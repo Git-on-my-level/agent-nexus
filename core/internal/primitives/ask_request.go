@@ -136,16 +136,14 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	if err = insertPreparedEvent(ctx, tx, prepared); err != nil {
 		return nil, err
 	}
+	if err = markTopicProjectionsDirtyTx(ctx, tx, projectionThreads, time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	if staged != nil {
 		if err = staged.Promote(); err != nil {
-			return nil, err
-		}
-	}
-	if len(projectionThreads) > 0 {
-		if err = s.MarkTopicProjectionsDirty(ctx, projectionThreads, time.Now().UTC()); err != nil {
 			return nil, err
 		}
 	}

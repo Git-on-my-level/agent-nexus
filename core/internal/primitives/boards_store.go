@@ -681,6 +681,9 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 	if err != nil {
 		return boardRow, boardCardRow{}, stagedContent, err
 	}
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
+		return boardRow, boardCardRow{}, stagedContent, err
+	}
 	return boardRow, cardRow, stagedContent, nil
 }
 
@@ -897,6 +900,10 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 		return nil, err
 	}
 
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{threadID}, time.Now().UTC()); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -963,6 +970,11 @@ func (s *Store) ArchiveBoardIfUpdatedAt(ctx context.Context, actorID, boardID st
 	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
 		return boardRowToAPI(ctx, s.db, row)
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	query := `UPDATE boards SET archived_at = ?, archived_by = ? WHERE id = ?`
 	args := []any{now, strings.TrimSpace(actorID), boardID}
@@ -970,7 +982,7 @@ func (s *Store) ArchiveBoardIfUpdatedAt(ctx context.Context, actorID, boardID st
 		query += ` AND updated_at = ?`
 		args = append(args, *ifUpdatedAt)
 	}
-	result, err := s.db.ExecContext(ctx, query, args...)
+	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("archive board: %w", err)
 	}
@@ -982,6 +994,12 @@ func (s *Store) ArchiveBoardIfUpdatedAt(ctx context.Context, actorID, boardID st
 		if rows != 1 {
 			return nil, ErrConflict
 		}
+	}
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{row.ThreadID}, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	row, err = s.getBoardRow(ctx, boardID)
 	if err != nil {
@@ -1008,11 +1026,22 @@ func (s *Store) UnarchiveBoard(ctx context.Context, actorID, boardID string) (ma
 	if !row.ArchivedAt.Valid || strings.TrimSpace(row.ArchivedAt.String) == "" {
 		return nil, ErrNotArchived
 	}
-	if _, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE boards SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		boardID,
 	); err != nil {
 		return nil, fmt.Errorf("unarchive board: %w", err)
+	}
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{row.ThreadID}, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	row, err = s.getBoardRow(ctx, boardID)
 	if err != nil {
@@ -1039,12 +1068,23 @@ func (s *Store) TrashBoard(ctx context.Context, actorID, boardID, reason string)
 	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
 		return boardRowToAPI(ctx, s.db, row)
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE boards SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		now, strings.TrimSpace(actorID), strings.TrimSpace(reason), boardID,
 	); err != nil {
 		return nil, fmt.Errorf("trash board: %w", err)
+	}
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{row.ThreadID}, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	row, err = s.getBoardRow(ctx, boardID)
 	if err != nil {
@@ -1071,11 +1111,22 @@ func (s *Store) RestoreBoard(ctx context.Context, actorID, boardID string) (map[
 	if !row.TrashedAt.Valid || strings.TrimSpace(row.TrashedAt.String) == "" {
 		return nil, ErrNotTrashed
 	}
-	if _, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE boards SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
 		boardID,
 	); err != nil {
 		return nil, fmt.Errorf("restore board: %w", err)
+	}
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{row.ThreadID}, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	row, err = s.getBoardRow(ctx, boardID)
 	if err != nil {
@@ -1298,6 +1349,10 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 		return nil, err
 	}
 
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{currentRow.ThreadID}, time.Now().UTC()); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2166,6 +2221,7 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		}
 		return BoardCardMutationResult{}, err
 	}
+	previousCardRow := cardRow
 	cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, cardRow.CardID, true)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -2174,6 +2230,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		return BoardCardMutationResult{}, err
 	}
 
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, previousCardRow, cardRow); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2382,6 +2442,10 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		return BoardCardMutationResult{}, err
 	}
 
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2546,6 +2610,10 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 	cardRow.ArchivedAt = sql.NullString{String: now, Valid: true}
 	cardRow.ArchivedBy = sql.NullString{String: actorID, Valid: true}
 
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2655,6 +2723,10 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		return BoardCardMutationResult{}, err
 	}
 
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2916,6 +2988,10 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 		return BoardCardMutationResult{}, err
 	}
 
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -3123,6 +3199,11 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	}
 	revisions, err := s.listBoardCardHistoryTx(ctx, tx, cardRow.CardID)
 	if err != nil {
+		_ = stagedContent.Cleanup()
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, nil, err
+	}
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
 		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
@@ -3811,6 +3892,9 @@ func touchBoardRow(ctx context.Context, tx *accessTx, board boardRow, actorID st
 		board.ID,
 	); err != nil {
 		return boardRow{}, fmt.Errorf("touch board row: %w", err)
+	}
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{board.ThreadID}, time.Now().UTC()); err != nil {
+		return boardRow{}, err
 	}
 	board.UpdatedAt = now
 	board.UpdatedBy = actorID
@@ -5290,4 +5374,29 @@ func (s *Store) GetBoardSummariesVisible(ctx context.Context, ids []string, visi
 		return nil, err
 	}
 	return s.computeBoardSummaries(ctx, boards, nil, visible)
+}
+
+// Invalidates only the card's own and explicitly associated threads, never all workspace threads.
+func markBoardCardProjectionDirtyTx(ctx context.Context, tx *accessTx, cards ...boardCardRow) error {
+	var threadIDs []string
+	for _, card := range cards {
+		threadIDs = append(threadIDs, card.ThreadID.String, card.ParentThreadID.String)
+		refs, err := decodeStoredJSONList(card.RefsJSON, "card.refs")
+		if err != nil {
+			return err
+		}
+		for _, ref := range refs {
+			if kind, _, ok := splitTypedRef(ref); ok && kind == "thread" {
+				resolved, err := resolveResourceRef(ctx, tx, ResourceRefInput{Type: kind, Ref: ref})
+				if err != nil {
+					if errors.Is(err, ErrNotFound) {
+						continue
+					}
+					return err
+				}
+				threadIDs = append(threadIDs, resolved.ID)
+			}
+		}
+	}
+	return markTopicProjectionsDirtyTx(ctx, tx, threadIDs, time.Now().UTC())
 }

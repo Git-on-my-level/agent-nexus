@@ -419,7 +419,7 @@ func (s *Store) ClearDerivedTopicProjectionDirty(ctx context.Context, threadID s
 	return nil
 }
 
-func (s *Store) ListDerivedTopicProjectionDirtyEntries(ctx context.Context, limit int) ([]DerivedTopicProjectionDirtyEntry, error) {
+func (s *Store) ListDerivedTopicProjectionDirtyEntries(ctx context.Context, limit int, now time.Time) ([]DerivedTopicProjectionDirtyEntry, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -433,11 +433,14 @@ func (s *Store) ListDerivedTopicProjectionDirtyEntries(ctx context.Context, limi
 		   FROM (
 				SELECT q.thread_id, q.dirty_at
 				  FROM derived_topic_dirty_queue q
+				  LEFT JOIN topic_projection_refresh_status r ON r.thread_id = q.thread_id
+				 WHERE COALESCE(r.retry_after, 0) <= ?
 				UNION ALL
 				SELECT s.thread_id,
 				       COALESCE(NULLIF(TRIM(s.queued_at), ''), NULLIF(TRIM(s.started_at), ''), NULLIF(TRIM(s.last_error_at), ''), s.updated_at) AS dirty_at
 				  FROM topic_projection_refresh_status s
 				 WHERE s.desired_generation > s.materialized_generation
+				   AND s.retry_after <= ?
 				   AND NOT EXISTS (
 						SELECT 1
 						  FROM derived_topic_dirty_queue q
@@ -446,7 +449,7 @@ func (s *Store) ListDerivedTopicProjectionDirtyEntries(ctx context.Context, limi
 		   )
 		  ORDER BY dirty_at ASC, thread_id ASC
 		  LIMIT ?`,
-		limit,
+		now.UnixMilli(), now.UnixMilli(), limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query derived thread dirty queue: %w", err)
@@ -779,7 +782,6 @@ func (s *Store) MarkTopicProjectionsDirty(ctx context.Context, threadIDs []strin
 		return nil
 	}
 
-	queuedAtText := queuedAt.UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin projection refresh dirty transaction: %w", err)
@@ -790,6 +792,21 @@ func (s *Store) MarkTopicProjectionsDirty(ctx context.Context, threadIDs []strin
 		}
 	}()
 
+	if err := markTopicProjectionsDirtyTx(ctx, tx, threadIDs, queuedAt); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit projection refresh dirty transaction: %w", err)
+	}
+	return nil
+}
+
+// markTopicProjectionsDirtyTx shares the canonical write's commit boundary.
+// Generations describe invalidation, leaving projection implementation/replay independent.
+func markTopicProjectionsDirtyTx(ctx context.Context, tx *accessTx, threadIDs []string, queuedAt time.Time) error {
+	threadIDs = uniqueNormalizedStrings(threadIDs)
+	queuedAtText := queuedAt.UTC().Format(time.RFC3339Nano)
 	for _, threadID := range threadIDs {
 		if _, err := tx.ExecContext(
 			ctx,
@@ -825,9 +842,6 @@ func (s *Store) MarkTopicProjectionsDirty(ctx context.Context, threadIDs []strin
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit projection refresh dirty transaction: %w", err)
-	}
 	return nil
 }
 
@@ -960,8 +974,6 @@ func (s *Store) MarkTopicProjectionRefreshStarted(ctx context.Context, threadID 
 		`UPDATE topic_projection_refresh_status
 		    SET in_progress_generation = ?,
 		        started_at = ?,
-		        last_error = NULL,
-		        last_error_at = NULL,
 		        updated_at = ?
 		  WHERE thread_id = ?`,
 		desiredGeneration,
@@ -1053,6 +1065,8 @@ func (s *Store) MarkTopicProjectionRefreshSucceeded(ctx context.Context, threadI
 				ELSE topic_projection_refresh_status.queued_at
 			END,
 			completed_at = excluded.completed_at,
+			failure_count = 0,
+			retry_after = 0,
 			last_error = NULL,
 			last_error_at = NULL,
 			updated_at = excluded.updated_at`,
@@ -1082,13 +1096,15 @@ func (s *Store) MarkTopicProjectionRefreshFailed(ctx context.Context, threadID s
 	if _, err := s.db.ExecContext(
 		ctx,
 		`INSERT INTO topic_projection_refresh_status(
-			thread_id, desired_generation, materialized_generation, last_error_at, last_error, updated_at
-		) VALUES (?, 1, 0, ?, ?, ?)
+			thread_id, desired_generation, materialized_generation, last_error_at, last_error, updated_at, failure_count, retry_after
+		) VALUES (?, 1, 0, ?, ?, ?, 1, ?)
 		ON CONFLICT(thread_id) DO UPDATE SET
 			in_progress_generation = CASE
 				WHEN ? > 0 AND COALESCE(topic_projection_refresh_status.in_progress_generation, 0) <= ? THEN NULL
 				ELSE topic_projection_refresh_status.in_progress_generation
 			END,
+			failure_count = MIN(topic_projection_refresh_status.failure_count + 1, 7),
+			retry_after = ? + MIN(5000 * (1 << MIN(topic_projection_refresh_status.failure_count, 6)), 300000),
 			last_error_at = excluded.last_error_at,
 			last_error = excluded.last_error,
 			updated_at = excluded.updated_at`,
@@ -1096,8 +1112,10 @@ func (s *Store) MarkTopicProjectionRefreshFailed(ctx context.Context, threadID s
 		failedAtText,
 		message,
 		failedAtText,
+		failedAt.Add(5*time.Second).UnixMilli(),
 		failedGeneration,
 		failedGeneration,
+		failedAt.UnixMilli(),
 	); err != nil {
 		return fmt.Errorf("mark thread projection %s refresh failed: %w", threadID, err)
 	}

@@ -2412,7 +2412,25 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 	}, nil
 }
 
-func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedEvent) error {
+func insertPreparedEvent(ctx context.Context, exec *accessTx, prepared preparedEvent) error {
+	// Capture canonical references before response fields are converted to handles.
+	threadIDs := []string{prepared.ThreadID}
+	if payload, ok := prepared.Body["payload"].(map[string]any); ok {
+		for _, field := range []string{"related_refs", "previous_related_refs"} {
+			for _, ref := range anyStringSlice(payload[field]) {
+				if kind, _, ok := splitTypedRef(ref); ok && kind == "thread" {
+					resolved, err := resolveResourceRef(ctx, exec, ResourceRefInput{Type: kind, Ref: ref})
+					if err != nil {
+						if errors.Is(err, ErrNotFound) {
+							continue
+						}
+						return err
+					}
+					threadIDs = append(threadIDs, resolved.ID)
+				}
+			}
+		}
+	}
 	if attribution, ok := commandcenter.AttributionFrom(ctx); ok {
 		prepared.Body["run_attribution"] = attribution
 		var wrapper map[string]any
@@ -2481,7 +2499,7 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 		return err
 	}
 
-	return nil
+	return markTopicProjectionsDirtyTx(ctx, exec, threadIDs, time.Now().UTC())
 }
 
 func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[string]any, error) {

@@ -894,8 +894,13 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(
+	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE documents SET title = ?, summary = ?, source = ?, tags_json = ?, hosts_json = ?, verified_at = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
 		nullableString(nextTitle),
@@ -918,6 +923,13 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	}
 	if affected == 0 {
 		return nil, nil, ErrConflict
+	}
+
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{doc.ThreadID.String}, time.Now().UTC()); err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
 	}
 	if err := s.rebuildDocumentFTS(ctx, documentID); err != nil {
 		return nil, nil, err
@@ -1366,6 +1378,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, err
 	}
 	if nullStringValue(doc.ThreadID) != nextThreadID {
+		if err := markTopicProjectionsDirtyTx(ctx, tx, []string{doc.ThreadID.String}, time.Now().UTC()); err != nil {
+			_ = tx.Rollback()
+			return nil, nil, err
+		}
 		if err := clearDocumentBackingThreadSubjectTx(ctx, tx, actorID, nullStringValue(doc.ThreadID), documentID, now); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Printf("tx rollback failed: %v", rbErr)
@@ -1658,6 +1674,11 @@ func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documen
 		return nil, nil, err
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	query := `UPDATE documents SET archived_at = ?, archived_by = ? WHERE id = ?`
 	args := []any{now, actorID, documentID}
@@ -1666,7 +1687,7 @@ func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documen
 		args = append(args, *ifUpdatedAt)
 	}
 	var result sql.Result
-	result, err = s.db.ExecContext(ctx, query, args...)
+	result, err = tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("archive document: %w", err)
 	}
@@ -1678,6 +1699,13 @@ func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documen
 		if rows != 1 {
 			return nil, nil, ErrConflict
 		}
+	}
+
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{doc.ThreadID.String}, time.Now().UTC()); err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
 	}
 
 	doc.ArchivedAt = nullableString(now)
@@ -1715,12 +1743,24 @@ func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID strin
 		return nil, nil, err
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx,
 		`UPDATE documents SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		documentID,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unarchive document: %w", err)
+	}
+
+	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{doc.ThreadID.String}, time.Now().UTC()); err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
 	}
 
 	doc.ArchivedAt = sql.NullString{}

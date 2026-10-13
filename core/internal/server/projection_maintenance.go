@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -179,6 +180,13 @@ func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time
 			return err
 		}
 		if processed == 0 {
+			stats, err := m.opts.primitiveStore.GetDerivedTopicProjectionQueueStats(ctx)
+			if err != nil {
+				return err
+			}
+			if stats.PendingCount > 0 {
+				return fmt.Errorf("%d projections remain pending retry", stats.PendingCount)
+			}
 			break
 		}
 	}
@@ -282,12 +290,13 @@ func (m *ProjectionMaintainer) Snapshot(ctx context.Context, now time.Time) Proj
 }
 
 func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.Time) (int, error) {
-	entries, err := m.opts.primitiveStore.ListDerivedTopicProjectionDirtyEntries(ctx, m.dirtyBatchSize)
+	entries, err := m.opts.primitiveStore.ListDerivedTopicProjectionDirtyEntries(ctx, m.dirtyBatchSize, now)
 	if err != nil {
 		m.recordError("load_dirty_queue", now, err)
 		return 0, fmt.Errorf("load dirty projection queue: %w", err)
 	}
 	processed := 0
+	var failures []error
 	for _, entry := range entries {
 		startedAt := now
 		if startedAt.IsZero() {
@@ -317,20 +326,22 @@ func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.T
 			if parseErr != nil || queuedAt.IsZero() {
 				queuedAt = startedAt
 			}
+			failedAt := time.Now().UTC()
 			m.stepMu.Lock()
 			if queueErr := m.opts.primitiveStore.RequeueTopicProjectionRefresh(ctx, entry.ThreadID, queuedAt); queueErr != nil {
 				m.stepMu.Unlock()
-				m.recordError("requeue_failed_projection", startedAt, queueErr)
+				m.recordError("requeue_failed_projection", failedAt, queueErr)
 				return processed, fmt.Errorf("%s: %w", failureMessage, queueErr)
 			}
-			if markErr := m.opts.primitiveStore.MarkTopicProjectionRefreshFailed(ctx, entry.ThreadID, startedGeneration, startedAt, failureMessage); markErr != nil {
+			if markErr := m.opts.primitiveStore.MarkTopicProjectionRefreshFailed(ctx, entry.ThreadID, startedGeneration, failedAt, failureMessage); markErr != nil {
 				m.stepMu.Unlock()
-				m.recordError("mark_failed_projection", startedAt, markErr)
+				m.recordError("mark_failed_projection", failedAt, markErr)
 				return processed, fmt.Errorf("%s: %w", failureMessage, markErr)
 			}
 			m.stepMu.Unlock()
-			m.recordError("refresh_dirty_projection", startedAt, err)
-			return processed, fmt.Errorf("refresh dirty projection %s: %w", entry.ThreadID, err)
+			m.recordError("refresh_dirty_projection", failedAt, err)
+			failures = append(failures, fmt.Errorf("refresh dirty projection %s: %w", entry.ThreadID, err))
+			continue
 		}
 		completedAt := time.Now().UTC()
 		m.stepMu.Lock()
@@ -342,7 +353,7 @@ func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.T
 		m.stepMu.Unlock()
 		processed++
 	}
-	return processed, nil
+	return processed, errors.Join(failures...)
 }
 
 func (m *ProjectionMaintainer) loadAllThreadIDs(ctx context.Context) ([]string, error) {

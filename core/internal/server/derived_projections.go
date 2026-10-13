@@ -467,8 +467,11 @@ func markTopicProjectionsDirty(ctx context.Context, opts handlerOptions, queuedA
 	return nil
 }
 
-func enqueueTopicProjectionsBestEffort(ctx context.Context, opts handlerOptions, threadIDs []string, queuedAt time.Time) {
-	_ = markTopicProjectionsDirty(ctx, opts, queuedAt, threadIDs...)
+// The canonical store transaction owns invalidation. This wakeup is only a latency hint.
+func notifyProjectionMaintainer(opts handlerOptions) {
+	if opts.projectionMaintainer != nil {
+		opts.projectionMaintainer.Notify()
+	}
 }
 
 func uniqueServerStrings(values []string) []string {
