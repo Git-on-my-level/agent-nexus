@@ -81,6 +81,9 @@ export const inboxResponseFailures = writable(
 /** Persisted sends for the current workspace/principal, including attention. */
 export const inboxUnsentResponses = writable([]);
 const inFlight = new Set();
+/** Idempotency keys the reader took back. Recovery must not send these
+ * while the persisted tombstone is still in flight. */
+const cancelledSends = new Set();
 const revokedPrincipals = new Set();
 let recoveryTimer;
 let recovering = false;
@@ -218,7 +221,11 @@ export async function recoverInboxResponses() {
     if (scope !== responseScope()) return;
     const visible = new Map(
       records
-        .filter(({ value }) => value.state !== "superseded")
+        .filter(
+          ({ value }) =>
+            value.state !== "superseded" &&
+            !cancelledSends.has(value.request.idempotency_key),
+        )
         .map(({ value }) => [value.request.idempotency_key, value]),
     );
     for (const entry of failedByItem.values()) {
@@ -236,6 +243,7 @@ export async function recoverInboxResponses() {
     for (const { value } of records) {
       if (value.state === "superseded") continue;
       const key = value.request.idempotency_key;
+      if (cancelledSends.has(key)) continue;
       const held = failedByItem.get(value.itemId);
       // A failed status write must not expose an older pending record as due,
       // create duplicate rows, or retry in a tight loop while storage is full.
@@ -511,21 +519,32 @@ export function undoInboxResponse() {
   const entry = pending;
   pending = null;
   clearTimeout(entry.timer);
+  cancelledSends.add(entry.request.idempotency_key);
+  inboxUnsentResponses.update((records) =>
+    records.filter(
+      (record) =>
+        record.request.idempotency_key !== entry.request.idempotency_key,
+    ),
+  );
   const text = String(
     entry.restore?.draft ||
       entry.restore?.reply ||
       entry.request.response_text ||
       "",
   );
-  // Returning to a draft is explicit Undo, not a discarded response.
+  // Tombstone the outbox immediately so recovery cannot send a reply the
+  // reader already took back, even if restoring the draft then fails.
+  void Promise.resolve(entry.saved)
+    .catch(() => {})
+    .then(() => removePersistedResponse(entry, "undo"))
+    .then(() => cancelledSends.delete(entry.request.idempotency_key))
+    .catch(() => {});
   void saveLocalWork(
     entry.identity,
     "draft",
     `inbox:${entry.itemId}:reply`,
     text,
-  )
-    .then(() => removePersistedResponse(entry, "undo"))
-    .catch(() => {});
+  ).catch(() => {});
   setOverlay(entry.itemId, null);
   forgetFailure(entry.itemId);
   showToast(null);
@@ -907,6 +926,7 @@ export function resetInboxResponseQueue() {
   pending = null;
   suspendedByIdentity.clear();
   failedByItem.clear();
+  cancelledSends.clear();
   clearTimeout(toastTimer);
   toastTimer = null;
   committedListeners.clear();

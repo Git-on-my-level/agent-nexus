@@ -428,10 +428,37 @@ describe("inbox response queue", () => {
       itemId: "inbox:a",
       restore: { reply: "draft" },
     });
+    expect(get(inboxUnsentResponses)).toEqual([]);
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2);
     expect(client.respondInboxItem).not.toHaveBeenCalled();
     expect(get(inboxResponseOverlay)["inbox:a"]).toBeUndefined();
     expect(get(inboxResponseToast)).toBeNull();
+  });
+
+  it("does not send an undone response if restoring the draft then fails", async () => {
+    queueInboxResponse({
+      itemId: "inbox:a",
+      request,
+      message: "Sent",
+      restore: { reply: "draft" },
+    });
+    const full = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("quota");
+      });
+    try {
+      expect(undoInboxResponse()?.itemId).toBe("inbox:a");
+      expect(get(inboxUnsentResponses)).toEqual([]);
+    } finally {
+      full.mockRestore();
+    }
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2);
+    await recoverInboxResponses();
+    expect(client.respondInboxItem).not.toHaveBeenCalled();
+    expect(
+      get(inboxUnsentResponses).filter((entry) => entry.state !== "attention"),
+    ).toEqual([]);
   });
 
   it("commits the waiting response at once when another is queued", async () => {

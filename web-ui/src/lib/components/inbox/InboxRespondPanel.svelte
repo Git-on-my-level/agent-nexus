@@ -269,7 +269,12 @@
     if (key === noteOpenedFor) return;
     noteOpenedFor = key;
     contextNoteOpen = false;
-    contextNote = "";
+    // Clear after the note field unmounts. Assigning "" while it is still
+    // bound with durableDraft checkpoints an empty draft under the new
+    // item and aborts the in-flight restore.
+    void tick().then(() => {
+      if (!contextNoteOpen && noteOpenedFor === key) contextNote = "";
+    });
   });
 
   async function openContextNote() {
@@ -305,15 +310,18 @@
   /**
    * @param {string} text
    * @param {string} [outcome]
-   * @param {string} [key] which item this answers, for a send that lands
-   *   after the panel has moved on. Defaults to the one on screen.
+   * @param {string | object} [context] which item this answers, for a send
+   *   that lands after the panel has moved on. Defaults to the one on screen.
    */
   function send(text, outcome = "answered", context = capture()) {
     const body = String(text ?? "").trim();
     const target =
       typeof context === "string"
         ? context
-        : context?.itemId || context?.row?.item?.id || itemKey;
+        : context?.itemId ||
+          context?.item?.id ||
+          context?.row?.item?.id ||
+          itemKey;
     const waiting = $inboxUnsentResponses.some(
       (entry) =>
         entry.itemId === target &&
@@ -326,7 +334,18 @@
 
   /** What the caller will need to answer this item, as it is right now. */
   function capture() {
-    return sendContext ? sendContext() : itemKey;
+    const context = sendContext ? sendContext() : itemKey;
+    if (typeof context === "string" || context == null) {
+      return context || itemKey;
+    }
+    // Object snapshots from the Inbox pane name the mailbox row, not the
+    // item. Stamp the item id at choice time so a later flush cannot treat
+    // the row now on screen as the send target.
+    return {
+      ...context,
+      itemId:
+        context.itemId || context.item?.id || context.row?.item?.id || itemKey,
+    };
   }
 
   /**

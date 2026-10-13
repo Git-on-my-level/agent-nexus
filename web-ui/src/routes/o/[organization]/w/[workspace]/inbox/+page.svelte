@@ -2186,6 +2186,7 @@
                     {busy}
                     sendContext={() => ({
                       id: selected.id,
+                      itemId: String(selected.item?.id || selected.id),
                       draft: reply,
                       mailbox,
                       /*
