@@ -918,7 +918,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
 - Concepts: `cards`, `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `busy`, `quota_exceeded`
 - Output: Returns `{ card }`.
 
 ## `cards.patch`

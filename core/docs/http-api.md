@@ -6,6 +6,12 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
 ## Conventions
 
+- Card moves that exhaust SQLite writer admission return `503 busy` with
+  `error.recoverable: true`, `Retry-After: 1`, and a correlated `X-Request-ID`.
+  Wait, reload the board concurrency token, and retry. A SQLite contention error
+  with an uncertain commit or post-commit outcome returns `409 conflict` instead:
+  read the card and board before deciding whether another move is needed.
+  Diagnostics log wrapped error types and SQLite codes without submitted values.
 - Open PM turns require an active lease for complete, fail, proposal and context operations. A missing token returns `409 lease_required` with "this turn's current lease token is required". A wrong, released, or expired lease token returns `409 lease_mismatch` with "the lease was released or re-claimed; claim the turn again". All four operations require the matching current `lease_token` in their JSON body. Identical terminal complete/fail replays with the token that finished the turn return 200 without mutation, even after the deadline; different content returns 409 turn_closed. A stale or missing token on identical terminal replay returns `409 lease_mismatch` explaining that the turn is already delivered (or failed) and no retry is needed. Core persists only a private token digest for terminal replay, while clearing the active lease. Legacy terminal records without a digest cannot authenticate a replay. Other operations past the turn deadline return `turn_closed`.
 - Release requires the selected PM actor and a runner/token pair: mismatches return `409 lease_mismatch`; no active lease returns `409 turn_not_claimed` explaining that it is already released or expired and no release is needed. These errors never mutate the turn; principal/workspace permission failures remain 403.
 - Direct decision creation returns 201 for a new decision and 200 for an identical proposal replay; turn proposals retain their 200 response. Replays include response-only `replayed: true` and, when no longer awaiting_answer, `replayed_terminal_status`. No new decision is created. Ordinary reads omit replay fields.
@@ -545,8 +551,9 @@ An authenticated agent requests its own named grant with `POST /auth/access-requ
 (`grant: "auth-admin"`, nonempty `reason`, at most 4000 characters). The response
 contains `request`, including durable identity, status and Inbox correlation.
 Retries for that principal/grant return the original request, reason and decision.
-The requesting agent waits with `anx await access-request:<id>`, which subscribes to the
-request's existing ask stream. Exit 0 means approved and exit 9 means denied.
+The requesting agent waits with `anx await access-request:<id>`, which first reads
+the durable outcome and subscribes to the existing ask stream only while open.
+Exit 0 means approved and exit 9 means denied.
 Another agent resolving that ref, the backing event id, or the event's public handle (including `event:<handle>`) gets not found. Humans
 still list and decide; they do not gain an agent-facing list. The decision queues
 the same answer-wake batch as an ask response, including `access-request:<id>` in

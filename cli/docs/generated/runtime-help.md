@@ -7523,7 +7523,7 @@ Generated Help: cards move
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
 - Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `busy`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 

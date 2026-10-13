@@ -113,6 +113,12 @@ func ExitCode(err error) int {
 	if strings.HasSuffix(typed.Code, "_not_found") {
 		return 3
 	}
+	if typed.Code == "busy" {
+		details, _ := typed.Details.(map[string]any)
+		if details["status"] == 503 {
+			return 6
+		}
+	}
 	switch typed.Code {
 	case "not_found", "draft_not_found", "profile_not_found":
 		return 3

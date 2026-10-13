@@ -8,6 +8,7 @@ type errorMetadata struct {
 }
 
 var defaultErrorMetadata = map[string]errorMetadata{
+	"busy":                       {Recoverable: true, Hint: "Wait for Retry-After, refresh the concurrency token, and retry."},
 	"auth_admin_required":        {Recoverable: false, Hint: "A human must explicitly grant this agent administration access through Access or auth admins grant."},
 	"human_required":             {Recoverable: false, Hint: "This action requires the human's own credentials."},
 	"host_self_revoke":           {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},

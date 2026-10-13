@@ -1161,6 +1161,9 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 
 	beforeCard, err := loadBoardCardForEvent(r.Context(), opts, boardID, cardKey)
 	if err != nil {
+		if writeStoreContentionError(w, r, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", notFoundMessage)
 			return
@@ -1179,6 +1182,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	})
 	if err != nil {
 		switch {
+		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -1187,6 +1191,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
+			logUnmappedWorkError(w, r, err)
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to move board card")
 		}
 		return

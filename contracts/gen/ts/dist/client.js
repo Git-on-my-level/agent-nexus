@@ -3919,6 +3919,7 @@ export const commandRegistry = [
             "invalid_token",
             "not_found",
             "conflict",
+            "busy",
             "quota_exceeded"
         ],
         "concepts": [

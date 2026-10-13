@@ -254,6 +254,20 @@ These tests:
 - use an empty temp workspace (fresh `state.sqlite` per run), bootstrap a human, and enroll a host through a one-time token
 - run multi-step thread/event, docs/conflict, and provenance flows through the real CLI
 
+The ordinary integration lane includes the agent ergonomics scenario and a
+20-iteration contention regression:
+
+```bash
+go test -tags=integration ./integration -run '^(TestAgentErgonomicsAgainstCore|TestConcurrentMovesAndAnsweredAwaitAgainstCore)$' -count=1 -v -timeout=10m
+```
+
+The contention test runs two core processes, with two concurrent agent writers
+per process and separate boards to avoid intentional board-token conflicts.
+Each agent performs 60 moves and 20 reads of an answered ask. `anx await` reads
+`GET /asks/{ask_id}` before subscribing; a terminal answer needs neither a
+subscription write nor SSE. Open asks still subscribe and consume the stream's
+initial durable snapshot, covering answers committed during subscription setup.
+
 ## Pi Dogfood
 
 The supported manual dogfood path is the Pi-based runner under `cli/dogfood/pi/`.
