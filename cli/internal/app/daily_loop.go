@@ -161,6 +161,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	if len(returnedOpenAsks) > orientReturnLimit {
 		returnedOpenAsks = returnedOpenAsks[:orientReturnLimit]
 	}
+	deliveryHealth, deliveryWarnings := a.orientDeliveryHealth(cfg, allOpenAsks)
 	for _, raw := range returnedOpenAsks {
 		if len(next) >= 10 {
 			break
@@ -188,16 +189,24 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	if resolution == "" {
 		_, resolution, _ = a.identityName(cfg)
 	}
+	for _, warning := range deliveryWarnings {
+		if warning.Code == "ask_delivery" {
+			next = append(next, []string{"anx", "bridge", "install"})
+		}
+	}
 	result := map[string]any{
 		"me":               map[string]any{"agent": agent["id"], "handle": agent["handle"], "host": agent["host_slug"], "current_card_ref": agent["current_card_ref"], "identity_resolved_by": resolution},
 		"my_work_by_phase": workByPhase, "my_work_matched": matched, "my_work_returned": min(matched, orientReturnLimit),
 		"work_page_limit": orientPageLimit, "work_has_more": anyString(workBody["next_cursor"]) != "", "work_next_cursor": workBody["next_cursor"],
 		"my_asks_and_answers": ownRequests, "my_asks_matched": askMatched, "my_asks_returned": len(ownRequests), "ask_page_limit": 200,
 		"open_asks": returnedOpenAsks, "open_asks_matched": len(allOpenAsks), "open_asks_returned": len(returnedOpenAsks),
+		"delivery_health":        deliveryHealth,
 		"mentions_notifications": map[string]any{"items": returnedNotifications, "matched": len(allNotifications), "returned": len(returnedNotifications)},
 		"stale_items":            stale, "stale_hours": hours, "next": next,
 	}
-	return &commandResult{Data: result}, nil
+	orientResult := &commandResult{Data: result}
+	orientResult.Warnings = append(orientResult.Warnings, deliveryWarnings...)
+	return orientResult, nil
 }
 
 func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg config.Resolved) (*commandResult, error) {

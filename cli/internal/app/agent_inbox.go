@@ -82,6 +82,9 @@ func (a *App) runAgentInboxList(ctx context.Context, args []string, cfg config.R
 	for _, raw := range filtered {
 		item := asMap(raw)
 		line := fmt.Sprintf("%s status=%s title=%q", anyString(item["ask_id"]), anyString(item["status"]), anyString(item["title"]))
+		if delivery := anyString(item["delivery"]); delivery != "" {
+			line += fmt.Sprintf(" delivery=%s", delivery)
+		}
 		if item["answer_unread"] == true {
 			line += " answer_unread=true"
 		}

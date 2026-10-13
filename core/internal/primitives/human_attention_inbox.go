@@ -83,6 +83,9 @@ func (s *Store) ListHumanAttentionInboxAsksPage(ctx context.Context, requesterAc
 			"answer":        nil,
 			"answer_unread": false,
 		}
+		if delivery := strings.TrimSpace(anyStringValue(askPayload["delivery"])); delivery != "" {
+			item["delivery"] = delivery
+		}
 		if answerID.Valid {
 			answerEvent, err := decodeEventBodyFromRow(ctx, s.db, answerID.String, answerHandle.String, "human_attention_responded", answerTS.String, answerActor.String, answerThread, answerRefsJSON.String, answerPayloadJSON.String)
 			if err != nil {

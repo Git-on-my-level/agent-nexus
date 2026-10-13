@@ -37,7 +37,7 @@ func init() {
 	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{Path: "bridge", Kind: "manual", Summary: "One bridge per enrolled host for derived-agent wake routing."})
 	localHelperTopics = append(localHelperTopics,
 		localHelperTopic{Path: "bridge run", Summary: "Run registered answer commands for the selected agent on this host.", JSONShape: "`stopped`", Composition: "Long-lived signed wake consumer; command registry stays local.", Examples: []string{"anx bridge run"}},
-		localHelperTopic{Path: "bridge install", Summary: "Install the host bridge runtime.", JSONShape: "`install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`", Composition: "Install a managed Python virtualenv and wrapper.", Examples: []string{"anx bridge install"}},
+		localHelperTopic{Path: "bridge install", Summary: "Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.", JSONShape: "`agent`, `unit_path`, `label`, `content`, `start_args`, `wrote`, `started`", Composition: "Idempotent; --dry-run prints the unit without writing. Legacy runtime: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`.", Examples: []string{"anx bridge install --as <agent>", "anx bridge install --dry-run --as <agent>", "anx bridge install --ref <git-ref>"}},
 		localHelperTopic{Path: "bridge doctor", Summary: "Check one enrolled-host bridge and its configured runtimes.", JSONShape: "`host`, `agents`, `agentctl`", Composition: "Invoke the bridge's host roster validation.", Examples: []string{"anx bridge doctor --config ./bridge.toml"}, Flags: []localHelperFlag{{Name: "--config <path>", Description: "One host bridge config."}}},
 	)
 }
@@ -52,7 +52,11 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 		result, err := a.runAskBridge(ctx, args[1:], cfg)
 		return result, "bridge run", err
 	case "install":
-		result, err := a.runBridgeInstall(ctx, args[1:])
+		if bridgeInstallTargetsRuntime(args[1:]) {
+			result, err := a.runBridgeInstall(ctx, args[1:])
+			return result, "bridge install", err
+		}
+		result, err := a.runBridgeUnitInstall(ctx, args[1:], cfg)
 		return result, "bridge install", err
 	case "doctor":
 		result, err := a.runBridgeDoctor(ctx, args[1:])
@@ -71,11 +75,25 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 	}
 }
 
+// bridgeInstallTargetsRuntime reports whether the flags select the legacy
+// managed Python wake-routing runtime rather than the default answer-bridge unit.
+func bridgeInstallTargetsRuntime(args []string) bool {
+	for _, arg := range args {
+		name := strings.SplitN(strings.TrimLeft(arg, "-"), "=", 2)[0]
+		switch name {
+		case "python", "install-dir", "bin-dir", "ref", "with-dev":
+			return true
+		}
+	}
+	return false
+}
+
 func bridgeUsageText() string {
 	return "Bridge: one process per enrolled host\n\n" +
 		"anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]\n" +
+		"anx bridge install [--as <agent>] [--dry-run] keep an anx bridge run alive (launchd/systemd)\n" +
 		"anx host enroll\n" +
-		"anx bridge install\n" +
+		"anx bridge install --ref <git-ref> (legacy: managed Python wake-routing runtime)\n" +
 		"anx bridge start --config ./bridge.toml\n" +
 		"anx bridge status --config ./bridge.toml\n" +
 		"anx bridge doctor --config ./bridge.toml\n" +

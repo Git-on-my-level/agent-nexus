@@ -50,6 +50,9 @@ func (a *App) runAskBridge(ctx context.Context, args []string, cfg config.Resolv
 		if ctx.Err() != nil {
 			break
 		}
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			fmt.Fprintf(os.Stderr, "anx bridge run: %v\n", err)
+		}
 		timer := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
