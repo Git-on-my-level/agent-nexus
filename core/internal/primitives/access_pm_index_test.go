@@ -13,7 +13,9 @@ import (
 )
 
 func TestResourceAccessPMWriteIndex(t *testing.T) {
-	t.Parallel()
+	// This test enforces a 200 ms request deadline. Like the scale guards,
+	// isolate its CPU samples from parallel schema/reference fixtures; their
+	// contention otherwise measures test scheduling rather than point reads.
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {

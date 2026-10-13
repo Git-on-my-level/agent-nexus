@@ -535,3 +535,73 @@ are recorded under SCA-733. Run:
 GOMAXPROCS=2 GOFLAGS=-p=1 ANX_PERFORMANCE_TEST=1 go test ./internal/server \
   -run '^TestPerformancePMCardContext$' -count=1 -timeout=4m -v
 ```
+
+## Handled inbox ref projection (SCA-780)
+
+The handled inbox admits one immutable resource-read snapshot, selects at most
+100 response events and resolves their presentation refs in batches of at most
+200 distinct IDs per resource type. Original request events use one indexed ID
+or handle batch, followed by the same scoped ref projection. Generic
+`publicRefsIn*` and typed-list projections batch each response value; nested
+projections reuse an immutable presentation map. Hidden or missing IDs retain
+raw typed refs. Rebinding access scope discards presentation handles.
+
+Ref hydration costs O(page refs), using canonical primary keys (and event handle
+indexes for original requests), independently of unrelated event history. Each
+200-ID batch compiles one scoped statement. Canonical inherited denial admission
+still depends on denied roots and reachable identities, with the existing bounded
+shared epoch cache. Admission validates the epoch and conditionally captures a
+stale closure in one SQL statement, retaining the existing query budgets across
+workspace writes. Inside the admitted transaction, point membership uses the
+existing fail-closed token rather than recompiling the recursive graph for every
+ref lookup. Epoch misses recompute the full canonical policy. Ordinary unpinned
+and mutation reads retain canonical fallback. Report rendering retains its
+ordinary scoped reads and response-level ref batches, without a new snapshot
+admission round trip.
+
+The modernc driver keeps SQL text in `sql.Stmt`, then calls native
+`sqlite3_prepare_v2` on every execution. A Go prepared-statement cache therefore
+cannot remove native parse cost. This repair reduces the number of statements
+and the SQL compiled in the read snapshot instead.
+
+Run the dedicated scale guards:
+
+```sh
+cd core
+GOMAXPROCS=2 ANX_PERFORMANCE_TEST=1 go test ./internal/server \
+  -run '^TestPerformanceHandledInboxRefsAndConcurrentAnswer$' -count=1 -timeout=5m -v
+GOMAXPROCS=2 ANX_PERFORMANCE_TEST=1 go test ./internal/storage \
+  -run '^TestPerformanceCompactAccess(OnlineMigration|Shadow)$' -count=1 -timeout=10m -v
+```
+
+The HTTP guard builds more than 4096 ref-bearing events, a large synthetic
+workspace and 50 handled responses with 500 distinct resource refs. It allows
+25 native read preparations and two seconds per measured GET, and requires an
+answer POST plus idempotent replay to succeed during two finite polling workers.
+All workers finish inside the test. The guard fails on the pre-repair handled
+reader's repeated ref lookups. Timing is local CPU/storage evidence, not a hosted
+network SLA. Budgets live in `internal/server/testdata/handled_inbox_budget.json`.
+On one Apple Silicon run with `GOMAXPROCS=2`, the same roughly 363 MB fixture
+measured 2,206 application read preparations and 4.43–4.83 seconds per GET
+on the pre-repair main, versus 17 preparations and 6.2–18.4 ms after repair.
+Authentication and actor reads use the same instrumented pool. Both baseline polling workers
+hit their ten-second client timeout; the repaired workers completed. Answer POST
+latency under polling fell from 949 ms to 210 ms. These samples include the
+existing production immediate writer configuration in both revisions.
+
+Compact shadow installation performs DDL only, but formerly received the same
+100 ms deadline as copying one maintenance chunk. Repeated installation rollback
+cannot benefit from the chunk-size adaptation. Installation now has a bounded
+five-second deadline; backfills retain their adaptive 100 ms writer leases.
+Worker errors report fixed stage/reason labels and numeric SQLite codes without
+SQL or resource contents. Verification mismatch labels name the ledger direction;
+operators should preserve the legacy reader and run offline verification before
+repairing inconsistent ledgers. Deadline reports identify installation versus
+backfill; write-contention reports identify retryable writer pressure. No
+production workspace is required or inspected by these guards.
+
+Answer persistence retains the production WAL, 20-second per-connection busy
+handler and immediate write transactions. Immediate locking queues writers at
+transaction admission instead of attempting an unsupported deferred read-to-write
+upgrade. The HTTP scale guard covers the full response, persisted replay and
+single committed claim under read load.
