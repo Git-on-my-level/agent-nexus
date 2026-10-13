@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -37,11 +38,17 @@ func TestPerformanceResidentMemory(t *testing.T) {
 	if root == "" {
 		t.Skip("requires ANX_MEMORY_WORKSPACE: disposable local workspace copy")
 	}
+	applyProbeCgroupLimit()
+	stopSampler := startMemoryPeakSampler(t)
+	defer stopSampler()
 	tls := libc.NewTLS()
 	defer tls.Close()
 	args := tls.Alloc(8)
-	if rc := sqlite3.Xsqlite3_config(tls, sqlite3.SQLITE_CONFIG_MEMSTATUS, libc.VaList(args, int32(1))); rc != sqlite3.SQLITE_OK {
-		t.Fatalf("enable SQLite memory counters before initialization: %d", rc)
+	nativeCounters := os.Getenv("ANX_MEMORY_HOSTED_MIX") != "1"
+	if nativeCounters {
+		if rc := sqlite3.Xsqlite3_config(tls, sqlite3.SQLITE_CONFIG_MEMSTATUS, libc.VaList(args, int32(1))); rc != sqlite3.SQLITE_OK {
+			t.Fatalf("enable SQLite memory counters before initialization: %d", rc)
+		}
 	}
 	ctx := context.Background()
 	w, err := storage.InitializeWorkspace(ctx, root)
@@ -51,6 +58,43 @@ func TestPerformanceResidentMemory(t *testing.T) {
 	defer w.Close()
 	db := w.DB()
 	ps := primitives.NewStore(db, blob.NewFilesystemBackend(w.Layout().ArtifactContentDir), w.Layout().ArtifactContentDir)
+	if os.Getenv("ANX_MEMORY_WARM_MAINTENANCE") == "1" {
+		warmCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		for {
+			done, err := w.MaintainAskSubjectsBatch(warmCtx)
+			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) && warmCtx.Err() == nil {
+					continue
+				}
+				t.Fatal(err)
+			}
+			if done {
+				break
+			}
+		}
+		for {
+			done, err := w.MaintainInboxLifecycleBatch(warmCtx, 200)
+			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) && warmCtx.Err() == nil {
+					continue
+				}
+				t.Fatal(err)
+			}
+			if done {
+				break
+			}
+		}
+		t.Log("fixture background backfills completed before measured activity")
+		return
+	}
+	if os.Getenv("ANX_MEMORY_PUBLIC_HISTORY") == "1" {
+		if _, err := db.ExecContext(ctx, `UPDATE threads SET body_json=json_remove(body_json,'$.pm_actor_id') WHERE json_extract(body_json,'$.title')='hidden subject'`); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("prepared public archived synthetic history")
+		return
+	}
 	if os.Getenv("ANX_MEMORY_PRIVATE_HISTORY") == "1" {
 		if _, err := db.ExecContext(ctx, `UPDATE threads SET body_json=json_set(body_json,'$.pm_actor_id','memory-private-owner') WHERE json_extract(body_json,'$.title')='hidden subject'`); err != nil {
 			t.Fatal(err)
@@ -64,6 +108,12 @@ func TestPerformanceResidentMemory(t *testing.T) {
 		if err := perfguard.Seed(ctx, db, w.Layout().ArtifactContentDir, "memory-owner-actor", time.Now().UTC().Truncate(time.Hour)); err != nil {
 			t.Fatal(err)
 		}
+		if os.Getenv("ANX_MEMORY_HOSTED_SEED") == "1" {
+			if _, err := db.ExecContext(ctx, `DELETE FROM pm_records WHERE kind='turn' AND id LIKE 'scale-pm-turn-%'`); err != nil {
+				t.Fatal(err)
+			}
+			t.Log("removed read-only synthetic PM turn placeholders; live turns will use PM service")
+		}
 		t.Log("prepared synthetic fixture; rerun without ANX_MEMORY_SEED on identical copies")
 		return
 	}
@@ -72,6 +122,11 @@ func TestPerformanceResidentMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := NewHandler("memory-probe", WithPrimitiveStore(ps), WithAuthStore(auth.NewStore(db)), WithActorRegistry(actors.NewStore(db)), WithSchemaContract(contract), WithHealthCheck(w.Ping))
+	if os.Getenv("ANX_MEMORY_HOSTED_MIX") == "1" {
+		var closeMix func()
+		h, closeMix = startHostedMemoryMix(t, w, ps, contract)
+		defer closeMix()
+	}
 	paths := []string{"/overview", "/cards/scale-card-1", "/inbox?limit=50"}
 	var mu sync.Mutex
 	latencies := map[string][]time.Duration{}
@@ -108,7 +163,9 @@ func TestPerformanceResidentMemory(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Logf("%s rss_kib=%s heap_alloc=%d heap_inuse=%d heap_sys=%d heap_released=%d stack_inuse=%d gc_target=%d total_alloc=%d num_gc=%d pool=%+v", label, strings.TrimSpace(string(rss)), m.HeapAlloc, m.HeapInuse, m.HeapSys, m.HeapReleased, m.StackInuse, m.NextGC, m.TotalAlloc, m.NumGC, db.Stats())
-		t.Logf("%s sqlite_native_used=%d sqlite_native_highwater=%d", label, sqlite3.Xsqlite3_memory_used(tls), sqlite3.Xsqlite3_memory_highwater(tls, 0))
+		if nativeCounters {
+			t.Logf("%s sqlite_native_used=%d sqlite_native_highwater=%d", label, sqlite3.Xsqlite3_memory_used(tls), sqlite3.Xsqlite3_memory_highwater(tls, 0))
+		}
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -166,6 +223,10 @@ func TestPerformanceResidentMemory(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+	}
+	if os.Getenv("ANX_MEMORY_HOSTED_MIX") == "1" {
+		time.Sleep(2 * time.Second)
+		logMemory("retained_without_forced_gc")
 	}
 	runtime.GC()
 	logMemory("after_gc")

@@ -29,6 +29,7 @@ import (
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
+	"agent-nexus-core/internal/runtimememory"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
 	"agent-nexus-core/internal/series"
@@ -68,6 +69,8 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheckCLI())
 	}
+
+	runtimememory.Configure(os.Stderr)
 
 	var (
 		host                        = envString("ANX_HOST", defaultHost)
@@ -169,6 +172,16 @@ func main() {
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
 	flag.Parse()
+	var diagnostics *runtimememory.Diagnostics
+	if envBool("ANX_MEMORY_DIAGNOSTICS", false) {
+		var diagnosticErr error
+		diagnostics, diagnosticErr = runtimememory.StartDiagnostics(true, envInt("ANX_MEMORY_DIAGNOSTICS_PORT", 6061), os.Stderr)
+		if diagnosticErr != nil {
+			fmt.Fprintf(os.Stderr, "memory diagnostics: %v\n", diagnosticErr)
+			os.Exit(1)
+		}
+	}
+	defer diagnostics.Close()
 
 	workspaceQuota = effectiveWorkspaceQuota(enforceLocalQuotas, workspaceQuota)
 

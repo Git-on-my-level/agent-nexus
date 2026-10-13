@@ -1013,7 +1013,7 @@
   "writers": {
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-    "../../cmd/anx-core/main.go:main": "6b36009d409a29d83788945d123adbaebd033aff951f7c8d0ef24d44006ae18e",
+    "../../cmd/anx-core/main.go:main": "9157deef5fc0470bf866bd7d8a7a08732c1df08ef494a7256df5565171aaccf2",
     "../../cmd/anx-core/main.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
     "../../cmd/anx-observe/main.go:load": "07b08a12c195d92fa958af2c0f460af0ca25a9acd678f9db3ce624675b73407f",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
@@ -1983,6 +1983,9 @@
     "../router/router.go:*Service:runOnce": "66ad616508903f96efc5a1548f0943faf3d7c0544daf0acb525684a7eba49e01",
     "../router/state.go:*StateStore:SetLastEventCursor": "f24bb2087b76d53f47214565b05820c215e995029bfc98576d28c33ecc3c9606",
     "../router/state.go:*StateStore:SetLastEventID": "522bf7913309c1aa37f401c4bf3d673d138f1104e4470d597976ea7b4ece8784",
+    "../runtimememory/diagnostics.go:*Diagnostics:Close": "2c8d50cda3f528e7073dbbb3cd621f48d0677b7b00dade958b5480c2dcab0966",
+    "../runtimememory/diagnostics.go:StartDiagnostics": "46b0a4edffd1add3dae1f47187d50c64b29ec808757fd12bdd34ec8facbbbbb9",
+    "../runtimememory/diagnostics.go:diagnosticHandler": "6f63e7893387b011f3b4be540ed17907a1b96e0a14deab8670a420a746f35fa0",
     "../scopedrepo/capabilities.go:*Store:Read": "e75fbe6f46bd59bce703df8bffa35508158e114a2f6898cfc411b1d0be60a603",
     "../scopedrepo/capabilities.go:*Store:Write": "f25c8e65d46978699af897840f60d11779cafb90244cbeb5b71fc07f0575739d",
     "../scopedrepo/feed.go:*Store:InitializeFeedSchema": "784ca2e873f0a3e734c57bea5955f4f16992e057d4e41e0c598b8d3bfc34ea51",
