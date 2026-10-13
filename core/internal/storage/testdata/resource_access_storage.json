@@ -2378,7 +2378,7 @@
     "../server/boards_handlers.go:handleListBoardCards": "35face22f09e0a3ea6feda526a025e904f4c322666c0fe485d3899281c286a9b",
     "../server/boards_handlers.go:handleListBoards": "1555261d8bddce96f404f12d3150dae7b8a75948868a0e4a8066377ae5d4701d",
     "../server/boards_handlers.go:handleMoveBoardCard": "a975950dad439968589d97258f0b76a275cf10c13b7ee416252b9fd354c564da",
-    "../server/boards_handlers.go:handleMoveCardMutation": "dc9a7ef6653f2f0d8bcebcc7d2b3fd77bc4d412a2e6bd07afc3f72077a508f5b",
+    "../server/boards_handlers.go:handleMoveCardMutation": "fabe910babf80b1135feff016e4f28a6ab7ba9f761e4c0f2fb323221141f3126",
     "../server/boards_handlers.go:handlePurgeBoard": "db0d09378940faed342cc7d103022f190ab17ffa630c0199236d68363cbee91a",
     "../server/boards_handlers.go:handleRemoveBoardCard": "bc8a0e0262c537ecbaaba68dfb1838d8dce59e55c1c9dc5d7d348b5b940130f0",
     "../server/boards_handlers.go:handleRestoreBoard": "6000eacf9ec01fc38dfc417456d8fd20d5db895d64c046999c8183200a937a6a",

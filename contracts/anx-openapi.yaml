@@ -11515,6 +11515,14 @@ components:
     MoveCardInput:
       type: object
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Optional actor-bound key for atomic replay of the original move and lifecycle-event receipt. Reuse requires the same target, body and concurrency tokens.
+        if_version:
+          type: integer
+          format: int64
+          description: Optional original work-version fence, checked in the move transaction alongside the board token.
         column_key:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]

@@ -7545,6 +7545,8 @@ Inputs:
   - body `actor_id` (string)
   - body `after_card_id` (string)
   - body `before_card_id` (string)
+  - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
   - body `resolution` (string)
   - body `resolution_refs` (list<any>)
   Enum values: column_key: backlog, blocked, done, in_progress, ready, review; resolution: done

@@ -4816,6 +4816,14 @@
                 "type": "string"
               },
               {
+                "name": "if_version",
+                "type": "integer"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
                 "name": "resolution",
                 "type": "string",
                 "enum_values": [
@@ -5564,6 +5572,14 @@
               },
               {
                 "name": "before_card_id",
+                "type": "string"
+              },
+              {
+                "name": "if_version",
+                "type": "integer"
+              },
+              {
+                "name": "request_key",
                 "type": "string"
               },
               {
@@ -22831,6 +22847,14 @@
               },
               {
                 "name": "before_card_id",
+                "type": "string"
+              },
+              {
+                "name": "if_version",
+                "type": "integer"
+              },
+              {
+                "name": "request_key",
                 "type": "string"
               },
               {

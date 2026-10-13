@@ -4014,6 +4014,14 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "if_version",
+          "type": "integer"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
           "name": "resolution",
           "type": "string",
           "enum_values": [
