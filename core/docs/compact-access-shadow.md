@@ -38,7 +38,7 @@ until the retention policy is accepted and release certification is complete.
    retries verification. Atomically replace the raw table with the certified
    explicit-ID table, reinstall its triggers, remove its redundant target index,
    publish compact reader mode, and advance the authorization epoch. The DDL
-   phase has a ten-second deadline; the measured dense-fixture commit took 81 ms.
+   phase has a ten-second deadline; the measured dense-fixture commit took 96 ms.
 
 The serving OS lease is retained after stabilization, including across open
 connections, and reacquired before migrations on restart. Old binaries are not
@@ -138,7 +138,8 @@ A 4,096-edge target fanout used one SQL statement, 4,096 returned rows and 28,73
 VM steps, with no full scan, sort or automatic index. Adding 8,192 unrelated
 edges changed this to 28,732 VM steps. Ordered old/compact authorization results
 also match across concurrent grants/revokes, private human/agent ownership and
-HTTP credential expiry/revocation.
+HTTP credential expiry/revocation. The existing common HTTP read performance
+gate runs in both legacy and certified compact modes with identical budgets.
 
 Reproduce the primary gates (complete commands, outputs and exit codes are
 attached to SCA-766):
