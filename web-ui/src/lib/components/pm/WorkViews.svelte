@@ -4,12 +4,16 @@
   import WorkCard from "./WorkCard.svelte";
   import SignalBadge from "./SignalBadge.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
-  import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import OwnerLabel from "$lib/components/OwnerLabel.svelte";
   import {
-    actorDisplayLabel,
+    actorDirectoryLoaded,
     actorRegistry,
+    agentDirectoryLoaded,
+    agentRegistry,
     principalRegistry,
   } from "$lib/actorSession";
+  import { buildOwnerDisplay } from "$lib/ownerDisplay.js";
+  import { boardDisplayTitle } from "$lib/boardUtils.js";
   import {
     phaseGroups,
     isNexusOwned,
@@ -162,12 +166,32 @@
 
   function boardLabel(work) {
     const ref = String(work?.board_ref ?? "").trim();
-    return boardTitles[ref] || ref.replace(/^board:/, "") || "—";
+    const title = boardTitles[ref] || ref.replace(/^board:/, "");
+    return boardDisplayTitle(title) || "—";
   }
+
+  /**
+   * One owner resolver for the whole list, rebuilt when the registries
+   * change. Resolving per row rebuilt the workspace name map per row.
+   */
+  let ownerCellFor = $derived(
+    buildOwnerDisplay({
+      actors: $actorRegistry,
+      principals: $principalRegistry,
+      agents: $agentRegistry,
+      actorsLoaded: $actorDirectoryLoaded,
+      agentsLoaded: $agentDirectoryLoaded,
+    }),
+  );
   function nextActorLabel(work) {
-    return work?.next_actor
-      ? actorDisplayLabel(work.next_actor, $actorRegistry, $principalRegistry)
-      : "";
+    if (!work?.next_actor) return "";
+    // The same cell the Owner column uses, so one row does not call the
+    // same agent two things. A pending cell stays blank rather than
+    // painting a directory name the roster may replace. Free-text
+    // annotations keep their words once both reads have answered.
+    const cell = ownerCellFor(work.next_actor);
+    if (!cell || cell.pending) return "";
+    return cell.name;
   }
 
   /**
@@ -558,6 +582,7 @@
                     href={href(work)}
                     {now}
                     onprefetch={prefetch}
+                    ownerCell={ownerCellFor(work.owner)}
                     boardTitle={multipleBoards ? boardLabel(work) : ""}
                     requested={Boolean(requested[key] || decisionId)}
                     requestedHref={decisionId
@@ -591,6 +616,7 @@
         summary={summaryOf(drag.work)}
         href={href(drag.work)}
         {now}
+        ownerCell={ownerCellFor(drag.work.owner)}
         boardTitle={multipleBoards ? boardLabel(drag.work) : ""}
         requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
       />
@@ -695,22 +721,18 @@
                   >
                 {/if}
               </td>
+              <!--
+                One owner format for people and agents: the name, an agent
+                marked as one, and the role, host and handle in the title.
+                A name the directory has not answered for yet holds a
+                placeholder instead of printing the raw handle and taking it
+                back a moment later.
+              -->
               <td class="max-w-40 overflow-hidden px-3 py-1.5">
-                {#if work.owner}
-                  <ActorLabel
-                    class="max-w-full"
-                    label={actorDisplayLabel(
-                      work.owner,
-                      $actorRegistry,
-                      $principalRegistry,
-                    )}
-                    seed={work.owner}
-                    size="xs"
-                    nameClass="text-meta text-fg truncate"
-                  />
-                {:else}
-                  <span class="text-fg-subtle">—</span>
-                {/if}
+                <OwnerLabel
+                  class="max-w-full"
+                  cell={ownerCellFor(work.owner)}
+                />
               </td>
               {#if anySourced}
                 <td class="whitespace-nowrap px-3 py-1.5">

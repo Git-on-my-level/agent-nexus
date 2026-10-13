@@ -1,6 +1,9 @@
 import { get, writable } from "svelte/store";
 
-import { replaceAgentRegistry } from "$lib/actorSession";
+import {
+  markAgentDirectoryRead,
+  replaceAgentRegistry,
+} from "$lib/actorSession";
 import { coreClient } from "$lib/coreClient";
 import {
   liveAgentChanges,
@@ -81,6 +84,9 @@ export function startAgentRoster(workspace) {
         try {
           await fetchRoster(key);
         } catch (error) {
+          // The read answered, badly. Lists that hold a placeholder for an
+          // agent name should stop holding it.
+          markAgentDirectoryRead(key);
           const current = get(agentRoster);
           agentRoster.set({
             ...current,

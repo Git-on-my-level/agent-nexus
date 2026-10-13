@@ -7,6 +7,7 @@
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
   import {
     agentRuntimeLabel,
+    handleRestatesAgentName,
     isQuietAgentState,
     taskPath,
   } from "$lib/agentPresence.js";
@@ -27,6 +28,13 @@
   } = $props();
 
   let runtime = $derived(agentRuntimeLabel(agent));
+  let name = $derived(agent.display_name || agent.handle);
+  // "priya on dev-host" over "@priya.dev-host" is one agent listed twice.
+  // The handle stays on the row's title (and in Copy ref on the agent page),
+  // and keeps its own line only where it says something new.
+  let showHandle = $derived(
+    Boolean(agent.handle) && !handleRestatesAgentName(name, agent.handle),
+  );
   let taskHref = $derived(
     model.task?.ref ? workspaceHref(taskPath(model.task.ref)) : "",
   );
@@ -73,12 +81,17 @@
       class="block truncate text-meta font-medium text-fg hover:underline"
       {href}
       data-agent-link
-      onfocus={onselect}>{agent.display_name || agent.handle}</a
+      title={agent.handle ? `${name} · @${agent.handle}` : name}
+      onfocus={onselect}>{name}</a
     >
     <p class="flex min-w-0 items-center gap-1.5 text-micro text-fg-muted">
-      <span class="truncate">@{agent.handle}</span>
+      {#if showHandle}
+        <span class="truncate" data-agent-handle>@{agent.handle}</span>
+        {#if runtime}
+          <span class="text-fg-subtle" aria-hidden="true">·</span>
+        {/if}
+      {/if}
       {#if runtime}
-        <span class="text-fg-subtle" aria-hidden="true">·</span>
         <span class="shrink-0">{runtime}</span>
       {/if}
       <AgentBridgeIndicator online={agent.bridge_online} />

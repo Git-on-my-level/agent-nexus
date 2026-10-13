@@ -10,6 +10,23 @@ export const BOARD_LIFECYCLE_STATE_LABELS = {
 /** @deprecated Use BOARD_LIFECYCLE_STATE_LABELS */
 export const BOARD_STATUS_LABELS = BOARD_LIFECYCLE_STATE_LABELS;
 
+/**
+ * The board name as a list shows it: without the word the column header
+ * already said.
+ *
+ * Boards are routinely named "Launch Readiness Board", so a BOARD column
+ * reads "…Board" down every row and a card's board chip truncates on the
+ * suffix ("Creative / Content Bo…"). Display only — the board keeps its
+ * title, and a board actually called "Board" keeps it too.
+ *
+ * @param {unknown} title
+ */
+export function boardDisplayTitle(title) {
+  const text = String(title ?? "").trim();
+  const trimmed = text.replace(/\s+board$/i, "").trim();
+  return trimmed || text;
+}
+
 export const CANONICAL_BOARD_COLUMNS = [
   { key: "backlog", title: "Backlog" },
   { key: "ready", title: "Ready" },

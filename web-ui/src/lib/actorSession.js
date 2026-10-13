@@ -21,6 +21,18 @@ export const principalRegistry = writable([]);
 export const actorDirectoryIncomplete = writable(false);
 export const principalDirectoryIncomplete = writable(false);
 /**
+ * Has a directory read landed for this workspace yet?
+ *
+ * A list that prints owner names needs to tell "nobody has told me this
+ * actor's name" from "I have not asked yet": without the distinction every
+ * row paints the raw id on first frame and swaps to the name a moment later,
+ * and the page reads as if it changed its mind. A row shows a placeholder
+ * while these are false. Both flip on the first read, successful or not —
+ * a failed read is an answer, and the fallback label is then the truth.
+ */
+export const actorDirectoryLoaded = writable(false);
+export const agentDirectoryLoaded = writable(false);
+/**
  * Agent roster summaries (`GET /agents`) for the current workspace. A derived
  * agent is named by its host relation ("codex on workstation-a") wherever the UI
  * says who did something; see `buildActorNameMap`.
@@ -38,6 +50,8 @@ function createEmptyActorState() {
     agentRegistry: [],
     actorDirectoryIncomplete: false,
     principalDirectoryIncomplete: false,
+    actorDirectoryLoaded: false,
+    agentDirectoryLoaded: false,
   };
 }
 
@@ -59,6 +73,8 @@ function syncCurrentWorkspaceStores(workspaceSlug = getCurrentWorkspaceSlug()) {
   agentRegistry.set([...state.agentRegistry]);
   actorDirectoryIncomplete.set(Boolean(state.actorDirectoryIncomplete));
   principalDirectoryIncomplete.set(Boolean(state.principalDirectoryIncomplete));
+  actorDirectoryLoaded.set(Boolean(state.actorDirectoryLoaded));
+  agentDirectoryLoaded.set(Boolean(state.agentDirectoryLoaded));
   return state;
 }
 
@@ -168,6 +184,7 @@ export function replaceActorRegistry(
 ) {
   const state = ensureActorState(workspaceSlug);
   state.actorRegistry = [...(actors ?? [])];
+  state.actorDirectoryLoaded = true;
   syncCurrentWorkspaceStores(workspaceSlug);
   return state.actorRegistry;
 }
@@ -210,10 +227,26 @@ export function replaceAgentRegistry(
 ) {
   const state = ensureActorState(workspaceSlug);
   state.agentRegistry = [...(agents ?? [])];
+  state.agentDirectoryLoaded = true;
   if (String(workspaceSlug ?? "").trim() === getCurrentWorkspaceSlug()) {
     syncCurrentWorkspaceStores(workspaceSlug);
   }
   return state.agentRegistry;
+}
+
+/**
+ * Record that the agent roster read finished without a usable roster (a
+ * failed read, an empty workspace). Lists waiting on agent names stop
+ * waiting: the fallback label is the best answer there is.
+ */
+export function markAgentDirectoryRead(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  const state = ensureActorState(workspaceSlug);
+  state.agentDirectoryLoaded = true;
+  if (String(workspaceSlug ?? "").trim() === getCurrentWorkspaceSlug()) {
+    syncCurrentWorkspaceStores(workspaceSlug);
+  }
 }
 
 /** The roster entry for an actor id, agent id or handle, or null. */
@@ -372,7 +405,7 @@ function principalDisplayLabelFromAuth(principal) {
   return u;
 }
 
-function humanizeUnmappedActorIdForUi(id) {
+export function humanizeUnmappedActorIdForUi(id) {
   const s = String(id ?? "").trim();
   if (!s) {
     return "";

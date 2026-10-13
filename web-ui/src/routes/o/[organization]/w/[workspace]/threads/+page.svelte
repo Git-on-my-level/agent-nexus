@@ -10,6 +10,18 @@
     parseTopicListSearchParams,
   } from "$lib/topicFilters";
   import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
+  import {
+    actorDirectoryLoaded,
+    actorRegistry,
+    agentDirectoryLoaded,
+    agentRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
+  import { buildOwnerDisplay } from "$lib/ownerDisplay.js";
+  import {
+    threadRowContextParts,
+    threadSubjectRef,
+  } from "$lib/threadListContext.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
@@ -41,6 +53,27 @@
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
+
+  /**
+   * Who a thread belongs to, from `updated_by` on the row and the directory
+   * the shell already loaded. Two threads can share a title ("Asks", one per
+   * actor); they do not share an owner.
+   */
+  let ownerCellFor = $derived(
+    buildOwnerDisplay({
+      actors: $actorRegistry,
+      principals: $principalRegistry,
+      agents: $agentRegistry,
+      actorsLoaded: $actorDirectoryLoaded,
+      agentsLoaded: $agentDirectoryLoaded,
+    }),
+  );
+  function rowContext(thread) {
+    const owner = ownerCellFor(thread?.updated_by || thread?.created_by);
+    return threadRowContextParts(thread, {
+      ownerName: owner && !owner.pending ? owner.name : "",
+    });
+  }
 
   /** @param {string} ref */
   function topicSegmentFromTypedRef(ref) {
@@ -265,9 +298,14 @@
             {/if}
           </div>
           <!-- Names, not identifiers: the ref is one click away behind
-               Copy ref for whoever needs it on the CLI. -->
-          <p class="text-micro text-fg-muted">
-            Updated <Time
+               Copy ref for whoever needs it on the CLI. The context parts
+               come first, because that is what tells two rows of the same
+               name apart. -->
+          <p class="text-micro text-fg-muted" title={threadSubjectRef(thread)}>
+            {#each rowContext(thread) as part, partIndex (partIndex)}<span
+                >{part}</span
+              ><span aria-hidden="true" class="text-fg-subtle">{" · "}</span
+              >{/each}Updated <Time
               value={thread.updated_at}
               fallback="—"
             />{#if topicSeg}
