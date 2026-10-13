@@ -5,6 +5,7 @@ package workspaceconfig
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -52,13 +53,52 @@ func ValidateForgeKind(kind string) bool {
 var forgeHostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?$`)
 
 // ValidateForgeHost accepts a DNS hostname with an optional port. Never a URL,
-// wildcard or path — one entry is one origin.
+// wildcard or path — one entry is one origin. The port must be a canonical
+// decimal in 1..65535; an omitted port means the HTTPS default 443.
 func ValidateForgeHost(host string) error {
 	value := strings.ToLower(strings.TrimSpace(host))
 	if value == "" || len(value) > 255 || !forgeHostPattern.MatchString(value) || strings.Contains(value, "..") {
 		return fmt.Errorf("forge host must be a hostname with an optional port: %q", host)
 	}
+	if _, ok := CanonicalForgeOrigin(value); !ok {
+		return fmt.Errorf("forge host port must be a canonical 1..65535 port; an omitted port means 443: %q", host)
+	}
 	return nil
+}
+
+// CanonicalForgeOrigin normalizes a registered forge host to the lowercase
+// host:port origin the lint compares URL origins against. An omitted port
+// means the HTTPS default 443. ok is false for malformed entries, including
+// out-of-range, zero, or leading-zero ports.
+func CanonicalForgeOrigin(host string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(host))
+	if value == "" || len(value) > 255 || !forgeHostPattern.MatchString(value) || strings.Contains(value, "..") {
+		return "", false
+	}
+	if _, port, err := net.SplitHostPort(value); err == nil {
+		if !canonicalPort(port) {
+			return "", false
+		}
+		return strings.TrimSuffix(value, ":"+port) + ":" + port, true
+	}
+	if strings.Contains(value, ":") {
+		return "", false
+	}
+	return value + ":443", true
+}
+
+func canonicalPort(port string) bool {
+	if port == "" || len(port) > 5 || (len(port) > 1 && port[0] == '0') {
+		return false
+	}
+	number := 0
+	for _, c := range port {
+		if c < '0' || c > '9' {
+			return false
+		}
+		number = number*10 + int(c-'0')
+	}
+	return number >= 1 && number <= 65535
 }
 
 type Workspace struct {

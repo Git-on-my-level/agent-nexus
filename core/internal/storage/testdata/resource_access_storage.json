@@ -1357,7 +1357,7 @@
     "../observation/config.go:type:PolicyConfig": "0801da1facf24633857ff1821f4c1a04ad8e7758a676a427cb428e21ac2aebeb",
     "../observation/config.go:type:RegistrationConfig": "999d6a7127a3dbed05503f0945e822725b5599e429c73d0ee521f7f5f2c2f49f",
     "../observation/config.go:type:RegistryConfig": "d97cbf026cf2167d43c569017136d6e91f9c3b8704084c9d91daa20b1624156d",
-    "../observation/forgejo.go:*ForgejoReader:Read": "0d2c229e2544b19f7159100ca5eff9f6b8a7abd708ebc226ccc952c586f1dc59",
+    "../observation/forgejo.go:*ForgejoReader:Read": "04808af1f0f19aaa1d090be66cd66c70a58061c534edc12814545f3eb3e7b8cd",
     "../observation/generate.go:RunGenerateHarness": "66b2ab7b3e36204c0d2c9b1ba84d82c3605e58405db68cdea340371bf05f2a8b",
     "../observation/generate.go:harnessExecutionID": "fedcaa846587aa76dbf5a8723ac4e705e5ed960c8ab4925bad6c6171bcc3daf8",
     "../observation/github.go:*GitHubReader:Read": "20298cfaf947c9d161084e847abd5c66a9f321d3e1000744e4c3582a3fdec5d7",

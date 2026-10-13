@@ -70,7 +70,7 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forge
 	for _, match := range askNamedPR.FindAllStringSubmatch(body, -1) {
 		satisfied := false
 		for _, u := range evidenceLinks {
-			kind := forgeKindFor(forges, u.Host)
+			kind := forgeKindFor(forges, u)
 			if kind == "" {
 				continue
 			}
@@ -96,7 +96,7 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forge
 				if e != nil {
 					continue
 				}
-				forgeKind := forgeKindFor(forges, u.Host)
+				forgeKind := forgeKindFor(forges, u)
 				if forgeKind != "" && forgeCommitPinnedFile(forgeKind, u) && strings.Contains(link.URL, match[2]) {
 					found = true
 				}

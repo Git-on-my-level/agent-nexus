@@ -111,29 +111,29 @@ func TestAskAuthoringEvidence(t *testing.T) {
 	if _, err := lintAskAuthoring("Review PR #123 before deciding", nil, []askEvidenceLink{{Label: "change", URL: "https://unregistered.example.test/o/r/pull/123"}}, nil); err == nil {
 		t.Fatal("unregistered host satisfied the PR")
 	}
-	// forgejo evidence URL for the named PR; the SCA-784 hub-ask regression.
+	// forgejo evidence URL for the named PR (issue #387 acceptance).
 	forges := []workspaceconfig.Forge{{Host: "forge.example.test", Kind: "forgejo"}}
-	if _, err := lintAskAuthoring("Ship PR #2 this week", nil, []askEvidenceLink{{Label: "hub", URL: "https://forge.example.test/hermes/davids-skill-hub/pulls/2"}}, forges); err != nil {
+	if _, err := lintAskAuthoring("Ship PR #2 this week", nil, []askEvidenceLink{{Label: "widgets", URL: "https://forge.example.test/acme/widgets/pulls/2"}}, forges); err != nil {
 		t.Fatal(err)
 	}
 	// Wrong number still fails.
-	if _, err := lintAskAuthoring("Ship PR #3 this week", nil, []askEvidenceLink{{Label: "hub", URL: "https://forge.example.test/hermes/davids-skill-hub/pulls/2"}}, forges); err == nil {
+	if _, err := lintAskAuthoring("Ship PR #3 this week", nil, []askEvidenceLink{{Label: "widgets", URL: "https://forge.example.test/acme/widgets/pulls/2"}}, forges); err == nil {
 		t.Fatal("wrong PR number satisfied")
 	}
 	// A matching path on an unregistered forge host never satisfies the mention.
-	if _, err := lintAskAuthoring("Ship PR #2 this week", nil, []askEvidenceLink{{Label: "hub", URL: "https://other.example.test/hermes/davids-skill-hub/pulls/2"}}, forges); err == nil {
+	if _, err := lintAskAuthoring("Ship PR #2 this week", nil, []askEvidenceLink{{Label: "widgets", URL: "https://other.example.test/acme/widgets/pulls/2"}}, forges); err == nil {
 		t.Fatal("unregistered forge host satisfied the PR")
 	}
 	// The forge's own URL dialect is required; a GitHub-style path on a
 	// registered forgejo host does not count.
-	if _, err := lintAskAuthoring("Ship PR #2 this week", nil, []askEvidenceLink{{Label: "hub", URL: "https://forge.example.test/hermes/davids-skill-hub/pull/2"}}, forges); err == nil {
+	if _, err := lintAskAuthoring("Ship PR #2 this week", nil, []askEvidenceLink{{Label: "widgets", URL: "https://forge.example.test/acme/widgets/pull/2"}}, forges); err == nil {
 		t.Fatal("github path satisfied a forgejo host")
 	}
 	// Body and ref URLs count as evidence too, per kind.
-	if _, err := lintAskAuthoring("Ship PR #2 per https://forge.example.test/hermes/davids-skill-hub/pulls/2.", nil, nil, forges); err != nil {
+	if _, err := lintAskAuthoring("Ship PR #2 per https://forge.example.test/acme/widgets/pulls/2.", nil, nil, forges); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lintAskAuthoring("Ship PR #2", []string{"https://forge.example.test/hermes/davids-skill-hub/pulls/2"}, nil, forges); err != nil {
+	if _, err := lintAskAuthoring("Ship PR #2", []string{"https://forge.example.test/acme/widgets/pulls/2"}, nil, forges); err != nil {
 		t.Fatal(err)
 	}
 	// GitLab and Bitbucket forms.
@@ -184,26 +184,48 @@ func TestAskAuthoringFilePermalinks(t *testing.T) {
 
 func TestForgeURLMatching(t *testing.T) {
 	forges := []workspaceconfig.Forge{{Host: "forge.example.test", Kind: "forgejo"}, {Host: "gitlab.example.test:8443", Kind: "gitlab"}}
-	if kind := forgeKindFor(forges, "forge.example.test"); kind != "forgejo" {
+	kindFor := func(raw string) string {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return forgeKindFor(forges, u)
+	}
+	if kind := kindFor("https://forge.example.test/o/r/pulls/1"); kind != "forgejo" {
 		t.Fatal(kind)
 	}
-	if kind := forgeKindFor(forges, "FORGE.example.test"); kind != "forgejo" {
+	if kind := kindFor("https://FORGE.example.test/o/r/pulls/1"); kind != "forgejo" {
 		t.Fatal(kind)
 	}
-	if kind := forgeKindFor(forges, "gitlab.example.test:8443"); kind != "gitlab" {
+	if kind := kindFor("https://gitlab.example.test:8443/o/r/-/merge_requests/1"); kind != "gitlab" {
 		t.Fatal(kind)
 	}
-	if kind := forgeKindFor(forges, "other.example.test"); kind != "" {
+	// A registration without a port is the HTTPS default origin; a URL on any
+	// other port, or over http, is a different origin and never matches.
+	if kind := kindFor("https://forge.example.test:8443/o/r/pulls/1"); kind != "" {
+		t.Fatal("port-less registration matched a custom port:", kind)
+	}
+	if kind := kindFor("http://forge.example.test/o/r/pulls/1"); kind != "" {
+		t.Fatal("port-less registration matched plain http:", kind)
+	}
+	if kind := kindFor("https://gitlab.example.test/o/r/-/merge_requests/1"); kind != "" {
+		t.Fatal("explicit-port registration matched the default port:", kind)
+	}
+	if kind := kindFor("https://other.example.test/o/r/pulls/1"); kind != "" {
 		t.Fatal(kind)
 	}
-	if kind := forgeKindFor(forges, "forge.example.test:8443"); kind != "" {
-		t.Fatal("portless registration matched a different port:", kind)
-	}
-	if kind := forgeKindFor(nil, "github.com"); kind != "github" {
+	// The built-in github kind follows github.com on any explicit port.
+	if kind := kindFor("https://github.com/o/r/pull/1"); kind != "github" {
 		t.Fatal(kind)
 	}
-	if kind := forgeKindFor(nil, "github.com:443"); kind != "github" {
+	if kind := kindFor("https://github.com:443/o/r/pull/1"); kind != "github" {
 		t.Fatal("github.com with explicit port rejected:", kind)
+	}
+	if kind := kindFor("https://github.com:8443/o/r/pull/1"); kind != "github" {
+		t.Fatal("github.com with explicit port rejected:", kind)
+	}
+	if n, ok := forgePRNumber("gitlab", "/g/sub/repo/-/merge_requests/4/commits"); !ok || n != "4" {
+		t.Fatal("gitlab commits tab rejected:", n, ok)
 	}
 	if _, ok := forgePRNumber("forgejo", "/o/r/pulls/12"); !ok {
 		t.Fatal("forgejo PR form")
@@ -241,9 +263,6 @@ func TestForgeURLMatching(t *testing.T) {
 	}
 	if n, ok := forgePRNumber("gitlab", u.Path); !ok || n != "4" {
 		t.Fatal(n, ok)
-	}
-	if n, ok := forgePRNumber("gitlab", "/g/sub/repo/-/merge_requests/4/commits"); !ok || n != "4" {
-		t.Fatal("gitlab commits tab rejected:", n, ok)
 	}
 }
 func TestAskCreatesSubjectAndKeepsCommandLocal(t *testing.T) {
@@ -360,9 +379,9 @@ func TestAskBridgeRecoversSubscriptionAndAcknowledgement(t *testing.T) {
 	}
 }
 
-// The SCA-784 hub ask regression, end to end: a Forgejo evidence URL naming
-// "PR #2" fails the lint until the forge host is registered for the workspace
-// with `anx config forge add`, then passes without --force.
+// End to end: a Forgejo evidence URL naming "PR #2" fails the lint until
+// the forge host is registered for the workspace with `anx config forge add`,
+// then passes without --force (issue #387 acceptance).
 func TestAskForgeEvidenceViaWorkspaceConfig(t *testing.T) {
 	var gotWork map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -408,10 +427,10 @@ func TestAskForgeEvidenceViaWorkspaceConfig(t *testing.T) {
 		}
 		return a
 	}
-	hubURL := "https://forge.example.test/hermes/davids-skill-hub/pulls/2"
+	prURL := "https://forge.example.test/acme/widgets/pulls/2"
 	askArgs := func(out *bytes.Buffer) []string {
 		_ = out
-		return []string{"--json", "--as", "worker", "ask", "Ship the hub gate?", "--body", "PR #2 must merge before launch.\n\n## Decision\nProceed once it merges.\n\n## Context\nThe gate blocks every hub ask.\n\n## Options with consequences\n- Accept: unblocks the fleet.\n- Wait: hub work stays blocked.\n\n## Recommendation\nAccept, because the gate is green.\n\n## Evidence\n- hub: " + hubURL, "--recommend", "Proceed", "--evidence", "hub=" + hubURL}
+		return []string{"--json", "--as", "worker", "ask", "Ship the widgets gate?", "--body", "PR #2 must merge before launch.\n\n## Decision\nProceed once it merges.\n\n## Context\nThe gate blocks every downstream ask.\n\n## Options with consequences\n- Accept: unblocks the fleet.\n- Wait: downstream work stays blocked.\n\n## Recommendation\nAccept, because the gate is green.\n\n## Evidence\n- widgets: " + prURL, "--recommend", "Proceed", "--evidence", "widgets=" + prURL}
 	}
 	rejected := &bytes.Buffer{}
 	if code := newApp(rejected).Run(askArgs(rejected)); code == 0 {

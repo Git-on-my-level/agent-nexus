@@ -1,7 +1,6 @@
 package app
 
 import (
-	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -9,24 +8,45 @@ import (
 	"agent-nexus-cli/internal/workspaceconfig"
 )
 
-// github.com is the only built-in forge; every other host must be registered
-// for the workspace with `anx config forge add`.
+// github.com is the only built-in forge and stays built in on any explicit
+// port; every other host must be registered for the workspace with
+// `anx config forge add` and matches one exact normalized origin.
 var builtinForgeHosts = map[string]string{"github.com": "github"}
 
-// forgeKindFor reports the forge dialect registered for a URL host, or "" when
-// the host is not a registered forge for this workspace.
-func forgeKindFor(forges []workspaceconfig.Forge, rawHost string) string {
-	host := strings.ToLower(rawHost)
-	hostname := host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		hostname = h
+// urlOrigin normalizes a URL to its lowercase host:port origin. An omitted
+// port is the scheme's default, so http://h and https://h are distinct
+// origins, and neither matches a port-less registration except on its own
+// default port.
+func urlOrigin(u *url.URL) string {
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return ""
 	}
-	if kind, ok := builtinForgeHosts[hostname]; ok {
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "http" {
+			port = "80"
+		} else {
+			port = "443"
+		}
+	}
+	return host + ":" + port
+}
+
+// forgeKindFor reports the forge dialect registered for a URL's exact origin,
+// or "" when the origin is not a registered forge for this workspace. A
+// registration without a port is the HTTPS default origin (443); a URL on any
+// other port is a different origin and never matches.
+func forgeKindFor(forges []workspaceconfig.Forge, u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if kind, ok := builtinForgeHosts[strings.ToLower(u.Hostname())]; ok {
 		return kind
 	}
+	origin := urlOrigin(u)
 	for _, forge := range forges {
-		entry := strings.ToLower(strings.TrimSpace(forge.Host))
-		if entry == host {
+		if entry, ok := workspaceconfig.CanonicalForgeOrigin(forge.Host); ok && entry == origin {
 			return strings.ToLower(forge.Kind)
 		}
 	}

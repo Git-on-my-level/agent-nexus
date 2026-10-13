@@ -255,12 +255,34 @@ func TestForgeRegistry(t *testing.T) {
 		{"ws", "", "github"},
 		{"ws", "https://not-a-host", "github"},
 		{"ws", "forge.example.test/path", "github"},
+		{"ws", "forge.example.test:99999", "forgejo"},
+		{"ws", "forge.example.test:65536", "forgejo"},
+		{"ws", "forge.example.test:0443", "forgejo"},
+		{"ws", "forge.example.test:0", "forgejo"},
 		{"unknown", "forge.example.test", "forgejo"},
 		{"ws", "forge.example.test", "sourcehut"},
 		{"ws", "forge.example.test", ""},
 	} {
 		if err := f.SetForge(tc.workspace, tc.host, tc.kind); err == nil {
 			t.Fatalf("accepted %+v", tc)
+		}
+	}
+	// Port normalization: omitted port means the HTTPS default 443; ports are
+	// exact, canonical and in range.
+	for _, tc := range []struct{ host, want string }{
+		{"forge.example.test", "forge.example.test:443"},
+		{"FORGE.Example.test", "forge.example.test:443"},
+		{"forge.example.test:8443", "forge.example.test:8443"},
+		{"forge.example.test:65535", "forge.example.test:65535"},
+	} {
+		got, ok := CanonicalForgeOrigin(tc.host)
+		if !ok || got != tc.want {
+			t.Fatalf("%s: %q %v", tc.host, got, ok)
+		}
+	}
+	for _, host := range []string{"", "forge.example.test:99999", "forge.example.test:65536", "forge.example.test:0443", "forge.example.test:0", "forge.example:test", "https://forge.example.test", "*.example.test", "forge.example.test."} {
+		if _, ok := CanonicalForgeOrigin(host); ok {
+			t.Fatalf("accepted %q", host)
 		}
 	}
 	// Load validation rejects hand-edited files with bad entries.
