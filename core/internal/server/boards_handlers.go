@@ -718,6 +718,9 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, input)
 	if err != nil {
+		if writeStoreContentionError(w, r, err) {
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
@@ -909,6 +912,9 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 
 	results, err := opts.primitiveStore.CreateBoardCardsBatch(r.Context(), actorID, boardID, ifBoardTok, inputs)
 	if err != nil {
+		if writeStoreContentionError(w, r, err) {
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
@@ -1053,6 +1059,9 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	result, err := opts.primitiveStore.UpdateBoardCard(r.Context(), actorID, boardID, cardKey, patchInput)
 	if err != nil {
+		if writeStoreContentionError(w, r, err) {
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
@@ -1258,6 +1267,7 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	})
 	if err != nil {
 		switch {
+		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -1331,6 +1341,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	})
 	if err != nil {
 		switch {
+		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -1394,6 +1405,7 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 	})
 	if err != nil {
 		switch {
+		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())

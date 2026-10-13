@@ -542,6 +542,9 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 
 	result, err := opts.primitiveStore.UpdateBoardCard(r.Context(), actorID, "", cardID, patchInput)
 	if err != nil {
+		if writeStoreContentionError(w, r, err) {
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}

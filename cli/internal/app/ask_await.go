@@ -18,14 +18,23 @@ import (
 )
 
 func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target string, timeout time.Duration) (*commandResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	// The tail of the await budget is reserved for the durable decision read,
+	// so a starved stream can never push the whole command past --timeout.
+	reserve := 2 * time.Second
+	if timeout < 2*reserve {
+		reserve = timeout / 2
+	}
+	deadline := time.Now().Add(timeout)
+	awaitCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	streamCtx, streamCancel := context.WithDeadline(ctx, deadline.Add(-reserve))
+	defer streamCancel()
 	// Terminal state is durable. Read it before creating a write-side subscription
 	// or competing for SSE admission, especially when writers are contending.
 	askPath := "/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:"))
-	current, err := a.invokeRawJSON(ctx, cfg, "await outcome", http.MethodGet, askPath, nil)
+	current, err := a.invokeRawJSON(awaitCtx, cfg, "await outcome", http.MethodGet, askPath, nil)
 	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(awaitCtx.Err(), context.DeadlineExceeded) {
 			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
 		}
 		return nil, err
@@ -34,17 +43,19 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		return awaitAskOutcomeResult(target, out)
 	}
 	subscription := ""
-	sub, err := a.invokeRawJSON(ctx, cfg, "await subscribe", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/subscriptions", map[string]any{"kind": "await", "label": "live await"})
+	sub, err := a.invokeRawJSON(awaitCtx, cfg, "await subscribe", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/subscriptions", map[string]any{"kind": "await", "label": "live await"})
 	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(awaitCtx.Err(), context.DeadlineExceeded) {
 			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
 		}
 		return nil, err
 	}
 	subscription = anyString(commandResultBody(sub)["id"])
 	backoff := 250 * time.Millisecond
-	for ctx.Err() == nil {
-		auth, err := a.cfgWithResolvedAuthToken(ctx, cfg)
+	for streamCtx.Err() == nil {
+		// Token refresh stays inside the await deadline; a hung refresh must
+		// not outlive --timeout either.
+		auth, err := a.cfgWithResolvedAuthToken(awaitCtx, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +65,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		if err != nil {
 			return nil, err
 		}
-		resp, err := client.OpenStream(ctx, httpclient.RawRequest{Method: http.MethodGet, Path: "/stream/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:")), Headers: map[string]string{"Accept": "text/event-stream"}})
+		resp, err := client.OpenStream(streamCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/stream/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:")), Headers: map[string]string{"Accept": "text/event-stream"}})
 		if err == nil {
 			if resp.StatusCode >= 400 {
 				b, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
@@ -62,7 +73,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 				return nil, errnorm.FromHTTPFailure(resp.StatusCode, b)
 			}
 			reader := bufio.NewReader(resp.Body)
-			for ctx.Err() == nil {
+			for streamCtx.Err() == nil {
 				ev, e := streaming.ReadEvent(reader)
 				if e != nil {
 					break
@@ -83,7 +94,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 					continue
 				}
 				resp.Body.Close()
-				_, ackErr := a.invokeRawJSON(ctx, cfg, "await delivery", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/delivery", map[string]any{"subscription_id": subscription, "state": "delivered", "attempts": 1})
+				_, ackErr := a.invokeRawJSON(awaitCtx, cfg, "await delivery", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/delivery", map[string]any{"subscription_id": subscription, "state": "delivered", "attempts": 1})
 				if ackErr != nil {
 					out["delivery_acknowledged"] = false
 				} else {
@@ -95,13 +106,29 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		}
 		timer := time.NewTimer(backoff)
 		select {
-		case <-ctx.Done():
+		case <-streamCtx.Done():
 			timer.Stop()
 		case <-timer.C:
 		}
 		if backoff < 4*time.Second {
 			backoff *= 2
 		}
+	}
+	// The stream can starve under writer contention even after the answer is
+	// durable. The reserved tail buys one durable read that decides between
+	// the answer and the timeout; a read failure surfaces as its real error
+	// instead of a timeout.
+	finalCtx, finalCancel := context.WithDeadline(ctx, deadline)
+	defer finalCancel()
+	current, err = a.invokeRawJSON(finalCtx, cfg, "await outcome", http.MethodGet, askPath, nil)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(finalCtx.Err(), context.DeadlineExceeded) {
+			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
+		}
+		return nil, err
+	}
+	if out := commandResultBody(current); anyString(out["status"]) != "open" {
+		return awaitAskOutcomeResult(target, out)
 	}
 	return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
 }
