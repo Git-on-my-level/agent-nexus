@@ -137,6 +137,13 @@ The import gate below remains in force; this contract alone enables no handler.
 
 ## Explicit integration gates
 
+The disabled independent document/comment writer is documented in
+[SEARCH.md](SEARCH.md). `SearchCanonicalHook` is admitted by the registered
+hook boundary and uses only exact SQL templates; `InitializeSearchSchema`
+creates its empty shadow tables. Production capture, audience parity, online
+backfill and reader selection remain unwired. No readiness follows from schema
+initialization or from passing the writer's transaction tests.
+
 `TestFoundationNotServing` rejects every production import of `scopedrepo`, including
 alias/dot imports. Thus neither a helper nor a handler can start a second
 computation with private control-flow information today. This is a temporary

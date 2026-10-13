@@ -165,7 +165,9 @@ func applyCanonicalHooks(ctx context.Context, tx *resourceaccess.Tx, mutation sc
 		if registered {
 			// Exact value types only. Embedding, wrappers and pointers cannot add
 			// callbacks or mutate registration after this admission check.
-			if _, approved := h.(ReadModelCanonicalHook); !approved {
+			switch h.(type) {
+			case ReadModelCanonicalHook, SearchCanonicalHook:
+			default:
 				return scopes.ErrDenied
 			}
 		}

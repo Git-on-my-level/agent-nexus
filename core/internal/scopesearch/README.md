@@ -5,6 +5,12 @@ does not register a route, initialize tables, replace `SearchDocuments`, or enab
 the new authority. Legacy search/comment privacy tests and the legacy FTS path
 remain authoritative until the complete phase-3 semantic cutover.
 
+SCA-760 adds the disabled, SQL-sealed `scopedrepo.SearchCanonicalHook` and its
+empty shadow schema. [Writer evidence and remaining retirement gates](../scopedrepo/SEARCH.md)
+describe the randomized common-domain parity suite and the explicit legacy
+semantic differences. No production reader, capture wiring or backfill worker
+is enabled by that adapter.
+
 `Search` receives a trusted `Repository`, a persistent-secret token codec and a
 finite request selection. The repository must authorize **all** selected scopes
 before invoking the callback and keep binding checks, candidate keys and bounded
@@ -58,12 +64,14 @@ are A's opaque allocated IDs.
 
 ## Lead-owned integration proposal
 
-1. Implement `Repository`/`Snapshot` and `Writer` inside `scopedrepo` using its
-   transaction capabilities and reviewed generated templates. Use the durable
+1. Implement `Repository`/`Snapshot` inside `scopedrepo` using its
+   transaction capabilities and reviewed generated templates. The disabled
+   `SearchCanonicalHook` now supplies the bounded, registered writer and schema;
+   canonical source capture and live integration remain required. Use the durable
    reference adapter in `server/scope_search_repository_test.go` as executable
-   evidence, not as a production factory. Its shadow DDL also specifies the
-   posting/resource/generation shapes. Enforce immutable ownership, current head,
-   complete old-posting bounds and scope/parent equality in the production schema.
+   evidence, not as a production factory. The writer's `search_schema.sql`
+   enforces immutable ownership, current head, complete old-posting bounds and
+   scope/parent equality; its adoption by the reader still needs review.
 2. Produce the bounded head/comment prefix from the incoming canonical write
    **before** forming the frozen bounded Change. Carry source truncation explicitly
    using A's `scopes.BoundSearchProjection` and shared `SourceTruncated` bit.
@@ -95,9 +103,10 @@ generation and exact stream together, then checks HTTP/SSE output. The reference
 writer uses <=32 batches of <=128 posting tuples, two deletes, one head insert
 and one generation update (<=36 search calls), plus <=8 calls for four stream
 destinations. This fits the shared 256-call ceiling without limiting coverage to
-256 terms. A must integrate reviewed typed batch templates and enforce the old
-posting cap in the production schema. This is an adapter proposal with explicit
-test selection, not complete production source capture or route authority.
+256 terms. The newer registered writer in `scopedrepo` supplies exact batch
+templates and the schema-enforced old-posting cap; its maximum is 39 calls
+including first-generation creation. Both remain disabled pending complete
+production source capture and route authority.
 
 The HTTP tests exercise the production executor/helper over a real SQLite
 workspace and foundation authority tables with explicit test selection. They
