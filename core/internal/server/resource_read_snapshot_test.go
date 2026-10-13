@@ -12,6 +12,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -37,11 +38,11 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 	thread := anyString(card.Card["thread_id"])
 	seedStreamPrivacyInbox(t, s, thread, streamPrivacyInboxItem(thread, "page-private-inbox", "PrivatePageSentinel"))
 	db.SetMaxOpenConns(1)
-	paths := []string{"/cards/" + anyString(card.Card["id"]), "/boards/" + anyString(board["id"]) + "/cards/" + anyString(card.Card["id"]), "/inbox?limit=50"}
+	paths := []string{"/cards/" + anyString(card.Card["id"]), "/boards/" + anyString(board["id"]) + "/cards/" + anyString(card.Card["id"]), "/inbox?limit=50", "/overview", "/overview?summary=1&work_view=summary", "/overview/changes"}
 	for _, live := range []bool{false, true} {
 		t.Run(fmt.Sprintf("live=%v", live), func(t *testing.T) {
 			store := primitives.NewStore(db, blob.NewFilesystemBackend(env.workspace.Layout().ArtifactContentDir), env.workspace.Layout().ArtifactContentDir, primitives.WithScopedInboxReader(live))
-			h := NewHandler("page-test", WithPrimitiveStore(store), WithAuthStore(auth.NewStore(db)), WithActorRegistry(actors.NewStore(db)))
+			h := NewHandler("page-test", WithPrimitiveStore(store), WithAuthStore(auth.NewStore(db)), WithActorRegistry(actors.NewStore(db)), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})))
 			request := func(token, path string, want int) {
 				t.Helper()
 				c, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -53,7 +54,7 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 				if w.Code != want {
 					t.Fatalf("path=%s got=%d want=%d body=%s", path, w.Code, want, w.Body.String())
 				}
-				if token == owner.AccessToken && want == http.StatusOK && !strings.Contains(w.Body.String(), "PrivatePageSentinel") {
+				if token == owner.AccessToken && want == http.StatusOK && path != "/overview/changes" && !strings.Contains(w.Body.String(), "PrivatePageSentinel") {
 					t.Fatal("authorized page lost the private positive control")
 				}
 				if token == stranger.AccessToken && strings.Contains(w.Body.String(), "PrivatePageSentinel") {
@@ -63,7 +64,7 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 			for _, path := range paths {
 				request(owner.AccessToken, path, 200)
 				status := 404
-				if strings.HasPrefix(path, "/inbox") {
+				if strings.HasPrefix(path, "/inbox") || strings.HasPrefix(path, "/overview") {
 					status = 200
 				}
 				request(stranger.AccessToken, path, status)

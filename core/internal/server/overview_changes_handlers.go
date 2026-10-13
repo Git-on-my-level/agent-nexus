@@ -72,11 +72,23 @@ func handleOverviewChanges(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, 503, "overview_unavailable", "overview store is not configured")
 		return
 	}
+	closeRead := func() {}
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		ctx, close, err := canonical.BeginResourceRead(r.Context())
+		if err != nil {
+			writeError(w, 500, "internal_error", "overview changes could not be loaded")
+			return
+		}
+		closeRead = close
+		defer closeRead()
+		r = r.WithContext(ctx)
+	}
 	now := time.Now().UTC()
 	d, err := store.LoadOverviewChanges(r.Context(), overviewPrincipal(r), planVisibility(r, opts), now, planStalledAfter())
 	if err == nil {
 		err = appendOverviewDecisions(r, opts, &d, now)
 	}
+	closeRead()
 	if err != nil {
 		writeError(w, 500, "internal_error", "overview changes could not be loaded")
 		return
