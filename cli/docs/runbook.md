@@ -268,6 +268,14 @@ Each agent issues 60 start/block commands and reads an answered ask 20 times. `a
 subscription write nor SSE. Open asks still subscribe and consume the stream's
 initial durable snapshot, covering answers committed during subscription setup.
 
+Card move errors with `outcome_unknown` or HTTP 503 trigger one authorized
+work-state readback (without card revision history). When the target column and any supplied resolution match, the CLI
+returns success with `recovered: true` without sending another move. Ranked
+moves require manual placement verification. Unmatched or unavailable readbacks
+retain the original error; `outcome_unknown` is non-retryable and never receives
+fresh-token retry advice. `error.details.retry_after` preserves the server's
+Retry-After header. This recovery does not automatically retry a failed write.
+
 ## Pi Dogfood
 
 The supported manual dogfood path is the Pi-based runner under `cli/dogfood/pi/`.

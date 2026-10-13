@@ -3970,6 +3970,7 @@ export const commandRegistry: CommandSpec[] = [
       "invalid_token",
       "not_found",
       "conflict",
+      "outcome_unknown",
       "busy",
       "quota_exceeded"
     ],
@@ -12835,7 +12836,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/work/{card_ref}",
     "operation_id": "workPatch",
     "summary": "Update local commitment annotations",
-    "description": "Relation objects preserve additional metadata fields. Invalid relation shapes, kinds, or workspace refs return 400 invalid_request with field-specific guidance. Unmapped store failures return 500 internal_error with a server-generated X-Request-ID that correlates with a secret-safe diagnostic log.",
+    "description": "Relation objects preserve additional metadata fields. Invalid relation shapes, kinds, or workspace refs return 400 invalid_request with field-specific guidance. Uncertain commit or post-commit failures return 409 outcome_unknown with recoverable=false and require state readback before another mutation. Unmapped store failures return 500 internal_error with a server-generated X-Request-ID that correlates with a secret-safe diagnostic log.",
     "why": "Update local commitment annotations.",
     "input_mode": "json-body",
     "streaming": {
@@ -12847,6 +12848,7 @@ export const commandRegistry: CommandSpec[] = [
       "invalid_request",
       "not_found",
       "conflict",
+      "outcome_unknown",
       "work_unavailable"
     ],
     "concepts": [

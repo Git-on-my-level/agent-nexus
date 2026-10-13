@@ -4984,7 +4984,7 @@ Generated Help: work patch
 - Input mode: `json-body`
 - Why: Update local commitment annotations.
 - Output: Returns `WorkResponse`.
-- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`
@@ -7523,7 +7523,7 @@ Generated Help: cards move
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
 - Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `busy`, `quota_exceeded`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 

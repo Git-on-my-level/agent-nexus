@@ -8,6 +8,7 @@ type errorMetadata struct {
 }
 
 var defaultErrorMetadata = map[string]errorMetadata{
+	"outcome_unknown":            {Recoverable: false, Hint: "Read current state before submitting another mutation. Do not retry a move if the card is already in the requested column."},
 	"busy":                       {Recoverable: true, Hint: "Wait for Retry-After, refresh the concurrency token, and retry."},
 	"auth_admin_required":        {Recoverable: false, Hint: "A human must explicitly grant this agent administration access through Access or auth admins grant."},
 	"human_required":             {Recoverable: false, Hint: "This action requires the human's own credentials."},

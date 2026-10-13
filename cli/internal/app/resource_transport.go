@@ -49,7 +49,7 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	}
 	body := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailure(resp.StatusCode, body)
+		return nil, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, body)
 	}
 
 	outPath := strings.TrimSpace(outputPath)
@@ -131,7 +131,7 @@ func (a *App) artifactFilenameFromMetadata(ctx context.Context, cfg config.Resol
 		return "", errnorm.Wrap(errnorm.KindNetwork, "request_failed", "artifact metadata request failed", invokeErr)
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return "", errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+		return "", errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, resp.Body)
 	}
 	parsed := parseResponseBody(resp.Body)
 	body, _ := parsed.(map[string]any)
@@ -194,7 +194,7 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 	}
 	responseBody := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailure(resp.StatusCode, responseBody)
+		return nil, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
 	}
 	headersSorted := normalizedHeaders(resp.Headers)
 	parsedBody := parseResponseBody(responseBody)
@@ -248,10 +248,10 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 		Body:    body,
 	})
 	if resp != nil && resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailure(resp.StatusCode, responseBody)
+		return a.recoverCardMove(ctx, cfg, commandID, pathParams, body, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Header, responseBody))
 	}
 	if invokeErr != nil {
-		return nil, mutationTransportError(commandName, resolveCommandMethod(commandID), body, invokeErr)
+		return a.recoverCardMove(ctx, cfg, commandID, pathParams, body, mutationTransportError(commandName, resolveCommandMethod(commandID), body, invokeErr))
 	}
 
 	headersSorted := normalizedHeaders(resp.Header)
@@ -621,7 +621,7 @@ func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Res
 	}
 	responseBody := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailure(resp.StatusCode, responseBody)
+		return nil, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
 	}
 
 	headersSorted := normalizedHeaders(resp.Headers)

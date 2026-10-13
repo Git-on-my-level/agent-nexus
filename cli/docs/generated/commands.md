@@ -918,7 +918,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
 - Concepts: `cards`, `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `busy`, `quota_exceeded`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Output: Returns `{ card }`.
 
 ## `cards.patch`
@@ -2773,7 +2773,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Update local commitment annotations.
 - Concepts: `cards`, `evidence`
-- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Output: Returns `WorkResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 

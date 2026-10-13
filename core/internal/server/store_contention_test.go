@@ -33,9 +33,19 @@ func TestStoreContentionClassification(t *testing.T) {
 			t.Fatal("classified a non-contention error")
 		}
 	}
-	w := httptest.NewRecorder()
-	writeStoreContentionError(w, httptest.NewRequest(http.MethodPost, "/cards/card/move", nil), &primitives.MutationOutcomeUnknown{Cause: sqliteContentionFixture(5)})
-	if w.Code != 409 || w.Header().Get("Retry-After") != "" || !strings.Contains(w.Body.String(), "read the card and board") {
-		t.Fatalf("uncertain commit invited blind retry: %d %s", w.Code, w.Body.String())
+	for _, cause := range []error{sqliteContentionFixture(5), errors.New("secret-value"), primitives.ErrNotFound, primitives.ErrConflict} {
+		for _, work := range []bool{false, true} {
+			w := httptest.NewRecorder()
+			err := fmt.Errorf("wrapped: %w", &primitives.MutationOutcomeUnknown{Cause: cause})
+			r := httptest.NewRequest(http.MethodPost, "/cards/card/move", nil)
+			if work {
+				workStoreError(w, r, err)
+			} else if !writeStoreContentionError(w, r, err) {
+				t.Fatal("missed uncertain outcome")
+			}
+			if w.Code != 409 || w.Header().Get("Retry-After") != "" || !strings.Contains(w.Body.String(), `"code":"outcome_unknown"`) || !strings.Contains(w.Body.String(), `"recoverable":false`) || strings.Contains(w.Body.String(), "secret-value") {
+				t.Fatalf("uncertain commit invited blind retry: %d %s", w.Code, w.Body.String())
+			}
+		}
 	}
 }

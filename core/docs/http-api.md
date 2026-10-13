@@ -8,9 +8,11 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
 - Card moves that exhaust SQLite writer admission return `503 busy` with
   `error.recoverable: true`, `Retry-After: 1`, and a correlated `X-Request-ID`.
-  Wait, reload the board concurrency token, and retry. A SQLite contention error
-  with an uncertain commit or post-commit outcome returns `409 conflict` instead:
-  read the card and board before deciding whether another move is needed.
+  Wait and read back before retrying. Every uncertain commit or post-commit
+  failure, including non-SQLite failures, returns `409 outcome_unknown` with
+  `error.recoverable: false`. Read the card and board; do not repeat a move
+  already applied. Work annotation patches use the same uncertain-outcome code
+  and require verifying the current annotation state before another mutation.
   Diagnostics log wrapped error types and SQLite codes without submitted values.
 - Open PM turns require an active lease for complete, fail, proposal and context operations. A missing token returns `409 lease_required` with "this turn's current lease token is required". A wrong, released, or expired lease token returns `409 lease_mismatch` with "the lease was released or re-claimed; claim the turn again". All four operations require the matching current `lease_token` in their JSON body. Identical terminal complete/fail replays with the token that finished the turn return 200 without mutation, even after the deadline; different content returns 409 turn_closed. A stale or missing token on identical terminal replay returns `409 lease_mismatch` explaining that the turn is already delivered (or failed) and no retry is needed. Core persists only a private token digest for terminal replay, while clearing the active lease. Legacy terminal records without a digest cannot authenticate a replay. Other operations past the turn deadline return `turn_closed`.
 - Release requires the selected PM actor and a runner/token pair: mismatches return `409 lease_mismatch`; no active lease returns `409 turn_not_claimed` explaining that it is already released or expired and no release is needed. These errors never mutate the turn; principal/workspace permission failures remain 403.
