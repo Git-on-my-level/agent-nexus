@@ -74,6 +74,14 @@ describe("buildOwnerDisplay", () => {
     expect(agent.seed).toBe("actor-priya");
   });
 
+  it("knows an agent written out by hand, not as an id", () => {
+    expect(buildOwnerDisplay(loaded())("priya on dev-host")).toMatchObject({
+      pending: false,
+      name: "priya",
+      isAgent: true,
+    });
+  });
+
   it("has no cell at all for an empty owner", () => {
     expect(buildOwnerDisplay(loaded())("")).toBeNull();
     expect(buildOwnerDisplay(loaded())(null)).toBeNull();

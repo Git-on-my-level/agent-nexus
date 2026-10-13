@@ -186,8 +186,11 @@
   );
   function nextActorLabel(work) {
     if (!work?.next_actor) return "";
-    // Same compaction as the Owner column, minus the host relation: this
-    // field is free text and " on " is not always a host there.
+    // The same name the Owner column shows, so one row does not call the
+    // same agent two things. `next_actor` is free text as well as an id,
+    // though: an unresolved one keeps its words, minus a trailing role.
+    const cell = ownerCellFor(work.next_actor);
+    if (cell && !cell.pending && cell.name) return cell.name;
     return compactOwnerName(
       actorDisplayLabel(work.next_actor, $actorRegistry, $principalRegistry),
     );

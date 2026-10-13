@@ -76,10 +76,20 @@ export function buildOwnerDisplay({
 } = {}) {
   const names = buildActorNameMap(actors, principals, agents);
 
+  /**
+   * Roster entries by every key a row might carry. The derived name is one of
+   * them on purpose: `owner` and `next_actor` hold free text as often as an
+   * id, and "leo on dev-host" written out by hand is still that agent.
+   */
   /** @type {Map<string, object>} */
   const roster = new Map();
   for (const agent of agents ?? []) {
-    for (const key of [agent?.actor_id, agent?.id, agent?.handle]) {
+    for (const key of [
+      agent?.actor_id,
+      agent?.id,
+      agent?.handle,
+      agent?.display_name,
+    ]) {
       const id = String(key ?? "").trim();
       if (id) roster.set(id, agent);
     }
