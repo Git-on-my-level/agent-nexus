@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { hasArrivedAgent, isColdStart } from "../../src/lib/firstRun.js";
+import {
+  hasArrivedAgent,
+  isColdStart,
+  rosterHasAgent,
+} from "../../src/lib/firstRun.js";
 import { loadOverview } from "../../src/lib/overview.js";
 
 /** The projection a workspace nothing has used produces. */
@@ -10,6 +14,7 @@ function coldModel(overrides = {}) {
     work: { status: "ok", total: 0 },
     initiatives: { status: "ok", count: 0, items: [] },
     needsYou: { status: "ok", count: 0, rows: [] },
+    reports: { status: "ok", pinned_ref: null, reports: [] },
     ...overrides,
   };
 }
@@ -90,10 +95,56 @@ describe("cold start", () => {
     ).toBe(true);
   });
 
+  it("ends at a dashboard somebody pinned, or a report to pin", () => {
+    // An agent wrote the report and a reader pinned it. Either half is this
+    // workspace having been used, even after every agent was revoked.
+    expect(
+      isColdStart(
+        coldModel({
+          reports: {
+            status: "ok",
+            pinned_ref: "document:dashboard",
+            reports: [],
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isColdStart(
+        coldModel({
+          reports: { status: "ok", pinned_ref: null, reports: [{ id: "r1" }] },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses to conclude zero from a section core cut short", () => {
+    // `truncated` means core stopped before the end: the zero beside it
+    // counts the window it read, not the workspace.
+    expect(
+      isColdStart(
+        coldModel({
+          agents: { status: "ok", known: 0, truncated: true, working: 0 },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isColdStart(
+        coldModel({ work: { status: "ok", total: 0, truncated: true } }),
+      ),
+    ).toBe(false);
+  });
+
   it("refuses to read a failed section as emptiness", () => {
     // A workspace full of work whose roster read failed must not be greeted
     // with "connect your first agent".
-    for (const section of ["agents", "work", "initiatives", "needsYou"]) {
+    for (const section of [
+      "agents",
+      "work",
+      "initiatives",
+      "needsYou",
+      "reports",
+    ]) {
       expect(
         isColdStart(
           coldModel({ [section]: { status: "unavailable", message: "nope" } }),
@@ -134,5 +185,48 @@ describe("the agent count cold start reads", () => {
     expect(model.agents.working).toBe(0);
     expect(model.agents.known).toBe(1);
     expect(isColdStart(model)).toBe(false);
+  });
+});
+
+describe("the live arrival signal", () => {
+  /*
+   * Core publishes a new host and a newly named agent only to the ephemeral
+   * roster hub (`agents_changed` on `GET /stream/agents`) and appends nothing
+   * to the workspace event log, so the roster store — not this page's event
+   * subscription — is what can end the waiting state on a visible tab.
+   */
+  it("fires on the first non-revoked agent in this workspace", () => {
+    const roster = (agents) => ({ workspace: "ops", status: "ready", agents });
+    expect(rosterHasAgent(roster([]), "ops")).toBe(false);
+    expect(rosterHasAgent(roster([{ id: "a" }]), "ops")).toBe(true);
+  });
+
+  it("ignores a revoked identity", () => {
+    // The only agent having been revoked puts the workspace back to needing
+    // one, which is what `rosterSummary` counts too.
+    expect(
+      rosterHasAgent(
+        {
+          workspace: "ops",
+          status: "ready",
+          agents: [{ id: "a", revoked_at: "2026-10-01T00:00:00Z" }],
+        },
+        "ops",
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a roster that is another workspace's, or not loaded yet", () => {
+    const agents = [{ id: "a" }];
+    expect(
+      rosterHasAgent({ workspace: "other", status: "ready", agents }, "ops"),
+    ).toBe(false);
+    expect(
+      rosterHasAgent({ workspace: "ops", status: "idle", agents }, "ops"),
+    ).toBe(false);
+    expect(
+      rosterHasAgent({ workspace: "ops", status: "error", agents }, "ops"),
+    ).toBe(false);
+    expect(rosterHasAgent(undefined, "ops")).toBe(false);
   });
 });

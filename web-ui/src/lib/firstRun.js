@@ -42,6 +42,14 @@ export function isColdStart(model) {
   if (!model) return false;
   if (!readable(model.agents) || !readable(model.work)) return false;
   if (!readable(model.initiatives) || !readable(model.needsYou)) return false;
+  if (!readable(model.reports)) return false;
+  /*
+   * A capped section counted only as far as its cap. Core sends `truncated`
+   * when it stopped short, so a zero beside it means "none in the window it
+   * read", not "none" — and on this question the difference is a workspace
+   * full of agents being told to connect its first one.
+   */
+  if (model.agents.truncated || model.work.truncated) return false;
   // One identity that has never run still counts: somebody got that far.
   if ((model.agents.known ?? 0) > 0) return false;
   if ((model.work.total ?? 0) > 0) return false;
@@ -49,10 +57,18 @@ export function isColdStart(model) {
   if ((model.initiatives.items?.length ?? 0) > 0) return false;
   if ((model.needsYou.count ?? 0) > 0) return false;
   if ((model.needsYou.rows?.length ?? 0) > 0) return false;
+  /*
+   * A dashboard is something an agent wrote and a reader pinned. Either half
+   * of that is somebody having already used this workspace, even if every
+   * agent has since been revoked and every task archived.
+   */
+  if (model.reports.pinned_ref) return false;
+  if ((model.reports.reports?.length ?? 0) > 0) return false;
   return true;
 }
 
 /**
+
  * Whether the snapshot shows an agent identity that has reached this
  * workspace.
  *
@@ -66,6 +82,31 @@ export function isColdStart(model) {
 export function hasArrivedAgent(model) {
   if (!model || !readable(model.agents)) return false;
   return (model.agents.known ?? 0) > 0;
+}
+
+/**
+ * Whether the live roster has an agent in it.
+ *
+ * The flip from cold has to come from somewhere the arrival is actually
+ * announced. Core publishes a new host or a newly named agent to the
+ * ephemeral roster hub (`GET /stream/agents`, `agents_changed`) and appends
+ * nothing to the workspace event log, so a page watching only `/stream/events`
+ * sits on "waiting" until something unrelated happens or the reader reloads.
+ * The Overview therefore reads the shell's roster store, which that stream
+ * already keeps current, and stops being cold the moment it is not empty.
+ *
+ * Revoked identities are left out, matching `rosterSummary`: a workspace whose
+ * only agent has been revoked is back to needing one.
+ *
+ * @param {{ workspace?: string, status?: string, agents?: object[] }} [roster]
+ * @param {string} [workspaceSlug] the workspace the page is showing
+ */
+export function rosterHasAgent(roster, workspaceSlug = "") {
+  if (!roster || roster.status !== "ready") return false;
+  if (workspaceSlug && roster.workspace !== workspaceSlug) return false;
+  return (Array.isArray(roster.agents) ? roster.agents : []).some(
+    (agent) => agent && !agent.revoked_at,
+  );
 }
 
 /**

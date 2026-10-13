@@ -319,7 +319,11 @@
     </div>
   {/if}
 
-  <div class="flex gap-1 border-b border-line-subtle" role="tablist">
+  <!-- Wraps. At 320px the two labels measure 254px in a 254px row: they fit
+       with nothing to spare, so any narrower container, longer label or
+       translation starts shrinking them until the words are cut off, and a
+       tab the reader cannot read is a path they cannot take. -->
+  <div class="flex flex-wrap gap-1 border-b border-line-subtle" role="tablist">
     {#each [["agent", "Have your agent do it"], ["manual", "Run it myself"]] as [key, label] (key)}
       <button
         class="-mb-px border-b-2 px-3 py-1.5 text-meta transition-colors {activeTab ===

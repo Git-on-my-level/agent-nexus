@@ -23,8 +23,21 @@ const SHOTS = `.screenshots/review/first-run${BEFORE ? "-before" : ""}`;
 
 const WS = "/o/local/w/local";
 
+/*
+ * Every test here opens a workspace route the dev server has not compiled
+ * yet, and they run in parallel: four cold compiles at once take well past
+ * the suite's 10s default. The budget below covers the compile, not the
+ * behaviour — each assertion about the behaviour keeps the default.
+ */
+const FIRST_PAINT = { timeout: 45_000 };
+
+// eslint-disable-next-line no-empty-pattern
+test.beforeEach(async ({}, testInfo) => {
+  testInfo.setTimeout(120_000);
+});
+
 /** A workspace that was provisioned and never used. */
-function snapshot({ agents = [] } = {}) {
+function snapshot({ agents = [], dashboard = null, truncatedAgents } = {}) {
   return {
     generated_at: new Date().toISOString(),
     work: { status: "ok", items: [], human_count: 0, truncated: false },
@@ -35,8 +48,17 @@ function snapshot({ agents = [] } = {}) {
       rows: [],
       href: "/inbox?mailbox=needs-you",
     },
-    dashboard: { status: "ok", pinned_ref: null, has_more: false, reports: [] },
-    agents: { status: "ok", truncated: false, items: agents },
+    dashboard: dashboard ?? {
+      status: "ok",
+      pinned_ref: null,
+      has_more: false,
+      reports: [],
+    },
+    agents: {
+      status: "ok",
+      truncated: Boolean(truncatedAgents),
+      items: agents,
+    },
   };
 }
 
@@ -48,7 +70,9 @@ async function installEmptyWorkspace(page) {
     agents: /** @type {object[]} */ ([]),
     /** Released by `arrive()`, which is what makes the flip deterministic. */
     live: deferred(),
-    /** The arrival is written once; reconnects stay open. */
+    /** How many times the roster stream has been connected. */
+    rosterConnects: 0,
+    /** The arrival is announced once; later reconnects stay open. */
     delivered: false,
   };
   const api = await installWorkspaceApi(page, {
@@ -69,58 +93,61 @@ async function installEmptyWorkspace(page) {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path === "/overview")
-      return route.fulfill({ json: snapshot({ agents: state.agents }) });
-    if (path === "/stream/events") {
-      // A finished SSE body is a drop: the client reconnects, and a resolved
-      // waiter would emit the same event again. Write the arrival once, then
-      // hold later connections open (`holdOpenStream`) so they cannot loop.
-      if (state.delivered) return holdOpenStream(page, route);
-      const arrived = await new Promise((resolve) => {
-        if (page.isClosed()) {
-          resolve(false);
-          return;
-        }
-        const finish = (value) => {
-          page.off("close", onClose);
-          page.off("requestfailed", onFailed);
-          resolve(value);
-        };
-        const onClose = () => finish(false);
-        const onFailed = (failed) => {
-          if (failed === request) finish(false);
-        };
-        page.on("close", onClose);
-        page.on("requestfailed", onFailed);
-        state.live.promise.then(() => finish(true));
+      return route.fulfill({
+        json: snapshot({
+          agents: state.agents,
+          dashboard: state.dashboard,
+          truncatedAgents: state.truncatedAgents,
+        }),
       });
-      if (!arrived) {
-        return route
-          .fulfill({
-            status: 200,
-            contentType: "text/event-stream",
-            body: ": keepalive\n\n",
-          })
-          .catch(() => {});
+    /*
+     * The roster hub, as core drives it. `CompleteHeadlessHostEnrollment` and
+     * the first `host_assertion` token both call `agentChanges.publish()` and
+     * append nothing to the event log, so `agents_changed` here is the only
+     * notice a browser gets that the first agent exists. Core sends one on
+     * connect and one per change, with no `id:` and no replay cursor.
+     */
+    if (path === "/stream/agents") {
+      state.rosterConnects += 1;
+      const revision = state.rosterConnects;
+      if (state.rosterConnects > 1) {
+        /*
+         * A finished SSE body is a drop, and the client reconnects. Announce
+         * the arrival once and hold every connection after it open, the way
+         * core does between changes — otherwise the resolved waiter would
+         * re-announce it every three seconds.
+         */
+        if (state.delivered) return holdOpenStream(page, route);
+        const onFailed = (failed) => {
+          if (failed === request) state.live.resolve();
+        };
+        page.on("requestfailed", onFailed);
+        await state.live.promise;
+        page.off("requestfailed", onFailed);
+        state.delivered = true;
       }
-      state.delivered = true;
-      const event = {
-        id: "evt-first-agent",
-        type: "agent_registered",
-        ts: new Date().toISOString(),
-        refs: ["agent:claude"],
-      };
       return route
         .fulfill({
           status: 200,
           contentType: "text/event-stream",
-          body: `id: ${event.id}\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+          body: `event: agents_changed\ndata: ${JSON.stringify({ revision })}\n\n`,
         })
         .catch(() => {});
     }
+    /*
+     * `/stream/events` is deliberately not handled here: it falls through to
+     * the shared mock, which holds it open and silent. That is what core does
+     * on a first enrollment, and it is the point of this spec — whatever flips
+     * the page must not be riding on the workspace event log.
+     */
     return route.fallback();
   });
 
-  /** The first agent checks in, and the live stream says so. */
+  /**
+   * The first agent checks in: `GET /agents` now has a row, and the roster
+   * hub says so. Nothing is appended to the workspace event log, because core
+   * appends nothing there either.
+   */
   state.arrive = () => {
     state.agents = [
       {
@@ -145,7 +172,9 @@ test("a cold Overview leads with connecting the first agent", async ({
 
   await page.goto(`${WS}/overview`);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible(
+    FIRST_PAINT,
+  );
 
   const panel = page.locator("[data-first-agent-panel]");
   if (BEFORE) {
@@ -172,11 +201,19 @@ test("a cold Overview leads with connecting the first agent", async ({
   }
   await page.screenshot({ path: `${SHOTS}/1-overview.png`, fullPage: true });
 
-  // The first agent registers. Nothing is reloaded; the page notices.
+  /*
+   * The first agent registers, exactly as core reports it: a row in
+   * `GET /agents` and an `agents_changed` on the roster hub. The workspace
+   * event log stays silent, which is what core leaves it at. Nothing is
+   * reloaded and nothing is navigated — the visible tab notices.
+   */
   workspace.arrive();
   if (!BEFORE) {
     await expect(page.locator("[data-first-agent-connected]")).toContainText(
       /connected/i,
+      // The roster stream reconnects on its own backoff before it can carry
+      // the news; the flip is bounded by that, not by a poll.
+      { timeout: 20_000 },
     );
     await expect(panel).toHaveCount(0);
     await expect(
@@ -189,6 +226,74 @@ test("a cold Overview leads with connecting the first agent", async ({
   }
 });
 
+test("a workspace with a pinned dashboard is not cold", async ({ page }) => {
+  // Every agent revoked and every task archived still leaves a workspace
+  // somebody has used. Its Overview is the Overview, not an invitation to
+  // connect a first agent.
+  const workspace = await installEmptyWorkspace(page);
+  workspace.dashboard = {
+    status: "ok",
+    pinned_ref: "document:dashboard",
+    has_more: false,
+    reports: [],
+  };
+
+  await page.goto(`${WS}/overview`);
+  await waitForAppReady(page);
+  await expect(
+    page.locator('[data-overview-section="initiatives"]'),
+  ).toBeVisible(FIRST_PAINT);
+  await expect(page.locator("[data-first-agent-panel]")).toHaveCount(0);
+});
+
+test("a truncated roster is never read as no agents", async ({ page }) => {
+  // `truncated` means core stopped short of the end. A zero beside it counts
+  // the window it read, not the workspace.
+  const workspace = await installEmptyWorkspace(page);
+  workspace.truncatedAgents = true;
+
+  await page.goto(`${WS}/overview`);
+  await waitForAppReady(page);
+  await expect(
+    page.locator('[data-overview-section="initiatives"]'),
+  ).toBeVisible(FIRST_PAINT);
+  await expect(page.locator("[data-first-agent-panel]")).toHaveCount(0);
+});
+
+test("both setup paths are reachable on a 320px screen", async ({ page }) => {
+  // The narrowest phone the shell supports. A tab painted past the right edge
+  // is a path the reader cannot take, and "Run it myself" is the one that
+  // still works on a deployment that cannot hand over a prompt.
+  await page.setViewportSize({ width: 320, height: 900 });
+  await mkdir(SHOTS, { recursive: true });
+  await installEmptyWorkspace(page);
+
+  await page.goto(`${WS}/overview`);
+  await waitForAppReady(page);
+  const tabs = page.locator("[data-setup-tab]");
+  await expect(tabs).toHaveCount(2, FIRST_PAINT);
+  /*
+   * Each label has to be legible in full, not merely inside the viewport: a
+   * flex row that refuses to wrap keeps both boxes on screen by shrinking
+   * them until the words are cut off, which is the same dead end.
+   */
+  const cut = await tabs.evaluateAll((nodes) =>
+    nodes
+      .filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map(
+        (node) =>
+          `${node.textContent?.trim()} (${node.clientWidth}px of ${node.scrollWidth}px)`,
+      ),
+  );
+  expect(cut, "setup tab labels cut off at 320px").toEqual([]);
+  for (const tab of await tabs.all()) {
+    const box = await tab.boundingBox();
+    expect(box, await tab.innerText()).not.toBeNull();
+    expect(box.x + box.width, await tab.innerText()).toBeLessThanOrEqual(320);
+  }
+  await page.screenshot({ path: `${SHOTS}/6-narrow.png`, fullPage: true });
+});
+
 test("the rest of the first-run path", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1100 });
   await mkdir(SHOTS, { recursive: true });
@@ -196,16 +301,16 @@ test("the rest of the first-run path", async ({ page }) => {
 
   await page.goto(`${WS}/tasks`);
   await waitForAppReady(page);
-  await expect(page.getByText("Nothing tracked yet")).toBeVisible();
+  await expect(page.getByText("Nothing tracked yet")).toBeVisible(FIRST_PAINT);
   await page.screenshot({ path: `${SHOTS}/2-tasks.png`, fullPage: true });
 
   await page.goto(`${WS}/inbox`);
   await waitForAppReady(page);
-  await expect(page.locator("[data-inbox-empty]")).toBeVisible();
+  await expect(page.locator("[data-inbox-empty]")).toBeVisible(FIRST_PAINT);
   await page.screenshot({ path: `${SHOTS}/3-inbox.png`, fullPage: true });
 
   await page.goto(`${WS}/agents`);
   await waitForAppReady(page);
-  await expect(page.locator("[data-agents-empty]")).toBeVisible();
+  await expect(page.locator("[data-agents-empty]")).toBeVisible(FIRST_PAINT);
   await page.screenshot({ path: `${SHOTS}/4-agents.png`, fullPage: true });
 });

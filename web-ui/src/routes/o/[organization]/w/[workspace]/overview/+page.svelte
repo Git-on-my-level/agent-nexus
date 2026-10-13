@@ -36,7 +36,12 @@
   import UrgentBand from "$lib/components/overview/UrgentBand.svelte";
   import MorningBrief from "$lib/components/overview/MorningBrief.svelte";
   import FirstAgentPanel from "$lib/components/onboarding/FirstAgentPanel.svelte";
-  import { hasArrivedAgent, isColdStart } from "$lib/firstRun.js";
+  import { agentRoster, startAgentRoster } from "$lib/agentRoster.js";
+  import {
+    hasArrivedAgent,
+    isColdStart,
+    rosterHasAgent,
+  } from "$lib/firstRun.js";
   import { morningBriefModel } from "$lib/morningBrief.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workspacePath } from "$lib/workspacePaths";
@@ -73,32 +78,72 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   /*
-   * Cold start: a workspace nothing has ever reported into.
-   *
-   * Read off the snapshot this page already loads, so it costs no request and
-   * nothing that grows with the workspace — see `firstRun.js`. The sections
+   * Cold start: a workspace nothing has ever reported into. The sections
    * below are all empty in this state and their only call to action (pin a
    * visual report) cannot be taken until an agent has written one, so the
    * page spends its first screen on connecting that agent instead.
-   */
-  let coldStart = $derived(isColdStart(model));
-  /*
-   * The flip, kept in the page rather than the panel: the same live refresh
-   * that fills the sections ends the cold state, and the reader who was
-   * watching deserves to be told that is what just happened. Per visit — a
-   * reload of a workspace that now has agents is not an arrival.
    *
-   * An agent on the roster is the fact, not the end of emptiness. A later
+   * The arrival signal.
+   *
+   * It cannot come from this page's own event-stream refresh: core publishes
+   * a new host and a newly named agent to the ephemeral roster hub
+   * (`agents_changed` on `GET /stream/agents`) and appends nothing to the
+   * workspace event log, so a visible tab watching only `/stream/events`
+   * would sit on "waiting for your first agent" until something unrelated
+   * happened or the reader reloaded.
+   *
+   * The shell's roster store is kept current by exactly that stream, and
+   * `startAgentRoster` is reference-counted: subscribing here while the
+   * workspace is cold shares the connection the Agents badge already opens
+   * rather than adding one, and adds no polling.
+   */
+  let firstAgent = $derived(
+    rosterHasAgent($agentRoster, $page.params.workspace),
+  );
+  let coldStart = $derived(isColdStart(model) && !firstAgent);
+  /*
+   * The flip, kept in the page rather than the panel: the reader who pasted a
+   * prompt into a terminal on another machine and came back to this tab
+   * deserves to be told what just happened. Per visit — a reload of a
+   * workspace that now has agents is not an arrival.
+   *
+   * An agent that exists is the fact, not the end of emptiness. A later
    * snapshot that cannot read the roster, or that gains a task without a
    * roster row, must not be told as "your first agent is connected" and must
-   * keep the connect prompt they still need.
+   * keep the connect prompt the reader still needs.
    */
   let sawColdStart = $state(false);
   $effect(() => {
     if (coldStart) sawColdStart = true;
   });
-  let agentArrived = $derived(hasArrivedAgent(model));
+  /*
+   * Either witness will do, and they arrive in that order: the roster is the
+   * live one (`agents_changed`), the snapshot the durable one that catches up
+   * on the re-read below.
+   */
+  let agentArrived = $derived(hasArrivedAgent(model) || firstAgent);
   let justConnected = $derived(sawColdStart && agentArrived);
+  /*
+   * Hold the roster open only while this page depends on it. A workspace with
+   * agents in it already answers the question, and the shell's own badge keeps
+   * the store current from there.
+   */
+  $effect(() => {
+    if (!coldStart) return;
+    return startAgentRoster($page.params.workspace);
+  });
+  /*
+   * The roster ends the cold state on its own; this re-reads the snapshot the
+   * sections behind the panel are drawn from, so they are current rather than
+   * the empty copy loaded before the agent existed. Once, on the transition:
+   * `sawColdStart && firstAgent` stops being newly true after it fires.
+   */
+  let snapshotRefreshed = false;
+  $effect(() => {
+    if (!sawColdStart || !firstAgent || snapshotRefreshed) return;
+    snapshotRefreshed = true;
+    void overviewRead.refresh();
+  });
   let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
   let cliInstallCommand = $derived(
     $page.data?.workspace?.cliInstallCommand ?? "",
