@@ -526,7 +526,7 @@ Run anx config show to inspect effective values and sources without printing sec
 CLI config surface: effective settings and their sources.
 
 ```text
-Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).
+Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config forge add <alias|url> <host> <kind> registers a non-GitHub forge host for a workspace so its pull-request URLs satisfy ask evidence linting (kinds: github, forgejo, gitea, gitlab, bitbucket). anx config show prints the resolved workspace and sources (secrets redacted).
 ```
 
 ## `agent-bridge`

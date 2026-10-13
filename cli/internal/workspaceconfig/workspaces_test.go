@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agent-nexus-cli/internal/hostidentity"
@@ -223,4 +224,52 @@ func TestDirectoryRulesRespectCaseAfterWildcards(t *testing.T) {
 		t.Fatalf("exact case: %s via %s err=%v", base, source, err)
 	}
 	t.Logf("verified wildcard matching with case-insensitive=%v", insensitive)
+}
+
+func TestForgeRegistry(t *testing.T) {
+	f := File{Aliases: map[string]string{"ws": "https://core.example.test"}}
+	if err := f.SetForge("ws", "Forge.Example.test", "forgejo"); err != nil {
+		t.Fatal(err)
+	}
+	// Idempotent per host: re-adding replaces the kind.
+	if err := f.SetForge("ws", "forge.example.test", "gitea"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.ForgesFor("https://core.example.test"); len(got) != 1 || got[0].Kind != "gitea" {
+		t.Fatalf("%+v", got)
+	}
+	if got := f.ForgesFor("https://core.example.test/"); len(got) != 1 {
+		t.Fatalf("trailing slash workspace mismatch: %+v", got)
+	}
+	if got := f.ForgesFor("https://other.example.test"); len(got) != 0 {
+		t.Fatalf("other workspace saw forges: %+v", got)
+	}
+	removed, err := f.RemoveForge("ws", "FORGE.example.test")
+	if err != nil || !removed {
+		t.Fatal(removed, err)
+	}
+	if removed, err := f.RemoveForge("ws", "forge.example.test"); err != nil || removed {
+		t.Fatal("removed unknown host", removed, err)
+	}
+	for _, tc := range []struct{ workspace, host, kind string }{
+		{"ws", "", "github"},
+		{"ws", "https://not-a-host", "github"},
+		{"ws", "forge.example.test/path", "github"},
+		{"unknown", "forge.example.test", "forgejo"},
+		{"ws", "forge.example.test", "sourcehut"},
+		{"ws", "forge.example.test", ""},
+	} {
+		if err := f.SetForge(tc.workspace, tc.host, tc.kind); err == nil {
+			t.Fatalf("accepted %+v", tc)
+		}
+	}
+	// Load validation rejects hand-edited files with bad entries.
+	broken := File{Aliases: map[string]string{}, Forges: map[string][]Forge{"https://core.example.test": {{Host: "bad host", Kind: "forgejo"}}}}
+	if err := broken.ValidateForges(); err == nil {
+		t.Fatal("accepted malformed host")
+	}
+	data, _ := json.Marshal(f)
+	if !strings.Contains(string(data), `"forges"`) && len(f.Forges) > 0 {
+		t.Fatal("forges lost on marshal")
+	}
 }

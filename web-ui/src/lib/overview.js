@@ -48,7 +48,15 @@ export function humanLiveRefreshDelay(
 export const DOC_SCAN_CAP = 20;
 export const PREVIEW_LIMIT = 5;
 
-const SOURCE_ORDER = ["nexus", "github", "multica", "git", "ssh_git"];
+const SOURCE_ORDER = [
+  "nexus",
+  "github",
+  "forgejo",
+  "gitea",
+  "multica",
+  "git",
+  "ssh_git",
+];
 const FRESHNESS_BUCKETS = [
   { key: "stale", label: "Not checked lately" },
   { key: "unknown", label: "Never checked" },

@@ -228,7 +228,13 @@ func preflightKnownCommandShape(args []string) error {
 		if err := preflightSubcommand(args[1:], configSubcommandSpec); err != nil {
 			return err
 		}
-		return preflightConfigArgs(args[1:])
+		if err := preflightConfigArgs(args[1:]); err != nil {
+			return err
+		}
+		if len(args) >= 3 && configSubcommandSpec.normalize(args[1]) == "forge" {
+			return preflightSubcommand(args[2:], configForgeSubcommandSpec)
+		}
+		return nil
 	case "meta":
 		if err := preflightSubcommand(args[1:], metaSubcommandSpec); err != nil {
 			return err
@@ -968,14 +974,32 @@ func preflightConfigArgs(args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	expected := map[string]int{"show": 0, "workspaces": 0, "use": 1, "map": 2, "unmap": 1}
 	for _, arg := range args[1:] {
 		if strings.HasPrefix(arg, "-") {
 			return errnorm.Usage("invalid_flags", "config commands accept positional arguments only")
 		}
 	}
+	if args[0] == "forge" {
+		return preflightConfigForgeArgs(args[1:])
+	}
+	expected := map[string]int{"show": 0, "workspaces": 0, "use": 1, "map": 2, "unmap": 1}
 	if len(args)-1 != expected[args[0]] {
 		return errnorm.Usage("invalid_args", "use anx help config "+args[0]+" for command arguments")
+	}
+	return nil
+}
+
+func preflightConfigForgeArgs(args []string) error {
+	if len(args) == 0 {
+		return configForgeSubcommandSpec.requiredError()
+	}
+	bounds := map[string][2]int{"add": {3, 3}, "remove": {2, 2}, "list": {0, 1}}
+	count, ok := bounds[args[0]]
+	if !ok {
+		return configForgeSubcommandSpec.unknownError(args[0])
+	}
+	if given := len(args) - 1; given < count[0] || given > count[1] {
+		return errnorm.Usage("invalid_args", "use anx help config forge "+args[0]+" for command arguments")
 	}
 	return nil
 }

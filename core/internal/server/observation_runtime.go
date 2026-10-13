@@ -116,7 +116,7 @@ func LoadObservationRuntime(path, workspaceID string, store *primitives.Store) (
 			return nil, fmt.Errorf("CLI transport is only available for Multica")
 		}
 		switch c.Target.Source {
-		case "github", "multica":
+		case "github", "multica", "forgejo", "gitea":
 			if c.Transport == "multica_cli" {
 				reader, err = observation.NewMulticaCLIReader(observation.MulticaCLIConfig{Binary: c.CLIBinary, Profile: c.CLIProfile, BaseURL: c.BaseURL, WorkspaceID: workspaceID, ConnectionID: c.Target.ConnectionID, SourceWorkspaceID: c.SourceWorkspaceID, Timeout: policy.Timeout})
 				break
@@ -146,13 +146,17 @@ func LoadObservationRuntime(path, workspaceID string, store *primitives.Store) (
 					return value, nil
 				}
 			}
-			if c.Target.Source == "github" {
+			switch c.Target.Source {
+			case "github":
 				if httpConfig.BaseURL == "" {
 					httpConfig.BaseURL = "https://api.github.com"
 				}
 				reader, err = observation.NewGitHubReader(httpConfig)
-			} else {
+			case "multica":
 				reader, err = observation.NewMulticaReader(httpConfig)
+			default:
+				// Self-hosted forges have no default origin; fail closed instead.
+				reader, err = observation.NewForgejoReader(httpConfig, c.Target.Source)
 			}
 		case "ssh_git":
 			reader, err = observation.NewSSHGitReader(observation.SSHConfig{WorkspaceID: workspaceID, ConnectionID: c.Target.ConnectionID, Host: c.Target.Host, Repository: c.Target.Path, KnownHostsFile: c.KnownHostsFile, IdentityFile: c.IdentityFile, Port: c.SSHPort, Timeout: policy.Timeout})

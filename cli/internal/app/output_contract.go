@@ -40,7 +40,7 @@ func commandSideEffectClass(command string) string {
 		return "read_only"
 	}
 	if parts[0] == "config" && len(parts) > 1 {
-		if parts[1] == "show" || parts[1] == "workspaces" {
+		if parts[1] == "show" || parts[1] == "workspaces" || (parts[1] == "forge" && len(parts) > 2 && parts[2] == "list") {
 			return "read_only"
 		}
 		return "local_operational_write"
@@ -626,6 +626,8 @@ func validSubcommands(group string) []string {
 		return authSubcommandSpec.valid
 	case "config":
 		return configSubcommandSpec.valid
+	case "config forge":
+		return configForgeSubcommandSpec.valid
 	case "debug":
 		return []string{"threads", "events", "ref-edges", "derived", "actors", "inbox", "meta"}
 	case "debug threads":

@@ -55,7 +55,7 @@ func NewRuntime(c RuntimeCallbacks, registrations []Registration, actorID, worke
 	return &Runtime{callbacks: c, registrations: append([]Registration(nil), registrations...), actorID: actorID, workerID: workerID, concurrency: concurrency}, nil
 }
 func (t Target) CanonicalNativeID() string {
-	if t.Source == "github" {
+	if t.Source == "github" || t.Source == "forgejo" || t.Source == "gitea" {
 		return t.Repository + "#" + t.NativeID
 	}
 	return t.NativeID
