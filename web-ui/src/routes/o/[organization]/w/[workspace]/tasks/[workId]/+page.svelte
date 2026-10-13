@@ -1,6 +1,6 @@
 <script>
   import { decisionRowStatus } from "$lib/inboxMailbox.js";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { get } from "svelte/store";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
@@ -64,9 +64,9 @@
   import { nextActionOvertaken, planNextSteps } from "$lib/planNext.js";
   import { authoredProvenance, liveProvenance } from "$lib/reportProvenance.js";
   import {
+    adoptPanelPreference,
     panelAutoCollapsed,
     panelCollapsed,
-    readPanelPreference,
     SHELL_PANELS,
     writePanelPreference,
   } from "$lib/shellPanels.js";
@@ -334,8 +334,18 @@
   let railPreference = $state(null);
   let viewportWidth = $state(0);
   let railViewerId = $derived($authenticatedAgent?.agent_id || "");
+  // Read once per viewer; see `adoptPanelPreference` for why re-reading on
+  // every identity tick would undo a collapse the viewer just made.
+  let railPreferenceViewerId = $state(/** @type {string | null} */ (null));
   $effect(() => {
-    railPreference = readPanelPreference(SHELL_PANELS.RAIL, railViewerId);
+    const viewerId = railViewerId;
+    const previousViewerId = untrack(() => railPreferenceViewerId);
+    if (previousViewerId === viewerId) return;
+    railPreference = adoptPanelPreference(SHELL_PANELS.RAIL, {
+      fromViewerId: previousViewerId,
+      toViewerId: viewerId,
+    });
+    railPreferenceViewerId = viewerId;
   });
   let railCollapsed = $derived(
     panelCollapsed({

@@ -663,7 +663,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
         .getByLabel("Project reference")
         .fill(`topic:platform-release-readiness-${LONG_ID}`);
       await page.getByLabel("Owner", { exact: true }).fill(LONG_OWNER);
-      await page.getByRole("button", { name: "Apply" }).click();
+      // The free-text filters apply on Enter, like the selects apply on change.
+      await page.keyboard.press("Enter");
       await expect(page.getByText("No matching tasks")).toBeVisible();
       await expectCleanLayout(
         page,
@@ -671,7 +672,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         bothEnds,
       );
 
-      await page.getByRole("link", { name: "Clear filters" }).first().click();
+      await page.getByRole("button", { name: "Clear filters" }).first().click();
       await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
 
       await page

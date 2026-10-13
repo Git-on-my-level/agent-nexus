@@ -1417,3 +1417,22 @@ describe("PM operator interactions", () => {
     ]);
   });
 });
+
+describe("tasks list live filters", () => {
+  it("keeps a free-text filter when another control changes in the same turn", async () => {
+    render(WorkPage);
+    await waitFor(() => expect(client.listWork).toHaveBeenCalled());
+
+    await fireEvent.click(screen.getByTestId("tasks-filters-toggle"));
+    const project = screen.getByLabelText("Project reference");
+    await fireEvent.change(project, { target: { value: "topic:release" } });
+    await fireEvent.change(screen.getByLabelText("Source"), {
+      target: { value: "github" },
+    });
+
+    expect(navigation.goto).toHaveBeenCalled();
+    const lastHref = String(navigation.goto.mock.calls.at(-1)?.[0] ?? "");
+    expect(lastHref).toContain("project_ref=topic%3Arelease");
+    expect(lastHref).toContain("source=github");
+  });
+});

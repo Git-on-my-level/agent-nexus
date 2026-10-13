@@ -261,31 +261,6 @@
     min-height: 100vh;
   }
 
-  .shell-loading {
-    min-height: 100vh;
-    display: grid;
-    place-items: center;
-    padding: 1.5rem;
-  }
-
-  .shell-loading-card {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 0.8rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--fg-muted);
-    font-size: 0.8125rem;
-  }
-
-  .shell-spinner {
-    width: 0.875rem;
-    height: 0.875rem;
-    animation: spin 0.85s linear infinite;
-  }
-
   .actor-gate-wrap {
     min-height: 100vh;
     display: grid;

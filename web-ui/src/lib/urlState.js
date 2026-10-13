@@ -91,3 +91,37 @@ export function withUpdatedSearchParams(url, updates = {}) {
 
   return `${next.pathname}${next.search}${next.hash}`;
 }
+
+/**
+ * Overlay for a value written this turn before `$page` reflects it.
+ * Sequential live-filter navigations each patch this instead of the stale URL.
+ */
+export function createInflightSlot() {
+  let inflight = null;
+  return {
+    get(fallback) {
+      return inflight ?? fallback;
+    },
+    set(next) {
+      inflight = next;
+      return next;
+    },
+    clear() {
+      inflight = null;
+    },
+  };
+}
+
+/**
+ * Copy `searchParams` and apply `changes` (empty values delete the key).
+ * @param {string | URLSearchParams} searchParams
+ * @param {Record<string, string>} [changes]
+ */
+export function patchSearchParams(searchParams, changes = {}) {
+  const params = new URLSearchParams(searchParams);
+  for (const [key, value] of Object.entries(changes)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  return params;
+}

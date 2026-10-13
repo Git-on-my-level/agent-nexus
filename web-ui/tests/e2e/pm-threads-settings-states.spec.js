@@ -553,9 +553,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByTestId("topics-filter-panel")).toBeVisible();
       await expectCleanLayout(page, "thread filters open", bothEnds);
 
-      await page.getByPlaceholder("Title or id…").fill(LONG_TOKEN);
       api.threads = [];
-      await page.getByRole("button", { name: "Apply" }).click();
+      await page.getByPlaceholder("Title or id…").fill(LONG_TOKEN);
+      await page.keyboard.press("Enter");
       await expect(
         page.getByText("No threads match the current filters"),
       ).toBeVisible();

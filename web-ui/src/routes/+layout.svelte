@@ -13,7 +13,7 @@
   import { browser } from "$app/environment";
   import { goto, preloadData } from "$app/navigation";
   import { page } from "$app/stores";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { get } from "svelte/store";
 
   import "../app.css";
@@ -50,7 +50,9 @@
   } from "$lib/extensions/accountSession.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
+  import WorkspacePageSkeleton from "$lib/components/layout/WorkspacePageSkeleton.svelte";
   import {
+    getDestinationSkeleton,
     getShellContentConfig,
     isMoreHubActivePath,
     navigationItems,
@@ -87,9 +89,9 @@
     workspacePath,
   } from "$lib/workspacePaths";
   import {
+    adoptPanelPreference,
     panelAutoCollapsed,
     panelCollapsed,
-    readPanelPreference,
     SHELL_PANELS,
     writePanelPreference,
   } from "$lib/shellPanels.js";
@@ -300,9 +302,23 @@
   let navViewerId = $derived(
     $authenticatedAgent?.agent_id || $selectedActorId || "",
   );
+  /*
+   * Read once per viewer, not on every identity tick. The shell paints while
+   * the viewer is still unknown, so a collapse clicked then is stored against
+   * the anonymous key; re-reading the newly identified viewer's empty slot
+   * would spring the nav back open a second after they closed it.
+   */
+  let navPreferenceViewerId = $state(/** @type {string | null} */ (null));
   $effect(() => {
     if (!browser) return;
-    navPreference = readPanelPreference(SHELL_PANELS.NAV, navViewerId);
+    const viewerId = navViewerId;
+    const previousViewerId = untrack(() => navPreferenceViewerId);
+    if (previousViewerId === viewerId) return;
+    navPreference = adoptPanelPreference(SHELL_PANELS.NAV, {
+      fromViewerId: previousViewerId,
+      toViewerId: viewerId,
+    });
+    navPreferenceViewerId = viewerId;
   });
   let navCollapsed = $derived(
     panelCollapsed({
@@ -353,6 +369,12 @@
       : "Account menu",
   );
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
+  /*
+   * What to paint while the workspace boots. Where the destination is a list
+   * we know its name and its shape, so the first paint shows where the reader
+   * landed instead of a spinner over the whole screen.
+   */
+  let destinationSkeleton = $derived(getDestinationSkeleton(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
   const shellNavForTitle = [
     ...navigationItems,
@@ -1018,32 +1040,6 @@
 <div class="shell-root">
   {#if !activeWorkspaceSlug}
     {@render children()}
-  {:else if (!identityReady || workspaceBootstrapPending) && !hostedMode}
-    <main class="shell-loading" aria-live="polite">
-      <div class="shell-loading-card">
-        <svg
-          class="shell-spinner"
-          fill="none"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-          ></circle>
-          <path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          ></path>
-        </svg>
-        <p>Loading workspace…</p>
-      </div>
-    </main>
   {:else if renderLoginOnly}
     {@render children()}
   {:else if gateVisible}
@@ -1610,13 +1606,18 @@
                 </button>
               </div>
             {:else if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
-              <div
-                class="p-6"
-                aria-label="Loading workspace content"
-                aria-busy="true"
-              >
-                <div class="h-6 w-48 rounded bg-slate-200/20"></div>
-                <div class="mt-6 h-40 rounded bg-slate-200/10"></div>
+              <div aria-label="Loading workspace content" aria-busy="true">
+                {#if destinationSkeleton}
+                  <WorkspacePageSkeleton
+                    title={destinationSkeleton.title}
+                    rows={destinationSkeleton.rows}
+                  />
+                {:else}
+                  <div class="p-6">
+                    <div class="h-6 w-48 rounded bg-slate-200/20"></div>
+                    <div class="mt-6 h-40 rounded bg-slate-200/10"></div>
+                  </div>
+                {/if}
               </div>
             {:else}
               {#key $readerScope}

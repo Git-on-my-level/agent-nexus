@@ -987,8 +987,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       });
       api.hold.actors = deferred();
       await page.goto(INBOX_PATH);
-      // The shell blocks on the bootstrap handshake before the gate can paint.
-      await expect(page.getByText("Loading workspace…")).toBeVisible(
+      // The shell paints while the bootstrap handshake runs, with a
+      // placeholder where the destination will be, and the gate replaces it.
+      await expect(page.getByLabel("Loading workspace content")).toBeVisible(
         FIRST_PAINT,
       );
       await expectCleanLayout(page, "workspace hydrating");

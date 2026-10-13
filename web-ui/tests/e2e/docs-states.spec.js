@@ -604,12 +604,13 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByTestId("docs-filter-panel")).toBeVisible();
       await expectCleanLayout(page, "filters open", bothEnds);
 
+      // Live filtering: each box narrows the list as it is checked, and the
+      // lifecycle lands in the URL so the narrowed list is shareable.
       await page.getByRole("checkbox", { name: "Archived" }).check();
+      await expect(page).toHaveURL(/state=archived/);
       await page.getByRole("checkbox", { name: "Trashed" }).check();
-      await page.getByRole("button", { name: "Apply" }).click();
-      await expect(
-        page.getByRole("button", { name: "Filtered" }),
-      ).toBeVisible();
+      await expect(page).toHaveURL(/state=trashed/);
+      await expect(page.getByText("Filters · 1 active")).toBeVisible();
       await expectCleanLayout(page, "filters applied", bothEnds);
 
       await page.getByRole("button", { name: "Select", exact: true }).click();
