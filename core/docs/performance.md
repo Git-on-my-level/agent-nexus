@@ -5,6 +5,9 @@ filtering before materialization. Hot-path O(workspace) work is a merge-blocking
 P1, including an authorization query that rebuilds a graph or scans stored text.
 A LIMIT applied after loading, sorting, or enriching every record is not a bound.
 
+For heap/native allocation, RSS and hot-route latency measurements on disposable
+local workspace copies, see [the resident memory probe](resident-memory.md).
+
 ## Idle streaming
 
 Inbox, event and notification-receipt streams observe SQLite `data_version` on

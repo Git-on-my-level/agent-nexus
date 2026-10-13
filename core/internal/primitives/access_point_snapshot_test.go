@@ -15,6 +15,9 @@ func TestPointSnapshotMissingAndExpiredProofDenies(t *testing.T) {
 	defer ws.Close()
 	snapshot := &denialSnapshot{rows: `[["card","private"],["card","private\u0000tail"],["work_evidence_alias",42],[null,null]]`}
 	snapshot.preparePointIndex()
+	if !snapshot.denies("work_evidence_alias", "42") || snapshot.denies("work_evidence_alias", "43") {
+		t.Fatal("ordinary and point lookups disagree on integer identities")
+	}
 	token := pointSnapshotSequence.Add(1)
 	pointSnapshots.Store(token, snapshot)
 	defer pointSnapshots.Delete(token)
@@ -43,5 +46,16 @@ func TestPointSnapshotInvalidUTF8RetainsCanonicalFallback(t *testing.T) {
 	snapshot.preparePointIndex()
 	if snapshot.pointIndex != nil {
 		t.Fatal("lossy UTF-8 proof admitted")
+	}
+}
+
+func TestPointSnapshotMalformedRowsFailClosed(t *testing.T) {
+	t.Parallel()
+	for _, rows := range []string{`[["card","private"]] []`, `[["card","private"]] trailing`, `[["card",1.5]]`, `[["card","private","extra"]]`, `null`} {
+		snapshot := &denialSnapshot{rows: rows}
+		snapshot.preparePointIndex()
+		if snapshot.pointIndex != nil || !snapshot.denies("card", "public") {
+			t.Fatalf("malformed snapshot admitted visibility: %q", rows)
+		}
 	}
 }
