@@ -256,6 +256,48 @@
   }
 }
 
+/*
+ * Placeholders wait before they appear: a read that lands inside the delay
+ * never paints grey bars, so a fast page does not flash. QA captures skip the
+ * wait so the loading scene is deterministic.
+ */
+.ui-skeleton-reveal {
+  animation: anx-fade-in var(--motion-base) 220ms both;
+}
+
+:root[data-qa="1"] .ui-skeleton-reveal {
+  animation-delay: 0s !important;
+}
+
+/* Popovers, menus and dialogs: a short fade and a few pixels of travel. */
+.ui-pop-in {
+  animation: anx-pop-in var(--motion-fast) both;
+}
+
+.ui-fade-in {
+  animation: anx-fade-in var(--motion-fast) both;
+}
+
+@keyframes anx-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes anx-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @layer components {
   .shell-root {
     min-height: 100vh;

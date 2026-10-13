@@ -23,7 +23,7 @@
   import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
-  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -459,6 +459,8 @@
   let confirmModalBusy = $derived(lifecycle.confirmBusy());
 </script>
 
+<svelte:head><title>Docs · Agent Nexus</title></svelte:head>
+
 <WorkspacePageShell data-tour="docs">
   <WorkspacePageHeader title="Docs">
     {#snippet actions()}
@@ -679,7 +681,7 @@
   {/if}
 
   {#if loading && documents.length === 0}
-    <Skeleton rows={6} />
+    <SkeletonList rows={6} lines={1} rowClass="h-[34px]" />
   {:else if error}
     <StateError
       message={error}
