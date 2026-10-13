@@ -1102,7 +1102,7 @@
               type="text"
             />
             <button disabled={creatingActor} type="submit">
-              {creatingActor ? "Creating..." : "Create and continue"}
+              {creatingActor ? "Creating…" : "Create and continue"}
             </button>
           </div>
         </form>
@@ -1667,7 +1667,7 @@
           >
             <path d={navIconPath(item.icon)} />
           </svg>
-          <span>{item.label}</span>
+          <span class="shell-bottom-nav-label">{item.label}</span>
           {#if item.count === "inbox-needs-you"}
             <InboxNavCount
               workspace={activeWorkspaceSlug}
@@ -1693,7 +1693,7 @@
         <span class="shell-bottom-nav-item" aria-hidden="true">
           <!-- The glyph wrapper sets the tab's height; match it exactly. -->
           <span class="shell-bottom-nav-accent-glyph"></span>
-          <span>&nbsp;</span>
+          <span class="shell-bottom-nav-label">&nbsp;</span>
         </span>
       {:else}
         <a
@@ -1730,8 +1730,15 @@
               </svg>
             </span>
           {/if}
-          <!-- "Set up your PM" does not fit a phone tab; the page says the rest. -->
-          <span>{pmNeedsSetup ? "Set up PM" : "Ask PM"}</span>
+          <!--
+            Neither "Set up your PM" nor "Set up PM" fits a phone tab: at
+            390px seven tabs leave about 48px each, and "Set up PM" wrapped
+            onto a second line, pushing this tab's glyph out of line with the
+            other six. The page the tab opens says the rest.
+          -->
+          <span class="shell-bottom-nav-label"
+            >{pmNeedsSetup ? "PM setup" : "Ask PM"}</span
+          >
         </a>
       {/if}
       <a
@@ -1752,7 +1759,7 @@
         >
           <path d={navIconPath("more")} />
         </svg>
-        <span>More</span>
+        <span class="shell-bottom-nav-label">More</span>
       </a>
     </nav>
   {/if}

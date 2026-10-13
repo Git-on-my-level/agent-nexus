@@ -134,8 +134,8 @@
   <div class="min-w-0 flex-1">
     <h1 class="text-title text-fg">Threads</h1>
     <p class="mt-1 hidden text-micro text-fg-muted sm:block">
-      Diagnostic list of append-only backing threads (timelines). Not every
-      thread is a topic.
+      The conversation behind each task, doc and board. Open one to read what
+      was said and when.
     </p>
   </div>
   <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-1.5">
@@ -231,10 +231,10 @@
   <StateEmpty
     title={hasActiveFilters
       ? "No threads match the current filters"
-      : "No threads returned"}
+      : "No threads yet"}
     helper={hasActiveFilters
       ? "Try adjusting or clearing the current filters."
-      : "Backing threads are append-only timelines. Not every thread is a topic."}
+      : "Threads appear as work gets discussed. Nothing has been said here yet."}
     actionLabel={hasActiveFilters ? "Clear filters" : ""}
     onclick={hasActiveFilters ? resetFilters : undefined}
   />
