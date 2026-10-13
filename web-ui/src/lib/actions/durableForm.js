@@ -81,7 +81,7 @@ export function durableForm(node, options) {
       return;
     generation += 1;
     paused = true;
-    options.onRestore(null, "confirmed");
+    options.onRestore(null, "confirmed", event.detail);
     fingerprint = JSON.stringify(options.read?.() ?? options.value);
   }
   const unsubscribe = localWorkScope.subscribe((next) => {

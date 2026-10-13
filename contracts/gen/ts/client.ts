@@ -5336,6 +5336,10 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
           "name": "patch.hosts",
           "type": "list\u003cstring\u003e"
         },
@@ -5358,6 +5362,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.verified_at",
           "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -5737,6 +5745,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "refs",
           "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -12349,6 +12361,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "relations",
           "type": "list\u003cobject\u003e"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         },
         {
           "name": "risk",

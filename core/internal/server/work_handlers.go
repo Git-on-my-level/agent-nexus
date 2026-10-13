@@ -215,12 +215,18 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 				return
 			}
 		}
-		item, err := store.CreateWork(r.Context(), actor, boardID, raw)
+		status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "work.create", actor, anyString(raw["request_key"]), raw, 201, func(ctx context.Context) (map[string]any, error) {
+			item, err := store.CreateWork(ctx, actor, boardID, raw)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"work": publicWork(item)}, nil
+		})
 		if err != nil {
 			workStoreError(w, r, err)
 			return
 		}
-		writeJSON(w, 201, map[string]any{"work": publicWork(item)})
+		writeJSON(w, status, response)
 		return
 	}
 	parts = strings.Split(strings.TrimPrefix(path, "/"), "/")

@@ -7,7 +7,7 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 ## Rollout and acceptance
 
 SCA-781 permits reviewable stages. The first changes cover the human-attention
-response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat and attachment uploads. It does not claim that every UI
+response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat attachment uploads, task creation and document authoring. It does not claim that every UI
 mutation already satisfies the invariant.
 
 | Stage                     | Coverage                                                                                                              | Acceptance gate                                                                                                                                                 |
@@ -16,7 +16,8 @@ mutation already satisfies the invariant.
 | Discussion foundation     | Shared thread, topic, card and document replies/comments, including reply targets and selected-quote anchors          | Atomic message-event replay, durable composer context, shared scope lock, exact-key recovery and attention UX                                                   |
 | PM foundation             | Inbox PM decision responses and Ask PM chat                                                                           | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
 | Attachment foundation     | Inbox and discussion file selections, upload bytes and completed refs                                                 | Atomic upload replay, original-byte/key recovery, storage denial, downloadable failures and privacy fences                                                      |
-| Remaining authoring       | Cards, documents, plans, settings and all other mutation forms                                                        | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
+| Task/document authoring   | New tasks; new documents, document descriptions, revisions and inline titles                                          | Atomic nested mutation/replay, frozen original concurrency tokens, reload/offline/attention recovery and explicit rebase                                        |
+| Remaining authoring       | Remaining card/plan/settings/lifecycle mutations and all other forms                                                  | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
 
 The issue remains in progress until all stages pass. Do not enable blind retries
 for an unaudited endpoint: an HTTP timeout can occur after the mutation committed.
@@ -145,6 +146,28 @@ separate delivery controls. Confirmed answers enter the scoped Inbox cache even
 when the originating component has unmounted. Epoch fencing still discards writes
 after sign-out or principal replacement.
 
+## Task and document authoring
+
+Task creation checkpoints the complete outcome/context/criteria/owner/next-action/
+due-date/board form. Document creation, descriptions, revision bodies and inline
+titles have separate principal/resource targets. Revision and description drafts
+retain their original base revision or update timestamp across reload; automatic
+retry never substitutes a newer concurrency token. A definitive conflict keeps
+the original draft and request. The explicit Use latest version action transfers
+the original into an editable draft and refreshes its base without replacing the
+authored text. Corrections submit a fresh key; older requests remain recovery
+history. Confirmation closes/navigates only unchanged work and preserves newer
+text. Closing an authoring form leaves its draft available when reopened.
+
+`ExecuteWithReplay` uses a scoped write transaction for each audited keyed
+operation. Nested primitive transactions become savepoints on that same database;
+reads, ownership checks, quota checks, blob ledgers, default-board creation and
+projections stay inside it. A nested rollback removes only its own partial work;
+the outer rollback removes the whole mutation when saving the receipt fails.
+Quota locking is acquired before the outer write lock and reused by nested
+writers. Receipt lookup and insertion use the existing actor/scope/key index.
+There is no new table or migration and no retry of unaudited operations.
+
 ## Replay audit
 
 No HTTP routes or database migrations are added. PM request contracts now accept
@@ -161,13 +184,15 @@ are regenerated from the canonical OpenAPI contract.
 | PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                | Covered by composite chat adapter; replay returns the canonical turn, whose lifecycle status may advance                                 |
 | Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                   | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery |
 | `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                 |
-| Card/doc/plan edits and other forms                                               | Diverse create/patch/action commands                                                                                                                                                                                           | Inventory each command, freeze original mutation intent and concurrency token, add atomic replay and durable adapters                    |
+| `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                            | Task creation covered; existing card edits and lifecycle remain rollout work                                                             |
+| `POST /docs`, `PATCH /docs/{id}`, `POST /docs/{id}/revisions`                     | Document/revision/metadata writes and original response commit with replay; exact body/base-token retries and changed-key conflicts                                                                                            | Creation, description, text revision and inline title adapters covered; legacy PUT and other lifecycle/knowledge forms remain gaps       |
+| Remaining card/plan/settings/lifecycle forms                                      | Diverse create/patch/action commands                                                                                                                                                                                           | Audit and migrate each remaining operation; extend whole-UI inventory                                                                    |
 
 ## Checks and extension rules
 
 `durableInputContract.test.js` parses the Svelte AST to require durable draft
 actions on every authored Inbox response field, requires the shared discussion
-composer action, PM answer/chat actions, and rejects direct Inbox/event/PM answer/chat/upload sends
+composer action, PM answer/chat actions, and rejects direct Inbox/event/PM answer/chat/upload/task/document authoring sends
 in any Svelte surface. This is a guard for the migrated scope; subsequent stages
 must extend it to all mutation forms. Do not present it as whole-UI enforcement.
 
@@ -193,7 +218,14 @@ rollback, concurrent replay, exact HTTP snapshots and fresh authorization.
 acknowledgement/reload/multiple tabs, byte/key preservation, downloadable definitive
 failures, replacement and attachment refs in recovered Inbox/discussion posts.
 
-Message, PM answer and attachment replay perform indexed point lookups on the existing
+`durable-authoring.spec.js` covers complete task drafts, exact-body creation
+recovery, offline document creation/tab closure, description conflicts with
+explicit rebase and revision body/base recovery. Existing document authoring
+regressions cover creation, revisions and inline titles. Real-core tests exercise
+eight concurrent exact creates, quota-enabled nested rollback, changed-body
+conflicts, original concurrency-token replay and revoked ownership.
+
+Message, PM answer, attachment and authoring replay perform indexed point lookups on the existing
 `(scope, actor_id, request_key)` primary key and bounded event/replay inserts in
 one transaction. Existing ownership triggers and scoped query wrappers remain
 active. No new GET/stream path, schema or migration is added.

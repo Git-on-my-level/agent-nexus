@@ -1678,7 +1678,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {

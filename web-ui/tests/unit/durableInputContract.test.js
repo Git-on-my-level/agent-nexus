@@ -54,6 +54,10 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
           "sendPmMessage",
           "answerPmDecision",
           "createArtifactAttachment",
+          "createWork",
+          "createDocument",
+          "patchDocument",
+          "updateDocument",
         ].includes(node.property?.name)
       ) {
         throw new Error(
@@ -100,5 +104,24 @@ it("PM chat and decision notes use durable form snapshots", () => {
         forms++;
     });
     expect(forms).toBe(1);
+  }
+});
+
+it("task and document authoring surfaces checkpoint complete forms", () => {
+  for (const [path, expected] of [
+    ["routes/o/[organization]/w/[workspace]/tasks/new/+page.svelte", 1],
+    ["routes/o/[organization]/w/[workspace]/docs/+page.svelte", 1],
+    [
+      "routes/o/[organization]/w/[workspace]/docs/[documentId]/edit/+page.svelte",
+      1,
+    ],
+    ["routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte", 2],
+  ]) {
+    const ast = parse(readFileSync(`${root}/${path}`, "utf8"));
+    let actions = 0;
+    walk(ast.html, (node) => {
+      if (node.type === "Action" && node.name === "durableForm") actions++;
+    });
+    expect(actions).toBe(expected);
   }
 });

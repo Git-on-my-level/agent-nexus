@@ -10378,6 +10378,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Actor-scoped original-result replay committed atomically with this mutation; retain unchanged until confirmed.
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
         actor_id:
           type: string
@@ -11568,7 +11572,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
-        request_key: { type: string }
+        request_key: { type: string, maxLength: 256, description: "Original-result replay committed atomically with document and first revision; retain unchanged until confirmed." }
         document: { $ref: '#/components/schemas/DocumentCreateInput' }
         content: {}
         content_base64:
@@ -11650,6 +11654,11 @@ components:
     PatchDocumentRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        request_key:
+          type: string
+          maxLength: 256
+          description: Actor-scoped original-result replay committed atomically with this mutation; retain unchanged until confirmed.
         patch: { $ref: '#/components/schemas/DocumentPatchInput' }
         if_updated_at:
           type: string
@@ -11659,6 +11668,10 @@ components:
     CreateDocumentRevisionRequest:
       type: object
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Actor-scoped original-result replay committed atomically with this mutation; retain unchanged until confirmed.
         if_base_revision:
           type: string
           description: Base revision ref or handle for optimistic concurrency; must match the document head when appending from the current tip.

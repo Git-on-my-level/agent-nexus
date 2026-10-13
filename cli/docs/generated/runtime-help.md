@@ -4869,6 +4869,7 @@ Inputs:
   - body `project_ref` (string)
   - body `related_refs` (list<any>)
   - body `relations` (list<object>)
+  - body `request_key` (string)
   - body `risk` (string)
   - body `roles` (list<string>)
   - body `source.aliases` (list<string>)
@@ -8205,6 +8206,7 @@ Inputs:
   - body `provenance.notes` (string)
   - body `provenance.sources` (list<string>)
   - body `refs` (list<any>)
+  - body `request_key` (string)
   Enum values: content_type: binary, structured, text
 
 Global flags:

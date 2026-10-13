@@ -5,6 +5,8 @@ package resourceaccess
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"sync/atomic"
 )
 
 type QueryRower interface {
@@ -46,10 +48,34 @@ type WriteHook func(context.Context, *sql.Tx, string, []any) error
 type DB struct {
 	raw        *sql.DB
 	afterWrite WriteHook
+	savepoints atomic.Uint64
 }
 type Tx struct {
 	raw        *sql.Tx
 	afterWrite WriteHook
+	savepoint  string
+	closed     bool
+	ctx        context.Context
+}
+type writeTransactionKey struct{}
+type writeTransaction struct {
+	db *sql.DB
+	tx *sql.Tx
+}
+
+// WriteTransaction binds nested scoped reads/writes to one transaction. Nested
+// BeginTx calls use savepoints, preserving local rollback and outer atomicity.
+func (d *DB) WriteTransaction(ctx context.Context, run func(context.Context, *Tx) error) error {
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	ctx = context.WithValue(ctx, writeTransactionKey{}, writeTransaction{d.raw, tx.raw})
+	if err := run(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetWriteHook is construction-only. Hooks maintain derived state in the source
@@ -83,6 +109,9 @@ func (d *DB) readHandle(ctx context.Context) interface {
 	QueryRower
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 } {
+	if bound, ok := ctx.Value(writeTransactionKey{}).(writeTransaction); ok && bound.db == d.raw {
+		return bound.tx
+	}
 	if pin, ok := ctx.Value(pinnedReadKey{}).(pinnedRead); ok && pin.db == d.raw {
 		return pin.tx
 	}
@@ -136,6 +165,13 @@ func (d *DB) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 	return result, nil
 }
 func (d *DB) BeginTx(ctx context.Context, o *sql.TxOptions) (*Tx, error) {
+	if bound, ok := ctx.Value(writeTransactionKey{}).(writeTransaction); ok && bound.db == d.raw {
+		name := fmt.Sprintf("anx_nested_%d", d.savepoints.Add(1))
+		if _, err := bound.tx.ExecContext(ctx, "SAVEPOINT "+name); err != nil {
+			return nil, err
+		}
+		return &Tx{raw: bound.tx, afterWrite: d.afterWrite, savepoint: name, ctx: ctx}, nil
+	}
 	tx, e := d.raw.BeginTx(ctx, o)
 	if e != nil {
 		return nil, e
@@ -169,8 +205,31 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 	}
 	return result, err
 }
-func (t *Tx) Commit() error   { return t.raw.Commit() }
-func (t *Tx) Rollback() error { return t.raw.Rollback() }
+func (t *Tx) Commit() error {
+	if t.savepoint == "" {
+		return t.raw.Commit()
+	}
+	if t.closed {
+		return sql.ErrTxDone
+	}
+	t.closed = true
+	_, err := t.raw.ExecContext(t.ctx, "RELEASE SAVEPOINT "+t.savepoint)
+	return err
+}
+func (t *Tx) Rollback() error {
+	if t.savepoint == "" {
+		return t.raw.Rollback()
+	}
+	if t.closed {
+		return sql.ErrTxDone
+	}
+	t.closed = true
+	if _, err := t.raw.ExecContext(context.WithoutCancel(t.ctx), "ROLLBACK TO SAVEPOINT "+t.savepoint); err != nil {
+		return err
+	}
+	_, err := t.raw.ExecContext(context.WithoutCancel(t.ctx), "RELEASE SAVEPOINT "+t.savepoint)
+	return err
+}
 
 // ReadSnapshot keeps one read-only SQLite snapshot while retaining the request's
 // epoch-validated denial cache. It exposes no mutation or raw transaction handle.
@@ -183,6 +242,9 @@ type ReadSnapshot struct {
 }
 
 func (d *DB) BeginReadSnapshot(ctx context.Context, admissionQuery string) (*ReadSnapshot, error) {
+	if bound, ok := ctx.Value(writeTransactionKey{}).(writeTransaction); ok && bound.db == d.raw {
+		return &ReadSnapshot{raw: bound.tx, borrowed: true}, nil
+	}
 	// A page may already own an admitted read transaction. Reuse it so nested
 	// readers see the same authority and work with a one-connection pool.
 	// Only the outer owner may finish this transaction.

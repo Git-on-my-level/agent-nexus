@@ -398,7 +398,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if s.blob == nil {
 		return nil, nil, fmt.Errorf("blob backend is not configured")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}
@@ -946,7 +946,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if s.blob == nil {
 		return nil, nil, fmt.Errorf("blob backend is not configured")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

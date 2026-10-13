@@ -45,6 +45,27 @@ const visible = (entry) => entry.state !== "superseded";
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "work.create") {
+    const result = await client.createWork(entry.request.body);
+    if (!result.work?.ref && !result.work?.id)
+      throw new Error("Task receipt is incomplete.");
+    return result;
+  }
+  if (
+    entry.operation === "docs.create" ||
+    entry.operation === "docs.patch" ||
+    entry.operation === "docs.revise"
+  ) {
+    const result =
+      entry.operation === "docs.create"
+        ? await client.createDocument(entry.request.body)
+        : entry.operation === "docs.patch"
+          ? await client.patchDocument(entry.request.id, entry.request.body)
+          : await client.updateDocument(entry.request.id, entry.request.body);
+    if (!result.document?.id && !result.document?.document_id)
+      throw new Error("Document receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "artifacts.attachments.create") {
     const result = await client.createArtifactAttachment({
       refs: entry.request.refs,
@@ -126,6 +147,51 @@ export function enqueueDiscussionMessage({ event, ...options }) {
     key,
     operation: "events.create",
     request: { request_key: key, event },
+  });
+}
+
+export function enqueueAuthoring({ operation, body, id = "", ...options }) {
+  if (
+    !["work.create", "docs.create", "docs.patch", "docs.revise"].includes(
+      operation,
+    )
+  )
+    throw new Error("This authoring operation has not been audited.");
+  const key = crypto.randomUUID();
+  const draft = options.draft || {};
+  const preview =
+    operation === "work.create"
+      ? [
+          ["Outcome", draft.title],
+          ["Context", draft.summary],
+          ["Acceptance criteria", draft.criteria],
+          ["Accountable owner", draft.owner],
+          ["Next actor", draft.nextActor],
+          ["Next action", draft.nextAction],
+          ["Due date", draft.due],
+          ["Board", draft.board],
+        ]
+          .filter(([, value]) => value)
+          .map(([label, value]) => `${label}: ${value}`)
+          .join("\n")
+      : operation === "docs.create"
+        ? [draft.title, draft.summary, draft.content]
+            .filter(Boolean)
+            .join("\n\n")
+        : (draft.content ?? draft.summary ?? draft.text ?? "");
+  return enqueueLocalMutation({
+    ...options,
+    key,
+    operation,
+    preview,
+    request: {
+      id,
+      body: {
+        ...body,
+        request_key: key,
+        actor_id: JSON.parse(get(localWorkScope))[3],
+      },
+    },
   });
 }
 
@@ -228,6 +294,7 @@ async function enqueueLocalMutation({
   draft,
   href,
   title = "Saved response",
+  preview,
 }) {
   const scope = get(localWorkScope);
   if (!canUseLocalWorkScope(scope))
@@ -249,7 +316,12 @@ async function enqueueLocalMutation({
     draft,
     href,
     title,
-    text: draft?.text ?? "",
+    text:
+      preview ??
+      draft?.text ??
+      draft?.content ??
+      draft?.summary ??
+      JSON.stringify(draft, null, 2),
     state: "pending",
     attempts: 0,
     nextAt: Date.now(),

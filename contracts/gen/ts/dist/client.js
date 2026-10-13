@@ -5285,6 +5285,10 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
                     "name": "patch.hosts",
                     "type": "list\u003cstring\u003e"
                 },
@@ -5307,6 +5311,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.verified_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -5686,6 +5694,10 @@ export const commandRegistry = [
                 {
                     "name": "refs",
                     "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -12298,6 +12310,10 @@ export const commandRegistry = [
                 {
                     "name": "relations",
                     "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 },
                 {
                     "name": "risk",
