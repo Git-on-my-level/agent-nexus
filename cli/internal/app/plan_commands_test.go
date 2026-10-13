@@ -34,6 +34,68 @@ func TestPlanUsageBeforeIdentityAndHelp(t *testing.T) {
 	}
 }
 
+func TestPlanStatusUsageListsRepairBeforeIdentity(t *testing.T) {
+	result := runCLIForTestJSONError(t, t.TempDir(), nil, []string{"--json", "plan", "step", "add", "card:launch", "--title", "Build", "--status", "in_progress"})
+	for _, want := range []string{"done, active, blocked or not_started", "use active for work in progress"} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("missing repair %q: %s", want, result)
+		}
+	}
+}
+
+func TestPlanReadbackModesAndErrorRecovery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" {
+			w.WriteHeader(http.StatusConflict)
+			io.WriteString(w, `{"error":{"code":"conflict","message":"plan changed"}}`)
+			return
+		}
+		io.WriteString(w, `{"card_ref":"card:launch","if_updated_at":"2026-10-13T00:00:00Z","plan":{"steps":[{"id":"build","title":"Build","after":[],"status":"active"}]},"plan_state":{"steps":[{"id":"build","status":"done","resolvable":true}],"progress":{"done":1,"total":1},"health":"done"},"summary":{"owner":"actor:alice"}}`)
+	}))
+	defer server.Close()
+	env := map[string]string{"ANX_ACCESS_TOKEN": "fixture-token"}
+	base := []string{"--base-url", server.URL}
+	for _, mode := range []string{"", "--verbose", "--json", "--headers"} {
+		args := append([]string{}, base...)
+		if mode != "" {
+			args = append(args, mode)
+		}
+		text := runCLIForTest(t, t.TempDir(), env, nil, append(args, "plan", "show", "card:launch"))
+		if mode == "" {
+			if !strings.Contains(text, "step id=build") || strings.Contains(text, "result.summary.owner") {
+				t.Fatal(text)
+			}
+		} else if !strings.Contains(text, "alice") {
+			t.Fatalf("%s omitted full fields: %s", mode, text)
+		}
+	}
+	for _, command := range [][]string{
+		{"plan", "step", "update", "card:launch", "missing", "--status", "done"},
+		{"plan", "step", "add", "card:launch", "--title", "Build"},
+		{"plan", "step", "update", "card:launch", "build", "--status", "done"},
+	} {
+		args := append(append([]string{"--json"}, base...), command...)
+		text := runCLIForTestJSONError(t, t.TempDir(), env, args)
+		var envelope map[string]any
+		if err := json.Unmarshal([]byte(text), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		errObj := envelope["error"].(map[string]any)
+		actions := errObj["next_actions"].([]any)
+		if len(actions) != 1 {
+			t.Fatalf("missing exact read action: %s", text)
+		}
+		a := actions[0].(map[string]any)
+		argv := stringList(a["argv"])
+		if strings.Join(argv, " ") != "anx plan show card:launch" || a["mutates"] != false {
+			t.Fatal(text)
+		}
+		if _, err := parsePlanCommand(argv[1:]); err != nil {
+			t.Fatalf("unrunnable repair: %v", err)
+		}
+	}
+}
+
 func TestPlanStepMutationsUseConcurrencyFence(t *testing.T) {
 	for _, tc := range []struct {
 		args []string

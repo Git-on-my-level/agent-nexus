@@ -74,6 +74,12 @@ func WriteEnvelopeJSON(w io.Writer, envelope Envelope) error {
 // WriteEnvelopeText projects the same document used by JSON mode. Nested records
 // get dotted keys; lists emit one line per item and never fall back to JSON.
 func WriteEnvelopeText(w io.Writer, envelope Envelope) error {
+	return WriteEnvelopeTextDetailed(w, envelope, false)
+}
+
+// WriteEnvelopeTextDetailed retains the complete field projection for debugging.
+// Compact command projections affect text only; JSON always retains all fields.
+func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) error {
 	envelope.Init()
 	var lines []string
 	if envelope.Error != nil {
@@ -81,7 +87,9 @@ func WriteEnvelopeText(w io.Writer, envelope Envelope) error {
 		project(&lines, "detail", envelope.Error.Details)
 	} else {
 		lines = append(lines, "ok command="+quote(envelope.Command))
-		if envelope.Command == "cards list" {
+		if !detailed && isPlanCommand(envelope.Command) {
+			projectPlan(&lines, envelope.Result)
+		} else if envelope.Command == "cards list" {
 			projectCardsList(&lines, envelope.Result)
 		} else {
 			project(&lines, "result", envelope.Result)

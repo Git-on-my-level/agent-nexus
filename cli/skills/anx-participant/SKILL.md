@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v20. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v21. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -46,6 +46,8 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 - PM designation requires the richer anx-pm skill and an explicit user designation. It grants no new source-write, private-history, approval, or execution authority.
 
 ## Initiative plans
+
+Plan text readbacks are compact; use `--verbose` for every field or `--json` for scripts. Step `--status` accepts `done`, `active`, `blocked`, or `not_started`.
 
 Read `anx plan show card:<slug>` before editing. Use `anx plan set card:<slug> --from-file plan.json` with `{ "steps": [] }` to replace the plan, or add a step with `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>`. Stable step ids are agent-chosen slugs; omitting `--step-id` derives one from the title. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Use `step update <card> <step-id>` for fields and `step rm <card> <step-id>` to remove an unreferenced step. Update dependent `--after` lists before removal.
 

@@ -436,6 +436,13 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 	if err == nil {
 		return []output.NextAction{}
 	}
+	if strings.HasPrefix(command, "plan ") && (err.Code == "not_found" || err.Code == "invalid_request" || err.Code == "conflict") {
+		if details, ok := err.Details.(map[string]any); ok {
+			if card := strings.TrimSpace(anyString(details["card_ref"])); card != "" {
+				return []output.NextAction{action("Read plan and reconcile step ids or concurrency", "anx", "plan", "show", card)}
+			}
+		}
+	}
 	if command == "pm card" || command == "pm propose" {
 		return []output.NextAction{action("Read pinned cards", "anx", "pm", "context")}
 	}

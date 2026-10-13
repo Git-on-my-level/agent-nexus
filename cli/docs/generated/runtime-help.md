@@ -9555,13 +9555,10 @@ digest. Custom files, unrelated instructions and credentials are preserved.
 Edit a linked initiative step with a card concurrency token.
 
 ```text
-One plan per initiative card. Add linked steps; never select a view.
-anx plan show <card>
-anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})
 anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]
-anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]
-anx plan step rm <card> <step-id>
-Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.
+Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
+Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
+Omitting --step-id derives a slug from --title. --after is a comma-separated list of step ids.
 ```
 
 ## `plan step update`
@@ -9569,13 +9566,10 @@ Writes read the latest plan then use its concurrency token. Conflicts require an
 Edit a linked initiative step with a card concurrency token.
 
 ```text
-One plan per initiative card. Add linked steps; never select a view.
-anx plan show <card>
-anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})
-anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]
-anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]
-anx plan step rm <card> <step-id>
-Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.
+anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status done|active|blocked|not_started]
+Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
+Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
+Pass at least one field; an empty --after clears dependencies. Source state takes precedence over fallback --status.
 ```
 
 ## `plan step rm`
@@ -9583,13 +9577,10 @@ Writes read the latest plan then use its concurrency token. Conflicts require an
 Edit a linked initiative step with a card concurrency token.
 
 ```text
-One plan per initiative card. Add linked steps; never select a view.
-anx plan show <card>
-anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})
-anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]
-anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]
 anx plan step rm <card> <step-id>
-Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.
+Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
+Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
+Removing a depended-on step is rejected; update dependencies first.
 ```
 
 ## `pm serve`

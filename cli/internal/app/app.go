@@ -262,7 +262,7 @@ func (a *App) Run(args []string) int {
 		warnings = append(result.Warnings, warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}); err != nil {
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return 0
@@ -294,7 +294,7 @@ func needsAgentIdentity(args []string) bool {
 	return true
 }
 
-func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelope) error {
+func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelope, detailed ...bool) error {
 	var err error
 	if jsonMode {
 		err = output.WriteEnvelopeJSON(w, envelope)
@@ -307,7 +307,7 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 				}
 			}
 		}
-		err = output.WriteEnvelopeText(w, envelope)
+		err = output.WriteEnvelopeTextDetailed(w, envelope, len(detailed) > 0 && detailed[0])
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)

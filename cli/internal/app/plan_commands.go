@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -23,6 +24,29 @@ func planHelpText(topic string) (string, bool) {
 	}
 	if strings.HasPrefix(topic, "refs") {
 		return "anx refs resolve <ref>... | --from-file <path|-> (JSON {refs:[]}); at most 200 refs, preserving unknown entries.\n", true
+	}
+	usage := map[string]string{
+		"plan show":        "anx plan show <card>",
+		"plan set":         "anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})",
+		"plan step add":    "anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]",
+		"plan step update": "anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status done|active|blocked|not_started]",
+		"plan step rm":     "anx plan step rm <card> <step-id>",
+	}
+	if text, ok := usage[topic]; ok {
+		text += "\nCard accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.\n"
+		if topic != "plan show" {
+			text += "Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.\n"
+		}
+		if topic == "plan step add" {
+			text += "Omitting --step-id derives a slug from --title. --after is a comma-separated list of step ids.\n"
+		}
+		if topic == "plan step update" {
+			text += "Pass at least one field; an empty --after clears dependencies. Source state takes precedence over fallback --status.\n"
+		}
+		if topic == "plan step rm" {
+			text += "Removing a depended-on step is rejected; update dependencies first.\n"
+		}
+		return text, true
 	}
 	return "One plan per initiative card. Add linked steps; never select a view.\n" +
 		"anx plan show <card>\n" +
@@ -107,7 +131,7 @@ func parsePlanCommand(args []string) (planCommand, error) {
 		return p, errnorm.Usage("invalid_request", "at least one step field is required")
 	}
 	if value, ok := p.fields["status"]; ok && value != "" && value != "done" && value != "active" && value != "blocked" && value != "not_started" {
-		return p, errnorm.Usage("invalid_request", "invalid step status")
+		return p, errnorm.Usage("invalid_request", "--status must be done, active, blocked or not_started; use active for work in progress")
 	}
 	if p.token != "" {
 		if _, err := time.Parse(time.RFC3339Nano, p.token); err != nil {
@@ -192,13 +216,13 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 			}
 			for _, raw := range steps {
 				if step, ok := raw.(map[string]any); ok && step["id"] == id {
-					return nil, p.name, errnorm.Usage("invalid_request", "step id already exists; choose --step-id")
+					return nil, p.name, errnorm.WithDetails(errnorm.Usage("invalid_request", fmt.Sprintf("step id %q already exists; update that step or choose a different --step-id", id)), map[string]any{"card_ref": p.card})
 				}
 			}
 			steps = append(steps, map[string]any{"id": id, "title": p.fields["title"], "after": []string{}})
 			index = len(steps) - 1
 		} else if index < 0 {
-			return nil, p.name, errnorm.Usage("not_found", "step id does not exist")
+			return nil, p.name, errnorm.WithDetails(errnorm.Usage("not_found", fmt.Sprintf("step id %q does not exist; read the plan to find its step ids", p.step)), map[string]any{"card_ref": p.card})
 		}
 		if p.name == "plan step rm" {
 			steps = append(steps[:index], steps[index+1:]...)
@@ -229,6 +253,9 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 		plan["steps"] = steps
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, p.name, "PUT", path, map[string]any{"plan": plan, "if_updated_at": p.token})
+	if err != nil {
+		errnorm.AnnotateDetail(err, "card_ref", p.card)
+	}
 	return result, p.name, err
 }
 
