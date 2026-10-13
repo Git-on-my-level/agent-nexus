@@ -2431,7 +2431,7 @@
     "../server/projection_maintenance.go:*ProjectionMaintainer:Snapshot": "3457e7955027024869b6ccd7f1282398f11c68f1a6b05c298a9b20f7d505c715",
     "../server/projection_maintenance.go:*ProjectionMaintainer:Step": "0a78110573163ccc947db53f7cf5a846bd28535cf124258af1722c54b7dc0607",
     "../server/projection_maintenance.go:*ProjectionMaintainer:loadAllThreadIDs": "c59fad91bc119688d9ffc99d11f80d3aa485166fbd0656e34013c6bfe52e36d9",
-    "../server/projection_maintenance.go:*ProjectionMaintainer:processDirtyQueue": "707373aa9620825568336b3a0453ac9cdc5d573bdabdb4e81e27953176c597b8",
+    "../server/projection_maintenance.go:*ProjectionMaintainer:processDirtyQueue": "2dc31aec6ac380eaf9975b87a1a16b3857c89f99cd1c3d5980a1cd166e9b4345",
     "../server/projection_maintenance.go:type:ProjectionMaintenanceErrorSnapshot": "170828c347dead883cbd944b06a05db319f03bb377cd50f81327d84f8451fd2c",
     "../server/projection_maintenance.go:type:ProjectionMaintenanceSnapshot": "455f885212e0d82d99d8983a7c6744e9b35247405f36f3df6ced07804f8c6725",
     "../server/ref_edges_handlers.go:handleListRefEdges": "383a2698d9b8bbc4cd4070fd02f7932f6f6f4f85f71c5b6f83b87c3f78734e6c",
