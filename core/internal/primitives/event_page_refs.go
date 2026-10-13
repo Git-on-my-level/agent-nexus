@@ -123,28 +123,29 @@ func withBatchPublicRefs(ctx context.Context, q interface {
 				// the identity index, then authorize the resulting revisions
 				// and parents through their complete scoped relations.
 				normalized := []string{}
-				handleLookups := []string{}
+				handleLookups := [][2]string{}
 				for _, input := range chunk {
 					value := handles.Normalize(input)
 					normalized = append(normalized, value)
 					aliases[value] = append(aliases[value], input)
 					if isVirtualRevisionHandle(value) {
-						handleLookups = append(handleLookups, value)
+						split := strings.LastIndex(value, "-r")
+						handleLookups = append(handleLookups, [2]string{value[:split], value[split+2:]})
 					}
 				}
 				data, _ := json.Marshal(normalized)
-				query += " OR r.revision_id IN (SELECT resource_id FROM resource_access_identities WHERE kind='" + kind + "' AND ref IN (SELECT value FROM json_each(?)))"
+				query += " OR r.revision_id IN (SELECT resource_id FROM resource_access_identities WHERE kind='" + kind + "' AND anx_resource_atom_key(CAST(ref AS BLOB)) IN (SELECT anx_resource_atom_key(CAST(value AS BLOB)) FROM json_each(?)))"
 				args = append(args, string(data))
 				if len(handleLookups) > 0 {
-					// Identity rows are not guaranteed. Match the per-ref
-					// computed handle so case-variant and handle-only inputs
-					// still resolve when the index has no matching ref.
-					parent := "COALESCE(d.handle,d.id,r.document_id)"
+					// Missing virtual identity rows still route by their parent
+					// and revision number. Every probe uses the identity-key
+					// or (parent,number) index; never scan computed handles.
+					parentKind, parentID, revisions := "document", "document_id", "document_revisions"
 					if kind == "card_revision" {
-						parent = "COALESCE(c.handle,c.id)"
+						parentKind, parentID, revisions = "card", "card_id", "card_revisions"
 					}
 					handleData, _ := json.Marshal(handleLookups)
-					query += " OR lower(" + parent + "||'-r'||r.revision_number) IN (SELECT value FROM json_each(?))"
+					query += " OR r.revision_id IN (SELECT route.revision_id FROM json_each(?) h JOIN " + revisions + " route ON route." + parentID + " IN (SELECT resource_id FROM resource_access_identities WHERE kind='" + parentKind + "' AND anx_resource_atom_key(CAST(ref AS BLOB))=anx_resource_atom_key(CAST(json_extract(h.value,'$[0]') AS BLOB)) UNION SELECT json_extract(h.value,'$[0]')) AND route.revision_number=CAST(json_extract(h.value,'$[1]') AS INTEGER))"
 					args = append(args, string(handleData))
 				}
 				// A handle routes to a different key: do not reuse the event

@@ -246,12 +246,14 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		cursorID = id
 	}
 
+	finishRead := func() {}
 	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
 		ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
 		if err != nil {
 			writeError(w, 500, "internal_error", "failed to admit completed inbox read")
 			return
 		}
+		finishRead = closeRead
 		defer closeRead()
 		r = r.WithContext(ctx)
 	}
@@ -307,6 +309,10 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		payloadItems = append(payloadItems, completedInboxItemPayload(r.Context(), opts.primitiveStore, evt, reqEvt))
 	}
 
+	// Materialization is complete. Network backpressure must not retain the
+	// SQLite connection, denial token or WAL snapshot. Deferred cleanup still
+	// covers every earlier exit.
+	finishRead()
 	resp := map[string]any{
 		"status":       "completed",
 		"items":        payloadItems,

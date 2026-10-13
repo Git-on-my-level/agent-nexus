@@ -117,6 +117,9 @@ func TestPublicRevisionBatchResolvesHandleWhenIdentityMisses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err = db.Exec(`DELETE FROM resource_access_identities WHERE kind='document_revision'`); err != nil {
+		t.Fatal(err)
+	}
 	expected := "document_revision:Mixed-Handle-r1"
 	scope, closeRead, err := s.BeginResourceRead(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}))
 	if err != nil {
@@ -128,6 +131,29 @@ func TestPublicRevisionBatchResolvesHandleWhenIdentityMisses(t *testing.T) {
 	if len(got) != 1 || got[0] != expected || counter.Count() != 1 {
 		t.Fatalf("identity-miss handle: got=%v expected=%s queries=%d", got, expected, counter.Count())
 	}
+	statement := counter.Statements()[0]
+	rows, err := ws.DB().QueryContext(ctx, "EXPLAIN QUERY PLAN "+statement.SQL, statement.Args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan strings.Builder
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err = rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan.WriteString(detail + "\n")
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	text := plan.String()
+	if strings.Contains(text, "SCAN _row") || strings.Contains(text, "SCAN r") || strings.Contains(text, "SCAN route") || !strings.Contains(text, "idx_access_identity_key") || !strings.Contains(text, "(document_id=? AND revision_number=?)") {
+		t.Fatalf("revision routing lost bounded indexes: %s", text)
+	}
+
 }
 
 func TestEventRefBatchUsesIndexedIDAndHandleSelectors(t *testing.T) {
