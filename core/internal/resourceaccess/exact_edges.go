@@ -4,7 +4,7 @@ import "strings"
 
 // Each arm retains its own indexed equality probe. Do not hide these branches
 // inside a materialized whole-ledger union or hex() the indexed BLOB column.
-const CompactReaderSQL = `(SELECT reader FROM main.resource_access_compact_control WHERE singleton=1)=1`
+const CompactReaderSQL = `(SELECT reader=1 AND force_legacy=0 FROM main.resource_access_compact_control WHERE singleton=1)`
 
 func ExactEdgeTerms(prefix, carry, where string, keys []string) []string {
 	binaryKeys := make([]string, len(keys))

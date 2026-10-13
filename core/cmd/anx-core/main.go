@@ -100,7 +100,8 @@ func main() {
 		streamPollInterval          = envDuration("ANX_STREAM_POLL_INTERVAL", time.Second)
 		projectionMode              = envString("ANX_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
-		compactAccessMigration      = envBool("ANX_COMPACT_ACCESS_MIGRATION", false)
+		compactAccessMigration      = envBool("ANX_COMPACT_ACCESS_MIGRATION", true)
+		compactAccessLegacyReads    = envBool("ANX_COMPACT_ACCESS_LEGACY_READS", false)
 		scopedInboxReader           = envBool("ANX_SCOPED_INBOX_READER", false)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		answerWakeQuietWindow       = envDuration("ANX_ANSWER_WAKE_QUIET_WINDOW", server.DefaultAnswerWakeQuietWindow)
@@ -170,6 +171,7 @@ func main() {
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
 	flag.BoolVar(&compactAccessMigration, "compact-access-migration", compactAccessMigration, "enable online compact access migration and certified reader cutover")
+	flag.BoolVar(&compactAccessLegacyReads, "compact-access-legacy-reads", compactAccessLegacyReads, "force legacy authorization reads even after certification (rollback kill switch)")
 	flag.BoolVar(&scopedInboxReader, "scoped-inbox-reader", scopedInboxReader, "enable the scoped inbox index with legacy authorization and fallback")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
@@ -226,6 +228,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer workspace.Close()
+	if err := workspace.SetCompactAccessLegacyReads(context.Background(), compactAccessLegacyReads); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to configure compact authorization fallback")
+		os.Exit(1)
+	}
 
 	var secretsEncryptor *secrets.Encryptor
 	if strings.TrimSpace(secretsKey) != "" {
@@ -630,7 +636,7 @@ func main() {
 					fmt.Fprintln(os.Stderr, "compact access migration: incomplete or verification failed; current reader retained")
 					return
 				}
-				fmt.Fprintf(os.Stderr, "compact access migration: certified rows=%d epoch=%d; compact reader active\n", result.Rows, result.Epoch)
+				fmt.Fprintf(os.Stderr, "compact access migration: certified rows=%d epoch=%d; certified reader selected unless legacy fallback is set\n", result.Rows, result.Epoch)
 			})
 		}()
 		defer func() { maintenanceCancel(); <-compactDone }()

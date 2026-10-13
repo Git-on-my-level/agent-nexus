@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 func compactCertify(t *testing.T, w *Workspace) CompactAccessVerification {
@@ -107,6 +110,78 @@ func TestCompactAccessCutoverStableIdentityAndRollback(t *testing.T) {
 		t.Fatal("overrode operator rollback")
 	}
 	if _, err := w.VerifyCompactAccessCutover(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
+	w := compactFixture(t, 30)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	selected := func(want bool) {
+		t.Helper()
+		var active bool
+		if err := w.db.QueryRowContext(ctx, "SELECT "+resourceaccess.CompactReaderSQL).Scan(&active); err != nil || active != want {
+			t.Fatalf("compact reader=%v want=%v err=%v", active, want, err)
+		}
+	}
+	selected(false) // Empty metadata never certifies a workspace.
+	if err := w.SetCompactAccessLegacyReads(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	var reported bool
+	w.RunCompactAccessMigration(ctx, func(_ CompactAccessVerification, err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		reported = true
+	})
+	if !reported {
+		t.Fatal("worker did not certify")
+	}
+	var mode int
+	if err := w.db.QueryRowContext(ctx, "SELECT reader FROM resource_access_compact_control").Scan(&mode); err != nil || mode != 1 {
+		t.Fatal("certification not published", mode, err)
+	}
+	selected(false) // Certification cannot undo an active kill switch.
+	compactExec(t, w, `UPDATE resource_access_edges SET target_ref='document:changed-under-fallback' WHERE rowid=1`)
+	if _, err := w.VerifyCompactAccessCutover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var epoch int64
+	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&epoch); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetCompactAccessLegacyReads(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	selected(true)
+	var after int64
+	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch+1 {
+		t.Fatal("epoch not invalidated", after, epoch, err)
+	}
+	if err := w.SetCompactAccessLegacyReads(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch+1 {
+		t.Fatal("idempotent config changed epoch", after, epoch, err)
+	}
+	if err := w.RollbackCompactAccess(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetCompactAccessLegacyReads(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	selected(false) // A durable operator rollback requires explicit re-certification.
+}
+
+func TestCompactAccessUpgradeOverrideMetadata(t *testing.T) {
+	w := compactFixture(t, 0)
+	compactExec(t, w, `ALTER TABLE resource_access_compact_control DROP COLUMN force_legacy`)
+	if err := w.initializeCompactAccessMetadata(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetCompactAccessLegacyReads(context.Background(), true); err != nil {
 		t.Fatal(err)
 	}
 }

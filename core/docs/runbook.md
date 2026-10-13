@@ -17,8 +17,11 @@ repo and live in the private `agent-nexus-saas/controlplane` repo.
 `anx-core` reads configuration from flags (highest priority) and environment
 variables.
 
-The optional `--compact-access-migration` / `ANX_COMPACT_ACCESS_MIGRATION` switch is
-off by default. See [compact access shadow migration](compact-access-shadow.md)
+The `--compact-access-migration` / `ANX_COMPACT_ACCESS_MIGRATION` worker is
+on by default; readers switch only after workspace certification.
+`--compact-access-legacy-reads` / `ANX_COMPACT_ACCESS_LEGACY_READS` forces legacy
+reads before serving on restart; the linked runbook also gives the immediate
+SQL rollback for a running core. See [compact access shadow migration](compact-access-shadow.md)
 for certified reader cutover, stable edge IDs, verified file reclamation and
 rollback. Default activation awaits the documented retention decision.
 

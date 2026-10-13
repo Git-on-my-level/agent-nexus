@@ -6,19 +6,28 @@ reclamation reduced the database file from **304,500,736 to 246,775,808 bytes**
 (**57,724,928 bytes saved, 18.96%**), while retaining the original exact ledger
 for immediate reader rollback. No HTTP routes or canonical API contracts change.
 
-## Release decision
+## Activation and rollback window
 
-`ANX_COMPACT_ACCESS_MIGRATION` / `--compact-access-migration` currently defaults
-to **false pending the rollback retention decision**. Enabling it runs the full
-migration, including certified reader cutover. It is no longer a shadow-only
-worker. Empty capability metadata is installed before serving so every reader
-can evaluate the selected format within its SQL snapshot.
+`ANX_COMPACT_ACCESS_MIGRATION` / `--compact-access-migration` defaults to **true**.
+The background worker certifies each workspace before publishing compact reader
+mode; uncertified workspaces automatically use the legacy ledger. Empty metadata
+is installed before serving; historical copying and verification stay off the
+readiness path. A failed certification leaves the current reader unchanged.
 
-Immediate, correct fallback requires a current old ledger. This implementation
-keeps that ledger synchronized until its removal in a later release. Stopping
-its writes while retaining it would require replay/rebuild before fallback, or
-an additional indexed delta ledger. Do not enable this migration by default
-until the retention policy is accepted and release certification is complete.
+`ANX_COMPACT_ACCESS_LEGACY_READS=true` / `--compact-access-legacy-reads=true`
+forces legacy authorization reads, including on an already certified workspace.
+The setting applies **before requests are served on process startup**; environment
+changes require a restart. Removing it restores compact reads only if the workspace
+is certified and has no durable operator rollback. Flag values override the env.
+This switch is independent of the migration worker: certification may complete
+while the switch is held, but cannot override it. Each changed selection bumps
+the authorization epoch so warm caches fall back within the consuming SQL snapshot.
+
+The accepted policy is expand, then contract: keep legacy writes current through
+the instant-rollback window. Stop them atomically with legacy-table removal in a
+later release, after production certification and an explicit release decision.
+No legacy data is dropped by this release. The contraction acceptance criteria are
+tracked in SCA-774 and summarized in the production reclamation runbook.
 
 ## Online migration
 
@@ -38,7 +47,7 @@ until the retention policy is accepted and release certification is complete.
    retries verification. Atomically replace the raw table with the certified
    explicit-ID table, reinstall its triggers, remove its redundant target index,
    publish compact reader mode, and advance the authorization epoch. The DDL
-   phase has a ten-second deadline; the measured dense-fixture commit took 96 ms.
+   phase has a ten-second deadline; the measured dense-fixture commit took 78 ms.
 
 The serving OS lease is retained after stabilization, including across open
 connections, and reacquired before migrations on restart. Old binaries are not
@@ -59,25 +68,32 @@ migration without changing the active reader; it is not silently repaired.
 ## Pause and instant reader rollback
 
 Disabling the migration flag pauses the worker; it does not undo a committed
-cutover. Installed mirrors remain transactional with canonical writes.
+cutover. Use the separate legacy-read kill switch to change readers. Installed
+mirrors remain transactional with canonical writes.
 
-An operator can switch readers back immediately while the old ledger remains
-current. Execute this short transaction with a local SQLite connection and a
-busy timeout:
+For **immediate fallback in an already running process**, without waiting for a
+restart or copying rows, an operator can execute this durable rollback transaction
+with a local SQLite connection. It is stronger than the process setting and
+survives restart:
 
 ```sql
+PRAGMA busy_timeout=5000;
 BEGIN IMMEDIATE;
 UPDATE resource_access_compact_control SET reader=2 WHERE singleton=1;
 UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1;
 COMMIT;
 ```
 
-Mode 2 prevents the worker from undoing the rollback. Explicit raw IDs stay
+Mode 2 prevents the worker or a cleared env kill switch from undoing the rollback. Explicit raw IDs stay
 stable. Re-certification/re-enablement requires deliberately resetting mode to
 0 and restarting the enabled worker. No authorization data is copied during the
 reader switch. Never manually switch to mode 1 without verification.
 
 ## Reclaim file space in a maintenance window
+
+For the precise hosted maintenance window and self-host procedure, see
+[production reclamation](../../deploy/compact-access-reclamation.md). Reclamation
+is **operator-run and offline**, never invoked by startup or the updater.
 
 Cutover frees pages; it does not shrink an `auto_vacuum=NONE` file. Keep the core
 stopped for **all** of the following steps. Disable supervisor restarts first.
@@ -131,12 +147,12 @@ It differs from the original proposal's 943,778-edge fixture.
 Backfill selects O(log N + B) keys and performs O(B log N) index work, B <= 200.
 Full snapshot verification and offline reclamation are O(N) maintenance work;
 EXCEPT uses temporary space and WAL snapshots can retain pages. Cutover never
-runs on a request path. Ordinary opted-in writes update the current rollback
+runs on a request path. Ordinary post-installation writes update the current rollback
 ledger and compact mirror plus a constant-size generation counter.
 
-A 4,096-edge target fanout used one SQL statement, 4,096 returned rows and 28,731
+A 4,096-edge target fanout used one SQL statement, 4,096 returned rows and 28,750
 VM steps, with no full scan, sort or automatic index. Adding 8,192 unrelated
-edges changed this to 28,732 VM steps. Ordered old/compact authorization results
+edges changed this to 28,751 VM steps. Ordered old/compact authorization results
 also match across concurrent grants/revokes, private human/agent ownership and
 HTTP credential expiry/revocation. The existing common HTTP read performance
 gate runs in both legacy and certified compact modes with identical budgets.

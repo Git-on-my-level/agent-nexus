@@ -84,31 +84,36 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 					t.Fatal("private page disclosed")
 				}
 			}
-			for _, path := range paths {
-				request(owner.AccessToken, path, 200)
-				status := 404
-				if strings.HasPrefix(path, "/inbox") || strings.HasPrefix(path, "/overview") {
-					status = 200
-				}
-				request(stranger.AccessToken, path, status)
-			}
-			if _, err := env.workspace.VerifyCompactAccessShadow(ctx); err != nil {
-				t.Fatal(err)
-			}
-			// Warm closure caches never extend credential lifetime or bypass revocation.
-			for _, column := range []string{"expires_at", "revoked_at"} {
-				if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`='2000-01-01T00:00:00Z' WHERE agent_id=?`, owner.AgentID); err != nil {
+			for _, forceLegacy := range []bool{false, true, false} {
+				if err := env.workspace.SetCompactAccessLegacyReads(ctx, forceLegacy); err != nil {
 					t.Fatal(err)
 				}
 				for _, path := range paths {
-					request(owner.AccessToken, path, 401)
+					request(owner.AccessToken, path, 200)
+					status := 404
+					if strings.HasPrefix(path, "/inbox") || strings.HasPrefix(path, "/overview") {
+						status = 200
+					}
+					request(stranger.AccessToken, path, status)
 				}
-				reset := `NULL`
-				if column == "expires_at" {
-					reset = `'2099-01-01T00:00:00Z'`
-				}
-				if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`=`+reset+` WHERE agent_id=?`, owner.AgentID); err != nil {
+				if _, err := env.workspace.VerifyCompactAccessShadow(ctx); err != nil {
 					t.Fatal(err)
+				}
+				// Warm closure caches never extend credential lifetime or bypass revocation.
+				for _, column := range []string{"expires_at", "revoked_at"} {
+					if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`='2000-01-01T00:00:00Z' WHERE agent_id=?`, owner.AgentID); err != nil {
+						t.Fatal(err)
+					}
+					for _, path := range paths {
+						request(owner.AccessToken, path, 401)
+					}
+					reset := `NULL`
+					if column == "expires_at" {
+						reset = `'2099-01-01T00:00:00Z'`
+					}
+					if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`=`+reset+` WHERE agent_id=?`, owner.AgentID); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 		})

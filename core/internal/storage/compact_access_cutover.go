@@ -282,3 +282,28 @@ func enableCompactAccessLease(ctx context.Context, db *sql.DB, lease *scopeProce
 	}
 	return nil
 }
+
+// SetCompactAccessLegacyReads applies the process configuration before serving.
+// It neither grants certification nor overrides a durable operator rollback.
+// The epoch bump makes every consuming authorization snapshot see the switch.
+func (w *Workspace) SetCompactAccessLegacyReads(ctx context.Context, force bool) error {
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET force_legacy=? WHERE singleton=1 AND force_legacy<>?`, force, force)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed > 0 {
+		if _, err = tx.ExecContext(ctx, `UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1`); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}

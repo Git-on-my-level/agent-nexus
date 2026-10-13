@@ -10,9 +10,7 @@ import (
 	"agent-nexus-core/internal/sqliteutil"
 )
 
-// InitializeCompactAccessShadow opts this database into the expand-only shadow
-// experiment. It does no historical copying. The old ledger remains authoritative
-// and all installed triggers persist even when the maintenance worker is paused.
+// initializeCompactAccessMetadata installs only empty reader capability metadata.
 func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -20,7 +18,7 @@ func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 	for _, q := range []string{
-		`CREATE TABLE IF NOT EXISTS resource_access_compact_control(singleton INTEGER PRIMARY KEY CHECK(singleton=1), reader INTEGER NOT NULL DEFAULT 0 CHECK(reader IN (0,1,2)), stable INTEGER NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 0, raw_cursor INTEGER, raw_done INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS resource_access_compact_control(singleton INTEGER PRIMARY KEY CHECK(singleton=1), reader INTEGER NOT NULL DEFAULT 0 CHECK(reader IN (0,1,2)), stable INTEGER NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 0, raw_cursor INTEGER, raw_done INTEGER NOT NULL DEFAULT 0, force_legacy INTEGER NOT NULL DEFAULT 0 CHECK(force_legacy IN (0,1)))`,
 		`INSERT INTO resource_access_compact_control(singleton) VALUES(1) ON CONFLICT DO NOTHING`,
 		`CREATE TABLE IF NOT EXISTS resource_access_compact_edges(edge_id INTEGER PRIMARY KEY,target_key BLOB NOT NULL CHECK(typeof(target_key)='blob' AND length(target_key)=32))`,
 		`CREATE INDEX IF NOT EXISTS idx_access_compact_target ON resource_access_compact_edges(target_key)`,
@@ -29,9 +27,21 @@ func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
 			return err
 		}
 	}
+	// Upgrade workspaces prepared by earlier builds of this migration.
+	var hasOverride bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pragma_table_info('resource_access_compact_control') WHERE name='force_legacy')`).Scan(&hasOverride); err != nil {
+		return err
+	}
+	if !hasOverride {
+		if _, err = tx.ExecContext(ctx, `ALTER TABLE resource_access_compact_control ADD COLUMN force_legacy INTEGER NOT NULL DEFAULT 0 CHECK(force_legacy IN (0,1))`); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
+// InitializeCompactAccessShadow installs transactional mirrors without copying
+// history or selecting compact reads. Mirrors survive a paused worker.
 func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) error {
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
@@ -253,9 +263,12 @@ func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(C
 				cutoverCtx, finish := context.WithTimeout(ctx, 10*time.Second)
 				err = w.CutoverCompactAccess(cutoverCtx, result)
 				finish()
-				if errors.Is(err, ErrCompactAccessChanged) {
-					continue
-				}
+			}
+			// Ordinary write contention is not a certification failure. Retry
+			// with a new snapshot; never publish a proof across a write gap.
+			var sqliteCode interface{ Code() int }
+			if errors.Is(err, ErrCompactAccessChanged) || (errors.As(err, &sqliteCode) && (sqliteCode.Code()&255 == 5 || sqliteCode.Code()&255 == 6)) {
+				continue
 			}
 			if report != nil && ctx.Err() == nil {
 				report(result, err)
