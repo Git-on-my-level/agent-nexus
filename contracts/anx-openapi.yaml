@@ -3040,19 +3040,33 @@ paths:
       x-anx-why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better)."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-output-envelope: "Returns `{ documents, next_cursor?, search_coverage }`. Each document may include `search_rank` (higher is better)."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, search_repair_pending]
       x-anx-concepts: [docs]
       x-anx-stability: beta
       x-anx-examples:
         - title: Search knowledge
           command: anx docs search "runbook" --knowledge --limit 20
       x-anx-agent-notes: >
-        SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments.
-        Query terms are AND-matched; punctuation is tokenized. Prefer this over
-        `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger
-        matches (title weighted above body, then summary/source/tags, then comments).
+        Default search uses independent current document heads and comments. AND terms
+        may span the current head and live comments of one authorized document.
+        Punctuation-normalized phrases must match one resource. Latin diacritics
+        fold as in the released unicode61 tokenizer (remove_diacritics=1).
+        Each resource covers at most 65536 source/normalized bytes and 4096 distinct terms.
+        Results use stable document order, not corpus-wide BM25 ranking. Pages contain at
+        most 100 documents and can be empty with next_cursor while bounded candidates are
+        verified. Follow next_cursor until absent. Content, authority, filter or reader-mode
+        changes invalidate cursors; restart without cursor. search_coverage describes the
+        active reader, including on empty pages. An operational aggregate fallback preserves
+        its legacy FTS5 semantics and refuses stale results while lazy repair is pending (503).
       parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/LifecycleState' }
+          description: Lifecycle states; defaults to active.
         - name: q
           in: query
           required: true
@@ -3077,7 +3091,7 @@ paths:
           in: query
           required: false
           schema: { type: string }
-          description: Opaque pagination cursor from a previous search response.
+          description: Opaque query/filter/principal/generation-bound cursor; restart without cursor after invalidation.
         - name: limit
           in: query
           required: false
@@ -3087,6 +3101,8 @@ paths:
             maximum: 1000
           description: Page size; omit to return up to 50 hits.
       responses:
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Ranked document search hits
           content:
@@ -10798,8 +10814,8 @@ components:
         search_rank:
           type: integer
           description: >
-            Search-only enrichment from GET /docs/search: higher means a stronger FTS5 match
-            (title weighted above body, then summary/source/tags, then comments). Omitted on list/get.
+            Search-only enrichment from GET /docs/search. Independent matches have rank 1
+            and stable document order. The operational aggregate fallback uses weighted FTS5 rank.
       required:
         [ref, handle, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
 
@@ -12317,6 +12333,14 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Document' }
         next_cursor: { type: string }
+        search_coverage:
+          type: object
+          description: Search-only coverage metadata, present even for empty pages.
+          properties:
+            mode: { type: string, enum: [independent, aggregate] }
+            bytes_per_resource: { type: integer }
+            terms_per_resource: { type: integer }
+          required: [mode]
       required: [documents]
 
     DocumentComment:

@@ -1,9 +1,9 @@
 # Bounded scope search
 
-This is stream C's disabled executor, rebased onto the SCA-666 foundation. It
-does not register a route, initialize tables, replace `SearchDocuments`, or enable
-the new authority. Legacy search/comment privacy tests and the legacy FTS path
-remain authoritative until the complete phase-3 semantic cutover.
+The bounded executor serves the production `GET /docs/search` head/comment
+reader after online certification. Migration 82 installs the transactional
+writers and resumable workers. See [the cutover contract](../../docs/comment-search-cutover.md)
+for authority, coverage, fallback behavior and measured costs.
 
 `Search` receives a trusted `Repository`, a persistent-secret token codec and a
 finite request selection. The repository must authorize **all** selected scopes
@@ -20,8 +20,9 @@ normalization truncation. Its writer must delete at most 4,096 old postings, ins
 never load a document's revisions or backing-thread history on a comment change.
 
 Coverage is a normalized UTF-8 prefix of at most 65,536 bytes and 4,096 distinct
-terms. Tokenization lowercases Unicode letters/numbers and replaces other input
-with word boundaries. It stops when either cap is reached and reports the actual
+terms. Tokenization lowercases Unicode letters/numbers, folds Latin diacritics
+as released unicode61 mode 1 did, and consumes its recognized combining accents
+within tokens. Other input becomes word boundaries. It stops when either cap is reached and reports the actual
 indexed byte count, truncation and canonical version. Prefix/fuzzy and historical
 version search are absent. Binary bodies supply no search text.
 
@@ -56,52 +57,34 @@ maintenance. There is no history-size term. RID accepts the foundation's 512-byt
 bound. The scope and version fields remain finite; actual production identities
 are A's opaque allocated IDs.
 
-## Lead-owned integration proposal
+## Reader integration
 
-1. Implement `Repository`/`Snapshot` and `Writer` inside `scopedrepo` using its
-   transaction capabilities and reviewed generated templates. Use the durable
-   reference adapter in `server/scope_search_repository_test.go` as executable
-   evidence, not as a production factory. Its shadow DDL also specifies the
-   posting/resource/generation shapes. Enforce immutable ownership, current head,
-   complete old-posting bounds and scope/parent equality in the production schema.
-2. Produce the bounded head/comment prefix from the incoming canonical write
-   **before** forming the frozen bounded Change. Carry source truncation explicitly
-   using A's `scopes.BoundSearchProjection` and shared `SourceTruncated` bit.
-   Never pass a full oversized
-   canonical record through `Change.Validate`, and never silently label an already
-   truncated delta complete. These are trusted canonical capture operations;
-   never use the helper to declassify guarded-reference previews.
-   Hooks must call this package for append/edit/delete/purge/lifecycle rebuilds in
-   the same transaction as canonical state, including imports.
-   Guarded-reference labels borrowed from another scope are render-only; never
-   put their target title/preview in the destination's searchable source text.
-3. Maintain monotonically increasing principal authority, scope lifecycle and
-   search generations. Selected mutation/revocation/regrant/activation must expire
-   old continuations; unrelated scope content must not invalidate them.
-4. Integrate the proposed writer-inventory fingerprints, canonical contract,
-   route/classifier/privacy/performance inventory, and authenticated selection.
-   `Handler` is a disabled transport helper: nil `Ready` denies before work. Its
-   positive readiness must come only from complete cutover approval.
-5. Adopt #295's SCA-661 budgets and explain the **actual production** candidate,
-   hydration and authority statements. The reference adapter's exact range and
-   bounded VALUES hydration plans are checked, but this is not production route
-   performance approval. Real canonical HTTP mutations and durable lifecycle
-   worker tests remain integration gates. Do not retire old tests yet.
+The former uncalled `scopedrepo.SearchCanonicalHook` adapter has been removed.
+The live writer is `storage/comment_search.go`; it keeps canonical event
+identity and current `resourceaccess` authority instead of granting new scope
+membership. It captures the first 64 KiB of raw comment input before the shared
+normalizer, with an explicit truncation bit, and replaces at most 4,096 postings.
 
-The executable adapter proposal in `server/scope_search_hooks_test.go` uses A's
-`ApplyCanonicalHooks` with an existing `resourceaccess.Tx`; its capability expires
-at callback exit. It commits/rolls back a canonical document, search postings,
-generation and exact stream together, then checks HTTP/SSE output. The reference
-writer uses <=32 batches of <=128 posting tuples, two deletes, one head insert
-and one generation update (<=36 search calls), plus <=8 calls for four stream
-destinations. This fits the shared 256-call ceiling without limiting coverage to
-256 terms. A must integrate reviewed typed batch templates and enforce the old
-posting cap in the production schema. This is an adapter proposal with explicit
-test selection, not complete production source capture or route authority.
+The production adapter is `primitives/document_search_reader.go`. It uses a
+persistent secret, durable content/authority generations, one immutable read
+snapshot, grouped parent continuations, bounded text batches and canonical
+response metadata. Reference HTTP adapters remain unit fixtures; the registered
+`/docs/search` route has its own integration and privacy tests.
 
-The HTTP tests exercise the production executor/helper over a real SQLite
-workspace and foundation authority tables with explicit test selection. They
-cover oversized repetitive heads, a late covered phrase, outside-prefix matches,
-empty-page progress, cross-scope frontier ordering, generation binding, comment
-history independence and transaction rollback. They do not claim the production
-authentication dispatcher or registered legacy `/docs/search` has switched.
+When `DeduplicateParents` is selected, the repository must give every resource of
+one parent the same recency key and numeric ordered resource IDs. After emitting
+a match, the executor advances to that parent's `~` sentinel, so later pages seek
+past its remaining comments. The production index binds this order to durable
+document/resource ordinals. Query fingerprints bind the grouping mode too.
+
+The executor's candidate bounds apply to admitted visible keys. SQL authority
+filtering may reject additional private postings before LIMIT; the production
+cutover document distinguishes this work and cold ownership-graph admission
+from the bounded hydration contract.
+
+Production phrase-free multi-term search uses `ParentANDSnapshot`: a bounded
+batch of authorized driver keys, followed by at most eight indexed authorized
+term-existence probes per parent. Matches and rejections skip the remaining
+resources of that parent; no comment bodies or history are materialized. Phrase
+verification remains same-resource. Index/query normalization uses unicode61
+Latin diacritic folding; version-2 backfill certification is required for serving.

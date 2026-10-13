@@ -20,6 +20,7 @@ const documentTagMaxLen = 64
 const knowledgeTag = "knowledge"
 
 type DocumentSearchFilter struct {
+	Coverage  *DocumentSearchCoverage
 	Query     string
 	Tag       string
 	Host      string
@@ -207,15 +208,19 @@ type documentFTSExecer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func upsertDocumentFTSTx(ctx context.Context, tx documentFTSExecer, documentID, title, body, summary, source string, tags []string, threadID string) error {
+func upsertDocumentFTSTx(ctx context.Context, tx documentFTSExecer, documentID, title, body, summary, source string, tags []string, threadID, revisionID string) error {
 	documentID = strings.TrimSpace(documentID)
 	if documentID == "" {
 		return nil
 	}
-	comments, err := documentCommentSearchText(ctx, tx, threadID)
-	if err != nil {
+	boundedBody := boundedSearchBody(body)
+	if _, err := tx.ExecContext(ctx, documentSearchHeadCaptureSQL, boundedBody, revisionID, len(body) > len(boundedBody), boundedBody, len(body) > len(boundedBody), documentID, revisionID); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM document_search_links_pending WHERE document_id=? AND NOT EXISTS(SELECT 1 FROM comment_search_heads WHERE thread_id=? LIMIT 1)`, documentID, threadID); err != nil {
+		return err
+	}
+	comments := ""
 	if _, err := tx.ExecContext(ctx, `DELETE FROM document_fts WHERE document_id = ?`, documentID); err != nil {
 		return fmt.Errorf("clear document fts: %w", err)
 	}
@@ -231,33 +236,10 @@ func upsertDocumentFTSTx(ctx context.Context, tx documentFTSExecer, documentID, 
 	); err != nil {
 		return fmt.Errorf("insert document fts: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM document_search_dirty WHERE document_id=? AND (SELECT done FROM comment_search_job WHERE singleton=1)=1 AND NOT EXISTS(SELECT 1 FROM comment_search_heads WHERE thread_id=? LIMIT 1)`, documentID, threadID); err != nil {
+		return err
+	}
 	return nil
-}
-
-func (s *Store) rebuildDocumentFTS(ctx context.Context, documentID string) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	doc, err := s.loadDocumentRow(ctx, documentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			_, _ = s.db.ExecContext(ctx, `DELETE FROM document_fts WHERE document_id = ?`, documentID)
-			return nil
-		}
-		return err
-	}
-	body := ""
-	if revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true); err == nil {
-		body = strings.TrimSpace(anyStringValue(revision["content"]))
-		if body == "" {
-			body = strings.TrimSpace(anyStringValue(revision["body_text"]))
-		}
-	}
-	tags, err := decodeStoredJSONList(doc.TagsJSON, "document.tags")
-	if err != nil {
-		return err
-	}
-	return upsertDocumentFTSTx(ctx, s.db, documentID, nullStringValue(doc.Title), body, doc.Summary, doc.Source, tags, nullStringValue(doc.ThreadID))
 }
 
 func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, desired, fallbackSeed string) (string, error) {
@@ -288,7 +270,7 @@ func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, des
 	return candidate, nil
 }
 
-func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter) ([]map[string]any, string, error) {
+func (s *Store) searchAggregateDocuments(ctx context.Context, filter DocumentSearchFilter) ([]map[string]any, string, error) {
 	if s == nil || s.db == nil {
 		return nil, "", fmt.Errorf("primitives store database is not initialized")
 	}
@@ -531,7 +513,11 @@ func (s *Store) ListDocumentComments(ctx context.Context, documentID string, lim
 }
 
 func (s *Store) loadDocumentCommentEvent(ctx context.Context, documentID, commentID string) (document map[string]any, event map[string]any, err error) {
-	document, _, err = s.GetDocument(ctx, documentID)
+	record, loadErr := s.loadDocumentRow(ctx, documentID)
+	if loadErr != nil {
+		return nil, nil, loadErr
+	}
+	document, err = record.toMap()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -568,7 +554,11 @@ func (s *Store) CreateDocumentComment(ctx context.Context, actorID, documentID, 
 	if text == "" {
 		return nil, invalidDocumentRequest("text is required")
 	}
-	document, _, err := s.GetDocument(ctx, documentID)
+	record, err := s.loadDocumentRow(ctx, documentID)
+	if err != nil {
+		return nil, err
+	}
+	document, err := record.toMap()
 	if err != nil {
 		return nil, err
 	}
@@ -629,9 +619,6 @@ func (s *Store) CreateDocumentComment(ctx context.Context, actorID, documentID, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.rebuildDocumentFTS(ctx, documentID); err != nil {
-		return nil, err
-	}
 	return documentCommentFromEvent(documentRef, created, parentRef), nil
 }
 
@@ -676,9 +663,6 @@ func (s *Store) UpdateDocumentComment(ctx context.Context, actorID, documentID, 
 	if _, err := s.db.ExecContext(ctx, `UPDATE events SET payload_json = ? WHERE id = ?`, string(payloadJSON), eventID); err != nil {
 		return nil, fmt.Errorf("edit document comment: %w", err)
 	}
-	if err := s.rebuildDocumentFTS(ctx, strings.TrimSpace(anyStringValue(document["id"]))); err != nil {
-		return nil, err
-	}
 	updated, err := s.GetEvent(ctx, eventID)
 	if err != nil {
 		return nil, err
@@ -702,9 +686,6 @@ func (s *Store) DeleteDocumentComment(ctx context.Context, actorID, documentID, 
 	eventID := strings.TrimSpace(anyStringValue(event["id"]))
 	trashed, err := s.TrashEvent(ctx, actorID, eventID, "document comment deleted")
 	if err != nil {
-		return nil, err
-	}
-	if err := s.rebuildDocumentFTS(ctx, strings.TrimSpace(anyStringValue(document["id"]))); err != nil {
 		return nil, err
 	}
 	payload, _ := event["payload"].(map[string]any)

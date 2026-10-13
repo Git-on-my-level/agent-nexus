@@ -733,7 +733,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 
-	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, documentSearchBody(encodedContent, contentType), docSummary, source, tags, threadID); err != nil {
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, documentSearchBody(encodedContent, contentType), docSummary, source, tags, threadID, revisionID); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
@@ -925,13 +925,15 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 		return nil, nil, ErrConflict
 	}
 
+	// Keep the released metadata-only FTS projection current atomically. Its
+	// body/comments remain untouched; dirty markers still gate lazy fallback.
+	if _, err = tx.ExecContext(ctx, `UPDATE document_fts SET title=?,summary=?,source=?,tags=? WHERE document_id=?`, nextTitle, nextSummary, nextSource, documentFTSTagsText(nextTags), documentID); err != nil {
+		return nil, nil, fmt.Errorf("patch document search metadata: %w", err)
+	}
 	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{doc.ThreadID.String}, time.Now().UTC()); err != nil {
 		return nil, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, nil, err
-	}
-	if err := s.rebuildDocumentFTS(ctx, documentID); err != nil {
 		return nil, nil, err
 	}
 	return s.GetDocument(ctx, documentID)
@@ -1397,7 +1399,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, err
 	}
 
-	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, documentSearchBody(encodedContent, contentType), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, documentSearchBody(encodedContent, contentType), nextSummary, nextSource, nextTags, nextThreadID, revisionID); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}

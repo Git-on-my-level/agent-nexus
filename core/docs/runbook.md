@@ -353,3 +353,12 @@ Technical limits stay active in both modes: `ANX_REQUEST_BODY_LIMIT_BYTES`,
 `ANX_AUTH_REQUEST_BODY_LIMIT_BYTES`, `ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES`,
 `ANX_ATTACHMENT_MAX_UPLOAD_BYTES`, auth/write rate limits, and blob integrity
 and reference checks. Disabling capacity quotas does not disable these limits.
+
+## Document search cutover
+
+Current head/comment search is default-on after online certification.
+`ANX_INDEPENDENT_DOCUMENT_SEARCH=false` selects the aggregate fallback on core
+restart. Dirty aggregates are rebuilt lazily; search returns retryable 503 while
+repair is pending instead of serving stale data. See
+[comment-search-cutover.md](comment-search-cutover.md) for upgrade ordering,
+coverage, resumable construction, privacy and fallback recovery.

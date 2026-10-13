@@ -41,8 +41,20 @@ func readOnDB(ctx context.Context, q QueryRower, query string, args []any) (stri
 	return ReadQuery(ctx, query), args
 }
 
-type DB struct{ raw *sql.DB }
-type Tx struct{ raw *sql.Tx }
+type WriteHook func(context.Context, *sql.Tx, string, []any) error
+
+type DB struct {
+	raw        *sql.DB
+	afterWrite WriteHook
+}
+type Tx struct {
+	raw        *sql.Tx
+	afterWrite WriteHook
+}
+
+// SetWriteHook is construction-only. Hooks maintain derived state in the source
+// transaction after its ordinary authorization check; they confer no read grant.
+func (d *DB) SetWriteHook(h WriteHook) { d.afterWrite = h }
 
 type pinnedReadKey struct{}
 type pinnedRead struct {
@@ -106,7 +118,7 @@ func (d *DB) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 	if err := ValidateSQLValues(args); err != nil {
 		return nil, err
 	}
-	if _, ok := PolicyFrom(ctx); !ok {
+	if _, ok := PolicyFrom(ctx); !ok && d.afterWrite == nil {
 		return d.raw.ExecContext(ctx, q, args...)
 	}
 	tx, err := d.BeginTx(ctx, nil)
@@ -128,7 +140,7 @@ func (d *DB) BeginTx(ctx context.Context, o *sql.TxOptions) (*Tx, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Tx{raw: tx}, nil
+	return &Tx{raw: tx, afterWrite: d.afterWrite}, nil
 }
 func (t *Tx) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
 	return t.raw.QueryContext(ctx, ReadQuery(ctx, q), args...)
@@ -151,7 +163,11 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 			return nil, err
 		}
 	}
-	return t.raw.ExecContext(ctx, q, args...)
+	result, err := t.raw.ExecContext(ctx, q, args...)
+	if err == nil && t.afterWrite != nil {
+		err = t.afterWrite(ctx, t.raw, q, args)
+	}
+	return result, err
 }
 func (t *Tx) Commit() error   { return t.raw.Commit() }
 func (t *Tx) Rollback() error { return t.raw.Rollback() }

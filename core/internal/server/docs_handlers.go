@@ -1006,7 +1006,15 @@ func handleSearchDocuments(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
+	states, parseErr := ParseListLifecycleStates(query)
+	if parseErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
+		return
+	}
+	coverage := primitives.DocumentSearchCoverage{}
 	documents, nextCursor, err := opts.primitiveStore.SearchDocuments(r.Context(), primitives.DocumentSearchFilter{
+		Coverage:  &coverage,
+		States:    states,
 		Query:     q,
 		Tag:       strings.TrimSpace(query.Get("tag")),
 		Host:      strings.TrimSpace(query.Get("host")),
@@ -1015,6 +1023,11 @@ func handleSearchDocuments(w http.ResponseWriter, r *http.Request, opts handlerO
 		Cursor:    strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
+		if errors.Is(err, primitives.ErrSearchRepairPending) {
+			w.Header().Set("Retry-After", "1")
+			writeError(w, http.StatusServiceUnavailable, "search_repair_pending", "aggregate search is being refreshed; retry")
+			return
+		}
 		if errors.Is(err, primitives.ErrInvalidCursor) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
 			return
@@ -1026,7 +1039,7 @@ func handleSearchDocuments(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to search documents")
 		return
 	}
-	response := map[string]any{"documents": documents}
+	response := map[string]any{"documents": documents, "search_coverage": coverage}
 	if nextCursor != "" {
 		response["next_cursor"] = nextCursor
 	}
