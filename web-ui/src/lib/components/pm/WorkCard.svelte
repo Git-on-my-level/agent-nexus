@@ -8,14 +8,6 @@
     workFreshness,
   } from "$lib/pm/presentation.js";
   import { workSummaryModel } from "$lib/workSummary.js";
-  import {
-    actorDisplayLabel,
-    actorRegistry,
-    agentRegistry,
-    findAgentSummary,
-    principalRegistry,
-  } from "$lib/actorSession";
-  import { compactOwnerName } from "$lib/ownerDisplay.js";
 
   /**
    * One board card: a title, the shared summary, and the two signals that are
@@ -47,16 +39,16 @@
     now = Date.now(),
     /** Primes the card cache and prefetches on hover; see `workCache.js`. */
     onprefetch = null,
+    /**
+     * Same cell the table Owner column uses, so both views share one
+     * format. A pending cell leaves the owner off until the name is stable.
+     */
+    ownerCell = null,
   } = $props();
 
   let model = $derived(summary ?? workSummaryModel(work, { now }));
-  // The card's owner reads like the table's: the name, without the role or
-  // the host it would truncate on inside a 18rem column.
   let ownerLabel = $derived(
-    compactOwnerName(
-      actorDisplayLabel(work?.owner, $actorRegistry, $principalRegistry),
-      { isAgent: Boolean(findAgentSummary(work?.owner, $agentRegistry)) },
-    ),
+    ownerCell && !ownerCell.pending ? ownerCell.name : "",
   );
   // The board name only when the parent says it tells boards apart; a
   // source-owned card says where it lives instead.

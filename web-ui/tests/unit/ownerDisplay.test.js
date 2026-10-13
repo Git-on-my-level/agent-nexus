@@ -95,7 +95,7 @@ describe("buildOwnerDisplay", () => {
     expect(beforeAnyRead.name).toBe("");
     expect(beforeAnyRead.title).toContain("actor-gds-producer");
 
-    // Actors landed and name this owner: no reason to keep waiting.
+    // A tagged person is stable without the roster.
     expect(
       buildOwnerDisplay(loaded({ agentsLoaded: false }))("actor-gds-producer")
         .pending,
@@ -123,6 +123,52 @@ describe("buildOwnerDisplay", () => {
       pending: false,
       name: "priya",
       isAgent: true,
+    });
+  });
+
+  it("waits for the roster even when the actor directory already names the agent", () => {
+    const namedButRosterPending = buildOwnerDisplay({
+      actors: [MAYA, PRIYA_ACTOR],
+      principals: [],
+      agents: [],
+      actorsLoaded: true,
+      agentsLoaded: false,
+    });
+    expect(namedButRosterPending("actor-priya").pending).toBe(true);
+    expect(namedButRosterPending("actor-priya").name).toBe("");
+    expect(namedButRosterPending("actor-gds-producer")).toMatchObject({
+      pending: false,
+      name: "Maya Chen",
+    });
+
+    const rosterAlreadyInHand = buildOwnerDisplay(
+      loaded({ agentsLoaded: false }),
+    );
+    expect(rosterAlreadyInHand("actor-priya")).toMatchObject({
+      pending: false,
+      name: "priya",
+      isAgent: true,
+    });
+  });
+
+  it("humanizes reserved and unmapped owners the way actorDisplayLabel does", () => {
+    const ownerCell = buildOwnerDisplay({
+      actors: [],
+      principals: [],
+      agents: [],
+      actorsLoaded: true,
+      agentsLoaded: true,
+    });
+    expect(ownerCell("system")).toMatchObject({
+      pending: false,
+      name: "System",
+    });
+    expect(ownerCell("anx-core")).toMatchObject({ name: "System" });
+    expect(ownerCell("external.deadbeefdeadbeef")).toMatchObject({
+      name: "External user",
+    });
+    expect(ownerCell("actor_ext_deadbeefdeadbeef")).toMatchObject({
+      name: "Workspace member",
     });
   });
 

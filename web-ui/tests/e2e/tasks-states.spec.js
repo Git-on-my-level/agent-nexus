@@ -945,6 +945,11 @@ test("the Owner column reads one way for a person and an agent", async ({
         display_name: "Maya Chen (Studio producer)",
         tags: ["human"],
       },
+      {
+        id: "actor-agent",
+        display_name: "Priya",
+        tags: [],
+      },
     ],
     agents: [
       {
@@ -994,6 +999,7 @@ test("the Owner column reads one way for a person and an agent", async ({
   await expect(owner("Maya Chen")).toBeVisible();
   await expect(table.locator("[data-owner-pending]")).toHaveCount(1);
   await expect(table.getByText("actor-agent")).toHaveCount(0);
+  await expect(owner("Priya")).toHaveCount(0);
 
   api.hold.agents.resolve();
   api.hold = {};

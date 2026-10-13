@@ -405,7 +405,7 @@ function principalDisplayLabelFromAuth(principal) {
   return u;
 }
 
-function humanizeUnmappedActorIdForUi(id) {
+export function humanizeUnmappedActorIdForUi(id) {
   const s = String(id ?? "").trim();
   if (!s) {
     return "";

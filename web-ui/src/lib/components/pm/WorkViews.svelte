@@ -6,14 +6,13 @@
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import OwnerLabel from "$lib/components/OwnerLabel.svelte";
   import {
-    actorDisplayLabel,
     actorDirectoryLoaded,
     actorRegistry,
     agentDirectoryLoaded,
     agentRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-  import { buildOwnerDisplay, compactOwnerName } from "$lib/ownerDisplay.js";
+  import { buildOwnerDisplay } from "$lib/ownerDisplay.js";
   import { boardDisplayTitle } from "$lib/boardUtils.js";
   import {
     phaseGroups,
@@ -186,14 +185,13 @@
   );
   function nextActorLabel(work) {
     if (!work?.next_actor) return "";
-    // The same name the Owner column shows, so one row does not call the
-    // same agent two things. `next_actor` is free text as well as an id,
-    // though: an unresolved one keeps its words, minus a trailing role.
+    // The same cell the Owner column uses, so one row does not call the
+    // same agent two things. A pending cell stays blank rather than
+    // painting a directory name the roster may replace. Free-text
+    // annotations keep their words once both reads have answered.
     const cell = ownerCellFor(work.next_actor);
-    if (cell && !cell.pending && cell.name) return cell.name;
-    return compactOwnerName(
-      actorDisplayLabel(work.next_actor, $actorRegistry, $principalRegistry),
-    );
+    if (!cell || cell.pending) return "";
+    return cell.name;
   }
 
   /**
@@ -584,6 +582,7 @@
                     href={href(work)}
                     {now}
                     onprefetch={prefetch}
+                    ownerCell={ownerCellFor(work.owner)}
                     boardTitle={multipleBoards ? boardLabel(work) : ""}
                     requested={Boolean(requested[key] || decisionId)}
                     requestedHref={decisionId
@@ -617,6 +616,7 @@
         summary={summaryOf(drag.work)}
         href={href(drag.work)}
         {now}
+        ownerCell={ownerCellFor(drag.work.owner)}
         boardTitle={multipleBoards ? boardLabel(drag.work) : ""}
         requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
       />

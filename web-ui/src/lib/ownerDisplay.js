@@ -12,7 +12,12 @@
  * stripping is display-only: nothing here renames an actor.
  */
 
-import { buildActorNameMap, isSyntheticAnxHandle } from "./actorSession.js";
+import {
+  buildActorNameMap,
+  humanizeUnmappedActorIdForUi,
+  isSyntheticAnxHandle,
+} from "./actorSession.js";
+import { isReservedSystemActorId } from "./systemActor.js";
 
 /** A trailing parenthetical: a role, a team, a disambiguator. */
 const ROLE_SUFFIX = /\s*\(([^()]+)\)\s*$/;
@@ -95,8 +100,9 @@ export function buildOwnerDisplay({
     }
   }
 
-  /** Actors the workspace itself tags as agents, host relation or not. */
+  /** Actors the workspace itself tags as agents or people. */
   const taggedAgents = new Set();
+  const taggedHumans = new Set();
   for (const actor of actors ?? []) {
     const id = String(actor?.id ?? actor?.actor_id ?? "").trim();
     if (!id) continue;
@@ -104,6 +110,7 @@ export function buildOwnerDisplay({
       ? actor.tags.map((tag) => String(tag).toLowerCase())
       : [];
     if (tags.includes("agent")) taggedAgents.add(id);
+    if (tags.includes("human")) taggedHumans.add(id);
   }
 
   /**
@@ -122,13 +129,25 @@ export function buildOwnerDisplay({
       .replace(/^actor:/, "");
     if (!id) return null;
 
-    const resolved = String(names.get(id) ?? "").trim();
-    const named = Boolean(resolved) && resolved !== id;
+    const mapped = String(names.get(id) ?? "").trim();
+    const humanized = humanizeUnmappedActorIdForUi(id);
     const agent = roster.get(id) ?? null;
+    const knownPerson = taggedHumans.has(id) && !taggedAgents.has(id);
+    const specialCased =
+      isReservedSystemActorId(id) ||
+      (Boolean(humanized) &&
+        humanized !== id &&
+        !isSyntheticAnxHandle(humanized));
 
-    // Nothing names this owner yet, and a read that could is still out.
-    // Hold a placeholder rather than printing the id and taking it back.
-    if (!actorsLoaded || (!named && !agentsLoaded)) {
+    // A named actor row is not the last word until the roster lands:
+    // host-derived agents keep a person-shaped display name ("Priya")
+    // and then replace it with the host relation. Hold the placeholder
+    // unless this owner is already on the roster, tagged as a person,
+    // or a reserved/synthetic label the roster never claims.
+    if (
+      !actorsLoaded ||
+      (!agentsLoaded && !agent && !knownPerson && !specialCased)
+    ) {
       return {
         pending: true,
         name: "",
@@ -139,8 +158,16 @@ export function buildOwnerDisplay({
     }
 
     const isAgent = Boolean(agent) || taggedAgents.has(id);
-    const label =
-      named && !isSyntheticAnxHandle(resolved) ? resolved : resolved || id;
+    let label;
+    if (isReservedSystemActorId(id)) {
+      label = humanized;
+    } else if (mapped && !isSyntheticAnxHandle(mapped)) {
+      label = mapped;
+    } else if (humanized && !isSyntheticAnxHandle(humanized)) {
+      label = humanized;
+    } else {
+      label = mapped || humanized || id;
+    }
     const parts = splitOwnerLabel(label, { host: isAgent });
     const handle = String(agent?.handle ?? "").trim();
 
