@@ -574,6 +574,9 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return hygiene.attach(map[string]any{"card": publicCardView(result.Card)}), nil
 	})
 	if err != nil {
+		if writeStoreContentionError(w, r, err) {
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}

@@ -985,7 +985,7 @@ func ValidateWorkAnnotations(patch map[string]any) error {
 	return validateWorkLocal(patch)
 }
 
-func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version int64, patch map[string]any) (map[string]any, error) {
+func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version int64, patch map[string]any) (workResult map[string]any, workErr error) {
 	if actor == "" {
 		return nil, workInvalid("actor required")
 	}
@@ -1014,10 +1014,18 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	for k, val := range patch {
 		m[k] = val
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, err
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if workErr != nil {
+			workErr = mutationOutcomeAfterBegin(workErr)
+		}
+	}()
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actor, id, version)
 	if err != nil {
@@ -1116,7 +1124,7 @@ func (s *Store) SubmitLeasedWorkObservation(ctx context.Context, actor, identifi
 	return s.submitWorkObservation(ctx, actor, identifier, token, input)
 }
 
-func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, token string, input map[string]any) (map[string]any, error) {
+func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, token string, input map[string]any) (workResult map[string]any, workErr error) {
 	if actor == "" {
 		return nil, workInvalid("actor required")
 	}
@@ -1198,10 +1206,18 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 	digestBytes := sha256.Sum256([]byte(workJSON(o)))
 	digest := hex.EncodeToString(digestBytes[:])
 	key := workString(o["idempotency_key"])
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, err
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if workErr != nil {
+			workErr = mutationOutcomeAfterBegin(workErr)
+		}
+	}()
 	defer tx.Rollback()
 	// Acquire the SQLite write lock before reading replay/order state.
 	if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET card_id=card_id WHERE card_id=?`, id); err != nil {
@@ -1377,7 +1393,7 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 	return map[string]any{"observation": o, "work": w, "duplicate": false}, err
 }
 
-func (s *Store) RequestWorkRefresh(ctx context.Context, actor, identifier string) (map[string]any, error) {
+func (s *Store) RequestWorkRefresh(ctx context.Context, actor, identifier string) (workResult map[string]any, workErr error) {
 	if actor == "" {
 		return nil, workInvalid("actor required")
 	}
@@ -1389,10 +1405,18 @@ func (s *Store) RequestWorkRefresh(ctx context.Context, actor, identifier string
 	if err = s.ensureWorkMetadata(ctx, id, actor); err != nil {
 		return nil, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, err
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if workErr != nil {
+			workErr = mutationOutcomeAfterBegin(workErr)
+		}
+	}()
 	defer tx.Rollback()
 	if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET card_id=card_id WHERE card_id=?`, id); err != nil {
 		return nil, err

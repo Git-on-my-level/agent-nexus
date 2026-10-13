@@ -22,6 +22,13 @@ import (
 
 var ErrInvalidBoardRequest = errors.New("invalid board request")
 
+// mutationTxBegin is a seam only so tests can cancel between the moment a
+// mutation's transaction takes the workspace writer and its first statement;
+// production always begins directly.
+var mutationTxBegin = func(ctx context.Context, db *accessDB) (*accessTx, error) {
+	return db.BeginTx(ctx, nil)
+}
+
 const boardSummaryRiskHorizon = 7 * 24 * time.Hour
 
 func rejectReservedBoardOwners(ids []string) error {
@@ -1674,7 +1681,7 @@ func SoleThreadRefIDFromRefs(refs []string) (string, error) {
 	return out, nil
 }
 
-func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, input AddBoardCardInput) (BoardCardMutationResult, error) {
+func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, input AddBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1694,10 +1701,18 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err != nil {
 		return BoardCardMutationResult{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card create transaction: %w", err)
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if mutationErr != nil {
+			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+		}
+	}()
 	defer tx.Rollback()
 	if replay := input.CreateReplay; replay != nil {
 		var hash string
@@ -1800,7 +1815,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap, ReplayCommitted: input.CreateReplay != nil}, nil
 }
 
-func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID string, ifBoard *string, inputs []AddBoardCardInput) ([]BoardCardMutationResult, error) {
+func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID string, ifBoard *string, inputs []AddBoardCardInput) (mutationResults []BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1832,10 +1847,18 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		}
 		preps[i] = prep
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("begin board cards batch transaction: %w", err)
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if mutationErr != nil {
+			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+		}
+	}()
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -1913,7 +1936,7 @@ func (s *Store) AddBoardCard(ctx context.Context, actorID, boardID string, input
 	return s.CreateBoardCard(ctx, actorID, boardID, input)
 }
 
-func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifier string, input UpdateBoardCardInput) (BoardCardMutationResult, error) {
+func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifier string, input UpdateBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1921,10 +1944,18 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card update transaction: %w", err)
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if mutationErr != nil {
+			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+		}
+	}()
 
 	var cardRow boardCardRow
 	if strings.TrimSpace(boardID) != "" {
@@ -2252,7 +2283,7 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 }
 
-func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier string, input MoveBoardCardInput) (BoardCardMutationResult, error) {
+func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier string, input MoveBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -2270,10 +2301,18 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card move transaction: %w", err)
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if mutationErr != nil {
+			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+		}
+	}()
 
 	var cardRow boardCardRow
 	var boardRow boardRow
@@ -2477,7 +2516,7 @@ func (s *Store) RemoveBoardCard(ctx context.Context, actorID, boardID, identifie
 	}, nil
 }
 
-func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifier string, input RemoveBoardCardInput) (BoardCardMutationResult, error) {
+func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifier string, input RemoveBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -2485,10 +2524,18 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card archive transaction: %w", err)
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if mutationErr != nil {
+			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+		}
+	}()
 
 	var cardRow boardCardRow
 	if strings.TrimSpace(boardID) != "" {
@@ -2898,7 +2945,7 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 }
 
 // TrashBoardCard records an operational soft-delete and clears archive columns (distinct soft-delete lanes).
-func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier, reason string, input RemoveBoardCardInput) (BoardCardMutationResult, error) {
+func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier, reason string, input RemoveBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -2906,10 +2953,18 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card trash transaction: %w", err)
 	}
+	// The transaction now holds the workspace writer: from here any
+	// failure leaves the outcome unknown unless it is a deterministic
+	// request rejection.
+	defer func() {
+		if mutationErr != nil {
+			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+		}
+	}()
 
 	var cardRow boardCardRow
 	if strings.TrimSpace(boardID) != "" {

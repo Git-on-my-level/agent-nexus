@@ -58,6 +58,9 @@ func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	switch {
+	case writeStoreContentionError(w, r, err):
+		// Pre-write contention and outcome-unknown classify above; the
+		// remaining typed rejections fall through unchanged.
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, 404, "not_found", "work not found")
 	case errors.Is(err, primitives.ErrConflict):
