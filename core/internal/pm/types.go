@@ -261,6 +261,8 @@ type TurnContextInput struct {
 }
 
 type DecisionInput struct {
+	ActorID        string         `json:"actor_id,omitempty"`
+	ReplayKey      string         `json:"replay_key,omitempty"`
 	Payload        *ActionPayload `json:"payload,omitempty"`
 	RequestKey     string         `json:"request_key"`
 	WorkRef        string         `json:"work_ref"`
@@ -270,6 +272,8 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
+	ProposalReplayJSON     json.RawMessage `json:"-"` // Original opt-in proposal HTTP receipt; never canonical decision state.
+	ProposalReplayStatus   int             `json:"-"`
 	AnswerReplayJSON       json.RawMessage `json:"-"`                          // Original keyed HTTP receipt; never part of the canonical decision body.
 	SourceAuthority        string          `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
 	WorkMissing            bool            `json:"-"`                          // Current work projection; never persisted.

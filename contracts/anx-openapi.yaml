@@ -9558,6 +9558,17 @@ components:
       type: object
       additionalProperties: false
       properties:
+        actor_id:
+          type: string
+          description: Optional original submitting actor; when supplied it must match the authenticated actor.
+        replay_key:
+          type: string
+          maxLength: 256
+          description: Optional actor/workspace-bound original HTTP receipt key. The decision, superseding writes, origin delivery and original response commit atomically. Retain request_key, replay_key and the complete body unchanged until confirmed. Exact retries return the original status/body after fresh authorization, including after PM disconnection. Clients omitting replay_key retain current-decision replay and its terminal-state metadata.
+        origin:
+          allOf:
+            - $ref: '#/components/schemas/PMOrigin'
+          description: Optional existing enabled channel binding owned by the authenticated actor; another actor's origin is rejected.
         request_key:
           type: string
         work_ref:

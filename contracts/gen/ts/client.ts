@@ -9346,6 +9346,14 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "origin",
+          "type": "any"
+        },
+        {
           "name": "payload.evidence_refs",
           "type": "list\u003cstring\u003e"
         },
@@ -9368,6 +9376,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "payload.resolution_refs",
           "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "replay_key",
+          "type": "string"
         }
       ]
     },

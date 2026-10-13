@@ -4226,10 +4226,13 @@ Inputs:
   - body `target_revision` (string)
   - body `work_ref` (string)
   Optional:
+  - body `actor_id` (string)
+  - body `origin` (any)
   - body `payload.evidence_refs` (list<string>)
   - body `payload.note` (string)
   - body `payload.phase` (string)
   - body `payload.resolution_refs` (list<string>)
+  - body `replay_key` (string)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.

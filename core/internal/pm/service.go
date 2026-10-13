@@ -61,6 +61,18 @@ func NewService(store *Store, cfg Config, deps Dependencies) (*Service, error) {
 	return s, nil
 }
 func (s *Service) authorize(ctx context.Context, p Principal, permission, ref string) error {
+	if err := s.authorizePermission(ctx, p, permission, ref); err != nil {
+		return err
+	}
+	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.disconnect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
+		return s.RequireOnboarded(ctx)
+	}
+	return nil
+}
+
+// Receipt recovery still checks fresh authority, but does not require a PM to
+// create work that already committed. New proposals retain the onboarding gate.
+func (s *Service) authorizePermission(ctx context.Context, p Principal, permission, ref string) error {
 	if p.ActorID == "" || p.WorkspaceID != s.cfg.WorkspaceID {
 		return ErrForbidden
 	}
@@ -90,11 +102,6 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 			return ErrNotFound
 		}
 		return ErrForbidden
-	}
-	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.disconnect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
-		if err := s.RequireOnboarded(ctx); err != nil {
-			return err
-		}
 	}
 	return nil
 }

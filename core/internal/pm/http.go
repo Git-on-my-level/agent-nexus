@@ -47,7 +47,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	bootstrap := len(path) == 2 && path[0] == "turns" && path[1] == "claim" && r.Method == http.MethodPost || len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" && r.Method == http.MethodPost
 	existingRead := r.Method == http.MethodGet && len(path) > 0 && (path[0] == "conversations" || path[0] == "decisions" || path[0] == "actions" || path[0] == "turns")
 	existingAnswer := r.Method == http.MethodPost && len(path) == 3 && (path[0] == "decisions" && (path[2] == "answer" || path[2] == "dispatch") || path[0] == "actions" && (path[2] == "reconcile" || path[2] == "acknowledge"))
-	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer {
+	// Proposal creation owns its onboarding gate: an opt-in stored receipt can
+	// be recovered after disconnect, while both legacy and fresh writes gate.
+	proposal := r.Method == http.MethodPost && len(path) == 1 && path[0] == "decisions"
+	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer && !proposal {
 		if err = h.Service.RequireOnboarded(ctx); err != nil {
 			writeError(w, err)
 			return
@@ -112,10 +115,19 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 1 && path[0] == "decisions" && r.Method == http.MethodPost:
 		var in DecisionInput
 		if err = decode(&in); err == nil {
+			if in.ReplayKey == "" {
+				// Retain the legacy route gate before work/domain preflight.
+				err = s.RequireOnboarded(ctx)
+			}
+			if err != nil {
+				break
+			}
 			var d Decision
 			d, err = s.ProposeDecision(ctx, p, in)
 			out = d
-			if !d.Replayed {
+			if d.ProposalReplayStatus != 0 {
+				status = d.ProposalReplayStatus
+			} else if !d.Replayed {
 				status = http.StatusCreated
 			}
 		}
@@ -233,7 +245,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				ctx = s.deps.BindRequesterContext(ctx, p)
 			}
 		}
-		if len(value.AnswerReplayJSON) > 0 {
+		if len(value.ProposalReplayJSON) > 0 {
+			out = value.ProposalReplayJSON
+		} else if len(value.AnswerReplayJSON) > 0 {
 			out = value.AnswerReplayJSON
 		} else {
 			out = s.decisionResponse(ctx, p, value)

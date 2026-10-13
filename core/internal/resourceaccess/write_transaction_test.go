@@ -87,3 +87,37 @@ func TestWriteTransactionPreservesNestedRollbackAndScopedReads(t *testing.T) {
 		t.Fatalf("partial outer commit %d %v", count, err)
 	}
 }
+
+func TestWriteTransactionBindsUnscopedExecAcrossWrappers(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	raw.SetMaxOpenConns(1)
+	if _, err := raw.Exec(`CREATE TABLE records(id TEXT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	abort := errors.New("receipt failed")
+	err = NewDB(raw).WriteTransaction(ctx, func(ctx context.Context, _ *Tx) error {
+		// PM Store.database creates a wrapper per call. It must borrow the
+		// writer even when no access policy or write hook is installed.
+		if _, err := NewDB(raw).ExecContext(ctx, `INSERT INTO records VALUES('pending')`); err != nil {
+			return err
+		}
+		var count int
+		if err := NewDB(raw).QueryRowContext(ctx, `SELECT count(*) FROM records`).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("write invisible inside transaction: %d %v", count, err)
+		}
+		return abort
+	})
+	if !errors.Is(err, abort) {
+		t.Fatal(err)
+	}
+	var count int
+	if err := raw.QueryRow(`SELECT count(*) FROM records`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("unscoped write escaped rollback: %d %v", count, err)
+	}
+}

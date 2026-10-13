@@ -149,7 +149,8 @@ func (d *DB) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 	if err := ValidateSQLValues(args); err != nil {
 		return nil, err
 	}
-	if _, ok := PolicyFrom(ctx); !ok && d.afterWrite == nil {
+	bound, nested := ctx.Value(writeTransactionKey{}).(writeTransaction)
+	if _, ok := PolicyFrom(ctx); !ok && d.afterWrite == nil && (!nested || bound.db != d.raw) {
 		return d.raw.ExecContext(ctx, q, args...)
 	}
 	tx, err := d.BeginTx(ctx, nil)

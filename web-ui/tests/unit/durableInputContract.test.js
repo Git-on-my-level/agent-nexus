@@ -53,6 +53,7 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
           "createPmConversation",
           "sendPmMessage",
           "answerPmDecision",
+          "createPmDecision",
           "createArtifactAttachment",
           "createWork",
           "createDocument",

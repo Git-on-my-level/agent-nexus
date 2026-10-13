@@ -13,9 +13,19 @@ import (
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Decision{}, ErrForbidden
+	}
+	if in.ReplayKey != "" {
+		return s.proposeDecisionWithReplay(ctx, p, in)
+	}
 	return s.proposeDecision(ctx, p, in, "", p.ActorID, "")
 }
 func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID, proposedBy, leaseToken string) (Decision, error) {
+	// The original-receipt mode belongs to human proposals, not leased turns.
+	if in.ReplayKey != "" || (in.ActorID != "" && in.ActorID != p.ActorID) {
+		return Decision{}, ErrInvalid
+	}
 	if err := s.authorize(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err
 	}
