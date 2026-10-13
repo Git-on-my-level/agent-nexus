@@ -8,7 +8,15 @@ let operations = Promise.resolve();
 let lastWrite = 0;
 const listeners = new Set();
 const epochs = new Map();
+const appliedRevocations = new Map();
 const uncheckpointed = new Map();
+const preparing = new Map();
+// File selection needs async byte reading. Warn until it has a durable checkpoint.
+export function protectLocalWorkPreparation(scope) {
+  const token = Symbol();
+  preparing.set(token, { scope, epoch: localWorkEpoch(scope) });
+  return () => preparing.delete(token);
+}
 const rememberedOwners = new Map();
 const workspaceKey = (scope) => JSON.stringify(JSON.parse(scope).slice(0, 2));
 
@@ -176,7 +184,7 @@ function notify() {
 if (typeof window !== "undefined") {
   window.addEventListener("beforeunload", (event) => {
     if (
-      ![...uncheckpointed.values()].some(
+      ![...uncheckpointed.values(), ...preparing.values()].some(
         (entry) => entry.epoch === localWorkEpoch(entry.scope),
       )
     )
@@ -185,6 +193,21 @@ if (typeof window !== "undefined") {
     event.returnValue = "";
   });
   window.addEventListener("storage", (event) => {
+    if (event.key?.startsWith(`${PREFIX}principal:`) && event.newValue) {
+      try {
+        const current = localStorage.getItem(event.key);
+        if (current && current !== event.newValue) return;
+        const principal = JSON.parse(
+          event.key.slice(`${PREFIX}principal:`.length),
+        );
+        void clearPrincipalLocalWork(JSON.stringify(["", "", ...principal]), {
+          epoch: event.newValue,
+          broadcast: false,
+        });
+      } catch {
+        /* Ignore malformed storage events. */
+      }
+    }
     if (event.key?.startsWith(PREFIX)) notify();
   });
   if (channel)
@@ -192,7 +215,7 @@ if (typeof window !== "undefined") {
       if (event.data?.purge) {
         // A delayed channel message must not replace a newer revocation.
         const principal = localWorkPrincipal(event.data.scope);
-        if (epochs.get(principal) === event.data.epoch) return;
+        if (appliedRevocations.get(principal) === event.data.epoch) return;
         let current;
         try {
           current = localStorage.getItem(epochKey(principal));
@@ -360,7 +383,9 @@ export function clearPrincipalLocalWork(
 ) {
   const principal = localWorkPrincipal(scope);
   if (!principal) return Promise.resolve();
-  if (!broadcast && epochs.get(principal) === epoch) return Promise.resolve();
+  if (!broadcast && appliedRevocations.get(principal) === epoch)
+    return Promise.resolve();
+  appliedRevocations.set(principal, epoch);
   for (const [key, entry] of uncheckpointed) {
     if (localWorkPrincipal(entry.scope) === principal)
       uncheckpointed.delete(key);

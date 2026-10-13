@@ -5566,7 +5566,7 @@ paths:
       x-anx-command-id: artifacts.attachments.create
       x-anx-cli-path: artifacts attachments create
       x-anx-why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
-      x-anx-agent-notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
+      x-anx-agent-notes: Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
       x-anx-input-mode: multipart-form
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
@@ -5581,6 +5581,10 @@ paths:
               type: object
               required: [refs, file]
               properties:
+                request_key:
+                  type: string
+                  maxLength: 256
+                  description: Actor-scoped key retained unchanged until upload confirmation.
                 refs:
                   type: string
                   description: JSON array of typed refs backing the attachment (e.g. `["thread:thread-1"]`).

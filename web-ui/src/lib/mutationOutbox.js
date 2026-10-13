@@ -11,7 +11,15 @@ import {
   localWorkEpoch,
   localWorkPrincipal,
   onLocalWorkChanged,
+  protectLocalWorkPreparation,
 } from "$lib/localWorkStore.js";
+import {
+  attachmentFile,
+  saveUploadedAttachment,
+  consumeUploadedAttachments,
+  refreshUploadedAttachments,
+  uploadedAttachments,
+} from "$lib/attachmentWork.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
 
@@ -37,6 +45,17 @@ const visible = (entry) => entry.state !== "superseded";
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "artifacts.attachments.create") {
+    const result = await client.createArtifactAttachment({
+      refs: entry.request.refs,
+      request_key: entry.key,
+      file: attachmentFile(entry.request),
+    });
+    if (!result?.artifact?.id)
+      throw new Error("Attachment receipt is incomplete.");
+    await saveUploadedAttachment(entry, result);
+    return result;
+  }
   if (entry.operation === "events.create")
     return client.createEvent(entry.request);
   if (entry.operation === "pm.chat.send") {
@@ -108,6 +127,44 @@ export function enqueueDiscussionMessage({ event, ...options }) {
     operation: "events.create",
     request: { request_key: key, event },
   });
+}
+
+export async function enqueueAttachment({ file, refs, target, href }) {
+  const scope = get(localWorkScope);
+  const epoch = localWorkEpoch(scope);
+  const finish = protectLocalWorkPreparation(scope);
+  try {
+    const buffer = file.arrayBuffer
+      ? await file.arrayBuffer()
+      : await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsArrayBuffer(file);
+        });
+    const bytes = new Uint8Array(buffer);
+    let raw = "";
+    for (let offset = 0; offset < bytes.length; offset += 32768)
+      raw += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+    if (scope !== get(localWorkScope) || epoch !== localWorkEpoch(scope))
+      throw new Error("The identity selecting this file is no longer active.");
+    const key = crypto.randomUUID();
+    return await enqueueLocalMutation({
+      key,
+      operation: "artifacts.attachments.create",
+      target: `upload:${target}:${key}`,
+      href,
+      title: "Saved attachment",
+      draft: { text: file.name },
+      request: {
+        composerTarget: target,
+        refs,
+        file: { name: file.name, type: file.type, bytes: btoa(raw) },
+      },
+    });
+  } finally {
+    finish();
+  }
 }
 
 export function enqueuePmMessage({
@@ -263,12 +320,21 @@ async function attempt(entry) {
           await saveLocalWork(entry.scope, "draft", entry.target, null, {
             epoch: entry.epoch,
           });
+        if (entry.operation === "events.create")
+          await consumeUploadedAttachments(
+            entry.scope,
+            entry.request.event.refs,
+            entry.epoch,
+          );
         confirm(entry, result);
       },
     );
   } catch (error) {
     if (!active(entry)) return;
-    entry.failure = mutationFailure(error);
+    entry.failure = mutationFailure(
+      error,
+      entry.operation === "artifacts.attachments.create" ? "file" : "response",
+    );
     entry.state = entry.failure.state;
     entry.nextAt =
       Date.now() +
@@ -305,6 +371,7 @@ export async function recoverMutations() {
     do {
       requested = false;
       const scope = get(localWorkScope);
+      await refreshUploadedAttachments(scope);
       if (!canUseLocalWorkScope(scope)) {
         mutationOutbox.set([]);
         break;
@@ -377,6 +444,12 @@ export async function retryMutation(key) {
 export async function editMutation(key) {
   const entry = get(mutationOutbox).find((row) => row.key === key);
   if (!entry || !active(entry) || entry.state !== "attention") return;
+  if (entry.operation === "artifacts.attachments.create") {
+    await persist({ ...entry, state: "superseded" });
+    volatile.delete(key);
+    requestRecovery();
+    return;
+  }
   // Transfer to a durable composer before superseding; retain the old exact
   // request for recovery history rather than silently discarding it.
   const draft = entry.receipt?.conversationId
@@ -397,6 +470,7 @@ export async function editMutation(key) {
 
 if (typeof window !== "undefined") {
   localWorkScope.subscribe(() => {
+    uploadedAttachments.set([]);
     mutationOutbox.set([]);
     mutationConfirmations.set({});
     requestRecovery();

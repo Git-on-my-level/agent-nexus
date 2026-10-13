@@ -6,6 +6,7 @@
     retryMutation,
   } from "$lib/mutationOutbox.js";
   import Time from "$lib/time/Time.svelte";
+  import { attachmentFile } from "$lib/attachmentWork.js";
   let { target = "", entry: provided = null } = $props();
   let entry = $derived(
     provided ||
@@ -13,6 +14,14 @@
       $mutationConfirmations[target],
   );
   let localError = $state("");
+  function download() {
+    const url = URL.createObjectURL(attachmentFile(entry.request));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = entry.request.file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   async function copy() {
     try {
       await navigator.clipboard.writeText(entry.text);
@@ -61,6 +70,13 @@
         value={entry.text}
       ></textarea>
       <div class="mt-2 flex gap-2">
+        {#if entry.operation === "artifacts.attachments.create"}
+          <button
+            type="button"
+            class="rounded border border-line px-2 py-1 text-fg"
+            onclick={download}>Save file</button
+          >
+        {/if}
         <button
           type="button"
           class="rounded border border-line px-2 py-1 text-fg"
@@ -70,7 +86,10 @@
           <button
             type="button"
             class="rounded border border-line px-2 py-1 text-fg"
-            onclick={edit}>Edit message</button
+            onclick={edit}
+            >{entry.operation === "artifacts.attachments.create"
+              ? "Choose replacement"
+              : "Edit message"}</button
           >
           <button
             type="button"

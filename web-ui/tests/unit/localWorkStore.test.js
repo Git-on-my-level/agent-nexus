@@ -37,6 +37,31 @@ it("checkpoints before yielding, even when IndexedDB is unavailable", async () =
   );
 });
 
+it("observing a remote epoch before its purge still clears visible private work", async () => {
+  const principal = JSON.stringify(["human", "actor"]);
+  const key = `anx:local-work:v1:principal:${principal}`;
+  const listener = vi.fn();
+  window.addEventListener("anx:local-work-purged", listener);
+  localStorage.setItem(key, "remote-revocation");
+  expect(localWorkEpoch(scope)).toBe("remote-revocation");
+  window.dispatchEvent(
+    new StorageEvent("storage", { key, newValue: "older-revocation" }),
+  );
+  expect(listener).not.toHaveBeenCalled();
+  window.dispatchEvent(
+    new StorageEvent("storage", { key, newValue: "remote-revocation" }),
+  );
+  // The single-fork suite can retain listeners from earlier module instances.
+  // Every live instance must apply the first notification, and none repeats it.
+  expect(listener).toHaveBeenCalled();
+  const applied = listener.mock.calls.length;
+  window.dispatchEvent(
+    new StorageEvent("storage", { key, newValue: "remote-revocation" }),
+  );
+  expect(listener).toHaveBeenCalledTimes(applied);
+  window.removeEventListener("anx:local-work-purged", listener);
+});
+
 it("namespaces work by organization, workspace, principal and target", async () => {
   await saveLocalWork(scope, "draft", "inbox:one:reply", "Private answer");
   for (const other of [

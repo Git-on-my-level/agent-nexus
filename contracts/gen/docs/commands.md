@@ -284,7 +284,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
-- Agent notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
+- Agent notes: Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
 
 ## `artifacts.content`
 

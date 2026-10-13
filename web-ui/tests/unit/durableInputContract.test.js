@@ -53,6 +53,7 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
           "createPmConversation",
           "sendPmMessage",
           "answerPmDecision",
+          "createArtifactAttachment",
         ].includes(node.property?.name)
       ) {
         throw new Error(

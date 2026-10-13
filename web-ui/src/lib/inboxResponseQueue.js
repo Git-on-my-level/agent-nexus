@@ -1,3 +1,4 @@
+import { consumeUploadedAttachments } from "$lib/attachmentWork.js";
 import { get, writable } from "svelte/store";
 import { isInboxResponseOutcome } from "$lib/askDelivery.js";
 import { captureInboxResponseSender } from "$lib/coreClient";
@@ -181,6 +182,11 @@ async function durableSend(entry) {
       await persistResponse(entry, "sending");
       const result = await entry.send(entry.itemId, entry.request);
       await removePersistedResponse(entry);
+      await consumeUploadedAttachments(
+        entry.identity,
+        entry.request.related_refs,
+        entry.localEpoch,
+      );
       // Do not clear a newer draft written while this response was sending.
       for (const field of ["reply", "context"]) {
         const target = `inbox:${entry.itemId}:${field}`;

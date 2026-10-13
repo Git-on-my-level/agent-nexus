@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -649,7 +650,24 @@ func handleCreateArtifactAttachment(w http.ResponseWriter, r *http.Request, opts
 	}
 
 	maxBytes := opts.requestBodyLimits.normalize().Attachment
-	created, err := opts.primitiveStore.CreateArtifactAttachment(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes)
+	key := strings.TrimSpace(r.FormValue("request_key"))
+	if len(key) > 256 || strings.ContainsRune(key, 0) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid upload request key")
+		return
+	}
+	var created map[string]any
+	if key != "" {
+		replayStore, ok := opts.primitiveStore.(interface {
+			CreateArtifactAttachmentWithReplay(context.Context, string, map[string]any, string, string, io.Reader, int64, string) (map[string]any, error)
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "replay_unavailable", "safe upload retry is unavailable")
+			return
+		}
+		created, err = replayStore.CreateArtifactAttachmentWithReplay(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes, key)
+	} else {
+		created, err = opts.primitiveStore.CreateArtifactAttachment(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes)
+	}
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "resource not found")

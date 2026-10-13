@@ -7890,7 +7890,7 @@ Generated Help: artifacts attachments create
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
-- Agent notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
+- Agent notes: Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
 - Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Local Help: artifacts attachments create

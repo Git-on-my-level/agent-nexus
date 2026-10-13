@@ -954,7 +954,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.",
+    "agent_notes": "Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.",
     "adjacent_commands": [
       "artifacts.archive",
       "artifacts.content",

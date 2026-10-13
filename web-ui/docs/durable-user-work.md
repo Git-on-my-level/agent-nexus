@@ -7,7 +7,7 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 ## Rollout and acceptance
 
 SCA-781 permits reviewable stages. The first changes cover the human-attention
-response path, the production timeout trigger, shared discussion composers, Inbox PM answers and Ask PM chat. It does not claim that every UI
+response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat and attachment uploads. It does not claim that every UI
 mutation already satisfies the invariant.
 
 | Stage                     | Coverage                                                                                                              | Acceptance gate                                                                                                                                                 |
@@ -15,7 +15,8 @@ mutation already satisfies the invariant.
 | Inbox response foundation | Freeform responses, suggested picks, acknowledgement/access/review outcomes, and context notes in both Inbox surfaces | IndexedDB/journal recovery, persisted requests, original-key retries, attention UX, cross-tab lock, privacy cleanup, timeout/524/offline/reload/duplicate tests |
 | Discussion foundation     | Shared thread, topic, card and document replies/comments, including reply targets and selected-quote anchors          | Atomic message-event replay, durable composer context, shared scope lock, exact-key recovery and attention UX                                                   |
 | PM foundation             | Inbox PM decision responses and Ask PM chat                                                                           | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
-| Remaining authoring       | Upload bytes, cards, documents, plans, settings and all other mutation forms                                          | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
+| Attachment foundation     | Inbox and discussion file selections, upload bytes and completed refs                                                 | Atomic upload replay, original-byte/key recovery, storage denial, downloadable failures and privacy fences                                                      |
+| Remaining authoring       | Cards, documents, plans, settings and all other mutation forms                                                        | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
 
 The issue remains in progress until all stages pass. Do not enable blind retries
 for an unaudited endpoint: an HTTP timeout can occur after the mutation committed.
@@ -96,9 +97,29 @@ first checkpoints the complete composer and retains the superseded original
 request as local recovery history. Confirmation refreshes the relevant timeline;
 a refresh error does not turn a confirmed post back into a failed send.
 
-File selection/upload itself is not yet migrated to a device blob outbox. Only
-confirmed artifact references are in these snapshots; pending upload bytes and
-other mutation operations remain explicit rollout work. This is not whole-UI coverage.
+## Attachment uploads
+
+File selections in discussion and Inbox composers enter the shared mutation
+outbox before any network upload. File bytes, name, MIME, destination refs and
+original key are private JSON records in the existing IndexedDB/journal store.
+Bytes use base64, trading storage overhead for the same safe fallback as other
+work. IndexedDB handles selections that exceed localStorage quota; if neither
+store can checkpoint the file, sending stops and the saved file can be downloaded
+in the open tab. Closing during asynchronous file reading warns until a local
+checkpoint succeeds. Unavailable storage cannot promise recovery after tab close.
+
+Uploads share the scope lock and global unsent count with responses and posts.
+Pending uploads hold their own composer's send button while other targets remain
+usable. Successful uploads release local bytes only after acknowledgement and
+persist an artifact receipt linked to the original composer. The receipt restores
+the attached ref even if the component unmounted before success. Posting consumes
+the receipt after confirmation; the frozen post/response retains its original refs.
+An attention-state upload offers exact-key retry, saving the original file, and
+choosing a replacement. Replaced requests remain in local recovery history.
+
+Privacy revocations clear receipts as well as requests and drafts. Observing an
+epoch does not count as applying its visible purge; both storage and channel
+notifications apply each revocation once and fence late work.
 
 ## PM composers and answers
 
@@ -128,7 +149,7 @@ after sign-out or principal replacement.
 
 No HTTP routes or database migrations are added. PM request contracts now accept
 an optional original `actor_id`, which must match the authenticated actor; decision
-answers also accept an optional `request_key`. Generated clients and CLI registries
+answers and multipart attachment uploads also accept an optional `request_key`. Generated clients and CLI registries
 are regenerated from the canonical OpenAPI contract.
 
 | Path                                                                              | Current evidence                                                                                                                                                                                                               | Next action                                                                                                                              |
@@ -139,13 +160,14 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                          |
 | PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                | Covered by composite chat adapter; replay returns the canonical turn, whose lifecycle status may advance                                 |
 | Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                   | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery |
+| `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                 |
 | Card/doc/plan edits and other forms                                               | Diverse create/patch/action commands                                                                                                                                                                                           | Inventory each command, freeze original mutation intent and concurrency token, add atomic replay and durable adapters                    |
 
 ## Checks and extension rules
 
 `durableInputContract.test.js` parses the Svelte AST to require durable draft
 actions on every authored Inbox response field, requires the shared discussion
-composer action, PM answer/chat actions, and rejects direct Inbox/event/PM answer/chat sends
+composer action, PM answer/chat actions, and rejects direct Inbox/event/PM answer/chat/upload sends
 in any Svelte surface. This is a guard for the migrated scope; subsequent stages
 must extend it to all mutation forms. Do not present it as whole-UI enforcement.
 
@@ -167,7 +189,11 @@ editing without duplicate conversation creation, newer text preservation and
 decision-answer recovery. Backend tests assert atomic decision/action/receipt
 rollback, concurrent replay, exact HTTP snapshots and fresh authorization.
 
-Message and PM answer replay perform indexed point lookups on the existing
+`durable-upload.spec.js` covers offline file selection/tab closure, lost upload
+acknowledgement/reload/multiple tabs, byte/key preservation, downloadable definitive
+failures, replacement and attachment refs in recovered Inbox/discussion posts.
+
+Message, PM answer and attachment replay perform indexed point lookups on the existing
 `(scope, actor_id, request_key)` primary key and bounded event/replay inserts in
 one transaction. Existing ownership triggers and scoped query wrappers remain
 active. No new GET/stream path, schema or migration is added.

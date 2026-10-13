@@ -4,7 +4,9 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -195,6 +197,17 @@ func (s *Store) GetArtifactContentHTTP(ctx context.Context, id string) (Artifact
 
 // CreateArtifactAttachment streams an attachment body into the blob store and inserts an artifacts row.
 func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, artifact map[string]any, mimeType string, originalFilename string, src io.Reader, maxUploadBytes int64) (map[string]any, error) {
+	return s.createArtifactAttachment(ctx, actorID, artifact, mimeType, originalFilename, src, maxUploadBytes, "")
+}
+
+// CreateArtifactAttachmentWithReplay commits metadata, blob ledger and the original
+// HTTP result together. Content-addressed staging occurs before the transaction;
+// an interrupted upload never leaves a canonical artifact or replay receipt.
+func (s *Store) CreateArtifactAttachmentWithReplay(ctx context.Context, actorID string, artifact map[string]any, mimeType, originalFilename string, src io.Reader, maxUploadBytes int64, key string) (map[string]any, error) {
+	return s.createArtifactAttachment(ctx, actorID, artifact, mimeType, originalFilename, src, maxUploadBytes, key)
+}
+
+func (s *Store) createArtifactAttachment(ctx context.Context, actorID string, artifact map[string]any, mimeType, originalFilename string, src io.Reader, maxUploadBytes int64, key string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -249,6 +262,30 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 		return nil, err
 	}
 
+	var requestHash string
+	if key != "" {
+		encoded, err := json.Marshal(struct {
+			Artifact                    map[string]any
+			MIME, Filename, ContentHash string
+			Size                        int64
+		}{artifact, mimeType, originalFilename, contentHash, size})
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(encoded)
+		requestHash = hex.EncodeToString(sum[:])
+		prior, err := s.GetIdempotencyReplay(ctx, "artifacts.attachments.create", actorID, key)
+		if err == nil {
+			if prior.RequestHash != requestHash {
+				return nil, ErrConflict
+			}
+			return prior.Response["artifact"].(map[string]any), nil
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+	}
+
 	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, size)
 	if err != nil {
 		return nil, err
@@ -283,6 +320,31 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin attachment transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if key != "" {
+		// Acquire the write lock before reading so identical concurrent requests
+		// serialize rather than upgrading a stale read snapshot.
+		if _, err := tx.ExecContext(ctx, `UPDATE idempotency_replays SET request_hash=request_hash WHERE scope='artifacts.attachments.create' AND actor_id=? AND request_key=?`, actorID, key); err != nil {
+			return nil, err
+		}
+		var hash, raw string
+		err := tx.QueryRowContext(ctx, `SELECT request_hash,response_json FROM idempotency_replays WHERE scope='artifacts.attachments.create' AND actor_id=? AND request_key=?`, actorID, key).Scan(&hash, &raw)
+		if err == nil {
+			if hash != requestHash {
+				return nil, ErrConflict
+			}
+			var response struct {
+				Artifact map[string]any `json:"artifact"`
+			}
+			if err := json.Unmarshal([]byte(raw), &response); err != nil {
+				return nil, err
+			}
+			return response.Artifact, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
 	}
 	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(origName, "attachment"), "artifact-"+artifactID)
 	if err != nil {
@@ -326,6 +388,16 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return nil, err
+	}
+
+	if key != "" {
+		raw, err := json.Marshal(map[string]any{"artifact": metadata})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES('artifacts.attachments.create',?,?,?,201,?)`, actorID, key, requestHash, string(raw)); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := staged.Promote(); err != nil {

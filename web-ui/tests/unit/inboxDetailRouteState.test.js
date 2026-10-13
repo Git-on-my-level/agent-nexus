@@ -66,6 +66,7 @@ vi.mock("$app/stores", () => ({
 
 vi.mock("$lib/coreClient", () => ({
   coreClient: coreClientMock,
+  createLocalMutationClient: () => coreClientMock,
   // The response queue captures the sender when it enqueues, so the commit
   // survives the navigation that follows. The sender is bound to one
   // workspace and reader: record which, so a test can tell where an answer

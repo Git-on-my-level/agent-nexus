@@ -1,4 +1,10 @@
 <script>
+  import AttachmentUploads from "$lib/components/AttachmentUploads.svelte";
+  import {
+    uploadedAttachments,
+    removeUploadedAttachment,
+  } from "$lib/attachmentWork.js";
+  import { mutationOutbox, enqueueAttachment } from "$lib/mutationOutbox.js";
   import { durableForm } from "$lib/actions/durableForm.js";
   import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { goto } from "$app/navigation";
@@ -96,14 +102,38 @@
   let notifyTargetQuery = $state("");
   let notifyTargetResults = $state([]);
   let notifyTargetSelected = $state(null);
+  let uploadTarget = $derived(item ? `inbox:${item.id}:options` : "");
+  let uploaded = $derived(
+    $uploadedAttachments.filter((row) => row.target === uploadTarget),
+  );
+  let uploadPending = $derived(
+    attachingResponseFile ||
+      $mutationOutbox.some(
+        (entry) =>
+          entry.operation === "artifacts.attachments.create" &&
+          entry.request.composerTarget === uploadTarget,
+      ),
+  );
+  let attachedRefs = $derived([
+    ...new Set([
+      ...responseAttachmentRefs,
+      ...uploaded.map((row) => `artifact:${row.artifact.id}`),
+    ]),
+  ]);
+  let attachedArtifacts = $derived({
+    ...responseComposerArtifactsByRef,
+    ...Object.fromEntries(
+      uploaded.map((row) => [`artifact:${row.artifact.id}`, row.artifact]),
+    ),
+  });
   function responseOptionsSnapshot() {
     return {
       notifyMode,
       notifyTargetActorID,
       notifyTargetAgentID,
       notifyTargetSelected,
-      responseAttachmentRefs,
-      responseComposerArtifactsByRef,
+      responseAttachmentRefs: attachedRefs,
+      responseComposerArtifactsByRef: attachedArtifacts,
     };
   }
   function restoreResponseOptions(value) {
@@ -154,7 +184,7 @@
       : [],
   );
   let inboxComposerArtifactRoutes = $derived.by(() => {
-    const artifacts = Object.values(responseComposerArtifactsByRef).filter(
+    const artifacts = Object.values(attachedArtifacts).filter(
       (row) => row && typeof row === "object",
     );
     if (!artifacts.length) return {};
@@ -581,8 +611,8 @@
       href: $page.url.pathname,
       draft: responseDraft,
       proposals: proposalStrings,
-      attachmentRefs: responseAttachmentRefs,
-      artifactsByRef: responseComposerArtifactsByRef,
+      attachmentRefs: attachedRefs,
+      artifactsByRef: attachedArtifacts,
       notifyMode,
       notifyTargetSelected,
       notifyTargetActorID,
@@ -787,26 +817,15 @@
         responseAttachmentError = "No valid refs are available for this item.";
         return;
       }
-      const payload = await coreClient.createArtifactAttachment({ refs, file });
-      const id = String(payload?.artifact?.id ?? "").trim();
-      if (!id) {
-        responseAttachmentError = "Upload succeeded but artifact id missing.";
-        return;
-      }
-      const ref = `artifact:${id}`;
-      responseAttachmentRefs = [...new Set([...responseAttachmentRefs, ref])];
-      const row =
-        payload?.artifact && typeof payload.artifact === "object"
-          ? payload.artifact
-          : null;
-      if (row) {
-        responseComposerArtifactsByRef = {
-          ...responseComposerArtifactsByRef,
-          [ref]: /** @type {Record<string, unknown>} */ (row),
-        };
-      }
-    } catch (error) {
-      responseAttachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
+      await enqueueAttachment({
+        refs,
+        file,
+        target: uploadTarget,
+        href: $page.url.pathname,
+      });
+    } catch {
+      responseAttachmentError =
+        "This file could not be saved locally. Keep this tab open and save a copy before leaving.";
     } finally {
       attachingResponseFile = false;
       pendingResponseAttachmentUpload = null;
@@ -1041,6 +1060,7 @@
       {:else}
         <InboxSendStatus itemId={item.id} />
         <InboxRespondPanel
+          busy={uploadPending}
           bind:this={respondPanel}
           kind={itemKind(item)}
           access={accessRequest}
@@ -1074,6 +1094,7 @@
             >
           {/snippet}
           {#snippet extras()}
+            <AttachmentUploads target={uploadTarget} />
             <div
               class="space-y-2"
               use:durableForm={{
@@ -1087,7 +1108,7 @@
                 <label
                   class="inline-flex cursor-pointer items-center rounded border border-line bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
                 >
-                  {attachingResponseFile ? "Uploading…" : "Attach file"}
+                  {attachingResponseFile ? "Saving file…" : "Attach file"}
                   <input
                     class="sr-only"
                     accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
@@ -1116,7 +1137,7 @@
                     size="compact"
                   />
                 {/if}
-                {#each responseAttachmentRefs as ref (ref)}
+                {#each attachedRefs as ref (ref)}
                   {@const composerResolved = resolveRefLink(ref, {
                     threadId: String(item?.thread_id ?? "").trim(),
                     boardId: "",
@@ -1136,6 +1157,7 @@
                       type="button"
                       aria-label={`Remove ${ref}`}
                       onclick={() => {
+                        void removeUploadedAttachment(ref);
                         responseAttachmentRefs = responseAttachmentRefs.filter(
                           (candidate) => candidate !== ref,
                         );

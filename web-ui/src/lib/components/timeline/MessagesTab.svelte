@@ -11,6 +11,12 @@
   } from "$lib/actorSession";
   import { authenticatedAgent } from "$lib/authSession";
   import { listAllPrincipals } from "$lib/authPrincipals";
+  import AttachmentUploads from "$lib/components/AttachmentUploads.svelte";
+  import {
+    uploadedAttachments,
+    removeUploadedAttachment,
+  } from "$lib/attachmentWork.js";
+  import { enqueueAttachment } from "$lib/mutationOutbox.js";
   import { durableForm } from "$lib/actions/durableForm.js";
   import {
     enqueueDiscussionMessage,
@@ -196,7 +202,7 @@
 
   let artifactRoutesWithComposerPending = $derived.by(() => {
     const base = routeMaps.artifactRoutesById ?? {};
-    const artifacts = Object.values(pendingComposerArtifactsByRef).filter(
+    const artifacts = Object.values(attachedArtifacts).filter(
       (row) => row && typeof row === "object",
     );
     if (!artifacts.length) return base;
@@ -274,6 +280,29 @@
   let composerTarget = $derived(
     `discussion:${threadId}:${subjectRefFilterNorm || "thread"}:composer`,
   );
+  let uploaded = $derived(
+    $uploadedAttachments.filter((row) => row.target === composerTarget),
+  );
+  let uploadPending = $derived(
+    attachingFile ||
+      $mutationOutbox.some(
+        (entry) =>
+          entry.operation === "artifacts.attachments.create" &&
+          entry.request.composerTarget === composerTarget,
+      ),
+  );
+  let attachedRefs = $derived([
+    ...new Set([
+      ...pendingAttachmentRefs,
+      ...uploaded.map((row) => `artifact:${row.artifact.id}`),
+    ]),
+  ]);
+  let attachedArtifacts = $derived({
+    ...pendingComposerArtifactsByRef,
+    ...Object.fromEntries(
+      uploaded.map((row) => [`artifact:${row.artifact.id}`, row.artifact]),
+    ),
+  });
   let savedPost = $derived(
     $mutationOutbox.find((entry) => entry.target === composerTarget),
   );
@@ -282,8 +311,8 @@
       text: messageText,
       replyToEventId,
       replyAutoMentionHandle,
-      pendingAttachmentRefs,
-      pendingComposerArtifactsByRef,
+      pendingAttachmentRefs: attachedRefs,
+      pendingComposerArtifactsByRef: attachedArtifacts,
       documentComment: effectiveDocumentComment,
     };
   }
@@ -450,7 +479,10 @@
   );
 
   let canPost = $derived(
-    Boolean(messageText.trim()) && !postingMessage && !savedPost,
+    Boolean(messageText.trim()) &&
+      !postingMessage &&
+      !savedPost &&
+      !uploadPending,
   );
 
   function isActiveDocumentComment(
@@ -865,7 +897,7 @@
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
       const pendingAttachments = (
-        Array.isArray(pendingAttachmentRefs) ? pendingAttachmentRefs : []
+        Array.isArray(attachedRefs) ? attachedRefs : []
       )
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
@@ -974,29 +1006,15 @@
             .filter(Boolean),
         ),
       ];
-      const payload = await coreClient.createArtifactAttachment({
+      await enqueueAttachment({
         refs,
         file,
+        target: composerTarget,
+        href: window.location.pathname,
       });
-      const id = String(payload?.artifact?.id ?? "").trim();
-      if (!id) {
-        attachmentError = "Upload succeeded but artifact id missing.";
-        return;
-      }
-      const ref = `artifact:${id}`;
-      pendingAttachmentRefs = [...new Set([...pendingAttachmentRefs, ref])];
-      const row =
-        payload?.artifact && typeof payload.artifact === "object"
-          ? payload.artifact
-          : null;
-      if (row) {
-        pendingComposerArtifactsByRef = {
-          ...pendingComposerArtifactsByRef,
-          [ref]: /** @type {Record<string, unknown>} */ (row),
-        };
-      }
-    } catch (error) {
-      attachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
+    } catch {
+      attachmentError =
+        "This file could not be saved locally. Keep this tab open and save a copy before leaving.";
     } finally {
       attachingFile = false;
       pendingAttachmentUpload = null;
@@ -1110,6 +1128,7 @@
     }}
   >
     <MutationSendStatus target={composerTarget} />
+    <AttachmentUploads target={composerTarget} />
     {#if postMessageError}
       <p
         class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text [overflow-wrap:anywhere]"
@@ -1311,7 +1330,7 @@
             >.
           </p>
         {/if}
-        {#if pendingAttachmentRefs.length > 0 || pendingAttachmentUpload}
+        {#if attachedRefs.length > 0 || pendingAttachmentUpload}
           <div class="flex flex-wrap items-center gap-1.5 text-micro">
             <span class="text-fg-muted">Attached</span>
             {#if pendingAttachmentUpload}
@@ -1334,7 +1353,7 @@
                 size="compact"
               />
             {/if}
-            {#each pendingAttachmentRefs as ref (ref)}
+            {#each attachedRefs as ref (ref)}
               {@const composerResolved = resolveRefLink(ref, {
                 threadId,
                 boardId: "",
@@ -1351,6 +1370,7 @@
                   type="button"
                   aria-label={`Remove ${ref}`}
                   onclick={() => {
+                    void removeUploadedAttachment(ref);
                     pendingAttachmentRefs = pendingAttachmentRefs.filter(
                       (candidate) => candidate !== ref,
                     );
@@ -1373,7 +1393,7 @@
         <label
           class="inline-flex cursor-pointer items-center rounded border border-line bg-bg px-3 py-1 text-micro font-medium text-fg hover:bg-bg-soft"
         >
-          {attachingFile ? "Uploading…" : "Attach file"}
+          {attachingFile ? "Saving file…" : "Attach file"}
           <input
             class="sr-only"
             accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
