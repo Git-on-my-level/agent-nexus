@@ -1,6 +1,4 @@
 <script>
-  import { page } from "$app/stores";
-
   import {
     authenticatedAgent,
     isHumanWorkspacePrincipal,
@@ -31,7 +29,6 @@
 
   const agent = $derived($authenticatedAgent);
   const isHuman = $derived(isHumanWorkspacePrincipal(agent));
-  const workspaceSlug = $derived($page.params.workspace ?? "");
 
   $effect(() => {
     if (!isHuman) {
@@ -118,9 +115,7 @@
   }
 </script>
 
-<svelte:head>
-  <title>Secrets{workspaceSlug ? ` - ${workspaceSlug}` : ""} · ANX</title>
-</svelte:head>
+<svelte:head><title>Secrets · Agent Nexus</title></svelte:head>
 
 <div class="mx-auto max-w-3xl sm:px-4 sm:py-6">
   <div class="mb-3 flex items-center justify-between gap-3 sm:mb-4">

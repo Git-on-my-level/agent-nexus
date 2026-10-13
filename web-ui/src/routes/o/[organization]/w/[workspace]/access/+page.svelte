@@ -730,9 +730,7 @@
   });
 </script>
 
-<svelte:head>
-  <title>Access - {workspaceSlug} - ANX</title>
-</svelte:head>
+<svelte:head><title>Access · Agent Nexus</title></svelte:head>
 
 {#if !canManageAccess}
   <div class="space-y-4">

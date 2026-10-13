@@ -194,6 +194,8 @@
   }
 </script>
 
+<svelte:head><title>Audit · Agent Nexus</title></svelte:head>
+
 <div class="min-w-0 max-w-full space-y-5">
   <div
     class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2"

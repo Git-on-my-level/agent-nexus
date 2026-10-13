@@ -563,6 +563,25 @@
     can see. A heading that needs a sentence is the wrong heading.
   -->
   <WorkspacePageHeader title="Overview">
+    {#snippet subtitle()}
+      <!-- Under the title rather than a row of its own: it dates the page. -->
+      {#if model && !readError}
+        <span
+          class="text-micro text-fg-muted"
+          role="status"
+          data-overview-refresh-status
+        >
+          Updated {formatTime($overviewRead.updatedAt, { now })}{refreshing
+            ? " · refreshing…"
+            : ""}
+        </span>
+      {:else if !model && !readError}
+        <span
+          class="ui-skeleton-reveal inline-block h-2.5 w-24 rounded bg-panel-hover align-middle"
+          aria-hidden="true"
+        ></span>
+      {/if}
+    {/snippet}
     {#snippet actions()}
       <!--
         The walkthrough was one-shot: "Maybe later" removed the only guided
@@ -595,16 +614,6 @@
           onclick={refresh}>Retry</button
         >
       </div>
-    {:else}
-      <p
-        class="text-micro text-fg-muted"
-        role="status"
-        data-overview-refresh-status
-      >
-        Updated {formatTime($overviewRead.updatedAt, { now })}{refreshing
-          ? " · refreshing…"
-          : ""}
-      </p>
     {/if}
   {:else if readError}
     <StateError

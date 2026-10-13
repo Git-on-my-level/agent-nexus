@@ -791,7 +791,6 @@
   @media (max-width: 639px) {
     .work-table,
     .work-table tbody,
-    .work-table tr,
     .work-table th[scope="row"] {
       display: block;
     }
@@ -807,23 +806,31 @@
      */
     .work-table td.work-status-cell {
       display: block;
+      grid-column: 1;
+      min-width: 0;
       max-width: none;
-      padding: 0 12px 2px;
+      padding: 2px 0 8px 12px;
     }
 
     .work-table td.work-meta-cell {
       display: flex;
+      grid-column: 2;
       align-items: center;
       gap: 8px;
       min-width: 0;
-      padding: 0 12px 8px;
+      padding: 2px 12px 8px 0;
     }
 
+    /* Status and its meta share the second line instead of stacking. */
     .work-table tr {
+      display: grid;
+      grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+      column-gap: 8px;
       height: auto;
     }
 
     .work-table th[scope="row"] {
+      grid-column: 1 / -1;
       max-width: none;
       min-width: 0;
       padding: 8px 12px 2px;

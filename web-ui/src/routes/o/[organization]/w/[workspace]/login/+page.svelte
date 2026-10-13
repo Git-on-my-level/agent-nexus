@@ -1,5 +1,6 @@
 <script>
   import { browser, dev } from "$app/environment";
+  import { assets } from "$app/paths";
   import { goto } from "$app/navigation";
   import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
   import { page } from "$app/stores";
@@ -63,6 +64,9 @@
   let loadingDevLogin = $state(false);
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
+  let workspaceLabel = $derived(
+    String($page.data?.workspace?.label ?? "").trim() || workspaceSlug,
+  );
   /** Core may advertise a dev bypass, but production builds never show it. */
   let showDevLocalPasskeyBypass = $derived(dev && devPasskeyBypassAvailable);
 
@@ -214,6 +218,8 @@
   }
 </script>
 
+<svelte:head><title>Sign in · Agent Nexus</title></svelte:head>
+
 {#if $authenticatedAgent}
   <main class="min-h-screen bg-bg px-4 py-6 text-fg">
     <div
@@ -223,263 +229,309 @@
     </div>
   </main>
 {:else if loadingWorkspaceStatus}
-  <main class="min-h-screen bg-bg px-4 py-6 text-fg">
-    <div
-      class="mx-auto max-w-5xl rounded-md border border-line bg-bg-soft px-4 py-6"
-      aria-busy="true"
-      aria-label="Loading sign-in"
-    >
-      <Skeleton rows={5} />
+  <main class="login-main">
+    <div class="login-frame">
+      {@render brand()}
+      <div
+        class="rounded-md border border-line bg-panel px-4 py-6"
+        aria-busy="true"
+        aria-label="Loading sign-in"
+      >
+        <Skeleton rows={5} />
+      </div>
     </div>
   </main>
 {:else}
-  <main class="min-h-screen bg-bg px-4 py-6 text-fg">
-    <div class="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
-      <section class="rounded-md border border-line bg-bg-soft lg:w-[22rem]">
-        <div class="border-b border-line px-4 py-3">
-          <p
-            class="text-micro font-medium uppercase tracking-wide text-fg-muted"
-          >
-            Sign in
-          </p>
-          <h1 class="mt-1 text-subtitle font-semibold text-fg">
-            {#if showDevLocalPasskeyBypass}
+  <main class="login-main">
+    <div class="login-frame">
+      {@render brand()}
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <section class="rounded-md border border-line bg-panel lg:w-[22rem]">
+          <div class="border-b border-line px-4 py-3">
+            <p
+              class="text-micro font-medium uppercase tracking-wide text-fg-muted"
+            >
               Sign in
-            {:else}
-              Sign in with a passkey
-            {/if}
-          </h1>
-          <p class="mt-2 text-meta text-fg-muted">
-            {#if showDevLocalPasskeyBypass}
-              Dev sign-in is the default in local mode. Expand the section below
-              if you need WebAuthn passkey authentication.
-            {:else}
-              Use your existing passkey to authenticate. You'll be signed in as
-              yourself; only you can edit on your behalf.
-            {/if}
-          </p>
-        </div>
-
-        <div class="space-y-3 px-4 py-3">
-          {#if showDevLocalPasskeyBypass}
-            <div class="space-y-3">
-              <p
-                class="text-micro font-medium uppercase tracking-wide text-fg-muted"
-              >
-                Local development
-              </p>
-              <p class="text-micro text-fg-muted">
-                Leave both fields blank to sign in as the seeded user.
-              </p>
-              <details class="mt-1">
-                <summary
-                  class="cursor-pointer text-micro text-fg-muted hover:text-fg"
-                >
-                  Local sign-in help
-                </summary>
-                <p class="mt-2 text-micro text-fg-muted">
-                  After a fresh <span class="font-mono">make serve</span> seed, empty
-                  fields work when there is one passkey user. With several principals,
-                  set principal username (Access) or exact display name.
-                </p>
-              </details>
-              <div>
-                <label
-                  class="block text-micro font-medium text-fg-muted"
-                  for="dev-login-username"
-                >
-                  Principal username (optional)
-                </label>
-                <input
-                  bind:value={devLoginUsername}
-                  class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 font-mono text-meta text-fg"
-                  id="dev-login-username"
-                  placeholder="you@team"
-                  type="text"
-                />
-              </div>
-              <div>
-                <label
-                  class="block text-micro font-medium text-fg-muted"
-                  for="dev-login-display"
-                >
-                  Display name (optional)
-                </label>
-                <input
-                  bind:value={devLoginDisplayName}
-                  class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
-                  id="dev-login-display"
-                  placeholder="Exact match when username is unknown"
-                  type="text"
-                />
-              </div>
-              <Button
-                variant="primary"
-                class="w-full"
-                disabled={loadingDevLogin}
-                onclick={handleDevLogin}
-              >
-                {loadingDevLogin ? "Signing in…" : "Sign in"}
-              </Button>
-              {#if devLoginError}
-                <div
-                  class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-                >
-                  {devLoginError}
-                </div>
+            </p>
+            <h1 class="mt-1 text-subtitle font-semibold text-fg">
+              {#if showDevLocalPasskeyBypass}
+                Sign in
+              {:else}
+                Sign in with a passkey
               {/if}
-            </div>
+            </h1>
+            <p class="mt-2 text-meta text-fg-muted">
+              {#if showDevLocalPasskeyBypass}
+                Dev sign-in is the default in local mode. Expand the section
+                below if you need WebAuthn passkey authentication.
+              {:else}
+                Use your existing passkey to authenticate. You'll be signed in
+                as yourself; only you can edit on your behalf.
+              {/if}
+            </p>
+          </div>
 
-            <details class="mt-4 border-t border-line pt-3">
-              <summary
-                class="cursor-pointer text-micro font-medium text-fg-muted hover:text-fg"
-              >
-                Sign in with passkey
-              </summary>
-              <div class="mt-3 space-y-3">
-                <Button
-                  variant="secondary"
-                  class="w-full"
-                  disabled={loadingLogin}
-                  onclick={handleLogin}
+          <div class="space-y-3 px-4 py-3">
+            {#if showDevLocalPasskeyBypass}
+              <div class="space-y-3">
+                <p
+                  class="text-micro font-medium uppercase tracking-wide text-fg-muted"
                 >
-                  {loadingLogin
-                    ? "Confirming passkey…"
-                    : "Sign in with existing passkey"}
+                  Local development
+                </p>
+                <p class="text-micro text-fg-muted">
+                  Leave both fields blank to sign in as the seeded user.
+                </p>
+                <details class="mt-1">
+                  <summary
+                    class="cursor-pointer text-micro text-fg-muted hover:text-fg"
+                  >
+                    Local sign-in help
+                  </summary>
+                  <p class="mt-2 text-micro text-fg-muted">
+                    After a fresh <span class="font-mono">make serve</span> seed,
+                    empty fields work when there is one passkey user. With several
+                    principals, set principal username (Access) or exact display name.
+                  </p>
+                </details>
+                <div>
+                  <label
+                    class="block text-micro font-medium text-fg-muted"
+                    for="dev-login-username"
+                  >
+                    Principal username (optional)
+                  </label>
+                  <input
+                    bind:value={devLoginUsername}
+                    class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 font-mono text-meta text-fg"
+                    id="dev-login-username"
+                    placeholder="you@team"
+                    type="text"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-micro font-medium text-fg-muted"
+                    for="dev-login-display"
+                  >
+                    Display name (optional)
+                  </label>
+                  <input
+                    bind:value={devLoginDisplayName}
+                    class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
+                    id="dev-login-display"
+                    placeholder="Exact match when username is unknown"
+                    type="text"
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  class="w-full"
+                  disabled={loadingDevLogin}
+                  onclick={handleDevLogin}
+                >
+                  {loadingDevLogin ? "Signing in…" : "Sign in"}
                 </Button>
-
-                {#if loginError}
+                {#if devLoginError}
                   <div
                     class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
                   >
-                    {loginError}
+                    {devLoginError}
                   </div>
                 {/if}
               </div>
-            </details>
-          {:else}
-            <Button
-              variant="primary"
-              class="w-full"
-              disabled={loadingLogin}
-              onclick={handleLogin}
-            >
-              {loadingLogin
-                ? "Confirming passkey…"
-                : "Sign in with existing passkey"}
-            </Button>
 
-            {#if loginError}
+              <details class="mt-4 border-t border-line pt-3">
+                <summary
+                  class="cursor-pointer text-micro font-medium text-fg-muted hover:text-fg"
+                >
+                  Sign in with passkey
+                </summary>
+                <div class="mt-3 space-y-3">
+                  <Button
+                    variant="secondary"
+                    class="w-full"
+                    disabled={loadingLogin}
+                    onclick={handleLogin}
+                  >
+                    {loadingLogin
+                      ? "Confirming passkey…"
+                      : "Sign in with existing passkey"}
+                  </Button>
+
+                  {#if loginError}
+                    <div
+                      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+                    >
+                      {loginError}
+                    </div>
+                  {/if}
+                </div>
+              </details>
+            {:else}
+              <Button
+                variant="primary"
+                class="w-full"
+                disabled={loadingLogin}
+                onclick={handleLogin}
+              >
+                {loadingLogin
+                  ? "Confirming passkey…"
+                  : "Sign in with existing passkey"}
+              </Button>
+
+              {#if loginError}
+                <div
+                  class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+                >
+                  {loginError}
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </section>
+
+        <section class="rounded-md border border-line bg-panel lg:flex-1">
+          <div class="border-b border-line px-4 py-3">
+            <p
+              class="text-micro font-medium uppercase tracking-wide text-fg-muted"
+            >
+              New to this workspace?
+            </p>
+            <h2 class="mt-1 text-meta font-semibold text-fg">
+              Join with an invite token
+            </h2>
+            <p class="mt-1 text-micro text-fg-muted">
+              Ask a workspace administrator for an invite.
+            </p>
+          </div>
+
+          <form
+            class="space-y-4 px-4 py-4"
+            onsubmit={(event) => {
+              event.preventDefault();
+              handleRegistration();
+            }}
+          >
+            <div>
+              <label
+                class="block text-micro font-medium text-fg-muted"
+                for="display-name"
+              >
+                Display name
+              </label>
+              <input
+                bind:value={registrationName}
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
+                id="display-name"
+                maxlength="120"
+                placeholder="Alex Chen"
+                type="text"
+              />
+            </div>
+
+            <div>
+              <label
+                class="block text-micro font-medium text-fg-muted"
+                for="invite-token"
+              >
+                Invite token
+              </label>
+              <input
+                bind:value={registrationToken}
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 font-mono text-meta text-fg"
+                id="invite-token"
+                placeholder="Paste your invite token"
+                type="text"
+              />
+            </div>
+
+            {#if registrationError}
               <div
                 class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
               >
-                {loginError}
+                {registrationError}
               </div>
             {/if}
-          {/if}
-        </div>
-      </section>
 
-      <section class="rounded-md border border-line bg-bg-soft lg:flex-1">
-        <div class="border-b border-line px-4 py-3">
-          <p
-            class="text-micro font-medium uppercase tracking-wide text-fg-muted"
-          >
-            New to this workspace?
-          </p>
-          <h2 class="mt-1 text-meta font-semibold text-fg">
-            Join with an invite token
-          </h2>
-        </div>
-
-        <form
-          class="space-y-4 px-4 py-4"
-          onsubmit={(event) => {
-            event.preventDefault();
-            handleRegistration();
-          }}
-        >
-          <div>
-            <label
-              class="block text-micro font-medium text-fg-muted"
-              for="display-name"
-            >
-              Display name
-            </label>
-            <input
-              bind:value={registrationName}
-              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
-              id="display-name"
-              maxlength="120"
-              placeholder="Alex Chen"
-              type="text"
-            />
-          </div>
-
-          <div>
-            <label
-              class="block text-micro font-medium text-fg-muted"
-              for="invite-token"
-            >
-              Invite token
-            </label>
-            <input
-              bind:value={registrationToken}
-              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 font-mono text-meta text-fg"
-              id="invite-token"
-              placeholder="Paste your invite token"
-              type="text"
-            />
-          </div>
-
-          {#if registrationError}
-            <div
-              class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-            >
-              {registrationError}
-            </div>
-          {/if}
-
-          <div
-            class="rounded-md bg-accent-soft px-3 py-2 text-micro text-accent-text"
-          >
-            This workspace requires an invite token to join. Contact your
-            workspace administrator for an invitation.
-          </div>
-
-          <div class="flex flex-wrap gap-2">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={loadingRegistration || !registrationToken.trim()}
-            >
-              {loadingRegistration
-                ? "Creating account…"
-                : "Create passkey and join"}
-            </Button>
-            {#if showDevLocalPasskeyBypass}
+            <div class="flex flex-wrap gap-2">
               <Button
-                variant="secondary"
+                type="submit"
+                variant="primary"
                 disabled={loadingRegistration || !registrationToken.trim()}
-                onclick={(e) => {
-                  e.preventDefault();
-                  handleDevRegistration();
-                }}
               >
-                {loadingRegistration ? "Signing in…" : "Join without passkey"}
+                {loadingRegistration
+                  ? "Creating account…"
+                  : "Create passkey and join"}
               </Button>
-            {/if}
-            {#if $devActorMode}
-              <Button
-                variant="secondary"
-                href={workspacePath(organizationSlug, workspaceSlug)}
-              >
-                Back to actor mode
-              </Button>
-            {/if}
-          </div>
-        </form>
-      </section>
+              {#if showDevLocalPasskeyBypass}
+                <Button
+                  variant="secondary"
+                  disabled={loadingRegistration || !registrationToken.trim()}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    handleDevRegistration();
+                  }}
+                >
+                  {loadingRegistration ? "Signing in…" : "Join without passkey"}
+                </Button>
+              {/if}
+              {#if $devActorMode}
+                <Button
+                  variant="secondary"
+                  href={workspacePath(organizationSlug, workspaceSlug)}
+                >
+                  Back to actor mode
+                </Button>
+              {/if}
+            </div>
+          </form>
+        </section>
+      </div>
     </div>
   </main>
 {/if}
+
+{#snippet brand()}
+  <div class="mb-5 flex min-w-0 items-center gap-2.5">
+    <img
+      src="{assets}/favicon.svg"
+      alt=""
+      class="h-6 w-6 shrink-0"
+      width="24"
+      height="24"
+    />
+    <span class="shrink-0 text-meta font-semibold text-fg">Agent Nexus</span>
+    {#if workspaceLabel}
+      <span class="text-fg-subtle" aria-hidden="true">/</span>
+      <span class="min-w-0 truncate text-meta text-fg-muted"
+        >{workspaceLabel}</span
+      >
+    {/if}
+  </div>
+{/snippet}
+
+<style>
+  .login-main {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    padding: 2rem 1rem;
+  }
+
+  .login-frame {
+    margin: 0 auto;
+    width: 100%;
+    max-width: 56rem;
+  }
+
+  /* On a desktop the form sits in the optical centre, not pinned to the top. */
+  @media (min-width: 1024px) {
+    .login-main {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-block: 3rem 12vh;
+    }
+  }
+</style>
