@@ -46,6 +46,21 @@ Fixtures in `tests/fixtures/workspaceAuth.js` include human agent shapes with `a
 
 - `ANX_UI_DISABLE_REQUEST_LOOP_GUARD=1` (set by `playwright.config.js`) turns off the per-URL navigation-loop guard in `hooks.server.js`; parallel workers loading the same page would otherwise get `request_loop_detected`.
 
+## Which server did the run drive?
+
+`playwright.identity.js` (wired as `globalSetup`) asks each web-ui server for
+`/__anx/e2e-identity` — dev/preview middleware from `vite.config.js` — and
+aborts before the first spec unless the server was started from this checkout
+at the base path this project expects.
+
+`reuseExistingServer` and a pinned `PLAYWRIGHT_PORT` /
+`PLAYWRIGHT_BASE_PATH_PORT` only check that _something_ is listening. Without
+this guard, a run aimed at another worktree's dev server fails as
+`element(s) not found` in whichever specs happen to be selected, which reads as
+a regression on the branch under test — SCA-767 was filed as four `main`
+regressions on exactly that evidence. Reusing a server from _this_ worktree
+still works; only a foreign or swapped one is refused.
+
 ## Helpers
 
 - `tests/helpers/pageReady.js` — `waitForAppReady(page)`; use it instead of `waitForLoadState("networkidle")`, which never settles on pages holding the live event stream.
