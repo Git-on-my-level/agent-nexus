@@ -13,10 +13,10 @@ import (
 // `anx config forge add` and matches one exact normalized origin.
 var builtinForgeHosts = map[string]string{"github.com": "github"}
 
-// urlOrigin normalizes a URL to its lowercase host:port origin. An omitted
-// port is the scheme's default, so http://h and https://h are distinct
-// origins, and neither matches a port-less registration except on its own
-// default port.
+// urlOrigin normalizes a URL to its canonical origin, scheme included. An
+// omitted port is the scheme's default, so http://forge.example:443 and
+// https://forge.example are different origins, and an http:// URL can never
+// match the canonical HTTPS origin a registration normalizes to.
 func urlOrigin(u *url.URL) string {
 	host := strings.ToLower(u.Hostname())
 	if host == "" {
@@ -30,7 +30,7 @@ func urlOrigin(u *url.URL) string {
 			port = "443"
 		}
 	}
-	return host + ":" + port
+	return u.Scheme + "://" + host + ":" + port
 }
 
 // forgeKindFor reports the forge dialect registered for a URL's exact origin,

@@ -268,12 +268,12 @@ func TestForgeRegistry(t *testing.T) {
 		}
 	}
 	// Port normalization: omitted port means the HTTPS default 443; ports are
-	// exact, canonical and in range.
+	// exact, canonical and in range. Origins are canonical https URLs.
 	for _, tc := range []struct{ host, want string }{
-		{"forge.example.test", "forge.example.test:443"},
-		{"FORGE.Example.test", "forge.example.test:443"},
-		{"forge.example.test:8443", "forge.example.test:8443"},
-		{"forge.example.test:65535", "forge.example.test:65535"},
+		{"forge.example.test", "https://forge.example.test:443"},
+		{"FORGE.Example.test", "https://forge.example.test:443"},
+		{"forge.example.test:8443", "https://forge.example.test:8443"},
+		{"forge.example.test:65535", "https://forge.example.test:65535"},
 	} {
 		got, ok := CanonicalForgeOrigin(tc.host)
 		if !ok || got != tc.want {

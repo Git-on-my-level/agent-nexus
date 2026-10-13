@@ -168,6 +168,7 @@ func TestForgejoRejectsForeignIdentityURLs(t *testing.T) {
 		name, issue, target string
 	}{
 		{"foreign origin", `{"number":2,"title":"X","state":"open","html_url":"https://unregistered.example.test/acme/widgets/pulls/2"}`, "2"},
+		{"http scheme for https source", `{"number":2,"title":"X","state":"open","html_url":"%HTTPBASE%/acme/widgets/pulls/2"}`, "2"},
 		{"wrong number in URL", `{"number":2,"title":"X","state":"open","html_url":"%BASE%/acme/widgets/pulls/3"}`, "2"},
 		{"wrong repository in URL", `{"number":2,"title":"X","state":"open","html_url":"%BASE%/acme/other/pulls/2"}`, "2"},
 		{"non-identity path", `{"number":2,"title":"X","state":"open","html_url":"%BASE%/acme/widgets/wiki/2"}`, "2"},
@@ -176,7 +177,8 @@ func TestForgejoRejectsForeignIdentityURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			origin := ""
 			cfg, server := testHTTPConfig(t, func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprint(w, strings.ReplaceAll(tt.issue, "%BASE%", origin))
+				body := strings.ReplaceAll(tt.issue, "%BASE%", origin)
+				fmt.Fprint(w, strings.ReplaceAll(body, "%HTTPBASE%", strings.Replace(origin, "https://", "http://", 1)))
 			})
 			origin = server.URL
 			reader, err := NewForgejoReader(cfg, "forgejo")

@@ -42,20 +42,22 @@ func (r *ForgejoReader) Capabilities() Capabilities {
 // operator configures the forge origin rather than an API path.
 func (r *ForgejoReader) api(path string) string { return "/api/v1" + path }
 
-// origin is the registered forge origin (lowercase host:port, HTTPS default
-// 443). Returned identity URLs must point here.
+// origin is the registered forge origin as a canonical https URL origin. The
+// shared HTTP source only accepts HTTPS registrations, so an http:// identity
+// URL can never match, whatever its port.
 func (r *ForgejoReader) origin() string {
 	port := r.source.base.Port()
 	if port == "" {
 		port = "443"
 	}
-	return strings.ToLower(r.source.base.Hostname()) + ":" + port
+	return "https://" + strings.ToLower(r.source.base.Hostname()) + ":" + port
 }
 
 // forgeIdentityURL reports whether a returned URL is this exact resource on
 // the registered origin: {owner}/{repo}/{issues|pulls}/{nativeID} (marker
-// restricted). Fragments are ignored; the path number must be the same
-// canonical decimal as the requested native ID.
+// restricted). Origins are scheme-aware, so an http:// URL never matches an
+// https registration even on port 443. Fragments are ignored; the path
+// number must be the same canonical decimal as the requested native ID.
 func forgeIdentityURL(raw string, origin, repository, nativeID string, markers ...string) (*url.URL, bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.User != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
@@ -69,7 +71,7 @@ func forgeIdentityURL(raw string, origin, repository, nativeID string, markers .
 			port = "443"
 		}
 	}
-	if strings.ToLower(u.Hostname())+":"+port != origin {
+	if u.Scheme+"://"+strings.ToLower(u.Hostname())+":"+port != origin {
 		return nil, false
 	}
 	segments := strings.Split(strings.Trim(u.Path, "/"), "/")

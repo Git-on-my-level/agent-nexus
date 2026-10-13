@@ -66,10 +66,11 @@ func ValidateForgeHost(host string) error {
 	return nil
 }
 
-// CanonicalForgeOrigin normalizes a registered forge host to the lowercase
-// host:port origin the lint compares URL origins against. An omitted port
-// means the HTTPS default 443. ok is false for malformed entries, including
-// out-of-range, zero, or leading-zero ports.
+// CanonicalForgeOrigin normalizes a registered forge host to the canonical
+// origin the lint compares URL origins against. Registrations name an HTTPS
+// origin — an omitted port means 443 — so the result always carries the
+// https scheme and can never match an http:// evidence URL. ok is false for
+// malformed entries, including out-of-range, zero, or leading-zero ports.
 func CanonicalForgeOrigin(host string) (string, bool) {
 	value := strings.ToLower(strings.TrimSpace(host))
 	if value == "" || len(value) > 255 || !forgeHostPattern.MatchString(value) || strings.Contains(value, "..") {
@@ -79,12 +80,12 @@ func CanonicalForgeOrigin(host string) (string, bool) {
 		if !canonicalPort(port) {
 			return "", false
 		}
-		return strings.TrimSuffix(value, ":"+port) + ":" + port, true
+		return "https://" + strings.TrimSuffix(value, ":"+port) + ":" + port, true
 	}
 	if strings.Contains(value, ":") {
 		return "", false
 	}
-	return value + ":443", true
+	return "https://" + value + ":443", true
 }
 
 func canonicalPort(port string) bool {

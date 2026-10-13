@@ -208,6 +208,11 @@ func TestForgeURLMatching(t *testing.T) {
 	if kind := kindFor("http://forge.example.test/o/r/pulls/1"); kind != "" {
 		t.Fatal("port-less registration matched plain http:", kind)
 	}
+	// The scheme is part of the origin: http on the https default port is a
+	// different origin and never matches an https registration.
+	if kind := kindFor("http://forge.example.test:443/o/r/pulls/1"); kind != "" {
+		t.Fatal("http on 443 matched an https registration:", kind)
+	}
 	if kind := kindFor("https://gitlab.example.test/o/r/-/merge_requests/1"); kind != "" {
 		t.Fatal("explicit-port registration matched the default port:", kind)
 	}
