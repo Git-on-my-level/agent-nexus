@@ -48,7 +48,7 @@ func TestConcurrentMovesAndAnsweredAwaitAgainstCore(t *testing.T) {
 							t.Fatalf("iteration=%d answer=%q", iteration, got)
 						}
 					}
-					t.Log("completed 20 iterations: 60 moves and 20 durable terminal awaits")
+					t.Log("completed 20 iterations: 60 start/block CLI commands and 20 durable terminal awaits")
 				})
 			}
 		})

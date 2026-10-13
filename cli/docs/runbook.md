@@ -263,7 +263,7 @@ go test -tags=integration ./integration -run '^(TestAgentErgonomicsAgainstCore|T
 
 The contention test runs two core processes, with two concurrent agent writers
 per process and separate boards to avoid intentional board-token conflicts.
-Each agent performs 60 moves and 20 reads of an answered ask. `anx await` reads
+Each agent issues 60 start/block commands and reads an answered ask 20 times. `anx await` reads
 `GET /asks/{ask_id}` before subscribing; a terminal answer needs neither a
 subscription write nor SSE. Open asks still subscribe and consume the stream's
 initial durable snapshot, covering answers committed during subscription setup.
