@@ -467,11 +467,17 @@ func TestBridgeUnitInstallReloadsWhenUnitChanges(t *testing.T) {
 	var wrote []string
 	var commands [][]string
 	originalMkdir, originalWrite, originalRead, originalRun := bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun
+	originalLstat, originalChmod, originalRename, originalStat := bridgeLstat, bridgeChmod, bridgeRename, bridgeStat
 	t.Cleanup(func() {
 		bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun = originalMkdir, originalWrite, originalRead, originalRun
+		bridgeLstat, bridgeChmod, bridgeRename, bridgeStat = originalLstat, originalChmod, originalRename, originalStat
 	})
 	bridgeMkdirAll = func(path string, perm os.FileMode) error { return nil }
 	bridgeReadFile = func(path string) ([]byte, error) { return []byte("stale unit"), nil }
+	bridgeLstat = func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	bridgeStat = func(path string) (os.FileInfo, error) { return fakeFileInfo{mode: 0o644}, nil }
+	bridgeChmod = func(path string, perm os.FileMode) error { return nil }
+	bridgeRename = func(from, to string) error { return nil }
 	bridgeWriteFile = func(path string, data []byte, perm os.FileMode) error {
 		wrote = append(wrote, string(data))
 		bridgeReadFile = func(string) ([]byte, error) { return data, nil }
