@@ -87,6 +87,35 @@ export function agentPath(agent) {
   return key ? `/agents/${encodeURIComponent(key)}` : "/agents";
 }
 
+/**
+ * Does the handle say anything the display name has not?
+ *
+ * A host-derived agent is named "priya on dev-host" and handled
+ * "priya.dev-host", so a row that printed both showed every agent twice —
+ * two lines, one fact. Compared as token sets so "on" and the separators do
+ * not matter; an unrelated handle ("legacy.bot") still earns its line.
+ *
+ * @param {unknown} displayName
+ * @param {unknown} handle
+ */
+export function handleRestatesAgentName(displayName, handle) {
+  const tokens = (value) =>
+    new Set(
+      text(value)
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token && token !== "on"),
+    );
+  const name = tokens(displayName);
+  const key = tokens(handle);
+  if (!name.size || !key.size) return false;
+  if (name.size !== key.size) return false;
+  for (const token of key) {
+    if (!name.has(token)) return false;
+  }
+  return true;
+}
+
 /** `codex` / `codex gpt-5` / persona name, for the "which runtime" slot. */
 export function agentRuntimeLabel(agent) {
   const run = agent?.active_run;

@@ -40,6 +40,7 @@
     principalDirectoryIncomplete,
     principalRegistry,
   } from "$lib/actorSession";
+  import { startAgentRoster } from "$lib/agentRoster.js";
   import { navIconPath } from "$lib/icons.js";
   import {
     humanActorIdSet,
@@ -880,6 +881,15 @@
       types: TASK_LIST_EVENT_TYPES,
       onChange: refreshFromLiveEvent,
     });
+    /*
+     * The Owner column names agents from the roster, so this page holds a
+     * reference to the shared roster loader instead of waiting on the nav
+     * badge's delayed start. One read per workspace either way — the loader
+     * is reference-counted and the shell asks for the same roster — and it
+     * is what lets an owner cell stop holding a placeholder: a roster read
+     * that answers, even with an error, is an answer.
+     */
+    const releaseRoster = startAgentRoster($page.params.workspace);
     return () => {
       disposed = true;
       stopDenied();
@@ -888,6 +898,7 @@
       clearInterval(timer);
       clearTimeout(humanLiveTimer);
       stopLive();
+      releaseRoster();
     };
   });
   const SOURCES = [

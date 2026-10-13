@@ -3,6 +3,14 @@
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
+  import {
+    actorDirectoryLoaded,
+    actorRegistry,
+    agentDirectoryLoaded,
+    agentRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
+  import { buildOwnerDisplay } from "$lib/ownerDisplay.js";
   import Time from "$lib/time/Time.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import { navIconPath } from "$lib/icons.js";
@@ -211,6 +219,23 @@
     const segment = resourceRouteSegment(documents[i], "document");
     return workspaceHref(`/docs/${encodeURIComponent(segment)}`);
   }
+  /**
+   * Who last changed a doc, from `updated_by` on the row we already have and
+   * the actor directory the shell already loaded: no request per row.
+   */
+  let ownerCellFor = $derived(
+    buildOwnerDisplay({
+      actors: $actorRegistry,
+      principals: $principalRegistry,
+      agents: $agentRegistry,
+      actorsLoaded: $actorDirectoryLoaded,
+      agentsLoaded: $agentDirectoryLoaded,
+    }),
+  );
+  function docAuthorCell(doc) {
+    return ownerCellFor(doc?.updated_by || doc?.created_by);
+  }
+
   /** Truncate to a quiet single-line preview (adds an ellipsis when cut). */
   function previewText(value, max = 80) {
     const text = String(value ?? "").trim();
@@ -775,6 +800,18 @@
     {/if}
   {/snippet}
 
+  {#snippet docAuthor(doc)}
+    {@const author = docAuthorCell(doc)}
+    {#if author && !author.pending}
+      <!-- A doc row said when it changed and never who. The name comes from
+           data the row already carries; a name still loading is left out
+           rather than shown as a raw id and corrected. -->
+      <span class="whitespace-nowrap" title={author.title}>
+        by {author.name}
+      </span>
+    {/if}
+  {/snippet}
+
   {#snippet docLastComment(doc)}
     {@const comment = doc?.last_comment}
     {@const commentBody = String(comment?.body ?? "").trim()}
@@ -846,11 +883,13 @@
               </WorkspaceResourceListRow>
               <span
                 class="hidden shrink-0 self-start whitespace-nowrap pt-0.5 text-right text-micro text-fg-muted sm:inline"
-                >Updated <Time value={doc.updated_at} fallback="—" /></span
+                >Updated <Time value={doc.updated_at} fallback="—" />
+                {@render docAuthor(doc)}</span
               >
             </div>
             <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
               Updated <Time value={doc.updated_at} fallback="—" />
+              {@render docAuthor(doc)}
             </p>
             {@render docEnrichment(doc, false)}
             {@render docLastComment(doc)}
@@ -918,6 +957,7 @@
             </div>
             <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
               Updated <Time value={doc.updated_at} fallback="—" />
+              {@render docAuthor(doc)}
             </p>
             {@render docEnrichment(doc, true)}
             {@render docLastComment(doc)}
@@ -928,7 +968,8 @@
                row does not say which of a doc's several timestamps it is. -->
           <span
             class="hidden whitespace-nowrap text-right text-fg-muted sm:inline"
-            >Updated <Time value={doc.updated_at} fallback="—" /></span
+            >Updated <Time value={doc.updated_at} fallback="—" />
+            {@render docAuthor(doc)}</span
           >
         {/snippet}
         {#snippet actions()}

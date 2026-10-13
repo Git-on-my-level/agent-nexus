@@ -11,8 +11,11 @@
   import {
     actorDisplayLabel,
     actorRegistry,
+    agentRegistry,
+    findAgentSummary,
     principalRegistry,
   } from "$lib/actorSession";
+  import { compactOwnerName } from "$lib/ownerDisplay.js";
 
   /**
    * One board card: a title, the shared summary, and the two signals that are
@@ -47,8 +50,13 @@
   } = $props();
 
   let model = $derived(summary ?? workSummaryModel(work, { now }));
+  // The card's owner reads like the table's: the name, without the role or
+  // the host it would truncate on inside a 18rem column.
   let ownerLabel = $derived(
-    actorDisplayLabel(work?.owner, $actorRegistry, $principalRegistry),
+    compactOwnerName(
+      actorDisplayLabel(work?.owner, $actorRegistry, $principalRegistry),
+      { isAgent: Boolean(findAgentSummary(work?.owner, $agentRegistry)) },
+    ),
   );
   // The board name only when the parent says it tells boards apart; a
   // source-owned card says where it lives instead.
