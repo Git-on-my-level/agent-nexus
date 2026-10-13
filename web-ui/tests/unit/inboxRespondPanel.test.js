@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import InboxRespondPanel from "../../src/lib/components/inbox/InboxRespondPanel.svelte";
 import { PROPOSAL_FLASH_MS } from "../../src/lib/inboxProposalChoice.js";
+import { inboxUnsentResponses } from "../../src/lib/inboxResponseQueue.js";
 
 /**
  * Choosing a suggested response, at the panel's own level.
@@ -43,10 +44,22 @@ const settle = () =>
 
 afterEach(() => {
   cleanup();
+  inboxUnsentResponses.set([]);
   vi.clearAllMocks();
 });
 
 describe("answering while a suggestion is on its way out", () => {
+  it("sends the captured choice when the next item already has a pending response", async () => {
+    const result = panel();
+    await fireEvent.click(document.querySelector('[data-inbox-proposal="1"]'));
+    inboxUnsentResponses.set([{ itemId: "inbox-b", state: "pending" }]);
+    await result.rerender({ itemKey: "inbox-b" });
+    expect(result.onSend).toHaveBeenCalledWith(
+      "Ship it",
+      "answered",
+      "inbox-a",
+    );
+  });
   it("holds Approve and Reject until the chosen response has gone", async () => {
     const { onSend } = panel();
 

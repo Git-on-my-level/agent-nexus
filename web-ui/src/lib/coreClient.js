@@ -49,7 +49,8 @@ export function getInboxResponseClientOptions() {
 export function captureInboxResponseSender() {
   const client = createAnxCoreClient({
     ...getInboxResponseClientOptions(),
-    fetchFn: globalThis.fetch.bind(globalThis),
+    fetchFn: (url, init) =>
+      globalThis.fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
   });
   return client.respondInboxItem.bind(client);
 }

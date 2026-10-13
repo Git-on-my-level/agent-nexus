@@ -107,7 +107,8 @@ describe("shared clock", () => {
 
 describe("bucketLabels", () => {
   const DAY = 86_400_000;
-  const run = (count, step, start = Date.parse("2026-10-01T00:00:00Z")) =>
+  // These cases exercise local calendar labels, independent of the host zone.
+  const run = (count, step, start = new Date(2026, 9, 1, 12).getTime()) =>
     Array.from({ length: count }, (_, index) => start + index * step);
 
   it("drops the year a run of days all shares", () => {
@@ -117,7 +118,7 @@ describe("bucketLabels", () => {
 
   it("adds the year only once two buckets need it to differ", () => {
     const labels = bucketLabels(
-      [Date.parse("2025-10-01T00:00:00Z"), Date.parse("2026-10-01T00:00:00Z")],
+      [new Date(2025, 9, 1, 12).getTime(), new Date(2026, 9, 1, 12).getTime()],
       { locale: "en-US" },
     );
     expect(labels).toEqual(["Oct 1, 2025", "Oct 1, 2026"]);

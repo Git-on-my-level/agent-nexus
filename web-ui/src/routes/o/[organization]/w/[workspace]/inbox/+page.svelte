@@ -1,4 +1,5 @@
 <script>
+  import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
@@ -76,12 +77,10 @@
     applyResponseOverlay,
     captureInboxResponseBinding,
     defaultNotifyMode,
-    flushInboxResponse,
-    dismissInboxResponseFailure,
     hasPendingInboxResponse,
     inboxResponseFailures,
     inboxResponseOverlay,
-    retryInboxResponse,
+    inboxUnsentResponses,
     onInboxResponseCommitted,
     queueInboxResponse,
     stashInboxRestore,
@@ -1198,7 +1197,16 @@
   ) {
     const item = row?.item;
     const body = String(text ?? "").trim();
-    if (!item?.id || !body || busy) return;
+    if (!item?.id || !body || (busy && row?.id === selected?.id)) return;
+    if (
+      $inboxUnsentResponses.some(
+        (entry) =>
+          entry.itemId === item.id &&
+          entry.state !== "attention" &&
+          (!binding || entry.identity === binding.identity),
+      )
+    )
+      return;
     const who = row.requester?.name || "";
     const request = acknowledge
       ? { response_text: body, outcome: "acknowledged", notify_mode: "none" }
@@ -1598,14 +1606,6 @@
 <svelte:window
   onkeydown={handleKeydown}
   onbeforeunload={(event) => {
-    // A response inside its undo window goes out now rather than being lost
-    // with the tab; the prompt gives it time to land.
-    if (hasPendingInboxResponse()) {
-      void flushInboxResponse();
-      event.preventDefault();
-      event.returnValue = "";
-      return;
-    }
     if (answer.trim()) {
       event.preventDefault();
       event.returnValue = "";
@@ -2171,41 +2171,7 @@
                     (docPanelRef = docPanelRef === ref ? "" : ref)}
                   openDocRef={docPanelRef}
                 />
-                {#if selected.responseError}
-                  <!--
-                    The send failed and nothing was recorded. The item is still
-                    here, still unanswered, and says why — rather than sliding
-                    back into the list minutes later with no explanation.
-                  -->
-                  <div
-                    class="rounded-md border border-danger bg-danger-soft px-3 py-2"
-                    role="alert"
-                    data-inbox-response-error
-                  >
-                    <p class="text-meta text-fg">
-                      <span class="font-medium text-danger-text"
-                        >Your response was not sent.</span
-                      >
-                      {selected.responseError}
-                    </p>
-                    <p class="mt-1.5 flex flex-wrap items-center gap-3">
-                      <button
-                        class="ui-btn-secondary"
-                        type="button"
-                        onclick={() =>
-                          void retryInboxResponse(selected.item?.id)}
-                        >Retry send</button
-                      >
-                      <button
-                        class="text-micro text-fg-muted hover:text-fg"
-                        type="button"
-                        onclick={() =>
-                          dismissInboxResponseFailure(selected.item?.id)}
-                        >Answer it again instead</button
-                      >
-                    </p>
-                  </div>
-                {/if}
+                <InboxSendStatus itemId={selected.item?.id} />
                 {#if needsResponse}
                   <InboxRespondPanel
                     bind:this={respondPanel}
@@ -2214,7 +2180,7 @@
                     canDecideAccess={decidesAccess}
                     proposals={selected.responseProposals}
                     needsContext={supportsNeedsContext(selected.item)}
-                    itemKey={selected.id}
+                    itemKey={String(selected.item?.id || selected.id)}
                     bind:draft={reply}
                     {chosen}
                     {busy}

@@ -2,6 +2,15 @@
 import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// These unit cases model one tab. Node's process-wide BroadcastChannel would
+// connect unrelated jsdom fixtures; real cross-tab delivery is covered in e2e.
+vi.hoisted(() => {
+  window.BroadcastChannel = class {
+    postMessage() {}
+    close() {}
+  };
+});
+
 const client = vi.hoisted(() => ({
   respondInboxItem: vi.fn(),
   capturedScopes: [],
@@ -26,6 +35,7 @@ import {
 import {
   UNDO_WINDOW_MS,
   applyResponseOverlay,
+  captureInboxResponseBinding,
   defaultNotifyMode,
   dismissInboxResponseFailure,
   dismissInboxResponseToast,
@@ -33,6 +43,8 @@ import {
   inboxResponseFailures,
   inboxResponseOverlay,
   inboxResponseToast,
+  inboxUnsentResponses,
+  recoverInboxResponses,
   queueInboxResponse,
   retryInboxResponse,
   resetInboxResponseQueue,
@@ -52,6 +64,17 @@ import {
   currentOrganizationSlug,
   currentWorkspaceSlug,
 } from "../../src/lib/workspaceContext.js";
+
+import { listLocalWork } from "../../src/lib/localWorkStore.js";
+
+beforeEach(async () => {
+  await listLocalWork("", "inbox-send");
+  localStorage.clear();
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: { request: async (_name, callback) => callback() },
+  });
+});
 
 function key(k, extra = {}) {
   return {
@@ -74,7 +97,7 @@ describe("answer snapshots", () => {
   });
   afterEach(() => resetInboxResponseQueue());
 
-  it.each(["workspace", "organization", "reader"])(
+  it.each(["workspace", "organization"])(
     "sends a submitted custom reply once in its captured scope across a %s switch",
     async (change) => {
       vi.useFakeTimers();
@@ -98,9 +121,7 @@ describe("answer snapshots", () => {
         if (change === "organization") currentOrganizationSlug.set("org-b");
         authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
         await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
-        expect(client.respondInboxItem).toHaveBeenCalledTimes(
-          change === "reader" ? 0 : 1,
-        );
+        expect(client.respondInboxItem).toHaveBeenCalledTimes(1);
         expect(get(inboxResponseOverlay)).toEqual({});
         expect(get(inboxResponseToast)).toBeNull();
         currentOrganizationSlug.set("org-a");
@@ -138,6 +159,9 @@ describe("answer snapshots", () => {
       message: "Sent",
     });
     const sent = flushInboxResponse();
+    await vi.waitFor(() =>
+      expect(client.respondInboxItem).toHaveBeenCalledOnce(),
+    );
     const originalRequest = client.respondInboxItem.mock.calls[0][1];
     currentWorkspaceSlug.set("workspace-b");
     authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
@@ -147,7 +171,7 @@ describe("answer snapshots", () => {
     currentWorkspaceSlug.set("workspace-a");
     authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
     expect(get(inboxResponseFailures)["inbox:private"].error).toBe(
-      "core unavailable",
+      "The service could not confirm your response. Your text is kept on this device.",
     );
     client.respondInboxItem.mockResolvedValue({});
     await retryInboxResponse("inbox:private");
@@ -354,6 +378,12 @@ describe("update digests", () => {
 describe("inbox response queue", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    currentOrganizationSlug.set("org-queue");
+    currentWorkspaceSlug.set("workspace-queue");
+    authenticatedAgent.set({
+      agent_id: "human-queue",
+      actor_id: "actor-queue",
+    });
     resetInboxResponseQueue();
     client.respondInboxItem.mockReset();
     client.respondInboxItem.mockResolvedValue({ event: { id: "e1" } });
@@ -421,7 +451,7 @@ describe("inbox response queue", () => {
     await flushInboxResponse();
     expect(get(inboxResponseToast)).toMatchObject({
       state: "failed",
-      error: expect.stringContaining("core unavailable"),
+      error: expect.stringContaining("could not confirm"),
     });
     expect(get(inboxResponseOverlay)["inbox:a"]).toBeUndefined();
   });
@@ -431,7 +461,7 @@ describe("inbox response queue", () => {
     queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
     await flushInboxResponse();
     expect(get(inboxResponseFailures)["inbox:a"]).toMatchObject({
-      error: expect.stringContaining("quota exceeded"),
+      error: expect.stringContaining("could not confirm"),
       outcome: "answered",
     });
     // The toast is dismissible; the mark on the item is not, because the item
@@ -453,7 +483,7 @@ describe("inbox response queue", () => {
     );
     expect(row.status).toBe("open");
     expect(row.response_failed).toBe(true);
-    expect(row.response_error).toContain("quota exceeded");
+    expect(row.response_error).toContain("could not confirm");
   });
 
   it("a failure outranks an optimistic overlay for the same item", () => {
@@ -599,7 +629,7 @@ describe("inbox response queue", () => {
     ];
     const overlay = {
       "inbox:a": {
-        status: "pending",
+        status: "committed",
         response_text: "Ship it",
         outcome: "rejected",
         responded_at: "t",
@@ -612,6 +642,94 @@ describe("inbox response queue", () => {
       outcome: "rejected",
     });
     expect(b.status).toBe("open");
+  });
+
+  it("keeps an unconfirmed response pending instead of calling it completed", () => {
+    const [item] = applyResponseOverlay([{ id: "inbox:a", status: "open" }], {
+      "inbox:a": {
+        status: "pending",
+        response_text: "Waiting for confirmation",
+        responded_at: "t",
+      },
+    });
+    expect(item).toMatchObject({
+      status: "open",
+      response_delivery_state: "pending",
+    });
+    expect(item.responded_at).toBeUndefined();
+    expect(item.response_text).toBeUndefined();
+  });
+
+  it("holds one saved response when storage fails during send and retry restores persistence", async () => {
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await listLocalWork(
+      '["org-queue","workspace-queue","human-queue","actor-queue"]',
+      "inbox-send",
+    );
+    const full = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("quota");
+      });
+    try {
+      await flushInboxResponse();
+      await recoverInboxResponses();
+      expect(client.respondInboxItem).not.toHaveBeenCalled();
+      expect(get(inboxUnsentResponses)).toHaveLength(1);
+      expect(get(inboxUnsentResponses)[0]).toMatchObject({
+        state: "attention",
+        request: { response_text: "Ship it" },
+      });
+    } finally {
+      full.mockRestore();
+    }
+    await retryInboxResponse("inbox:a");
+    expect(client.respondInboxItem).toHaveBeenCalledOnce();
+    expect(get(inboxUnsentResponses)).toEqual([]);
+  });
+
+  it("does not resurrect a captured suggestion after its principal signs out", async () => {
+    const binding = captureInboxResponseBinding();
+    authenticatedAgent.set({
+      agent_id: "another-human",
+      actor_id: "another-actor",
+    });
+    expect(
+      queueInboxResponse({
+        itemId: "inbox:a",
+        request,
+        message: "Old choice",
+        binding,
+      }),
+    ).toBe(0);
+    await flushInboxResponse();
+    expect(client.respondInboxItem).not.toHaveBeenCalled();
+    expect(await listLocalWork(binding.identity, "inbox-send")).toEqual([]);
+  });
+
+  it("keeps a 401 response private through session loss and restores the same key after sign-in", async () => {
+    const owner = { agent_id: "human-queue", actor_id: "actor-queue" };
+    const binding = captureInboxResponseBinding();
+    client.respondInboxItem.mockRejectedValueOnce(
+      Object.assign(new Error("session expired"), { status: 401 }),
+    );
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    const original = client.respondInboxItem.mock.calls[0][1];
+    authenticatedAgent.set(null);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(get(inboxResponseFailures)).toEqual({});
+    expect(
+      (await listLocalWork(binding.identity, "inbox-send"))[0].value.request,
+    ).toEqual(original);
+    authenticatedAgent.set(owner);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(get(inboxResponseFailures)["inbox:a"]).toMatchObject({
+      state: "attention",
+      response_text: "Ship it",
+    });
+    await retryInboxResponse("inbox:a");
+    expect(client.respondInboxItem.mock.calls[1][1]).toEqual(original);
   });
 
   it("notifies the requester unless core says it cannot reach them", () => {

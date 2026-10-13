@@ -148,6 +148,11 @@ function deferred() {
   return { promise, resolve };
 }
 beforeEach(() => {
+  localStorage.clear();
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: { request: async (_name, callback) => callback() },
+  });
   clearWorkspaceViews();
   vi.clearAllMocks();
   for (const mock of Object.values(client)) mock.mockReset();
@@ -973,7 +978,9 @@ describe("PM operator interactions", () => {
     await fireEvent.keyDown(window, { key: "2" });
     await fireEvent.keyDown(window, { key: "2" });
     expect(client.respondInboxItem).not.toHaveBeenCalled();
-    expect(await screen.findByText("Sent to Omar Reed")).toBeTruthy();
+    expect(
+      await screen.findByText("Response saved. Waiting to send."),
+    ).toBeTruthy();
 
     await fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await flushInboxResponse();

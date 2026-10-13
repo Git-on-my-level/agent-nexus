@@ -15,6 +15,10 @@
     proposalKeyAction,
   } from "$lib/inboxProposalChoice.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
+  import { inboxUnsentResponses } from "$lib/inboxResponseQueue.js";
+  import { durableDraft } from "$lib/actions/durableDraft.js";
+  import { localWorkScopeKey } from "$lib/localWorkScope.js";
+  import { saveLocalWork, localWorkPrincipal } from "$lib/localWorkStore.js";
 
   /**
    * How the reader answers an ask, review or escalation. Shared by the Inbox
@@ -82,6 +86,13 @@
     extras = null,
     after = null,
   } = $props();
+
+  let blocked = $derived(
+    busy ||
+      $inboxUnsentResponses.some(
+        (entry) => entry.itemId === itemKey && entry.state !== "attention",
+      ),
+  );
 
   const MAX_KEYED = MAX_KEYED_PROPOSALS;
   let isReview = $derived(String(kind ?? "").toLowerCase() === "review");
@@ -171,10 +182,25 @@
   /** Flash the chosen option once, then send it. */
   function commit(index) {
     const proposal = proposals[index];
-    if (!proposal || busy || pending) return;
+    if (!proposal || blocked || pending) return;
     armed = index;
     flashing = index;
     pending = { proposal, context: capture() };
+    // Preserve the pick before its visual confirmation or navigation can run.
+    draft = String(proposal);
+    const scope = localWorkScopeKey();
+    if (localWorkPrincipal(scope)) {
+      void saveLocalWork(
+        scope,
+        "draft",
+        `inbox:${itemKey}:reply`,
+        String(proposal),
+      ).catch((error) => {
+        window.dispatchEvent(
+          new CustomEvent("local-save-error", { detail: error.message }),
+        );
+      });
+    }
     // Reduced motion keeps the confirmation, drops the animation and the wait.
     if (prefersReducedMotion()) {
       flush();
@@ -190,7 +216,7 @@
    * @returns {boolean} true when the key did something here
    */
   export function pressProposalKey(number) {
-    if (!keyable || busy || pending) return false;
+    if (!keyable || blocked || pending) return false;
     const index = Number(number) - 1;
     const action = proposalKeyAction({
       index,
@@ -247,7 +273,7 @@
   });
 
   async function openContextNote() {
-    if (busy || pending) return;
+    if (blocked || pending) return;
     contextNoteOpen = true;
     await tick();
     contextNoteEl?.focus?.();
@@ -284,7 +310,17 @@
    */
   function send(text, outcome = "answered", context = capture()) {
     const body = String(text ?? "").trim();
-    if (!body || busy || pending) return;
+    const target =
+      typeof context === "string"
+        ? context
+        : context?.itemId || context?.row?.item?.id || itemKey;
+    const waiting = $inboxUnsentResponses.some(
+      (entry) =>
+        entry.itemId === target &&
+        entry.state !== "attention" &&
+        (!context?.binding || entry.identity === context.binding.identity),
+    );
+    if (!body || pending || waiting || (busy && target === itemKey)) return;
     onSend?.(body, outcome, context);
   }
 
@@ -299,7 +335,7 @@
    * what stops everything else.
    */
   function acknowledge() {
-    if (busy || pending) return;
+    if (blocked || pending) return;
     onAcknowledge?.();
   }
 
@@ -346,7 +382,7 @@
             <button
               class="ui-btn-primary"
               type="button"
-              disabled={busy || Boolean(pending)}
+              disabled={blocked || Boolean(pending)}
               onclick={() =>
                 decide(
                   confirmingRequestId,
@@ -357,7 +393,7 @@
             <button
               class="ui-btn-secondary"
               type="button"
-              disabled={busy}
+              disabled={blocked}
               onclick={() => (confirmingRequestId = "")}>Cancel</button
             >
           </div>
@@ -367,13 +403,13 @@
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy || Boolean(pending)}
+            disabled={blocked || Boolean(pending)}
             onclick={startConfirm}>Approve…</button
           >
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy || Boolean(pending)}
+            disabled={blocked || Boolean(pending)}
             onclick={() =>
               decide(
                 access?.requestId,
@@ -394,13 +430,13 @@
       <button
         class="ui-btn-secondary"
         type="button"
-        disabled={busy || Boolean(pending)}
+        disabled={blocked || Boolean(pending)}
         onclick={() => send("Approved.", "approved")}>Approve</button
       >
       <button
         class="ui-btn-secondary"
         type="button"
-        disabled={busy || Boolean(pending)}
+        disabled={blocked || Boolean(pending)}
         onclick={() => send("Rejected.", "rejected")}>Reject</button
       >
     </div>
@@ -420,7 +456,7 @@
                 : 'border-line bg-bg-soft hover:border-line-strong hover:bg-panel-hover'}"
               class:proposal--sending={flashing === index}
               type="button"
-              disabled={busy}
+              disabled={blocked}
               data-inbox-proposal={index < MAX_KEYED ? index + 1 : undefined}
               data-inbox-proposal-armed={selected ? "true" : undefined}
               data-inbox-proposal-sending={flashing === index
@@ -467,6 +503,8 @@
             id={`${replyId}-context`}
             class="ui-input min-h-16"
             bind:value={contextNote}
+            disabled={blocked}
+            use:durableDraft={`inbox:${itemKey}:context`}
             bind:this={contextNoteEl}
             placeholder="Name what you need before you can answer…"
             data-inbox-needs-context-note
@@ -475,14 +513,14 @@
             <button
               class="ui-btn-secondary"
               type="button"
-              disabled={busy || !contextNote.trim() || Boolean(pending)}
+              disabled={blocked || !contextNote.trim() || Boolean(pending)}
               data-inbox-needs-context-send
               onclick={sendContextRequest}>Send back for context</button
             >
             <button
               class="text-micro text-fg-muted hover:text-fg"
               type="button"
-              disabled={busy}
+              disabled={blocked}
               onclick={() => {
                 contextNoteOpen = false;
                 contextNote = "";
@@ -494,7 +532,7 @@
         <button
           class="ui-btn-secondary"
           type="button"
-          disabled={busy || Boolean(pending)}
+          disabled={blocked || Boolean(pending)}
           data-inbox-needs-context-open
           onclick={openContextNote}>I need more context</button
         >
@@ -519,6 +557,8 @@
         id={replyId}
         class="ui-input {tall ? 'min-h-[160px]' : 'min-h-20'}"
         bind:value={draft}
+        disabled={blocked}
+        use:durableDraft={`inbox:${itemKey}:reply`}
         {placeholder}
         data-inbox-shortcut="reply"
         aria-keyshortcuts="R"
@@ -528,7 +568,7 @@
         <button
           class="ui-btn-primary"
           type="submit"
-          disabled={busy || !draft.trim() || Boolean(pending)}
+          disabled={blocked || !draft.trim() || Boolean(pending)}
           title={`${sendLabel} (${formatShortcut("Enter")})`}
           >{sendLabel}</button
         >
@@ -536,7 +576,7 @@
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy || Boolean(pending)}
+            disabled={blocked || Boolean(pending)}
             data-inbox-shortcut="done"
             aria-keyshortcuts="E"
             title="Acknowledge (E)"

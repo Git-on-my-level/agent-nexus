@@ -1,8 +1,8 @@
 <script>
-  import { browser } from "$app/environment";
+  import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy } from "svelte";
 
   import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
   import {
@@ -48,13 +48,10 @@
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
     captureInboxResponseBinding,
-    defaultNotifyMode,
-    dismissInboxResponseFailure,
-    flushInboxResponse,
     hasPendingInboxResponse,
-    inboxResponseFailures,
+    inboxUnsentResponses,
+    defaultNotifyMode,
     queueInboxResponse,
-    retryInboxResponse,
     takeInboxRestore,
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
@@ -82,13 +79,6 @@
   let loading = $state(false);
   let loadError = $state("");
   let item = $state(null);
-  /*
-   * The last send for this item, if it failed. The item stays on screen
-   * unanswered and says why; nothing is filed as handled until core says so.
-   */
-  let responseError = $derived(
-    item?.id ? ($inboxResponseFailures[item.id]?.error ?? "") : "",
-  );
   let responseDraft = $state("");
   let notifyMode = $state("original");
   let notifyTargetActorID = $state("");
@@ -102,7 +92,6 @@
   let responseComposerArtifactsByRef = $state(
     /** @type {Record<string, Record<string, unknown>>} */ ({}),
   );
-  let autosaveInterval = null;
   let notifyTargetQuery = $state("");
   let notifyTargetResults = $state([]);
   let notifyTargetSelected = $state(null);
@@ -110,7 +99,6 @@
   let notifyTargetSearchSeq = 0;
   let notifyTargetMenuOpen = $state(false);
   let inboxLoadSeq = 0;
-  let loadedInboxRouteKey = $state("");
   let chosen = $state("");
   /* The respond panel owns which suggestion is highlighted; see the pane. */
   let respondPanel = $state(null);
@@ -225,10 +213,6 @@
 
   function inboxRouteKey(workspace = workspaceSlug, id = inboxItemID) {
     return `${String(workspace ?? "").trim()}:${String(id ?? "").trim()}`;
-  }
-
-  function draftStorageKey(workspace = workspaceSlug, id = inboxItemID) {
-    return `anx.human-response.draft:${workspace}:${id}`;
   }
 
   // A request from an agent for a grant. The panel then offers only the two
@@ -385,7 +369,6 @@
     loading = true;
     resetRouteLocalState();
     item = null;
-    loadedInboxRouteKey = "";
 
     try {
       const response = await coreClient.getInboxItem(id);
@@ -396,12 +379,7 @@
         return;
       }
       item = loaded;
-      loadedInboxRouteKey = routeKey;
       notifyMode = defaultNotifyMode(loaded);
-      if (browser) {
-        const cached = localStorage.getItem(draftStorageKey(workspace, id));
-        if (cached != null) responseDraft = cached;
-      }
       applyRestore(takeInboxRestore(loaded.id));
       void loadContext(loaded, routeKey);
       void loadAsk(loaded, routeKey);
@@ -599,7 +577,7 @@
   }
 
   /**
-   * Queues the response behind the undo toast and returns to the Inbox. The
+   * Queues the response behind the undo toast and keeps its state visible. The
    * committed request is this page's `inbox.respond` call, unchanged.
    */
   function submitResponseWithText(
@@ -608,6 +586,15 @@
   ) {
     const sending = context ?? responseContext();
     if (!sending.itemId) return;
+    if (
+      $inboxUnsentResponses.some(
+        (entry) =>
+          entry.itemId === sending.itemId &&
+          entry.state !== "attention" &&
+          entry.identity === sending.binding?.identity,
+      )
+    )
+      return;
     const text = String(responseText ?? "").trim();
     if (!text) {
       submitError = "Response text is required.";
@@ -681,13 +668,13 @@
     // When the reader has already moved on, this page is showing something
     // else and must be left exactly as they left it.
     if (sending.itemId !== String(item?.id ?? "")) return;
-    if (browser) localStorage.removeItem(draftStorageKey());
     responseDraft = "";
     chosen = "";
     responseAttachmentRefs = [];
     responseComposerArtifactsByRef = {};
     responseAttachmentError = "";
-    void goto(workspaceHref("/inbox"));
+    // Keep the saved response and its delivery state visible on this item.
+    // The reader can navigate away at any point while the outbox sends it.
   }
 
   function undoLastResponse() {
@@ -807,20 +794,6 @@
     }
   }
 
-  onMount(() => {
-    autosaveInterval = setInterval(() => {
-      if (
-        !browser ||
-        !item ||
-        isCompleted ||
-        loadedInboxRouteKey !== inboxRouteKey()
-      ) {
-        return;
-      }
-      localStorage.setItem(draftStorageKey(), String(responseDraft ?? ""));
-    }, 2000);
-  });
-
   $effect(() => {
     const workspace = workspaceSlug;
     const id = inboxItemID;
@@ -828,21 +801,11 @@
   });
 
   onDestroy(() => {
-    if (autosaveInterval != null) clearInterval(autosaveInterval);
     clearNotifyTargetSearchTimer();
   });
 </script>
 
-<svelte:window
-  onkeydown={handleKeydown}
-  onbeforeunload={(event) => {
-    if (hasPendingInboxResponse()) {
-      void flushInboxResponse();
-      event.preventDefault();
-      event.returnValue = "";
-    }
-  }}
-/>
+<svelte:window onkeydown={handleKeydown} />
 
 <div
   class="mx-auto max-w-3xl space-y-3 px-4 py-4 max-md:px-3 max-md:py-3"
@@ -1056,34 +1019,7 @@
           {/if}
         </div>
       {:else}
-        {#if responseError}
-          <div
-            class="mb-3 rounded-md border border-danger bg-danger-soft px-3 py-2"
-            role="alert"
-            data-inbox-response-error
-          >
-            <p class="text-meta text-fg">
-              <span class="font-medium text-danger-text"
-                >Your response was not sent.</span
-              >
-              {responseError}
-            </p>
-            <p class="mt-1.5 flex flex-wrap items-center gap-3">
-              <button
-                class="ui-btn-secondary"
-                type="button"
-                onclick={() => void retryInboxResponse(item.id)}
-                >Retry send</button
-              >
-              <button
-                class="text-micro text-fg-muted hover:text-fg"
-                type="button"
-                onclick={() => dismissInboxResponseFailure(item.id)}
-                >Answer it again instead</button
-              >
-            </p>
-          </div>
-        {/if}
+        <InboxSendStatus itemId={item.id} />
         <InboxRespondPanel
           bind:this={respondPanel}
           kind={itemKind(item)}

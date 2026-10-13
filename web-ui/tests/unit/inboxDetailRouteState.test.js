@@ -90,6 +90,7 @@ import {
   inboxResponseOverlay,
   resetInboxResponseQueue,
 } from "../../src/lib/inboxResponseQueue.js";
+import { listLocalWork } from "../../src/lib/localWorkStore.js";
 import { authenticatedAgent } from "../../src/lib/authSession.js";
 import {
   currentOrganizationSlug,
@@ -137,7 +138,17 @@ afterEach(() => {
   pageStore.reset();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await listLocalWork("", "inbox-send");
+  resetInboxResponseQueue();
+  currentOrganizationSlug.set("local");
+  currentWorkspaceSlug.set("local");
+  authenticatedAgent.set({ agent_id: "human-test", actor_id: "actor-test" });
+  localStorage.clear();
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: { request: async (_name, callback) => callback() },
+  });
   pageStore.reset();
 });
 

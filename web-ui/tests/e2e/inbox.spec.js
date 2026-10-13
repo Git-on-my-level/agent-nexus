@@ -370,11 +370,18 @@ test("inbox triage lists actionable rows and responding removes an item", async 
 
   await page.getByLabel("Your response").fill("Approved.");
   await page.getByRole("button", { name: "Send response" }).click();
-  // Back in the Inbox behind an undo toast; nothing is sent yet.
-  await expect(page).toHaveURL(/\/inbox$/);
+  // The item keeps its saved response visible while waiting to send.
+  await expect(page).toHaveURL(/\/inbox\/inbox-001$/);
+  await expect(
+    page.locator('[data-inbox-send-state="pending"]').first(),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "← Back to inbox" }).click();
+  await expect(page).toHaveURL(/\/inbox(?:\?|$)/);
   await expect(page.locator('[data-inbox-toast="pending"]')).toBeVisible();
   expect(respondCount).toBe(0);
-  await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
+  await expect(page.getByTestId("inbox-row-inbox-001")).toContainText(
+    "Pending",
+  );
   // The window closes and the response is committed once.
   await expect.poll(() => respondCount, { timeout: 15_000 }).toBe(1);
   expect(responseBodies[0]).toMatchObject({

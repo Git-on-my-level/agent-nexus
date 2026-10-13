@@ -1,13 +1,25 @@
 import { get, writable } from "svelte/store";
 import { isInboxResponseOutcome } from "$lib/askDelivery.js";
 import { captureInboxResponseSender } from "$lib/coreClient";
-import { errorMessage } from "$lib/pm/presentation.js";
+import { mutationFailure } from "$lib/mutationStatus.js";
+import {
+  listLocalWork,
+  loadLocalWork,
+  loadLocalWorkRecord,
+  localWorkPrincipal,
+  localWorkEpoch,
+  clearPrincipalLocalWork,
+  onLocalWorkChanged,
+  saveLocalWork,
+} from "$lib/localWorkStore.js";
+import { canUseLocalWorkScope } from "$lib/localWorkScope.js";
 import { authenticatedAgent } from "$lib/authSession.js";
 import { selectedActorId } from "$lib/actorSession.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
 import {
   currentOrganizationSlug,
   currentWorkspaceSlug,
+  devActorMode,
 } from "$lib/workspaceContext.js";
 
 /**
@@ -66,6 +78,229 @@ export const inboxResponseFailures = writable(
   /** @type {Record<string, { error: string, outcome: string, response_text: string, at: string }>} */ ({}),
 );
 
+/** Persisted sends for the current workspace/principal, including attention. */
+export const inboxUnsentResponses = writable([]);
+const inFlight = new Set();
+const revokedPrincipals = new Set();
+let recoveryTimer;
+let recovering = false;
+let recoveryRequested = false;
+
+function persistedEntry(entry, state = "pending", failure = null) {
+  return {
+    itemId: entry.itemId,
+    item: entry.item,
+    identity: entry.identity,
+    request: entry.request,
+    message: entry.message,
+    restore: entry.restore,
+    deadline: entry.deadline,
+    attempts: entry.attempts || 0,
+    nextAt: entry.nextAt || entry.deadline,
+    state,
+    failure,
+  };
+}
+
+function persistResponse(entry, state = "pending", failure = null) {
+  return saveLocalWork(
+    entry.identity,
+    "inbox-send",
+    entry.request.idempotency_key,
+    persistedEntry(entry, state, failure),
+    { epoch: entry.localEpoch },
+  );
+}
+
+function removePersistedResponse(entry, reason = "confirmed") {
+  return saveLocalWork(
+    entry.identity,
+    "inbox-send",
+    entry.request.idempotency_key,
+    null,
+    { epoch: entry.localEpoch, deletionReason: reason },
+  );
+}
+
+/** Only a confirmed response leaves the outbox. Undo returns it to a draft. */
+async function durableSend(entry) {
+  await entry.saved;
+  if (navigator.onLine === false) throw new Error("The device is offline.");
+  if (!globalThis.navigator?.locks) {
+    const error = new Error(
+      "Web Locks are unavailable; cross-tab sending is paused.",
+    );
+    error.status = 400;
+    error.publicMessage =
+      "Sending is paused in this browser. Your text is saved here. Copy it before sending from another browser.";
+    throw error;
+  }
+  return navigator.locks.request(
+    `anx:inbox-send:${entry.identity}`,
+    async () => {
+      if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
+        throw new Error("This identity has signed out.");
+      }
+      const record = await loadLocalWorkRecord(
+        entry.identity,
+        "inbox-send",
+        entry.request.idempotency_key,
+      );
+      if (record?.deleted && record.deletionReason === "confirmed") return {};
+      const stored = record && !record.deleted ? record.value : null;
+      if (record?.deletionReason === "undo" || stored?.state === "superseded") {
+        const error = new Error("This response was returned to a draft.");
+        error.cancelled = true;
+        throw error;
+      }
+      if (!stored)
+        throw new Error(
+          "The saved request could not be read. Keep the original response for retry.",
+        );
+      if (
+        stored.state === "retrying" &&
+        stored.nextAt > Date.now() &&
+        !entry.manualRetry
+      ) {
+        const error = new Error("Another tab scheduled the next retry.");
+        error.deferred = true;
+        throw error;
+      }
+      // An old timer cannot bypass another tab's definitive failure/backoff.
+      if (stored.state === "attention" && !entry.manualRetry) {
+        const error = new Error(
+          stored.failure?.detail || "Review this response before retrying.",
+        );
+        error.status = stored.failure?.status || 400;
+        throw error;
+      }
+      entry.attempts = (stored.attempts || 0) + 1;
+      await persistResponse(entry, "sending");
+      const result = await entry.send(entry.itemId, entry.request);
+      await removePersistedResponse(entry);
+      // Do not clear a newer draft written while this response was sending.
+      for (const field of ["reply", "context"]) {
+        const target = `inbox:${entry.itemId}:${field}`;
+        const draft = await loadLocalWork(entry.identity, "draft", target);
+        if (draft?.trim() === entry.request.response_text?.trim()) {
+          await saveLocalWork(entry.identity, "draft", target, null, {
+            epoch: entry.localEpoch,
+          });
+        }
+      }
+      return result;
+    },
+  );
+}
+
+function scheduleRecovery(delay = 0) {
+  if (typeof window === "undefined") return;
+  clearTimeout(recoveryTimer);
+  recoveryTimer = setTimeout(() => void recoverInboxResponses(), delay);
+}
+
+/** Rebuild failed/pending sends after navigation, reload, reconnect or focus. */
+export async function recoverInboxResponses() {
+  if (recovering) {
+    recoveryRequested = true;
+    return;
+  }
+  if (
+    !canUseLocalWorkScope(scopeIdentity) ||
+    revokedPrincipals.has(localWorkPrincipal(scopeIdentity))
+  )
+    return;
+  recovering = true;
+  const identity = scopeIdentity;
+  const scope = responseScope();
+  try {
+    const records = await listLocalWork(identity, "inbox-send");
+    if (scope !== responseScope()) return;
+    const visible = new Map(
+      records
+        .filter(({ value }) => value.state !== "superseded")
+        .map(({ value }) => [value.request.idempotency_key, value]),
+    );
+    for (const entry of failedByItem.values()) {
+      if (entry.volatile) visible.set(entry.request.idempotency_key, entry);
+    }
+    inboxUnsentResponses.set([...visible.values()]);
+    const liveKeys = new Set(
+      records.map(({ value }) => value.request?.idempotency_key),
+    );
+    for (const [itemId, entry] of failedByItem) {
+      if (!entry.volatile && !liveKeys.has(entry.request.idempotency_key))
+        forgetFailure(itemId);
+    }
+    let next = Infinity;
+    for (const { value } of records) {
+      if (value.state === "superseded") continue;
+      const key = value.request.idempotency_key;
+      const held = failedByItem.get(value.itemId);
+      // A failed status write must not expose an older pending record as due,
+      // create duplicate rows, or retry in a tight loop while storage is full.
+      if (held?.volatile && held.request.idempotency_key === key) continue;
+      if (inFlight.has(key) || pending?.request.idempotency_key === key)
+        continue;
+      const entry = {
+        ...value,
+        id: ++sequence,
+        scope,
+        send: captureInboxResponseSender(),
+        timer: null,
+        saved: Promise.resolve(),
+        localEpoch: localWorkEpoch(identity),
+      };
+      const failure = value.failure || {
+        error: "Waiting to send. Your response is kept on this device.",
+        state: "pending",
+        response_text: value.request.response_text,
+        outcome: value.request.outcome,
+      };
+      failedByItem.set(entry.itemId, entry);
+      setFailure(entry.itemId, failure);
+      if (value.state === "attention") continue;
+      const due = value.nextAt || value.deadline || 0;
+      if (due > Date.now()) {
+        next = Math.min(next, due - Date.now());
+        continue;
+      }
+      if (navigator.onLine === false) continue;
+      // A row's request never occupies the one Undo slot during recovery.
+      await commit(entry, true);
+    }
+    if (Number.isFinite(next)) scheduleRecovery(next);
+  } finally {
+    recovering = false;
+    if (recoveryRequested) {
+      recoveryRequested = false;
+      scheduleRecovery();
+    }
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => scheduleRecovery());
+  window.addEventListener("focus", () => scheduleRecovery());
+  onLocalWorkChanged(() => scheduleRecovery());
+  window.addEventListener("anx:local-work-purged", (event) => {
+    revokedPrincipals.add(event.detail?.principal);
+    for (const identity of suspendedByIdentity.keys()) {
+      if (localWorkPrincipal(identity) === event.detail?.principal)
+        suspendedByIdentity.delete(identity);
+    }
+    if (event.detail?.principal !== localWorkPrincipal(scopeIdentity)) return;
+    if (pending) clearTimeout(pending.timer);
+    pending = null;
+    suspendedByIdentity.clear();
+    failedByItem.clear();
+    inboxResponseFailures.set({});
+    inboxResponseOverlay.set({});
+    inboxUnsentResponses.set([]);
+    showToast(null);
+  });
+}
+
 let sequence = 0;
 /** @type {null | { id: number, itemId: string, request: object, message: string, restore: any, timer: any, deadline: number }} */
 let pending = null;
@@ -89,6 +324,7 @@ let toastTimer = null;
 const committedListeners = new Set();
 let scopeGeneration = 0;
 let scopeIdentity = "";
+let scopeUsable = false;
 const responseScope = () => `${scopeIdentity}:${scopeGeneration}`;
 // Failed replies belong to the submitting reader, even when another workspace
 // is on screen. Keep their retry payloads private until that identity returns.
@@ -153,6 +389,7 @@ export function captureInboxResponseBinding() {
     send: captureInboxResponseSender(),
     scope: responseScope(),
     identity: scopeIdentity,
+    localEpoch: localWorkEpoch(scopeIdentity),
   };
 }
 
@@ -180,10 +417,15 @@ export function queueInboxResponse({
   if (!isInboxResponseOutcome(request?.outcome)) {
     throw new Error("queueInboxResponse requires a valid outcome");
   }
+  const bound = binding ?? captureInboxResponseBinding();
+  if (
+    bound.localEpoch !== undefined &&
+    bound.localEpoch !== localWorkEpoch(bound.identity)
+  )
+    return 0;
   if (pending) void commit(pending);
   // Only this item's failure: answering B must not disarm Retry on A.
   forgetFailure(id);
-  const bound = binding ?? captureInboxResponseBinding();
   const entry = {
     id: ++sequence,
     itemId: id,
@@ -191,12 +433,43 @@ export function queueInboxResponse({
     scope: bound.scope,
     identity: bound.identity,
     send: bound.send,
-    request: { ...request, idempotency_key: crypto.randomUUID() },
+    request: JSON.parse(
+      JSON.stringify({ ...request, idempotency_key: crypto.randomUUID() }),
+    ),
     message: String(message ?? "Response sent"),
     restore: restore ?? null,
     deadline: Date.now() + UNDO_WINDOW_MS,
     timer: null,
+    localEpoch: bound.localEpoch ?? localWorkEpoch(bound.identity),
   };
+  // Write synchronously to the fallback journal now, not after Undo closes.
+  entry.saved = persistResponse(entry);
+  if (entry.identity === scopeIdentity)
+    inboxUnsentResponses.update((records) => [
+      ...records,
+      persistedEntry(entry),
+    ]);
+  entry.saved = entry.saved.then(async () => {
+    // A deliberate new answer replaces attention entries, keeping their text
+    // as recovery history. Uncertain sends still retry their original key.
+    const previous = await listLocalWork(entry.identity, "inbox-send");
+    for (const { value } of previous) {
+      if (
+        value.itemId === entry.itemId &&
+        value.state === "attention" &&
+        value.request.idempotency_key !== entry.request.idempotency_key
+      ) {
+        await saveLocalWork(
+          entry.identity,
+          "inbox-send",
+          value.request.idempotency_key,
+          { ...value, state: "superseded" },
+        );
+      }
+    }
+  });
+  void entry.saved.catch(() => {});
+  scheduleRecovery();
   /*
    * The reader has already left the workspace this answer belongs to. A
    * response does not outlive a workspace switch — that is what the switch
@@ -238,6 +511,21 @@ export function undoInboxResponse() {
   const entry = pending;
   pending = null;
   clearTimeout(entry.timer);
+  const text = String(
+    entry.restore?.draft ||
+      entry.restore?.reply ||
+      entry.request.response_text ||
+      "",
+  );
+  // Returning to a draft is explicit Undo, not a discarded response.
+  void saveLocalWork(
+    entry.identity,
+    "draft",
+    `inbox:${entry.itemId}:reply`,
+    text,
+  )
+    .then(() => removePersistedResponse(entry, "undo"))
+    .catch(() => {});
   setOverlay(entry.itemId, null);
   forgetFailure(entry.itemId);
   showToast(null);
@@ -268,7 +556,13 @@ export function retryInboxResponse(itemId = "") {
   const want = String(itemId ?? "").trim();
   const failed = want ? failedByItem.get(want) : newestFailure();
   if (!failed) return Promise.resolve();
-  const entry = { ...failed, deadline: Date.now(), timer: null };
+  const entry = {
+    ...failed,
+    deadline: Date.now(),
+    timer: null,
+    manualRetry: true,
+  };
+  entry.saved = persistResponse(entry);
   forgetFailure(entry.itemId);
   /*
    * A response still inside its undo window is committed first. Only one can
@@ -278,6 +572,13 @@ export function retryInboxResponse(itemId = "") {
    */
   if (pending) void commit(pending);
   pending = entry;
+  showToast({
+    id: entry.id,
+    itemId: entry.itemId,
+    message: entry.message,
+    state: "sending",
+    deadline: entry.deadline,
+  });
   setOverlay(entry.itemId, {
     item: entry.item,
     scope: entry.scope,
@@ -294,10 +595,54 @@ export function dismissInboxResponseFailure(itemId = "") {
   const want = String(itemId ?? "").trim();
   const target = want || newestFailure()?.itemId || "";
   if (!target) return;
+  const entry = failedByItem.get(target);
+  if (entry) {
+    // Editing never silently loses the original text or auto-resends it.
+    entry.nextAt = 0;
+    inboxUnsentResponses.update((records) =>
+      records.map((record) =>
+        record.request.idempotency_key === entry.request.idempotency_key
+          ? { ...record, state: "attention" }
+          : record,
+      ),
+    );
+    void persistResponse(entry, "attention", {
+      state: "attention",
+      error: "Review your saved response before sending.",
+      response_text: entry.request.response_text,
+    });
+    void saveLocalWork(
+      entry.identity,
+      "draft",
+      `inbox:${target}:reply`,
+      entry.request.response_text,
+    );
+    stashInboxRestore(target, {
+      ...entry.restore,
+      draft: entry.request.response_text,
+      reply: entry.request.response_text,
+      chosen: "",
+    });
+  }
   forgetFailure(target);
   // The toast only ever shows one failure; retire it when that is this one.
   inboxResponseToast.update((toast) =>
     toast?.state === "failed" && toast.itemId === target ? null : toast,
+  );
+}
+
+export function editInboxResponse(itemId) {
+  const entry = failedByItem.get(String(itemId));
+  if (!entry) return;
+  dismissInboxResponseFailure(itemId);
+  window.dispatchEvent(
+    new CustomEvent("anx:edit-draft", {
+      detail: {
+        scope: entry.identity,
+        target: `inbox:${itemId}:reply`,
+        text: entry.request.response_text,
+      },
+    }),
   );
 }
 
@@ -313,15 +658,24 @@ export function onInboxResponseCommitted(listener) {
   return () => committedListeners.delete(listener);
 }
 
-async function commit(entry) {
-  if (pending !== entry) return;
-  pending = null;
+async function commit(entry, recovered = false) {
+  if (entry.localEpoch !== localWorkEpoch(entry.identity)) return;
+  if (!recovered && pending !== entry) return;
+  if (inFlight.has(entry.request.idempotency_key)) return;
+  inFlight.add(entry.request.idempotency_key);
+  if (pending === entry) pending = null;
   clearTimeout(entry.timer);
   inboxResponseToast.update((toast) =>
     toast?.id === entry.id ? { ...toast, state: "sending" } : toast,
   );
   try {
-    const result = await entry.send(entry.itemId, entry.request);
+    const result = await durableSend(entry);
+    inboxUnsentResponses.update((records) =>
+      records.filter(
+        (record) =>
+          record.request.idempotency_key !== entry.request.idempotency_key,
+      ),
+    );
     const respondedAt = new Date().toISOString();
     // Confirmation belongs to the captured reader, even after navigation.
     // The active overlay is cleared on scope changes, so persist directly.
@@ -369,17 +723,38 @@ async function commit(entry) {
       }
     }
   } catch (err) {
+    if (entry.localEpoch !== localWorkEpoch(entry.identity)) return;
+    if (err?.deferred) return;
+    if (err?.cancelled) {
+      setOverlay(entry.itemId, null);
+      forgetFailure(entry.itemId);
+      return;
+    }
     /*
      * Not answered. The overlay goes — an unanswered item must not sit under
      * Handled — and the failure takes its place, so the row comes back
      * carrying the reason and a Retry rather than silently reappearing.
      */
+    const classification = mutationFailure(err);
+    entry.nextAt =
+      Date.now() +
+      Math.min(60_000, 2_000 * 2 ** Math.min(entry.attempts || 0, 5));
     const failure = {
-      error: errorMessage(err),
+      ...classification,
+      error: classification.message,
+      nextAt: classification.state === "retrying" ? entry.nextAt : null,
       outcome: String(entry.request?.outcome ?? ""),
       response_text: String(entry.request?.response_text ?? ""),
       at: new Date().toISOString(),
     };
+    // A persistence failure leaves the original in-memory entry intact.
+    let volatile = false;
+    try {
+      await persistResponse(entry, classification.state, failure);
+    } catch {
+      volatile = true;
+      /* Copy remains available in the item. */
+    }
     const failed = {
       id: entry.id,
       itemId: entry.itemId,
@@ -390,6 +765,13 @@ async function commit(entry) {
       request: entry.request,
       message: entry.message,
       restore: entry.restore,
+      attempts: entry.attempts,
+      nextAt: entry.nextAt,
+      saved: Promise.resolve(),
+      localEpoch: entry.localEpoch,
+      volatile,
+      state: classification.state,
+      failure,
     };
     if (entry.identity !== scopeIdentity) {
       const suspended = suspendedByIdentity.get(entry.identity) || {
@@ -402,6 +784,13 @@ async function commit(entry) {
       return;
     }
     failed.scope = responseScope();
+    inboxUnsentResponses.update((records) => [
+      ...records.filter(
+        (record) =>
+          record.request.idempotency_key !== entry.request.idempotency_key,
+      ),
+      persistedEntry(entry, classification.state, failure),
+    ]);
     setOverlay(entry.itemId, null);
     setFailure(entry.itemId, failure);
     failedByItem.set(entry.itemId, failed);
@@ -411,8 +800,11 @@ async function commit(entry) {
       message: entry.message,
       state: "failed",
       deadline: 0,
-      error: errorMessage(err),
+      error: failure.error,
     });
+  } finally {
+    inFlight.delete(entry.request.idempotency_key);
+    scheduleRecovery();
   }
 }
 
@@ -457,9 +849,20 @@ export function applyResponseOverlay(
      * to stay where the reader left it with the reason attached.
      */
     if (failure) {
-      return { ...item, response_error: failure.error, response_failed: true };
+      return {
+        ...item,
+        response_error: failure.error,
+        response_failed: true,
+        response_delivery_state: failure.state,
+      };
     }
     if (!entry || (entry.until && entry.until <= now)) return item;
+    if (entry.status === "pending")
+      return {
+        ...item,
+        response_delivery_state: "pending",
+        response_pending: true,
+      };
     if (String(item?.status ?? "") === "completed") return item;
     return {
       ...item,
@@ -511,6 +914,8 @@ export function resetInboxResponseQueue() {
   inboxResponseToast.set(null);
   inboxResponseOverlay.set({});
   inboxResponseFailures.set({});
+  clearTimeout(recoveryTimer);
+  inboxUnsentResponses.set([]);
 }
 
 // Invalidate visible snapshots with their workspace/reader. A generation rejects late
@@ -524,22 +929,37 @@ function invalidateResponseScope() {
     agent?.agent_id || "",
     agent?.actor_id || get(selectedActorId) || "",
   ]);
-  if (identity === scopeIdentity) return;
+  const usable = canUseLocalWorkScope(identity);
+  if (identity === scopeIdentity && usable === scopeUsable) return;
+  scopeUsable = usable;
   // Store subscriptions run after routing stores change. The captured sender
   // still targets the submitting workspace and reader, including auth retries.
   const previous = scopeIdentity ? JSON.parse(scopeIdentity) : [];
   const next = JSON.parse(identity);
   const workspaceChanged = previous[0] !== next[0] || previous[1] !== next[1];
+  const principalChanged =
+    !workspaceChanged &&
+    !(previous[2] && !next[2]) &&
+    canUseLocalWorkScope(identity) &&
+    localWorkPrincipal(scopeIdentity) &&
+    localWorkPrincipal(identity) &&
+    localWorkPrincipal(scopeIdentity) !== localWorkPrincipal(identity);
+  if (usable && localWorkPrincipal(identity))
+    revokedPrincipals.delete(localWorkPrincipal(identity));
+  if (principalChanged) {
+    void clearPrincipalLocalWork(scopeIdentity);
+    suspendedByIdentity.delete(scopeIdentity);
+  }
   let held = null;
   if (pending) {
     if (workspaceChanged) void commit(pending);
     else {
-      held = pending;
-      clearTimeout(held.timer);
+      if (!principalChanged) held = pending;
+      clearTimeout(pending.timer);
       pending = null;
     }
   }
-  if (held || failedByItem.size) {
+  if (!principalChanged && (held || failedByItem.size)) {
     suspendedByIdentity.set(scopeIdentity, {
       pending: held,
       failures: new Map(failedByItem),
@@ -548,11 +968,14 @@ function invalidateResponseScope() {
   }
   scopeIdentity = identity;
   scopeGeneration += 1;
+  inboxUnsentResponses.set([]);
+  scheduleRecovery();
   failedByItem.clear();
   restoreSlots.clear();
   showToast(null);
   inboxResponseOverlay.set({});
   inboxResponseFailures.set({});
+  if (!usable) return;
   const suspended = suspendedByIdentity.get(identity);
   if (!suspended) return;
   suspendedByIdentity.delete(identity);
@@ -589,6 +1012,7 @@ for (const store of [
   selectedActorId,
   currentOrganizationSlug,
   currentWorkspaceSlug,
+  devActorMode,
 ]) {
   store.subscribe(invalidateResponseScope);
 }
