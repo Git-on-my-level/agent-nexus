@@ -153,8 +153,8 @@ func (a *App) resolveAskDelivery(cfg config.Resolved, in askDeliveryInput) (askD
 	return decision, nil
 }
 
-// askDeliveryFollowUp is the exact next command the asking agent (or a human
-// auditing the ask) should know about, per the chosen mode.
+// askDeliveryFollowUp is the exact runnable command the asking agent (or a
+// human auditing the ask) should run next, per the chosen mode.
 func askDeliveryFollowUp(mode, askRef string) string {
 	switch mode {
 	case askDeliveryAwait:
@@ -162,9 +162,11 @@ func askDeliveryFollowUp(mode, askRef string) string {
 	case askDeliveryBatch:
 		return "anx await --answers"
 	case askDeliveryResume:
-		return "the registered resume command fires via anx bridge run; open asks appear in anx orient"
+		// The registered executor fires on its own; `anx orient` is the
+		// runnable check that shows the delivery state for open resume asks.
+		return "anx orient"
 	default:
-		return "no wake; answers remain visible via anx orient and anx inbox list --status answered"
+		return "anx inbox list --status answered"
 	}
 }
 

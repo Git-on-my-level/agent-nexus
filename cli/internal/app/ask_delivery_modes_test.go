@@ -202,6 +202,20 @@ func TestResolveAskDeliveryMatrix(t *testing.T) {
 	})
 }
 
+func TestAskDeliveryFollowUpsAreRunnable(t *testing.T) {
+	cases := map[string]string{
+		askDeliveryAwait:  "anx await event:ask-1",
+		askDeliveryBatch:  "anx await --answers",
+		askDeliveryResume: "anx orient",
+		askDeliveryNone:   "anx inbox list --status answered",
+	}
+	for mode, want := range cases {
+		if got := askDeliveryFollowUp(mode, "event:ask-1"); got != want {
+			t.Fatalf("mode %s follow-up %q, want runnable %q", mode, got, want)
+		}
+	}
+}
+
 func askServer(t *testing.T, eventRef string, captured *map[string]any) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -395,14 +409,23 @@ func TestBridgeUnitInstallWritesOnceThenReportsCurrent(t *testing.T) {
 	var wrote []string
 	var commands [][]string
 	originalMkdir, originalWrite, originalRead, originalRun := bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun
+	originalLstat, originalChmod, originalRename, originalStat := bridgeLstat, bridgeChmod, bridgeRename, bridgeStat
 	t.Cleanup(func() {
 		bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun = originalMkdir, originalWrite, originalRead, originalRun
+		bridgeLstat, bridgeChmod, bridgeRename, bridgeStat = originalLstat, originalChmod, originalRename, originalStat
 	})
 	bridgeMkdirAll = func(path string, perm os.FileMode) error { return nil }
 	bridgeReadFile = func(path string) ([]byte, error) { return nil, os.ErrNotExist }
+	bridgeLstat = func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	bridgeStat = func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	bridgeChmod = func(path string, perm os.FileMode) error { return nil }
 	bridgeWriteFile = func(path string, data []byte, perm os.FileMode) error {
 		wrote = append(wrote, string(data))
-		bridgeReadFile = func(string) ([]byte, error) { return data, nil }
+		return nil
+	}
+	bridgeRename = func(from, to string) error {
+		content := wrote[len(wrote)-1]
+		bridgeReadFile = func(string) ([]byte, error) { return []byte(content), nil }
 		return nil
 	}
 	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {

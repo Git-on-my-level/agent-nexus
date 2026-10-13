@@ -45,9 +45,9 @@ choices, instead of silently never firing.
 Every ask result prints:
 
 - the chosen `mode` and the `reason` it was chosen,
-- the exact follow-up: `anx await <ask-id>` for `await`, `anx await --answers`
-  for `batch`, the bridge/executor note for `resume`, and the read-it-later
-  paths for `none`.
+- the exact follow-up command: `anx await <ask-id>` for `await`,
+  `anx await --answers` for `batch`, `anx orient` (delivery state) for
+  `resume`, and `anx inbox list --status answered` for `none`.
 
 ## The bridge
 

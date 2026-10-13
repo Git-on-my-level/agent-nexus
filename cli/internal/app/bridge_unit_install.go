@@ -93,11 +93,28 @@ func (a *App) runBridgeUnitInstall(ctx context.Context, args []string, cfg confi
 	if err := bridgeMkdirAll(filepath.Dir(logPath), 0o700); err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_log_dir_failed", "failed to create bridge log directory", err)
 	}
+	if existing, lstatErr := bridgeLstat(plan.Path); lstatErr == nil && existing.Mode()&os.ModeSymlink != 0 {
+		return nil, errnorm.Usage("invalid_request", "refusing to replace the symlinked unit path "+plan.Path+"; remove the symlink first")
+	}
 	existing, readErr := bridgeReadFile(plan.Path)
 	alreadyCurrent := readErr == nil && string(existing) == plan.Content
 	if !alreadyCurrent {
-		if err := bridgeWriteFile(plan.Path, []byte(plan.Content), 0o644); err != nil {
+		// Write beside the target, force the final mode, then rename so a
+		// preexisting world-readable unit can never survive a reinstall.
+		tempPath := plan.Path + ".anx-install_tmp"
+		if err := bridgeWriteFile(tempPath, []byte(plan.Content), 0o644); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_unit_write_failed", "failed to write bridge unit", err)
+		}
+		if err := bridgeChmod(tempPath, 0o644); err != nil {
+			_ = os.Remove(tempPath)
+			return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_unit_mode_failed", "failed to set bridge unit mode", err)
+		}
+		if err := bridgeRename(tempPath, plan.Path); err != nil {
+			_ = os.Remove(tempPath)
+			return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_unit_rename_failed", "failed to install bridge unit", err)
+		}
+		if final, statErr := bridgeStat(plan.Path); statErr != nil || final.Mode().Perm() != 0o644 {
+			_ = bridgeChmod(plan.Path, 0o644)
 		}
 	}
 	view["already_current"] = alreadyCurrent
@@ -177,9 +194,35 @@ func bridgeExecutablePath() (string, error) {
 	return execPath, nil
 }
 
+// validateBridgeUnitValue rejects characters that break unit-file syntax:
+// quotes, backslashes and control characters cannot be escaped reliably in
+// both launchd XML and systemd assignments, and paths carrying them are
+// pathological.
+func validateBridgeUnitValue(kind, value string) error {
+	for _, r := range value {
+		switch {
+		case r == '"' || r == '\\' || r == '\n' || r == '\r':
+			return errnorm.Usage("invalid_request", fmt.Sprintf("bridge unit %s contains %q, which cannot be embedded safely; move the %s to a simple path", kind, string(r), kind))
+		case r < 0x20:
+			return errnorm.Usage("invalid_request", fmt.Sprintf("bridge unit %s contains a control character; move the %s to a simple path", kind, kind))
+		}
+	}
+	return nil
+}
+
 // answerBridgeUnitPlan renders the persistent `anx bridge run` unit for the
 // current platform and the command that loads it.
 func answerBridgeUnitPlan(home, agent, execPath, logPath string, env map[string]string) (bridgeUnitPlan, error) {
+	for kind, value := range map[string]string{"binary path": execPath, "log path": logPath, "agent name": agent} {
+		if err := validateBridgeUnitValue(kind, value); err != nil {
+			return bridgeUnitPlan{}, err
+		}
+	}
+	for key, value := range env {
+		if err := validateBridgeUnitValue("environment key "+key, value); err != nil {
+			return bridgeUnitPlan{}, err
+		}
+	}
 	slug := strings.ReplaceAll(strings.ToLower(agent), ".", "-")
 	switch runtime.GOOS {
 	case "darwin":
@@ -195,6 +238,12 @@ func answerBridgeUnitPlan(home, agent, execPath, logPath string, env map[string]
 			Env:       env,
 		}, nil
 	case "linux":
+		// StandardOutput/StandardError append: values are not word-split, but
+		// the unit parser ends the assignment at unquoted whitespace, so a
+		// spaced log path would truncate. Reject it instead of guessing.
+		if strings.ContainsAny(logPath, " \t") {
+			return bridgeUnitPlan{}, errnorm.Usage("invalid_request", "the bridge log path contains whitespace, which a systemd unit cannot carry; use a --config-dir without spaces")
+		}
 		unit := "anx-bridge-" + slug + ".service"
 		return bridgeUnitPlan{
 			Path:      filepath.Join(home, ".config", "systemd", "user", unit),
@@ -250,6 +299,13 @@ func systemdAnswerBridgeUnit(description, execPath, agent, logPath string, env m
 	for _, key := range sortedEnvKeys(env) {
 		envLines += "Environment=\"" + systemdSpecEscape(key) + "=" + systemdSpecEscape(env[key]) + "\"\n"
 	}
+	// The unit parser splits ExecStart on unquoted whitespace, so a binary
+	// path with spaces must be quoted; quotes, backslashes and control
+	// characters were rejected before rendering.
+	execArg := systemdSpecEscape(execPath)
+	if strings.ContainsAny(execPath, " \t") {
+		execArg = `"` + execArg + `"`
+	}
 	return `# Keep the ANX answer bridge running for one derived agent.
 [Unit]
 Description=` + systemdSpecEscape(description) + `
@@ -257,7 +313,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=` + systemdSpecEscape(execPath) + ` bridge run --as ` + systemdSpecEscape(agent) + `
+ExecStart=` + execArg + ` bridge run --as ` + systemdSpecEscape(agent) + `
 ` + envLines + `Restart=on-failure
 RestartSec=5
 StandardOutput=append:` + systemdSpecEscape(logPath) + `

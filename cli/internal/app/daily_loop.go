@@ -614,20 +614,34 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout 
 		if len(responseIDs) == 0 {
 			return nil, false, nil
 		}
-		result, err := a.runAgentInboxList(waitCtx, []string{"--status", "answered", "--unread"}, cfg)
+		// Sweep newest-first for the woken answers. The scan stops as soon as
+		// every notified answer is matched, or after maxOwnAsksLookupPages
+		// pages, so a wake behind newer activity is still found without
+		// looping over the whole ask history.
+		_, actorID, err := a.resolveOwnAsksActor(waitCtx, cfg)
 		if err != nil {
 			return nil, false, err
 		}
-		data := asMap(result.Data)
-		items := asSlice(data["items"])
-		batch := make([]any, 0, len(items))
-		for _, raw := range items {
-			item := asMap(raw)
-			answer := asMap(item["answer"])
-			answerID := strings.TrimSpace(anyString(answer["response_event_id"]))
-			if answerID != "" && responseIDs[answerID] {
-				batch = append(batch, item)
+		batch := make([]any, 0, len(responseIDs))
+		cursor := ""
+		for page := 0; page < maxOwnAsksLookupPages; page++ {
+			items, next, pageErr := a.fetchOwnAsksPageForActor(waitCtx, cfg, actorID, cursor, 200)
+			if pageErr != nil {
+				return nil, false, pageErr
 			}
+			for _, raw := range items {
+				item := asMap(raw)
+				answerID := strings.TrimSpace(anyString(asMap(item["answer"])["response_event_id"]))
+				if answerID == "" || !responseIDs[answerID] {
+					continue
+				}
+				batch = append(batch, item)
+				delete(responseIDs, answerID)
+			}
+			if len(responseIDs) == 0 || next == "" {
+				break
+			}
+			cursor = next
 		}
 		if len(batch) == 0 {
 			return nil, false, nil

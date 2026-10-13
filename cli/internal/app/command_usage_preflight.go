@@ -788,6 +788,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"full-id":   boolFlag,
 			"status":    valueFlag,
 			"unread":    boolFlag,
+			"limit":     valueFlag,
+			"cursor":    valueFlag,
 		},
 		"inbox respond": {
 			"from-file":     valueFlag,

@@ -9,6 +9,10 @@ var (
 	bridgeReadFile = os.ReadFile
 	bridgeOpenFile = os.OpenFile
 
+	bridgeLstat  = os.Lstat
+	bridgeChmod  = os.Chmod
+	bridgeRename = os.Rename
+
 	bridgeStartManagedProcess func(bridgeManagedConfig, string) (bridgeManagedRuntime, error)
 	bridgeStopManagedProcess  func(bridgeManagedRuntime, time.Duration, bool) (bridgeManagedRuntime, error)
 	bridgeProcessAlive        func(int) bool

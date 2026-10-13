@@ -346,18 +346,18 @@ func TestInboxListFiltersOpenAnsweredAllAndUnread(t *testing.T) {
 	}
 }
 
-func TestInboxListPaginatesBeforeFilteringOlderAnswers(t *testing.T) {
-	var pages int
+// One request reads exactly one bounded page; older answers behind newer
+// activity surface through the returned continuation cursor, never an
+// implicit client-side loop over the ask history.
+func TestInboxListStaysBoundedAndContinuesThroughCursor(t *testing.T) {
+	var pages []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/agents/agent-1":
 			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"}}`)
 		case "/agent-inbox/asks":
-			pages++
-			if r.URL.Query().Get("limit") != "200" {
-				t.Errorf("inbox page limit=%q, want 200", r.URL.Query().Get("limit"))
-			}
+			pages = append(pages, r.URL.Query().Get("cursor"))
 			if r.URL.Query().Get("cursor") == "" {
 				items := make([]map[string]any, 200)
 				for i := range items {
@@ -381,9 +381,26 @@ func TestInboxListPaginatesBeforeFilteringOlderAnswers(t *testing.T) {
 		t.Fatalf("inbox list exit=%d output=%s", exit, out.String())
 	}
 	result := asMap(dailyJSON(t, out)["result"])
-	items := asSlice(result["items"])
-	if pages != 2 || len(items) != 1 || anyString(asMap(items[0])["ask_id"]) != "event:old-ask" {
-		t.Fatalf("older answer behind >100 requests was lost: pages=%d result=%#v", pages, result)
+	if len(pages) != 1 {
+		t.Fatalf("inbox list must read exactly one page, read %d: %v", len(pages), pages)
+	}
+	if len(asSlice(result["items"])) != 0 || anyString(result["next_cursor"]) != "older-page" {
+		t.Fatalf("expected an empty bounded page plus continuation cursor: %#v", result)
+	}
+	next := asSlice(result["next"])
+	if len(next) != 9 || anyString(next[2]) != "list" || anyString(next[7]) != "--cursor" || anyString(next[8]) != "older-page" {
+		t.Fatalf("continuation command missing: %#v", next)
+	}
+
+	// Following the printed command reaches the older answer.
+	out.Reset()
+	if exit := a.Run([]string{"--json", "--as", "worker", "inbox", "list", "--status", "answered", "--limit", "50", "--cursor", "older-page"}); exit != 0 {
+		t.Fatalf("continuation exit=%d output=%s", exit, out.String())
+	}
+	continued := asMap(dailyJSON(t, out)["result"])
+	items := asSlice(continued["items"])
+	if len(items) != 1 || anyString(asMap(items[0])["ask_id"]) != "event:old-ask" {
+		t.Fatalf("older answer behind newer activity was lost: %#v", continued)
 	}
 }
 
