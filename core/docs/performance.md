@@ -578,10 +578,11 @@ All workers finish inside the test. The guard fails on the pre-repair handled
 reader's repeated ref lookups. Timing is local CPU/storage evidence, not a hosted
 network SLA. Budgets live in `internal/server/testdata/handled_inbox_budget.json`.
 On one Apple Silicon run with `GOMAXPROCS=2`, the same roughly 363 MB fixture
-measured 2,204 prepares and 3.11–3.27 seconds per GET on the pre-repair main,
-versus 15 prepares and 20.5–28.7 ms after repair. Both baseline polling workers
+measured 2,206 application read preparations and 4.43–4.83 seconds per GET
+on the pre-repair main, versus 17 preparations and 6.2–18.4 ms after repair.
+Authentication and actor reads use the same instrumented pool. Both baseline polling workers
 hit their ten-second client timeout; the repaired workers completed. Answer POST
-latency under polling fell from 675 ms to 162 ms. These samples include the
+latency under polling fell from 949 ms to 210 ms. These samples include the
 existing production immediate writer configuration in both revisions.
 
 Compact shadow installation performs DDL only, but formerly received the same

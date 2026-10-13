@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/testsql"
@@ -100,7 +102,7 @@ func TestPerformanceHandledInboxRefsAndConcurrentAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewHandler(contract.Version, WithPrimitiveStore(store), WithSchemaContract(contract), WithAuthStore(env.authStore), WithActorRegistry(env.registry)))
+	server := httptest.NewServer(NewHandler(contract.Version, WithPrimitiveStore(store), WithSchemaContract(contract), WithAuthStore(auth.NewStore(db)), WithActorRegistry(actors.NewStore(db))))
 	defer server.Close()
 	client := &http.Client{Timeout: 10 * time.Second}
 	do := func(method, path string, body []byte) (int, []byte, error) {
