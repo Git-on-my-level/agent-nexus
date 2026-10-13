@@ -136,6 +136,176 @@ describe("liveWorkspaceEvents", () => {
     stop();
   });
 
+  it("flushes a sustained stream on its max wait instead of waiting for quiet", async () => {
+    // Timers only move when this test moves them, so the gaps below are the
+    // module's own scheduling, not the runner's wall clock. Reconfiguring the
+    // suite's clock needs the real one back first.
+    vi.useRealTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    const fake = fakeClient({ newest: "" });
+    const flushes = [];
+    const stop = liveWorkspaceEvents({
+      client: fake.client,
+      debounceMs: 400,
+      maxWaitMs: 1500,
+      onChange: (batch) => flushes.push({ at: Date.now(), size: batch.length }),
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
+    // An event every 25 ms for 5 s: the debounce timer never gets its silence.
+    const streamStart = Date.now();
+    for (let i = 0; i < 200; i++) {
+      fake.emit({
+        id: `evt-${i}`,
+        type: "card_moved",
+        ts: new Date().toISOString(),
+      });
+      await vi.advanceTimersByTimeAsync(25);
+    }
+    const duringStream = flushes.length;
+    // The tail of the stream lands on the ordinary debounce once it stops.
+    await vi.advanceTimersByTimeAsync(500);
+    // Nothing waited for the stream to stop: 5 s of events arrived in flushes
+    // whose spacing never exceeds the max wait.
+    expect(duringStream).toBeGreaterThanOrEqual(3);
+    let previous = streamStart;
+    for (const { at } of flushes) {
+      expect(at - previous).toBeLessThanOrEqual(1500);
+      previous = at;
+    }
+    expect(flushes.reduce((total, { size }) => total + size, 0)).toBe(200);
+    stop();
+  });
+
+  it("still debounces a burst up to its max wait", async () => {
+    const fake = fakeClient({ newest: "" });
+    const onChange = vi.fn();
+    const stop = liveWorkspaceEvents({
+      client: fake.client,
+      debounceMs: 400,
+      maxWaitMs: 1500,
+      onChange,
+    });
+    await flush();
+    await flush();
+    for (let i = 0; i < 3; i++) {
+      fake.emit({
+        id: `burst-${i}`,
+        type: "card_moved",
+        ts: new Date().toISOString(),
+      });
+      await vi.advanceTimersByTimeAsync(50);
+    }
+    // Still inside the debounce window, and well inside the max wait.
+    expect(onChange).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(400);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toHaveLength(3);
+    stop();
+  });
+
+  it("keeps one refresh in flight and flushes what arrived behind it", async () => {
+    const fake = fakeClient({ newest: "" });
+    let release = null;
+    const batches = [];
+    let inFlight = 0;
+    let overlapped = false;
+    const stop = liveWorkspaceEvents({
+      client: fake.client,
+      debounceMs: 100,
+      maxWaitMs: 300,
+      onChange: (batch) => {
+        if (inFlight > 0) overlapped = true;
+        inFlight++;
+        batches.push(batch.map((event) => event.id));
+        return new Promise((resolve) => {
+          release = () => {
+            inFlight--;
+            resolve();
+          };
+        });
+      },
+    });
+    await flush();
+    await flush();
+    fake.emit({ id: "a", type: "card_moved", ts: new Date().toISOString() });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(batches).toEqual([["a"]]);
+    // The refresh is still running: later events queue instead of starting
+    // a second one, however long the stream stays busy.
+    for (const id of ["b", "c", "d"]) {
+      fake.emit({ id, type: "card_moved", ts: new Date().toISOString() });
+      await vi.advanceTimersByTimeAsync(200);
+    }
+    expect(batches).toHaveLength(1);
+    expect(overlapped).toBe(false);
+    const finishFirst = release;
+    finishFirst();
+    await vi.advanceTimersByTimeAsync(10);
+    // Past its max wait while it waited, so the queue flushes at once.
+    expect(batches).toEqual([["a"], ["b", "c", "d"]]);
+    release();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(batches).toHaveLength(2);
+    expect(overlapped).toBe(false);
+    stop();
+  });
+
+  it("bounds the queue behind a refresh that never settles", async () => {
+    const fake = fakeClient({ newest: "" });
+    const batches = [];
+    const stop = liveWorkspaceEvents({
+      client: fake.client,
+      debounceMs: 10,
+      maxWaitMs: 20,
+      onChange: (batch) => {
+        batches.push(batch);
+        return new Promise(() => {});
+      },
+    });
+    await flush();
+    await flush();
+    fake.emit({
+      id: "first",
+      type: "card_moved",
+      ts: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    expect(batches).toHaveLength(1);
+    for (let i = 0; i < 600; i++) {
+      fake.emit({
+        id: `queued-${i}`,
+        type: "card_moved",
+        ts: new Date().toISOString(),
+      });
+    }
+    await vi.advanceTimersByTimeAsync(100);
+    // Only the newest 500 are held; the oldest are dropped rather than grown
+    // without limit, and they describe state the next re-read sees anyway.
+    stop();
+    const stopped = liveWorkspaceEvents({
+      client: fake.client,
+      debounceMs: 10,
+      maxWaitMs: 20,
+      onChange: (batch) => batches.push(batch),
+    });
+    await flush();
+    await flush();
+    for (let i = 0; i < 600; i++) {
+      fake.emit({
+        id: `probe-${i}`,
+        type: "card_moved",
+        ts: new Date().toISOString(),
+      });
+    }
+    await vi.advanceTimersByTimeAsync(30);
+    const probed = batches[batches.length - 1];
+    expect(probed).toHaveLength(500);
+    expect(probed[0].id).toBe("probe-100");
+    expect(probed[499].id).toBe("probe-599");
+    stopped();
+  });
+
   it("ignores replayed history and events the filter rejects", async () => {
     const fake = fakeClient({ newest: "" });
     const onChange = vi.fn();

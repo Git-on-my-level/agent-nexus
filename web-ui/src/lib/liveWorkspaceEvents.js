@@ -13,7 +13,9 @@
  * unknown. It resumes with `last_event_id` after a drop (core replays what
  * landed during the gap), backs off while core is unreachable, and stops for
  * good on an auth failure (the page's own reads surface that). Each
- * subscriber coalesces bursts into one callback.
+ * subscriber coalesces bursts into one callback, and a sustained stream
+ * still flushes every `maxWaitMs` (1.5 s by default) so a busy workspace
+ * never looks stale: silence is never required for an update to land.
  *
  * `liveAgentChanges` is the same pattern over `GET /stream/agents`, core's
  * ephemeral roster invalidation (`agents_changed`, sent once on connect and
@@ -39,6 +41,7 @@
  *   filter?: (event: object) => boolean,
  *   onChange: (events: object[]) => void | Promise<void>,
  *   debounceMs?: number,
+ *   maxWaitMs?: number,
  *   reconnectMs?: number,
  * }} options
  * @returns {() => void} stop
@@ -50,6 +53,7 @@ export function liveWorkspaceEvents({
   filter = () => true,
   onChange,
   debounceMs = 400,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
   reconnectMs = 3000,
 }) {
   if (
@@ -67,6 +71,7 @@ export function liveWorkspaceEvents({
     filter,
     onChange,
     debounceMs,
+    maxWaitMs,
     reconnectMs,
   });
 }
@@ -79,6 +84,7 @@ export function liveWorkspaceEvents({
  *   client: { streamAgentChanges?: (options: object) => Promise<void> },
  *   onChange: (changes: object[]) => void | Promise<void>,
  *   debounceMs?: number,
+ *   maxWaitMs?: number,
  *   reconnectMs?: number,
  * }} options
  * @returns {() => void} stop
@@ -87,6 +93,7 @@ export function liveAgentChanges({
   client,
   onChange,
   debounceMs = 250,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
   reconnectMs = 3000,
 }) {
   if (
@@ -103,6 +110,7 @@ export function liveAgentChanges({
     filter: () => true,
     onChange,
     debounceMs,
+    maxWaitMs,
     reconnectMs,
   });
 }
@@ -112,6 +120,7 @@ export function liveInboxChanges({
   client,
   onChange,
   debounceMs = 250,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
   reconnectMs = 3000,
 }) {
   if (
@@ -128,11 +137,30 @@ export function liveInboxChanges({
     filter: () => true,
     onChange,
     debounceMs,
+    maxWaitMs,
     reconnectMs,
   });
 }
 
-/** One subscriber on a shared hub, with its own filter and debounce. */
+/** How long a subscriber may hold events back while the stream stays busy. */
+const DEFAULT_MAX_WAIT_MS = 1500;
+
+/**
+ * Events a subscriber keeps while a refresh is in flight. Past this the oldest
+ * go: the callback re-reads current state, so the newest events are the ones
+ * that describe what to read.
+ */
+const MAX_PENDING_EVENTS = 500;
+
+/**
+ * One subscriber on a shared hub, with its own filter and debounce.
+ *
+ * Debouncing coalesces a burst, but it never postpones an update past
+ * `maxWaitMs` after the first held event — a stream that never goes quiet
+ * would otherwise never flush. Only one `onChange` runs at a time: events
+ * that land while one is in flight mark the subscriber dirty and flush when
+ * it settles, so a slow re-read cannot overlap itself.
+ */
 function subscribe({
   client,
   key,
@@ -140,21 +168,50 @@ function subscribe({
   filter,
   onChange,
   debounceMs,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
   reconnectMs,
 }) {
+  const maxWait = Math.max(Number(debounceMs) || 0, Number(maxWaitMs) || 0);
   let stopped = false;
   let flushTimer = null;
   let pending = [];
+  let heldSince = 0;
+  let running = false;
+  let dirty = false;
+
+  /** Debounce, but never later than `maxWait` after the first held event. */
+  function schedule() {
+    if (stopped || !pending.length) return;
+    const waited = Date.now() - heldSince;
+    const delay = Math.max(0, Math.min(debounceMs, maxWait - waited));
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = setTimeout(flush, delay);
+  }
 
   function flush() {
     flushTimer = null;
     if (stopped || !pending.length) return;
+    if (running) {
+      // One re-read at a time; these events flush when it settles.
+      dirty = true;
+      return;
+    }
     const batch = pending;
     pending = [];
+    heldSince = 0;
+    running = true;
+    dirty = false;
     void Promise.resolve()
       .then(() => onChange(batch))
       .catch(() => {
         // The page owns its own error state; a failed re-read is not ours.
+      })
+      .then(() => {
+        running = false;
+        if (stopped || !dirty) return;
+        dirty = false;
+        // Usually already past its max wait, so this flushes straight away.
+        schedule();
       });
   }
 
@@ -165,9 +222,16 @@ function subscribe({
     } catch {
       return;
     }
+    if (!pending.length) heldSince = Date.now();
     pending.push(event);
-    if (flushTimer) clearTimeout(flushTimer);
-    flushTimer = setTimeout(flush, debounceMs);
+    if (pending.length > MAX_PENDING_EVENTS) {
+      pending.splice(0, pending.length - MAX_PENDING_EVENTS);
+    }
+    if (running) {
+      dirty = true;
+      return;
+    }
+    schedule();
   };
 
   const release = joinHub(client, key, subscriber, { reconnectMs });
@@ -175,7 +239,9 @@ function subscribe({
   return () => {
     stopped = true;
     clearTimeout(flushTimer);
+    flushTimer = null;
     pending = [];
+    dirty = false;
     release();
   };
 }
