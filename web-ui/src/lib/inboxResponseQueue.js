@@ -139,7 +139,7 @@ async function durableSend(entry) {
     throw error;
   }
   return navigator.locks.request(
-    `anx:inbox-send:${entry.identity}`,
+    `anx:mutation-send:${entry.identity}`,
     async () => {
       if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
         throw new Error("This identity has signed out.");

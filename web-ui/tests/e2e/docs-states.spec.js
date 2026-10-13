@@ -956,6 +956,37 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
       await page.getByRole("button", { name: "Comment" }).click();
       await expectCleanLayout(page, "pending doc comment", bothEnds);
+      const commentText = "Keep this instruction and its selected quote.";
+      await page.locator("#message-text").fill(commentText);
+      await page.reload();
+      await expect(page.locator("#message-text")).toHaveValue(commentText);
+      await expect(page.locator(".msg-composer")).toContainText(
+        "Check the OAuth callback copy",
+      );
+      let posted = null;
+      await page.route(/\/events$/, async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        posted = route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            event: { ...posted.event, id: "confirmed-doc-comment" },
+          }),
+        });
+      });
+      await page
+        .locator(".msg-composer")
+        .getByRole("button", { name: "Comment", exact: true })
+        .click();
+      await expect
+        .poll(() => posted?.event?.payload?.kind)
+        .toBe("document_text_comment");
+      expect(posted.event.payload.document_comment.selected_text).toContain(
+        "Check the OAuth callback copy",
+      );
+      expect(posted.event.payload.text).toBe(commentText);
+      expect(posted.request_key).toBeTruthy();
     });
 
     test("settings page: load, save, conflict and trashed", async ({

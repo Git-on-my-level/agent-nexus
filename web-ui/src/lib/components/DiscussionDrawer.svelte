@@ -449,11 +449,10 @@
     displayMessageCount > 0 ? String(Math.min(displayMessageCount, 99)) : "",
   );
 
-  async function handleMessagePost(routeScopeId, event) {
+  async function handleMessagePost(routeScopeId, result) {
     if (useParentTimelineContext && hostOnMessagePost) {
-      return await hostOnMessagePost(routeScopeId, event);
+      return await hostOnMessagePost(routeScopeId, result);
     }
-    const result = await coreClient.createEvent({ event });
     if (!useParentTimelineContext) {
       await isolatedTimelineApi.refreshTimeline();
     }

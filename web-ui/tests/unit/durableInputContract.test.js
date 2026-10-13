@@ -47,12 +47,30 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
     walk(ast.instance, (node) => {
       if (
         node.type === "MemberExpression" &&
-        node.property?.name === "respondInboxItem"
+        ["respondInboxItem", "createEvent"].includes(node.property?.name)
       ) {
         throw new Error(
-          `${path.slice(root.length)} bypasses the durable Inbox outbox`,
+          `${path.slice(root.length)} bypasses a durable mutation outbox`,
         );
       }
     });
   }
+});
+
+it("discussion text and metadata use a durable composer and outbox", () => {
+  const ast = parse(
+    readFileSync(`${root}/lib/components/timeline/MessagesTab.svelte`, "utf8"),
+  );
+  let composer = 0;
+  walk(ast.html, (node) => {
+    if (node.type !== "Element" || node.name !== "form") return;
+    if (
+      node.attributes.some(
+        (attribute) =>
+          attribute.type === "Action" && attribute.name === "durableForm",
+      )
+    )
+      composer += 1;
+  });
+  expect(composer).toBe(1);
 });

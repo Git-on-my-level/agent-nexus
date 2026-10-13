@@ -231,8 +231,7 @@
   }
 
   /** @param {string} routeScopeId topic id or thread id for listTopicTimeline / refresh coalescing */
-  async function handleMessagePost(routeScopeId, event) {
-    const result = await coreClient.createEvent({ event });
+  async function handleMessagePost(routeScopeId, result) {
     await topicDetailStore.queueRefreshTopicDetail(routeScopeId, {
       workspace: true,
       timeline: true,

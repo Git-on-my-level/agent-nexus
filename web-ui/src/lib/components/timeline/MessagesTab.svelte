@@ -11,6 +11,14 @@
   } from "$lib/actorSession";
   import { authenticatedAgent } from "$lib/authSession";
   import { listAllPrincipals } from "$lib/authPrincipals";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import {
+    enqueueDiscussionMessage,
+    mutationOutbox,
+  } from "$lib/mutationOutbox.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
+  import { appPath } from "$lib/workspacePaths.js";
   import { coreClient } from "$lib/coreClient";
   import {
     messageTargetFromHash,
@@ -263,6 +271,66 @@
     /** @type {Record<string, Record<string, unknown>>} */ ({}),
   );
 
+  let composerTarget = $derived(
+    `discussion:${threadId}:${subjectRefFilterNorm || "thread"}:composer`,
+  );
+  let savedPost = $derived(
+    $mutationOutbox.find((entry) => entry.target === composerTarget),
+  );
+  function composerSnapshot() {
+    return {
+      text: messageText,
+      replyToEventId,
+      replyAutoMentionHandle,
+      pendingAttachmentRefs,
+      pendingComposerArtifactsByRef,
+      documentComment: effectiveDocumentComment,
+    };
+  }
+  function restoreComposer(value, reason = "") {
+    if (reason === "privacy" || reason === "confirmed")
+      onClearPendingDocumentPost?.();
+    messageText = value?.text ?? "";
+    replyToEventId = value?.replyToEventId ?? "";
+    replyAutoMentionHandle = value?.replyAutoMentionHandle ?? "";
+    pendingAttachmentRefs = value?.pendingAttachmentRefs ?? [];
+    pendingComposerArtifactsByRef = value?.pendingComposerArtifactsByRef ?? {};
+    restoredDocumentComment = value?.documentComment ?? null;
+  }
+  let restoredDocumentComment = $state(null);
+  // A restored anchor remains part of the request even when a parent selection
+  // vanished on reload. Prefer a newly selected anchor when there is one.
+  let effectiveDocumentComment = $derived(
+    pendingDocumentComment || restoredDocumentComment,
+  );
+  onMount(() => {
+    const confirmed = async (event) => {
+      if (
+        event.detail?.scope !== get(localWorkScope) ||
+        event.detail?.target !== composerTarget
+      )
+        return;
+      try {
+        await (onMessagePost?.(routeScopeForPost, event.detail.result) ??
+          timelineCtx.refreshTimeline());
+        if (
+          event.detail.scope !== get(localWorkScope) ||
+          event.detail.target !== composerTarget
+        )
+          return;
+        await tick();
+        scrollPostedMessageIntoView(
+          String(event.detail.result?.event?.id ?? ""),
+        );
+      } catch {
+        /* A read failure does not undo a confirmed post. */
+      }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
+
   let mentionCandidates = $state([]);
   let mentionLoading = $state(false);
   let mentionOpen = $state(false);
@@ -381,7 +449,9 @@
     filterMentionCandidates(mentionCandidates, mentionQuery).slice(0, 12),
   );
 
-  let canPost = $derived(Boolean(messageText.trim()) && !postingMessage);
+  let canPost = $derived(
+    Boolean(messageText.trim()) && !postingMessage && !savedPost,
+  );
 
   function isActiveDocumentComment(
     /** @type {Record<string, unknown> | null} */ v,
@@ -396,7 +466,7 @@
 
   let hasPendingDocumentComment = $derived(
     isActiveDocumentComment(
-      /** @type {Record<string, unknown> | null} */ (pendingDocumentComment),
+      /** @type {Record<string, unknown> | null} */ (effectiveDocumentComment),
     ),
   );
 
@@ -409,20 +479,20 @@
 
   let pendingSelectedQuote = $derived(
     hasPendingDocumentComment &&
-      pendingDocumentComment &&
-      typeof pendingDocumentComment === "object"
+      effectiveDocumentComment &&
+      typeof effectiveDocumentComment === "object"
       ? String(
-          /** @type {any} */ (pendingDocumentComment).selected_text ?? "",
+          /** @type {any} */ (effectiveDocumentComment).selected_text ?? "",
         ).trim() || "(empty selection)"
       : "",
   );
 
   let pendingIsQuoteOnly = $derived(
     hasPendingDocumentComment &&
-      pendingDocumentComment &&
-      typeof pendingDocumentComment === "object" &&
+      effectiveDocumentComment &&
+      typeof effectiveDocumentComment === "object" &&
       String(
-        /** @type {any} */ (pendingDocumentComment).anchor_status ?? "",
+        /** @type {any} */ (effectiveDocumentComment).anchor_status ?? "",
       ).trim() === "quote_only",
   );
 
@@ -619,6 +689,7 @@
       // there is nothing pending.
       if (e.key === "Escape" && hasPendingDocumentComment) {
         e.preventDefault();
+        restoredDocumentComment = null;
         onClearPendingDocumentPost?.();
       }
       return;
@@ -776,10 +847,13 @@
   }
 
   async function handlePostMessage() {
+    if (postingMessage || savedPost) return;
     if (!messageText.trim()) {
       postMessageError = "Message text is required.";
       return;
     }
+    const submittedTarget = composerTarget;
+    const submittedScope = get(localWorkScope);
     postingMessage = true;
     postMessageError = "";
     try {
@@ -796,7 +870,7 @@
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
       const docCom = hasPendingDocumentComment
-        ? /** @type {Record<string, unknown>} */ (pendingDocumentComment)
+        ? /** @type {Record<string, unknown>} */ (effectiveDocumentComment)
         : null;
       const revRef =
         docCom && String(docCom.revision_id ?? "").trim()
@@ -823,15 +897,36 @@
       } else {
         payload = { text: trimmed };
       }
-      const postResult = await onMessagePost(routeScopeForPost, {
-        type: "message_posted",
-        thread_id: threadId,
-        thread_ref: `thread:${threadId}`,
-        refs,
-        summary,
-        payload,
-        provenance: { sources: ["event:ui"] },
+      await enqueueDiscussionMessage({
+        target: composerTarget,
+        draft: composerSnapshot(),
+        href:
+          (subjectRefFilterNorm &&
+            resolveRefLink(subjectRefFilterNorm, {
+              workspaceSlug,
+              organizationSlug,
+              threadId,
+              ...routeMaps,
+            }).href) ||
+          appPath(`/topics/${encodeURIComponent(routeScopeForPost)}`),
+        title: subjectRefFilterNorm
+          ? "Saved comment"
+          : "Saved discussion reply",
+        event: {
+          type: "message_posted",
+          thread_id: threadId,
+          thread_ref: `thread:${threadId}`,
+          refs,
+          summary,
+          payload,
+          provenance: { sources: ["event:ui"] },
+        },
       });
+      if (
+        submittedTarget !== composerTarget ||
+        submittedScope !== get(localWorkScope)
+      )
+        return;
       messageText = "";
       replyToEventId = "";
       replyAutoMentionHandle = "";
@@ -839,21 +934,18 @@
       pendingComposerArtifactsByRef = {};
       attachmentError = "";
       closeMentions();
+      restoredDocumentComment = null;
       if (docCom) {
         onPendingDocumentPostConsumed?.();
       }
-      const postedId =
-        postResult &&
-        typeof postResult === "object" &&
-        postResult.event &&
-        postResult.event.id
-          ? String(postResult.event.id)
-          : "";
-      await tick();
-      scrollPostedMessageIntoView(postedId);
-      requestAnimationFrame(() => scrollPostedMessageIntoView(postedId));
-    } catch (error) {
-      postMessageError = `Failed to post: ${error instanceof Error ? error.message : String(error)}`;
+    } catch {
+      if (
+        submittedTarget !== composerTarget ||
+        submittedScope !== get(localWorkScope)
+      )
+        return;
+      postMessageError =
+        "Your message is still here. Check the saved message above, or copy your text before closing this tab.";
     } finally {
       postingMessage = false;
     }
@@ -1005,12 +1097,19 @@
   </div>
 
   <form
+    use:durableForm={{
+      target: composerTarget,
+      value: composerSnapshot(),
+      read: composerSnapshot,
+      onRestore: restoreComposer,
+    }}
     class="msg-composer mt-4 rounded-md border border-line bg-panel p-3"
     onsubmit={(e) => {
       e.preventDefault();
       void handlePostMessage();
     }}
   >
+    <MutationSendStatus target={composerTarget} />
     {#if postMessageError}
       <p
         class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text [overflow-wrap:anywhere]"
@@ -1049,6 +1148,7 @@
           type="button"
           class="shrink-0 cursor-pointer rounded p-0.5 text-fg-muted hover:bg-panel hover:text-fg"
           onclick={() => {
+            restoredDocumentComment = null;
             onClearPendingDocumentPost?.();
           }}
           title="Clear (Esc)"

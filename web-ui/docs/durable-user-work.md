@@ -6,14 +6,15 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 
 ## Rollout and acceptance
 
-SCA-781 permits reviewable stages. The first change covers the human-attention
-response path, the production timeout trigger. It does not claim that every UI
+SCA-781 permits reviewable stages. The first changes cover the human-attention
+response path, the production timeout trigger, and shared discussion composers. It does not claim that every UI
 mutation already satisfies the invariant.
 
 | Stage                     | Coverage                                                                                                              | Acceptance gate                                                                                                                                                 |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Inbox response foundation | Freeform responses, suggested picks, acknowledgement/access/review outcomes, and context notes in both Inbox surfaces | IndexedDB/journal recovery, persisted requests, original-key retries, attention UX, cross-tab lock, privacy cleanup, timeout/524/offline/reload/duplicate tests |
-| Complete urgent surfaces  | Discussion replies, comments, and Inbox PM decision responses                                                         | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
+| Discussion foundation     | Shared thread, topic, card and document replies/comments, including reply targets and selected-quote anchors          | Atomic message-event replay, durable composer context, shared scope lock, exact-key recovery and attention UX                                                   |
+| Complete urgent surfaces  | Inbox PM decision responses and file-upload data                                                                      | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
 | Remaining authoring       | Ask PM chat, cards, documents, plans, settings and all other mutation forms                                           | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
 
 The issue remains in progress until all stages pass. Do not enable blind retries
@@ -75,22 +76,48 @@ page keeps the delivery state visible after submission; the reader can navigate
 back to the Inbox and answer a different item while the first sends. The same
 item's composer is held while an uncertain response is pending or retrying.
 
+## Discussion composers
+
+`durableForm` checkpoints JSON composer snapshots, including reply targets,
+automatic mention prefixes, document anchors and already-uploaded artifact refs.
+Native input/change events checkpoint synchronously; auxiliary state changes
+also checkpoint through the action update. Draft targets combine the backing
+thread and subject, shared across the drawer and inspection page. Restore reads
+cannot overwrite newer typing or another target. Privacy cleanup suppresses
+state-reset writes until a fresh edit, so clearing an owner cannot resurrect it.
+Inbox notification choices and uploaded attachment refs use the same action.
+
+`mutationOutbox.js` provides an adapter for message events. It freezes the
+original event and request key before sending, retains pending/retrying/attention
+records, and resumes after reload, focus or reconnect. The same scope-wide Web
+Lock serializes it with Inbox sends. Both appear in the global unsent count.
+Definitive errors offer the original text, copy, edit and manual retry. Editing
+first checkpoints the complete composer and retains the superseded original
+request as local recovery history. Confirmation refreshes the relevant timeline;
+a refresh error does not turn a confirmed post back into a failed send.
+
+File selection/upload itself is not yet migrated to a device blob outbox. Only
+confirmed artifact references are in these snapshots; pending upload bytes and
+other mutation operations remain explicit rollout work. PM decisions and chat
+are also still pending. This is not whole-UI coverage.
+
 ## Replay audit
 
 No HTTP routes or canonical contracts change in this stage.
 
-| Path                                | Current evidence                                                                                                                                                                              | Next action                                                                                                           |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `POST /inbox/{id}/respond`          | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse | Preserve full original request/key through device recovery; covered here                                              |
-| `POST /events` (discussion replies) | `request_key` replay handling and event-ID conflict recovery in `primitives_handlers.go`                                                                                                      | Audit actor/body matching and transaction/crash boundaries before outbox migration                                    |
-| Document/card comments              | Dedicated comment endpoints are separate from discussion events                                                                                                                               | Audit contract, replay records and atomicity, then migrate every comment composer                                     |
-| PM decision answers and chat        | Separate PM commands and lifecycle                                                                                                                                                            | Audit retry keys and replay behavior before automatic retry                                                           |
-| Card/doc/plan edits and other forms | Diverse create/patch/action commands                                                                                                                                                          | Inventory each command, freeze original mutation intent and concurrency token, add atomic replay and durable adapters |
+| Path                                                  | Current evidence                                                                                                                                                                              | Next action                                                                                                              |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `POST /inbox/{id}/respond`                            | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse | Preserve full original request/key through device recovery; covered here                                                 |
+| `POST /events` (`message_posted`, including comments) | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                   | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event |
+| Document/card comments                                | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                       |
+| PM decision answers and chat                          | Separate PM commands and lifecycle                                                                                                                                                            | Audit retry keys and replay behavior before automatic retry                                                              |
+| Card/doc/plan edits and other forms                   | Diverse create/patch/action commands                                                                                                                                                          | Inventory each command, freeze original mutation intent and concurrency token, add atomic replay and durable adapters    |
 
 ## Checks and extension rules
 
 `durableInputContract.test.js` parses the Svelte AST to require durable draft
-actions on every authored Inbox response field and rejects direct Inbox sends
+actions on every authored Inbox response field, requires the shared discussion
+composer action, and rejects direct Inbox/event sends
 in any Svelte surface. This is a guard for the migrated scope; subsequent stages
 must extend it to all mutation forms. Do not present it as whole-UI enforcement.
 
@@ -99,6 +126,17 @@ closing an offline tab, interrupted confirmation with a duplicate retry across
 tabs, definitive conflicts, storage denial and delivery-state screenshots.
 The browser mock checks exact body/key replay; the real core concurrency test
 checks that duplicate retries produce one canonical response event.
+
+`durable-discussion.spec.js` covers reply metadata restoration, timeout/524,
+offline tab closure, lost confirmation with reload and duplicate replay, storage
+failure, copy/edit states and state screenshots. The document layout spec also
+checks that a selected quote survives reload and is posted with its instruction
+at all four viewports.
+
+Message replay performs an indexed point lookup on the existing
+`(scope, actor_id, request_key)` primary key and bounded event/replay inserts in
+one transaction. Existing ownership triggers and scoped query wrappers remain
+active. No new GET/stream path, schema or migration is added.
 
 IndexedDB lists use the scope index, O(records in the device scope), and target
 lookups use the primary record key, O(1). The fallback

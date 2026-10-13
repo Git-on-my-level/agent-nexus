@@ -1,4 +1,5 @@
 <script>
+  import { durableForm } from "$lib/actions/durableForm.js";
   import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -95,6 +96,25 @@
   let notifyTargetQuery = $state("");
   let notifyTargetResults = $state([]);
   let notifyTargetSelected = $state(null);
+  function responseOptionsSnapshot() {
+    return {
+      notifyMode,
+      notifyTargetActorID,
+      notifyTargetAgentID,
+      notifyTargetSelected,
+      responseAttachmentRefs,
+      responseComposerArtifactsByRef,
+    };
+  }
+  function restoreResponseOptions(value) {
+    notifyMode = value?.notifyMode ?? "original";
+    notifyTargetActorID = value?.notifyTargetActorID ?? "";
+    notifyTargetAgentID = value?.notifyTargetAgentID ?? "";
+    notifyTargetSelected = value?.notifyTargetSelected ?? null;
+    responseAttachmentRefs = value?.responseAttachmentRefs ?? [];
+    responseComposerArtifactsByRef =
+      value?.responseComposerArtifactsByRef ?? {};
+  }
   let notifyTargetSearchTimer = null;
   let notifyTargetSearchSeq = 0;
   let notifyTargetMenuOpen = $state(false);
@@ -1054,7 +1074,15 @@
             >
           {/snippet}
           {#snippet extras()}
-            <div class="space-y-2">
+            <div
+              class="space-y-2"
+              use:durableForm={{
+                target: item ? `inbox:${item.id}:options` : "",
+                value: responseOptionsSnapshot(),
+                read: responseOptionsSnapshot,
+                onRestore: restoreResponseOptions,
+              }}
+            >
               <div class="flex flex-wrap items-center gap-2">
                 <label
                   class="inline-flex cursor-pointer items-center rounded border border-line bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
