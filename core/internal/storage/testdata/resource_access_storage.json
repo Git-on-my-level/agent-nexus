@@ -2387,7 +2387,7 @@
     "../server/boards_handlers.go:loadBoardCardPinnedDocument": "954349292c2e7c84fbd54ef66ed0bfeeb5785b38339a7f226476c758bd676e53",
     "../server/boards_handlers.go:loadExistingBoardCardForCreateReplay": "8e972e401f6ae162d23ae953e91e809d916e8b63a5b5a2cd44413536d5f252f8",
     "../server/boards_handlers.go:normalizeRequiredTimestamp": "c15fef469115e41ecf716ddf26207954745fe01d5a2719cbc53256a2027f4bad",
-    "../server/boards_handlers.go:parseBoardCardPatchInput": "1f78b1eec473b584c486c8cc44f33a66dc890f38a8730f321157a45b059456ce",
+    "../server/boards_handlers.go:parseBoardCardPatchInput": "796d0893d95e256ee143987ef72222f30af9116581e705b59603d1179cf90c03",
     "../server/boards_handlers.go:writeBoardLifecycleStoreError": "13139b19a90a06153f0f5d25956c6014bc38fce13d64aaec38bca399212788d6",
     "../server/card_assignee_wake.go:enqueueCardAssigneeWakeBestEffort": "af21909eb00cce9cd01b3987ab6d3c08621a938c52051fd4eac470ddfe7d9749",
     "../server/card_assignee_wake.go:prepareCardAssigneeWakeTarget": "8114b8a038af99edebf9402dca73f4c23a1caa654374c70234a00c616e0de221",

@@ -125,3 +125,11 @@ func TestCardPatchReplayCommitsAssignmentEventWakeAndReceipt(t *testing.T) {
 		t.Fatal("revoked replay accepted", out.Code, out.Body.String())
 	}
 }
+
+func TestCardPatchPreservesSelectedOwnerOrder(t *testing.T) {
+	out := httptest.NewRecorder()
+	input, _, ok := parseBoardCardPatchInput(out, map[string]any{"assignee_refs": []string{"actor:z-picked", "actor:a-existing"}})
+	if !ok || input.Assignee == nil || *input.Assignee != "z-picked" {
+		t.Fatalf("selection was replaced by sorted owner: %+v %s", input, out.Body.String())
+	}
+}

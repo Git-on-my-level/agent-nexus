@@ -2370,7 +2370,9 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 				empty := ""
 				input.Assignee = &empty
 			} else {
-				input.Assignee = assigneeStorageStringFromRefs(uniqueSortedStrings(value))
+				// The first ref is the selected accountable owner. Sorting the
+				// list can silently keep an old owner instead of applying the choice.
+				input.Assignee = assigneeStorageStringFromRefs(value)
 			}
 			appendChanged("assignee_refs")
 		case "due_at":

@@ -208,7 +208,9 @@ outbox. Task and palette status stay inline; editing from the task reopens the
 saved selection. The palette says the assignment is saved until confirmation; attention
 retains copy/edit/retry actions. Editing restores the selected person and original
 base. Only “Use latest version” updates the base and a subsequent send gets a new
-key. Navigation, principal changes and late refreshes are fenced.
+key. Navigation, principal changes and late refreshes are fenced. The metadata parser
+now respects the selected first assignee instead of sorting the list and possibly
+retaining the previous owner; a regression test covers this ordering.
 
 Keyed `PATCH /cards/{id}` commits card/board metadata, the lifecycle event, the
 assignment wake artifact and queue row, and the original receipt together.
