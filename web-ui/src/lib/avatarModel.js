@@ -24,15 +24,25 @@ export function hashSeed(input) {
   return Math.abs(h);
 }
 
-/** @param {unknown} input */
+/**
+ * Display names carry a role in brackets ("Jordan (Human operator)"); the
+ * bracket is a qualifier, not a name, and its punctuation is never an initial.
+ *
+ * @param {unknown} input
+ */
 export function initialsOf(input) {
-  const s = String(input ?? "").trim();
-  if (!s) return "·";
-  const parts = s.split(/[\s_.@-]+/).filter(Boolean);
+  const raw = String(input ?? "").trim();
+  if (!raw) return "·";
+  const named = raw.replace(/\s*[([{].*$/, "").trim() || raw;
+  const parts = named
+    .split(/[\s_.@-]+/)
+    .map((part) => part.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean);
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  return s.slice(0, 2).toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return raw.slice(0, 2).toUpperCase();
 }
 
 /**

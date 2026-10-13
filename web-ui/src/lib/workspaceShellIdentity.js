@@ -1,4 +1,5 @@
 import { isSyntheticAnxHandle } from "$lib/actorSession";
+import { initialsOf } from "$lib/avatarModel.js";
 import { initialsFor } from "$lib/extensions/accountSession.js";
 
 /** Machine-minted handles (`external.<hash>`, `passkey.<slug>.<hex>`) are not names. */
@@ -49,16 +50,6 @@ export function computeWorkspaceShellIdentity({
   return {
     primaryLabel: primary,
     secondaryLabel: "",
-    initials: initialsFromLabel(primary),
+    initials: initialsOf(primary),
   };
-}
-
-function initialsFromLabel(label) {
-  const s = String(label ?? "").trim();
-  if (!s) return "?";
-  const parts = s.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).slice(0, 2).toUpperCase();
-  }
-  return s.slice(0, 2).toUpperCase();
 }
