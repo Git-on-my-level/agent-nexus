@@ -123,14 +123,30 @@ func withBatchPublicRefs(ctx context.Context, q interface {
 				// the identity index, then authorize the resulting revisions
 				// and parents through their complete scoped relations.
 				normalized := []string{}
+				handleLookups := []string{}
 				for _, input := range chunk {
 					value := handles.Normalize(input)
 					normalized = append(normalized, value)
 					aliases[value] = append(aliases[value], input)
+					if isVirtualRevisionHandle(value) {
+						handleLookups = append(handleLookups, value)
+					}
 				}
 				data, _ := json.Marshal(normalized)
 				query += " OR r.revision_id IN (SELECT resource_id FROM resource_access_identities WHERE kind='" + kind + "' AND ref IN (SELECT value FROM json_each(?)))"
 				args = append(args, string(data))
+				if len(handleLookups) > 0 {
+					// Identity rows are not guaranteed. Match the per-ref
+					// computed handle so case-variant and handle-only inputs
+					// still resolve when the index has no matching ref.
+					parent := "COALESCE(d.handle,d.id,r.document_id)"
+					if kind == "card_revision" {
+						parent = "COALESCE(c.handle,c.id)"
+					}
+					handleData, _ := json.Marshal(handleLookups)
+					query += " OR lower(" + parent + "||'-r'||r.revision_number) IN (SELECT value FROM json_each(?))"
+					args = append(args, string(handleData))
+				}
 				// A handle routes to a different key: do not reuse the event
 				// pager's denial subset indexed by the input strings.
 				readCtx = context.WithValue(ctx, eventPageTargetsKey{}, struct{}{})
@@ -163,4 +179,17 @@ func withBatchPublicRefs(ctx context.Context, q interface {
 		}
 	}
 	return context.WithValue(ctx, publicRefCacheKey{}, refs), nil
+}
+
+func isVirtualRevisionHandle(normalized string) bool {
+	i := strings.LastIndex(normalized, "-r")
+	if i <= 0 || i+2 >= len(normalized) {
+		return false
+	}
+	for _, c := range normalized[i+2:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }

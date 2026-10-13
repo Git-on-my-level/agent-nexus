@@ -91,6 +91,43 @@ func TestPublicRevisionBatchPreservesNormalizedHandles(t *testing.T) {
 	if len(got) != 1 || got[0] != expected || counter.Count() != 1 {
 		t.Fatalf("revision aliases: got=%v expected=%s queries=%d", got, expected, counter.Count())
 	}
+	counter.Reset()
+	handleOnly := []string{"document_revision:" + strings.ToUpper(strings.TrimPrefix(expected, "document_revision:"))}
+	got = publicTypedRefs(scope, s.db, handleOnly)
+	if len(got) != 1 || got[0] != expected || counter.Count() != 1 {
+		t.Fatalf("handle-only revision: got=%v expected=%s queries=%d", got, expected, counter.Count())
+	}
+}
+
+func TestPublicRevisionBatchResolvesHandleWhenIdentityMisses(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
+	defer db.Close()
+	s := NewTestStore(db, ws.Layout().ArtifactContentDir)
+	for _, query := range []string{
+		`INSERT INTO documents(id,handle,title,head_revision_id,head_revision_number,created_at,created_by,updated_at,updated_by) VALUES('doc','Mixed-Handle','Doc','rev',1,'now','owner','now','owner')`,
+		`INSERT INTO document_revisions(revision_id,document_id,revision_number,artifact_id,created_at,created_by) VALUES('rev','doc',1,'blob','now','owner')`,
+	} {
+		if _, err = db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expected := "document_revision:Mixed-Handle-r1"
+	scope, closeRead, err := s.BeginResourceRead(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRead()
+	counter.Reset()
+	got := publicTypedRefs(scope, s.db, []string{"document_revision:MIXED-HANDLE-R1"})
+	if len(got) != 1 || got[0] != expected || counter.Count() != 1 {
+		t.Fatalf("identity-miss handle: got=%v expected=%s queries=%d", got, expected, counter.Count())
+	}
 }
 
 func TestEventRefBatchUsesIndexedIDAndHandleSelectors(t *testing.T) {
