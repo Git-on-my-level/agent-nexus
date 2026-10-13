@@ -216,10 +216,7 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 				}
 			}
 		}
-		tokens, err := scopesearch.NewTokens([]byte(strings.Repeat("k", 32)))
-		if err != nil {
-			t.Fatal(err)
-		}
+
 		for round := 0; round < 3; round++ {
 			if round == 1 {
 				for i, id := range ids {
@@ -239,7 +236,16 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 				}
 			}
 			for _, did := range repo.parents {
-				if err = s.rebuildDocumentFTS(ctx, did); err != nil {
+				if _, err = s.db.ExecContext(ctx, `INSERT INTO document_search_dirty VALUES(?) ON CONFLICT DO NOTHING`, did); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = s.repairAggregateSearchOne(ctx); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for done := false; !done; {
+				done, err = s.repairAggregateSearchOne(ctx)
+				if err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -254,7 +260,7 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 					if mode == 2 {
 						legacyQ = strings.ReplaceAll(q, " ", "-")
 					}
-					old, _, err := s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: legacyQ})
+					old, _, err := s.searchAggregateDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: legacyQ})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -263,23 +269,24 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 						want = append(want, anyStringValue(doc["id"]))
 					}
 					sort.Strings(want)
-					req := scopesearch.Request{Principal: "reader", Scopes: selected, Query: q, Phrase: mode == 2, Limit: 3}
+					pageLimit := 3
+					req := DocumentSearchFilter{Query: legacyQ, Limit: &pageLimit}
 					seen := map[string]bool{}
 					for n := 0; ; n++ {
 						if n > 100 {
 							t.Fatal("paging did not terminate")
 						}
-						page, err := scopesearch.Search(ctx, repo, tokens, req)
+						page, next, err := s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), req)
 						if err != nil {
 							t.Fatal(err)
 						}
-						for _, hit := range page.Items {
-							seen[hit.Parent] = true
+						for _, hit := range page {
+							seen[anyStringValue(hit["id"])] = true
 						}
-						if page.Continuation == "" {
+						if next == "" {
 							break
 						}
-						req.Continuation = page.Continuation
+						req.Cursor = next
 					}
 					got := []string{}
 					for id := range seen {
@@ -298,7 +305,7 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 }
 
 func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
-	// Each difference is a deliberate contract choice for the future reader:
+	// Each difference is a deliberate contract choice for the production reader:
 	// coherent single-resource evidence, significant accents, bounded coverage.
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -334,7 +341,13 @@ func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
 			if tc.phrase {
 				q = strings.ReplaceAll(q, " ", "-")
 			}
-			old, _, err := s.SearchDocuments(ctx, DocumentSearchFilter{Query: q})
+			for done := false; !done; {
+				done, err = s.repairAggregateSearchOne(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			old, _, err := s.searchAggregateDocuments(ctx, DocumentSearchFilter{Query: q})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -344,6 +357,17 @@ func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
 			}
 			if !found {
 				t.Fatal("legacy difference fixture did not match")
+			}
+			coverage := DocumentSearchCoverage{}
+			production, _, e := s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: q, Coverage: &coverage})
+			if e != nil || len(production) != 0 || coverage.Mode != "independent" {
+				t.Fatal("production reader violates intentional difference", production, coverage, e)
+			}
+			if tc.name == "accent identity" {
+				production, _, e = s.SearchDocuments(ctx, DocumentSearchFilter{Query: "CAFÉ"})
+				if e != nil || len(production) != 1 {
+					t.Fatal("production accent identity", production, e)
+				}
 			}
 			tokens, err := scopesearch.NewTokens([]byte(strings.Repeat("k", 32)))
 			if err != nil {

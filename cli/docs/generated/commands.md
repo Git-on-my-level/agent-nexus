@@ -1267,9 +1267,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
 - Concepts: `docs`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).
-- Agent notes: SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments. Query terms are AND-matched; punctuation is tokenized. Prefer this over `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger matches (title weighted above body, then summary/source/tags, then comments).
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `search_repair_pending`
+- Output: Returns `{ documents, next_cursor?, search_coverage }`. Each document may include `search_rank` (higher is better).
+- Agent notes: Default search uses independent current document heads and comments. AND terms and punctuation-normalized phrases must match one resource; accents are significant. Each resource covers at most 65536 source/normalized bytes and 4096 distinct terms. Results use stable document order, not corpus-wide BM25 ranking. Pages contain at most 100 documents and can be empty with next_cursor while bounded candidates are verified. Follow next_cursor until absent. Content, authority, filter or reader-mode changes invalidate cursors; restart without cursor. search_coverage describes the active reader, including on empty pages. An operational aggregate fallback preserves its legacy FTS5 semantics and refuses stale results while lazy repair is pending (503).
 - Examples:
   - Search knowledge: `anx docs search "runbook" --knowledge --limit 20`
 

@@ -10,6 +10,7 @@ import (
 // Authority is deliberately absent: the live adapter retains canonical event
 // authorization, including inherited document and private-reference policy.
 type CommentProjection struct {
+	Preview   string   `json:"preview"`
 	Text      string   `json:"text"`
 	Terms     []string `json:"terms"`
 	Truncated bool     `json:"truncated"`
@@ -29,7 +30,15 @@ func PrepareComment(input string) CommentProjection {
 	if terms == nil {
 		terms = []string{}
 	}
-	return CommentProjection{Text: text.Normalized(), Terms: terms, Truncated: truncated || text.Truncated()}
+	preview := input
+	if len(preview) > MaxSnippetBytes {
+		end := MaxSnippetBytes
+		for end > 0 && !utf8.RuneStart(preview[end]) {
+			end--
+		}
+		preview = preview[:end]
+	}
+	return CommentProjection{Preview: preview, Text: text.Normalized(), Terms: terms, Truncated: truncated || text.Truncated()}
 }
 
 func EncodeComment(input string) (string, error) {

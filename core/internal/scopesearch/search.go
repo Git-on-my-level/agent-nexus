@@ -60,6 +60,8 @@ type Request struct {
 	CandidateBudget   int
 	VerificationBytes int
 	Continuation      string
+	// GroupedRepositories order one parent per Recency and numeric RID within it.
+	DeduplicateParents bool
 }
 
 type Hit struct {
@@ -125,9 +127,10 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 	}
 	sort.Strings(terms)
 	queryID := fingerprint(struct {
-		Query  string
-		Phrase bool
-	}{q.Normalized(), req.Phrase})
+		Query   string
+		Phrase  bool
+		Grouped bool
+	}{q.Normalized(), req.Phrase, req.DeduplicateParents})
 	var cursor searchCursor
 	if req.Continuation != "" {
 		if err := tokens.open(req.Continuation, &cursor); err != nil || cursor.Query != queryID {
@@ -212,6 +215,10 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 		page.VerificationBytes = bytes
 		verified := 0
 		for i, c := range batch {
+			if req.DeduplicateParents && cursor.After != nil && !lessKey(*cursor.After, c.Key) {
+				verified++
+				continue
+			}
 			text := texts[i]
 			if len(text) != c.IndexedBytes {
 				return ErrProjection
@@ -221,6 +228,14 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 			cursor.After = &key
 			verified++
 			if matches(text, q.Normalized(), terms, req.Phrase) {
+				if req.DeduplicateParents {
+					// The repository uses bounded decimal ordinal keys. Skip the
+					// rest of this parent without walking its comment history.
+					if c.Parent == "" {
+						return ErrProjection
+					}
+					key.RID = "~"
+				}
 				page.Items = append(page.Items, Hit{c.Scope, c.Key.Kind, c.Key.RID, c.Version, c.Parent, snippet(text, terms[0]), len(text), c.Truncated})
 				if len(page.Items) == req.Limit {
 					break

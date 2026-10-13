@@ -39,38 +39,7 @@ func TestCommentSearchFullWriteCost1000Comments(t *testing.T) {
 		t.Fatal(err)
 	}
 	target = comment["id"].(string)
-	// Save and restore only the new capture triggers to compare the same full
-	// canonical API, source corpus and legacy graph/aggregate code path.
-	rows, err := ws.DB().Query(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'comment_search_event_%' ORDER BY name`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	triggers := []string{}
-	for rows.Next() {
-		var q string
-		if err = rows.Scan(&q); err != nil {
-			t.Fatal(err)
-		}
-		triggers = append(triggers, q)
-	}
-	if err = rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	rows.Close()
-	if len(triggers) != 3 {
-		t.Fatal(triggers)
-	}
-	if _, err = ws.DB().Exec(`DROP TRIGGER comment_search_event_insert;DROP TRIGGER comment_search_event_update;DROP TRIGGER comment_search_event_delete`); err != nil {
-		t.Fatal(err)
-	}
-	for _, phase := range []string{"aggregate-only", "aggregate-plus-independent"} {
-		if phase == "aggregate-plus-independent" {
-			for _, q := range triggers {
-				if _, err = ws.DB().Exec(q); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}
+	for _, phase := range []string{"independent-cutover"} {
 		pool, capture, err := perfguard.Open("file:" + ws.Layout().DatabasePath)
 		if err != nil {
 			t.Fatal(err)
@@ -95,7 +64,42 @@ func TestCommentSearchFullWriteCost1000Comments(t *testing.T) {
 			t.Fatal(err)
 		}
 		work := capture.Work()
+		if readRows > 50 {
+			t.Fatalf("comment edit still reads history: %d rows", readRows)
+		}
 		pool.Close()
 		t.Logf("phase=%s comments=1000 body_bytes=1000000 elapsed=%s sql_calls=%d rows=%d vm_steps=%d full_scan=%d", phase, elapsed, calls, readRows, work.VMSteps, work.FullScanSteps)
 	}
+	// Same source corpus and authorized request, with the fallback repaired
+	// before its sample. Both modes must return the edited parent.
+	for _, enabled := range []string{"false", "true"} {
+		t.Setenv("ANX_INDEPENDENT_DOCUMENT_SEARCH", enabled)
+		pool, capture, e := perfguard.Open("file:" + ws.Layout().DatabasePath)
+		if e != nil {
+			t.Fatal(e)
+		}
+		measured := primitives.NewTestStore(pool, ws.Layout().ArtifactContentDir)
+		request := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "owner"})
+		limit := 1
+		coverage := primitives.DocumentSearchCoverage{}
+		filter := primitives.DocumentSearchFilter{Query: "measured", Limit: &limit, Coverage: &coverage}
+		if _, _, e = measured.SearchDocuments(request, filter); e != nil {
+			t.Fatal(e)
+		}
+		capture.Start()
+		start := time.Now()
+		docs, _, e := measured.SearchDocuments(request, filter)
+		elapsed := time.Since(start)
+		_, calls, rows := capture.Stop()
+		if e != nil || len(docs) != 1 || docs[0]["id"] != did {
+			t.Fatal(docs, e)
+		}
+		if e = capture.WorkError(); e != nil {
+			t.Fatal(e)
+		}
+		work := capture.Work()
+		t.Logf("search_mode=%s comments=1000 elapsed=%s sql_calls=%d rows=%d vm_steps=%d full_scan=%d", coverage.Mode, elapsed, calls, rows, work.VMSteps, work.FullScanSteps)
+		pool.Close()
+	}
+
 }

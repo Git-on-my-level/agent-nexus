@@ -642,6 +642,12 @@ func main() {
 		defer func() { maintenanceCancel(); <-compactDone }()
 	}
 	commentSearchDone := make(chan struct{})
+	documentSearchDone := make(chan struct{})
+	go func() {
+		defer close(documentSearchDone)
+		primitiveStore.RunDocumentSearchMaintenance(maintenanceCtx, func(error) { fmt.Fprintln(os.Stderr, "document search maintenance: retrying bounded batch") })
+	}()
+	defer func() { maintenanceCancel(); <-documentSearchDone }()
 	go func() {
 		defer close(commentSearchDone)
 		workspace.RunCommentSearchMaintenance(maintenanceCtx, func(error) { fmt.Fprintln(os.Stderr, "comment search backfill: retrying bounded batch") })

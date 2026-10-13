@@ -247,6 +247,21 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		t.Fatal(err)
 	}
 
+	// Certify the real head/comment reader before measuring routes. Fixture
+	// construction uses raw canonical imports, exactly the online backfill case.
+	for i := 0; ; i++ {
+		if i > 20000 {
+			t.Fatal("document search fixture did not certify")
+		}
+		done, err := store.MaintainDocumentSearchBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			break
+		}
+	}
+
 	observed, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)&_txlock=immediate")
 	if err != nil {
 		t.Fatal(err)

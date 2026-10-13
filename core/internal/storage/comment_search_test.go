@@ -177,6 +177,7 @@ func TestCommentSearchBackfillFailureCancellationAndContention(t *testing.T) {
 	}
 	defer ws.Close()
 	commentSearchEvent(t, ws.DB(), "event", "needle")
+	commentSearchExec(t, ws.DB(), `UPDATE comment_search_job SET done=0,cursor=NULL`)
 	commentSearchExec(t, ws.DB(), `CREATE TRIGGER reject_comment_backfill BEFORE UPDATE ON comment_search_heads BEGIN SELECT RAISE(ABORT,'injected failure'); END`)
 	if _, err = ws.MaintainCommentSearchBatch(ctx); err == nil {
 		t.Fatal("failure ignored")

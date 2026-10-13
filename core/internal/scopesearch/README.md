@@ -1,10 +1,9 @@
 # Bounded scope search
 
-The bounded executor and HTTP helper remain disabled. Migration 82 now installs
-an active canonical comment writer and an online maintenance worker using this
-package's `PrepareComment` normalizer. See [the live cutover status](../../docs/comment-search-cutover.md)
-for authority, coverage, evidence and the remaining reader switch. Legacy
-`SearchDocuments` and aggregate rebuilding still serve requests.
+The bounded executor serves the production `GET /docs/search` head/comment
+reader after online certification. Migration 82 installs the transactional
+writers and resumable workers. See [the cutover contract](../../docs/comment-search-cutover.md)
+for authority, coverage, fallback behavior and measured costs.
 
 `Search` receives a trusted `Repository`, a persistent-secret token codec and a
 finite request selection. The repository must authorize **all** selected scopes
@@ -65,11 +64,19 @@ identity and current `resourceaccess` authority instead of granting new scope
 membership. It captures the first 64 KiB of raw comment input before the shared
 normalizer, with an explicit truncation bit, and replaces at most 4,096 postings.
 
-The existing server reference adapters continue to test the bounded executor,
-continuations, HTTP helper and snapshot interface. They do not certify the
-registered `/docs/search` dispatcher. The live-table parity adapter is also
-test-only: its fixed generations and point hydration are deliberately unsuitable
-for serving. Production activation still needs a reviewed repository, current
-document-head integration, lifecycle/filter/ranking contract, durable generation
-invalidation, batched hydration and a fresh aggregate fallback. See the cutover
-document for the exact remaining gates.
+The production adapter is `primitives/document_search_reader.go`. It uses a
+persistent secret, durable content/authority generations, one immutable read
+snapshot, grouped parent continuations, bounded text batches and canonical
+response metadata. Reference HTTP adapters remain unit fixtures; the registered
+`/docs/search` route has its own integration and privacy tests.
+
+When `DeduplicateParents` is selected, the repository must give every resource of
+one parent the same recency key and numeric ordered resource IDs. After emitting
+a match, the executor advances to that parent's `~` sentinel, so later pages seek
+past its remaining comments. The production index binds this order to durable
+document/resource ordinals. Query fingerprints bind the grouping mode too.
+
+The executor's candidate bounds apply to admitted visible keys. SQL authority
+filtering may reject additional private postings before LIMIT; the production
+cutover document distinguishes this work and cold ownership-graph admission
+from the bounded hydration contract.

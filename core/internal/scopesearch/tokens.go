@@ -76,3 +76,8 @@ func (t *Tokens) open(token string, v any) error {
 	}
 	return nil
 }
+
+// SealContinuation and OpenContinuation bind the legacy fallback cursor using
+// the same persistent encrypted codec and size bound as the independent reader.
+func (t *Tokens) SealContinuation(v any) (string, error)     { return t.seal(v) }
+func (t *Tokens) OpenContinuation(token string, v any) error { return t.open(token, v) }

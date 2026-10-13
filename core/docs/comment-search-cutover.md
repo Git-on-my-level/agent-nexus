@@ -1,133 +1,181 @@
-# Independent comment search cutover
+# Independent document and comment search
 
-SCA-760 / PR #376 now has an active canonical writer and online backfill. Migration
-81 installs empty derived tables and event triggers; `anx-core` starts the
-maintenance worker and cancels/joins it on shutdown. The earlier uncalled
-`scopedrepo.SearchCanonicalHook` and its separate schema have been removed.
-The bounded `scopesearch` executor remains shared. `/docs/search` still uses the
-aggregate, and comment APIs still rebuild it. This completes the writer/backfill
-portion, not reader activation or the aggregate retirement criterion.
+SCA-760 / PR #376 activates the production head/comment reader on
+`GET /docs/search`. Migration **82** follows main's migration **81** (projection
+retry backoff). Upgrade tests build real schema-80 (release 0.12.60) and schema-81
+databases, reopen them through ordinary startup, and verify both migrations,
+strict ordering, preserved retry columns and online capture of existing comments.
+Release 0.12.61 also uses schema 81.
 
-## Chosen semantic improvements
+## Activation, fallback and recovery
 
-These are intentional changes for the independent reader, exercised by
-`TestCommentSearchIntentionalSemanticImprovements` against actual aggregate FTS:
+`ANX_INDEPENDENT_DOCUMENT_SEARCH` defaults to enabled. Selection requires durable
+completion of both event and head backfills, no unready head, and no pending
+parent attachment. A fresh empty workspace is certified immediately. The core
+starts both resumable workers and cancels/joins them at shutdown. This has been
+exercised in disposable workspaces; it is not a claim of deployment to a user's
+workspace.
 
-- AND and phrase matches must occur in one resource. Two unrelated comments, or
-  the document body plus a comment, cannot manufacture one hit. A phrase cannot
-  bridge the newline between comments. Every hit therefore has coherent evidence
-  in its own source. The eventual document-head adapter must apply this same rule.
-- Accents remain significant: `café` matches `CAFÉ`, but not `cafe`. This preserves
-  spelling distinctions erased by default FTS5 diacritic folding. Normalization
-  lowercases Unicode letters/numbers; no Unicode canonical-equivalence folding
-  is promised.
-- Coverage is bounded by the first 65,536 raw UTF-8 bytes, then by 65,536 normalized
-  bytes and 4,096 distinct terms. This makes work independent of comment history
-  and huge repetitive/punctuation input. Projection metadata and executor hits
-  expose actual indexed bytes and truncation. Text after that prefix cannot
-  match. This trades suffix recall for predictable cost with explicit coverage;
-  a serving contract must expose that limitation, including on empty results.
+Set `ANX_INDEPENDENT_DOCUMENT_SEARCH=false` in the core process configuration to
+select the aggregate implementation. Configuration changes take effect on
+process restart; no migration rollback is needed. Reader selection itself does
+not wait for a backfill. Re-enabling selects the independent reader once its
+certification is complete.
 
-`TestCommentSearchRandomizedAggregateParity` runs 324 comparisons (three seeds,
-12 documents per seed, three mutation rounds, 12 queries, single/AND/phrase),
-using actual canonical event triggers, actual aggregate `SearchDocuments`, and
-the shared executor over scoped live-table snapshots at three hits per page.
-It checks comment-derived document membership in the common bounded ASCII domain
-through edits, deletion and restoration. It does not certify BM25 ordering,
-head-only results, filters or the HTTP response contract. The test adapter has
-fixed generations and is not production code.
+Comment APIs no longer rebuild the aggregate, read a document blob, or enumerate
+peer comments. Canonical triggers record dirty document IDs in the same
+transaction. Fallback repairs one dirty document per request and per maintenance
+tick, with a five-second transaction deadline. It reads the current blob outside
+the transaction, rechecks revision/artifact/hash/type inside it, and rebuilds
+from current canonical metadata and live comments. It clears the dirty marker
+atomically. A successful fallback response is never admitted while dirty rows
+remain. A backlog yields HTTP **503**, `search_repair_pending`, and
+`Retry-After: 1` until repair catches up. This is a fail-closed operational
+switch, **not a zero-downtime promise**: lazy aggregate reconstruction still costs
+O(the repaired document's body and comment history). Workers also repair while
+the independent backfill is incomplete. Once certified and enabled, they leave
+aggregate repair dormant until fallback is selected.
 
-## Atomic canonical capture and audience certification
+Canonical source records remain authoritative. An index error aborts the source
+write; no successful mutation can commit without its required capture.
+Unavailable blobs or failed maintenance do not certify an incomplete head.
+Worker errors are rate limited and never include source payloads.
 
-Every event INSERT, UPDATE of content/identity/ownership/lifecycle columns, and
-DELETE maintains `comment_search_heads` and `comment_search_postings` inside the
-same SQLite transaction. This covers create/edit/delete/restore, imports,
-replacement, hard deletion, thread movement and direct reference changes. A
-projection failure aborts the source write. There is no API-path opt-in to miss.
-All live `message_posted` thread events are captured, so later document/thread
-attachment does not require rescanning history on the attaching mutation.
+## Search semantics and response
 
-A head is bound to its canonical event and current thread with
-`authority_binding=canonical-event-v1`. The binding is enforced in SQL. The
-scoped relations in `primitives/access_scope.go` require an extant, nontrashed
-message event in that same thread and apply the canonical event denial predicate
-before count, selection or payload hydration. This inherits document/thread and
-private-reference policy. It does not invent an all-members audience or copy
-permissions into the projection. A visibility change on a referenced resource
-changes current authority immediately; the projection's source binding remains
-valid without fan-out rewriting comment text.
+These intentional differences from aggregate FTS are executable contracts:
 
-The durable job's `done=1` certifies complete source capture under that binding
-policy, not a new audience grant or permission to serve the new HTTP reader.
-Tests check owner, stranger and unauthorized-agent access, private references
-introduced by editing, grant/revocation in a reused request context, and privacy
-after backfill. Missing/deleted/reparented sources cannot expose orphan terms.
-The new tables are explicitly classified in the storage privacy inventory.
+- AND/phrase terms must occur in one current document head or one live comment.
+  Separate comments, or a head and comment, cannot manufacture a match.
+- Unicode letters/numbers are lowercased. Accents remain significant:
+  `café` matches `CAFÉ`, not `cafe`. Canonical-equivalence folding is not promised.
+- Each source contributes at most 65,536 raw UTF-8 bytes, then at most 65,536
+  normalized bytes and 4,096 distinct terms. Head metadata precedes body text.
+  Truncation is retained even when the bounded body cache itself was clipped.
+  `search_coverage` exposes the selected mode and these caps, including on empty
+  responses. The aggregate fallback retains its released FTS semantics.
+- Query input is limited to 1,024 bytes and eight normalized terms. A single
+  punctuation-separated token is a normalized phrase, preserving the released
+  quoted-token parser behavior; whitespace-separated tokens use AND.
+- Independent results use stable document insertion order and rank 1, avoiding
+  corpus-dependent ranking. Each parent appears once across an unchanged
+  traversal even if hundreds of its comments match. Pages contain at most 100
+  parents. Bounded verification or filters can produce an empty page with an
+  opaque continuation; callers must follow it until absent. A private-only
+  query returns neither results nor a continuation.
+- Tags, knowledge, hosts and active/archived/trashed state filters use canonical
+  metadata. Search returns canonical document metadata, the live comment-count
+  rollup and a bounded last-comment preview. Optional list-only revision counts
+  and head character counts are omitted; ordinary document listing retains them.
 
-## Online backfill and recovery
+`TestCommentSearchIntentionalSemanticImprovements` compares the differing
+semantics against actual aggregate FTS. The randomized test now runs **324**
+comparisons through the **production SearchDocuments reader**, versus actual
+aggregate FTS, across three seeds, mutation rounds and single/AND/phrase queries.
+It checks membership in their shared bounded ASCII domain rather than pretending
+different ranking or suffix coverage is parity.
 
-The worker visits canonical event primary keys in durable keyset order, one
-source position per transaction, with a 250 ms context deadline and a 25 ms tick.
-A worst-case source can produce 4,096 postings; source, derived rows and cursor
-commit together. A nullable initial cursor handles the empty-string identity.
-The final empty seek and certification commit under the same write transaction.
-Triggers capture edits/inserts behind the cursor, including writes after `done`.
-There is no request-time or startup history copy and no queue catch-up race.
+## Authority and continuations
 
-Reopening resumes the committed cursor. Cancellation, SQLite contention or
-storage failure leaves that row pending and retries later; errors are reported
-at most once per minute without source data. Tests interrupt/reopen, insert
-behind the cursor, edit/delete/trash/move records during the build, inject a
-projection failure, cancel, contend with another writer, check timeout cleanup,
-and compare all surviving projections with current canonical source data.
-Backfill is exercised to certification in disposable local workspaces; this PR
-has not been deployed to a user's workspace.
+The canonical resourceaccess policy applies before candidate pagination and
+payload hydration. A posting must still belong to a current document and, for
+comments, an extant, nontrashed message in its current backing thread.
+Document/thread ownership and referenced private resources remain authoritative.
+A private contributor still constrains the whole document according to the
+released ownership graph. The per-thread count is safe under that same graph.
+Projection copies never grant access.
 
-## Cost and indexes
+Binding validation, posting admission, normalized text hydration and response
+metadata run in one immutable SQLite read transaction. Request readers reuse the
+existing epoch-admitted denial snapshot; all consuming statements retain its
+epoch guard. Trusted internal callers are also pinned to a read transaction.
 
-Projection write work is O(L + (Uold + Unew) log N), with Uold/Unew <= 4,096.
-L is the incoming source payload; SQL extracts its text once and the normalizer
-reads at most 64 KiB. It never loads document blobs or peer comment history.
-The posting primary key `(event_id,term)` and unique `(event_id,slot)` keep old
-posting deletion resource-local. `(thread_id,term,event_id)` is the future
-candidate range. All binding checks are primary-key probes. The backfill uses
-one primary-key seek, one source point capture and one checkpoint per chunk;
-its total work is linear in historical events but is never on the serving path.
+Migration 82 creates a persistent random 32-byte cursor key and monotonic search
+generation. Triggers advance the generation on head/comment changes, lifecycle
+changes, deletion and reattachment. Both readers bind encrypted/authenticated
+continuations to the current authority epoch, content generation, principal,
+query, filters and reader mode. Any binding change returns HTTP 400 `invalid_request`
+with an invalid-cursor message (restart); an unchanged cursor survives process restart. Deletion/recreation
+cannot reset the workspace generation. Hidden content changes can invalidate a
+cursor conservatively but never expose identities, text, counts or term-derived
+private-only continuations.
 
-`TestPerformanceCommentSearchWriteHistoryIndependence` measures the actual event
-trigger with 100 and 1,000 peers: one top-level SQL update, 481 VM steps, no full
-scan/sort/automatic index in both cases. This isolates the new projection cost.
-`TestCommentSearchFullWriteCost1000Comments` compares the actual authorized
-`UpdateDocumentComment` API on the same 1,000-comment, 1 MB document, disabling
-only the new capture triggers for the baseline. Each side starts with the same
-text and a warmed authority read; fresh instrumented connections avoid SQLite
-automatic-reprepare measurement artifacts. Full API numbers are reported in the
-PR and test logs. Aggregate rebuilding remains, so this phase does not claim a
-live write speedup or reduced full-request history reads.
+Production and registered-route tests exercise owner/stranger/unauthorized-agent
+controls, private references, revocation, lifecycle filters, head/comment edits,
+deletion/restoration, duplicate-parent pagination, changed filters and principal,
+fallback after a new comment edit, restart, and a body changing during blob I/O.
 
-## Remaining merge criteria
+## Online construction and write bounds
 
-1. Implement and review the production independent reader over current canonical
-   authority, document heads plus comments, bounded candidate/hydration SQL,
-   durable content/authority/lifecycle generations and response coverage. Test
-   head/parent lifecycle, filters, ordering, continuations, and full HTTP privacy.
-2. Select that reader default-on only after certification, with an instant,
-   current aggregate fallback. Before removing aggregate writes, implement a
-   bounded fallback strategy that accounts for post-certification mutations;
-   switching to a stale FTS table is not acceptable. Source-version counters in
-   these heads are not yet safe continuation generations (delete/restore resets
-   a head); do not use the test adapter's constant binding in production.
-3. Stop the three comment-driven aggregate rebuilds and aggregate comment
-   population only with that safe reader/fallback transition. Run the full API
-   before/after scale comparison again to demonstrate the actual reduction.
+Event capture visits one source primary key per transaction, with a durable
+nullable cursor and 250 ms transaction deadline. Head capture visits one current
+document, reads its blob outside the transaction and rechecks its complete source
+binding before commit. Parent attachment visits one comment key per chunk.
+Final empty seeks and completion checkpoints commit with their source checks.
+Triggers capture inserts/edits behind committed cursors. Cancellation,
+contention and failure leave the checkpoint resumable. Migration/startup creates
+empty projection tables and indexes, never copies historical content.
 
-No HTTP routes or external contracts change in this writer/backfill phase.
-The remaining criteria above are required before calling the full cutover done.
+`comment_search_heads/postings` are the canonical per-event normalized cache and
+term lookup used when a parent attaches. `document_search_resources/postings`
+materialize that parent binding for grouped traversal; they are actively
+maintained lookup indexes, not a second normalizer or unused reader path.
+Stored byte counts let the executor admit text without decoding every candidate.
+Per-head artifact/revision indexes invalidate current head captures without
+scanning historical revision tables.
 
-Focused reproduction from `core/`:
+One comment replacement normalizes at most 64 KiB and replaces at most 4,096 old
+and 4,096 new terms. It updates only that event and its document bindings, using
+event/resource primary keys and resource-local term indexes. Imports may share a
+thread among at most 64 documents; canonical document mutations enforce that cap
+before an unbounded comment fanout can arise. Ordinary documents own one thread.
+
+Candidate traversal uses `(term,doc_n,res_n)`, resource lookup uses numeric primary
+keys, and per-source cleanup uses `(res_n,term)`. The executor admits at most 4P
+visible candidate keys (P <= 100), hydrates at most 4 MiB including rejected
+candidates, and batch-loads response metadata. Authority filtering happens before
+that candidate limit: its cold canonical graph and rejected private postings are
+not covered by the executor's hydration bound. The broad performance suite must
+therefore be reported separately from the bounded executor and the 1,000-comment
+fixture; a passing microbenchmark is not certification of arbitrary denial size.
+
+## Measured full operation cost
+
+Same local 1,000-comment document with a 1 MB body, authorized
+`UpdateDocumentComment`, warmed authority read, fresh instrumented pool:
+
+| Operation                                                              | SQL calls | Rows read | SQLite VM steps | Local elapsed |
+| ---------------------------------------------------------------------- | --------: | --------: | --------------: | ------------: |
+| Aggregate-only baseline (e507ccc9 test disables only capture triggers) |        28 |     1,020 |          35,548 |     299.13 ms |
+| Dual writer before cutover                                             |        28 |     1,020 |          37,893 |     316.20 ms |
+| Independent cutover                                                    |        14 |         9 |           8,252 |      23.46 ms |
+
+The write removes 99.1% of returned SQL rows and 76.8% of VM work in this fixture.
+Timing is a local sample, not an SLO. The comparison includes the actual scoped
+API, canonical ownership writes and projection triggers, not only normalization.
+
+On the same corpus, an already-repaired aggregate search used 24,675 VM steps
+(3.26 ms); independent search used 1,054 (3.32 ms), both returning the edited
+parent. This small sample demonstrates reduced database work, not a latency
+win over warm FTS. Lazy fallback repair is measured separately from serving.
+
+The full-corpus registered route was also measured against main commit
+`2157d4b1`, with the same scale fixture and privacy controls. Warm authorized /
+unauthorized search VM work fell from **1,691,601 / 1,781,601** to
+**1,886 / 2,039**; cold unauthorized work fell from **3,025,105** to **1,245,517**.
+Both branches' advisory scale runs exit nonzero: source-pinned main baselines are
+expired, exact plan reviews remain outstanding, and cold canonical authorization
+still exceeds the standard 50,000-VM budget. No performance budget or plan
+allowance was relaxed. This is remaining performance-gate review, not a passing
+whole-workspace scale certification. Raw before/after reports accompany the PR.
+
+Reproduction from `core/`:
 
 ```sh
-go test ./internal/storage -run 'TestCommentSearch|TestPerformanceCommentSearch' -count=1 -v -timeout=3m
-go test ./internal/primitives -run 'TestCommentSearch|TestResourceAccessBlobContentAndDocumentSearch' -count=1 -v -timeout=5m
-ANX_PERFORMANCE_TEST=1 go test ./internal/storage -run TestPerformanceStartup -count=1 -v -timeout=5m
+go test ./internal/storage ./internal/primitives ./internal/scopesearch ./internal/server -run 'TestCommentSearch|TestDocumentSearch|TestResourceAccessBlobContentAndDocumentSearch' -count=1 -v -timeout=10m
+ANX_PERFORMANCE_TEST=1 go test ./internal/storage -run 'TestPerformanceCommentSearch|TestPerformanceStartup' -count=1 -v -timeout=5m
 ```
+
+The PR records full test logs, the broader scale-gate result, and any outstanding
+performance review. The original uncalled `scopedrepo.SearchCanonicalHook` and
+its parallel schema have been removed.

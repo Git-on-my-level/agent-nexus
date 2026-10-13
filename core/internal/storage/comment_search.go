@@ -29,17 +29,20 @@ func init() {
 // current event inside the source transaction; no caller supplies projection
 // text, parent or audience. All thread messages are captured so later document
 // attachment/reparenting requires no unbounded history work on that mutation.
-const commentSearchCapture = `INSERT INTO comment_search_heads(event_id,thread_id,projection_json,source_version,authority_binding)
- SELECT id,thread_id,anx_comment_search_projection(CAST(CASE WHEN json_valid(payload_json) THEN COALESCE(json_extract(payload_json,'$.payload.text'),'') ELSE '' END AS BLOB)),1,'canonical-event-v1'
+const commentSearchCapture = `INSERT INTO comment_search_heads(event_id,thread_id,projection_json,source_version,authority_binding,source_ts,actor_id)
+ SELECT id,thread_id,anx_comment_search_projection(CAST(CASE WHEN json_valid(payload_json) THEN COALESCE(json_extract(payload_json,'$.payload.text'),'') ELSE '' END AS BLOB)),1,'canonical-event-v1',ts,actor_id
  FROM events WHERE id=? AND type='message_posted' AND COALESCE(thread_id,'')<>'' AND COALESCE(trim(trashed_at),'')=''
- ON CONFLICT(event_id) DO UPDATE SET thread_id=excluded.thread_id,projection_json=excluded.projection_json,source_version=comment_search_heads.source_version+1`
+ ON CONFLICT(event_id) DO UPDATE SET thread_id=excluded.thread_id,projection_json=excluded.projection_json,source_version=comment_search_heads.source_version+1,source_ts=excluded.source_ts,actor_id=excluded.actor_id`
 
 const commentSearchSchema = `
 CREATE TABLE IF NOT EXISTS comment_search_heads(
  event_id TEXT PRIMARY KEY,thread_id TEXT NOT NULL,
  projection_json TEXT NOT NULL CHECK(json_valid(projection_json) AND length(CAST(projection_json AS BLOB))<=262144 AND length(CAST(json_extract(projection_json,'$.text') AS BLOB))<=65536 AND json_array_length(projection_json,'$.terms')<=4096),
  source_version INTEGER NOT NULL CHECK(typeof(source_version)='integer' AND source_version>0),
- authority_binding TEXT NOT NULL CHECK(authority_binding='canonical-event-v1')
+ authority_binding TEXT NOT NULL CHECK(authority_binding='canonical-event-v1'),source_ts TEXT NOT NULL DEFAULT '',actor_id TEXT NOT NULL DEFAULT '',
+ indexed_bytes INTEGER GENERATED ALWAYS AS(length(CAST(json_extract(projection_json,'$.text') AS BLOB))) STORED,
+ truncated INTEGER GENERATED ALWAYS AS(json_extract(projection_json,'$.truncated')) STORED,
+ preview TEXT GENERATED ALWAYS AS(json_extract(projection_json,'$.preview')) STORED
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS comment_search_postings(
  thread_id TEXT NOT NULL,term TEXT NOT NULL,event_id TEXT NOT NULL,
@@ -91,12 +94,15 @@ func installCommentSearch(ctx context.Context, tx *sql.Tx) error {
 	_, err = tx.ExecContext(ctx, `CREATE TRIGGER IF NOT EXISTS comment_search_event_insert AFTER INSERT ON events BEGIN
  DELETE FROM comment_search_heads WHERE event_id=NEW.id AND (NEW.type<>'message_posted' OR COALESCE(NEW.thread_id,'')='' OR COALESCE(trim(NEW.trashed_at),'')<>'');
  `+capture+`; END;
-CREATE TRIGGER IF NOT EXISTS comment_search_event_update AFTER UPDATE OF id,type,thread_id,payload_json,trashed_at,archived_at,refs_json,actor_id ON events BEGIN
+CREATE TRIGGER IF NOT EXISTS comment_search_event_update AFTER UPDATE OF id,type,thread_id,payload_json,trashed_at,archived_at,refs_json,actor_id,ts ON events BEGIN
  DELETE FROM comment_search_heads WHERE event_id=OLD.id AND (OLD.id<>NEW.id OR NEW.type<>'message_posted' OR COALESCE(NEW.thread_id,'')='' OR COALESCE(trim(NEW.trashed_at),'')<>'');
  `+capture+`;
 END;
 CREATE TRIGGER IF NOT EXISTS comment_search_event_delete AFTER DELETE ON events BEGIN DELETE FROM comment_search_heads WHERE event_id=OLD.id; END;`)
-	return err
+	if err != nil {
+		return err
+	}
+	return installDocumentSearch(ctx, tx)
 }
 
 func stringsReplaceCommentID(query string) string {
