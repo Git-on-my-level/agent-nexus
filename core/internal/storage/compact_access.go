@@ -192,7 +192,7 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 	legacy := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_exact_edges`
 	reconstructed := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_compact_reconstructed`
 	raw := `SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges`
-	for _, q := range []string{
+	for i, q := range []string{
 		`SELECT EXISTS(` + legacy + ` EXCEPT ` + reconstructed + `)`,
 		`SELECT EXISTS(` + reconstructed + ` EXCEPT ` + legacy + `)`,
 		`SELECT EXISTS(` + legacy + ` EXCEPT ` + raw + `)`,
@@ -204,7 +204,8 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 			return result, err
 		}
 		if mismatch {
-			return result, ErrCompactAccessMismatch
+			checks := []string{"exact_to_compact", "compact_to_exact", "exact_to_raw", "raw_to_exact", "orphan_compact_edge"}
+			return result, &compactMismatchError{check: checks[i]}
 		}
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM resource_access_compact_edges`).Scan(&result.Rows); err != nil {
@@ -215,7 +216,7 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 
 // RunCompactAccessMigration is server maintenance, never startup readiness
 // or request work. Verification holds a WAL read snapshot, not a writer lease.
-// Errors contain no resource contents; callers should log only generic status.
+// Reports expose only stage/reason/code, never SQL text or resource contents.
 func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(CompactAccessVerification, error)) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -228,38 +229,44 @@ func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(C
 		case <-ticker.C:
 		}
 		var err error
+		stage := "shadow_install"
 		if !installed {
-			chunkCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			chunkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			err = w.InitializeCompactAccessShadow(chunkCtx)
 			cancel()
 			installed = err == nil
 		}
 		var done bool
 		if err == nil {
+			stage = "reader_mode"
 			var mode int
 			if err = w.db.QueryRowContext(ctx, `SELECT reader FROM resource_access_compact_control WHERE singleton=1`).Scan(&mode); err == nil && mode != 0 {
 				return
 			}
 		}
 		if err == nil {
+			stage = "compact_backfill"
 			done, err = w.MaintainCompactAccessBatch(ctx)
 		}
 		if err == nil {
+			stage = "stable_backfill"
 			rawDone, rawErr := w.MaintainStableAccessBatch(ctx)
 			done, err = done && rawDone, rawErr
 		}
 		if err != nil {
 			if report != nil && ctx.Err() == nil && time.Since(lastReport) >= time.Minute {
-				report(CompactAccessVerification{}, err)
+				report(CompactAccessVerification{}, compactMigrationError(stage, err))
 				lastReport = time.Now()
 			}
 			continue
 		}
 		if done {
+			stage = "verification"
 			verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 			result, err := w.VerifyCompactAccessCutover(verifyCtx)
 			cancel()
 			if err == nil {
+				stage = "cutover"
 				cutoverCtx, finish := context.WithTimeout(ctx, 10*time.Second)
 				err = w.CutoverCompactAccess(cutoverCtx, result)
 				finish()
@@ -271,7 +278,7 @@ func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(C
 				continue
 			}
 			if report != nil && ctx.Err() == nil {
-				report(result, err)
+				report(result, compactMigrationError(stage, err))
 			}
 			return // A mismatch requires operator investigation, not endless rescans.
 		}

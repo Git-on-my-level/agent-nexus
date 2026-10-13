@@ -23,6 +23,18 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, 503, "unavailable", "report data is unavailable")
 		return
 	}
+	originalContext := r.Context()
+	closeRead := func() {}
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		ctx, finish, err := canonical.BeginResourceRead(r.Context())
+		if err != nil {
+			writeError(w, 503, "unavailable", "report data is unavailable")
+			return
+		}
+		closeRead = finish
+		defer func() { closeRead() }()
+		r = r.WithContext(ctx)
+	}
 	id, ok := resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
 	if !ok {
 		return
@@ -46,6 +58,10 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	observedAt, results := materializeReportPanels(r, opts, panels)
+	closeRead()
+	closeRead = func() {}
+	// Review reminder mutations use their current transactional policy.
+	r = r.WithContext(originalContext)
 	if err := checkReportReviews(r, opts, doc, revision, panels); err != nil {
 		writeError(w, 503, "unavailable", "report review reminders are unavailable")
 		return

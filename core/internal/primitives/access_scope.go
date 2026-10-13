@@ -19,6 +19,7 @@ func WithAccessScope(ctx context.Context, scope AccessScope) context.Context {
 	ctx = context.WithValue(ctx, accessScopeKey{}, scope)
 	// Rebinding either principal or selected PM starts a new policy boundary.
 	ctx = context.WithValue(ctx, denialRequestKey{}, struct{}{})
+	ctx = context.WithValue(ctx, publicRefCacheKey{}, struct{}{})
 	return resourceaccess.WithPolicy(ctx, resourceaccess.Policy{
 		Read: func(q string) string { return scopeRead(ctx, q) },
 		Check: func(c context.Context, q resourceaccess.QueryRower, v any) error {

@@ -535,3 +535,68 @@ are recorded under SCA-733. Run:
 GOMAXPROCS=2 GOFLAGS=-p=1 ANX_PERFORMANCE_TEST=1 go test ./internal/server \
   -run '^TestPerformancePMCardContext$' -count=1 -timeout=4m -v
 ```
+
+## Handled inbox ref projection (SCA-780)
+
+The handled inbox admits one immutable resource-read snapshot, selects at most
+100 response events and resolves their presentation refs in batches of at most
+200 distinct IDs per resource type. Original request events use one indexed ID
+or handle batch, followed by the same scoped ref projection. Generic
+`publicRefsIn*` and typed-list projections batch each response value; nested
+projections reuse an immutable presentation map. Hidden or missing IDs retain
+raw typed refs. Rebinding access scope discards presentation handles.
+
+Ref hydration costs O(page refs), using canonical primary keys (and event handle
+indexes for original requests), independently of unrelated event history. Each
+200-ID batch compiles one scoped statement. Canonical inherited denial admission
+still depends on denied roots and reachable identities, with the existing bounded
+shared epoch cache. On a warm hit admission probes only the epoch; inside the
+admitted transaction point membership uses the existing fail-closed token rather
+than recompiling an unreachable recursive graph. Epoch misses recompute the full
+canonical policy. Ordinary unpinned and mutation reads retain canonical fallback.
+
+The modernc driver keeps SQL text in `sql.Stmt`, then calls native
+`sqlite3_prepare_v2` on every execution. A Go prepared-statement cache therefore
+cannot remove native parse cost. This repair reduces the number of statements
+and the SQL compiled in the read snapshot instead.
+
+Run the dedicated scale guards:
+
+```sh
+cd core
+GOMAXPROCS=2 ANX_PERFORMANCE_TEST=1 go test ./internal/server \
+  -run '^TestPerformanceHandledInboxRefsAndConcurrentAnswer$' -count=1 -timeout=5m -v
+GOMAXPROCS=2 ANX_PERFORMANCE_TEST=1 go test ./internal/storage \
+  -run '^TestPerformanceCompactAccess(OnlineMigration|Shadow)$' -count=1 -timeout=10m -v
+```
+
+The HTTP guard builds more than 4096 ref-bearing events, a large synthetic
+workspace and 50 handled responses with 500 distinct resource refs. It allows
+25 native read preparations and two seconds per measured GET, and requires an
+answer POST plus idempotent replay to succeed during two finite polling workers.
+All workers finish inside the test. The guard fails on the pre-repair handled
+reader's repeated ref lookups. Timing is local CPU/storage evidence, not a hosted
+network SLA. Budgets live in `internal/server/testdata/handled_inbox_budget.json`.
+On one Apple Silicon run with `GOMAXPROCS=2`, the same roughly 363 MB fixture
+measured 2,204 prepares and 3.11–3.27 seconds per GET on the pre-repair main,
+versus 15 prepares and 20.5–28.7 ms after repair. Both baseline polling workers
+hit their ten-second client timeout; the repaired workers completed. Answer POST
+latency under polling fell from 675 ms to 162 ms. These samples include the
+existing production immediate writer configuration in both revisions.
+
+Compact shadow installation performs DDL only, but formerly received the same
+100 ms deadline as copying one maintenance chunk. Repeated installation rollback
+cannot benefit from the chunk-size adaptation. Installation now has a bounded
+five-second deadline; backfills retain their adaptive 100 ms writer leases.
+Worker errors report fixed stage/reason labels and numeric SQLite codes without
+SQL or resource contents. Verification mismatch labels name the ledger direction;
+operators should preserve the legacy reader and run offline verification before
+repairing inconsistent ledgers. Deadline reports identify installation versus
+backfill; write-contention reports identify retryable writer pressure. No
+production workspace is required or inspected by these guards.
+
+Answer persistence retains the production WAL, 20-second per-connection busy
+handler and immediate write transactions. Immediate locking queues writers at
+transaction admission instead of attempting an unsupported deferred read-to-write
+upgrade. The HTTP scale guard covers the full response, persisted replay and
+single committed claim under read load.

@@ -257,34 +257,45 @@ func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable s
 			if raw != nil {
 				cached = cachedReadDenialForEpoch(raw, scope, epochTable)
 			}
-			candidate := &denialSnapshot{epochTable: epochTable}
-			var rows, refs sql.NullString
-			sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
-			var captureArgs []any
+			// A warm cache needs only an epoch probe. Modernc reparses native
+			// statements on every execution, even through sql.Stmt; compiling
+			// the unreachable recursive capture on a hit wastes request CPU.
 			if cached != nil {
-				current := `(SELECT version FROM _anx_snapshot_epoch)`
-				roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
-				sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
-				captureArgs = []any{cached.epoch, cached.epoch}
-			}
-			sql = strings.ReplaceAll(sql, "main.resource_access_epoch", "main."+epochTable)
-			dest := []any{&candidate.epoch, &rows}
-			if epochTable == "receipt_access_epoch" {
-				refSQL := `COALESCE((SELECT json_group_array(json_array(kind,ref)) FROM (WITH ` + ownershipRefs("_anx_receipt_refs", "_anx_denied") + ` SELECT kind,ref FROM _anx_receipt_refs WHERE ref<>id)),'[]')`
-				if cached != nil {
-					refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN NULL ELSE ` + refSQL + ` END`
-					captureArgs = append(captureArgs, cached.epoch)
-				}
-				sql += "," + refSQL
-				dest = append(dest, &refs)
-			}
-			if err := db.QueryRowContext(c, sql, captureArgs...).Scan(dest...); err == nil {
-				if cached != nil && candidate.epoch == cached.epoch {
+				var epoch int64
+				if db.QueryRowContext(c, "SELECT version FROM main."+epochTable+" WHERE singleton=1").Scan(&epoch) == nil && epoch == cached.epoch {
 					state.snapshot = cached
-				} else if rows.Valid && (epochTable != "receipt_access_epoch" || refs.Valid) {
-					candidate.rows, candidate.refs = rows.String, refs.String
-					state.snapshot = candidate
-					rememberReadDenial(raw, scope, candidate)
+				}
+			}
+			if state.snapshot == nil {
+				candidate := &denialSnapshot{epochTable: epochTable}
+				var rows, refs sql.NullString
+				sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
+				var captureArgs []any
+				if cached != nil {
+					current := `(SELECT version FROM _anx_snapshot_epoch)`
+					roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
+					sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
+					captureArgs = []any{cached.epoch, cached.epoch}
+				}
+				sql = strings.ReplaceAll(sql, "main.resource_access_epoch", "main."+epochTable)
+				dest := []any{&candidate.epoch, &rows}
+				if epochTable == "receipt_access_epoch" {
+					refSQL := `COALESCE((SELECT json_group_array(json_array(kind,ref)) FROM (WITH ` + ownershipRefs("_anx_receipt_refs", "_anx_denied") + ` SELECT kind,ref FROM _anx_receipt_refs WHERE ref<>id)),'[]')`
+					if cached != nil {
+						refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN NULL ELSE ` + refSQL + ` END`
+						captureArgs = append(captureArgs, cached.epoch)
+					}
+					sql += "," + refSQL
+					dest = append(dest, &refs)
+				}
+				if err := db.QueryRowContext(c, sql, captureArgs...).Scan(dest...); err == nil {
+					if cached != nil && candidate.epoch == cached.epoch {
+						state.snapshot = cached
+					} else if rows.Valid && (epochTable != "receipt_access_epoch" || refs.Valid) {
+						candidate.rows, candidate.refs = rows.String, refs.String
+						state.snapshot = candidate
+						rememberReadDenial(raw, scope, candidate)
+					}
 				}
 			}
 		}
