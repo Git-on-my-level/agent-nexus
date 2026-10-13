@@ -300,6 +300,14 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 }
 
 func loadOpenInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions, now time.Time) (map[string]any, error) {
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		defer closeRead()
+		r = r.WithContext(ctx)
+	}
 	stage := time.Now()
 	var threadIDs []string
 	var err error

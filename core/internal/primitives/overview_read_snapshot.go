@@ -17,6 +17,16 @@ type pinnedDenial struct {
 	scope    AccessScope
 }
 
+// BeginResourceRead pins a read-only resource page and uses constant-time
+// identity membership where its SQL needs no reference/prose expansion. Queries
+// needing the complete policy retain it in the same admitted transaction.
+func (s *Store) BeginResourceRead(ctx context.Context) (context.Context, func(), error) {
+	if s == nil || s.db == nil {
+		return ctx, func() {}, errors.New("resource store database is not initialized")
+	}
+	return s.beginSummaryRead(ctx)
+}
+
 // BeginOverviewRead admits a bounded Overview phase to an immutable SQLite
 // snapshot. Admission recomputes canonical denial on an epoch mismatch. Reads
 // inside that same transaction still validate the epoch, but need not compile
