@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isColdStart } from "../../src/lib/firstRun.js";
+import { hasArrivedAgent, isColdStart } from "../../src/lib/firstRun.js";
 import { loadOverview } from "../../src/lib/overview.js";
 
 /** The projection a workspace nothing has used produces. */
@@ -57,6 +57,37 @@ describe("cold start", () => {
         coldModel({ needsYou: { status: "ok", count: 1, rows: [] } }),
       ),
     ).toBe(false);
+  });
+
+  it("is not an arrival: that requires a readable roster row", () => {
+    expect(hasArrivedAgent(coldModel())).toBe(false);
+    expect(hasArrivedAgent(null)).toBe(false);
+    expect(
+      hasArrivedAgent(
+        coldModel({
+          agents: {
+            status: "unavailable",
+            message: "nope",
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      hasArrivedAgent(coldModel({ work: { status: "ok", total: 1 } })),
+    ).toBe(false);
+    expect(
+      hasArrivedAgent(
+        coldModel({
+          agents: {
+            status: "ok",
+            known: 1,
+            working: 0,
+            waiting: 0,
+            offline: 0,
+          },
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("refuses to read a failed section as emptiness", () => {

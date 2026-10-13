@@ -36,7 +36,7 @@
   import UrgentBand from "$lib/components/overview/UrgentBand.svelte";
   import MorningBrief from "$lib/components/overview/MorningBrief.svelte";
   import FirstAgentPanel from "$lib/components/onboarding/FirstAgentPanel.svelte";
-  import { isColdStart } from "$lib/firstRun.js";
+  import { hasArrivedAgent, isColdStart } from "$lib/firstRun.js";
   import { morningBriefModel } from "$lib/morningBrief.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workspacePath } from "$lib/workspacePaths";
@@ -87,12 +87,18 @@
    * that fills the sections ends the cold state, and the reader who was
    * watching deserves to be told that is what just happened. Per visit — a
    * reload of a workspace that now has agents is not an arrival.
+   *
+   * An agent on the roster is the fact, not the end of emptiness. A later
+   * snapshot that cannot read the roster, or that gains a task without a
+   * roster row, must not be told as "your first agent is connected" and must
+   * keep the connect prompt they still need.
    */
   let sawColdStart = $state(false);
   $effect(() => {
     if (coldStart) sawColdStart = true;
   });
-  let justConnected = $derived(sawColdStart && model && !coldStart);
+  let agentArrived = $derived(hasArrivedAgent(model));
+  let justConnected = $derived(sawColdStart && agentArrived);
   let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
   let cliInstallCommand = $derived(
     $page.data?.workspace?.cliInstallCommand ?? "",
@@ -562,7 +568,7 @@
   {:else}
     <div role="status" aria-label="Loading overview"><Skeleton rows={6} /></div>
   {/if}
-  {#if model && coldStart}
+  {#if model && !agentArrived && (coldStart || sawColdStart)}
     <FirstAgentPanel
       {cliBaseUrl}
       {cliInstallCommand}

@@ -14,6 +14,7 @@ import { mkdir } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
+import { holdOpenStream } from "../helpers/openStream.js";
 import { deferred, installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 import { waitForAppReady } from "../helpers/pageReady.js";
 
@@ -47,6 +48,8 @@ async function installEmptyWorkspace(page) {
     agents: /** @type {object[]} */ ([]),
     /** Released by `arrive()`, which is what makes the flip deterministic. */
     live: deferred(),
+    /** The arrival is written once; reconnects stay open. */
+    delivered: false,
   };
   const api = await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
@@ -68,12 +71,38 @@ async function installEmptyWorkspace(page) {
     if (path === "/overview")
       return route.fulfill({ json: snapshot({ agents: state.agents }) });
     if (path === "/stream/events") {
-      const onFailed = (failed) => {
-        if (failed === request) state.live.resolve();
-      };
-      page.on("requestfailed", onFailed);
-      await state.live.promise;
-      page.off("requestfailed", onFailed);
+      // A finished SSE body is a drop: the client reconnects, and a resolved
+      // waiter would emit the same event again. Write the arrival once, then
+      // hold later connections open (`holdOpenStream`) so they cannot loop.
+      if (state.delivered) return holdOpenStream(page, route);
+      const arrived = await new Promise((resolve) => {
+        if (page.isClosed()) {
+          resolve(false);
+          return;
+        }
+        const finish = (value) => {
+          page.off("close", onClose);
+          page.off("requestfailed", onFailed);
+          resolve(value);
+        };
+        const onClose = () => finish(false);
+        const onFailed = (failed) => {
+          if (failed === request) finish(false);
+        };
+        page.on("close", onClose);
+        page.on("requestfailed", onFailed);
+        state.live.promise.then(() => finish(true));
+      });
+      if (!arrived) {
+        return route
+          .fulfill({
+            status: 200,
+            contentType: "text/event-stream",
+            body: ": keepalive\n\n",
+          })
+          .catch(() => {});
+      }
+      state.delivered = true;
       const event = {
         id: "evt-first-agent",
         type: "agent_registered",

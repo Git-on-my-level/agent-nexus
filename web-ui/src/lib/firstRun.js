@@ -53,6 +53,22 @@ export function isColdStart(model) {
 }
 
 /**
+ * Whether the snapshot shows an agent identity that has reached this
+ * workspace.
+ *
+ * The arrival banner is this fact, not the end of emptiness. A later
+ * unreadable roster, or a task that landed without a roster row, is not
+ * "your first agent is connected".
+ *
+ * @param {ReturnType<typeof import("./overview.js").loadOverview> extends Promise<infer T> ? T : never} [model]
+ * @returns {boolean}
+ */
+export function hasArrivedAgent(model) {
+  if (!model || !readable(model.agents)) return false;
+  return (model.agents.known ?? 0) > 0;
+}
+
+/**
  * The agent harnesses the connect prompt is written for.
  *
  * Named in the copy because "paste this into your agent" is an instruction a
