@@ -274,13 +274,6 @@ func decodeEventBodyFromRow(
 	if err := json.Unmarshal([]byte(refsJSON), &refsList); err != nil {
 		return nil, fmt.Errorf("decode event refs: %w", err)
 	}
-	refsList = publicTypedRefs(ctx, q, refsList)
-	// Use []any for refs so API consumers that walk raw maps (e.g. thread ref discovery) match
-	// json.Unmarshal into map[string]any, which decodes JSON arrays as []any.
-	refs := make([]any, len(refsList))
-	for i, r := range refsList {
-		refs[i] = r
-	}
 
 	var wrapper map[string]any
 	if err := json.Unmarshal([]byte(payloadJSON), &wrapper); err != nil {
@@ -288,6 +281,15 @@ func decodeEventBodyFromRow(
 	}
 	if wrapper == nil {
 		wrapper = map[string]any{}
+	}
+
+	ctx = batchPublicRefValue(ctx, q, map[string]any{"refs": refsList, "thread_ref": "thread:" + threadID.String, "payload": wrapper})
+	refsList = publicTypedRefs(ctx, q, refsList)
+	// Use []any for refs so API consumers that walk raw maps (e.g. thread ref discovery) match
+	// json.Unmarshal into map[string]any, which decodes JSON arrays as []any.
+	refs := make([]any, len(refsList))
+	for i, r := range refsList {
+		refs[i] = r
 	}
 
 	handle := strings.TrimSpace(eventHandle)
@@ -2462,6 +2464,7 @@ func insertPreparedEvent(ctx context.Context, exec *accessTx, prepared preparedE
 	}
 	prepared.Body["handle"] = handle
 	prepared.Body["ref"] = "event:" + handle
+	ctx = batchPublicRefValue(ctx, exec, map[string]any{"payload": prepared.Body, "thread_ref": "thread:" + prepared.ThreadID})
 	if prepared.ThreadID != "" {
 		prepared.Body["thread_ref"] = makePublicTypedRef(ctx, exec, "thread", prepared.ThreadID)
 	}
@@ -3305,37 +3308,43 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 	}
 	defer rows.Close()
 
-	events := make([]map[string]any, 0)
+	stored := []storedEventRow{}
 	for rows.Next() {
-		var (
-			eventID     string
-			eventHandle string
-			typeValue   string
-			ts          string
-			actorID     string
-			thread      sql.NullString
-			refsJSON    string
-			payloadJSON string
-			archivedAt  sql.NullString
-			archivedBy  sql.NullString
-			trashedAt   sql.NullString
-			trashedBy   sql.NullString
-			trashReason sql.NullString
-		)
-		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
-			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
+		var row storedEventRow
+		if err := rows.Scan(&row.id, &row.handle, &row.kind, &row.ts, &row.actor, &row.thread, &row.refs, &row.payload,
+			&row.archivedAt, &row.archivedBy, &row.trashedAt, &row.trashedBy, &row.trashReason); err != nil {
 			return nil, fmt.Errorf("scan human_attention_responded row: %w", err)
 		}
-
-		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		stored = append(stored, row)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("iterate human_attention_responded page: %w", err)
+	}
+	values := make([]any, 0, len(stored)*2)
+	for _, row := range stored {
+		var refs, payload any
+		if err := json.Unmarshal([]byte(row.refs), &refs); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(row.payload), &payload); err != nil {
+			return nil, err
+		}
+		values = append(values, map[string]any{"refs": refs, "thread_ref": "thread:" + row.thread.String}, payload)
+	}
+	ctx, err = withBatchPublicRefs(ctx, s.db, values)
+	if err != nil {
+		return nil, err
+	}
+	events := make([]map[string]any, 0, len(stored))
+	for _, row := range stored {
+		body, err := decodeEventBodyFromRow(ctx, s.db, row.id, row.handle, row.kind, row.ts, row.actor, row.thread, row.refs, row.payload)
 		if err != nil {
 			return nil, err
 		}
-		overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
+		overlayEventLifecycleFromSQLColumns(body, row.archivedAt, row.archivedBy, row.trashedAt, row.trashedBy, row.trashReason)
 		events = append(events, body)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate human_attention_responded page: %w", err)
 	}
 
 	return events, nil

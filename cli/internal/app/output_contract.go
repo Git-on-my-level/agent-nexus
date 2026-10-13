@@ -40,7 +40,7 @@ func commandSideEffectClass(command string) string {
 		return "read_only"
 	}
 	if parts[0] == "config" && len(parts) > 1 {
-		if parts[1] == "show" || parts[1] == "workspaces" {
+		if parts[1] == "show" || parts[1] == "workspaces" || (parts[1] == "forge" && len(parts) > 2 && parts[2] == "list") {
 			return "read_only"
 		}
 		return "local_operational_write"
@@ -216,7 +216,14 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		}
 	}
 	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
-		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
+		switch anyString(asMap(root["delivery"])["mode"]) {
+		case askDeliveryBatch:
+			actions = append(actions, action("Sweep answers next run", "anx", "await", "--answers"))
+		case askDeliveryAwait, "":
+			actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
+		case askDeliveryResume:
+			actions = append(actions, action("Check delivery health", "anx", "orient"))
+		}
 	}
 	if command == "auth access-requests request" {
 		request := asMap(root["request"])
@@ -626,6 +633,8 @@ func validSubcommands(group string) []string {
 		return authSubcommandSpec.valid
 	case "config":
 		return configSubcommandSpec.valid
+	case "config forge":
+		return configForgeSubcommandSpec.valid
 	case "debug":
 		return []string{"threads", "events", "ref-edges", "derived", "actors", "inbox", "meta"}
 	case "debug threads":

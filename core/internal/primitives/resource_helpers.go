@@ -97,6 +97,7 @@ func publicTypedRefs(ctx context.Context, q queryRower, refs []string) []string 
 	if len(refs) == 0 {
 		return refs
 	}
+	ctx = batchPublicRefValue(ctx, q, map[string]any{"refs": refs})
 	out := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		prefix, value, ok := normalizeTypedRef(ref)
@@ -110,6 +111,7 @@ func publicTypedRefs(ctx context.Context, q queryRower, refs []string) []string 
 }
 
 func publicTypedRefsAny(ctx context.Context, q queryRower, refs []any) []any {
+	ctx = batchPublicRefValue(ctx, q, map[string]any{"refs": refs})
 	if len(refs) == 0 {
 		return refs
 	}
@@ -142,6 +144,11 @@ func publicRefsInValue(ctx context.Context, q queryRower, value any) any {
 }
 
 func publicRefsInField(ctx context.Context, q queryRower, key string, value any) any {
+	ctx = batchPublicRefValue(ctx, q, map[string]any{key: value})
+	return publicRefsInFieldCached(ctx, q, key, value)
+}
+
+func publicRefsInFieldCached(ctx context.Context, q queryRower, key string, value any) any {
 	if isPublicRefFieldKey(key) {
 		return publicRefsInRefValue(ctx, q, value)
 	}
@@ -149,13 +156,13 @@ func publicRefsInField(ctx context.Context, q queryRower, key string, value any)
 	case []any:
 		out := make([]any, len(v))
 		for i, item := range v {
-			out[i] = publicRefsInValue(ctx, q, item)
+			out[i] = publicRefsInFieldCached(ctx, q, "", item)
 		}
 		return out
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, item := range v {
-			out[key] = publicRefsInField(ctx, q, key, item)
+			out[key] = publicRefsInFieldCached(ctx, q, key, item)
 		}
 		return out
 	default:
@@ -178,7 +185,7 @@ func publicRefsInRefValue(ctx context.Context, q queryRower, value any) any {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, item := range v {
-			out[key] = publicRefsInField(ctx, q, key, item)
+			out[key] = publicRefsInFieldCached(ctx, q, key, item)
 		}
 		return out
 	default:

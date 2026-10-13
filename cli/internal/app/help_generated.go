@@ -1230,7 +1230,19 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check. Pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.\n\nUsage:\n  anx doctor\n\n" + formatGlobalFlagUsage(topic), true
 	}
 	if topic == "config" {
-		return "Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).\n", true
+		return "Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config forge add <alias|url> <host> <kind> registers a non-GitHub forge host for a workspace so its pull-request URLs satisfy ask evidence linting (kinds: github, forgejo, gitea, gitlab, bitbucket). anx config show prints the resolved workspace and sources (secrets redacted).\n", true
+	}
+	if topic == "config forge" {
+		return "Config forge: register non-GitHub code forge hosts per workspace. github.com is built in; every other forge host must be registered so its pull-request URLs and commit-pinned permalinks satisfy ask evidence linting. Kinds: github, forgejo (covers Gitea), gitlab, bitbucket.\n\nUsage:\n  anx config forge add <alias|url> <host> <github|forgejo|gitea|gitlab|bitbucket>\n  anx config forge remove <alias|url> <host>\n  anx config forge list [<alias|url>]\n\nExamples:\n  anx config forge add my-workspace forge.example.test forgejo\n  anx config forge list my-workspace\n", true
+	}
+	if topic == "config forge add" {
+		return "Config forge add: register one non-GitHub forge host for a workspace (idempotent per host; re-adding replaces the kind). github.com is built in and cannot be overridden. The kind selects the URL dialect the ask lint accepts: github /pull/N, forgejo or gitea /pulls/N, gitlab /-/merge_requests/N, bitbucket /pull-requests/N.\n\nUsage:\n  anx config forge add <alias|url> <host> <github|forgejo|gitea|gitlab|bitbucket>\n\nExamples:\n  anx config forge add my-workspace forge.example.test forgejo\n", true
+	}
+	if topic == "config forge remove" {
+		return "Config forge remove: drop one forge host from a workspace's registry. Unknown hosts report not_found.\n\nUsage:\n  anx config forge remove <alias|url> <host>\n", true
+	}
+	if topic == "config forge list" {
+		return "Config forge list: show registered forge hosts for one workspace, or every workspace with entries when no argument is given.\n\nUsage:\n  anx config forge list [<alias|url>]\n", true
 	}
 	if topic == "auth" {
 		return "Auth: anx auth whoami reports the enrolled host, derived agent and resolution source. Enroll with anx host enroll.\n", true
@@ -2248,6 +2260,26 @@ func configLocalHelpText(topic string) (string, bool) {
 			summary:  "Remove a directory rule by its path glob (idempotent).",
 			usage:    "anx config unmap <path-glob>",
 			examples: []string{`anx config unmap "${ANX_PROJECT_GLOB:?set this to the existing directory glob}"`},
+		},
+		"config forge": {
+			summary:  "Register non-GitHub code forge hosts per workspace so their pull-request URLs satisfy ask evidence linting. github.com is built in.",
+			usage:    "anx config forge add <alias|url> <host> <kind> | anx config forge remove <alias|url> <host> | anx config forge list [<alias|url>]",
+			examples: []string{"anx config forge add my-workspace forge.example.test forgejo", "anx config forge list"},
+		},
+		"config forge add": {
+			summary:  "Register one forge host for a workspace (idempotent per host). Kind selects the accepted URL dialect: github, forgejo, gitea, gitlab or bitbucket.",
+			usage:    "anx config forge add <alias|url> <host> <github|forgejo|gitea|gitlab|bitbucket>",
+			examples: []string{"anx config forge add my-workspace forge.example.test forgejo"},
+		},
+		"config forge remove": {
+			summary:  "Drop one forge host from a workspace's registry. Unknown hosts report not_found.",
+			usage:    "anx config forge remove <alias|url> <host>",
+			examples: []string{"anx config forge remove my-workspace forge.example.test"},
+		},
+		"config forge list": {
+			summary:  "Show registered forge hosts for one workspace, or every workspace with entries when no argument is given.",
+			usage:    "anx config forge list [<alias|url>]",
+			examples: []string{"anx config forge list", "anx config forge list my-workspace"},
 		},
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",

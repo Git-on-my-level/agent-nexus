@@ -246,6 +246,18 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		cursorID = id
 	}
 
+	finishRead := func() {}
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
+		if err != nil {
+			writeError(w, 500, "internal_error", "failed to admit completed inbox read")
+			return
+		}
+		finishRead = closeRead
+		defer closeRead()
+		r = r.WithContext(ctx)
+	}
+
 	params := primitives.HumanAttentionRespondedPageParams{
 		CursorTS:         cursorTS,
 		CursorID:         cursorID,
@@ -266,13 +278,41 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		events = events[:requestedLimit]
 	}
 
+	// Hydrate the original requests as a page rather than one GetEvent per row.
+	var requests map[string]map[string]any
+	if batch, ok := opts.primitiveStore.(interface {
+		GetEventsByRefs(context.Context, []string) (map[string]map[string]any, error)
+	}); ok {
+		refs := make([]string, 0, len(events))
+		for _, evt := range events {
+			payload, _ := evt["payload"].(map[string]any)
+			refs = append(refs, anyString(payload["request_event_ref"]))
+		}
+		requests, err = batch.GetEventsByRefs(r.Context(), refs)
+		if err != nil {
+			writeError(w, 500, "internal_error", "failed to load completed inbox requests")
+			return
+		}
+	}
 	payloadItems := make([]map[string]any, 0, len(events))
 	for _, evt := range events {
 		payload, _ := evt["payload"].(map[string]any)
-		reqEvt := resolveHumanAttentionRequestEvent(r.Context(), opts.primitiveStore, payload)
+		var reqEvt map[string]any
+		if requests != nil {
+			reqEvt = requests[strings.TrimSpace(anyString(payload["request_event_ref"]))]
+			if anyString(reqEvt["type"]) != humanAttentionRequestedEventType {
+				reqEvt = nil
+			}
+		} else {
+			reqEvt = resolveHumanAttentionRequestEvent(r.Context(), opts.primitiveStore, payload)
+		}
 		payloadItems = append(payloadItems, completedInboxItemPayload(r.Context(), opts.primitiveStore, evt, reqEvt))
 	}
 
+	// Materialization is complete. Network backpressure must not retain the
+	// SQLite connection, denial token or WAL snapshot. Deferred cleanup still
+	// covers every earlier exit.
+	finishRead()
 	resp := map[string]any{
 		"status":       "completed",
 		"items":        payloadItems,

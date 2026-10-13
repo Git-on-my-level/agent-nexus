@@ -633,7 +633,7 @@ func main() {
 			defer close(compactDone)
 			workspace.RunCompactAccessMigration(maintenanceCtx, func(result storage.CompactAccessVerification, err error) {
 				if err != nil {
-					fmt.Fprintln(os.Stderr, "compact access migration: incomplete or verification failed; current reader retained")
+					fmt.Fprintf(os.Stderr, "compact access migration: %v\n", err)
 					return
 				}
 				fmt.Fprintf(os.Stderr, "compact access migration: certified rows=%d epoch=%d; certified reader selected unless legacy fallback is set\n", result.Rows, result.Epoch)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/internal/streaming"
 )
 
@@ -161,6 +163,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	if len(returnedOpenAsks) > orientReturnLimit {
 		returnedOpenAsks = returnedOpenAsks[:orientReturnLimit]
 	}
+	deliveryHealth, deliveryWarnings := a.orientDeliveryHealth(cfg, allOpenAsks)
 	for _, raw := range returnedOpenAsks {
 		if len(next) >= 10 {
 			break
@@ -188,16 +191,24 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	if resolution == "" {
 		_, resolution, _ = a.identityName(cfg)
 	}
+	for _, warning := range deliveryWarnings {
+		if warning.Code == "ask_delivery" {
+			next = append(next, []string{"anx", "bridge", "install"})
+		}
+	}
 	result := map[string]any{
 		"me":               map[string]any{"agent": agent["id"], "handle": agent["handle"], "host": agent["host_slug"], "current_card_ref": agent["current_card_ref"], "identity_resolved_by": resolution},
 		"my_work_by_phase": workByPhase, "my_work_matched": matched, "my_work_returned": min(matched, orientReturnLimit),
 		"work_page_limit": orientPageLimit, "work_has_more": anyString(workBody["next_cursor"]) != "", "work_next_cursor": workBody["next_cursor"],
 		"my_asks_and_answers": ownRequests, "my_asks_matched": askMatched, "my_asks_returned": len(ownRequests), "ask_page_limit": 200,
 		"open_asks": returnedOpenAsks, "open_asks_matched": len(allOpenAsks), "open_asks_returned": len(returnedOpenAsks),
+		"delivery_health":        deliveryHealth,
 		"mentions_notifications": map[string]any{"items": returnedNotifications, "matched": len(allNotifications), "returned": len(returnedNotifications)},
 		"stale_items":            stale, "stale_hours": hours, "next": next,
 	}
-	return &commandResult{Data: result}, nil
+	orientResult := &commandResult{Data: result}
+	orientResult.Warnings = append(orientResult.Warnings, deliveryWarnings...)
+	return orientResult, nil
 }
 
 func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -584,6 +595,7 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout time.Duration) (*commandResult, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	var lastUnmatched []string
 	readBatch := func() (*commandResult, bool, error) {
 		notifications, err := a.invokeRawJSON(waitCtx, cfg, "await answer notifications", "GET", "/agent-notifications?status=unread", nil)
 		if err != nil {
@@ -605,25 +617,55 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout 
 		if len(responseIDs) == 0 {
 			return nil, false, nil
 		}
-		result, err := a.runAgentInboxList(waitCtx, []string{"--status", "answered", "--unread"}, cfg)
+		// Sweep newest-first for the woken answers. The scan stops as soon as
+		// every notified answer is matched, or after maxOwnAsksLookupPages
+		// pages, so a wake behind newer activity is still found without
+		// looping over the whole ask history.
+		_, actorID, err := a.resolveOwnAsksActor(waitCtx, cfg)
 		if err != nil {
 			return nil, false, err
 		}
-		data := asMap(result.Data)
-		items := asSlice(data["items"])
-		batch := make([]any, 0, len(items))
-		for _, raw := range items {
-			item := asMap(raw)
-			answer := asMap(item["answer"])
-			answerID := strings.TrimSpace(anyString(answer["response_event_id"]))
-			if answerID != "" && responseIDs[answerID] {
-				batch = append(batch, item)
+		batch := make([]any, 0, len(responseIDs))
+		cursor := ""
+		for page := 0; page < maxOwnAsksLookupPages; page++ {
+			items, next, pageErr := a.fetchOwnAsksPageForActor(waitCtx, cfg, actorID, cursor, 200)
+			if pageErr != nil {
+				return nil, false, pageErr
 			}
+			for _, raw := range items {
+				item := asMap(raw)
+				answerID := strings.TrimSpace(anyString(asMap(item["answer"])["response_event_id"]))
+				if answerID == "" || !responseIDs[answerID] {
+					continue
+				}
+				batch = append(batch, item)
+				delete(responseIDs, answerID)
+			}
+			if len(responseIDs) == 0 || next == "" {
+				break
+			}
+			cursor = next
 		}
+		// Whatever is left after the bounded window is preserved, never
+		// silently dropped: notified answers older than the newest
+		// maxOwnAsksLookupPages*200 asks stay listed as unmatched.
+		unmatched := make([]string, 0, len(responseIDs))
+		for answerID := range responseIDs {
+			unmatched = append(unmatched, answerID)
+		}
+		sort.Strings(unmatched)
+		lastUnmatched = unmatched
 		if len(batch) == 0 {
 			return nil, false, nil
 		}
-		return &commandResult{Data: map[string]any{"answers": batch, "count": len(batch)}}, true, nil
+		data := map[string]any{"answers": batch, "count": len(batch)}
+		result := &commandResult{Data: data}
+		if len(unmatched) > 0 {
+			data["incomplete"] = true
+			data["unmatched_notification_ids"] = unmatched
+			result.Warnings = append(result.Warnings, output.Warning{Code: "ask_delivery", Message: fmt.Sprintf("%d notified answer(s) were not found among the newest %d asks; they may answer older asks. Continue with: anx inbox list --status answered --unread --limit 200, then page with --cursor", len(unmatched), maxOwnAsksLookupPages*200)})
+		}
+		return result, true, nil
 	}
 	if result, ready, err := readBatch(); err != nil || ready {
 		return result, err
@@ -633,7 +675,12 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout 
 	for {
 		select {
 		case <-waitCtx.Done():
-			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), map[string]any{"target": "answers", "timeout": timeout.String()})
+			details := map[string]any{"target": "answers", "timeout": timeout.String()}
+			if len(lastUnmatched) > 0 {
+				details["unmatched_notification_ids"] = lastUnmatched
+				details["continuation"] = fmt.Sprintf("%d notified answer(s) were never found among the newest %d asks; continue with: anx inbox list --status answered --unread --limit 200, then page with --cursor", len(lastUnmatched), maxOwnAsksLookupPages*200)
+			}
+			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), details)
 		case <-ticker.C:
 			result, ready, err := readBatch()
 			if err != nil {

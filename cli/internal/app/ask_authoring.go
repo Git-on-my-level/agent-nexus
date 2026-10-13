@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"agent-nexus-cli/internal/workspaceconfig"
 )
 
 type askEvidenceLink struct {
@@ -50,7 +52,7 @@ var askNamedPR = regexp.MustCompile(`(?i)\bPR\s*#?(\d+)\b`)
 var askNamedRef = regexp.MustCompile("(?i)\\b(doc(?:ument)?|card|topic|file)\\s+[`\"]([^`\"\\n]+)[`\"]")
 var askPointerOnly = regexp.MustCompile(`(?i)^\s*(?:please\s+)?(?:see|read|refer to|check)\s+[^\n]+\s*$`)
 
-func lintAskAuthoring(body string, refs []string, links []askEvidenceLink) ([]string, error) {
+func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forges []workspaceconfig.Forge) ([]string, error) {
 	for _, link := range links {
 		u, e := url.Parse(link.URL)
 		if e != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || strings.TrimSpace(link.Label) == "" {
@@ -64,8 +66,20 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink) ([]st
 	for _, link := range links {
 		evidence += " " + link.URL
 	}
+	evidenceLinks := evidenceURLs(evidence)
 	for _, match := range askNamedPR.FindAllStringSubmatch(body, -1) {
-		if !regexp.MustCompile(`/pull/` + regexp.QuoteMeta(match[1]) + `(?:[^0-9]|$)`).MatchString(evidence) {
+		satisfied := false
+		for _, u := range evidenceLinks {
+			kind := forgeKindFor(forges, u)
+			if kind == "" {
+				continue
+			}
+			if number, ok := forgePRNumber(kind, u.Path); ok && number == match[1] {
+				satisfied = true
+				break
+			}
+		}
+		if !satisfied {
 			return nil, fmt.Errorf("PR #%s has no matching evidence URL; add its labelled pull-request URL", match[1])
 		}
 	}
@@ -78,7 +92,12 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink) ([]st
 		found := strings.Contains(evidence, needle)
 		if kind == "file" {
 			for _, link := range links {
-				if regexp.MustCompile(`/blob/[0-9a-fA-F]{40}/`).MatchString(link.URL) && strings.Contains(link.URL, match[2]) && strings.Contains(link.URL, "#L") {
+				u, e := url.Parse(link.URL)
+				if e != nil {
+					continue
+				}
+				forgeKind := forgeKindFor(forges, u)
+				if forgeKind != "" && forgeCommitPinnedFile(forgeKind, u) && strings.Contains(link.URL, match[2]) {
 					found = true
 				}
 			}

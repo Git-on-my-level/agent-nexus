@@ -24,6 +24,10 @@ func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (
 	if err != nil {
 		return nil, command, err
 	}
+	if args[0] == "forge" && len(args) > 1 && configForgeSubcommandSpec.normalize(args[1]) == "list" {
+		command = "config forge list"
+		return a.runConfigForgeList(args[2:], catalog)
+	}
 	if args[0] == "workspaces" {
 		cwd, err := a.workspaceCWD()
 		if err != nil {
@@ -40,7 +44,21 @@ func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (
 		}
 		return &commandResult{Data: data}, command, nil
 	}
+	if args[0] == "ask-delivery" {
+		if len(args) == 1 {
+			return &commandResult{Data: map[string]any{"ask_delivery": strings.TrimSpace(catalog.File.AskDelivery)}}, command, nil
+		}
+		mode := strings.ToLower(strings.TrimSpace(args[1]))
+		if !validAskDeliveryMode(mode) {
+			return nil, command, errnorm.Usage("invalid_request", "ask-delivery must be one of: await, resume, batch, none")
+		}
+		if err := setWorkspaceAskDeliveryDefault(dir, mode); err != nil {
+			return nil, command, err
+		}
+		return &commandResult{Data: map[string]any{"ask_delivery": mode}}, command, nil
+	}
 	var base, pattern string
+	var forgeData map[string]any
 	err = workspaceconfig.Update(dir, func(current *workspaceconfig.Catalog) error {
 		switch args[0] {
 		case "use":
@@ -78,6 +96,11 @@ func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (
 					delete(current.File.Rules, raw)
 				}
 			}
+		case "forge":
+			forgeData, err = runConfigForgeMutate(args[1:], current)
+			if err != nil {
+				return err
+			}
 		default:
 			return configSubcommandSpec.unknownError(args[0])
 		}
@@ -85,6 +108,9 @@ func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (
 	})
 	if err != nil {
 		return nil, command, err
+	}
+	if args[0] == "forge" {
+		return &commandResult{Data: forgeData}, command, nil
 	}
 	data := map[string]any{"base_url": base}
 	if args[0] == "use" {
@@ -111,4 +137,66 @@ func redactedConfigShowData(cfg config.Resolved) map[string]any {
 		data["access_token_redacted"] = true
 	}
 	return data
+}
+
+// runConfigForgeList is a read: it reports the forge hosts registered for one
+// workspace or, with no workspace argument, every workspace that has entries.
+func (a *App) runConfigForgeList(args []string, catalog workspaceconfig.Catalog) (*commandResult, string, error) {
+	command := "config forge list"
+	data := map[string]any{}
+	if len(args) == 0 {
+		forges := map[string][]workspaceconfig.Forge{}
+		for key, entries := range catalog.File.Forges {
+			forges[key] = entries
+		}
+		data["forges"] = forges
+		return &commandResult{Data: data}, command, nil
+	}
+	base, err := catalog.Target(args[0])
+	if err != nil {
+		return nil, command, errnorm.Usage("workspace_unknown", err.Error())
+	}
+	data["workspace"] = base
+	data["forges"] = catalog.File.ForgesFor(base)
+	return &commandResult{Data: data}, command, nil
+}
+
+// runConfigForgeMutate applies one forge registry write inside the workspace
+// config update transaction.
+func runConfigForgeMutate(args []string, current *workspaceconfig.Catalog) (map[string]any, error) {
+	if len(args) == 0 {
+		return nil, configForgeSubcommandSpec.requiredError()
+	}
+	switch configForgeSubcommandSpec.normalize(args[0]) {
+	case "add":
+		if len(args) != 4 {
+			return nil, errnorm.Usage("invalid_args", "use anx help config forge add for command arguments")
+		}
+		base, err := current.Target(args[1])
+		if err != nil {
+			return nil, errnorm.Usage("workspace_unknown", err.Error())
+		}
+		if err = current.File.SetForge(args[1], args[2], args[3]); err != nil {
+			return nil, errnorm.Usage("invalid_request", err.Error())
+		}
+		return map[string]any{"workspace": base, "host": strings.ToLower(strings.TrimSpace(args[2])), "kind": strings.ToLower(strings.TrimSpace(args[3])), "registered": true}, nil
+	case "remove":
+		if len(args) != 3 {
+			return nil, errnorm.Usage("invalid_args", "use anx help config forge remove for command arguments")
+		}
+		base, err := current.Target(args[1])
+		if err != nil {
+			return nil, errnorm.Usage("workspace_unknown", err.Error())
+		}
+		removed, err := current.File.RemoveForge(args[1], args[2])
+		if err != nil {
+			return nil, errnorm.Usage("workspace_unknown", err.Error())
+		}
+		if !removed {
+			return nil, errnorm.Usage("not_found", "forge host "+args[2]+" is not registered for "+base)
+		}
+		return map[string]any{"workspace": base, "host": strings.ToLower(strings.TrimSpace(args[2])), "removed": true}, nil
+	default:
+		return nil, configForgeSubcommandSpec.unknownError(args[0])
+	}
 }

@@ -27,7 +27,7 @@ Subject defaults to the current card or creates a ready card on the default boar
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
-Delivery: --on-answer <command> (host-only), --webhook <https-url>; run anx bridge run. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
+Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 `)
 }
 
@@ -105,6 +105,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		dryRunFlag                                            trackedBool
 		forceFlag                                             trackedBool
 		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag trackedString
+		deliveryFlag                                          trackedString
 		evidenceFlags                                         trackedStrings
 	)
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
@@ -129,6 +130,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&evidenceFlags, "evidence", "Label=URL evidence (repeatable)")
 	fs.Var(&onAnswerFlag, "on-answer", "Host-only command to resume on answer")
 	fs.Var(&webhookFlag, "webhook", "HTTPS answer subscription URL")
+	fs.Var(&deliveryFlag, "delivery", "Answer delivery mode: await, resume, batch, or none")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render the request without sending it")
 	if err := fs.Parse(flagArgs); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -236,7 +238,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if utf8.RuneCountInString(title) > 160 {
 		return nil, errnorm.Usage("ask_title_too_long", "ask title exceeds the hard maximum of 160 characters; move detail into --body or --body-file ask.md")
 	}
-	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links)
+	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links, a.workspaceForges(cfg))
 	if titleErr := lintAskTitle(title); titleErr != nil {
 		lintErr = titleErr
 	}
@@ -374,11 +376,6 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if err := validateEventsCreateInput(bodyMap, kind); err != nil {
 		return nil, err
 	}
-	if dryRunFlag.set && dryRunFlag.value {
-		result := dryRunResult(kind, "events.create", nil, nil, bodyMap)
-		result.Warnings = append(result.Warnings, askAuthoringWarnings(warnings)...)
-		return result, nil
-	}
 	// Allocate the local registry key before publishing the ask. The command
 	// never enters event JSON or a request to the server.
 	random := make([]byte, 16)
@@ -386,10 +383,31 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		return nil, err
 	}
 	localAskID := "ev_" + hex.EncodeToString(random)
-	command := a.resumeCommand(onAnswerFlag.value, localAskID)
+	delivery, err := a.resolveAskDelivery(cfg, askDeliveryInput{
+		Explicit:     deliveryFlag.value,
+		ExplicitSet:  deliveryFlag.set,
+		OnAnswer:     onAnswerFlag.value,
+		OnAnswerFlag: onAnswerFlag.set,
+		AskID:        localAskID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	asMap(bodyMap["event"])["id"] = localAskID
+	asMap(bodyMap["event"])["payload"].(map[string]any)["delivery"] = delivery.Mode
+	if dryRunFlag.set && dryRunFlag.value {
+		result := dryRunResult(kind, "events.create", nil, nil, bodyMap)
+		result.Warnings = append(result.Warnings, askAuthoringWarnings(warnings)...)
+		result.Warnings = append(result.Warnings, askDeliveryWarnings(delivery)...)
+		if data, ok := result.Data.(map[string]any); ok {
+			data["delivery"] = askDeliveryResultView(delivery, "event:"+localAskID)
+		}
+		return result, nil
+	}
+	command := delivery.Command
 	registryPath := ""
 	var registration askResumeRegistration
-	if command != "" {
+	if delivery.Mode == askDeliveryResume {
 		dir, err := a.askRegistryDir(cfg)
 		if err != nil {
 			return nil, err
@@ -401,25 +419,26 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		registryPath = askRegistryPath(dir, "event:"+localAskID)
 		registration = askResumeRegistration{AskID: "event:" + localAskID, BaseURL: cfg.BaseURL, ActorID: cfg.ActorID, Command: command, Dir: cwd, ThreadID: threadID, State: "pending"}
 	}
-	asMap(bodyMap["event"])["id"] = localAskID
 	result, err := a.invokeTypedJSON(ctx, cfg, kind, "events.create", nil, nil, bodyMap)
 	if err != nil {
 		return nil, err
 	}
 	event := asMap(asMap(commandResultBody(result))["event"])
+	askRef := ""
 	if id := strings.TrimSpace(anyString(event["id"])); id != "" {
-		if command != "" {
-			registration.AskID = "event:" + id
+		askRef = "event:" + id
+		if delivery.Mode == askDeliveryResume {
+			registration.AskID = askRef
 			registration.AskRef = anyString(event["ref"])
 			if err = writeAskRegistration(registryPath, registration); err != nil {
-				return nil, errnorm.WithDetails(errnorm.Local("registration_failed", "ask created; could not save local resume registration"), map[string]any{"ask_id": "event:" + id})
+				return nil, errnorm.WithDetails(errnorm.Local("registration_failed", "ask created; could not save local resume registration"), map[string]any{"ask_id": askRef})
 			}
 			_, e := a.invokeRawJSON(ctx, cfg, "ask subscribe", "POST", "/asks/"+url.PathEscape(id)+"/subscriptions", map[string]any{"kind": "bridge", "label": "host resume"})
 			if e != nil {
-				return nil, errnorm.WithDetails(errnorm.Local("subscription_failed", "ask was created but bridge subscription failed"), map[string]any{"ask_id": "event:" + id})
+				return nil, errnorm.WithDetails(errnorm.Local("subscription_failed", "ask was created but bridge subscription failed"), map[string]any{"ask_id": askRef})
 			}
 		}
-		asMap(result.Data)["body"] = map[string]any{"ask_id": "event:" + id, "subject_ref": subjectRef, "kind": kind, "event": event}
+		asMap(result.Data)["body"] = map[string]any{"ask_id": askRef, "subject_ref": subjectRef, "kind": kind, "event": event, "delivery": askDeliveryResultView(delivery, askRef)}
 	}
 	if webhookFlag.value != "" {
 		id := anyString(event["id"])
@@ -432,6 +451,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	for _, warning := range warnings {
 		result.Warnings = append(result.Warnings, output.Warning{Code: "ask_authoring", Message: warning})
 	}
+	result.Warnings = append(result.Warnings, askDeliveryWarnings(delivery)...)
 	return result, nil
 }
 

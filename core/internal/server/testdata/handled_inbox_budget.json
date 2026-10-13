@@ -1,0 +1,5 @@
+{
+  "max_read_prepares": 25,
+  "max_get_ms": 2000,
+  "max_answer_ms": 2000
+}

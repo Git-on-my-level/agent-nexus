@@ -58,7 +58,8 @@ func TestInboxResponseRequiresHumanAcrossWritePaths(t *testing.T) {
 }
 
 func TestInboxResponseConcurrentReplayIsSingleEvent(t *testing.T) {
-	t.Parallel()
+	// Keep the eight simultaneous response writers isolated from unrelated
+	// schema/reference fixtures that can exhaust their SQLite busy timeout.
 	requireIntegrationTest(t)
 	h, itemID := responseSecurityFixture(t)
 	endpoint := h.baseURL + "/inbox/" + url.PathEscape(itemID) + "/respond"

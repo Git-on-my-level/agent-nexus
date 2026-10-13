@@ -251,7 +251,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta skill` (local-helper): Render the bundled participant or PM skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
 - `bridge run` (local-helper): Run registered answer commands for the selected agent on this host.
-- `bridge install` (local-helper): Install the host bridge runtime.
+- `bridge install` (local-helper): Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
 - `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
 - `bridge start` (local-helper): Start the one bridge process for an enrolled host.
 - `bridge stop` (local-helper): Stop a managed host bridge.
@@ -306,7 +306,7 @@ Subject defaults to the current card or creates a ready card on the default boar
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
-Delivery: --on-answer <command> (host-only), --webhook <https-url>; run anx bridge run. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
+Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 ```
 
 ## `onboarding`
@@ -526,7 +526,7 @@ Run anx config show to inspect effective values and sources without printing sec
 CLI config surface: effective settings and their sources.
 
 ```text
-Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).
+Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config forge add <alias|url> <host> <kind> registers a non-GitHub forge host for a workspace so its pull-request URLs satisfy ask evidence linting (kinds: github, forgejo, gitea, gitlab, bitbucket). anx config show prints the resolved workspace and sources (secrets redacted).
 ```
 
 ## `agent-bridge`
@@ -824,8 +824,9 @@ One bridge per enrolled host for derived-agent wake routing.
 Bridge: one process per enrolled host
 
 anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]
+anx bridge install [--as <agent>] [--dry-run] keep an anx bridge run alive (launchd/systemd)
 anx host enroll
-anx bridge install
+anx bridge install --ref <git-ref> (legacy: managed Python wake-routing runtime)
 anx bridge start --config ./bridge.toml
 anx bridge status --config ./bridge.toml
 anx bridge doctor --config ./bridge.toml
@@ -8998,18 +8999,20 @@ anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed a
 
 ## `bridge install`
 
-Install the host bridge runtime.
+Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
 
 ```text
 Local Help: bridge install
 
 - Kind: `local helper`
 - Side effect class: `local_operational_write`
-- Summary: Install the host bridge runtime.
-- Composition: Install a managed Python virtualenv and wrapper.
-- JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
+- Summary: Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
+- Composition: Idempotent; --dry-run prints the unit without writing. Legacy runtime: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`.
+- JSON body: `agent`, `unit_path`, `label`, `content`, `start_args`, `wrote`, `started`
 - Examples:
-  - `anx bridge install`
+  - `anx bridge install --as <agent>`
+  - `anx bridge install --dry-run --as <agent>`
+  - `anx bridge install --ref <git-ref>`
 
 
 Global flags:

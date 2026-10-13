@@ -90,6 +90,8 @@ const STATUS_TONES = Object.freeze({
  */
 const AUTHORITY_LABELS = Object.freeze({
   github: "GitHub",
+  forgejo: "Forgejo",
+  gitea: "Gitea",
   multica: "Multica",
   git: "Git",
   ssh_git: "Git",

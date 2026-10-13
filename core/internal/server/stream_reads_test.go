@@ -292,7 +292,8 @@ func TestSharedInboxLateSubscriberGetsCurrentAges(t *testing.T) {
 }
 
 func TestInboxCommitDuringSweepRevisitsEarlierPage(t *testing.T) {
-	t.Parallel()
+	// Isolate strict stream delivery deadlines from parallel schema/reference
+	// fixtures. Streaming and competing writes within this fixture remain concurrent.
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	base := env.primitiveStore.(*primitives.Store)

@@ -94,6 +94,8 @@ func (c ConnectionConfig) Reader(t Target, timeout time.Duration, credentials Cr
 		switch t.Source {
 		case "github":
 			return NewGitHubReader(h)
+		case "forgejo", "gitea":
+			return NewForgejoReader(h, t.Source)
 		case "multica":
 			return NewMulticaReader(h)
 		}

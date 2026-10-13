@@ -81,6 +81,8 @@ func reader(c config) (observation.Reader, error) {
 	switch c.Target.Source {
 	case "github":
 		return observation.NewGitHubReader(h)
+	case "forgejo", "gitea":
+		return observation.NewForgejoReader(h, c.Target.Source)
 	case "multica":
 		return observation.NewMulticaReader(h)
 	}

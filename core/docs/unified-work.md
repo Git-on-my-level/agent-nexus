@@ -97,6 +97,15 @@ and network policy; no token extraction or credential copying occurs. Explicit
 private destinations. The environment handle resolves only the named variable
 in memory; choose source-side read-only credentials.
 
+Self-hosted Forgejo and Gitea forges use `source: "forgejo"` (or `"gitea"`) with
+the same HTTP transport: `base_url` is the forge HTTPS origin (the reader mounts
+the Gitea-compatible API under `/api/v1`), `kind` is `issue` or `pull_request`,
+`native_id` is the numeric index and `repository` is `owner/repo`. There is no
+default origin; the credential env handle authenticates as a read-only
+`Authorization: token` personal access token. The reader reports PR state,
+reviews, commit statuses and comments; it is read-only. GitLab and Bitbucket
+have no observation reader yet.
+
 For `ssh_git`, configure the exact target `host`, absolute repository `path`,
 `known_hosts_file`, optional `identity_file` and `ssh_port`. Existing key and host
 files are read in place. No forwarding, interactive prompts, caller-controlled

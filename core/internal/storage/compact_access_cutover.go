@@ -130,7 +130,7 @@ func (w *Workspace) VerifyCompactAccessCutover(ctx context.Context) (CompactAcce
 				return result, err
 			}
 			if mismatch {
-				return result, ErrCompactAccessMismatch
+				return result, &compactMismatchError{check: "stable_raw_identity"}
 			}
 		}
 	}

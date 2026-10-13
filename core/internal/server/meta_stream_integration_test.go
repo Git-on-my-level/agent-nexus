@@ -390,7 +390,8 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 
 func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 	requireIntegrationTest(t)
-	t.Parallel()
+	// Isolate strict stream delivery deadlines from parallel schema/reference
+	// fixtures. Streaming and competing writes within this fixture remain concurrent.
 
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()

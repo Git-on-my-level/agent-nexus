@@ -38,12 +38,24 @@ var notificationsSubcommandSpec = subcommandSpec{
 
 var configSubcommandSpec = subcommandSpec{
 	command: "config",
-	valid:   []string{"show", "use", "map", "unmap", "workspaces"},
+	valid:   []string{"show", "use", "map", "unmap", "workspaces", "ask-delivery", "forge"},
 	examples: []string{
 		"anx config show",
 		"anx config workspaces",
 		`anx config use "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"`,
 		`anx config map "${ANX_PROJECT_GLOB:?set this to an absolute project glob}" "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"`,
+		"anx config ask-delivery resume",
+	},
+}
+
+var configForgeSubcommandSpec = subcommandSpec{
+	command: "config forge",
+	valid:   []string{"add", "remove", "list"},
+	examples: []string{
+		"anx config forge add <alias|url> <host> <github|forgejo|gitea|gitlab|bitbucket>",
+		"anx config forge remove <alias|url> <host>",
+		"anx config forge list",
+		"anx config forge list <alias|url>",
 	},
 }
 
