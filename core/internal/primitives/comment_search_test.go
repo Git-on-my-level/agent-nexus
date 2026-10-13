@@ -235,6 +235,12 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			for done := false; !done; {
+				done, err = ws.MaintainCommentSearchBatch(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 			for _, did := range repo.parents {
 				if _, err = s.db.ExecContext(ctx, `INSERT INTO document_search_dirty VALUES(?) ON CONFLICT DO NOTHING`, did); err != nil {
 					t.Fatal(err)
@@ -281,7 +287,8 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 					}
 					sort.Strings(want)
 					pageLimit := 3
-					req := DocumentSearchFilter{Query: legacyQ, Limit: &pageLimit}
+					coverage := DocumentSearchCoverage{}
+					req := DocumentSearchFilter{Query: legacyQ, Limit: &pageLimit, Coverage: &coverage}
 					seen := map[string]bool{}
 					for n := 0; ; n++ {
 						if n > 100 {
@@ -290,6 +297,9 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 						page, next, err := s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), req)
 						if err != nil {
 							t.Fatal(err)
+						}
+						if coverage.Mode != "independent" {
+							t.Fatal("parity did not exercise independent reader", coverage)
 						}
 						for _, hit := range page {
 							seen[anyStringValue(hit["id"])] = true

@@ -1040,6 +1040,7 @@ var migrations = []migration{
 	{Version: 81, AfterApply: installProjectionRetryBackoff},
 	{Version: 82, AfterApply: installCommentSearch},
 	{Version: 83, AfterApply: upgradeSearchNormalization},
+	{Version: 84, AfterApply: upgradeExternalCommentSearch},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

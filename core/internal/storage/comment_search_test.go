@@ -33,6 +33,20 @@ func commentSearchCount(t *testing.T, db *sql.DB, q string, args ...any) int {
 	return n
 }
 
+func drainCommentSearch(t *testing.T, ws *Workspace) {
+	t.Helper()
+	for i := 0; i < 5000; i++ {
+		done, err := ws.MaintainCommentSearchBatch(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			return
+		}
+	}
+	t.Fatal("comment projection did not converge")
+}
+
 func TestCommentSearchCanonicalImportsLifecycleAndRollback(t *testing.T) {
 	ws, err := InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
@@ -49,6 +63,7 @@ func TestCommentSearchCanonicalImportsLifecycleAndRollback(t *testing.T) {
 	} {
 		commentSearchExec(t, db, q)
 	}
+	drainCommentSearch(t, ws)
 	if n := commentSearchCount(t, db, `SELECT count(*) FROM comment_search_postings WHERE thread_id='new-thread' AND term='needle'`); n != 1 {
 		t.Fatal(n)
 	}
@@ -60,20 +75,22 @@ func TestCommentSearchCanonicalImportsLifecycleAndRollback(t *testing.T) {
 		t.Fatal(n)
 	}
 	commentSearchExec(t, db, `UPDATE events SET trashed_at=NULL WHERE id='comment'`)
+	drainCommentSearch(t, ws)
 	if n := commentSearchCount(t, db, `SELECT count(*) FROM comment_search_postings`); n != 2 {
 		t.Fatal(n)
 	}
-	// A failure after deleting old postings must roll back the canonical edit,
-	// original terms and version in the same source transaction.
+	// An external source write succeeds even when normalization cannot. Its
+	// pending row remains uncertified and the worker can retry after repair.
 	commentSearchExec(t, db, `CREATE TRIGGER reject_comment_search BEFORE INSERT ON comment_search_postings BEGIN SELECT RAISE(ABORT,'injected index failure'); END`)
-	if _, err = db.Exec(`UPDATE events SET payload_json='{"payload":{"text":"replacement"}}' WHERE id='comment'`); err == nil {
-		t.Fatal("source edit survived index failure")
+	commentSearchExec(t, db, `UPDATE events SET payload_json='{"payload":{"text":"replacement"}}' WHERE id='comment'`)
+	if _, err = ws.MaintainCommentSearchBatch(context.Background()); err == nil {
+		t.Fatal("worker failure was not reported")
 	}
-	if n := commentSearchCount(t, db, `SELECT count(*) FROM events WHERE id='comment' AND json_extract(payload_json,'$.payload.text')='edited needle'`); n != 1 {
-		t.Fatal(n)
+	if n := commentSearchCount(t, db, `SELECT count(*) FROM events WHERE id='comment' AND json_extract(payload_json,'$.payload.text')='replacement'`); n != 1 {
+		t.Fatal("lost external source", n)
 	}
-	if n := commentSearchCount(t, db, `SELECT count(*) FROM comment_search_postings WHERE term='needle'`); n != 1 {
-		t.Fatal(n)
+	if n := commentSearchCount(t, db, `SELECT count(*) FROM comment_search_heads WHERE event_id='comment' AND ready=0`); n != 1 {
+		t.Fatal("failed projection certified", n)
 	}
 	commentSearchExec(t, db, `DROP TRIGGER reject_comment_search`)
 	commentSearchExec(t, db, `INSERT OR REPLACE INTO events(id,type,ts,actor_id,thread_id,payload_json) VALUES('comment','other','now','owner','thread','{}')`)
@@ -164,6 +181,7 @@ func TestCommentSearchOnlineBackfillResumesAndCertifiesSourceBindings(t *testing
 	// Certification stays valid through new canonical writes; the source
 	// authorization graph, not a copied audience list, controls subsequent reads.
 	commentSearchEvent(t, ws.DB(), "after-done", "live token")
+	drainCommentSearch(t, ws)
 	if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM comment_search_postings WHERE event_id='after-done'`); n != 2 {
 		t.Fatal(n)
 	}
@@ -221,6 +239,7 @@ func TestCommentSearchCapsAndResourceDeletePlan(t *testing.T) {
 		words[i] = fmt.Sprintf("term%d", i)
 	}
 	commentSearchEvent(t, ws.DB(), "max", strings.Join(words, " "))
+	drainCommentSearch(t, ws)
 	if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM comment_search_postings WHERE event_id='max'`); n != 4096 {
 		t.Fatal(n)
 	}

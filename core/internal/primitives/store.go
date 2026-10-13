@@ -22,6 +22,7 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/commentindex"
 	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
@@ -219,6 +220,7 @@ func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...
 	var scopedDB *accessDB
 	if db != nil {
 		scopedDB = resourceaccess.NewDB(db)
+		scopedDB.SetWriteHook(commentindex.AfterWrite)
 	}
 	store := &Store{db: scopedDB, streamDB: db, blob: blobBackend, blobRoot: blobRoot}
 	for _, option := range options {

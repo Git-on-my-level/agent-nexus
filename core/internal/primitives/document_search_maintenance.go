@@ -185,7 +185,7 @@ func (s *Store) RunDocumentSearchMaintenance(ctx context.Context, report func(er
 			done, err := s.MaintainDocumentSearchBatch(ctx)
 			var commentsDone bool
 			if err == nil {
-				err = s.db.QueryRowContext(ctx, `SELECT done FROM comment_search_job WHERE singleton=1`).Scan(&commentsDone)
+				err = s.db.QueryRowContext(ctx, `SELECT done AND NOT EXISTS(SELECT 1 FROM comment_search_pending_heads LIMIT 1) FROM comment_search_job WHERE singleton=1`).Scan(&commentsDone)
 			}
 			if err == nil && (!independentDocumentSearchEnabled() || !done || !commentsDone) {
 				var repaired bool

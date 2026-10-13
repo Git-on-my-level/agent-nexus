@@ -10,8 +10,8 @@ Release 0.12.61 also uses schema 81.
 ## Activation, fallback and recovery
 
 `ANX_INDEPENDENT_DOCUMENT_SEARCH` defaults to enabled. Selection requires durable
-completion of both event and head backfills, no unready head, and no pending
-parent attachment. A fresh empty workspace is certified immediately. The core
+completion of both event and head backfills, no pending comment normalization or
+unready document head, and no pending parent attachment. A fresh empty workspace is certified immediately. The core
 starts both resumable workers and cancels/joins them at shutdown. This has been
 exercised in disposable workspaces; it is not a claim of deployment to a user's
 workspace.
@@ -36,8 +36,10 @@ O(the repaired document's body and comment history). Workers also repair while
 the independent backfill is incomplete. Once certified and enabled, they leave
 aggregate repair dormant until fallback is selected.
 
-Canonical source records remain authoritative. An index error aborts the source
-write; no successful mutation can commit without its required capture.
+Canonical source records remain authoritative. Core normalization errors abort
+the source transaction. External mutations commit with bounded raw capture and
+remain pending if later normalization fails; no successful mutation can commit
+without its required capture.
 Unavailable blobs or failed maintenance do not certify an incomplete head.
 Worker errors are rate limited and never include source payloads.
 
@@ -197,3 +199,36 @@ inlining decision. Plan regressions cover two/eight terms under canonical,
 pinned-denial and point-snapshot policies. The production-reader VM regression
 uses 100 and 10,000 unrelated documents with a private matching control;
 only warm work after authority admission is budgeted, not cold closure creation.
+
+## External writers and raw capture (migration 84)
+
+Search's canonical event/document triggers use SQLite built-ins only. Event
+triggers capture at most 64 KiB of raw text, its truncation bit, source identity
+and a pending flag. They remove old terms immediately, dirty current aggregates
+and invalidate continuations atomically with the source write. Document metadata
+changes invalidate affected heads without calling a connection-local normalizer.
+
+Core's scoped database wrapper installs a construction-time write hook. After
+ordinary event-write authorization it normalizes at most 64 bound source
+identities inside that same transaction, using the shared Go preparation kernel;
+normalization failure rolls back the source and derived changes. The hook does
+not enumerate the queue, load document blobs, or read peer comments. Non-core and
+literal/bulk writes remain pending for the online worker. That worker stays alive
+after certification, uses a cheap indexed idle check without taking a writer
+lock, and processes one pending source per bounded transaction.
+
+Independent admission checks current pending state inside its read snapshot.
+Pending sources cannot make a stale independent result; the existing aggregate
+fallback repairs canonical text lazily or returns retryable 503 until repair is
+complete. Canonical source authority still applies before matching and pagination.
+A worker failure leaves the source intact and pending, so it can retry. Migration
+84 preserves already-normalized preview rows and replaces the old triggers using
+metadata changes only; it does not normalize historical sources at startup.
+
+The plain-driver regression installs the production search schema without
+unrelated ownership triggers and proves zero user-defined functions are registered.
+It exercises insert/edit/trash/restore/delete and worker catch-up. Full workspace
+compatibility is exercised by the CLI's legacy fixture driver, which retains the
+pre-existing reference/ownership function contract but has no search function.
+Separate reader tests cover pending-state fallback, privacy changes before
+processing, and synchronous source rollback on normalization failure.

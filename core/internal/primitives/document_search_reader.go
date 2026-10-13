@@ -46,7 +46,7 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 	}
 	filter.States = NormalizeListLifecycleStates(filter.States)
 	var ready bool
-	if err := s.db.QueryRowContext(ctx, `SELECT c.normalization_version=2 AND d.normalization_version=2 AND c.done AND d.done AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1) FROM comment_search_job c,document_search_state d WHERE c.singleton=1 AND d.singleton=1`).Scan(&ready); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT c.normalization_version=2 AND d.normalization_version=2 AND c.done AND d.done AND NOT EXISTS(SELECT 1 FROM comment_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1) FROM comment_search_job c,document_search_state d WHERE c.singleton=1 AND d.singleton=1`).Scan(&ready); err != nil {
 		return nil, "", err
 	}
 	independent := independentDocumentSearchEnabled() && ready
@@ -67,7 +67,7 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 	var key []byte
 	var dirty bool
 	if err = s.db.QueryRowContext(ctx, `SELECT generation,cursor_key,(SELECT version FROM resource_access_epoch WHERE singleton=1),EXISTS(SELECT 1 FROM document_search_dirty LIMIT 1),
- (SELECT done AND normalization_version=2 FROM comment_search_job WHERE singleton=1) AND done AND normalization_version=2 AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1)
+ (SELECT done AND normalization_version=2 FROM comment_search_job WHERE singleton=1) AND done AND normalization_version=2 AND NOT EXISTS(SELECT 1 FROM comment_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1)
  FROM document_search_state WHERE singleton=1`).Scan(&generation, &key, &authority, &dirty, &ready); err != nil {
 		return nil, "", err
 	}

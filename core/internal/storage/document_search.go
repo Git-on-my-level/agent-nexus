@@ -120,8 +120,7 @@ CREATE TRIGGER IF NOT EXISTS document_search_document_update AFTER UPDATE ON doc
  DELETE FROM document_search_heads WHERE document_id=OLD.id AND OLD.id<>NEW.id;
  INSERT INTO document_search_dirty SELECT OLD.id WHERE OLD.id<>NEW.id ON CONFLICT DO NOTHING;
  INSERT INTO document_search_heads(document_id) VALUES(NEW.id) ON CONFLICT DO NOTHING;
- UPDATE document_search_heads SET ready=CASE WHEN body_revision=NEW.head_revision_id THEN ready ELSE 0 END,
- projection_json=json_patch(anx_comment_search_projection(CAST(COALESCE(NEW.title,'')||' '||NEW.summary||' '||NEW.source||' '||NEW.tags_json||' '||body_text AS BLOB)),CASE WHEN body_truncated THEN '{"truncated":true}' ELSE '{}' END) WHERE document_id=NEW.id;
+ UPDATE document_search_heads SET ready=CASE WHEN body_revision=NEW.head_revision_id AND OLD.title IS NEW.title AND OLD.summary IS NEW.summary AND OLD.source IS NEW.source AND OLD.tags_json IS NEW.tags_json THEN ready ELSE 0 END WHERE document_id=NEW.id;
  DELETE FROM document_search_resources WHERE kind='comment' AND doc_n=(SELECT n FROM document_search_heads WHERE document_id=NEW.id) AND COALESCE(OLD.thread_id,'')<>COALESCE(NEW.thread_id,'');
  INSERT INTO document_search_links_pending(document_id) SELECT NEW.id WHERE COALESCE(OLD.thread_id,'')<>COALESCE(NEW.thread_id,'') ON CONFLICT(document_id) DO UPDATE SET cursor=NULL;
  INSERT INTO document_search_dirty VALUES(NEW.id) ON CONFLICT DO NOTHING;

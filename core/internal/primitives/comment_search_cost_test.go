@@ -39,6 +39,12 @@ func TestCommentSearchFullWriteCost1000Comments(t *testing.T) {
 		t.Fatal(err)
 	}
 	target = comment["id"].(string)
+	for done := false; !done; {
+		done, err = ws.MaintainCommentSearchBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, phase := range []string{"independent-cutover"} {
 		pool, capture, err := perfguard.Open("file:" + ws.Layout().DatabasePath)
 		if err != nil {
