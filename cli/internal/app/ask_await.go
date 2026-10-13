@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -19,9 +20,25 @@ import (
 func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target string, timeout time.Duration) (*commandResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// Terminal state is durable. Read it before creating a write-side subscription
+	// or competing for SSE admission, especially when writers are contending.
+	askPath := "/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:"))
+	current, err := a.invokeRawJSON(ctx, cfg, "await outcome", http.MethodGet, askPath, nil)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
+		}
+		return nil, err
+	}
+	if out := commandResultBody(current); anyString(out["status"]) != "open" {
+		return awaitAskOutcomeResult(target, out)
+	}
 	subscription := ""
 	sub, err := a.invokeRawJSON(ctx, cfg, "await subscribe", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/subscriptions", map[string]any{"kind": "await", "label": "live await"})
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
+		}
 		return nil, err
 	}
 	subscription = anyString(commandResultBody(sub)["id"])
@@ -72,25 +89,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 				} else {
 					out["delivery_acknowledged"] = true
 				}
-				switch status {
-				case "answered":
-					response := asMap(out["response"])
-					out["answer"] = response["response_text"]
-					out["outcome"] = response["outcome"]
-					out["responder"] = response["responding_actor_id"]
-					if response["outcome"] == "rejected" {
-						message := "ask rejected"
-						if strings.HasPrefix(target, "access-request:") || anyString(out["access_request_ref"]) != "" {
-							message = "access request denied"
-						}
-						return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", message), out)
-					}
-					return &commandResult{Data: out}, nil
-				case "needs_context", "withdrawn", "expired":
-					return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, status, "ask ended: "+status), out)
-				default:
-					return nil, errnorm.New(errnorm.KindRemote, "invalid_response_outcome", "unknown ask state")
-				}
+				return awaitAskOutcomeResult(target, out)
 			}
 			resp.Body.Close()
 		}
@@ -105,4 +104,26 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		}
 	}
 	return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
+}
+
+func awaitAskOutcomeResult(target string, out map[string]any) (*commandResult, error) {
+	switch anyString(out["status"]) {
+	case "answered":
+		response := asMap(out["response"])
+		out["answer"] = response["response_text"]
+		out["outcome"] = response["outcome"]
+		out["responder"] = response["responding_actor_id"]
+		if response["outcome"] == "rejected" {
+			message := "ask rejected"
+			if strings.HasPrefix(target, "access-request:") || anyString(out["access_request_ref"]) != "" {
+				message = "access request denied"
+			}
+			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", message), out)
+		}
+		return &commandResult{Data: out}, nil
+	case "needs_context", "withdrawn", "expired":
+		return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, anyString(out["status"]), "ask ended: "+anyString(out["status"])), out)
+	default:
+		return nil, errnorm.New(errnorm.KindRemote, "invalid_response_outcome", "unknown ask state")
+	}
 }

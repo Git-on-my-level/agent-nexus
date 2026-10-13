@@ -1988,7 +1988,7 @@ paths:
     patch:
       operationId: workPatch
       summary: Update local commitment annotations
-      description: Relation objects preserve additional metadata fields. Invalid relation shapes, kinds, or workspace refs return 400 invalid_request with field-specific guidance. Unmapped store failures return 500 internal_error with a server-generated X-Request-ID that correlates with a secret-safe diagnostic log.
+      description: Relation objects preserve additional metadata fields. Invalid relation shapes, kinds, or workspace refs return 400 invalid_request with field-specific guidance. Uncertain commit or post-commit failures return 409 outcome_unknown with recoverable=false and require state readback before another mutation. Unmapped store failures return 500 internal_error with a server-generated X-Request-ID that correlates with a secret-safe diagnostic log.
       tags:
       - work
       x-anx-surface: canonical
@@ -2004,6 +2004,7 @@ paths:
       - invalid_request
       - not_found
       - conflict
+      - outcome_unknown
       - work_unavailable
       x-anx-concepts:
       - cards
@@ -4794,7 +4795,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, outcome_unknown, busy, quota_exceeded]
       x-anx-concepts: [cards, boards, write]
       x-anx-stability: beta
       parameters:
@@ -4819,7 +4820,19 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '409':
-          $ref: '#/components/responses/ErrorResponse'
+          description: Board token conflict, or non-recoverable outcome_unknown after an uncertain commit. Read back first; do not repeat an already-applied move.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: SQLite writer contention before commit; recoverable busy error. Wait, reload the board token and retry.
+          headers:
+            Retry-After:
+              description: Minimum seconds to wait before retrying.
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
   /cards/{card_id}/restore:
     post:

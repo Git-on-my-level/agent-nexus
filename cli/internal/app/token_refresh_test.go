@@ -59,6 +59,8 @@ func TestAwaitRenewsExpiredDerivedTokenAndResumes(t *testing.T) {
 		case "/auth/token":
 			grants.Add(1)
 			refreshGrant(w)
+		case "/asks/ask-1":
+			fmt.Fprint(w, `{"status":"open"}`)
 		case "/stream/asks/ask-1":
 			n := streams.Add(1)
 			w.Header().Set("Content-Type", "text/event-stream")

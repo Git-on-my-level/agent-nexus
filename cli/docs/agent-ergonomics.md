@@ -1,6 +1,7 @@
 # Agent workflow ergonomics measurement
 
-The opt-in `TestAgentErgonomicsAgainstCore` scenario builds a real core and CLI,
+The `TestAgentErgonomicsAgainstCore` scenario in ordinary integration coverage
+builds a real core and CLI,
 uses a temporary workspace and host enrollment, and exercises orientation,
 pickup, session registration, participation, progress, an ask and answered
 await, blocking/unblocking, plan add/update/read, completion with evidence, and
@@ -16,17 +17,21 @@ success rate. It does not predict how often an agent makes this mistake.
 
 ## Observed findings and shipped slice
 
-| Finding                                                                                                      | Change or follow-up                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plan add/update/read repeat computed, authored and executive summary fields across many dotted-key lines.    | Compact plan header, one row per authored step with computed status taking precedence, health reason/timestamp, dependencies, critical path, next steps and mismatch/truncation flags. Complete fields remain in `--verbose`, `--headers`, and `--json`. |
-| `invalid step status` does not name accepted values; recovery needs help.                                    | Error lists `done`, `active`, `blocked`, `not_started` and explains that work in progress uses `active`.                                                                                                                                                 |
-| Individual plan help prints every plan verb.                                                                 | Focused verb usage, relevant flags and concurrency guidance.                                                                                                                                                                                             |
-| Missing or duplicate step errors omit a runnable read command; conflicts require locating the plan.          | Return an exact read-only `anx plan show <requested-card>` action. No automatic mutation retry.                                                                                                                                                          |
-| Session/participation JSON authoring still requires schema discovery beyond normal help.                     | Follow-up: include small validated registration examples in command help.                                                                                                                                                                                |
-| Progress message and answered-await readbacks expand the entire event/response.                              | Follow-up: compact their normal text while retaining refs, decision, provenance and full JSON.                                                                                                                                                           |
-| Concurrent local scenarios encountered an await timeout and card-move HTTP 500 before the changed plan code. | [Investigation #372](https://github.com/Git-on-my-level/agent-nexus/issues/372). Preserve failed logs; benchmark remains opt-in. Ten-second await and checked human fixture improve diagnostics without claiming the move failure is fixed.              |
+| Finding                                                                                                      | Change or follow-up                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan add/update/read repeat computed, authored and executive summary fields across many dotted-key lines.    | Compact plan header, one row per authored step with computed status taking precedence, health reason/timestamp, dependencies, critical path, next steps and mismatch/truncation flags. Complete fields remain in `--verbose`, `--headers`, and `--json`.                  |
+| `invalid step status` does not name accepted values; recovery needs help.                                    | Error lists `done`, `active`, `blocked`, `not_started` and explains that work in progress uses `active`.                                                                                                                                                                  |
+| Individual plan help prints every plan verb.                                                                 | Focused verb usage, relevant flags and concurrency guidance.                                                                                                                                                                                                              |
+| Missing or duplicate step errors omit a runnable read command; conflicts require locating the plan.          | Return an exact read-only `anx plan show <requested-card>` action. No automatic mutation retry.                                                                                                                                                                           |
+| Session/participation JSON authoring still requires schema discovery beyond normal help.                     | Follow-up: include small validated registration examples in command help.                                                                                                                                                                                                 |
+| Progress message and answered-await readbacks expand the entire event/response.                              | Follow-up: compact their normal text while retaining refs, decision, provenance and full JSON.                                                                                                                                                                            |
+| Concurrent local scenarios encountered an await timeout and card-move HTTP 500 before the changed plan code. | [Investigation #372](https://github.com/Git-on-my-level/agent-nexus/issues/372). Preserve failed logs; the scenario now runs in ordinary integration coverage. Ten-second await and checked human fixture improve diagnostics without claiming the move failure is fixed. |
 
 ## Comparison
+
+These figures record the plan-rendering comparison in PR #373. Subsequent
+durable-await and contention recovery changes affect current total readbacks;
+current reruns need not reproduce these historical byte totals.
 
 Sequential runs against baseline `84e1a5ccfea0c139d65f929b2ec9dfdf61f68c43`
 and the updated CLI used the identical scenario and an unchanged core.
@@ -56,14 +61,14 @@ Run these sequentially from `cli/`, saving full output and each command's exit
 code; do not use a pipeline that replaces the test exit code:
 
 ```sh
-ANX_ERGONOMICS_CLI_BINARY="$PWD/../../anx-ergonomics-baseline-bin" go test -tags=integration,ergonomics ./integration -run '^TestAgentErgonomicsAgainstCore$' -count=1 -v
-go test -tags=integration,ergonomics ./integration -run '^TestAgentErgonomicsAgainstCore$' -count=1 -v
+ANX_ERGONOMICS_CLI_BINARY="$PWD/../../anx-ergonomics-baseline-bin" go test -tags=integration ./integration -run '^TestAgentErgonomicsAgainstCore$' -count=1 -v
+go test -tags=integration ./integration -run '^TestAgentErgonomicsAgainstCore$' -count=1 -v
 ```
 
 Local validation also runs `make test-fast` and targeted output/app/skill tests.
-The measurement lane has an extra `ergonomics` build tag to quarantine its
-core instability under #372; it is not silently retried or skipped inside the
-scenario. API routes, server reads, authorization and durable mutations are
-unchanged. CLI projection work is linear in the response's steps and dependency
+The scenario now uses the ordinary `integration` build tag, alongside a
+20-iteration concurrent move/await regression. It is not silently retried or skipped
+inside the scenario. The original plan-rendering slice changed no API routes,
+server reads, authorization or durable mutations. Its CLI projection work is linear in the response's steps and dependency
 entries (server caps: 200 steps, 50 dependencies per step), with one bounded map
 for computed states and no additional HTTP calls.

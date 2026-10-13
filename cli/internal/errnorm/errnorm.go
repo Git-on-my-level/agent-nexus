@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -113,6 +114,12 @@ func ExitCode(err error) int {
 	if strings.HasSuffix(typed.Code, "_not_found") {
 		return 3
 	}
+	if typed.Code == "busy" {
+		details, _ := typed.Details.(map[string]any)
+		if details["status"] == 503 {
+			return 6
+		}
+	}
 	switch typed.Code {
 	case "not_found", "draft_not_found", "profile_not_found":
 		return 3
@@ -120,7 +127,7 @@ func ExitCode(err error) int {
 		return 4
 	case "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
 		return 5
-	case "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
+	case "outcome_unknown", "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
 		return 6
 	case "cli_outdated", "skill_outdated":
 		return 7
@@ -214,12 +221,23 @@ func FromHTTPFailure(status int, body []byte) *Error {
 	return out
 }
 
+// Preserve either form of Retry-After (seconds or HTTP date) without guessing
+// when it is safe to replay a mutation.
+func FromHTTPFailureWithHeaders(status int, headers http.Header, body []byte) *Error {
+	err := FromHTTPFailure(status, body)
+	if value := strings.TrimSpace(headers.Get("Retry-After")); value != "" {
+		err.Details.(map[string]any)["retry_after"] = value
+	}
+	return err
+}
+
 type Metadata struct {
 	Recoverable bool
 	Hint        string
 }
 
 var defaultMetadataByCode = map[string]Metadata{
+	"outcome_unknown":               {Recoverable: false, Hint: "Read current state before submitting another mutation. Do not retry a move if the card is already in the requested column."},
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
 	"agent_revoked":                 {Recoverable: false, Hint: "Ask a human auth-admin to review host enrollment and agent access."},
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},

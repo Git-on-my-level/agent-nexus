@@ -51,6 +51,9 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 	return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: valid}
 }
 func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
+	if writeMutationOutcomeUnknownError(w, r, err) {
+		return
+	}
 	if writePrimitiveQuotaViolationError(w, err) {
 		return
 	}

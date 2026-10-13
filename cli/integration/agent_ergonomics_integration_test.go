@@ -1,4 +1,4 @@
-//go:build integration && ergonomics
+//go:build integration
 
 package integration
 
@@ -15,8 +15,6 @@ import (
 
 // Keep the scenario and its full readbacks reproducible without using a shared
 // workspace or credentials. Enrollment and the simulated human are fixtures.
-// Opt-in until concurrent core instability is resolved:
-// https://github.com/Git-on-my-level/agent-nexus/issues/372
 func TestAgentErgonomicsAgainstCore(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	t.Cleanup(func() {

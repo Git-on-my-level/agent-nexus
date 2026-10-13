@@ -101,6 +101,8 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 					fmt.Fprint(w, `{"event":{"id":"ask-1","type":"human_attention_requested","thread_id":"thread-1"}}`)
 				case r.URL.Path == "/events":
 					fmt.Fprint(w, `{"events":[]}`)
+				case r.URL.Path == "/asks/ask-1":
+					fmt.Fprint(w, `{"status":"open"}`)
 				case r.URL.Path == "/stream/asks/ask-1":
 					n := opened.Add(1)
 					w.Header().Set("Content-Type", "text/event-stream")
@@ -167,6 +169,8 @@ func TestAwaitAccessRequestUsesTypedRefAndExitCodes(t *testing.T) {
 				case r.URL.Path == "/asks/access-request:req-1/subscriptions" || r.URL.Path == "/asks/access-request:req-1/delivery":
 					subscribed = r.URL.Path
 					fmt.Fprint(w, `{"id":"sub-1"}`)
+				case r.URL.Path == "/asks/access-request:req-1":
+					fmt.Fprint(w, `{"status":"open"}`)
 				case r.URL.Path == "/stream/asks/access-request:req-1":
 					streamed = r.URL.Path
 					w.Header().Set("Content-Type", "text/event-stream")
