@@ -48,8 +48,10 @@ func validAskDeliveryMode(value string) bool {
 
 // answerBridgeRunning reports whether an `anx bridge run` holds the answer
 // registry lock for this workspace and actor. The lock lives for the bridge
-// process lifetime, so a held lock is the truthful per-host-and-agent signal;
-// server-side bridge liveness describes the wake-routing bridge instead.
+// process lifetime, so a held exclusive lock is the truthful per-host-and-agent
+// signal; server-side bridge liveness describes the wake-routing bridge instead.
+// The probe never takes that exclusive lock: doing so races a starting bridge
+// and makes a second ask treat the probe as a live deliverer.
 func (a *App) answerBridgeRunning(cfg config.Resolved) bool {
 	if runtime.GOOS == "windows" {
 		return false // The answer bridge itself requires macOS or Linux.
@@ -58,12 +60,7 @@ func (a *App) answerBridgeRunning(cfg config.Resolved) bool {
 	if err != nil {
 		return false
 	}
-	unlock, err := lockAskBridge(filepath.Join(dir, "bridge.lock"))
-	if err != nil {
-		return true
-	}
-	unlock()
-	return false
+	return askBridgeLockHeld(filepath.Join(dir, "bridge.lock"))
 }
 
 // resolveAskDelivery picks the answer-delivery mode for one ask. Filing must

@@ -393,7 +393,7 @@ func TestBridgeUnitInstallWritesOnceThenReportsCurrent(t *testing.T) {
 
 	a, _ := deliveryTestApp(t, server.URL, map[string]string{"ANX_BASE_URL": server.URL})
 	var wrote []string
-	started := 0
+	var commands [][]string
 	originalMkdir, originalWrite, originalRead, originalRun := bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun
 	t.Cleanup(func() {
 		bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun = originalMkdir, originalWrite, originalRead, originalRun
@@ -406,7 +406,7 @@ func TestBridgeUnitInstallWritesOnceThenReportsCurrent(t *testing.T) {
 		return nil
 	}
 	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
-		started++
+		commands = append(commands, append([]string{name}, args...))
 		return "", "", nil
 	}
 	cfg := deliveryTestCfg(server.URL)
@@ -414,9 +414,11 @@ func TestBridgeUnitInstallWritesOnceThenReportsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if len(wrote) != 1 || started != 1 || first.Data.(map[string]any)["started"] != true {
-		t.Fatalf("first install wrote=%d started=%d data=%#v", len(wrote), started, first.Data)
+	if len(wrote) != 1 || first.Data.(map[string]any)["started"] != true {
+		t.Fatalf("first install wrote=%d data=%#v", len(wrote), first.Data)
 	}
+	assertBridgeUnitActivateCommands(t, commands, false)
+	commands = nil
 	second, err := a.runBridgeUnitInstall(context.Background(), []string{"--as", "worker"}, cfg)
 	if err != nil {
 		t.Fatalf("reinstall: %v", err)
@@ -424,6 +426,83 @@ func TestBridgeUnitInstallWritesOnceThenReportsCurrent(t *testing.T) {
 	data := second.Data.(map[string]any)
 	if len(wrote) != 1 || data["already_current"] != true {
 		t.Fatalf("second install must be idempotent: wrote=%d data=%#v", len(wrote), data)
+	}
+	assertBridgeUnitActivateCommands(t, commands, true)
+}
+
+func TestBridgeUnitInstallReloadsWhenUnitChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unit install targets launchd/systemd hosts")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	}))
+	defer server.Close()
+
+	a, _ := deliveryTestApp(t, server.URL, map[string]string{"ANX_BASE_URL": server.URL})
+	var wrote []string
+	var commands [][]string
+	originalMkdir, originalWrite, originalRead, originalRun := bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun
+	t.Cleanup(func() {
+		bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun = originalMkdir, originalWrite, originalRead, originalRun
+	})
+	bridgeMkdirAll = func(path string, perm os.FileMode) error { return nil }
+	bridgeReadFile = func(path string) ([]byte, error) { return []byte("stale unit"), nil }
+	bridgeWriteFile = func(path string, data []byte, perm os.FileMode) error {
+		wrote = append(wrote, string(data))
+		bridgeReadFile = func(string) ([]byte, error) { return data, nil }
+		return nil
+	}
+	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
+		commands = append(commands, append([]string{name}, args...))
+		if len(args) > 0 && args[0] == "bootout" {
+			return "", "Boot-out failed: 3: No such process", fmt.Errorf("exit status 1")
+		}
+		return "", "", nil
+	}
+	result, err := a.runBridgeUnitInstall(context.Background(), []string{"--as", "worker"}, deliveryTestCfg(server.URL))
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	data := result.Data.(map[string]any)
+	if len(wrote) != 1 || data["already_current"] != false || data["started"] != true {
+		t.Fatalf("changed unit must be rewritten and started: wrote=%d data=%#v", len(wrote), data)
+	}
+	assertBridgeUnitActivateCommands(t, commands, false)
+}
+
+func assertBridgeUnitActivateCommands(t *testing.T, commands [][]string, alreadyCurrent bool) {
+	t.Helper()
+	joined := make([]string, len(commands))
+	for i, command := range commands {
+		joined[i] = strings.Join(command, " ")
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		if len(commands) < 2 || !strings.Contains(joined[0], "bootout") || !strings.Contains(joined[1], "bootstrap") {
+			t.Fatalf("expected bootout then bootstrap, got %q", joined)
+		}
+	case "linux":
+		if len(commands) < 2 || !strings.Contains(joined[0], "daemon-reload") || !strings.Contains(joined[1], "enable") || !strings.Contains(joined[1], "--now") {
+			t.Fatalf("expected daemon-reload then enable --now, got %q", joined)
+		}
+		hasRestart := false
+		for _, command := range joined {
+			if strings.Contains(command, "restart") {
+				hasRestart = true
+			}
+		}
+		if alreadyCurrent && hasRestart {
+			t.Fatalf("unchanged reinstall should not restart: %q", joined)
+		}
+		if !alreadyCurrent && !hasRestart {
+			t.Fatalf("changed or first install should restart the unit: %q", joined)
+		}
+	default:
+		if len(commands) == 0 {
+			t.Fatalf("expected activation commands, got none")
+		}
 	}
 }
 

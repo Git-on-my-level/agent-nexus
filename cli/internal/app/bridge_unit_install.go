@@ -102,22 +102,52 @@ func (a *App) runBridgeUnitInstall(ctx context.Context, args []string, cfg confi
 	}
 	view["already_current"] = alreadyCurrent
 	view["wrote"] = plan.Path
-	startErr := error(nil)
-	if len(plan.StartArgs) > 0 {
-		startName := plan.StartArgs[0]
-		_, _, startErr = bridgeCommandRun(ctx, startName, plan.StartArgs[1:]...)
-	}
-	switch {
-	case startErr == nil:
+	startErr := activateAnswerBridgeUnit(ctx, plan, alreadyCurrent)
+	if startErr == nil {
 		view["started"] = true
-	case alreadyCurrent:
-		view["started"] = false
-		view["start_hint"] = strings.Join(plan.StartArgs, " ") + " (the service is likely already loaded)"
-	default:
+	} else {
 		view["started"] = false
 		view["start_hint"] = strings.Join(plan.StartArgs, " ") + " (" + startErr.Error() + ")"
 	}
 	return &commandResult{Data: view}, nil
+}
+
+// activateAnswerBridgeUnit loads or reloads the written unit so a first install
+// is visible to systemd/launchd and a rewritten unit replaces the running job.
+func activateAnswerBridgeUnit(ctx context.Context, plan bridgeUnitPlan, alreadyCurrent bool) error {
+	switch plan.Unit {
+	case "launchd":
+		domain := "gui/" + strconv.Itoa(os.Getuid())
+		stdout, stderr, err := bridgeCommandRun(ctx, "/bin/launchctl", "bootout", domain+"/"+plan.Label)
+		if err != nil && !launchctlServiceMissing(stdout, stderr) {
+			return err
+		}
+		_, _, err = bridgeCommandRun(ctx, "/bin/launchctl", "bootstrap", domain, plan.Path)
+		return err
+	case "systemd-user":
+		if _, _, err := bridgeCommandRun(ctx, "/usr/bin/systemctl", "--user", "daemon-reload"); err != nil {
+			return err
+		}
+		if _, _, err := bridgeCommandRun(ctx, "/usr/bin/systemctl", "--user", "enable", "--now", plan.Label); err != nil {
+			return err
+		}
+		if alreadyCurrent {
+			return nil
+		}
+		_, _, err := bridgeCommandRun(ctx, "/usr/bin/systemctl", "--user", "restart", plan.Label)
+		return err
+	default:
+		if len(plan.StartArgs) == 0 {
+			return nil
+		}
+		_, _, err := bridgeCommandRun(ctx, plan.StartArgs[0], plan.StartArgs[1:]...)
+		return err
+	}
+}
+
+func launchctlServiceMissing(stdout, stderr string) bool {
+	msg := stdout + "\n" + stderr
+	return strings.Contains(msg, "Could not find service") || strings.Contains(msg, "No such process")
 }
 
 // validBridgeUnitAgentName keeps agent names safe to embed in launchd labels,

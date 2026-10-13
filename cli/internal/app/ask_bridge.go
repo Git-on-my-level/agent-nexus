@@ -39,7 +39,7 @@ func (a *App) runAskBridge(ctx context.Context, args []string, cfg config.Resolv
 	if err != nil {
 		return nil, err
 	}
-	unlock, err := lockAskBridge(filepath.Join(dir, "bridge.lock"))
+	unlock, err := lockAskBridgeReady(filepath.Join(dir, "bridge.lock"))
 	if err != nil {
 		return nil, err
 	}
