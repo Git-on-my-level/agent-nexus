@@ -8,8 +8,8 @@
     buildThreadFilterQueryParamsFromThreadListState,
     buildTopicListSearchString,
     parseTopicListSearchParams,
+    TOPIC_STATUSES,
   } from "$lib/topicFilters";
-  import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
   import {
     actorDirectoryLoaded,
     actorRegistry,
@@ -23,7 +23,10 @@
     threadSubjectRef,
   } from "$lib/threadListContext.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import LifecycleStateFilter from "$lib/components/LifecycleStateFilter.svelte";
+  import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
+  import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
+  import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
@@ -33,16 +36,9 @@
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
 
-  const defaultFilters = {
-    states: ["active"],
-    q: "",
-  };
-
-  let filters = $state({ ...defaultFilters });
   let loading = $state(false);
   let error = $state("");
   let retrying = $state(false);
-  let filtersOpen = $state(false);
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -53,6 +49,24 @@
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
+
+  /*
+   * The URL is the filter state: a narrowed list is shareable and the Back
+   * button restores it. Only the search box holds a draft, until it is
+   * submitted.
+   */
+  let urlFilters = $derived(parseTopicListSearchParams($page.url.searchParams));
+  let states = $derived(urlFilters.states);
+  let query = $derived(urlFilters.q);
+  let searchDraft = $state("");
+  $effect(() => {
+    searchDraft = query;
+  });
+
+  let filterCount = $derived(
+    (states.length === 1 && states[0] === "active" ? 0 : 1) + (query ? 1 : 0),
+  );
+  let hasActiveFilters = $derived(filterCount > 0);
 
   /**
    * Who a thread belongs to, from `updated_by` on the row and the directory
@@ -88,8 +102,8 @@
     error = "";
     retrying = isRetry;
     try {
-      const query = buildThreadFilterQueryParamsFromThreadListState(state);
-      const response = await coreClient.listThreads(query);
+      const listQuery = buildThreadFilterQueryParamsFromThreadListState(state);
+      const response = await coreClient.listThreads(listQuery);
       if (loadToken !== activeListLoadToken) return;
       backingThreads = response.threads ?? [];
     } catch (loadError) {
@@ -107,222 +121,158 @@
 
   $effect(() => {
     workspaceSlug;
-    const parsed = parseTopicListSearchParams($page.url.searchParams);
-    filters = { ...defaultFilters, ...parsed };
-    const st = parsed.states ?? ["active"];
-    filtersOpen = !(
-      st.length === 1 &&
-      String(st[0]) === "active" &&
-      String(parsed.q ?? "").trim() === ""
-    );
-    void loadBackingThreadsFromState(parsed);
+    void loadBackingThreadsFromState({ states, q: query });
   });
 
-  async function applyFilters() {
-    const qs = buildTopicListSearchString(filters);
+  /** Apply filters by navigating: the list re-reads from the new URL. */
+  function applyFilters(next) {
+    const qs = buildTopicListSearchString(next);
     const base = workspaceHref("/threads");
-    await goto(`${base}${qs ? `?${qs}` : ""}`, {
+    void goto(`${base}${qs ? `?${qs}` : ""}`, {
       replaceState: true,
       noScroll: true,
       keepFocus: true,
     });
   }
 
-  async function resetFilters() {
-    await goto(workspaceHref("/threads"), {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true,
-    });
+  function resetFilters() {
+    applyFilters({});
   }
-
-  let hasActiveFilters = $derived.by(() => {
-    const st = filters.states ?? ["active"];
-    const isDefaultFilters =
-      st.length === 1 && String(st[0]) === "active" && filters.q.trim() === "";
-    return !isDefaultFilters;
-  });
 
   /** @param {string} value */
   function toggleLifecycleState(value) {
-    const cur = [...(filters.states ?? ["active"])];
-    const set = new Set(cur);
+    const set = new Set(states);
     if (set.has(value)) {
       if (set.size <= 1) return;
       set.delete(value);
     } else {
       set.add(value);
     }
-    const order = /** @type {const} */ (["active", "archived", "trashed"]);
-    filters = {
-      ...filters,
-      states: order.filter((s) => set.has(s)),
-    };
+    applyFilters({
+      states: TOPIC_STATUSES.filter((s) => set.has(s)),
+      q: query,
+    });
   }
 </script>
 
-<div
-  class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
->
-  <div class="min-w-0 flex-1">
-    <h1 class="text-title text-fg">Threads</h1>
-    <p class="mt-1 hidden text-micro text-fg-muted sm:block">
-      The conversation behind each task, doc and board. Open one to read what
-      was said and when.
-    </p>
-  </div>
-  <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-1.5">
-    <button
-      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
-        ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
-        : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
-      onclick={() => (filtersOpen = !filtersOpen)}
-      type="button"
-      data-testid="topics-filters-toggle"
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+<WorkspacePageShell>
+  <WorkspacePageHeader title="Threads">
+    {#snippet subtitle()}
+      <span class="hidden sm:inline"
+        >The conversation behind each task, doc and board. Open one to read what
+        was said and when.</span
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-      {hasActiveFilters ? "Filtered" : "Filters"}
-    </button>
-  </div>
-</div>
-
-{#if error}
-  <StateError
-    message={error}
-    onretry={() => void loadBackingThreadsFromState(filters, true)}
-    {retrying}
-    class="mb-4"
-  />
-{/if}
-
-{#if filtersOpen}
-  <CompactFilterBar testId="topics-filter-panel">
-    {#snippet children()}
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div class="text-micro">
-          <span class="font-medium text-fg-muted">Lifecycle</span>
-          <fieldset
-            class="mt-1 space-y-1 rounded-md border border-line bg-bg-soft px-2.5 py-2"
-          >
-            {#each Object.entries(BOARD_LIFECYCLE_STATE_LABELS) as [value, label] (value)}
-              <label
-                class="flex cursor-pointer items-center gap-2 text-meta text-fg"
-              >
-                <input
-                  checked={(filters.states ?? ["active"]).includes(value)}
-                  class="h-3.5 w-3.5 cursor-pointer rounded border-line bg-bg text-accent-hover focus:ring-2 focus:ring-accent focus:ring-offset-0"
-                  type="checkbox"
-                  onchange={() => toggleLifecycleState(value)}
-                />
-                {label}
-              </label>
-            {/each}
-          </fieldset>
-        </div>
-        <label class="text-micro sm:col-span-1">
-          <span class="font-medium text-fg-muted">Search</span>
-          <input
-            bind:value={filters.q}
-            class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
-            placeholder="Title or id…"
-            type="search"
-            autocomplete="off"
-          />
-        </label>
-      </div>
-      <div class="mt-3 flex gap-1.5">
-        <button
-          class="cursor-pointer rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line"
-          onclick={applyFilters}
-          type="button">Apply</button
-        >
-        <button
-          class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
-          onclick={resetFilters}
-          type="button">Clear filters</button
-        >
-      </div>
     {/snippet}
-  </CompactFilterBar>
-{/if}
+  </WorkspacePageHeader>
 
-{#if loading && backingThreads.length === 0}
-  <Skeleton rows={6} />
-{:else if backingThreads.length === 0 && !error}
-  <StateEmpty
-    title={hasActiveFilters
-      ? "No threads match the current filters"
-      : "No threads yet"}
-    helper={hasActiveFilters
-      ? "Try adjusting or clearing the current filters."
-      : "Threads appear as work gets discussed. Nothing has been said here yet."}
-    actionLabel={hasActiveFilters ? "Clear filters" : ""}
-    onclick={hasActiveFilters ? resetFilters : undefined}
-  />
-{:else if backingThreads.length > 0}
-  <!-- With an error and no rows the bordered container would render as a
-       stray 2px rule under the alert. -->
-  <div
-    class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
+  {#if error}
+    <StateError
+      message={error}
+      onretry={() =>
+        void loadBackingThreadsFromState({ states, q: query }, true)}
+      {retrying}
+    />
+  {/if}
+
+  <WorkspaceListFilters
+    activeCount={filterCount}
+    toggleTestId="topics-filters-toggle"
+    panelTestId="topics-filter-panel"
+    openWhenFiltered={hasActiveFilters}
+    onclear={resetFilters}
   >
-    {#each backingThreads as thread, i}
-      {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
-      <div class="flex items-stretch {i > 0 ? 'border-t border-line' : ''}">
-        <a
-          class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-line-subtle"
-          href={workspaceHref(
-            `/threads/${encodeURIComponent(resourceRouteSegment(thread, "thread"))}`,
-          )}
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <p class="truncate text-meta font-medium text-fg">
-              {resourceDisplayLabel(thread)}
+    {#snippet children()}
+      <LifecycleStateFilter {states} ontoggle={toggleLifecycleState} />
+      <form
+        class="flex items-end gap-2"
+        onsubmit={(event) => {
+          event.preventDefault();
+          applyFilters({ states, q: searchDraft });
+        }}
+      >
+        <label class="ui-label mb-0" for="thread-filter-search">Search</label>
+        <input
+          id="thread-filter-search"
+          class="ui-input w-auto"
+          bind:value={searchDraft}
+          placeholder="Title or id…"
+          type="search"
+          autocomplete="off"
+          onchange={() => applyFilters({ states, q: searchDraft })}
+        />
+      </form>
+    {/snippet}
+  </WorkspaceListFilters>
+
+  {#if loading && backingThreads.length === 0}
+    <Skeleton rows={6} />
+  {:else if backingThreads.length === 0 && !error}
+    <StateEmpty
+      title={hasActiveFilters
+        ? "No threads match the current filters"
+        : "No threads yet"}
+      helper={hasActiveFilters
+        ? "Try adjusting or clearing the current filters."
+        : "Threads appear as work gets discussed. Nothing has been said here yet."}
+      actionLabel={hasActiveFilters ? "Clear filters" : ""}
+      onclick={hasActiveFilters ? resetFilters : undefined}
+    />
+  {:else if backingThreads.length > 0}
+    <!-- With an error and no rows the bordered container would render as a
+         stray 2px rule under the alert. -->
+    <div
+      class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
+    >
+      {#each backingThreads as thread, i}
+        {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
+        <div class="flex items-stretch {i > 0 ? 'border-t border-line' : ''}">
+          <a
+            class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-line-subtle"
+            href={workspaceHref(
+              `/threads/${encodeURIComponent(resourceRouteSegment(thread, "thread"))}`,
+            )}
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="truncate text-meta font-medium text-fg">
+                {resourceDisplayLabel(thread)}
+              </p>
+              {#if thread.state === "archived"}
+                <span
+                  class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                  >Archived</span
+                >
+              {/if}
+            </div>
+            <!-- Names, not identifiers: the ref is one click away behind
+                 Copy ref for whoever needs it on the CLI. The context parts
+                 come first, because that is what tells two rows of the same
+                 name apart. -->
+            <p
+              class="text-micro text-fg-muted"
+              title={threadSubjectRef(thread)}
+            >
+              {#each rowContext(thread) as part, partIndex (partIndex)}<span
+                  >{part}</span
+                ><span aria-hidden="true" class="text-fg-subtle">{" · "}</span
+                >{/each}Updated <Time
+                value={thread.updated_at}
+                fallback="—"
+              />{#if topicSeg}
+                · linked to a topic{/if}
             </p>
-            {#if thread.state === "archived"}
-              <span
-                class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                >Archived</span
-              >
-            {/if}
-          </div>
-          <!-- Names, not identifiers: the ref is one click away behind
-               Copy ref for whoever needs it on the CLI. The context parts
-               come first, because that is what tells two rows of the same
-               name apart. -->
-          <p class="text-micro text-fg-muted" title={threadSubjectRef(thread)}>
-            {#each rowContext(thread) as part, partIndex (partIndex)}<span
-                >{part}</span
-              ><span aria-hidden="true" class="text-fg-subtle">{" · "}</span
-              >{/each}Updated <Time
-              value={thread.updated_at}
-              fallback="—"
-            />{#if topicSeg}
-              · linked to a topic{/if}
-          </p>
-        </a>
-        {#if thread.ref || thread.handle}
-          <div class="flex shrink-0 items-center pr-2">
-            <CopyButton
-              value={thread.ref || `thread:${thread.handle}`}
-              label="Copy ref"
-              title={thread.ref || `thread:${thread.handle}`}
-              iconOnly
-            />
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </div>
-{/if}
+          </a>
+          {#if thread.ref || thread.handle}
+            <div class="flex shrink-0 items-center pr-2">
+              <CopyButton
+                value={thread.ref || `thread:${thread.handle}`}
+                label="Copy ref"
+                title={thread.ref || `thread:${thread.handle}`}
+                iconOnly
+              />
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
+</WorkspacePageShell>

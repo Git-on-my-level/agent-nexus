@@ -8,6 +8,7 @@
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
+  import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import WorkViews from "$lib/components/pm/WorkViews.svelte";
@@ -1049,19 +1050,14 @@
     </p>
   {/if}
 
-  <!--
-    One disclosure, not four control rows. Source, Status, Freshness and the
-    project/owner form were four separate always-open surfaces above a list
-    that most readers never filtered.
-  -->
-  <details class="text-micro text-fg-muted">
-    <summary class="w-fit cursor-pointer"
-      >Filters{#if filterCount}
-        · {filterCount} active{/if}</summary
-    >
-    <div class="mt-2 flex flex-wrap items-end gap-2">
-      <!-- Each label stays with its own control: as loose siblings they wrapped
-           apart on a phone, leaving a label sitting beside the previous select. -->
+  <WorkspaceListFilters
+    activeCount={filterCount}
+    toggleTestId="tasks-filters-toggle"
+    panelTestId="tasks-filter-panel"
+    openWhenFiltered={activeFilters}
+    onclear={() => void goto(workspaceHref(`/tasks?view=${view}`))}
+  >
+    {#snippet children()}
       <div class="flex items-end gap-2">
         <label class="ui-label mb-0" for="task-filter-source">Source</label>
         <select
@@ -1126,6 +1122,10 @@
           <option value="unknown">Never checked</option>
         </select>
       </div>
+      <!-- The two free-text filters apply on Enter or on leaving the field,
+           like every other control here. They used to need a third click on
+           an Apply button that narrowed nothing the selects had not already
+           narrowed. A form so Enter still means "that one". -->
       <form
         class="flex flex-wrap items-end gap-2"
         onsubmit={(event) => {
@@ -1139,29 +1139,35 @@
           );
         }}
       >
-        <label
-          >Project reference<input
+        <div class="flex items-end gap-2">
+          <label class="ui-label mb-0" for="task-filter-project-ref"
+            >Project reference</label
+          >
+          <input
+            id="task-filter-project-ref"
             name="project_ref"
-            class="ui-input mt-1 block"
+            class="ui-input w-auto"
             value={filters.project_ref}
             placeholder="topic:project"
-          /></label
-        ><label
-          >Owner<input
+            onchange={(event) =>
+              setFilter("project_ref", event.currentTarget.value.trim())}
+          />
+        </div>
+        <div class="flex items-end gap-2">
+          <label class="ui-label mb-0" for="task-filter-owner">Owner</label>
+          <input
+            id="task-filter-owner"
             name="owner"
-            class="ui-input mt-1 block"
+            class="ui-input w-auto"
             value={filters.owner}
             placeholder="Owner identifier"
-          /></label
-        ><button class="ui-btn-secondary" type="submit">Apply</button>
+            onchange={(event) =>
+              setFilter("owner", event.currentTarget.value.trim())}
+          />
+        </div>
       </form>
-      {#if activeFilters}
-        <a class="ui-prose-link" href={workspaceHref(`/tasks?view=${view}`)}
-          >Clear filters</a
-        >
-      {/if}
-    </div>
-  </details>
+    {/snippet}
+  </WorkspaceListFilters>
 
   {#if evidenceFor}
     <form

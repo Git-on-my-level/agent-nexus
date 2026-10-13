@@ -201,6 +201,33 @@ export function isMoreHubActivePath(pathname) {
   );
 }
 
+/**
+ * What the first paint of a list destination looks like before its rows
+ * arrive: the page's own name, and placeholders where the rows will be.
+ *
+ * A cold load used to paint "Loading workspace…" over the whole screen for a
+ * second or two, so the reader could not see where they had landed until the
+ * data did. These titles are deliberately the same strings the pages render,
+ * so nothing moves when the real header replaces the placeholder.
+ */
+const DESTINATION_SKELETONS = [
+  { match: /^\/tasks$/, title: "Tasks", rows: 8 },
+  { match: /^\/docs$/, title: "Docs", rows: 8 },
+  { match: /^\/threads$/, title: "Threads", rows: 6 },
+];
+
+/**
+ * `{ title, rows }` for a list destination, or null where the shape of the
+ * page is not a list of rows and a guess would be worse than a blank.
+ */
+export function getDestinationSkeleton(pathname) {
+  const normalizedPathname = normalizePathname(pathname);
+  const matched = DESTINATION_SKELETONS.find((rule) =>
+    rule.match.test(normalizedPathname),
+  );
+  return matched ? { title: matched.title, rows: matched.rows } : null;
+}
+
 export function getShellContentConfig(pathname) {
   const normalizedPathname = normalizePathname(pathname);
 

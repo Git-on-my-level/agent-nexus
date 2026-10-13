@@ -193,6 +193,9 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Tasks")');
+      // The bootstrap placeholder carries the destination's own name, so the
+      // scene has to wait for the loaded page rather than for the heading.
+      await page.waitForSelector("text=Nothing tracked yet");
     },
   },
   {
@@ -201,6 +204,16 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Docs")');
+      await page.waitForSelector("text=Launch checklist");
+    },
+  },
+  {
+    name: "workspace-threads",
+    path: "/o/local/w/local/threads",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector('h1:has-text("Threads")');
+      await page.waitForSelector("text=Launch war room");
     },
   },
   {
@@ -1597,6 +1610,39 @@ async function handleWorkspaceApiRoute(
     return;
   }
 
+  /*
+   * The Threads list. One backing thread per QA topic, which is what core
+   * returns: the topic names the thread, and the ref is what the CLI wants.
+   */
+  if (pathname === "/threads" && request.method() === "GET") {
+    const states = new Set(
+      url.searchParams.getAll("state").length
+        ? url.searchParams.getAll("state")
+        : ["active"],
+    );
+    const items = filterByQuery(QA_TOPICS, url.searchParams.get("q"), [
+      "id",
+      "thread_id",
+      "title",
+    ])
+      .filter((topic) => states.has(String(topic.state ?? "active")))
+      .map((topic) => ({
+        id: topic.thread_id,
+        handle: topic.thread_id,
+        ref: `thread:${topic.thread_id}`,
+        title: topic.title,
+        topic_ref: `topic:${topic.id}`,
+        state: topic.state ?? "active",
+        updated_at: topic.updated_at,
+      }));
+    await route.fulfill(
+      jsonResponse(200, {
+        threads: sliceByLimit(items, url.searchParams),
+      }),
+    );
+    return;
+  }
+
   if (pathname === "/boards" && request.method() === "GET") {
     const items = filterByQuery(QA_BOARDS, url.searchParams.get("q"), [
       "id",
@@ -1727,6 +1773,14 @@ async function captureScene(browser, baseUrl, scene, outDir) {
     await page.goto(buildSceneUrl(baseUrl, scene.path), {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
+    });
+    /*
+     * The shell paints the destination's own skeleton while the workspace
+     * boots — same heading, same shape — so every scene waits for that to go
+     * before its own content check, or it captures the placeholder.
+     */
+    await page.waitForSelector('[aria-label="Loading workspace content"]', {
+      state: "detached",
     });
     await scene.waitFor(page);
     await page.evaluate(async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getDestinationSkeleton,
   getShellContentConfig,
   isKnownSection,
   isMoreHubActivePath,
@@ -76,6 +77,31 @@ describe("navigation model", () => {
     const config = getShellContentConfig("/access");
     expect(config.mode).toBe("wide");
     expect(config.maxWidth).toBe("84rem");
+  });
+
+  it("names a list destination's skeleton so the first paint says where you are", () => {
+    expect(getDestinationSkeleton("/tasks")).toEqual({
+      title: "Tasks",
+      rows: 8,
+    });
+    expect(getDestinationSkeleton("/docs")).toEqual({ title: "Docs", rows: 8 });
+    expect(getDestinationSkeleton("/docs/")).toEqual({
+      title: "Docs",
+      rows: 8,
+    });
+    expect(getDestinationSkeleton("/threads")).toEqual({
+      title: "Threads",
+      rows: 6,
+    });
+  });
+
+  it("has no skeleton for pages that are not a list of rows", () => {
+    // A guessed shape is worse than a blank: the card page, Overview and the
+    // Inbox detail all paint something a row skeleton would misdescribe.
+    expect(getDestinationSkeleton("/tasks/card-1")).toBeNull();
+    expect(getDestinationSkeleton("/docs/doc-1")).toBeNull();
+    expect(getDestinationSkeleton("/overview")).toBeNull();
+    expect(getDestinationSkeleton("/inbox")).toBeNull();
   });
 
   it("marks mobile More tab active for hub and settings routes", () => {
