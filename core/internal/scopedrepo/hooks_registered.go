@@ -10,8 +10,7 @@ import (
 // ApplyRegisteredCanonicalHooks is the SQL-sealed alternative to the disabled
 // generic testing boundary ApplyCanonicalHooks. Unknown hook implementations
 // are rejected before any callback; each proxy admits only the exact reviewed
-// identity read and the fixed feed/search delta statements. Search posting
-// batches contain at most 128 terms. An ignored SQL rejection,
+// identity read and six single-row delta statements. An ignored SQL rejection,
 // panic or adapter failure rolls back the existing source transaction.
 //
 // This does NOT establish canonical provenance or computation isolation:

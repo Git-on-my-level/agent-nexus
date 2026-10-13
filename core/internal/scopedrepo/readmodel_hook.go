@@ -27,7 +27,7 @@ func registeredHookWrite(query string) bool {
 		readmodel.IncrementCounter, readmodel.DecrementCounter:
 		return true
 	default:
-		return registeredSearchWrite(query)
+		return false
 	}
 }
 

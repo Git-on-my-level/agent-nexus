@@ -128,6 +128,11 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	}
 	add("derived_inbox_items", denied("inbox", "_row.id"))
 	add("scope_inbox_live", denied("inbox", "_row.id"))
+	// Search copies never confer authority. Bind every head and term to a live
+	// canonical event and re-evaluate its inherited privacy in this snapshot.
+	for _, table := range []string{"comment_search_heads", "comment_search_postings"} {
+		add(table, denied("event", "_row.event_id")+` AND EXISTS (SELECT 1 FROM main.events e WHERE e.id=_row.event_id AND e.thread_id=_row.thread_id AND e.type='message_posted' AND COALESCE(trim(e.trashed_at),'')='')`)
+	}
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for _, source := range resourceaccess.FilterOwnershipSources() {

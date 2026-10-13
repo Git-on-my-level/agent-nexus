@@ -1,15 +1,10 @@
 # Bounded scope search
 
-This is stream C's disabled executor, rebased onto the SCA-666 foundation. It
-does not register a route, initialize tables, replace `SearchDocuments`, or enable
-the new authority. Legacy search/comment privacy tests and the legacy FTS path
-remain authoritative until the complete phase-3 semantic cutover.
-
-SCA-760 adds the disabled, SQL-sealed `scopedrepo.SearchCanonicalHook` and its
-empty shadow schema. [Writer evidence and remaining retirement gates](../scopedrepo/SEARCH.md)
-describe the randomized common-domain parity suite and the explicit legacy
-semantic differences. No production reader, capture wiring or backfill worker
-is enabled by that adapter.
+The bounded executor and HTTP helper remain disabled. Migration 82 now installs
+an active canonical comment writer and an online maintenance worker using this
+package's `PrepareComment` normalizer. See [the live cutover status](../../docs/comment-search-cutover.md)
+for authority, coverage, evidence and the remaining reader switch. Legacy
+`SearchDocuments` and aggregate rebuilding still serve requests.
 
 `Search` receives a trusted `Repository`, a persistent-secret token codec and a
 finite request selection. The repository must authorize **all** selected scopes
@@ -62,55 +57,19 @@ maintenance. There is no history-size term. RID accepts the foundation's 512-byt
 bound. The scope and version fields remain finite; actual production identities
 are A's opaque allocated IDs.
 
-## Lead-owned integration proposal
+## Reader integration
 
-1. Implement `Repository`/`Snapshot` inside `scopedrepo` using its
-   transaction capabilities and reviewed generated templates. The disabled
-   `SearchCanonicalHook` now supplies the bounded, registered writer and schema;
-   canonical source capture and live integration remain required. Use the durable
-   reference adapter in `server/scope_search_repository_test.go` as executable
-   evidence, not as a production factory. The writer's `search_schema.sql`
-   enforces immutable ownership, current head, complete old-posting bounds and
-   scope/parent equality; its adoption by the reader still needs review.
-2. Produce the bounded head/comment prefix from the incoming canonical write
-   **before** forming the frozen bounded Change. Carry source truncation explicitly
-   using A's `scopes.BoundSearchProjection` and shared `SourceTruncated` bit.
-   Never pass a full oversized
-   canonical record through `Change.Validate`, and never silently label an already
-   truncated delta complete. These are trusted canonical capture operations;
-   never use the helper to declassify guarded-reference previews.
-   Hooks must call this package for append/edit/delete/purge/lifecycle rebuilds in
-   the same transaction as canonical state, including imports.
-   Guarded-reference labels borrowed from another scope are render-only; never
-   put their target title/preview in the destination's searchable source text.
-3. Maintain monotonically increasing principal authority, scope lifecycle and
-   search generations. Selected mutation/revocation/regrant/activation must expire
-   old continuations; unrelated scope content must not invalidate them.
-4. Integrate the proposed writer-inventory fingerprints, canonical contract,
-   route/classifier/privacy/performance inventory, and authenticated selection.
-   `Handler` is a disabled transport helper: nil `Ready` denies before work. Its
-   positive readiness must come only from complete cutover approval.
-5. Adopt #295's SCA-661 budgets and explain the **actual production** candidate,
-   hydration and authority statements. The reference adapter's exact range and
-   bounded VALUES hydration plans are checked, but this is not production route
-   performance approval. Real canonical HTTP mutations and durable lifecycle
-   worker tests remain integration gates. Do not retire old tests yet.
+The former uncalled `scopedrepo.SearchCanonicalHook` adapter has been removed.
+The live writer is `storage/comment_search.go`; it keeps canonical event
+identity and current `resourceaccess` authority instead of granting new scope
+membership. It captures the first 64 KiB of raw comment input before the shared
+normalizer, with an explicit truncation bit, and replaces at most 4,096 postings.
 
-The executable adapter proposal in `server/scope_search_hooks_test.go` uses A's
-`ApplyCanonicalHooks` with an existing `resourceaccess.Tx`; its capability expires
-at callback exit. It commits/rolls back a canonical document, search postings,
-generation and exact stream together, then checks HTTP/SSE output. The reference
-writer uses <=32 batches of <=128 posting tuples, two deletes, one head insert
-and one generation update (<=36 search calls), plus <=8 calls for four stream
-destinations. This fits the shared 256-call ceiling without limiting coverage to
-256 terms. The newer registered writer in `scopedrepo` supplies exact batch
-templates and the schema-enforced old-posting cap; its maximum is 39 calls
-including first-generation creation. Both remain disabled pending complete
-production source capture and route authority.
-
-The HTTP tests exercise the production executor/helper over a real SQLite
-workspace and foundation authority tables with explicit test selection. They
-cover oversized repetitive heads, a late covered phrase, outside-prefix matches,
-empty-page progress, cross-scope frontier ordering, generation binding, comment
-history independence and transaction rollback. They do not claim the production
-authentication dispatcher or registered legacy `/docs/search` has switched.
+The existing server reference adapters continue to test the bounded executor,
+continuations, HTTP helper and snapshot interface. They do not certify the
+registered `/docs/search` dispatcher. The live-table parity adapter is also
+test-only: its fixed generations and point hydration are deliberately unsuitable
+for serving. Production activation still needs a reviewed repository, current
+document-head integration, lifecycle/filter/ranking contract, durable generation
+invalidation, batched hydration and a fresh aggregate fallback. See the cutover
+document for the exact remaining gates.

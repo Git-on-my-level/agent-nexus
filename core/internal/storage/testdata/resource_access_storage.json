@@ -1,708 +1,727 @@
 {
   "tables": {
     "access_requests": {
-      "actor_id": "scope:request-event",
-      "created_at": "scope:request-event",
-      "decided_at": "scope:request-event",
-      "decided_by": "scope:request-event",
-      "grant_name": "scope:request-event",
-      "id": "scope:request-event",
-      "inbox_item_id": "scope:request-event",
-      "principal_id": "scope:request-event",
-      "reason": "scope:request-event",
-      "request_event_id": "scope:request-event",
-      "status": "scope:request-event",
-      "username": "scope:request-event"
+      "actor_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "decided_at": "UNCLASSIFIED",
+      "decided_by": "UNCLASSIFIED",
+      "grant_name": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "inbox_item_id": "UNCLASSIFIED",
+      "principal_id": "UNCLASSIFIED",
+      "reason": "UNCLASSIFIED",
+      "request_event_id": "UNCLASSIFIED",
+      "status": "UNCLASSIFIED",
+      "username": "UNCLASSIFIED"
     },
     "actors": {
-      "created_at": "identity",
-      "display_name": "scope",
-      "id": "identity",
-      "metadata_json": "internal:auth-provenance",
-      "tags_json": "scope"
+      "created_at": "UNCLASSIFIED",
+      "display_name": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "metadata_json": "UNCLASSIFIED",
+      "tags_json": "UNCLASSIFIED"
     },
     "agent_keys": {
-      "agent_id": "identity",
-      "algorithm": "identity",
-      "created_at": "identity",
-      "id": "identity",
-      "public_key": "identity",
-      "revoked_at": "identity"
+      "agent_id": "UNCLASSIFIED",
+      "algorithm": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "public_key": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED"
     },
     "agent_presence": {
-      "agent_id": "scope:presence",
-      "current_card_ref": "scope:presence",
-      "note": "scope:presence",
-      "observed_at": "scope:presence"
+      "agent_id": "UNCLASSIFIED",
+      "current_card_ref": "UNCLASSIFIED",
+      "note": "UNCLASSIFIED",
+      "observed_at": "UNCLASSIFIED"
     },
     "agent_progress_notes": {
-      "agent_id": "scope:progress",
-      "card_ref": "scope:progress",
-      "id": "scope:progress",
-      "observed_at": "scope:progress",
-      "text": "scope:progress"
+      "agent_id": "UNCLASSIFIED",
+      "card_ref": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "observed_at": "UNCLASSIFIED",
+      "text": "UNCLASSIFIED"
     },
     "agent_sessions": {
-      "activity": "identity",
-      "actor_id": "identity",
-      "agent_id": "identity",
-      "capabilities_json": "identity",
-      "created_at": "identity",
-      "expires_at": "identity",
-      "host_scope": "identity",
-      "id": "identity",
-      "last_seen_at": "identity",
-      "native_session_id": "identity",
-      "native_session_id_kind": "identity",
-      "provider": "identity",
-      "request_json": "identity",
-      "sequence": "identity"
+      "activity": "UNCLASSIFIED",
+      "actor_id": "UNCLASSIFIED",
+      "agent_id": "UNCLASSIFIED",
+      "capabilities_json": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "host_scope": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "last_seen_at": "UNCLASSIFIED",
+      "native_session_id": "UNCLASSIFIED",
+      "native_session_id_kind": "UNCLASSIFIED",
+      "provider": "UNCLASSIFIED",
+      "request_json": "UNCLASSIFIED",
+      "sequence": "UNCLASSIFIED"
     },
     "agent_summary_card_positions": {
-      "assignee": "internal:reader-cursor",
-      "handle": "internal:reader-cursor",
-      "id": "internal:reader-cursor"
+      "assignee": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED"
     },
     "agent_wakeup_actor_positions": {
-      "actor_id": "internal:reader-cursor",
-      "resume_token": "internal:reader-cursor",
-      "seq": "internal:reader-cursor",
-      "wakeup_id": "internal:reader-cursor"
+      "actor_id": "UNCLASSIFIED",
+      "resume_token": "UNCLASSIFIED",
+      "seq": "UNCLASSIFIED",
+      "wakeup_id": "UNCLASSIFIED"
     },
     "agent_wakeup_snapshot_positions": {
-      "created_at": "internal:reader-cursor",
-      "thread_id": "internal:reader-cursor",
-      "trigger_event_id": "internal:reader-cursor",
-      "wakeup_id": "internal:reader-cursor"
+      "created_at": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "trigger_event_id": "UNCLASSIFIED",
+      "wakeup_id": "UNCLASSIFIED"
     },
     "agent_wakeup_stream": {
-      "seq": "internal:reader-cursor",
-      "thread_id": "internal:reader-cursor",
-      "wakeup_id": "internal:reader-cursor"
+      "seq": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "wakeup_id": "UNCLASSIFIED"
     },
     "agent_wakeups": {
-      "bridge_instance_id": "parent:wakeup",
-      "claimed_at": "parent:wakeup",
-      "completed_at": "parent:wakeup",
-      "created_at": "parent:wakeup",
-      "dismissed_at": "parent:wakeup",
-      "failed_at": "parent:wakeup",
-      "failure_reason": "ownership:wakeup",
-      "notification_status": "parent:wakeup",
-      "read_at": "parent:wakeup",
-      "refs_json": "ownership:wakeup",
-      "status": "parent:wakeup",
-      "target_actor_id": "parent:wakeup",
-      "target_handle": "parent:wakeup",
-      "thread_id": "parent:wakeup",
-      "thread_title": "ownership:wakeup",
-      "trigger_created_at": "parent:wakeup",
-      "trigger_event_id": "parent:wakeup",
-      "trigger_text": "ownership:wakeup",
-      "updated_at": "parent:wakeup",
-      "wakeup_id": "parent:wakeup",
-      "workspace_id": "parent:wakeup",
-      "workspace_name": "parent:wakeup"
+      "bridge_instance_id": "UNCLASSIFIED",
+      "claimed_at": "UNCLASSIFIED",
+      "completed_at": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "dismissed_at": "UNCLASSIFIED",
+      "failed_at": "UNCLASSIFIED",
+      "failure_reason": "UNCLASSIFIED",
+      "notification_status": "UNCLASSIFIED",
+      "read_at": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "status": "UNCLASSIFIED",
+      "target_actor_id": "UNCLASSIFIED",
+      "target_handle": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "thread_title": "UNCLASSIFIED",
+      "trigger_created_at": "UNCLASSIFIED",
+      "trigger_event_id": "UNCLASSIFIED",
+      "trigger_text": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "wakeup_id": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED",
+      "workspace_name": "UNCLASSIFIED"
     },
     "agents": {
-      "actor_id": "identity",
-      "created_at": "identity",
-      "id": "identity",
-      "metadata_json": "scope",
-      "revoked_at": "identity",
-      "updated_at": "identity",
-      "username": "identity"
+      "actor_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "metadata_json": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "username": "UNCLASSIFIED"
     },
     "artifacts": {
-      "archived_at": "parent:artifact",
-      "archived_by": "parent:artifact",
-      "content_hash": "parent:artifact",
-      "content_refs_json": "ownership:artifact",
-      "content_type": "parent:artifact",
-      "created_at": "parent:artifact",
-      "created_by": "parent:artifact",
-      "handle": "parent:artifact",
-      "id": "parent:artifact",
-      "kind": "parent:artifact",
-      "metadata_json": "ownership:artifact",
-      "refs_json": "ownership:artifact",
-      "thread_id": "parent:artifact",
-      "trash_reason": "ownership:artifact",
-      "trashed_at": "parent:artifact",
-      "trashed_by": "parent:artifact"
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "content_hash": "UNCLASSIFIED",
+      "content_refs_json": "UNCLASSIFIED",
+      "content_type": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "metadata_json": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED"
     },
     "ask_deliveries": {
-      "ask_id": "scope:request-event",
-      "attempts": "scope:request-event",
-      "id": "scope:request-event",
-      "kind": "scope:request-event",
-      "last_at": "scope:request-event",
-      "latency_ms": "scope:request-event",
-      "next_at": "scope:request-event",
-      "reason": "scope",
-      "state": "scope:request-event",
-      "status_code": "scope:request-event",
-      "subscription_id": "scope:request-event"
+      "ask_id": "UNCLASSIFIED",
+      "attempts": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "last_at": "UNCLASSIFIED",
+      "latency_ms": "UNCLASSIFIED",
+      "next_at": "UNCLASSIFIED",
+      "reason": "UNCLASSIFIED",
+      "state": "UNCLASSIFIED",
+      "status_code": "UNCLASSIFIED",
+      "subscription_id": "UNCLASSIFIED"
     },
     "ask_delivery_attempts": {
-      "at": "internal:delivery",
-      "attempt": "internal:delivery",
-      "delivery_id": "internal:delivery",
-      "latency_ms": "internal:delivery",
-      "status_code": "internal:delivery"
+      "at": "UNCLASSIFIED",
+      "attempt": "UNCLASSIFIED",
+      "delivery_id": "UNCLASSIFIED",
+      "latency_ms": "UNCLASSIFIED",
+      "status_code": "UNCLASSIFIED"
     },
     "ask_subject_boards": {
-      "actor_id": "internal:delivery",
-      "board_id": "internal:delivery"
+      "actor_id": "UNCLASSIFIED",
+      "board_id": "UNCLASSIFIED"
     },
     "ask_subject_close_queue": {
-      "card_id": "parent:card"
+      "card_id": "UNCLASSIFIED"
     },
     "ask_subjects": {
-      "ask_id": "scope:request-event",
-      "card_id": "scope:request-event",
-      "close_reason": "scope:request-event",
-      "due_at": "scope:request-event",
-      "open": "scope:request-event",
-      "requester": "scope:request-event",
-      "thread_id": "scope:request-event"
+      "ask_id": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "close_reason": "UNCLASSIFIED",
+      "due_at": "UNCLASSIFIED",
+      "open": "UNCLASSIFIED",
+      "requester": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
     },
     "ask_subjects_job": {
-      "cursor": "internal:reader-cursor",
-      "done": "internal:reader-cursor",
-      "singleton": "internal:reader-cursor"
+      "cursor": "UNCLASSIFIED",
+      "done": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED"
     },
     "ask_subscriptions": {
-      "actor_id": "scope:request-event",
-      "ask_id": "scope:request-event",
-      "created_at": "scope:request-event",
-      "enabled": "scope:request-event",
-      "endpoint": "scope",
-      "id": "scope:request-event",
-      "kind": "scope:request-event",
-      "label": "scope",
-      "nonce": "opaque:credential",
-      "secret": "opaque:credential"
+      "actor_id": "UNCLASSIFIED",
+      "ask_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "enabled": "UNCLASSIFIED",
+      "endpoint": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "label": "UNCLASSIFIED",
+      "nonce": "UNCLASSIFIED",
+      "secret": "UNCLASSIFIED"
     },
     "ask_wake_snapshot_positions": {
-      "created_at": "internal:reader-cursor",
-      "notification_status": "internal:reader-cursor",
-      "target_actor_id": "internal:reader-cursor",
-      "wakeup_id": "internal:reader-cursor"
+      "created_at": "UNCLASSIFIED",
+      "notification_status": "UNCLASSIFIED",
+      "target_actor_id": "UNCLASSIFIED",
+      "wakeup_id": "UNCLASSIFIED"
     },
     "auth_access_tokens": {
-      "agent_id": "identity",
-      "created_at": "identity",
-      "expires_at": "identity",
-      "id": "identity",
-      "revoked_at": "identity",
-      "series_adapter": "identity",
-      "token_hash": "identity"
+      "agent_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED",
+      "series_adapter": "UNCLASSIFIED",
+      "token_hash": "UNCLASSIFIED"
     },
     "auth_audit_events": {
-      "actor_actor_id": "identity",
-      "actor_agent_id": "identity",
-      "event_type": "identity",
-      "id": "identity",
-      "invite_id": "identity",
-      "metadata_json": "scope",
-      "occurred_at": "identity",
-      "occurred_at_sort_key": "identity",
-      "subject_actor_id": "identity",
-      "subject_agent_id": "identity"
+      "actor_actor_id": "UNCLASSIFIED",
+      "actor_agent_id": "UNCLASSIFIED",
+      "event_type": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "invite_id": "UNCLASSIFIED",
+      "metadata_json": "UNCLASSIFIED",
+      "occurred_at": "UNCLASSIFIED",
+      "occurred_at_sort_key": "UNCLASSIFIED",
+      "subject_actor_id": "UNCLASSIFIED",
+      "subject_agent_id": "UNCLASSIFIED"
     },
     "auth_bootstrap_state": {
-      "consumed_at": "identity",
-      "consumed_by_actor_id": "identity",
-      "consumed_by_agent_id": "identity",
-      "consumed_token_hash": "identity",
-      "id": "identity"
+      "consumed_at": "UNCLASSIFIED",
+      "consumed_by_actor_id": "UNCLASSIFIED",
+      "consumed_by_agent_id": "UNCLASSIFIED",
+      "consumed_token_hash": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED"
     },
     "auth_invites": {
-      "consumed_at": "identity",
-      "consumed_by_actor_id": "identity",
-      "consumed_by_agent_id": "identity",
-      "created_at": "identity",
-      "created_by_actor_id": "identity",
-      "created_by_agent_id": "identity",
-      "expires_at": "identity",
-      "id": "identity",
-      "kind": "identity",
-      "note": "scope",
-      "revoked_at": "identity",
-      "revoked_by_actor_id": "identity",
-      "revoked_by_agent_id": "identity",
-      "token_hash": "identity"
+      "consumed_at": "UNCLASSIFIED",
+      "consumed_by_actor_id": "UNCLASSIFIED",
+      "consumed_by_agent_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by_actor_id": "UNCLASSIFIED",
+      "created_by_agent_id": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "note": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED",
+      "revoked_by_actor_id": "UNCLASSIFIED",
+      "revoked_by_agent_id": "UNCLASSIFIED",
+      "token_hash": "UNCLASSIFIED"
     },
     "auth_refresh_sessions": {
-      "agent_id": "identity",
-      "created_at": "identity",
-      "expires_at": "identity",
-      "id": "identity",
-      "replaced_by_session_id": "identity",
-      "revoked_at": "identity",
-      "token_hash": "identity"
+      "agent_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "replaced_by_session_id": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED",
+      "token_hash": "UNCLASSIFIED"
     },
     "auth_used_assertions": {
-      "assertion_hash": "identity",
-      "used_at": "identity"
+      "assertion_hash": "UNCLASSIFIED",
+      "used_at": "UNCLASSIFIED"
     },
     "blob_usage_ledger": {
-      "content_hash": "internal:canonical-accounting",
-      "created_at": "internal:canonical-accounting",
-      "size_bytes": "internal:canonical-accounting",
-      "updated_at": "internal:canonical-accounting"
+      "content_hash": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "size_bytes": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED"
     },
     "blob_usage_totals": {
-      "blob_bytes": "internal:canonical-accounting",
-      "blob_objects": "internal:canonical-accounting",
-      "id": "internal:canonical-accounting",
-      "rebuilt_at": "internal:canonical-accounting",
-      "updated_at": "internal:canonical-accounting"
+      "blob_bytes": "UNCLASSIFIED",
+      "blob_objects": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "rebuilt_at": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED"
     },
     "boards": {
-      "archived_at": "parent:board",
-      "archived_by": "parent:board",
-      "column_schema_json": "ownership:board",
-      "created_at": "parent:board",
-      "created_by": "parent:board",
-      "handle": "parent:board",
-      "id": "parent:board",
-      "owners_json": "ownership:board",
-      "refs_json": "ownership:board",
-      "role": "ownership:board",
-      "summary": "ownership:board",
-      "thread_id": "parent:board",
-      "title": "ownership:board",
-      "trash_reason": "ownership:board",
-      "trashed_at": "parent:board",
-      "trashed_by": "parent:board",
-      "updated_at": "parent:board",
-      "updated_by": "parent:board"
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "column_schema_json": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "owners_json": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "role": "UNCLASSIFIED",
+      "summary": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "title": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED"
     },
     "card_plans": {
-      "body_json": "ownership:plan",
-      "card_id": "parent:plan",
-      "updated_at": "parent:plan"
+      "body_json": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED"
     },
     "card_revisions": {
-      "artifact_id": "ownership:card_revision",
-      "card_id": "parent:card_revision",
-      "created_at": "parent:card_revision",
-      "created_by": "parent:card_revision",
-      "prev_revision_id": "ownership:card_revision",
-      "refs_json": "ownership:card_revision",
-      "revision_hash": "parent:card_revision",
-      "revision_id": "parent:card_revision",
-      "revision_number": "parent:card_revision",
-      "thread_id": "parent:card_revision"
+      "artifact_id": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "prev_revision_id": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "revision_hash": "UNCLASSIFIED",
+      "revision_id": "UNCLASSIFIED",
+      "revision_number": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
     },
     "cards": {
-      "archived_at": "parent:card",
-      "archived_by": "parent:card",
-      "assignee": "parent:card",
-      "board_id": "parent:card",
-      "column_key": "parent:card",
-      "created_at": "parent:card",
-      "created_by": "parent:card",
-      "definition_of_done_json": "ownership:card",
-      "due_at": "parent:card",
-      "handle": "parent:card",
-      "head_revision_id": "parent:card",
-      "head_revision_number": "parent:card",
-      "id": "parent:card",
-      "parent_thread_id": "parent:card",
-      "pinned_document_id": "ownership:card",
-      "provenance_json": "ownership:card",
-      "rank": "parent:card",
-      "refs_json": "ownership:card",
-      "resolution": "parent:card",
-      "resolution_refs_json": "ownership:card",
-      "risk": "parent:card",
-      "summary": "ownership:card",
-      "thread_id": "parent:card",
-      "title": "ownership:card",
-      "trash_reason": "ownership:card",
-      "trashed_at": "parent:card",
-      "trashed_by": "parent:card",
-      "updated_at": "parent:card",
-      "updated_by": "parent:card",
-      "version": "parent:card"
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "assignee": "UNCLASSIFIED",
+      "board_id": "UNCLASSIFIED",
+      "column_key": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "definition_of_done_json": "UNCLASSIFIED",
+      "due_at": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "head_revision_id": "UNCLASSIFIED",
+      "head_revision_number": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "parent_thread_id": "UNCLASSIFIED",
+      "pinned_document_id": "UNCLASSIFIED",
+      "provenance_json": "UNCLASSIFIED",
+      "rank": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "resolution": "UNCLASSIFIED",
+      "resolution_refs_json": "UNCLASSIFIED",
+      "risk": "UNCLASSIFIED",
+      "summary": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "title": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED"
+    },
+    "comment_search_heads": {
+      "authority_binding": "UNCLASSIFIED",
+      "event_id": "UNCLASSIFIED",
+      "projection_json": "UNCLASSIFIED",
+      "source_version": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
+    },
+    "comment_search_job": {
+      "authority_binding": "UNCLASSIFIED",
+      "cursor": "UNCLASSIFIED",
+      "done": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED"
+    },
+    "comment_search_postings": {
+      "event_id": "UNCLASSIFIED",
+      "slot": "UNCLASSIFIED",
+      "term": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
     },
     "consumed_grant_jtis": {
-      "consumed_at": "identity",
-      "jti": "identity"
+      "consumed_at": "UNCLASSIFIED",
+      "jti": "UNCLASSIFIED"
     },
     "derived_board_views": {
-      "board_id": "scope:board-cache",
-      "data_json": "scope:board-cache",
-      "generated_at": "scope:board-cache",
-      "source_hash": "scope:board-cache",
-      "stale": "scope:board-cache"
+      "board_id": "UNCLASSIFIED",
+      "data_json": "UNCLASSIFIED",
+      "generated_at": "UNCLASSIFIED",
+      "source_hash": "UNCLASSIFIED",
+      "stale": "UNCLASSIFIED"
     },
     "derived_inbox_items": {
-      "category": "scope:inbox",
-      "data_json": "ownership:inbox",
-      "due_at": "scope:inbox",
-      "generated_at": "scope:inbox",
-      "has_due_at": "scope:inbox",
-      "id": "scope:inbox",
-      "lifecycle_hidden": "scope:inbox",
-      "lifecycle_ready": "scope:inbox",
-      "source_card_id": "ownership:inbox",
-      "source_event_id": "ownership:inbox",
-      "source_hash": "scope:inbox",
-      "thread_id": "ownership:inbox",
-      "trigger_at": "scope:inbox"
+      "category": "UNCLASSIFIED",
+      "data_json": "UNCLASSIFIED",
+      "due_at": "UNCLASSIFIED",
+      "generated_at": "UNCLASSIFIED",
+      "has_due_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "lifecycle_hidden": "UNCLASSIFIED",
+      "lifecycle_ready": "UNCLASSIFIED",
+      "source_card_id": "UNCLASSIFIED",
+      "source_event_id": "UNCLASSIFIED",
+      "source_hash": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "trigger_at": "UNCLASSIFIED"
     },
     "derived_topic_dirty_queue": {
-      "dirty_at": "parent:thread",
-      "thread_id": "parent:thread"
+      "dirty_at": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
     },
     "derived_topic_views": {
-      "artifact_count": "scope:topic-cache",
-      "data_json": "scope:topic-cache",
-      "decision_count": "scope:topic-cache",
-      "decision_request_count": "scope:topic-cache",
-      "document_count": "scope:topic-cache",
-      "generated_at": "scope:topic-cache",
-      "inbox_count": "scope:topic-cache",
-      "last_activity_at": "scope:topic-cache",
-      "latest_stale_exception_at": "scope:topic-cache",
-      "open_card_count": "scope:topic-cache",
-      "pending_decision_count": "scope:topic-cache",
-      "recommendation_count": "scope:topic-cache",
-      "source_hash": "scope:topic-cache",
-      "stale": "scope:topic-cache",
-      "thread_id": "scope:topic-cache"
+      "artifact_count": "UNCLASSIFIED",
+      "data_json": "UNCLASSIFIED",
+      "decision_count": "UNCLASSIFIED",
+      "decision_request_count": "UNCLASSIFIED",
+      "document_count": "UNCLASSIFIED",
+      "generated_at": "UNCLASSIFIED",
+      "inbox_count": "UNCLASSIFIED",
+      "last_activity_at": "UNCLASSIFIED",
+      "latest_stale_exception_at": "UNCLASSIFIED",
+      "open_card_count": "UNCLASSIFIED",
+      "pending_decision_count": "UNCLASSIFIED",
+      "recommendation_count": "UNCLASSIFIED",
+      "source_hash": "UNCLASSIFIED",
+      "stale": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
     },
     "document_fts": {
-      "body": "derived:document-and-comments",
-      "comments": "derived:document-and-comments",
-      "document_id": "derived:document-and-comments",
-      "source": "derived:document-and-comments",
-      "summary": "derived:document-and-comments",
-      "tags": "derived:document-and-comments",
-      "title": "derived:document-and-comments"
+      "body": "UNCLASSIFIED",
+      "comments": "UNCLASSIFIED",
+      "document_id": "UNCLASSIFIED",
+      "source": "UNCLASSIFIED",
+      "summary": "UNCLASSIFIED",
+      "tags": "UNCLASSIFIED",
+      "title": "UNCLASSIFIED"
     },
     "document_revisions": {
-      "artifact_id": "ownership:document_revision",
-      "created_at": "parent:document_revision",
-      "created_by": "parent:document_revision",
-      "document_id": "parent:document_revision",
-      "prev_revision_id": "ownership:document_revision",
-      "refs_json": "ownership:document_revision",
-      "revision_hash": "parent:document_revision",
-      "revision_id": "parent:document_revision",
-      "revision_number": "parent:document_revision",
-      "thread_id": "parent:document_revision"
+      "artifact_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "document_id": "UNCLASSIFIED",
+      "prev_revision_id": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "revision_hash": "UNCLASSIFIED",
+      "revision_id": "UNCLASSIFIED",
+      "revision_number": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED"
     },
     "documents": {
-      "archived_at": "parent:document",
-      "archived_by": "parent:document",
-      "created_at": "parent:document",
-      "created_by": "parent:document",
-      "handle": "parent:document",
-      "head_revision_id": "parent:document",
-      "head_revision_number": "parent:document",
-      "hosts_json": "ownership:document",
-      "id": "parent:document",
-      "provenance_json": "ownership:document",
-      "refs_json": "ownership:document",
-      "search_text": "ownership:document",
-      "slug": "parent:document",
-      "source": "ownership:document",
-      "summary": "ownership:document",
-      "supersedes_json": "ownership:document",
-      "tags_json": "ownership:document",
-      "thread_id": "parent:document",
-      "title": "ownership:document",
-      "trash_reason": "ownership:document",
-      "trashed_at": "parent:document",
-      "trashed_by": "parent:document",
-      "updated_at": "parent:document",
-      "updated_by": "parent:document",
-      "verified_at": "parent:document"
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "head_revision_id": "UNCLASSIFIED",
+      "head_revision_number": "UNCLASSIFIED",
+      "hosts_json": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "provenance_json": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "search_text": "UNCLASSIFIED",
+      "slug": "UNCLASSIFIED",
+      "source": "UNCLASSIFIED",
+      "summary": "UNCLASSIFIED",
+      "supersedes_json": "UNCLASSIFIED",
+      "tags_json": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "title": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED",
+      "verified_at": "UNCLASSIFIED"
     },
     "event_stream_positions": {
-      "id": "internal:reader-cursor",
-      "ts": "internal:reader-cursor"
+      "id": "UNCLASSIFIED",
+      "ts": "UNCLASSIFIED"
     },
     "events": {
-      "actor_id": "parent:event",
-      "archived_at": "parent:event",
-      "archived_by": "parent:event",
-      "created_at": "parent:event",
-      "handle": "parent:event",
-      "id": "parent:event",
-      "payload_json": "ownership:event",
-      "refs_json": "ownership:event",
-      "thread_id": "parent:event",
-      "trash_reason": "ownership:event",
-      "trashed_at": "parent:event",
-      "trashed_by": "parent:event",
-      "ts": "parent:event",
-      "type": "parent:event"
+      "actor_id": "UNCLASSIFIED",
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "payload_json": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED",
+      "ts": "UNCLASSIFIED",
+      "type": "UNCLASSIFIED"
     },
     "home_read_cursors": {
-      "group_ref": "internal:reader-cursor",
-      "last_read_event_id": "internal:reader-cursor",
-      "last_read_event_ts": "internal:reader-cursor",
-      "reader_id": "internal:reader-cursor",
-      "updated_at": "internal:reader-cursor"
+      "group_ref": "UNCLASSIFIED",
+      "last_read_event_id": "UNCLASSIFIED",
+      "last_read_event_ts": "UNCLASSIFIED",
+      "reader_id": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED"
     },
     "host_agents": {
-      "agent_id": "identity",
-      "host_id": "identity",
-      "identity_kind": "identity",
-      "name": "identity"
+      "agent_id": "UNCLASSIFIED",
+      "host_id": "UNCLASSIFIED",
+      "identity_kind": "UNCLASSIFIED",
+      "name": "UNCLASSIFIED"
     },
     "host_enrollment_tokens": {
-      "consumed_at": "identity",
-      "created_at": "identity",
-      "created_by_agent_id": "identity",
-      "expires_at": "identity",
-      "id": "identity",
-      "label": "scope",
-      "revoked_at": "identity",
-      "token_hash": "identity"
+      "consumed_at": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by_agent_id": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "label": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED",
+      "token_hash": "UNCLASSIFIED"
     },
     "host_enrollments": {
-      "adoptions_json": "scope",
-      "completed_host_id": "identity",
-      "created_at": "identity",
-      "discovered_adapters_json": "scope",
-      "expires_at": "identity",
-      "hostname": "scope",
-      "id": "identity",
-      "os_user": "scope",
-      "poll_token_hash": "identity",
-      "public_key": "identity",
-      "request_nonce": "identity",
-      "requested_slug": "identity",
-      "requesting_ip": "identity",
-      "status": "identity",
-      "user_code": "identity"
+      "adoptions_json": "UNCLASSIFIED",
+      "completed_host_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "discovered_adapters_json": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "hostname": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "os_user": "UNCLASSIFIED",
+      "poll_token_hash": "UNCLASSIFIED",
+      "public_key": "UNCLASSIFIED",
+      "request_nonce": "UNCLASSIFIED",
+      "requested_slug": "UNCLASSIFIED",
+      "requesting_ip": "UNCLASSIFIED",
+      "status": "UNCLASSIFIED",
+      "user_code": "UNCLASSIFIED"
     },
     "host_exclusions": {
-      "host_id": "identity",
-      "name": "identity"
+      "host_id": "UNCLASSIFIED",
+      "name": "UNCLASSIFIED"
     },
     "host_keys": {
-      "created_at": "identity",
-      "host_id": "identity",
-      "id": "identity",
-      "public_key": "identity",
-      "revoked_at": "identity"
+      "created_at": "UNCLASSIFIED",
+      "host_id": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "public_key": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED"
     },
     "hosts": {
-      "bridge_checked_in_at": "identity",
-      "bridge_expires_at": "identity",
-      "bridge_instance_id": "identity",
-      "created_at": "identity",
-      "discovered_adapters_json": "scope",
-      "display_name": "scope",
-      "hostname": "scope",
-      "id": "identity",
-      "os_user": "scope",
-      "revoked_at": "identity",
-      "slug": "identity"
+      "bridge_checked_in_at": "UNCLASSIFIED",
+      "bridge_expires_at": "UNCLASSIFIED",
+      "bridge_instance_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "discovered_adapters_json": "UNCLASSIFIED",
+      "display_name": "UNCLASSIFIED",
+      "hostname": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "os_user": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED",
+      "slug": "UNCLASSIFIED"
     },
     "human_attention_answer_reads": {
-      "answer_event_id": "internal:delivery",
-      "read_at": "internal:delivery",
-      "requester_actor_id": "internal:delivery"
+      "answer_event_id": "UNCLASSIFIED",
+      "read_at": "UNCLASSIFIED",
+      "requester_actor_id": "UNCLASSIFIED"
     },
     "human_attention_answer_wake_batches": {
-      "answer_count": "internal:delivery",
-      "answer_event_ids_json": "internal:delivery",
-      "ask_event_ids_json": "internal:delivery",
-      "batch_id": "internal:delivery",
-      "debounce_deadline": "internal:delivery",
-      "first_answered_at": "internal:delivery",
-      "last_answered_at": "internal:delivery",
-      "refs_json": "internal:delivery",
-      "target_actor_id": "internal:delivery",
-      "target_handle": "internal:delivery",
-      "thread_id": "internal:delivery",
-      "trigger_created_at": "internal:delivery",
-      "trigger_event_id": "internal:delivery",
-      "updated_at": "internal:delivery",
-      "workspace_id": "internal:delivery"
+      "answer_count": "UNCLASSIFIED",
+      "answer_event_ids_json": "UNCLASSIFIED",
+      "ask_event_ids_json": "UNCLASSIFIED",
+      "batch_id": "UNCLASSIFIED",
+      "debounce_deadline": "UNCLASSIFIED",
+      "first_answered_at": "UNCLASSIFIED",
+      "last_answered_at": "UNCLASSIFIED",
+      "refs_json": "UNCLASSIFIED",
+      "target_actor_id": "UNCLASSIFIED",
+      "target_handle": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "trigger_created_at": "UNCLASSIFIED",
+      "trigger_event_id": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "human_attention_request_resolutions": {
-      "actor_id": "internal:delivery",
-      "created_at": "internal:delivery",
-      "request_event_id": "internal:delivery",
-      "resolution_event_id": "internal:delivery",
-      "resolution_type": "internal:delivery"
+      "actor_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "request_event_id": "UNCLASSIFIED",
+      "resolution_event_id": "UNCLASSIFIED",
+      "resolution_type": "UNCLASSIFIED"
     },
     "human_attention_response_claims": {
-      "actor_id": "scope:claim",
-      "created_at": "scope:claim",
-      "inbox_item_id": "scope:claim",
-      "request_event_id": "scope:claim",
-      "request_hash": "scope:claim",
-      "request_key": "scope:claim",
-      "response_event_id": "scope:claim",
-      "response_json": "scope:claim"
+      "actor_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "inbox_item_id": "UNCLASSIFIED",
+      "request_event_id": "UNCLASSIFIED",
+      "request_hash": "UNCLASSIFIED",
+      "request_key": "UNCLASSIFIED",
+      "response_event_id": "UNCLASSIFIED",
+      "response_json": "UNCLASSIFIED"
     },
     "idempotency_replays": {
-      "actor_id": "scope:replay",
-      "created_at": "scope:replay",
-      "request_hash": "scope:replay",
-      "request_key": "scope:replay",
-      "response_json": "scope:replay",
-      "response_status": "scope:replay",
-      "scope": "scope:replay"
+      "actor_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "request_hash": "UNCLASSIFIED",
+      "request_key": "UNCLASSIFIED",
+      "response_json": "UNCLASSIFIED",
+      "response_status": "UNCLASSIFIED",
+      "scope": "UNCLASSIFIED"
     },
     "inbox_hidden_subject_refs": {
-      "owner_id": "internal:reader-snapshot",
-      "owner_kind": "internal:reader-snapshot",
-      "ref": "internal:reader-snapshot"
+      "owner_id": "UNCLASSIFIED",
+      "owner_kind": "UNCLASSIFIED",
+      "ref": "UNCLASSIFIED"
     },
     "inbox_lifecycle_dirty": {
-      "inbox_id": "internal:reader-snapshot"
+      "inbox_id": "UNCLASSIFIED"
     },
     "inbox_lifecycle_job": {
-      "cursor": "internal:reader-snapshot",
-      "done": "internal:reader-snapshot",
-      "owners_ready": "internal:reader-snapshot",
-      "phase": "internal:reader-snapshot",
-      "singleton": "internal:reader-snapshot"
+      "cursor": "UNCLASSIFIED",
+      "done": "UNCLASSIFIED",
+      "owners_ready": "UNCLASSIFIED",
+      "phase": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED"
     },
     "inbox_lifecycle_refs": {
-      "inbox_id": "internal:reader-snapshot",
-      "ref": "internal:reader-snapshot"
+      "inbox_id": "UNCLASSIFIED",
+      "ref": "UNCLASSIFIED"
     },
     "inbox_lifecycle_subjects": {
-      "owner_id": "internal:reader-snapshot",
-      "owner_kind": "internal:reader-snapshot",
-      "ref": "internal:reader-snapshot"
+      "owner_id": "UNCLASSIFIED",
+      "owner_kind": "UNCLASSIFIED",
+      "ref": "UNCLASSIFIED"
     },
     "observation_investigation_specs": {
-      "id": "configuration:operator-investigation",
-      "spec_json": "configuration:operator-investigation",
-      "updated_at": "configuration:operator-investigation",
-      "version": "configuration:operator-investigation",
-      "workspace_id": "configuration:operator-investigation"
+      "id": "UNCLASSIFIED",
+      "spec_json": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "overview_visits": {
-      "principal_id": "internal:reader-snapshot",
-      "snapshot_json": "internal:reader-snapshot",
-      "visited_at": "internal:reader-snapshot"
+      "principal_id": "UNCLASSIFIED",
+      "snapshot_json": "UNCLASSIFIED",
+      "visited_at": "UNCLASSIFIED"
     },
     "passkey_credentials": {
-      "aaguid": "identity",
-      "agent_id": "identity",
-      "attachment": "identity",
-      "attestation_type": "identity",
-      "backup_eligible": "identity",
-      "backup_state": "identity",
-      "created_at": "identity",
-      "credential_id": "identity",
-      "public_key": "identity",
-      "sign_count": "identity",
-      "transport": "identity",
-      "user_handle": "identity"
+      "aaguid": "UNCLASSIFIED",
+      "agent_id": "UNCLASSIFIED",
+      "attachment": "UNCLASSIFIED",
+      "attestation_type": "UNCLASSIFIED",
+      "backup_eligible": "UNCLASSIFIED",
+      "backup_state": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "credential_id": "UNCLASSIFIED",
+      "public_key": "UNCLASSIFIED",
+      "sign_count": "UNCLASSIFIED",
+      "transport": "UNCLASSIFIED",
+      "user_handle": "UNCLASSIFIED"
     },
     "pm_card_alias_positions": {
-      "alias_handle": "internal:reader-cursor",
-      "resource_id": "internal:reader-cursor",
-      "resource_type": "internal:reader-cursor"
+      "alias_handle": "UNCLASSIFIED",
+      "resource_id": "UNCLASSIFIED",
+      "resource_type": "UNCLASSIFIED"
     },
     "pm_card_ask_positions": {
-      "ask_id": "internal:reader-cursor",
-      "card_id": "internal:reader-cursor",
-      "open": "internal:reader-cursor"
+      "ask_id": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "open": "UNCLASSIFIED"
     },
     "pm_card_decision_positions": {
-      "card_ref": "internal:reader-cursor",
-      "id": "internal:reader-cursor",
-      "kind": "internal:reader-cursor",
-      "status": "internal:reader-cursor",
-      "workspace_id": "internal:reader-cursor"
+      "card_ref": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "status": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "pm_card_event_positions": {
-      "id": "internal:reader-cursor",
-      "thread_id": "internal:reader-cursor",
-      "ts": "internal:reader-cursor"
+      "id": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "ts": "UNCLASSIFIED"
     },
     "pm_onboarding_backfill": {
-      "actor_id": "scope:presence",
-      "first_seen_at": "scope:presence",
-      "last_seen_at": "scope:presence",
-      "workspace_id": "scope:presence"
+      "actor_id": "UNCLASSIFIED",
+      "first_seen_at": "UNCLASSIFIED",
+      "last_seen_at": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "pm_presence": {
-      "actor_id": "scope:presence",
-      "first_seen_at": "scope:presence",
-      "last_seen_at": "scope:presence",
-      "signal": "scope:presence",
-      "workspace_id": "scope:presence"
+      "actor_id": "UNCLASSIFIED",
+      "first_seen_at": "UNCLASSIFIED",
+      "last_seen_at": "UNCLASSIFIED",
+      "signal": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "pm_reader_decision_positions": {
-      "actor_id": "internal:reader-cursor",
-      "id": "internal:reader-cursor",
-      "kind": "internal:reader-cursor",
-      "status": "internal:reader-cursor",
-      "workspace_id": "internal:reader-cursor"
+      "actor_id": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "status": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "pm_records": {
-      "actor_id": "scope:pm-closure",
-      "body": "scope:pm-closure",
-      "id": "scope:pm-closure",
-      "kind": "scope:pm-closure",
-      "parent_id": "scope:pm-closure",
-      "revision": "scope:pm-closure",
-      "workspace_id": "scope:pm-closure"
+      "actor_id": "UNCLASSIFIED",
+      "body": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "parent_id": "UNCLASSIFIED",
+      "revision": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "pm_registration": {
-      "actor_id": "scope:presence",
-      "host": "scope:presence",
-      "runner": "scope:presence",
-      "workspace_id": "scope:presence"
+      "actor_id": "UNCLASSIFIED",
+      "host": "UNCLASSIFIED",
+      "runner": "UNCLASSIFIED",
+      "workspace_id": "UNCLASSIFIED"
     },
     "pm_workspace_ask_positions": {
-      "category": "internal:reader-cursor",
-      "id": "internal:reader-cursor",
-      "recipient": "internal:reader-cursor",
-      "trigger_at": "internal:reader-cursor"
+      "category": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "recipient": "UNCLASSIFIED",
+      "trigger_at": "UNCLASSIFIED"
     },
     "pm_workspace_card_positions": {
-      "attention": "internal:reader-cursor",
-      "id": "internal:reader-cursor",
-      "updated_at": "internal:reader-cursor"
+      "attention": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED"
     },
     "pm_workspace_event_positions": {
-      "id": "internal:reader-cursor",
-      "ts": "internal:reader-cursor"
+      "id": "UNCLASSIFIED",
+      "ts": "UNCLASSIFIED"
     },
     "receipt_access_epoch": {
-      "singleton": "internal:reader-snapshot",
-      "version": "internal:reader-snapshot"
+      "singleton": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED"
     },
     "receipt_stream_state": {
-      "log_start_seq": "internal:reader-cursor",
-      "singleton": "internal:reader-cursor"
+      "log_start_seq": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED"
     },
     "receipt_trigger_positions": {
-      "id": "internal:reader-cursor",
-      "trashed_at": "internal:reader-cursor"
+      "id": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED"
     },
     "receipt_visibility_epoch": {
-      "singleton": "internal:reader-cursor",
-      "version": "internal:reader-cursor"
+      "singleton": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED"
     },
     "ref_edges": {
-      "created_at": "scope:edge-endpoints",
-      "edge_type": "scope:edge-endpoints",
-      "id": "scope:edge-endpoints",
-      "metadata_json": "scope:edge-endpoints",
-      "source_id": "scope:edge-endpoints",
-      "source_type": "scope:edge-endpoints",
-      "target_id": "scope:edge-endpoints",
-      "target_type": "scope:edge-endpoints"
+      "created_at": "UNCLASSIFIED",
+      "edge_type": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "metadata_json": "UNCLASSIFIED",
+      "source_id": "UNCLASSIFIED",
+      "source_type": "UNCLASSIFIED",
+      "target_id": "UNCLASSIFIED",
+      "target_type": "UNCLASSIFIED"
     },
     "resource_access_compact_control": {
       "force_legacy": "internal:authorization",
@@ -730,57 +749,57 @@
     },
     "resource_access_edges": {
       "edge_id": "internal:authorization",
-      "source_id": "internal:authorization",
-      "source_kind": "internal:authorization",
-      "target_ref": "internal:authorization"
+      "source_id": "UNCLASSIFIED",
+      "source_kind": "UNCLASSIFIED",
+      "target_ref": "UNCLASSIFIED"
     },
     "resource_access_epoch": {
-      "singleton": "internal:authorization",
-      "version": "internal:authorization"
+      "singleton": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED"
     },
     "resource_access_exact_edges": {
-      "edge_id": "internal:authorization",
-      "source_id": "internal:authorization",
-      "source_kind": "internal:authorization",
-      "target_key": "internal:authorization"
+      "edge_id": "UNCLASSIFIED",
+      "source_id": "UNCLASSIFIED",
+      "source_kind": "UNCLASSIFIED",
+      "target_key": "UNCLASSIFIED"
     },
     "resource_access_external_edges": {
-      "source_id": "scope:edge-endpoints",
-      "source_kind": "scope:edge-endpoints",
-      "target_key": "internal:authorization"
+      "source_id": "UNCLASSIFIED",
+      "source_kind": "UNCLASSIFIED",
+      "target_key": "UNCLASSIFIED"
     },
     "resource_access_identities": {
-      "bucket": "internal:authorization",
-      "identity_id": "internal:authorization",
-      "kind": "internal:authorization",
-      "origin": "internal:authorization",
-      "origin_id": "internal:authorization",
-      "ref": "internal:authorization",
-      "resource_id": "internal:authorization"
+      "bucket": "UNCLASSIFIED",
+      "identity_id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "origin": "UNCLASSIFIED",
+      "origin_id": "UNCLASSIFIED",
+      "ref": "UNCLASSIFIED",
+      "resource_id": "UNCLASSIFIED"
     },
     "resource_access_mention_buckets": {
-      "bucket": "internal:authorization",
-      "edge_id": "internal:authorization"
+      "bucket": "UNCLASSIFIED",
+      "edge_id": "UNCLASSIFIED"
     },
     "resource_access_mentions": {
-      "edge_id": "internal:authorization",
-      "identity_id": "internal:authorization",
-      "source_id": "internal:authorization",
-      "source_kind": "internal:authorization"
+      "edge_id": "UNCLASSIFIED",
+      "identity_id": "UNCLASSIFIED",
+      "source_id": "UNCLASSIFIED",
+      "source_kind": "UNCLASSIFIED"
     },
     "resource_access_pm_refs": {
-      "id": "internal:authorization",
-      "kind": "internal:authorization",
-      "target_ref": "internal:authorization"
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "target_ref": "UNCLASSIFIED"
     },
     "resource_access_series_refs": {
-      "labels": "internal:authorization",
-      "series": "internal:authorization",
-      "target_ref": "internal:authorization"
+      "labels": "UNCLASSIFIED",
+      "series": "UNCLASSIFIED",
+      "target_ref": "UNCLASSIFIED"
     },
     "resource_access_series_unknown": {
-      "labels": "internal:authorization",
-      "series": "internal:authorization"
+      "labels": "UNCLASSIFIED",
+      "series": "UNCLASSIFIED"
     },
     "resource_access_stable_edges": {
       "edge_id": "internal:authorization",
@@ -789,256 +808,256 @@
       "target_ref": "internal:authorization"
     },
     "resource_access_tombstones": {
-      "id": "internal:authorization",
-      "kind": "internal:authorization",
-      "owner": "internal:authorization",
-      "ref": "internal:authorization"
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "owner": "UNCLASSIFIED",
+      "ref": "UNCLASSIFIED"
     },
     "resource_handle_aliases": {
-      "alias_handle": "scope:resource-alias",
-      "canonical_handle": "scope:resource-alias",
-      "created_at": "scope:resource-alias",
-      "created_by": "scope:resource-alias",
-      "id": "scope:resource-alias",
-      "reason": "scope:resource-alias",
-      "resource_id": "scope:resource-alias",
-      "resource_type": "scope:resource-alias"
+      "alias_handle": "UNCLASSIFIED",
+      "canonical_handle": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "reason": "UNCLASSIFIED",
+      "resource_id": "UNCLASSIFIED",
+      "resource_type": "UNCLASSIFIED"
     },
     "runs": {
-      "adapter": "parent:run",
-      "agent_id": "parent:run",
-      "branch": "ownership:run",
-      "card_ref": "ownership:run",
-      "ended_at": "parent:run",
-      "external_id": "ownership:run",
-      "handle": "parent:run",
-      "host_id": "parent:run",
-      "id": "parent:run",
-      "labels_json": "ownership:run",
-      "last_observed_at": "parent:run",
-      "launcher": "parent:run",
-      "liveness": "parent:run",
-      "model": "ownership:run",
-      "repository": "ownership:run",
-      "result_collected": "parent:run",
-      "started_at": "parent:run",
-      "state": "parent:run"
+      "adapter": "UNCLASSIFIED",
+      "agent_id": "UNCLASSIFIED",
+      "branch": "UNCLASSIFIED",
+      "card_ref": "UNCLASSIFIED",
+      "ended_at": "UNCLASSIFIED",
+      "external_id": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "host_id": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "labels_json": "UNCLASSIFIED",
+      "last_observed_at": "UNCLASSIFIED",
+      "launcher": "UNCLASSIFIED",
+      "liveness": "UNCLASSIFIED",
+      "model": "UNCLASSIFIED",
+      "repository": "UNCLASSIFIED",
+      "result_collected": "UNCLASSIFIED",
+      "started_at": "UNCLASSIFIED",
+      "state": "UNCLASSIFIED"
     },
     "schema_migrations": {
-      "applied_at": "internal:schema",
-      "version": "internal:schema"
+      "applied_at": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED"
     },
     "scope_inbox_live": {
-      "category_rank": "scope:inbox",
-      "id": "scope:inbox",
-      "scope_id": "scope:inbox",
-      "trigger_at": "scope:inbox"
+      "category_rank": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "scope_id": "UNCLASSIFIED",
+      "trigger_at": "UNCLASSIFIED"
     },
     "scope_inbox_live_job": {
-      "cursor": "internal:reader-cursor",
-      "done": "internal:reader-cursor",
-      "singleton": "internal:reader-cursor"
+      "cursor": "UNCLASSIFIED",
+      "done": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED"
     },
     "scope_inbox_live_positions": {
-      "category_rank": "internal:reader-cursor",
-      "id": "internal:reader-cursor",
-      "scope_id": "internal:reader-cursor",
-      "trigger_at": "internal:reader-cursor"
+      "category_rank": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "scope_id": "UNCLASSIFIED",
+      "trigger_at": "UNCLASSIFIED"
     },
     "secrets": {
-      "actor_id": "opaque:credential",
-      "ciphertext": "opaque:credential",
-      "created_at": "opaque:credential",
-      "description": "scope",
-      "id": "opaque:credential",
-      "key_id": "opaque:credential",
-      "name": "scope",
-      "nonce": "opaque:credential",
-      "updated_at": "opaque:credential",
-      "updated_by": "opaque:credential"
+      "actor_id": "UNCLASSIFIED",
+      "ciphertext": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "description": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "key_id": "UNCLASSIFIED",
+      "name": "UNCLASSIFIED",
+      "nonce": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED"
     },
     "series_adapters": {
-      "agent_id": "configuration:series",
-      "created_at": "configuration:series",
-      "deleted_at": "configuration:series",
-      "description": "scope",
-      "expected_interval": "configuration:series",
-      "host_id": "configuration:series",
-      "last_push": "configuration:series",
-      "name": "configuration:series",
-      "revoked_at": "configuration:series"
+      "agent_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "deleted_at": "UNCLASSIFIED",
+      "description": "UNCLASSIFIED",
+      "expected_interval": "UNCLASSIFIED",
+      "host_id": "UNCLASSIFIED",
+      "last_push": "UNCLASSIFIED",
+      "name": "UNCLASSIFIED",
+      "revoked_at": "UNCLASSIFIED"
     },
     "series_daily": {
-      "day": "scope:series-stream",
-      "high": "scope:series-stream",
-      "labels": "scope:series-stream",
-      "last_state": "scope:series-stream",
-      "last_ts": "scope:series-stream",
-      "last_value": "scope:series-stream",
-      "low": "scope:series-stream",
-      "n": "scope:series-stream",
-      "series": "scope:series-stream",
-      "total": "scope:series-stream"
+      "day": "UNCLASSIFIED",
+      "high": "UNCLASSIFIED",
+      "labels": "UNCLASSIFIED",
+      "last_state": "UNCLASSIFIED",
+      "last_ts": "UNCLASSIFIED",
+      "last_value": "UNCLASSIFIED",
+      "low": "UNCLASSIFIED",
+      "n": "UNCLASSIFIED",
+      "series": "UNCLASSIFIED",
+      "total": "UNCLASSIFIED"
     },
     "series_definitions": {
-      "adapter": "configuration:series",
-      "kind": "configuration:series",
-      "name": "configuration:series",
-      "unit": "scope"
+      "adapter": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "name": "UNCLASSIFIED",
+      "unit": "UNCLASSIFIED"
     },
     "series_ingestion_days": {
-      "day": "internal:rate-budget",
-      "n": "internal:rate-budget"
+      "day": "UNCLASSIFIED",
+      "n": "UNCLASSIFIED"
     },
     "series_labels": {
-      "labels": "scope:series-stream",
-      "series": "scope:series-stream"
+      "labels": "UNCLASSIFIED",
+      "series": "UNCLASSIFIED"
     },
     "series_live_daily": {
-      "day": "scope:series-stream",
-      "high": "scope:series-stream",
-      "labels": "scope:series-stream",
-      "last_state": "scope:series-stream",
-      "last_ts": "scope:series-stream",
-      "last_value": "scope:series-stream",
-      "low": "scope:series-stream",
-      "n": "scope:series-stream",
-      "series": "scope:series-stream",
-      "total": "scope:series-stream"
+      "day": "UNCLASSIFIED",
+      "high": "UNCLASSIFIED",
+      "labels": "UNCLASSIFIED",
+      "last_state": "UNCLASSIFIED",
+      "last_ts": "UNCLASSIFIED",
+      "last_value": "UNCLASSIFIED",
+      "low": "UNCLASSIFIED",
+      "n": "UNCLASSIFIED",
+      "series": "UNCLASSIFIED",
+      "total": "UNCLASSIFIED"
     },
     "series_points": {
-      "labels": "scope:series-stream",
-      "received_day": "scope:series-stream",
-      "series": "scope:series-stream",
-      "state": "scope:series-stream",
-      "ts": "scope:series-stream",
-      "value": "scope:series-stream"
+      "labels": "UNCLASSIFIED",
+      "received_day": "UNCLASSIFIED",
+      "series": "UNCLASSIFIED",
+      "state": "UNCLASSIFIED",
+      "ts": "UNCLASSIFIED",
+      "value": "UNCLASSIFIED"
     },
     "series_request_budgets": {
-      "minute": "internal:rate-budget",
-      "n": "internal:rate-budget",
-      "scope": "internal:rate-budget"
+      "minute": "UNCLASSIFIED",
+      "n": "UNCLASSIFIED",
+      "scope": "UNCLASSIFIED"
     },
     "threads": {
-      "archived_at": "parent:thread",
-      "archived_by": "parent:thread",
-      "body_json": "ownership:thread",
-      "handle": "parent:thread",
-      "id": "parent:thread",
-      "kind": "parent:thread",
-      "provenance_json": "ownership:thread",
-      "thread_id": "parent:thread",
-      "trash_reason": "ownership:thread",
-      "trashed_at": "parent:thread",
-      "trashed_by": "parent:thread",
-      "updated_at": "parent:thread",
-      "updated_by": "parent:thread"
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "body_json": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "kind": "UNCLASSIFIED",
+      "provenance_json": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED"
     },
     "topic_projection_refresh_status": {
-      "completed_at": "scope:thread-error",
-      "desired_generation": "scope:thread-error",
-      "failure_count": "scope:thread-error",
-      "in_progress_generation": "scope:thread-error",
-      "last_error": "scope:thread-error",
-      "last_error_at": "scope:thread-error",
-      "materialized_generation": "scope:thread-error",
-      "queued_at": "scope:thread-error",
-      "retry_after": "scope:thread-error",
-      "started_at": "scope:thread-error",
-      "thread_id": "scope:thread-error",
-      "updated_at": "scope:thread-error"
+      "completed_at": "UNCLASSIFIED",
+      "desired_generation": "UNCLASSIFIED",
+      "failure_count": "UNCLASSIFIED",
+      "in_progress_generation": "UNCLASSIFIED",
+      "last_error": "UNCLASSIFIED",
+      "last_error_at": "UNCLASSIFIED",
+      "materialized_generation": "UNCLASSIFIED",
+      "queued_at": "UNCLASSIFIED",
+      "retry_after": "UNCLASSIFIED",
+      "started_at": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED"
     },
     "topics": {
-      "archived_at": "parent:topic",
-      "archived_by": "parent:topic",
-      "created_at": "parent:topic",
-      "created_by": "parent:topic",
-      "extensions_json": "ownership:topic",
-      "handle": "parent:topic",
-      "id": "parent:topic",
-      "provenance_json": "ownership:topic",
-      "summary": "ownership:topic",
-      "thread_id": "parent:topic",
-      "title": "ownership:topic",
-      "trash_reason": "ownership:topic",
-      "trashed_at": "parent:topic",
-      "trashed_by": "parent:topic",
-      "updated_at": "parent:topic",
-      "updated_by": "parent:topic"
+      "archived_at": "UNCLASSIFIED",
+      "archived_by": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "created_by": "UNCLASSIFIED",
+      "extensions_json": "UNCLASSIFIED",
+      "handle": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "provenance_json": "UNCLASSIFIED",
+      "summary": "UNCLASSIFIED",
+      "thread_id": "UNCLASSIFIED",
+      "title": "UNCLASSIFIED",
+      "trash_reason": "UNCLASSIFIED",
+      "trashed_at": "UNCLASSIFIED",
+      "trashed_by": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED"
     },
     "work_evidence_entries": {
-      "card_id": "parent:card",
-      "evidence_json": "parent:card",
-      "slot": "parent:card"
+      "card_id": "UNCLASSIFIED",
+      "evidence_json": "UNCLASSIFIED",
+      "slot": "UNCLASSIFIED"
     },
     "work_evidence_index": {
-      "card_id": "parent:work_evidence_alias",
-      "evidence_id": "parent:work_evidence_alias",
-      "id": "parent:work_evidence_alias",
-      "lookup_key": "ownership:work_evidence_alias"
+      "card_id": "UNCLASSIFIED",
+      "evidence_id": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "lookup_key": "UNCLASSIFIED"
     },
     "work_evidence_keys": {
-      "card_id": "parent:work_evidence_record",
-      "evidence_id": "parent:work_evidence_record",
-      "lookup_key": "parent:work_evidence_record"
+      "card_id": "UNCLASSIFIED",
+      "evidence_id": "UNCLASSIFIED",
+      "lookup_key": "UNCLASSIFIED"
     },
     "work_evidence_records": {
-      "card_id": "parent:work_evidence_record",
-      "evidence_json": "ownership:work_evidence_record",
-      "id": "parent:work_evidence_record",
-      "slot": "parent:work_evidence_record"
+      "card_id": "UNCLASSIFIED",
+      "evidence_json": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "slot": "UNCLASSIFIED"
     },
     "work_metadata": {
-      "authority": "parent:work_metadata",
-      "card_id": "parent:work_metadata",
-      "connection_id": "parent:work_metadata",
-      "latest_attempt_id": "parent:work_metadata",
-      "latest_observation_id": "parent:work_metadata",
-      "metadata_json": "ownership:work_metadata",
-      "native_id": "parent:work_metadata",
-      "refresh_json": "ownership:work_metadata",
-      "updated_at": "parent:work_metadata",
-      "updated_by": "parent:work_metadata",
-      "version": "parent:work_metadata"
+      "authority": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "connection_id": "UNCLASSIFIED",
+      "latest_attempt_id": "UNCLASSIFIED",
+      "latest_observation_id": "UNCLASSIFIED",
+      "metadata_json": "UNCLASSIFIED",
+      "native_id": "UNCLASSIFIED",
+      "refresh_json": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED",
+      "version": "UNCLASSIFIED"
     },
     "work_observations": {
-      "body_json": "ownership:work_observation",
-      "card_id": "parent:work_observation",
-      "digest": "parent:work_observation",
-      "id": "parent:work_observation",
-      "idempotency_key": "parent:work_observation",
-      "observed_at": "parent:work_observation",
-      "received_at": "parent:work_observation",
-      "source_sequence": "parent:work_observation",
-      "status": "parent:work_observation"
+      "body_json": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "digest": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "idempotency_key": "UNCLASSIFIED",
+      "observed_at": "UNCLASSIFIED",
+      "received_at": "UNCLASSIFIED",
+      "source_sequence": "UNCLASSIFIED",
+      "status": "UNCLASSIFIED"
     },
     "work_participants": {
-      "activity": "parent:participant",
-      "card_id": "parent:participant",
-      "created_at": "parent:participant",
-      "expires_at": "parent:participant",
-      "id": "parent:participant",
-      "last_seen_at": "parent:participant",
-      "request_json": "ownership:participant",
-      "sequence": "parent:participant",
-      "session_id": "parent:participant"
+      "activity": "UNCLASSIFIED",
+      "card_id": "UNCLASSIFIED",
+      "created_at": "UNCLASSIFIED",
+      "expires_at": "UNCLASSIFIED",
+      "id": "UNCLASSIFIED",
+      "last_seen_at": "UNCLASSIFIED",
+      "request_json": "UNCLASSIFIED",
+      "sequence": "UNCLASSIFIED",
+      "session_id": "UNCLASSIFIED"
     },
     "work_summary_asks": {
-      "inbox_id": "internal:reader-cursor",
-      "recipient_actor_id": "internal:reader-cursor",
-      "subject_ref": "internal:reader-cursor",
-      "trigger_at": "internal:reader-cursor"
+      "inbox_id": "UNCLASSIFIED",
+      "recipient_actor_id": "UNCLASSIFIED",
+      "subject_ref": "UNCLASSIFIED",
+      "trigger_at": "UNCLASSIFIED"
     },
     "work_summary_asks_job": {
-      "cursor": "internal:reader-cursor",
-      "done": "internal:reader-cursor",
-      "singleton": "internal:reader-cursor"
+      "cursor": "UNCLASSIFIED",
+      "done": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED"
     },
     "workspace_dashboard": {
-      "document_id": "parent:document",
-      "singleton": "parent:document",
-      "updated_at": "parent:document",
-      "updated_by": "parent:document"
+      "document_id": "UNCLASSIFIED",
+      "singleton": "UNCLASSIFIED",
+      "updated_at": "UNCLASSIFIED",
+      "updated_by": "UNCLASSIFIED"
     }
   },
   "writers": {
@@ -2048,7 +2067,7 @@
     "../scopedrepo/hooks.go:*mutationTx:QueryContext": "67b3be168ba566190c10a097b69c1a56f9c89efc4ea6be7c5ef101a91bb369dc",
     "../scopedrepo/hooks.go:*mutationTx:close": "e0fbc66cb740d625159945611e65da89916a5014ce34a6cead7845fb06aa88d8",
     "../scopedrepo/hooks.go:ApplyCanonicalHooks": "c40f51a2e51bdcabb610e8dede00e78c120f1a792cfe3a11ab59180e5a4d7045",
-    "../scopedrepo/hooks.go:applyCanonicalHooks": "c5a34eace7618e2b5340f8a78692be5052abb519143cb1c4d91d68ba3b76aaf5",
+    "../scopedrepo/hooks.go:applyCanonicalHooks": "018a4dc7626bc25f400dde0429a21d57e26d739620635db69c16ba28ca73eb26",
     "../scopedrepo/hooks_registered.go:ApplyRegisteredCanonicalHooks": "ce00146f91f2dc4975ef9a0df4731ecf9d4d0e8847ba633dd28caa0dd2acd207",
     "../scopedrepo/inbox_dispatch.go:*InboxDispatcher:Read": "2f6d9d5051105e13d14cb62233ae1f04cc0184461c1e4bd7dbf97a0a6a4faecc",
     "../scopedrepo/inbox_dispatch.go:*Store:InitializeInboxDispatcherSchema": "67fb3d7e4221fadc4541875064470bf8af655148ec7e2d3cf8914bce5f0d61f2",
@@ -2092,16 +2111,6 @@
     "../scopedrepo/readmodel_adapter.go:*readModelAdapter:Snapshot": "a05a2cd8ec6f76f25d9c068194d82fa35c3952617829b8a1c6e16887828bc2b6",
     "../scopedrepo/readmodel_hook.go:*hookExecutor:Exec": "64197c7ce04846582d5db24c53116b253795aa77fe438f98d540c5ebdf6e253c",
     "../scopedrepo/readmodel_hook.go:ReadModelCanonicalHook:ApplyCanonical": "2016ee812b4c7fbbd46d7298123bac0d35585cd7b28f7c742cf55fd9b8917f47",
-    "../scopedrepo/search_hook.go:*Store:InitializeSearchSchema": "03e42594f56db783ceefc04e94c985e1ae184beac47ce91f491ad2f30d1ec602",
-    "../scopedrepo/search_hook.go:*searchWriter:ReplaceSearch": "d6e3574fdd109cdb51af62c6b372558a261eab0d34dce3e3ecabfc0b4909543e",
-    "../scopedrepo/search_hook.go:SearchCanonicalHook:ApplyCanonical": "8d1c5348a8e3451f197e3148b6c70b73d5eca38f7c5b12f789db9493aa9e2c6f",
-    "../scopedrepo/search_hook.go:searchAdvanceGeneration": "18ccb5ae766e80b92e47aa5b64ac572978c0a4bc697e1433533567c3b8eea226",
-    "../scopedrepo/search_hook.go:searchBind": "b6cbd7f41d0f69e85478a129ca77b48c1973c5b838caae83b0005352705c3453",
-    "../scopedrepo/search_hook.go:searchCreateGeneration": "8bfcf1a660f612d34ff5cfd072df0b62d95e609d17102ea350c0297bc2e79522",
-    "../scopedrepo/search_hook.go:searchDeleteHead": "490a17c88c9faf9755da5eb13f32771782f00e3e7617bc7ad37f60031c1002d5",
-    "../scopedrepo/search_hook.go:searchDeletePostings": "4ddb17c3f7d7e8fb042a5a4cb034c1186adf8dae9e52d0b03b84da405d60e9f9",
-    "../scopedrepo/search_hook.go:searchInsertHead": "c78b6794527273fd5cb8dfaa31814e67f86375fe08f6de139c68826dfcd5586d",
-    "../scopedrepo/search_hook.go:searchInsertPostings": "5abe56cef9ae52c3272606902f64c4ad3052eb741104621193378e3889371b45",
     "../scopedrepo/store.go:*Store:CanPublish": "ef65489fd033a85545858748fea65b0390db8e572d4f26f0ad0cc434db8e369b",
     "../scopedrepo/store.go:*Store:Compute": "c48c7e2f440cc002b6f6e3a3aea5c3ec28888f74493c8469922eaf07b8c6732d",
     "../scopedrepo/store.go:*Store:Directory": "92903e81bec46399cf66cf2cd1469f6d045f0ab7d3217596d558cac79d62a5aa",
@@ -2129,8 +2138,10 @@
     "../scopes/mutation.go:CanonicalMutation:Validate": "613821d680e66660c26f5536d82a6438a5f5bd9c005fb9782963bce9254eb82c",
     "../scopes/mutation.go:type:ResourceIdentity": "111d5d90865ee4e34d4030eecdb22356517d2f6d20d30614cf3953cef2d9ebf1",
     "../scopesearch/change.go:ApplyCanonical": "d0de944abaa1b3a45d1506338873adcd3e0c07613636181cb2b67404f8908121",
+    "../scopesearch/comment_projection.go:EncodeComment": "1aec1f7f511f98b505516db1c24eb1faad5d298445234a2243ea2bfc6310606b",
+    "../scopesearch/comment_projection.go:PrepareComment": "86810f5d3214fba83b1ac150edcdab76dde37387a1628f22720861c77369ee22",
+    "../scopesearch/comment_projection.go:type:CommentProjection": "3708119452486aa52bab72332a55ac8a6d1a402f256f7a12ab1ca142ff829f44",
     "../scopesearch/http.go:Handler": "b002b590ab5dc91e4f30e0afeb4ef038bf4df0574ac4f1a328e63a6098f5dbc1",
-    "../scopesearch/index.go:Apply": "c12b2a743d714b1d00f229707864aea431d1d7d828cc505c81ef9fa74e0cb7d0",
     "../scopesearch/search.go:Search": "a41949a235fa4bc9fb42404c207a085e0c3a8f45faa2f666ae02faaa1a95a448",
     "../scopesearch/search.go:type:Hit": "ddea90ac160614c18b14bc6bdd61336f453b99d74d3d7c40f4069d277acd5680",
     "../scopesearch/search.go:type:Page": "25128d3b2c28c32681803a1fcad22f1823ef8096b28f4ae0bf189ae18f2f3633",
@@ -2622,6 +2633,12 @@
     "../storage/ask_subjects.go:installAskSubjects": "256cd223e74c3b5a38b36e68cef15494e480414766aa0026cfbaba42320d842e",
     "../storage/ask_subscriptions.go:installAskSubscriptions": "97c43a9ed98833feb66fed18b255bbcef09d5d77c1d6da7ecd8f8b73a3aefc69",
     "../storage/board_role_migration.go:applyMigration64BoardRole": "88b96b88270c47c83030c7978ee37a37e17d8c51eb84781939269baf5a49187e",
+    "../storage/comment_search.go:*Workspace:MaintainCommentSearchBatch": "1633f0383305e1144317435b77dfcde939a661c579de63c8f4ab0ea64cc13822",
+    "../storage/comment_search.go:*Workspace:RunCommentSearchMaintenance": "fdcc19e0b3230548e45267a4fd217c1a83ff12f7096eaf2d387c496f79c5275a",
+    "../storage/comment_search.go:commentSearchCapture": "0fcc66e6f45718ad7e3c17356ea5c53fd0d92c447c5565c73c2c66a9ea2db728",
+    "../storage/comment_search.go:commentSearchSchema": "e58700727ef967a4dc43748f6aeeb2f7d8c618e94f75292bdeb2a7ba72dd841b",
+    "../storage/comment_search.go:init": "7cbe9031c626bd2159561c46297bbf18fb96aa83127f31700418f39dd2f13838",
+    "../storage/comment_search.go:installCommentSearch": "2a8b33e584122fd643899a5f8c082260ce5934a4abd60ea917448e1ae6496bba",
     "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "51252c93d11c4d16fbc5d173e0c4f7a8af6c89c4e707f4ada6f4370b894e5f0d",
     "../storage/compact_access.go:*Workspace:MaintainCompactAccessBatch": "3899faa70168581d6146877248687e99deb04e7be9627998b10caf013e2834ed",
     "../storage/compact_access.go:*Workspace:RunCompactAccessMigration": "e0eb5501c43c5517450fb0f3051f12b28682ddd8b255892c30b3daef7e1416e9",
@@ -2687,7 +2704,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "775af8aec6a93e305223d37509c5a27dc3508e7ec19a874bde13c19ec0566e2d",
+    "../storage/migrations.go:migrations": "b365e6d2d93c8b1790d9c409b54e912044dc48e3efe18736387d85ee16a9aedb",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",

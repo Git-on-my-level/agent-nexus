@@ -641,6 +641,12 @@ func main() {
 		}()
 		defer func() { maintenanceCancel(); <-compactDone }()
 	}
+	commentSearchDone := make(chan struct{})
+	go func() {
+		defer close(commentSearchDone)
+		workspace.RunCommentSearchMaintenance(maintenanceCtx, func(error) { fmt.Fprintln(os.Stderr, "comment search backfill: retrying bounded batch") })
+	}()
+	defer func() { maintenanceCancel(); <-commentSearchDone }()
 	if scopedInboxReader {
 		buildDone, shadowDone := make(chan struct{}), make(chan struct{})
 		go func() {

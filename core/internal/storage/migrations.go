@@ -1038,6 +1038,7 @@ var migrations = []migration{
 	{Version: 79, Statements: []string{`CREATE VIEW IF NOT EXISTS pm_card_event_positions AS SELECT id,thread_id,ts FROM events`, `CREATE VIEW IF NOT EXISTS pm_card_ask_positions AS SELECT ask_id,card_id,open FROM ask_subjects`, `CREATE VIEW IF NOT EXISTS pm_card_alias_positions AS SELECT resource_type,alias_handle,resource_id FROM resource_handle_aliases`}},
 	{Version: 80, AfterApply: installPMWorkspaceContext},
 	{Version: 81, AfterApply: installProjectionRetryBackoff},
+	{Version: 82, AfterApply: installCommentSearch},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {
