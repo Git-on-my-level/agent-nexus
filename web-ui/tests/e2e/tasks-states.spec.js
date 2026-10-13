@@ -307,6 +307,10 @@ async function installTasksApi(page, overrides = {}) {
     })),
     observations: OBSERVATIONS,
     observationsNextCursor: "",
+    actors: [
+      { id: "actor-sample", display_name: "Synthetic User", tags: ["human"] },
+    ],
+    agents: [],
     hold: {},
     fail: {},
     calls: [],
@@ -388,15 +392,9 @@ async function installTasksApi(page, overrides = {}) {
         },
       });
     if (path === "/actors")
-      return json(200, {
-        actors: [
-          {
-            id: "actor-sample",
-            display_name: "Synthetic User",
-            tags: ["human"],
-          },
-        ],
-      });
+      return respond("actors", () => ({ actors: api.actors }));
+    if (path === "/agents")
+      return respond("agents", () => ({ agents: api.agents }));
     if (path === "/auth/principals")
       return json(200, { principals: [], next_cursor: "" });
     if (path === "/auth/bootstrap/status")
@@ -936,6 +934,87 @@ for (const viewport of AUDIT_VIEWPORTS) {
     });
   });
 }
+
+test("the Owner column reads one way for a person and an agent", async ({
+  page,
+}) => {
+  const api = await installTasksApi(page, {
+    actors: [
+      {
+        id: "actor-sample",
+        display_name: "Maya Chen (Studio producer)",
+        tags: ["human"],
+      },
+    ],
+    agents: [
+      {
+        id: "agent-priya",
+        actor_id: "actor-agent",
+        host_id: "host-dev",
+        handle: "priya.dev-host",
+        display_name: "priya on dev-host",
+      },
+    ],
+  });
+  api.work = [
+    {
+      ref: "card:owned-by-person",
+      handle: "owned-by-person",
+      title: "Owned by a person",
+      board_ref: "board:sample",
+      source: { authority: "nexus" },
+      phase: "ready",
+      owner: "actor-sample",
+      freshness: freshness("fresh"),
+    },
+    {
+      ref: "card:owned-by-agent",
+      handle: "owned-by-agent",
+      title: "Owned by an agent",
+      board_ref: "board:sample",
+      source: { authority: "nexus" },
+      phase: "ready",
+      owner: "actor:actor-agent",
+      freshness: freshness("fresh"),
+    },
+  ];
+
+  // Only the roster can name the agent's owner, and it is held: that cell
+  // holds a placeholder rather than printing an id it would take back.
+  api.hold.agents = deferred();
+  await page.goto(TASKS);
+  await expect(
+    page.getByRole("link", { name: "Owned by a person" }),
+  ).toBeVisible(firstPaint);
+
+  // The signed-in identity is this actor too, and the account menu shows a
+  // name in full on purpose. Only the table is under test here.
+  const table = page.getByRole("region", { name: "Task table" });
+  const owner = (name) => table.locator(`[data-owner-name="${name}"]`).first();
+  await expect(owner("Maya Chen")).toBeVisible();
+  await expect(table.locator("[data-owner-pending]")).toHaveCount(1);
+  await expect(table.getByText("actor-agent")).toHaveCount(0);
+
+  api.hold.agents.resolve();
+  api.hold = {};
+
+  // One format, both rows: the name, never the role or the host it would
+  // truncate on; the rest is one hover away.
+  await expect(owner("priya")).toBeVisible();
+  await expect(table.locator("[data-owner-pending]")).toHaveCount(0);
+  await expect(table.getByText("Studio producer")).toHaveCount(0);
+  await expect(table.getByText("priya on dev-host")).toHaveCount(0);
+  await expect(owner("Maya Chen")).toHaveAttribute(
+    "title",
+    "Maya Chen · Studio producer",
+  );
+  await expect(owner("priya")).toHaveAttribute(
+    "title",
+    "priya · on dev-host · @priya.dev-host",
+  );
+  // Only the agent is marked as one.
+  await expect(table.getByLabel("agent")).toHaveCount(1);
+});
 
 test("Tasks restores its list on reload while revalidation is held", async ({
   page,
