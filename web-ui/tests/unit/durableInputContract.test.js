@@ -58,6 +58,7 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
           "createDocument",
           "patchDocument",
           "updateDocument",
+          "setCardPlan",
         ].includes(node.property?.name)
       ) {
         throw new Error(

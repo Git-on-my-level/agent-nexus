@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -31,7 +32,7 @@ func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash s
 			if out.RequestHash != hash {
 				return ErrConflict
 			}
-			return json.Unmarshal([]byte(raw), &out.Response)
+			return decodeMutationReceipt([]byte(raw), &out.Response)
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -47,8 +48,10 @@ func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash s
 		if _, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES(?,?,?,?,?,?)`, scope, actor, key, hash, status, string(encoded)); err != nil {
 			return err
 		}
-		out = IdempotencyReplay{RequestHash: hash, Status: status, Response: response}
-		return nil
+		out = IdempotencyReplay{RequestHash: hash, Status: status}
+		// Return the stored JSON representation on the first send too. Typed
+		// nested values otherwise encode in a different field order on replay.
+		return decodeMutationReceipt(encoded, &out.Response)
 	})
 	return out, err
 }
@@ -56,3 +59,9 @@ func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash s
 type replayQuotaKey struct{}
 
 func replayOwnsQuota(ctx context.Context, s *Store) bool { return ctx.Value(replayQuotaKey{}) == s }
+
+func decodeMutationReceipt(raw []byte, response *map[string]any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber() // Preserve integer receipts without float64 rounding.
+	return decoder.Decode(response)
+}

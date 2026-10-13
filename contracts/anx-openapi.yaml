@@ -11005,6 +11005,7 @@ components:
       required: [plan, if_updated_at]
       properties:
         actor_id: {type: string, description: Optional dev-mode actor; authenticated principal otherwise.}
+        request_key: {type: string, maxLength: 256, description: Optional actor-bound replay key. Retries must preserve the complete original plan and if_updated_at; the original response commits atomically with the edit.}
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         if_updated_at: {type: string, format: date-time}
     CardPlanResponse:

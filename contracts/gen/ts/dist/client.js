@@ -8204,6 +8204,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },

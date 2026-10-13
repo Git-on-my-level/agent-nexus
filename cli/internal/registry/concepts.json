@@ -6233,6 +6233,10 @@
               {
                 "name": "actor_id",
                 "type": "string"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
               }
             ]
           },
@@ -24944,6 +24948,10 @@
             "optional": [
               {
                 "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
                 "type": "string"
               }
             ]

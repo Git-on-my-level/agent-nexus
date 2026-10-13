@@ -168,6 +168,50 @@ Quota locking is acquired before the outer write lock and reused by nested
 writers. Receipt lookup and insertion use the existing actor/scope/key index.
 There is no new table or migration and no retry of unaudited operations.
 
+## Plan and card surface audit
+
+The current task detail and `PlanView.svelte` display plans; they contain no plan
+editor or card content editor. Plan authoring currently runs through the core/CLI
+`plan.set` command. Do not claim a UI plan composer migration or add a new editor
+as part of this durability work. The UI guard rejects future direct `setCardPlan`
+sends until a durable adapter and complete composer snapshot are introduced.
+
+`PUT /cards/{id}/plan` now accepts an optional `request_key`. The replay hash binds
+the canonical card, original plan, actor and original `if_updated_at`. Its nested
+`SetCardPlan` savepoint writes the graph, card and board timestamps, work version
+and event. It does not call a quota-locking writer. Enrichment and its authorization admission borrow the outer
+write snapshot; the original complete HTTP projection is stored before commit.
+The audit found that `PinReads` opened a second connection for admission even
+inside the wrapper. It now uses a borrowed read snapshot, ensuring admission sees
+uncommitted ownership changes and that closing a projection cannot close its
+parent write transaction.
+The custom CLI helper currently sends unkeyed requests and rereads the token when
+none is supplied; callers needing recovery must retain the complete keyed HTTP
+request rather than recomposing it from the latest read.
+The single-connection test sets its pool limit after fixture creation: existing
+unkeyed task creation reads quota usage while holding its native transaction,
+which stalls on a one-connection pool. The keyed task path uses the bound outer
+transaction; unkeyed quota reads remain a separate audit gap.
+Tests cover eight concurrent requests with quotas enabled and a one-connection
+pool, changed plans/tokens/targets, a later superseding edit, full rollback on
+receipt failure, and replay denied after private ownership is revoked.
+
+The original send now returns the stored JSON representation too: typed nested
+responses previously changed field order on replay. Decoding uses `json.Number`
+to retain integer precision. This applies to all routes using the general atomic
+wrapper; plain unkeyed writes retain their existing behavior.
+
+The remaining UI card edit is command-palette assignment in
+`CommandPalette.svelte:assignContextTask`. It currently fetches a card token and
+calls `cards.patch` directly. Task moves run through `taskBoardMove.js`; the board
+also collects completion evidence. These are still open. `cards.patch` writes its
+card first and emits a lifecycle event and assignment wake afterward. Blindly
+putting that handler in the wrapper would reacquire quota locks in `AppendEvent`
+and `CreateArtifact`; wake preparation also reads authentication state. Audit
+those writes, ownership and durable wake scheduling before migrating assignment,
+card metadata or lifecycle requests. Content revisions are a separate endpoint,
+not metadata PATCH.
+
 ## Replay audit
 
 No HTTP routes or database migrations are added. PM request contracts now accept
@@ -175,18 +219,19 @@ an optional original `actor_id`, which must match the authenticated actor; decis
 answers and multipart attachment uploads also accept an optional `request_key`. Generated clients and CLI registries
 are regenerated from the canonical OpenAPI contract.
 
-| Path                                                                              | Current evidence                                                                                                                                                                                                               | Next action                                                                                                                              |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /inbox/{id}/respond`                                                        | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse                                  | Preserve full original request/key through device recovery; covered here                                                                 |
-| `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                    | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                 |
-| Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                 | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                       |
-| `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                          |
-| PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                | Covered by composite chat adapter; replay returns the canonical turn, whose lifecycle status may advance                                 |
-| Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                   | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery |
-| `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                 |
-| `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                            | Task creation covered; existing card edits and lifecycle remain rollout work                                                             |
-| `POST /docs`, `PATCH /docs/{id}`, `POST /docs/{id}/revisions`                     | Document/revision/metadata writes and original response commit with replay; exact body/base-token retries and changed-key conflicts                                                                                            | Creation, description, text revision and inline title adapters covered; legacy PUT and other lifecycle/knowledge forms remain gaps       |
-| Remaining card/plan/settings/lifecycle forms                                      | Diverse create/patch/action commands                                                                                                                                                                                           | Audit and migrate each remaining operation; extend whole-UI inventory                                                                    |
+| Path                                                                              | Current evidence                                                                                                                                                                                                               | Next action                                                                                                                                           |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /inbox/{id}/respond`                                                        | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse                                  | Preserve full original request/key through device recovery; covered here                                                                              |
+| `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                    | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                              |
+| Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                 | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                                    |
+| `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                                       |
+| PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                | Covered by composite chat adapter; replay returns the canonical turn, whose lifecycle status may advance                                              |
+| Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                   | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery              |
+| `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                              |
+| `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                            | Task creation covered; existing card edits and lifecycle remain rollout work                                                                          |
+| `POST /docs`, `PATCH /docs/{id}`, `POST /docs/{id}/revisions`                     | Document/revision/metadata writes and original response commit with replay; exact body/base-token retries and changed-key conflicts                                                                                            | Creation, description, text revision and inline title adapters covered; legacy PUT and other lifecycle/knowledge forms remain gaps                    |
+| `PUT /cards/{id}/plan`                                                            | Graph, timestamps, work version, event and original response commit together; concurrent quota-enabled/single-connection replay, original projection, rollback and revocation tests                                            | Keyed core API covered; CLI helpers currently send unkeyed requests, and the UI has no plan editor. Future composers still need durable drafts/outbox |
+| Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                           | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules
 

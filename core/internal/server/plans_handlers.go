@@ -114,6 +114,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 			Plan        json.RawMessage `json:"plan"`
 			IfUpdatedAt string          `json:"if_updated_at"`
 			ActorID     string          `json:"actor_id"`
+			RequestKey  string          `json:"request_key"`
 		}
 		if !decodeJSONBody(w, r, &req) {
 			return
@@ -133,21 +134,42 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		if !ok {
 			return
 		}
-		if err = store.SetCardPlan(r.Context(), actor, id, req.IfUpdatedAt, p); err != nil {
-			workStoreError(w, r, err)
-			return
-		}
-		card, err = opts.primitiveStore.GetBoardCard(r.Context(), "", id)
+		status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "plan.set", actor, req.RequestKey, struct {
+			ID   string
+			Body any
+		}{id, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+			// SetCardPlan's nested transaction writes the graph, card/board tokens,
+			// work version and lifecycle event. Enrichment borrows this same write
+			// snapshot, so both the edit and its original receipt commit together.
+			if err := store.SetCardPlan(ctx, actor, id, req.IfUpdatedAt, p); err != nil {
+				return nil, err
+			}
+			updated, err := opts.primitiveStore.GetBoardCard(ctx, "", id)
+			if err != nil {
+				return nil, err
+			}
+			if err := store.EnrichCardPlans(ctx, []map[string]any{updated}, planVisibility(r.WithContext(ctx), opts), time.Now().UTC(), planStalledAfter()); err != nil {
+				return nil, err
+			}
+			return cardPlanResponse(updated), nil
+		})
 		if err != nil {
 			workStoreError(w, r, err)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, status, response)
+		return
 	}
 	if !enrichPlans(w, r, opts, []map[string]any{card}) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"summary": card["work_summary"], "card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]})
+	writeJSON(w, 200, cardPlanResponse(card))
+}
+
+func cardPlanResponse(card map[string]any) map[string]any {
+	return map[string]any{"summary": card["work_summary"], "card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]}
 }
 
 func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

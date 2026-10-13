@@ -92,17 +92,19 @@ type pinnedRead struct {
 // policy owner admits that snapshot before it is exposed. Business mutations
 // continue using ordinary transactions and their current canonical policy.
 func (d *DB) PinReads(ctx context.Context, admit func(context.Context, QueryRower) (context.Context, error)) (context.Context, func(), error) {
-	_, _ = readOnDB(ctx, d.raw, "SELECT id FROM cards", nil)
-	tx, err := d.raw.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	// Projection admission must see the caller's uncommitted ownership writes
+	// too. Borrow an existing write/read snapshot instead of opening a second
+	// connection with older authority (or stalling a one-connection pool).
+	snapshot, err := d.BeginReadSnapshot(ctx, "SELECT id FROM cards")
 	if err != nil {
 		return ctx, nil, err
 	}
-	next, err := admit(ctx, tx)
+	next, err := admit(ctx, snapshot.raw)
 	if err != nil {
-		_ = tx.Rollback()
+		_ = snapshot.Rollback()
 		return ctx, nil, err
 	}
-	return context.WithValue(next, pinnedReadKey{}, pinnedRead{d.raw, tx}), func() { _ = tx.Rollback() }, nil
+	return context.WithValue(next, pinnedReadKey{}, pinnedRead{d.raw, snapshot.raw}), func() { _ = snapshot.Rollback() }, nil
 }
 
 func (d *DB) readHandle(ctx context.Context) interface {

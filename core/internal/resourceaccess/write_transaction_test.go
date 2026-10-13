@@ -58,6 +58,25 @@ func TestWriteTransactionPreservesNestedRollbackAndScopedReads(t *testing.T) {
 			return err
 		}
 		defer snapshot.Rollback()
+		pinned, closeRead, err := db.PinReads(ctx, func(ctx context.Context, handle QueryRower) (context.Context, error) {
+			var count int
+			err := handle.QueryRowContext(ctx, `SELECT count(*) FROM records`).Scan(&count)
+			if err != nil || count != 1 {
+				t.Fatalf("admission saw stale write snapshot: count %d error %v", count, err)
+			}
+			return ctx, err
+		})
+		if err != nil {
+			return err
+		}
+		if err := db.QueryRowContext(pinned, `SELECT count(*) FROM records`).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("pinned write count %d %v", count, err)
+		}
+		closeRead()
+		// Closing a borrowed projection must leave its parent transaction open.
+		if _, err := outer.ExecContext(ctx, `INSERT INTO records VALUES(?)`, "after projection close"); err != nil {
+			return err
+		}
 		return abort
 	})
 	if !errors.Is(err, abort) {
