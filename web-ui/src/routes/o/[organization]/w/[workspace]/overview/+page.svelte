@@ -107,10 +107,13 @@
    * deserves to be told what just happened. Per visit — a reload of a
    * workspace that now has agents is not an arrival.
    *
-   * An agent that exists is the fact, not the end of emptiness. A later
-   * snapshot that cannot read the roster, or that gains a task without a
-   * roster row, must not be told as "your first agent is connected" and must
-   * keep the connect prompt the reader still needs.
+   * An agent that exists is the fact, not the end of emptiness: a snapshot
+   * that gains a pinned report, a truncated section or a task without a
+   * roster row ends the cold state without anything having connected, and
+   * must not be announced as "your first agent is connected". That is the
+   * whole of what this latch gates — the panel itself follows the current
+   * snapshot, so a workspace that turns out not to be empty gets the normal
+   * Overview rather than a connect prompt held open by a stale cache.
    */
   let sawColdStart = $state(false);
   $effect(() => {
@@ -613,7 +616,17 @@
   {:else}
     <div role="status" aria-label="Loading overview"><Skeleton rows={6} /></div>
   {/if}
-  {#if model && !agentArrived && (coldStart || sawColdStart)}
+  <!--
+    The panel follows the snapshot on screen, with no latch of its own. A
+    cached cold snapshot paints first and is replaced by a revalidated one
+    that is not cold — because of a pin, a report, a truncated section, or a
+    task that landed without a roster row — and that newer answer is the
+    authoritative one. Latching here kept the connect prompt up for the rest
+    of the visit over a workspace that is demonstrably not empty, and left it
+    on screen after the roster subscription behind it had been released.
+    `sawColdStart` latches only for the arrival banner below.
+  -->
+  {#if model && coldStart}
     <FirstAgentPanel
       {cliBaseUrl}
       {cliInstallCommand}

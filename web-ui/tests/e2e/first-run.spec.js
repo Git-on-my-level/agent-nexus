@@ -25,15 +25,17 @@ const WS = "/o/local/w/local";
 
 /*
  * Every test here opens a workspace route the dev server has not compiled
- * yet, and they run in parallel: four cold compiles at once take well past
- * the suite's 10s default. The budget below covers the compile, not the
- * behaviour — each assertion about the behaviour keeps the default.
+ * yet, and they run in parallel: four cold compiles at once measured ~15s
+ * against the suite's 10s default. The budget below covers the compile, not
+ * the behaviour — each assertion about the behaviour keeps the default — and
+ * the per-test ceiling is three of them plus room, for the one test that
+ * opens three uncompiled routes in a row.
  */
-const FIRST_PAINT = { timeout: 45_000 };
+const FIRST_PAINT = { timeout: 30_000 };
 
 // eslint-disable-next-line no-empty-pattern
 test.beforeEach(async ({}, testInfo) => {
-  testInfo.setTimeout(120_000);
+  testInfo.setTimeout(100_000);
 });
 
 /** A workspace that was provisioned and never used. */
@@ -92,7 +94,9 @@ async function installEmptyWorkspace(page) {
   await page.route("**/*", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === "/overview")
+    if (path === "/overview") {
+      // Armed by a test that needs the cached snapshot to paint first.
+      if (state.hold) await state.hold.promise;
       return route.fulfill({
         json: snapshot({
           agents: state.agents,
@@ -100,6 +104,7 @@ async function installEmptyWorkspace(page) {
           truncatedAgents: state.truncatedAgents,
         }),
       });
+    }
     /*
      * The roster hub, as core drives it. `CompleteHeadlessHostEnrollment` and
      * the first `host_assertion` token both call `agentChanges.publish()` and
@@ -259,6 +264,62 @@ test("a truncated roster is never read as no agents", async ({ page }) => {
   ).toBeVisible(FIRST_PAINT);
   await expect(page.locator("[data-first-agent-panel]")).toHaveCount(0);
 });
+
+/*
+ * The cached predecessor. `staleWhileRevalidate` paints the last snapshot
+ * from sessionStorage before the request that replaces it returns, so a
+ * workspace that was cold a moment ago shows the connect panel first and
+ * then learns better. The panel has to follow the newer answer: holding it up
+ * because the page was *once* shown a cold snapshot kept a connect prompt on
+ * a workspace that is demonstrably not empty, for the rest of the visit, with
+ * the roster subscription behind it already released.
+ */
+for (const { label, revalidated } of [
+  {
+    label: "a dashboard was pinned",
+    revalidated: (state) => {
+      state.dashboard = {
+        status: "ok",
+        pinned_ref: "document:dashboard",
+        has_more: false,
+        reports: [],
+      };
+    },
+  },
+  {
+    label: "the roster came back truncated",
+    revalidated: (state) => {
+      state.truncatedAgents = true;
+    },
+  },
+]) {
+  test(`a cached cold snapshot gives way when ${label}`, async ({ page }) => {
+    const workspace = await installEmptyWorkspace(page);
+
+    await page.goto(`${WS}/overview`);
+    await waitForAppReady(page);
+    await expect(page.locator("[data-first-agent-panel]")).toBeVisible(
+      FIRST_PAINT,
+    );
+
+    // No agent arrives. Only the snapshot changes, and the next read is held
+    // open so the cached cold one is what paints after the reload.
+    revalidated(workspace);
+    workspace.hold = deferred();
+    await page.reload();
+    await expect(page.locator("[data-first-agent-panel]")).toBeVisible(
+      FIRST_PAINT,
+    );
+
+    workspace.hold.resolve();
+    await expect(page.locator("[data-first-agent-panel]")).toHaveCount(0);
+    await expect(
+      page.locator('[data-overview-section="initiatives"]'),
+    ).toBeVisible();
+    // And nothing claims an agent connected, because none did.
+    await expect(page.locator("[data-first-agent-connected]")).toHaveCount(0);
+  });
+}
 
 test("both setup paths are reachable on a 320px screen", async ({ page }) => {
   // The narrowest phone the shell supports. A tab painted past the right edge
