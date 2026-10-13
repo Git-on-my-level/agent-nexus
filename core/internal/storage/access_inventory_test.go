@@ -270,6 +270,9 @@ func TestResourceAccessStorageInventory(t *testing.T) {
 	if _, err = observation.NewInvestigationStore(ws.DB(), func(context.Context, string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
+	if err = ws.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
 	columns := liveAccessColumns(t, ws.DB())
 	writers := liveAccessWriters(t)
 	path := "testdata/resource_access_storage.json"

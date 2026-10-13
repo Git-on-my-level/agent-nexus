@@ -704,6 +704,21 @@
       "target_id": "scope:edge-endpoints",
       "target_type": "scope:edge-endpoints"
     },
+    "resource_access_compact_edges": {
+      "edge_id": "internal:authorization",
+      "target_key": "internal:authorization"
+    },
+    "resource_access_compact_job": {
+      "cursor": "internal:authorization",
+      "done": "internal:authorization",
+      "singleton": "internal:authorization"
+    },
+    "resource_access_compact_reconstructed": {
+      "edge_id": "internal:authorization",
+      "source_id": "internal:authorization",
+      "source_kind": "internal:authorization",
+      "target_key": "internal:authorization"
+    },
     "resource_access_edges": {
       "source_id": "internal:authorization",
       "source_kind": "internal:authorization",
@@ -2579,6 +2594,11 @@
     "../storage/ask_subjects.go:installAskSubjects": "256cd223e74c3b5a38b36e68cef15494e480414766aa0026cfbaba42320d842e",
     "../storage/ask_subscriptions.go:installAskSubscriptions": "97c43a9ed98833feb66fed18b255bbcef09d5d77c1d6da7ecd8f8b73a3aefc69",
     "../storage/board_role_migration.go:applyMigration64BoardRole": "88b96b88270c47c83030c7978ee37a37e17d8c51eb84781939269baf5a49187e",
+    "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "f1333bac39a6a3d7cdfcc373be9a28dcd9287e7f10c02b6c904a3c0e63b06c77",
+    "../storage/compact_access.go:*Workspace:MaintainCompactAccessBatch": "3899faa70168581d6146877248687e99deb04e7be9627998b10caf013e2834ed",
+    "../storage/compact_access.go:*Workspace:RunCompactAccessShadow": "2192da94925889c99712ec41c8ffa9f9134faeced13adf56c31c6617cdff6554",
+    "../storage/compact_access.go:*Workspace:VerifyCompactAccessShadow": "7ea9125c4513b85caf9a8ea4f097e327944549dd3c83ac0654e1f2086510d66c",
+    "../storage/compact_access.go:*Workspace:maintainCompactAccessChunk": "6ca313f4ed2b76dbf755cae21135a7fe03a6e77e5469b1039b91825c7a9b6e4e",
     "../storage/event_stream.go:indexBoundedEventStreamReads": "7f9a37b118d152e0762d5704c3dded5b9a9397e3597911f792568e926638518c",
     "../storage/evidence_index.go:applyMigration65EvidenceIndex": "e4bb6d285505af13d6d4b8be58137cb4272e1794e6d611e25dd791d2d0cf8bdb",
     "../storage/evidence_index.go:installExternalKeyReferenceEdges": "c3c9b2d93298de4cb8fe93e5147f4684f610c627af17e67d07eefc5ebe7d3557",

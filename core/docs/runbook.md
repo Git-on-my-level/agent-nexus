@@ -17,6 +17,10 @@ repo and live in the private `agent-nexus-saas/controlplane` repo.
 `anx-core` reads configuration from flags (highest priority) and environment
 variables.
 
+The optional `--compact-access-shadow` / `ANX_COMPACT_ACCESS_SHADOW` switch is
+off by default. See [compact access shadow migration](compact-access-shadow.md)
+for resumable dual writes, verification, disk overhead and rollback.
+
 | Purpose                                                                                           | Flag                            | Env                                       | Default                                           |
 | ------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------- | ------------------------------------------------- |
 | Workspace root (SQLite + artifacts)                                                               | `--workspace-root`              | `ANX_WORKSPACE_ROOT`                      | `.anx-workspace`                                  |

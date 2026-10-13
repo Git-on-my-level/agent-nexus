@@ -29,6 +29,7 @@ type Workspace struct {
 	closeOnce           sync.Once
 	askSubjectsBatch    adaptiveMaintenanceBatch
 	inboxLifecycleBatch adaptiveMaintenanceBatch
+	compactAccessBatch  adaptiveMaintenanceBatch
 	closeErr            error
 }
 

@@ -23,7 +23,7 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 	defer ws.Close()
 	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
 	rng := rand.New(rand.NewSource(747))
-	owners := []string{"", "alice", "bob", "carol"}
+	owners := []string{"", "alice", "bob", "carol", "agent-owner", "agent-stranger"}
 	var threads, refs []string
 	for i := 0; i < 24; i++ {
 		related := []string{}
@@ -56,6 +56,15 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err = s.CreateBoardCard(ctx, "alice", board["id"].(string), AddBoardCardInput{Title: fmt.Sprintf("Card %d", i), ColumnKey: "ready", Refs: []string{refs[rng.Intn(len(refs))]}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = ws.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		done, err = ws.MaintainCompactAccessBatch(ctx)
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -105,6 +114,9 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		if _, err = ws.VerifyCompactAccessShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
 		for _, owner := range owners {
 			scope := AccessScope{ActorID: owner}
 			pin, closeRead, err := s.BeginResourceRead(WithRequestAccessScope(ctx, scope))
@@ -132,6 +144,22 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 				closeRead()
 				t.Fatal("reference policy was bypassed")
 			}
+			// Test-only reader substitution exercises the SAME canonical policy over
+			// the reconstructed compact relation. Production cannot select this view.
+			compact := resourceaccess.WithPolicy(WithAccessScope(ctx, scope), resourceaccess.Policy{
+				Read: func(q string) string {
+					return strings.ReplaceAll(scopeRead(WithAccessScope(ctx, scope), q), "main.resource_access_exact_edges", "main.resource_access_compact_reconstructed")
+				},
+			})
+			// Compare the complete denial closure once per principal/round. Every
+			// relation predicate uses this same closure; the remaining ordered-query
+			// matrix checks the original pinned and point-reader policies below.
+			closure := `SELECT json_array(kind,id) FROM _anx_denied ORDER BY kind,id`
+			if got, want := read(compact, closure), read(WithAccessScope(ctx, scope), closure); got != want {
+				closeRead()
+				t.Fatalf("compact denial divergence round=%d actor=%q got=%s want=%s", round, owner, got, want)
+			}
+			comparisons++
 			for _, q := range queries {
 				want := read(WithAccessScope(ctx, scope), q)
 				for _, c := range []context.Context{old, pin} {

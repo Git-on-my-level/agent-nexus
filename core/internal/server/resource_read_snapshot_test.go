@@ -21,6 +21,9 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
+	if err := env.workspace.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "page-owner", "page-owner-actor", "page.owner", "page-owner-token")
 	stranger := seedMachinePrincipalForLockoutTest(t, ctx, db, "page-stranger", "page-stranger-actor", "page.stranger", "page-stranger-token")
 	s := env.primitiveStore.(*primitives.Store)
@@ -37,6 +40,13 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 	}
 	thread := anyString(card.Card["thread_id"])
 	seedStreamPrivacyInbox(t, s, thread, streamPrivacyInboxItem(thread, "page-private-inbox", "PrivatePageSentinel"))
+	for done := false; !done; {
+		var err error
+		done, err = env.workspace.MaintainCompactAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	db.SetMaxOpenConns(1)
 	paths := []string{"/cards/" + anyString(card.Card["id"]), "/boards/" + anyString(board["id"]) + "/cards/" + anyString(card.Card["id"]), "/inbox?limit=50", "/overview", "/overview?summary=1&work_view=summary", "/overview/changes"}
 	for _, live := range []bool{false, true} {
@@ -68,6 +78,9 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 					status = 200
 				}
 				request(stranger.AccessToken, path, status)
+			}
+			if _, err := env.workspace.VerifyCompactAccessShadow(ctx); err != nil {
+				t.Fatal(err)
 			}
 			// Warm closure caches never extend credential lifetime or bypass revocation.
 			for _, column := range []string{"expires_at", "revoked_at"} {
