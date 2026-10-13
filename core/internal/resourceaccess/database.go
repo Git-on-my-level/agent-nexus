@@ -98,7 +98,7 @@ func (d *DB) CheckValues(ctx context.Context, values any) error {
 		return err
 	}
 	if p, ok := PolicyFrom(ctx); ok {
-		return p.Check(ctx, d.raw, values)
+		return p.Check(ctx, d.readHandle(ctx), values)
 	}
 	return nil
 }
@@ -162,10 +162,17 @@ func (t *Tx) Rollback() error { return t.raw.Rollback() }
 // compares its epoch inside the transaction and falls back to its canonical graph.
 // Business write transactions continue to use BeginTx and canonical checks.
 type ReadSnapshot struct {
-	raw *sql.Tx
+	raw      *sql.Tx
+	borrowed bool
 }
 
 func (d *DB) BeginReadSnapshot(ctx context.Context, admissionQuery string) (*ReadSnapshot, error) {
+	// A page may already own an admitted read transaction. Reuse it so nested
+	// readers see the same authority and work with a one-connection pool.
+	// Only the outer owner may finish this transaction.
+	if pin, ok := ctx.Value(pinnedReadKey{}).(pinnedRead); ok && pin.db == d.raw {
+		return &ReadSnapshot{raw: pin.tx, borrowed: true}, nil
+	}
 	// Capture/cache authority before holding a transaction connection, including
 	// pools limited to one connection. No business query is executed here.
 	_, _ = readOnDB(ctx, d.raw, admissionQuery, nil)
@@ -183,5 +190,15 @@ func (t *ReadSnapshot) QueryRowContext(ctx context.Context, q string, args ...an
 	q, args = readOnDB(ctx, t.raw, q, args)
 	return t.raw.QueryRowContext(ctx, q, args...)
 }
-func (t *ReadSnapshot) Commit() error   { return t.raw.Commit() }
-func (t *ReadSnapshot) Rollback() error { return t.raw.Rollback() }
+func (t *ReadSnapshot) Commit() error {
+	if t.borrowed {
+		return nil
+	}
+	return t.raw.Commit()
+}
+func (t *ReadSnapshot) Rollback() error {
+	if t.borrowed {
+		return nil
+	}
+	return t.raw.Rollback()
+}

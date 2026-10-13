@@ -585,6 +585,17 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 }
 
 func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
+	closeRead := func() {}
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		ctx, finishRead, err := canonical.BeginResourceRead(r.Context())
+		if err != nil {
+			writeError(w, 500, "internal_error", "failed to load board card")
+			return
+		}
+		closeRead = finishRead
+		defer closeRead()
+		r = r.WithContext(ctx)
+	}
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -612,6 +623,7 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !enrichPlans(w, r, opts, []map[string]any{card}) {
 		return
 	}
+	closeRead() // Release the WAL snapshot before writing to a potentially slow client.
 	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardPayload(card)})
 }
 
