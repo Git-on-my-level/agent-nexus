@@ -18,8 +18,17 @@ import (
 )
 
 func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target string, timeout time.Duration) (*commandResult, error) {
-	awaitCtx, cancel := context.WithTimeout(ctx, timeout)
+	// The tail of the await budget is reserved for the durable decision read,
+	// so a starved stream can never push the whole command past --timeout.
+	reserve := 2 * time.Second
+	if timeout < 2*reserve {
+		reserve = timeout / 2
+	}
+	deadline := time.Now().Add(timeout)
+	awaitCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	streamCtx, streamCancel := context.WithDeadline(ctx, deadline.Add(-reserve))
+	defer streamCancel()
 	// Terminal state is durable. Read it before creating a write-side subscription
 	// or competing for SSE admission, especially when writers are contending.
 	askPath := "/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:"))
@@ -43,9 +52,9 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 	}
 	subscription = anyString(commandResultBody(sub)["id"])
 	backoff := 250 * time.Millisecond
-	for awaitCtx.Err() == nil {
-		// Token refresh stays inside the await budget; the parent ctx is kept
-		// only for the final durable read after the budget ends.
+	for streamCtx.Err() == nil {
+		// Token refresh stays inside the await deadline; a hung refresh must
+		// not outlive --timeout either.
 		auth, err := a.cfgWithResolvedAuthToken(awaitCtx, cfg)
 		if err != nil {
 			return nil, err
@@ -56,7 +65,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		if err != nil {
 			return nil, err
 		}
-		resp, err := client.OpenStream(awaitCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/stream/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:")), Headers: map[string]string{"Accept": "text/event-stream"}})
+		resp, err := client.OpenStream(streamCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/stream/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:")), Headers: map[string]string{"Accept": "text/event-stream"}})
 		if err == nil {
 			if resp.StatusCode >= 400 {
 				b, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
@@ -64,7 +73,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 				return nil, errnorm.FromHTTPFailure(resp.StatusCode, b)
 			}
 			reader := bufio.NewReader(resp.Body)
-			for awaitCtx.Err() == nil {
+			for streamCtx.Err() == nil {
 				ev, e := streaming.ReadEvent(reader)
 				if e != nil {
 					break
@@ -97,7 +106,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		}
 		timer := time.NewTimer(backoff)
 		select {
-		case <-awaitCtx.Done():
+		case <-streamCtx.Done():
 			timer.Stop()
 		case <-timer.C:
 		}
@@ -106,18 +115,20 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		}
 	}
 	// The stream can starve under writer contention even after the answer is
-	// durable. One final bounded read decides between the answer and the
-	// timeout instead of reporting a timeout over an answer that already exists.
-	finalRead := 2 * time.Second
-	if timeout < 2*finalRead {
-		finalRead = timeout / 2
-	}
-	finalCtx, finalCancel := context.WithTimeout(ctx, finalRead)
+	// durable. The reserved tail buys one durable read that decides between
+	// the answer and the timeout; a read failure surfaces as its real error
+	// instead of a timeout.
+	finalCtx, finalCancel := context.WithDeadline(ctx, deadline)
 	defer finalCancel()
-	if current, err := a.invokeRawJSON(finalCtx, cfg, "await outcome", http.MethodGet, askPath, nil); err == nil {
-		if out := commandResultBody(current); anyString(out["status"]) != "open" {
-			return awaitAskOutcomeResult(target, out)
+	current, err = a.invokeRawJSON(finalCtx, cfg, "await outcome", http.MethodGet, askPath, nil)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(finalCtx.Err(), context.DeadlineExceeded) {
+			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
 		}
+		return nil, err
+	}
+	if out := commandResultBody(current); anyString(out["status"]) != "open" {
+		return awaitAskOutcomeResult(target, out)
 	}
 	return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
 }

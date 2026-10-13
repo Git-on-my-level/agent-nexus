@@ -25,7 +25,7 @@ func TestWorkStoreUnmappedErrorsAreLoggedWithoutSecrets(t *testing.T) {
 	previous := log.Writer()
 	log.SetOutput(&output)
 	t.Cleanup(func() { log.SetOutput(previous) })
-	for _, err := range []error{errors.New("secret-value"), fmt.Errorf("secret-value: %w", codedWorkError{}), fmt.Errorf("secret-value: %w", primitives.ErrHandleAllocation)} {
+	for _, err := range []error{errors.New("secret-value"), fmt.Errorf("secret-value: %w", primitives.ErrHandleAllocation)} {
 		output.Reset()
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPatch, "/work/secret-value?token=secret-value", strings.NewReader("secret-value"))
@@ -42,12 +42,30 @@ func TestWorkStoreUnmappedErrorsAreLoggedWithoutSecrets(t *testing.T) {
 		if strings.Contains(output.String()+w.Body.String(), "secret-value") {
 			t.Fatal("error log or response leaked request or error content")
 		}
-		if strings.Contains(output.String(), "codedWorkError") && !strings.Contains(output.String(), "store_code=5") {
-			t.Fatal("lost wrapped database error code")
-		}
 		if errors.Is(err, primitives.ErrHandleAllocation) && !strings.Contains(output.String(), "diagnostic=handle_allocation_exhausted") {
 			t.Fatal("lost safe handle allocation diagnostic")
 		}
+	}
+	// A coded busy error is mapped contention: retryable 503 with Retry-After,
+	// a correlated log line, and no request or error content in either.
+	output.Reset()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPatch, "/work/secret-value?token=secret-value", strings.NewReader("secret-value"))
+	r.Header.Set("Authorization", "Bearer secret-value")
+	r.Header.Set("X-Request-ID", "secret-value")
+	workStoreError(w, r, fmt.Errorf("secret-value: %w", codedWorkError{}))
+	requestID := w.Header().Get("X-Request-ID")
+	if _, err := uuid.Parse(requestID); err != nil {
+		t.Fatalf("invalid request ID %q", requestID)
+	}
+	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "1" || !strings.Contains(w.Body.String(), `"code":"busy"`) || !strings.Contains(output.String(), "request_id="+requestID) {
+		t.Fatalf("missing correlated busy: response=%s log=%s", w.Body.String(), output.String())
+	}
+	if strings.Contains(output.String()+w.Body.String(), "secret-value") {
+		t.Fatal("error log or response leaked request or error content")
+	}
+	if !strings.Contains(output.String(), "store_code=5") {
+		t.Fatal("lost wrapped database error code")
 	}
 }
 

@@ -63,3 +63,42 @@ func TestAwaitStillTimesOutWhenFinalReadStaysOpen(t *testing.T) {
 		t.Fatalf("exit=%d want=8; an open final read must not become an answer: %s", exit, out.String())
 	}
 }
+
+// A final durable read that fails on the server side must surface the real
+// failure instead of disguising it as a timeout.
+func TestAwaitFinalReadFailureSurfacesRealError(t *testing.T) {
+	var gets atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/asks/ask-1":
+			if gets.Add(1) == 1 {
+				// Initial read: the ask is open.
+				_, _ = w.Write([]byte(`{"status":"open","response":null}`))
+				return
+			}
+			// Final read within the reserved tail: core fails the read.
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"cannot read ask"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/asks/ask-1/subscriptions":
+			_, _ = w.Write([]byte(`{"id":"sub-1"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/asks/ask-1":
+			<-r.Context().Done()
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	// The wide budget keeps the reserved tail (1s) far above any scheduling
+	// delay, so the surfaced error is the server's, not the read deadline's.
+	exit := a.Run([]string{"--json", "--as", "worker", "await", "event:ask-1", "--timeout", "2s"})
+	if exit == 8 {
+		t.Fatalf("exit=8; a failed final read must not look like a timeout: %s", out.String())
+	}
+	doc := dailyJSON(t, out)
+	errBody := asMap(doc["error"])
+	if code := anyString(errBody["code"]); code != "internal_error" {
+		t.Fatalf("error code=%q want internal_error: %s", code, out.String())
+	}
+}
