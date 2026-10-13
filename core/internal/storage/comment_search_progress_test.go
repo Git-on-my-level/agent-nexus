@@ -56,7 +56,7 @@ func TestCommentSearchSlowWorstCasePreparation(t *testing.T) {
 	text.WriteString(strings.Repeat(" ", 65536-text.Len()))
 	commentSearchEvent(t, ws.DB(), "worst", text.String())
 	_, err = ws.maintainCommentSearchBatch(context.Background(), func(raw []byte, truncated bool) (string, error) {
-		// Exceed the metadata chunk budget, and prove another writer can commit
+		// Exceed the former 250 ms chunk budget, and prove another writer can commit
 		// while preparation is running (including on a single-core machine).
 		time.Sleep(350 * time.Millisecond)
 		commentSearchExec(t, ws.DB(), `UPDATE comment_search_job SET done=1`)
