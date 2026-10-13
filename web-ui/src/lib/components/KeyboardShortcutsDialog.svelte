@@ -30,7 +30,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     bind:this={dialog}
-    class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh] outline-none"
+    class="ui-fade-in fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh] outline-none"
     role="dialog"
     aria-modal="true"
     aria-label={title}
@@ -40,7 +40,9 @@
       if (event.target === event.currentTarget) open = false;
     }}
   >
-    <div class="w-full max-w-sm rounded-md border border-line bg-panel p-4">
+    <div
+      class="ui-pop-in w-full max-w-sm rounded-md border border-line bg-panel p-4"
+    >
       <h2
         class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
       >

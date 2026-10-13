@@ -249,7 +249,7 @@
       of every key below.
     -->
     <div
-      class="picker-menu"
+      class="picker-menu ui-pop-in"
       role="menu"
       aria-label="Report"
       tabindex="-1"

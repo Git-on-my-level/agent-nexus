@@ -162,7 +162,7 @@
   {#if open && hasItems}
     <div
       bind:this={menuPanelRef}
-      class="anx-ctx-menu fixed z-[200] min-w-[9rem] rounded-md border border-line bg-panel py-0.5 text-micro shadow-md"
+      class="anx-ctx-menu ui-fade-in fixed z-[200] min-w-[9rem] rounded-md border border-line bg-panel py-0.5 text-micro shadow-md"
       style:left="{pos.x}px"
       style:top="{pos.y}px"
       role="menu"

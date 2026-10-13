@@ -743,7 +743,7 @@
 
 {#if open}
   <div
-    class="cmd-backdrop"
+    class="cmd-backdrop ui-fade-in"
     onclick={handleBackdropClick}
     onkeydown={handleKeydown}
     role="dialog"
@@ -752,7 +752,7 @@
     tabindex="-1"
     use:focusTrap={{ initialFocus: () => inputEl, fallbackFocus }}
   >
-    <div class="cmd-modal">
+    <div class="cmd-modal ui-pop-in">
       <div class="cmd-input-wrap">
         {#if subpage}
           <button

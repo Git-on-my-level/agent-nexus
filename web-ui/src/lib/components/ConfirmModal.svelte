@@ -96,8 +96,8 @@
   >
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="confirm-overlay" onclick={handleBackdropClick}></div>
-    <div class="confirm-panel">
+    <div class="confirm-overlay ui-fade-in" onclick={handleBackdropClick}></div>
+    <div class="confirm-panel ui-pop-in">
       <h2 class="confirm-title">{title}</h2>
       {#if message}
         <p class="confirm-message">{message}</p>
