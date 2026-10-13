@@ -97,6 +97,7 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 		return string(raw)
 	}
 	comparisons := 0
+	overviewComparisons := 0
 	for round := 0; round < 5; round++ {
 		// Grant, revoke, and transfer ownership with the real invalidation triggers.
 		for i := 0; i < 6; i++ {
@@ -111,6 +112,14 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			old := context.WithValue(pin, summaryPointReadKey{}, false)
+			oldPolicy, _ := resourceaccess.PolicyFrom(old)
+			oldRead := oldPolicy.ReadOnDB
+			oldPolicy.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
+				q, a := oldRead(c, db, query, args)
+				q = strings.ReplaceAll(q, "ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id", "ref=_row.source_type || ':' || _row.source_id OR ref=_row.target_type || ':' || _row.target_id")
+				return q, a
+			}
+			old = resourceaccess.WithPolicy(old, oldPolicy)
 			policy, _ := resourceaccess.PolicyFrom(pin)
 			proof := pin.Value(pinnedDenialKey{}).(pinnedDenial)
 			pointSQL, _ := policy.ReadOnDB(pin, proof.db, `SELECT id FROM documents WHERE id=?`, []any{"missing"})
@@ -133,10 +142,30 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 					comparisons++
 				}
 			}
+			overview := func(c context.Context) string {
+				t.Helper()
+				page, err := s.OverviewVisible(c, nil, nil, nil, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := json.Marshal(page)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(raw)
+			}
+			wantOverview := overview(WithAccessScope(ctx, scope))
+			for _, c := range []context.Context{old, pin} {
+				if got := overview(c); got != wantOverview {
+					closeRead()
+					t.Fatalf("Overview round=%d actor=%q got=%s want=%s", round, owner, got, wantOverview)
+				}
+				overviewComparisons++
+			}
 			closeRead()
 		}
 	}
-	t.Logf("seed=747 byte-equivalent result comparisons=%d", comparisons)
+	t.Logf("seed=747 byte-equivalent result comparisons=%d Overview comparisons=%d", comparisons, overviewComparisons)
 }
 
 func TestResourceReadNestedSnapshotSingleConnection(t *testing.T) {

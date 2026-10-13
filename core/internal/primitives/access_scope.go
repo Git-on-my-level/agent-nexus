@@ -94,7 +94,9 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("document_revisions", denied("document", "_row.document_id")+" AND "+denied("document_revision", "_row.revision_id"))
 	add("card_revisions", denied("card", "_row.card_id")+" AND "+denied("card_revision", "_row.revision_id"))
 	add("resource_handle_aliases", cleanJSON("_row.reason")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.resource_type AND id=_row.resource_id)")
-	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id OR ref=_row.target_type || ':' || _row.target_id)")
+	// Separate equality probes let SQLite index the materialized reference set.
+	// An OR here scans every denied spelling for every candidate placement.
+	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id)")
 	add("resource_access_external_edges", "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.source_kind AND id=_row.source_id)")
 	add("work_metadata", denied("card", "_row.card_id"))
 	add("work_observations", denied("card", "_row.card_id")+" AND "+denied("work_observation", "_row.id"))
