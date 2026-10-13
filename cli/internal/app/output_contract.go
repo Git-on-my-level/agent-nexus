@@ -216,7 +216,14 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		}
 	}
 	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
-		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
+		switch anyString(asMap(root["delivery"])["mode"]) {
+		case askDeliveryBatch:
+			actions = append(actions, action("Sweep answers next run", "anx", "await", "--answers"))
+		case askDeliveryAwait, "":
+			actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
+		case askDeliveryResume:
+			actions = append(actions, action("Check delivery health", "anx", "orient"))
+		}
 	}
 	if command == "auth access-requests request" {
 		request := asMap(root["request"])

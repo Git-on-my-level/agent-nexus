@@ -44,6 +44,19 @@ func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (
 		}
 		return &commandResult{Data: data}, command, nil
 	}
+	if args[0] == "ask-delivery" {
+		if len(args) == 1 {
+			return &commandResult{Data: map[string]any{"ask_delivery": strings.TrimSpace(catalog.File.AskDelivery)}}, command, nil
+		}
+		mode := strings.ToLower(strings.TrimSpace(args[1]))
+		if !validAskDeliveryMode(mode) {
+			return nil, command, errnorm.Usage("invalid_request", "ask-delivery must be one of: await, resume, batch, none")
+		}
+		if err := setWorkspaceAskDeliveryDefault(dir, mode); err != nil {
+			return nil, command, err
+		}
+		return &commandResult{Data: map[string]any{"ask_delivery": mode}}, command, nil
+	}
 	var base, pattern string
 	var forgeData map[string]any
 	err = workspaceconfig.Update(dir, func(current *workspaceconfig.Catalog) error {

@@ -20,9 +20,10 @@ import (
 const Filename = "workspaces.json"
 
 type File struct {
-	Default string            `json:"default,omitempty"`
-	Aliases map[string]string `json:"aliases"`
-	Rules   map[string]string `json:"directory_rules,omitempty"`
+	Default     string            `json:"default,omitempty"`
+	Aliases     map[string]string `json:"aliases"`
+	Rules       map[string]string `json:"directory_rules,omitempty"`
+	AskDelivery string            `json:"ask_delivery,omitempty"`
 	// Forges registers non-GitHub code forge hosts per workspace (keyed by the
 	// workspace base URL) so evidence URLs on those hosts can satisfy ask
 	// evidence linting. github.com is built in and needs no entry.

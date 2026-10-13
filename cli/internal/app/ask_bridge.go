@@ -39,7 +39,7 @@ func (a *App) runAskBridge(ctx context.Context, args []string, cfg config.Resolv
 	if err != nil {
 		return nil, err
 	}
-	unlock, err := lockAskBridge(filepath.Join(dir, "bridge.lock"))
+	unlock, err := lockAskBridgeReady(filepath.Join(dir, "bridge.lock"))
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +49,9 @@ func (a *App) runAskBridge(ctx context.Context, args []string, cfg config.Resolv
 		err = a.consumeAskWakes(ctx, cfg, dir, *maxAttempts, *timeout)
 		if ctx.Err() != nil {
 			break
+		}
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			fmt.Fprintf(os.Stderr, "anx bridge run: %v\n", err)
 		}
 		timer := time.NewTimer(backoff)
 		select {
