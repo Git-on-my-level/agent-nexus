@@ -550,10 +550,14 @@ Ref hydration costs O(page refs), using canonical primary keys (and event handle
 indexes for original requests), independently of unrelated event history. Each
 200-ID batch compiles one scoped statement. Canonical inherited denial admission
 still depends on denied roots and reachable identities, with the existing bounded
-shared epoch cache. On a warm hit admission probes only the epoch; inside the
-admitted transaction point membership uses the existing fail-closed token rather
-than recompiling an unreachable recursive graph. Epoch misses recompute the full
-canonical policy. Ordinary unpinned and mutation reads retain canonical fallback.
+shared epoch cache. Admission validates the epoch and conditionally captures a
+stale closure in one SQL statement, retaining the existing query budgets across
+workspace writes. Inside the admitted transaction, point membership uses the
+existing fail-closed token rather than recompiling the recursive graph for every
+ref lookup. Epoch misses recompute the full canonical policy. Ordinary unpinned
+and mutation reads retain canonical fallback. Report rendering retains its
+ordinary scoped reads and response-level ref batches, without a new snapshot
+admission round trip.
 
 The modernc driver keeps SQL text in `sql.Stmt`, then calls native
 `sqlite3_prepare_v2` on every execution. A Go prepared-statement cache therefore

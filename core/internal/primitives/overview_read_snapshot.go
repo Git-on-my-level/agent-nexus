@@ -53,16 +53,8 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 		query := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT COALESCE(` + current + `,-1),CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
 		snapshot := &denialSnapshot{}
 		var rows sql.NullString
-		// This probe establishes the transaction snapshot. A matching epoch
-		// proves cached authority in that same snapshot without preparing the
-		// large canonical fallback. A miss still evaluates the complete graph.
-		if err := db.QueryRowContext(ctx, `SELECT COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)`).Scan(&snapshot.epoch); err != nil {
+		if err := db.QueryRowContext(ctx, query, cached.epoch, cached.epoch).Scan(&snapshot.epoch, &rows); err != nil {
 			return ctx, err
-		}
-		if snapshot.epoch != cached.epoch {
-			if err := db.QueryRowContext(ctx, query, cached.epoch, cached.epoch).Scan(&snapshot.epoch, &rows); err != nil {
-				return ctx, err
-			}
 		}
 		if snapshot.epoch < 0 {
 			return ctx, errOverviewSnapshotUnavailable

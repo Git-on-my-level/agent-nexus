@@ -89,7 +89,8 @@ func TestResourceAccessRouteInventory(t *testing.T) {
 }
 
 func TestResourceAccessRouteMatrix(t *testing.T) {
-	t.Parallel()
+	// Isolate strict stream delivery deadlines from parallel schema/reference
+	// fixtures. Streaming and competing writes within this fixture remain concurrent.
 	requireIntegrationTest(t)
 	policies := loadPrivacyRouteMatrix(t)
 	// Rebuild is a successful canonical maintenance action; run it after the
