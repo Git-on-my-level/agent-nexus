@@ -35,6 +35,13 @@
   } from "$lib/overviewUrgent.js";
   import UrgentBand from "$lib/components/overview/UrgentBand.svelte";
   import MorningBrief from "$lib/components/overview/MorningBrief.svelte";
+  import FirstAgentPanel from "$lib/components/onboarding/FirstAgentPanel.svelte";
+  import { agentRoster, startAgentRoster } from "$lib/agentRoster.js";
+  import {
+    hasArrivedAgent,
+    isColdStart,
+    rosterHasAgent,
+  } from "$lib/firstRun.js";
   import { morningBriefModel } from "$lib/morningBrief.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workspacePath } from "$lib/workspacePaths";
@@ -69,6 +76,83 @@
 
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
+  );
+  /*
+   * Cold start: a workspace nothing has ever reported into. The sections
+   * below are all empty in this state and their only call to action (pin a
+   * visual report) cannot be taken until an agent has written one, so the
+   * page spends its first screen on connecting that agent instead.
+   *
+   * The arrival signal.
+   *
+   * It cannot come from this page's own event-stream refresh: core publishes
+   * a new host and a newly named agent to the ephemeral roster hub
+   * (`agents_changed` on `GET /stream/agents`) and appends nothing to the
+   * workspace event log, so a visible tab watching only `/stream/events`
+   * would sit on "waiting for your first agent" until something unrelated
+   * happened or the reader reloaded.
+   *
+   * The shell's roster store is kept current by exactly that stream, and
+   * `startAgentRoster` is reference-counted: subscribing here while the
+   * workspace is cold shares the connection the Agents badge already opens
+   * rather than adding one, and adds no polling.
+   */
+  let firstAgent = $derived(
+    rosterHasAgent($agentRoster, $page.params.workspace),
+  );
+  let coldStart = $derived(isColdStart(model) && !firstAgent);
+  /*
+   * The flip, kept in the page rather than the panel: the reader who pasted a
+   * prompt into a terminal on another machine and came back to this tab
+   * deserves to be told what just happened. Per visit — a reload of a
+   * workspace that now has agents is not an arrival.
+   *
+   * An agent that exists is the fact, not the end of emptiness: a snapshot
+   * that gains a pinned report, a truncated section or a task without a
+   * roster row ends the cold state without anything having connected, and
+   * must not be announced as "your first agent is connected". That is the
+   * whole of what this latch gates — the panel itself follows the current
+   * snapshot, so a workspace that turns out not to be empty gets the normal
+   * Overview rather than a connect prompt held open by a stale cache.
+   */
+  let sawColdStart = $state(false);
+  $effect(() => {
+    if (coldStart) sawColdStart = true;
+  });
+  /*
+   * Either witness will do, and they arrive in that order: the roster is the
+   * live one (`agents_changed`), the snapshot the durable one that catches up
+   * on the re-read below.
+   */
+  let agentArrived = $derived(hasArrivedAgent(model) || firstAgent);
+  let justConnected = $derived(sawColdStart && agentArrived);
+  /*
+   * Hold the roster open only while this page depends on it. A workspace with
+   * agents in it already answers the question, and the shell's own badge keeps
+   * the store current from there.
+   */
+  $effect(() => {
+    if (!coldStart) return;
+    return startAgentRoster($page.params.workspace);
+  });
+  /*
+   * The roster ends the cold state on its own; this re-reads the snapshot the
+   * sections behind the panel are drawn from, so they are current rather than
+   * the empty copy loaded before the agent existed. Once, on the transition:
+   * `sawColdStart && firstAgent` stops being newly true after it fires.
+   */
+  let snapshotRefreshed = false;
+  $effect(() => {
+    if (!sawColdStart || !firstAgent || snapshotRefreshed) return;
+    snapshotRefreshed = true;
+    void overviewRead.refresh();
+  });
+  let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
+  let cliInstallCommand = $derived(
+    $page.data?.workspace?.cliInstallCommand ?? "",
+  );
+  let workspaceLabel = $derived(
+    $page.data?.workspace?.label || $page.params.workspace || "",
   );
   let reports = $derived(
     model?.reports?.status === "ok" ? model.reports.reports : [],
@@ -532,7 +616,27 @@
   {:else}
     <div role="status" aria-label="Loading overview"><Skeleton rows={6} /></div>
   {/if}
-  {#if model}
+  <!--
+    The panel follows the snapshot on screen, with no latch of its own. A
+    cached cold snapshot paints first and is replaced by a revalidated one
+    that is not cold — because of a pin, a report, a truncated section, or a
+    task that landed without a roster row — and that newer answer is the
+    authoritative one. Latching here kept the connect prompt up for the rest
+    of the visit over a workspace that is demonstrably not empty, and left it
+    on screen after the roster subscription behind it had been released.
+    `sawColdStart` latches only for the arrival banner below.
+  -->
+  {#if model && coldStart}
+    <FirstAgentPanel
+      {cliBaseUrl}
+      {cliInstallCommand}
+      {workspaceLabel}
+      hrefFor={workspaceHref}
+    />
+  {:else if model}
+    {#if justConnected}
+      <FirstAgentPanel connected hrefFor={workspaceHref} />
+    {/if}
     <!--
       Initiatives, worst first: blocked, at risk, stale, on track, done. The
       sort lives in `planHealth.js` so this section and the band above it
