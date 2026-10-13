@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS comment_search_postings(
 ) WITHOUT ROWID;
 CREATE UNIQUE INDEX IF NOT EXISTS comment_search_postings_scope ON comment_search_postings(thread_id,term,event_id);
 CREATE TABLE IF NOT EXISTS comment_search_job(
- singleton INTEGER PRIMARY KEY CHECK(singleton=1),cursor TEXT,
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1),cursor TEXT,pending_cursor TEXT,
  normalization_version INTEGER NOT NULL DEFAULT 2,
  done INTEGER NOT NULL DEFAULT 0 CHECK(done IN(0,1)),
  authority_binding TEXT NOT NULL DEFAULT 'canonical-event-v1' CHECK(authority_binding='canonical-event-v1')
@@ -120,11 +120,16 @@ CREATE TRIGGER IF NOT EXISTS comment_search_event_delete AFTER DELETE ON events 
 	return installDocumentSearch(ctx, tx)
 }
 
-// MaintainCommentSearchBatch advances one indexed source position per short
-// transaction. A worst-case row has 4096 postings; one row prevents dense legacy
-// comments from starving a fixed transaction time budget. Triggers cover writes
-// behind the cursor and the final empty seek certifies complete source coverage.
+// MaintainCommentSearchBatch reserves one source in a bounded capture chunk.
+// CPU preparation runs after releasing that writer. Applying at most 4096 terms
+// has its own five-second deadline, matching the document-head maintenance budget.
+// The durable pending cursor advances before attempting normalization, including
+// failed attempts; failures are reported by Run and cannot starve later sources.
 func (w *Workspace) MaintainCommentSearchBatch(ctx context.Context) (bool, error) {
+	return w.maintainCommentSearchBatch(ctx, commentindex.Prepare)
+}
+
+func (w *Workspace) maintainCommentSearchBatch(ctx context.Context, prepare func([]byte, bool) (string, error)) (bool, error) {
 	var idle bool
 	if err := w.db.QueryRowContext(ctx, `SELECT done AND NOT EXISTS(SELECT 1 FROM comment_search_heads WHERE ready=0 LIMIT 1) FROM comment_search_job WHERE singleton=1`).Scan(&idle); err != nil {
 		return false, err
@@ -132,33 +137,75 @@ func (w *Workspace) MaintainCommentSearchBatch(ctx context.Context) (bool, error
 	if idle {
 		return true, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	id, done, err := w.reserveCommentSearchSource(ctx)
+	if err != nil || done {
+		return done, err
+	}
+	var raw []byte
+	var truncated bool
+	var version int64
+	err = w.db.QueryRowContext(ctx, `SELECT raw_text,raw_truncated,source_version FROM comment_search_heads WHERE event_id=? AND ready=0`, id).Scan(&raw, &truncated, &version)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	body, err := prepare(raw, truncated)
+	if err != nil {
+		return false, err
+	}
+	// No writer lock or chunk deadline covers preparation. Source edits/deletes
+	// during that work invalidate this proposal; the current capture stays pending.
+	applyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(applyCtx, w.db)
 	if err != nil {
 		return false, err
 	}
 	defer cleanup()
-	var cursor sql.NullString
-	var done bool
-	if err = tx.QueryRowContext(ctx, `SELECT cursor,done FROM comment_search_job WHERE singleton=1 AND normalization_version=2 AND authority_binding='canonical-event-v1'`).Scan(&cursor, &done); err != nil {
+	_, err = tx.ExecContext(applyCtx, `UPDATE comment_search_heads SET projection_json=?,ready=1 WHERE event_id=? AND ready=0 AND source_version=? AND raw_text=CAST(? AS BLOB) AND raw_truncated=?`, body, id, version, string(raw), truncated)
+	if err != nil {
 		return false, err
 	}
-	var pending string
-	pendingErr := tx.QueryRowContext(ctx, `SELECT event_id FROM comment_search_heads WHERE ready=0 ORDER BY event_id LIMIT 1`).Scan(&pending)
-	if pendingErr == nil {
-		if err = commentindex.Normalize(ctx, tx, pending); err != nil {
-			return false, err
-		}
-		return false, tx.Commit()
+	return false, tx.Commit()
+}
+
+func (w *Workspace) reserveCommentSearchSource(ctx context.Context) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
+	if err != nil {
+		return "", false, err
 	}
-	if pendingErr != sql.ErrNoRows {
-		return false, pendingErr
-	}
-	if done {
-		return true, tx.Commit()
+	defer cleanup()
+	var cursor, pendingCursor sql.NullString
+	var done bool
+	if err = tx.QueryRowContext(ctx, `SELECT cursor,pending_cursor,done FROM comment_search_job WHERE singleton=1 AND normalization_version=2 AND authority_binding='canonical-event-v1'`).Scan(&cursor, &pendingCursor, &done); err != nil {
+		return "", false, err
 	}
 	var id string
+	// Two index seeks implement wraparound without sorting the entire queue.
+	err = sql.ErrNoRows
+	if pendingCursor.Valid {
+		err = tx.QueryRowContext(ctx, `SELECT event_id FROM comment_search_heads WHERE ready=0 AND event_id>? ORDER BY event_id LIMIT 1`, pendingCursor.String).Scan(&id)
+	}
+	if err == sql.ErrNoRows {
+		err = tx.QueryRowContext(ctx, `SELECT event_id FROM comment_search_heads WHERE ready=0 ORDER BY event_id LIMIT 1`).Scan(&id)
+	}
+	if err == nil {
+		_, err = tx.ExecContext(ctx, `UPDATE comment_search_job SET pending_cursor=? WHERE singleton=1`, id)
+		if err != nil {
+			return "", false, err
+		}
+		return id, false, tx.Commit()
+	}
+	if err != sql.ErrNoRows {
+		return "", false, err
+	}
+	if done {
+		return "", true, tx.Commit()
+	}
 	if cursor.Valid {
 		err = tx.QueryRowContext(ctx, `SELECT id FROM events WHERE id>? ORDER BY id LIMIT 1`, cursor.String).Scan(&id)
 	} else {
@@ -167,23 +214,23 @@ func (w *Workspace) MaintainCommentSearchBatch(ctx context.Context) (bool, error
 	if err == sql.ErrNoRows {
 		_, err = tx.ExecContext(ctx, `UPDATE comment_search_job SET done=1 WHERE singleton=1`)
 		if err != nil {
-			return false, err
+			return "", false, err
 		}
-		return true, tx.Commit()
+		return "", true, tx.Commit()
 	}
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
+	// Re-capture even an existing head: an old normalization version may
+	// have reset the historical cursor. Replacing its old 4096 terms shares
+	// the same five-second bound as applying a prepared projection.
 	if _, err = tx.ExecContext(ctx, commentSearchCapture, id); err != nil {
-		return false, err
-	}
-	if err = commentindex.Normalize(ctx, tx, id); err != nil {
-		return false, err
+		return "", false, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE comment_search_job SET cursor=? WHERE singleton=1`, id); err != nil {
-		return false, err
+		return "", false, err
 	}
-	return false, tx.Commit()
+	return id, false, tx.Commit()
 }
 
 // RunCommentSearchMaintenance belongs to the server maintenance lifecycle,

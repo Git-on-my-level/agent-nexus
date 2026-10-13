@@ -26,14 +26,23 @@ func Normalize(ctx context.Context, tx Transaction, id string) error {
 	if err != nil {
 		return err
 	}
+	body, err := Prepare(raw, truncated)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE comment_search_heads SET projection_json=?,ready=1 WHERE event_id=? AND ready=0`, body, id)
+	return err
+}
+
+// Prepare does bounded CPU work without needing a database transaction.
+func Prepare(raw []byte, truncated bool) (string, error) {
 	projection := scopesearch.PrepareComment(string(raw))
 	projection.Truncated = projection.Truncated || truncated
 	body, err := json.Marshal(projection)
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE comment_search_heads SET projection_json=?,ready=1 WHERE event_id=? AND ready=0`, string(body), id)
-	return err
+	return string(body), nil
 }
 
 // AfterWrite catches ordinary parameterized core event mutations in the same

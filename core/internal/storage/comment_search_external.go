@@ -33,3 +33,19 @@ func upgradeExternalCommentSearch(ctx context.Context, tx *sql.Tx) error {
 	}
 	return installCommentSearch(ctx, tx)
 }
+
+// Rotation metadata contains no projection and never certifies an unready head.
+func upgradeCommentSearchPendingCursor(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "comment_search_job")
+	if err != nil || !exists {
+		return err
+	}
+	var n int
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('comment_search_job') WHERE name='pending_cursor'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		_, err = tx.ExecContext(ctx, `ALTER TABLE comment_search_job ADD COLUMN pending_cursor TEXT`)
+	}
+	return err
+}

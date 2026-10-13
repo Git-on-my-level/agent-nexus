@@ -1041,6 +1041,7 @@ var migrations = []migration{
 	{Version: 82, AfterApply: installCommentSearch},
 	{Version: 83, AfterApply: upgradeSearchNormalization},
 	{Version: 84, AfterApply: upgradeExternalCommentSearch},
+	{Version: 85, AfterApply: upgradeCommentSearchPendingCursor},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

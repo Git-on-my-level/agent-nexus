@@ -120,7 +120,18 @@ fallback after a new comment edit, restart, and a body changing during blob I/O.
 ## Online construction and write bounds
 
 Event capture visits one source primary key per transaction, with a durable
-nullable cursor and 250 ms transaction deadline. Head capture visits one current
+nullable cursor and five-second capture transaction deadline (a preview upgrade
+may replace up to 4,096 old terms). Pending event raw text
+and source version are read without a write transaction; preparation and JSON
+encoding run outside the write lock. The guarded apply has a separate five-second
+deadline for at most 4,096 terms, matching the document-head maintenance budget.
+It applies only if source version, raw bytes, truncation and pending state still
+match; concurrent edits remain pending. Busy acquisition yields immediately.
+A durable pending cursor (migration 85, metadata only) advances before each
+attempt and wraps through two indexed seeks. Failed rows remain uncertified,
+rotate behind other pending rows, and surface through the worker's rate-limited
+error callback. This bounds write-lock duration and prevents queue starvation.
+Head capture visits one current
 document, reads its blob outside the transaction and rechecks its complete source
 binding before commit. Parent attachment visits one comment key per chunk.
 Final empty seeks and completion checkpoints commit with their source checks.
