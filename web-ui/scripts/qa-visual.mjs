@@ -116,16 +116,24 @@ export const QA_SCENES = [
     name: "workspace-home-handoff-empty",
     path: "/o/local/w/local",
     workspaceMode: "home-empty",
+    /*
+     * Nothing has ever reported into this workspace, so the Overview is the
+     * connect-your-first-agent panel rather than a stack of empty sections.
+     * The sections this scene used to wait on — initiatives, the dashboard
+     * note, the detail fold and the urgent band inside it — are not rendered
+     * in that state by design; `workspace-home-handoff-first-run` still
+     * covers them, because its one open ask means it is not a cold start.
+     *
+     * The panel carries the longest strings in the product (an install
+     * command and an `anx --base-url …` line), which is what makes auditing
+     * it at phone width worth a scene.
+     */
     waitFor: async (page) => {
-      await page.waitForSelector("text=No open initiatives.");
-      await page.waitForSelector(
-        "text=Pin a visual report to show your workspace dashboard here.",
-      );
-      await page.locator("[data-overview-detail]:not([open])").waitFor();
-      // Still computed, still one click away: "Nothing is waiting on you."
-      await page
-        .locator("[data-urgent-state='empty']")
-        .waitFor({ state: "attached" });
+      await page.locator("[data-first-agent-panel]").waitFor();
+      await page.waitForSelector("text=Connect your first agent");
+      await page.locator("[data-setup-prompt='machine']").waitFor();
+      await page.locator("[data-first-agent-waiting]").waitFor();
+      await page.locator("[data-first-agent-example]").waitFor();
     },
   },
   {
