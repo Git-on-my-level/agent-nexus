@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/internal/streaming"
 )
 
@@ -593,6 +595,7 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout time.Duration) (*commandResult, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	var lastUnmatched []string
 	readBatch := func() (*commandResult, bool, error) {
 		notifications, err := a.invokeRawJSON(waitCtx, cfg, "await answer notifications", "GET", "/agent-notifications?status=unread", nil)
 		if err != nil {
@@ -643,10 +646,26 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout 
 			}
 			cursor = next
 		}
+		// Whatever is left after the bounded window is preserved, never
+		// silently dropped: notified answers older than the newest
+		// maxOwnAsksLookupPages*200 asks stay listed as unmatched.
+		unmatched := make([]string, 0, len(responseIDs))
+		for answerID := range responseIDs {
+			unmatched = append(unmatched, answerID)
+		}
+		sort.Strings(unmatched)
+		lastUnmatched = unmatched
 		if len(batch) == 0 {
 			return nil, false, nil
 		}
-		return &commandResult{Data: map[string]any{"answers": batch, "count": len(batch)}}, true, nil
+		data := map[string]any{"answers": batch, "count": len(batch)}
+		result := &commandResult{Data: data}
+		if len(unmatched) > 0 {
+			data["incomplete"] = true
+			data["unmatched_notification_ids"] = unmatched
+			result.Warnings = append(result.Warnings, output.Warning{Code: "ask_delivery", Message: fmt.Sprintf("%d notified answer(s) were not found among the newest %d asks; they may answer older asks. Continue with: anx inbox list --status answered --unread --limit 200, then page with --cursor", len(unmatched), maxOwnAsksLookupPages*200)})
+		}
+		return result, true, nil
 	}
 	if result, ready, err := readBatch(); err != nil || ready {
 		return result, err
@@ -656,7 +675,12 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout 
 	for {
 		select {
 		case <-waitCtx.Done():
-			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), map[string]any{"target": "answers", "timeout": timeout.String()})
+			details := map[string]any{"target": "answers", "timeout": timeout.String()}
+			if len(lastUnmatched) > 0 {
+				details["unmatched_notification_ids"] = lastUnmatched
+				details["continuation"] = fmt.Sprintf("%d notified answer(s) were never found among the newest %d asks; continue with: anx inbox list --status answered --unread --limit 200, then page with --cursor", len(lastUnmatched), maxOwnAsksLookupPages*200)
+			}
+			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), details)
 		case <-ticker.C:
 			result, ready, err := readBatch()
 			if err != nil {

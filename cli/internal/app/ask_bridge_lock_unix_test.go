@@ -11,19 +11,28 @@ import (
 
 func TestAskBridgeLockProbeDoesNotAcquireExclusive(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bridge.lock")
-	if askBridgeLockHeld(path) {
-		t.Fatal("empty lock reported a running bridge")
+	if askBridgeLockState(path) != answerBridgeAbsent {
+		t.Fatal("empty lock reported something other than absent")
 	}
 	unlock, err := lockAskBridge(path)
 	if err != nil {
 		t.Fatalf("probe leaked an exclusive lock: %v", err)
 	}
-	if !askBridgeLockHeld(path) {
+	if askBridgeLockState(path) != answerBridgeRunning {
 		t.Fatal("held exclusive lock not observed")
 	}
 	unlock()
-	if askBridgeLockHeld(path) {
+	if askBridgeLockState(path) != answerBridgeAbsent {
 		t.Fatal("released lock still reported running")
+	}
+}
+
+// An uninspectable lock must read as unknown, never as a live bridge: an
+// ask must not select resume delivery on a probe it could not run.
+func TestAskBridgeLockProbeReportsUnknownWhenUninspectable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-dir", "bridge.lock")
+	if askBridgeLockState(path) != answerBridgeUnknown {
+		t.Fatal("open failure must read as unknown, not running")
 	}
 }
 
@@ -39,7 +48,7 @@ func TestAskBridgeLockProbesDoNotFalsePositive(t *testing.T) {
 	}
 	defer syscall.Flock(int(holder.Fd()), syscall.LOCK_UN)
 
-	if askBridgeLockHeld(path) {
+	if askBridgeLockState(path) != answerBridgeAbsent {
 		t.Fatal("a concurrent shared probe was treated as a live exclusive bridge")
 	}
 }

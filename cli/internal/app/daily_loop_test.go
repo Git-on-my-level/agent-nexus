@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -267,6 +268,95 @@ func TestAwaitAnswersFindsWakeForAnswerBehindInterveningEvents(t *testing.T) {
 	answers := asSlice(result["answers"])
 	if pages != 2 || result["count"] != float64(1) || len(answers) != 1 || anyString(asMap(answers[0])["ask_id"]) != "event:old-ask" {
 		t.Fatalf("await lost answer behind intervening events: pages=%d result=%#v", pages, result)
+	}
+}
+
+func TestAwaitAnswersFlagsNotifiedAnswersBeyondTheScanWindow(t *testing.T) {
+	page := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/agents/agent-1":
+			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"}}`)
+		case r.URL.Path == "/agent-notifications":
+			fmt.Fprint(w, `{"items":[{"trigger_event_id":"response-window","related_refs":["event:response-window"]},{"trigger_event_id":"response-beyond","related_refs":["event:response-beyond"]}]}`)
+		case r.URL.Path == "/agent-inbox/asks":
+			page++
+			body := map[string]any{}
+			if page == 2 {
+				body["items"] = []map[string]any{{"ask_id": "event:window-ask", "status": "answered", "answer": map[string]any{"response_event_id": "response-window", "text": "Yes"}, "answer_unread": true}}
+			} else {
+				body["items"] = []map[string]any{{"ask_id": fmt.Sprintf("event:open-%d", page), "status": "open", "answer_unread": false}}
+			}
+			if page < 10 {
+				body["page_info"] = map[string]any{"next_cursor": fmt.Sprintf("p%d", page), "has_more": true}
+			} else {
+				body["page_info"] = map[string]any{"has_more": false}
+			}
+			_ = json.NewEncoder(w).Encode(body)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "--answers", "--timeout", "2s"}); exit != 0 {
+		t.Fatalf("await answers exit=%d output=%s", exit, out.String())
+	}
+	result := asMap(dailyJSON(t, out)["result"])
+	answers := asSlice(result["answers"])
+	if result["count"] != float64(1) || len(answers) != 1 || anyString(asMap(answers[0])["ask_id"]) != "event:window-ask" {
+		t.Fatalf("window answer missing: %#v", result)
+	}
+	if result["incomplete"] != true {
+		t.Fatalf("partial batch must be marked incomplete: %#v", result)
+	}
+	unmatched := asSlice(result["unmatched_notification_ids"])
+	if len(unmatched) != 1 || anyString(unmatched[0]) != "response-beyond" {
+		t.Fatalf("unmatched notification ids missing: %#v", result)
+	}
+	warnings := asSlice(dailyJSON(t, out)["warnings"])
+	foundWarning := false
+	for _, raw := range warnings {
+		if anyString(asMap(raw)["code"]) == "ask_delivery" && strings.Contains(anyString(asMap(raw)["message"]), "inbox list --status answered --unread") {
+			foundWarning = true
+		}
+	}
+	if !foundWarning {
+		t.Fatalf("continuation warning missing: %s", out.String())
+	}
+}
+
+func TestAwaitAnswersTimeoutNamesUnmatchedNotifications(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/agents/agent-1":
+			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"}}`)
+		case r.URL.Path == "/agent-notifications":
+			fmt.Fprint(w, `{"items":[{"trigger_event_id":"response-beyond","related_refs":["event:response-beyond"]}]}`)
+		case r.URL.Path == "/agent-inbox/asks":
+			fmt.Fprint(w, `{"items":[{"ask_id":"event:open-1","status":"open","answer_unread":false}],"page_info":{"has_more":false}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "--answers", "--timeout", "300ms"}); exit != 8 {
+		t.Fatalf("await answers exit=%d output=%s", exit, out.String())
+	}
+	doc := dailyJSON(t, out)
+	err := asMap(doc["error"])
+	details := asMap(err["details"])
+	unmatched := asSlice(details["unmatched_notification_ids"])
+	if len(unmatched) != 1 || anyString(unmatched[0]) != "response-beyond" {
+		t.Fatalf("timeout must name unmatched notifications: %s", out.String())
+	}
+	if !strings.Contains(anyString(details["continuation"]), "inbox list --status answered --unread") {
+		t.Fatalf("timeout must carry the continuation path: %s", out.String())
 	}
 }
 

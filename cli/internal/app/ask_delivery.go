@@ -46,21 +46,33 @@ func validAskDeliveryMode(value string) bool {
 	return false
 }
 
-// answerBridgeRunning reports whether an `anx bridge run` holds the answer
+// answerBridgeProbe is the outcome of inspecting the answer-registry lock.
+// Unknown covers every state the probe cannot verify (open failures,
+// unexpected flock errors, platforms without the bridge); delivery selection
+// must treat unknown as "not a deliverer", never as "running".
+type answerBridgeProbe int
+
+const (
+	answerBridgeAbsent answerBridgeProbe = iota
+	answerBridgeRunning
+	answerBridgeUnknown
+)
+
+// answerBridgeState reports whether an `anx bridge run` holds the answer
 // registry lock for this workspace and actor. The lock lives for the bridge
 // process lifetime, so a held exclusive lock is the truthful per-host-and-agent
 // signal; server-side bridge liveness describes the wake-routing bridge instead.
 // The probe never takes that exclusive lock: doing so races a starting bridge
 // and makes a second ask treat the probe as a live deliverer.
-func (a *App) answerBridgeRunning(cfg config.Resolved) bool {
+func (a *App) answerBridgeState(cfg config.Resolved) answerBridgeProbe {
 	if runtime.GOOS == "windows" {
-		return false // The answer bridge itself requires macOS or Linux.
+		return answerBridgeUnknown // The answer bridge itself requires macOS or Linux.
 	}
 	dir, err := a.askRegistryDir(cfg)
 	if err != nil {
-		return false
+		return answerBridgeUnknown
 	}
-	return askBridgeLockHeld(filepath.Join(dir, "bridge.lock"))
+	return askBridgeLockState(filepath.Join(dir, "bridge.lock"))
 }
 
 // resolveAskDelivery picks the answer-delivery mode for one ask. Filing must
@@ -69,7 +81,8 @@ func (a *App) answerBridgeRunning(cfg config.Resolved) bool {
 func (a *App) resolveAskDelivery(cfg config.Resolved, in askDeliveryInput) (askDeliveryDecision, error) {
 	decision := askDeliveryDecision{Command: a.resumeCommand(in.OnAnswer, in.AskID)}
 	agentctlContinuation := strings.TrimSpace(a.Getenv("AGENTCTL_EXECUTION_ID")) != ""
-	bridgeRunning := a.answerBridgeRunning(cfg)
+	probe := a.answerBridgeState(cfg)
+	bridgeRunning := probe == answerBridgeRunning
 	canDeliver := bridgeRunning || agentctlContinuation
 
 	if in.ExplicitSet {
@@ -145,9 +158,12 @@ func (a *App) resolveAskDelivery(cfg config.Resolved, in askDeliveryInput) (askD
 	}
 
 	decision.Mode = askDeliveryBatch
-	if bridgeRunning {
+	switch {
+	case bridgeRunning:
 		decision.Reason = "anx bridge run is running but no resume command is registered (--on-answer, ANX_RESUME_CMD or agentctl); answers queue until anx await --answers"
-	} else {
+	case probe == answerBridgeUnknown:
+		decision.Reason = "the answer-bridge lock could not be verified and no agentctl continuation is active; answers queue until anx await --answers"
+	default:
 		decision.Reason = "no running anx bridge run and no agentctl continuation; answers queue until anx await --answers"
 	}
 	return decision, nil
@@ -205,9 +221,15 @@ func (a *App) orientDeliveryHealth(cfg config.Resolved, openAsks []any) (map[str
 	if len(openResumeAsks) == 0 {
 		return map[string]any{"open_resume_asks": []string{}}, nil
 	}
-	bridgeRunning := a.answerBridgeRunning(cfg)
-	health := map[string]any{"open_resume_asks": openResumeAsks, "bridge_running": bridgeRunning}
-	if bridgeRunning || strings.TrimSpace(a.Getenv("AGENTCTL_EXECUTION_ID")) != "" {
+	probe := a.answerBridgeState(cfg)
+	health := map[string]any{"open_resume_asks": openResumeAsks, "bridge_running": probe == answerBridgeRunning}
+	if probe == answerBridgeUnknown {
+		// An unverifiable probe is not evidence of absence; stay quiet rather
+		// than alarm on a permissions hiccup.
+		health["bridge_running"] = nil
+		return health, nil
+	}
+	if probe == answerBridgeRunning || strings.TrimSpace(a.Getenv("AGENTCTL_EXECUTION_ID")) != "" {
 		return health, nil
 	}
 	health["warning"] = fmt.Sprintf("%d open %s ask(s) expect the resident executor, but no anx bridge run is running for this host and no agentctl continuation is active; answers will not reach the executor", len(openResumeAsks), askDeliveryResume)

@@ -23,22 +23,27 @@ func lockAskBridge(path string) (func(), error) {
 	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }
 
-// askBridgeLockHeld probes whether an exclusive answer-bridge lock is held
+// askBridgeLockState probes whether an exclusive answer-bridge lock is held
 // without taking one. A shared non-blocking lock succeeds alongside other
 // probes and fails only when `anx bridge run` holds exclusive; holding
 // exclusive here would starve a starting bridge and look like a live one
-// to a concurrent ask/orient.
-func askBridgeLockHeld(path string) bool {
+// to a concurrent ask/orient. Anything that cannot be inspected — open
+// failures, unexpected flock errors — is unknown, never "running": delivery
+// selection must not accept a resume ask on an unverifiable probe.
+func askBridgeLockState(path string) answerBridgeProbe {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return true
+		return answerBridgeUnknown
 	}
 	defer f.Close()
 	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
-		return true
+		if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+			return answerBridgeRunning
+		}
+		return answerBridgeUnknown
 	}
 	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	return false
+	return answerBridgeAbsent
 }
 
 // lockAskBridgeReady takes the exclusive answer-bridge lock, retrying briefly

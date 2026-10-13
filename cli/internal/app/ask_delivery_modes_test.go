@@ -194,6 +194,32 @@ func TestResolveAskDeliveryMatrix(t *testing.T) {
 			t.Fatalf("decision=%+v err=%v", got, err)
 		}
 	})
+	t.Run("unverifiable lock never selects resume", func(t *testing.T) {
+		a, _ := deliveryTestApp(t, server.URL, nil)
+		// A config dir beneath a regular file cannot host the registry, so the
+		// probe cannot inspect the lock.
+		blocked := filepath.Join(t.TempDir(), "blocker.txt")
+		if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg := deliveryTestCfg(server.URL)
+		cfg.ConfigDir = filepath.Join(blocked, "config")
+		if got := a.answerBridgeState(cfg); got != answerBridgeUnknown {
+			t.Fatalf("probe state %v, want unknown", got)
+		}
+		decision, err := a.resolveAskDelivery(cfg, askDeliveryInput{OnAnswer: "hook", OnAnswerFlag: true, AskID: "ask"})
+		if err != nil || decision.Mode != "resume" {
+			t.Fatalf("legacy wiring must still file durably: %+v %v", decision, err)
+		}
+		if !strings.Contains(decision.Reason, "durable") {
+			t.Fatalf("reason must state durable registration: %q", decision.Reason)
+		}
+		// An explicit resume, though, must not pass on an unverifiable probe.
+		_, err = a.resolveAskDelivery(cfg, askDeliveryInput{Explicit: "resume", ExplicitSet: true, OnAnswer: "hook", AskID: "ask"})
+		if err == nil || !strings.Contains(err.Error(), "choices") {
+			t.Fatalf("explicit resume must fail when the probe is unknown, got %v", err)
+		}
+	})
 	t.Run("auto default resumes under agentctl", func(t *testing.T) {
 		got, err := decision(t, map[string]string{"AGENTCTL_EXECUTION_ID": "exec-1"}, false, askDeliveryInput{})
 		if err != nil || got.Mode != "resume" {
