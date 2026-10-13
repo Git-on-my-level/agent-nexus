@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adoptPanelPreference,
+  clearPanelPreference,
   PANEL_AUTO_COLLAPSE_BELOW,
   panelAutoCollapsed,
   panelCollapsed,
@@ -38,6 +40,119 @@ describe("panelStorageKey", () => {
 
   it("gives an unidentified viewer a key rather than no persistence", () => {
     expect(panelStorageKey(SHELL_PANELS.NAV, "")).toContain("anonymous");
+  });
+});
+
+describe("adoptPanelPreference", () => {
+  const NAV = SHELL_PANELS.NAV;
+
+  it("adopts a choice made before the viewer was identified", () => {
+    // The shell paints during bootstrap, so a collapse clicked then lands on
+    // the anonymous key. Identifying must not undo it.
+    const storage = fakeStorage();
+    writePanelPreference(NAV, true, "", storage);
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: "",
+        toViewerId: "agent-a",
+        storage,
+      }),
+    ).toBe(true);
+    expect(readPanelPreference(NAV, "agent-a", storage)).toBe(true);
+  });
+
+  it("clears the anonymous key it adopted, so the next viewer starts clean", () => {
+    const storage = fakeStorage();
+    writePanelPreference(NAV, true, "", storage);
+    adoptPanelPreference(NAV, {
+      fromViewerId: "",
+      toViewerId: "agent-a",
+      storage,
+    });
+    expect(readPanelPreference(NAV, "", storage)).toBeNull();
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: "",
+        toViewerId: "agent-b",
+        storage,
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps the identified viewer's own choice over the anonymous one", () => {
+    const storage = fakeStorage();
+    writePanelPreference(NAV, true, "", storage);
+    writePanelPreference(NAV, false, "agent-a", storage);
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: "",
+        toViewerId: "agent-a",
+        storage,
+      }),
+    ).toBe(false);
+    // And the anonymous key is left alone: it was not adopted.
+    expect(readPanelPreference(NAV, "", storage)).toBe(true);
+  });
+
+  it("never carries one real viewer's layout to another", () => {
+    const storage = fakeStorage();
+    writePanelPreference(NAV, true, "agent-a", storage);
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: "agent-a",
+        toViewerId: "agent-b",
+        storage,
+      }),
+    ).toBeNull();
+    expect(readPanelPreference(NAV, "agent-a", storage)).toBe(true);
+  });
+
+  it("adopts nothing on the first read, when no viewer has been read yet", () => {
+    // `null` is "nothing read yet", which is not the anonymous viewer.
+    const storage = fakeStorage();
+    writePanelPreference(NAV, true, "", storage);
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: null,
+        toViewerId: "agent-a",
+        storage,
+      }),
+    ).toBeNull();
+    expect(readPanelPreference(NAV, "", storage)).toBe(true);
+  });
+
+  it("returns the stored value when the viewer has not changed", () => {
+    const storage = fakeStorage();
+    writePanelPreference(NAV, true, "", storage);
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: "",
+        toViewerId: "",
+        storage,
+      }),
+    ).toBe(true);
+  });
+
+  it("survives a storage that throws", () => {
+    const hostile = {
+      getItem() {
+        throw new Error("blocked");
+      },
+      setItem() {
+        throw new Error("blocked");
+      },
+      removeItem() {
+        throw new Error("blocked");
+      },
+    };
+    expect(
+      adoptPanelPreference(NAV, {
+        fromViewerId: "",
+        toViewerId: "agent-a",
+        storage: hostile,
+      }),
+    ).toBeNull();
+    expect(() => clearPanelPreference(NAV, "a", hostile)).not.toThrow();
   });
 });
 

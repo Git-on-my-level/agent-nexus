@@ -13,7 +13,7 @@
   import { browser } from "$app/environment";
   import { goto, preloadData } from "$app/navigation";
   import { page } from "$app/stores";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { get } from "svelte/store";
 
   import "../app.css";
@@ -89,9 +89,9 @@
     workspacePath,
   } from "$lib/workspacePaths";
   import {
+    adoptPanelPreference,
     panelAutoCollapsed,
     panelCollapsed,
-    readPanelPreference,
     SHELL_PANELS,
     writePanelPreference,
   } from "$lib/shellPanels.js";
@@ -302,9 +302,23 @@
   let navViewerId = $derived(
     $authenticatedAgent?.agent_id || $selectedActorId || "",
   );
+  /*
+   * Read once per viewer, not on every identity tick. The shell paints while
+   * the viewer is still unknown, so a collapse clicked then is stored against
+   * the anonymous key; re-reading the newly identified viewer's empty slot
+   * would spring the nav back open a second after they closed it.
+   */
+  let navPreferenceViewerId = $state(/** @type {string | null} */ (null));
   $effect(() => {
     if (!browser) return;
-    navPreference = readPanelPreference(SHELL_PANELS.NAV, navViewerId);
+    const viewerId = navViewerId;
+    const previousViewerId = untrack(() => navPreferenceViewerId);
+    if (previousViewerId === viewerId) return;
+    navPreference = adoptPanelPreference(SHELL_PANELS.NAV, {
+      fromViewerId: previousViewerId,
+      toViewerId: viewerId,
+    });
+    navPreferenceViewerId = viewerId;
   });
   let navCollapsed = $derived(
     panelCollapsed({

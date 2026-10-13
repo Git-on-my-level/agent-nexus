@@ -21,13 +21,29 @@ const WIDE = { width: 1600, height: 900 };
  */
 const NARROW = { width: 768, height: 1024 };
 
+/**
+ * The shell is server-rendered, so a visible sidebar is not yet a live one:
+ * its buttons do nothing until the client hydrates. Waiting for the nav to
+ * appear used to prove hydration — it only appeared once the client replaced
+ * the full-screen loading card — and no longer does.
+ *
+ * The bootstrap placeholder is in the server's HTML and only the client can
+ * take it away, so its going is the signal that the shell's buttons are wired.
+ */
+async function expectShellReady(page) {
+  await expect(page.locator("[data-shell-nav]")).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(
+    page.locator('[aria-label="Loading workspace content"]'),
+  ).toHaveCount(0, { timeout: 60_000 });
+}
+
 async function open(page, path = TASKS, viewport = WIDE) {
   await installWorkspaceApi(page, {});
   await page.setViewportSize(viewport);
   await page.goto(path);
-  await expect(page.locator("[data-shell-nav]")).toBeVisible({
-    timeout: 60_000,
-  });
+  await expectShellReady(page);
 }
 
 test("the left nav collapses to an icon rail and stays navigable", async ({
@@ -86,18 +102,22 @@ test("the nav's collapse state is remembered across a reload", async ({
   await expect(nav).toHaveAttribute("data-shell-nav", "collapsed");
 
   await page.reload();
+  await expectShellReady(page);
   await expect(page.locator("[data-shell-nav]")).toHaveAttribute(
     "data-shell-nav",
     "collapsed",
     { timeout: 60_000 },
   );
 
-  // And expanding it again sticks the same way.
+  // And expanding it again sticks the same way. The reload has to land on a
+  // live shell before this is asserted: the server renders the nav expanded
+  // whatever the preference says, so an unhydrated page would pass it.
   await page
     .locator("[data-shell-nav]")
     .getByRole("button", { name: "Show menu" })
     .click();
   await page.reload();
+  await expectShellReady(page);
   await expect(page.locator("[data-shell-nav]")).toHaveAttribute(
     "data-shell-nav",
     "expanded",
@@ -198,8 +218,8 @@ test("at 1024 the sidebar has room, and the page does not scroll sideways", asyn
   // leaves a comfortable column — and the toggle is the viewer's to use.
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto(`${WORKSPACE}/tasks`);
+  await expectShellReady(page);
   const nav = page.locator("[data-shell-nav]");
-  await expect(nav).toBeVisible({ timeout: 60_000 });
   await expect(nav).toHaveAttribute("data-shell-nav", "expanded");
   await expect(nav.locator("[data-panel-toggle='left']")).toBeEnabled();
   expect(

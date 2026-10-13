@@ -102,6 +102,66 @@ export function writePanelPreference(
   }
 }
 
+/**
+ * @param {string} panel
+ * @param {string} [viewerId]
+ * @param {Storage} [storage]
+ */
+export function clearPanelPreference(
+  panel,
+  viewerId = "",
+  storage = undefined,
+) {
+  const store = storage ?? safeStorage();
+  if (!store) return;
+  try {
+    store.removeItem(panelStorageKey(panel, viewerId));
+  } catch {
+    // Same reasoning as the write: storage must not break the toggle.
+  }
+}
+
+/**
+ * The preference to apply now that `toViewerId` is the viewer.
+ *
+ * The shell paints before the viewer's identity resolves, so a collapse
+ * clicked in that window is stored against the anonymous key. Re-reading the
+ * newly identified viewer's empty slot would silently undo it — the nav would
+ * spring back open under the viewer's hand a second after they closed it.
+ *
+ * So a choice made while nobody was identified is adopted by the viewer who
+ * turns out to own it: once, only out of the anonymous key, and the anonymous
+ * key is cleared afterwards so the next viewer to identify on this browser
+ * does not inherit a stranger's layout. A viewer with a stored choice of their
+ * own always keeps it, and one real viewer never adopts another's.
+ *
+ * `fromViewerId` of `null` means "nothing has been read yet", which is not the
+ * same as the anonymous viewer: a first read adopts nothing.
+ *
+ * @param {string} panel
+ * @param {{ fromViewerId?: string|null, toViewerId?: string, storage?: Storage }} input
+ * @returns {boolean|null}
+ */
+export function adoptPanelPreference(
+  panel,
+  { fromViewerId = null, toViewerId = "", storage = undefined } = {},
+) {
+  const store = storage ?? safeStorage();
+  const own = readPanelPreference(panel, toViewerId, store);
+  if (own !== null) return own;
+  if (fromViewerId === null) return null;
+
+  const fromKey = panelStorageKey(panel, fromViewerId);
+  if (fromKey !== panelStorageKey(panel, "")) return null;
+  if (fromKey === panelStorageKey(panel, toViewerId)) return null;
+
+  const carried = readPanelPreference(panel, fromViewerId, store);
+  if (carried === null) return null;
+  writePanelPreference(panel, carried, toViewerId, store);
+  clearPanelPreference(panel, fromViewerId, store);
+  return carried;
+}
+
 function safeStorage() {
   try {
     return typeof localStorage === "undefined" ? null : localStorage;
