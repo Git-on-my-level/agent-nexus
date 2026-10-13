@@ -102,6 +102,11 @@ func (a *App) runBridgeUnitInstall(ctx context.Context, args []string, cfg confi
 		// Write beside the target, force the final mode, then rename so a
 		// preexisting world-readable unit can never survive a reinstall.
 		tempPath := plan.Path + ".anx-install_tmp"
+		// Clear a stale or planted temp entry so the write below creates a
+		// fresh, regular file instead of following a symlink.
+		if _, err := bridgeLstat(tempPath); err == nil {
+			_ = os.Remove(tempPath)
+		}
 		if err := bridgeWriteFile(tempPath, []byte(plan.Content), 0o644); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_unit_write_failed", "failed to write bridge unit", err)
 		}
@@ -114,7 +119,9 @@ func (a *App) runBridgeUnitInstall(ctx context.Context, args []string, cfg confi
 			return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_unit_rename_failed", "failed to install bridge unit", err)
 		}
 		if final, statErr := bridgeStat(plan.Path); statErr != nil || final.Mode().Perm() != 0o644 {
-			_ = bridgeChmod(plan.Path, 0o644)
+			if chmodErr := bridgeChmod(plan.Path, 0o644); chmodErr != nil {
+				return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_unit_mode_failed", "installed unit does not have mode 0644 and chmod failed", chmodErr)
+			}
 		}
 	}
 	view["already_current"] = alreadyCurrent
