@@ -345,6 +345,7 @@
       "authority_binding": "internal:reader-cursor",
       "cursor": "internal:reader-cursor",
       "done": "internal:reader-cursor",
+      "normalization_version": "internal:reader-cursor",
       "singleton": "internal:reader-cursor"
     },
     "comment_search_postings": {
@@ -463,6 +464,7 @@
       "cursor_key": "internal:auth-provenance",
       "done": "internal:reader-cursor",
       "generation": "internal:reader-cursor",
+      "normalization_version": "internal:reader-cursor",
       "singleton": "internal:reader-cursor"
     },
     "documents": {
@@ -798,9 +800,9 @@
     },
     "resource_access_edges": {
       "edge_id": "internal:authorization",
-      "source_id": "UNCLASSIFIED",
-      "source_kind": "UNCLASSIFIED",
-      "target_ref": "UNCLASSIFIED"
+      "source_id": "internal:authorization",
+      "source_kind": "internal:authorization",
+      "target_ref": "internal:authorization"
     },
     "resource_access_epoch": {
       "singleton": "internal:authorization",
@@ -1113,13 +1115,7 @@
     "../../cmd/anx-access-reclaim/main.go:main": "568c3b7d462b7b62611eeea0859465ab930b6e5adc4ffc816d6c5d2fc12b275e",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-<<<<<<< ours
-    "../../cmd/anx-core/main.go:main": "ab6b07b207c0db9ab15979754339cd3f038326d81f2f569fdc1598ba0be995d3",
-||||||| base
-    "../../cmd/anx-core/main.go:main": "9157deef5fc0470bf866bd7d8a7a08732c1df08ef494a7256df5565171aaccf2",
-=======
-    "../../cmd/anx-core/main.go:main": "3017fb97621b7d6ca8ed71c2788a3f6beb2858cd450ae7754a217cde59d7c070",
->>>>>>> theirs
+    "../../cmd/anx-core/main.go:main": "23daedf06176c03568c61767f4d362573709dba1c89cb2349372dd78bdf7c05f",
     "../../cmd/anx-core/main.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
     "../../cmd/anx-observe/main.go:load": "07b08a12c195d92fa958af2c0f460af0ca25a9acd678f9db3ce624675b73407f",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
@@ -1753,15 +1749,16 @@
     "../primitives/docs_store.go:clearDocumentBackingThreadSubjectTx": "480116e48aeac5f0982ad158a5cb1e0500f7e1c7f2cff563576a709f35f3270a",
     "../primitives/docs_store.go:ensureDocumentBackingThreadTx": "563e054f8efaf51d10dfa39f6ce330696fb3e6a247f29cee260e6235f88bd61d",
     "../primitives/docs_store.go:publicizeDocumentRevisionMap": "d52d0da5e0da2927600b36b38ccbf4d8f3e25fcdc59ef71dc494e55b6157bfcb",
-    "../primitives/document_search_maintenance.go:*Store:MaintainDocumentSearchBatch": "797d2fa0658c7ad13632c1cb86d215aea22cbe0245de309add17870b64f09b4b",
+    "../primitives/document_search_maintenance.go:*Store:MaintainDocumentSearchBatch": "7468f4b95a700aa4104f670d2ac17ae08e5287f7651dd12b143905f771bf7208",
     "../primitives/document_search_maintenance.go:*Store:RunDocumentSearchMaintenance": "518d9b79b583d423b48c94b92377803e38a811332ed56782939de5c5d6c4aca8",
     "../primitives/document_search_maintenance.go:*Store:readSearchBody": "174de2fbd4a9a48c7099f27c64e36c933b7a0e66264655f5d8c833be1069efd5",
     "../primitives/document_search_maintenance.go:*Store:repairAggregateSearchOne": "4429ebbe524e42e61d59d737d5a25b7ee58bf5fe887597934ea026575cbca871",
     "../primitives/document_search_maintenance.go:documentSearchHeadCaptureSQL": "adf139d3c02a516b68dc7363fe749a04e616262ce58f9b9a5a9777caaf2001b9",
-    "../primitives/document_search_reader.go:*Store:SearchDocuments": "12661b1528e8840053c7453e855dc06a3b3e40857e35e82c4f1ffc3115401391",
+    "../primitives/document_search_reader.go:*Store:SearchDocuments": "4388a55d990eb5ca261bc098be415f250225ccff2bbc5b0aa048eae753ec13e1",
     "../primitives/document_search_reader.go:*Store:beginDocumentSearchRead": "4bf1f28628f68974bab839f9d3abcb239a86231491c09913d0b8d7770b37049a",
     "../primitives/document_search_reader.go:*Store:documentSearchResults": "c7e7a58e1cc38c8dc6ccb00a43cc54f22b26eeadfbfeb3b74b330a82fac0c65c",
     "../primitives/document_search_reader.go:documentSearchRepository:Candidates": "a868cf9fc0403f8400b95f6ad779d25b7e091813784b1b8ce2e1730c3f106cbc",
+    "../primitives/document_search_reader.go:documentSearchRepository:ParentMatches": "8dcd5c441dea91e929a56dc4f0416115f39cc59a9ae36995105c40f959abdd15",
     "../primitives/document_search_reader.go:documentSearchRepository:Texts": "261283f01b731a3f44a709c2b758aeebea0c686f576209727e2836cb1857d782",
     "../primitives/document_search_reader.go:type:DocumentSearchCoverage": "4d2624d1de09ffc4b53ff0056034587f514bd611fc7850e1a922de0942e348cb",
     "../primitives/event_page_refs.go:withBatchPublicRefs": "988b6960cab2a2d8a1f62cc163a22d06f2a5e1c181c2732967b6e9f0e7ce048e",
@@ -2084,14 +2081,8 @@
     "../resourceaccess/database.go:*Tx:Rollback": "7159b2ff622c9a278d74fed8c19c308e7b8420f69dae46a0e1ed4461b0c80a5f",
     "../resourceaccess/database.go:ReadQuery": "6473044fc64daeebe4e9c46d0103a0139729e7e65c2de5aa5b8fede3b1d3ad79",
     "../resourceaccess/database.go:readOnDB": "587aaf349c448a43c1f35314dc751f9f885498dca758e226e1292ad95ac61a91",
-<<<<<<< ours
-    "../resourceaccess/pm_index.go:InstallPMAccess": "e5983be65ecf7a23050b7617587562dfd1fbdf4e72009ed6e41cdae4b364cfad",
-||||||| base
-    "../resourceaccess/pm_index.go:InstallPMAccess": "51a61104a6ae0833167d3bd63a564b8d1573b27e461ffc61dd3890c934acdd26",
-=======
     "../resourceaccess/maintenance.go:*DB:BeginMaintenanceChunk": "95c0fa4a91844db3f5b776364694005cb12bac22dd3008333a3f3a779aeb1034",
-    "../resourceaccess/pm_index.go:InstallPMAccess": "51a61104a6ae0833167d3bd63a564b8d1573b27e461ffc61dd3890c934acdd26",
->>>>>>> theirs
+    "../resourceaccess/pm_index.go:InstallPMAccess": "e5983be65ecf7a23050b7617587562dfd1fbdf4e72009ed6e41cdae4b364cfad",
     "../resourceaccess/sql_values.go:StructuredSQLArguments": "15fd80936159abac6e905b50ef115fb5fbbef559d33e10fb9c87aac41f51b30a",
     "../router/models.go:type:AgentBridgeCheckin": "404f6a97ca734891541a5ad4ac357497fed04ec438f886ccc6d6736f6eda501e",
     "../router/router.go:*Service:Run": "024d53af4c127c31b494427871d44923950d433816d8d81c4c115b32ca9204c1",
@@ -2214,7 +2205,7 @@
     "../scopesearch/comment_projection.go:PrepareComment": "ff23d80e2558d9e33213a77da3f6e762ddd118e4a88e411a065183a21b2d01ff",
     "../scopesearch/comment_projection.go:type:CommentProjection": "7619716023aacbe7d9456c5928e911f559d3986870c701347014f02adc38e5bd",
     "../scopesearch/http.go:Handler": "b002b590ab5dc91e4f30e0afeb4ef038bf4df0574ac4f1a328e63a6098f5dbc1",
-    "../scopesearch/search.go:Search": "d45f27ca1ab504a488c98ace3f41a8aa9b1db0ae7f59bb38261c410e52cf4721",
+    "../scopesearch/search.go:Search": "06d10c631102713af698c9266bed6156f48a3af2897b904421afbee4812ea2a9",
     "../scopesearch/search.go:type:Hit": "ddea90ac160614c18b14bc6bdd61336f453b99d74d3d7c40f4069d277acd5680",
     "../scopesearch/search.go:type:Page": "25128d3b2c28c32681803a1fcad22f1823ef8096b28f4ae0bf189ae18f2f3633",
     "../scopesearch/search.go:type:searchCursor": "0ee2f5d05d932d43719fe939a2e7ece7412b4b17d894119efa027b6155d094a2",
@@ -2707,13 +2698,12 @@
     "../storage/ask_subjects.go:installAskSubjects": "256cd223e74c3b5a38b36e68cef15494e480414766aa0026cfbaba42320d842e",
     "../storage/ask_subscriptions.go:installAskSubscriptions": "97c43a9ed98833feb66fed18b255bbcef09d5d77c1d6da7ecd8f8b73a3aefc69",
     "../storage/board_role_migration.go:applyMigration64BoardRole": "88b96b88270c47c83030c7978ee37a37e17d8c51eb84781939269baf5a49187e",
-    "../storage/comment_search.go:*Workspace:MaintainCommentSearchBatch": "1633f0383305e1144317435b77dfcde939a661c579de63c8f4ab0ea64cc13822",
+    "../storage/comment_search.go:*Workspace:MaintainCommentSearchBatch": "4d0f3ef25de3470e25f75c038cd45e8855bbb188bbe0a4add3922a081cc1ea59",
     "../storage/comment_search.go:*Workspace:RunCommentSearchMaintenance": "fdcc19e0b3230548e45267a4fd217c1a83ff12f7096eaf2d387c496f79c5275a",
     "../storage/comment_search.go:commentSearchCapture": "b8ce959848e02623cd3f159d0273625c44a5b4fe968a13cea409729a61096ce2",
-    "../storage/comment_search.go:commentSearchSchema": "7b23a5da38348a2a2e437e199b270a781af52c0e9eb260c883372a712b0e4e9a",
+    "../storage/comment_search.go:commentSearchSchema": "4d9602afbf05eab15a54fd084983a19817e7997b9190cbcf9776b5fa5f6409cb",
     "../storage/comment_search.go:init": "7cbe9031c626bd2159561c46297bbf18fb96aa83127f31700418f39dd2f13838",
-<<<<<<< ours
-    "../storage/comment_search.go:installCommentSearch": "2a8b33e584122fd643899a5f8c082260ce5934a4abd60ea917448e1ae6496bba",
+    "../storage/comment_search.go:installCommentSearch": "d1f58f3ceee47af77027654428d7407f9c4b27c96a7882839fc4776048dcf532",
     "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "51252c93d11c4d16fbc5d173e0c4f7a8af6c89c4e707f4ada6f4370b894e5f0d",
     "../storage/compact_access.go:*Workspace:MaintainCompactAccessBatch": "3899faa70168581d6146877248687e99deb04e7be9627998b10caf013e2834ed",
     "../storage/compact_access.go:*Workspace:RunCompactAccessMigration": "e0eb5501c43c5517450fb0f3051f12b28682ddd8b255892c30b3daef7e1416e9",
@@ -2729,13 +2719,8 @@
     "../storage/compact_access_cutover.go:enableCompactAccessLease": "f92b83fff6ddffb1fc7c7e208fb4ec9b3d61cdf24ed546dae63018c0c8027775",
     "../storage/compact_access_cutover.go:installStableAccessEdges": "f1bf07771df2a2eb637d83ade6925b8e697fe0e8d85e0c05bf9cf4081d67260c",
     "../storage/compact_access_reclaim.go:ReclaimCompactAccessOffline": "250f2bd14832a500bbfad7499f02d59fc67d3bc519b5c847319158963ebbc887",
-||||||| base
-    "../storage/comment_search.go:installCommentSearch": "2a8b33e584122fd643899a5f8c082260ce5934a4abd60ea917448e1ae6496bba",
-=======
-    "../storage/comment_search.go:installCommentSearch": "d1f58f3ceee47af77027654428d7407f9c4b27c96a7882839fc4776048dcf532",
-    "../storage/document_search.go:documentSearchSchema": "ba13938e7e96ac216afb655bef4ecb774b0821a9d9ed55f1270695bcabf93635",
+    "../storage/document_search.go:documentSearchSchema": "89c0092f287b2b2810771fc3c319a71dc50cba68f3dd01ce4d961de30631c0e7",
     "../storage/document_search.go:installDocumentSearch": "59d18555304db1a3427ab7434ece361296993b22bdf56383b8924cb7bd956db0",
->>>>>>> theirs
     "../storage/event_stream.go:indexBoundedEventStreamReads": "7f9a37b118d152e0762d5704c3dded5b9a9397e3597911f792568e926638518c",
     "../storage/evidence_index.go:applyMigration65EvidenceIndex": "e4bb6d285505af13d6d4b8be58137cb4272e1794e6d611e25dd791d2d0cf8bdb",
     "../storage/evidence_index.go:installExternalKeyReferenceEdges": "c3c9b2d93298de4cb8fe93e5147f4684f610c627af17e67d07eefc5ebe7d3557",
@@ -2786,7 +2771,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "b365e6d2d93c8b1790d9c409b54e912044dc48e3efe18736387d85ee16a9aedb",
+    "../storage/migrations.go:migrations": "e7d5474cace2174e0af2aefaa065033432447e9a209af2eca34ead754c3dbeb4",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
@@ -2818,6 +2803,7 @@
     "../storage/scope_migration_fence.go:scopeLedgerDigest": "25755d6a7774b3895bc3d77b671f46c545cfe65738742035eae3ea1f0fd6de80",
     "../storage/scope_migration_lock_unix.go:acquireScopeProcessLock": "8f70873d3f53a0343ca0eae664ebb56a87937aa836d9da839a7c4534f883e2c2",
     "../storage/scope_migration_lock_windows.go:acquireScopeProcessLock": "8643060ea92ad21531bd57f0651acc97b7f5760cb1f961284db9d252e223e570",
+    "../storage/search_normalization.go:upgradeSearchNormalization": "19ccc8adc02192e94ea0bc9354d50b009334fc3fd8d5b891f4354c7503141030",
     "../storage/series_rollups.go:SeriesLiveDailyBackfillSQL": "e9116a1a96878025863f33d754e3a566ff060fdcbab747bae49bef4a43f3735b",
     "../storage/series_rollups.go:seriesLiveDailyInsertSQL": "3c9fd56c804aa4274e20bf10e6355bf7998235353b8bb4f99e931999c1c1b6be",
     "../storage/series_rollups.go:seriesLiveDailyTableSQL": "c32b0794d6521bc488af84cd189a7ef8a9bce8dd304368fcb11ea13fc612a84e",

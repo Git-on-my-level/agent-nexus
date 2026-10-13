@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS comment_search_postings(
 CREATE UNIQUE INDEX IF NOT EXISTS comment_search_postings_scope ON comment_search_postings(thread_id,term,event_id);
 CREATE TABLE IF NOT EXISTS comment_search_job(
  singleton INTEGER PRIMARY KEY CHECK(singleton=1),cursor TEXT,
+ normalization_version INTEGER NOT NULL DEFAULT 2,
  done INTEGER NOT NULL DEFAULT 0 CHECK(done IN(0,1)),
  authority_binding TEXT NOT NULL DEFAULT 'canonical-event-v1' CHECK(authority_binding='canonical-event-v1')
 );
@@ -124,7 +125,7 @@ func (w *Workspace) MaintainCommentSearchBatch(ctx context.Context) (bool, error
 	defer cleanup()
 	var cursor sql.NullString
 	var done bool
-	if err = tx.QueryRowContext(ctx, `SELECT cursor,done FROM comment_search_job WHERE singleton=1 AND authority_binding='canonical-event-v1'`).Scan(&cursor, &done); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT cursor,done FROM comment_search_job WHERE singleton=1 AND normalization_version=2 AND authority_binding='canonical-event-v1'`).Scan(&cursor, &done); err != nil {
 		return false, err
 	}
 	if done {

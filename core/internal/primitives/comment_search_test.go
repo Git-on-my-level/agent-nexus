@@ -22,7 +22,7 @@ func TestCommentSearchCanonicalAPIsAndAudience(t *testing.T) {
 	}
 	defer ws.Close()
 	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-	doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "report"}, "body", "text", []string{})
+	doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "report"}, "body plan café", "text", []string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 		rng := rand.New(rand.NewSource(seed))
 		ids := []string{}
 		for i := 0; i < 12; i++ {
-			doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": fmt.Sprintf("report %d", i)}, "body", "text", []string{})
+			doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": fmt.Sprintf("report %d", i)}, "body plan café", "text", []string{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -210,7 +210,7 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 				k := rng.Intn(12)
 				id := fmt.Sprintf("parity-%02d-%02d", i, j)
 				ids = append(ids, id)
-				payload, _ := json.Marshal(map[string]any{"payload": map[string]any{"text": fmt.Sprintf("word%d mate%d", k, k)}})
+				payload, _ := json.Marshal(map[string]any{"payload": map[string]any{"text": fmt.Sprintf("word%d mate%d approved résumé", k, k)}})
 				if _, err = ws.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,'message_posted','now','owner',?,'[]',?)`, id, thread, string(payload)); err != nil {
 					t.Fatal(err)
 				}
@@ -259,6 +259,17 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 					}
 					if mode == 2 {
 						legacyQ = strings.ReplaceAll(q, " ", "-")
+					} else if mode == 1 {
+						switch k % 3 {
+						case 0:
+							legacyQ = fmt.Sprintf("plan word%d", k)
+						case 1:
+							legacyQ = fmt.Sprintf("word%d word%d", k, (k+1)%12)
+						case 2:
+							legacyQ = fmt.Sprintf("cafe word%d", k)
+						}
+					} else if k < 4 {
+						legacyQ = []string{"cafe", "CAFÉ", "cafe\u0301", "resume"}[k]
 					}
 					old, _, err := s.searchAggregateDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: legacyQ})
 					if err != nil {
@@ -301,12 +312,12 @@ func TestCommentSearchRandomizedAggregateParity(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("aggregate membership comparisons=%d (3 seeds, edits, deletes, restores, AND, phrase, 3-hit pages)", comparisons)
+	t.Logf("aggregate membership comparisons=%d (3 seeds, edits, deletes, restores, parent AND, diacritics, phrase, 3-hit pages)", comparisons)
 }
 
 func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
 	// Each difference is a deliberate contract choice for the production reader:
-	// coherent single-resource evidence, significant accents, bounded coverage.
+	// same-resource phrases and bounded coverage.
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -320,10 +331,7 @@ func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
 		query      string
 		phrase     bool
 	}{
-		{"cross-comment AND", "body", []string{"alpha", "omega"}, "alpha omega", false},
 		{"cross-comment phrase", "body", []string{"alpha", "omega"}, "alpha omega", true},
-		{"head/comment AND", "alpha", []string{"omega"}, "alpha omega", false},
-		{"accent identity", "body", []string{"café"}, "cafe", false},
 		{"bounded coverage", "body", []string{strings.Repeat("x ", scopesearch.MaxTextBytes/2) + "outsideprefix"}, "outsideprefix", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -363,12 +371,6 @@ func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
 			if e != nil || len(production) != 0 || coverage.Mode != "independent" {
 				t.Fatal("production reader violates intentional difference", production, coverage, e)
 			}
-			if tc.name == "accent identity" {
-				production, _, e = s.SearchDocuments(ctx, DocumentSearchFilter{Query: "CAFÉ"})
-				if e != nil || len(production) != 1 {
-					t.Fatal("production accent identity", production, e)
-				}
-			}
 			tokens, err := scopesearch.NewTokens([]byte(strings.Repeat("k", 32)))
 			if err != nil {
 				t.Fatal(err)
@@ -380,12 +382,6 @@ func TestCommentSearchIntentionalSemanticImprovements(t *testing.T) {
 			}
 			if len(page.Items) != 0 {
 				t.Fatal("independent match violates chosen contract", page)
-			}
-			if tc.name == "accent identity" {
-				page, err = scopesearch.Search(ctx, repo, tokens, scopesearch.Request{Principal: "reader", Scopes: []string{thread}, Query: "CAFÉ"})
-				if err != nil || len(page.Items) != 1 {
-					t.Fatal("accented spelling must match case-insensitively", page, err)
-				}
 			}
 			if tc.name == "bounded coverage" {
 				page, err = scopesearch.Search(ctx, repo, tokens, scopesearch.Request{Principal: "reader", Scopes: []string{thread}, Query: "x"})

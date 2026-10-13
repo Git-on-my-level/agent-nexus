@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-func TestCommentSearchMigration82FromReleaseAnd81(t *testing.T) {
-	for _, version := range []int{80, 81} {
+func TestCommentSearchMigrations82And83FromReleaseAndPreview(t *testing.T) {
+	for _, version := range []int{80, 81, 82} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ctx := context.Background()
 			layout := NewLayout(t.TempDir())
@@ -33,19 +33,23 @@ func TestCommentSearchMigration82FromReleaseAnd81(t *testing.T) {
 				}
 			}
 			commentSearchEvent(t, db, "legacy", "historical needle")
+			before := 0
+			if version >= 82 {
+				before = commentSearchCount(t, db, `SELECT count(*) FROM comment_search_heads`)
+			}
 			db.Close()
 			ws, err := InitializeWorkspace(ctx, layout.RootDir)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer ws.Close()
-			if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM schema_migrations WHERE version IN(81,82)`); n != 2 {
+			if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM schema_migrations WHERE version IN(81,82,83)`); n != 3 {
 				t.Fatal("collision or missing migration", n)
 			}
 			if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM pragma_table_info('topic_projection_refresh_status') WHERE name IN('retry_after','failure_count')`); n != 2 {
 				t.Fatal("lost projection retry schema", n)
 			}
-			if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM comment_search_heads`); n != 0 {
+			if n := commentSearchCount(t, ws.DB(), `SELECT count(*) FROM comment_search_heads`); n != before {
 				t.Fatal("startup copied history", n)
 			}
 			for i := 0; ; i++ {

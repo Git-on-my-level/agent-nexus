@@ -20,8 +20,9 @@ normalization truncation. Its writer must delete at most 4,096 old postings, ins
 never load a document's revisions or backing-thread history on a comment change.
 
 Coverage is a normalized UTF-8 prefix of at most 65,536 bytes and 4,096 distinct
-terms. Tokenization lowercases Unicode letters/numbers and replaces other input
-with word boundaries. It stops when either cap is reached and reports the actual
+terms. Tokenization lowercases Unicode letters/numbers, folds Latin diacritics
+as released unicode61 mode 1 did, and consumes its recognized combining accents
+within tokens. Other input becomes word boundaries. It stops when either cap is reached and reports the actual
 indexed byte count, truncation and canonical version. Prefix/fuzzy and historical
 version search are absent. Binary bodies supply no search text.
 
@@ -80,3 +81,10 @@ The executor's candidate bounds apply to admitted visible keys. SQL authority
 filtering may reject additional private postings before LIMIT; the production
 cutover document distinguishes this work and cold ownership-graph admission
 from the bounded hydration contract.
+
+Production phrase-free multi-term search uses `ParentANDSnapshot`: a bounded
+batch of authorized driver keys, followed by at most eight indexed authorized
+term-existence probes per parent. Matches and rejections skip the remaining
+resources of that parent; no comment bodies or history are materialized. Phrase
+verification remains same-resource. Index/query normalization uses unicode61
+Latin diacritic folding; version-2 backfill certification is required for serving.

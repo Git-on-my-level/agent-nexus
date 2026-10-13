@@ -61,7 +61,7 @@ func (s *Store) MaintainDocumentSearchBatch(ctx context.Context) (bool, error) {
 	var id string
 	var cursor sql.NullString
 	var scanDone bool
-	if err := s.db.QueryRowContext(ctx, `SELECT cursor,done FROM document_search_state WHERE singleton=1`).Scan(&cursor, &scanDone); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT cursor,done FROM document_search_state WHERE singleton=1 AND normalization_version=2`).Scan(&cursor, &scanDone); err != nil {
 		return false, err
 	}
 	err := s.db.QueryRowContext(ctx, `SELECT document_id FROM document_search_heads WHERE ready=0 ORDER BY document_id LIMIT 1`).Scan(&id)

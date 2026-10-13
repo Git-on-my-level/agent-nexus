@@ -46,7 +46,7 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 	}
 	filter.States = NormalizeListLifecycleStates(filter.States)
 	var ready bool
-	if err := s.db.QueryRowContext(ctx, `SELECT c.done AND d.done AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1) FROM comment_search_job c,document_search_state d WHERE c.singleton=1 AND d.singleton=1`).Scan(&ready); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT c.normalization_version=2 AND d.normalization_version=2 AND c.done AND d.done AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1) FROM comment_search_job c,document_search_state d WHERE c.singleton=1 AND d.singleton=1`).Scan(&ready); err != nil {
 		return nil, "", err
 	}
 	independent := independentDocumentSearchEnabled() && ready
@@ -67,7 +67,7 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 	var key []byte
 	var dirty bool
 	if err = s.db.QueryRowContext(ctx, `SELECT generation,cursor_key,(SELECT version FROM resource_access_epoch WHERE singleton=1),EXISTS(SELECT 1 FROM document_search_dirty LIMIT 1),
- (SELECT done FROM comment_search_job WHERE singleton=1) AND done AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1)
+ (SELECT done AND normalization_version=2 FROM comment_search_job WHERE singleton=1) AND done AND normalization_version=2 AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1)
  FROM document_search_state WHERE singleton=1`).Scan(&generation, &key, &authority, &dirty, &ready); err != nil {
 		return nil, "", err
 	}
@@ -127,7 +127,7 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 	// released parser's quoted-token behavior. Spaces between tokens mean AND.
 	phrase := len(strings.Fields(filter.Query)) == 1 && len(projection.Terms()) > 1
 	repo := documentSearchRepository{s: s, ctx: ctx, filter: filter, binding: scopesearch.Binding{Principal: principal, AuthorityGeneration: authority, Scopes: []scopesearch.ScopeGeneration{{Scope: "documents", Generation: generation, ScopeGeneration: 1}}}}
-	page, err := scopesearch.Search(ctx, repo, codec, scopesearch.Request{Principal: principal, Scopes: []string{"documents"}, Query: filter.Query, Phrase: phrase, Limit: limit, Continuation: filter.Cursor, DeduplicateParents: true})
+	page, err := scopesearch.Search(ctx, repo, codec, scopesearch.Request{Principal: principal, Scopes: []string{"documents"}, Query: filter.Query, Phrase: phrase, Limit: limit, Continuation: filter.Cursor, DeduplicateParents: true, ParentAND: !phrase && len(projection.Terms()) > 1})
 	if errors.Is(err, scopesearch.ErrRestart) || errors.Is(err, scopesearch.ErrCursor) {
 		return nil, "", ErrInvalidCursor
 	}
@@ -264,6 +264,51 @@ func (r documentSearchRepository) Texts(_ context.Context, keys []scopesearch.Ca
 			return nil, scopesearch.ErrProjection
 		}
 		out[i] = text
+		seen++
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if seen != len(out) {
+		return nil, scopesearch.ErrProjection
+	}
+	return out, nil
+}
+
+// Each of at most 4P admitted candidate keys probes at most eight terms using
+// (term,doc_n,res_n). EXISTS stops at its first authorized resource. Both the
+// driver (before LIMIT) and every intersection operand use scoped postings.
+func (r documentSearchRepository) ParentMatches(_ context.Context, keys []scopesearch.Candidate, terms []string) ([]bool, error) {
+	out := make([]bool, len(keys))
+	if len(keys) == 0 {
+		return out, nil
+	}
+	values, args := []string{}, []any{}
+	for i, k := range keys {
+		values = append(values, "(?,?,?)")
+		args = append(args, i, math.MaxInt64-k.Key.Recency, k.Parent)
+	}
+	checks := []string{"k.parent<>''"}
+	for _, term := range terms {
+		checks = append(checks, `EXISTS(SELECT 1 FROM document_search_postings p WHERE p.term=? AND p.doc_n=k.doc_n)`)
+		args = append(args, term)
+	}
+	rows, err := r.s.db.QueryContext(r.ctx, `WITH k(ord,doc_n,parent) AS (VALUES `+strings.Join(values, ",")+`) SELECT k.ord,`+strings.Join(checks, " AND ")+` FROM k`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := 0
+	for rows.Next() {
+		var i int
+		var match bool
+		if err = rows.Scan(&i, &match); err != nil {
+			return nil, err
+		}
+		if i < 0 || i >= len(out) {
+			return nil, scopesearch.ErrProjection
+		}
+		out[i] = match
 		seen++
 	}
 	if err = rows.Err(); err != nil {

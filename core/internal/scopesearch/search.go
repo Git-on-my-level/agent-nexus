@@ -47,6 +47,12 @@ type Snapshot interface {
 	Texts(context.Context, []Candidate) ([]string, error)
 }
 
+// ParentANDSnapshot verifies a bounded batch using authorized parent postings
+// in the same snapshot. It must never union unscoped terms or load comment history.
+type ParentANDSnapshot interface {
+	ParentMatches(context.Context, []Candidate, []string) ([]bool, error)
+}
+
 type Repository interface {
 	ReadSearch(context.Context, string, []string, func(Snapshot) error) error
 }
@@ -62,6 +68,7 @@ type Request struct {
 	Continuation      string
 	// GroupedRepositories order one parent per Recency and numeric RID within it.
 	DeduplicateParents bool
+	ParentAND          bool
 }
 
 type Hit struct {
@@ -127,10 +134,11 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 	}
 	sort.Strings(terms)
 	queryID := fingerprint(struct {
-		Query   string
-		Phrase  bool
-		Grouped bool
-	}{q.Normalized(), req.Phrase, req.DeduplicateParents})
+		Query     string
+		Phrase    bool
+		Grouped   bool
+		ParentAND bool
+	}{q.Normalized(), req.Phrase, req.DeduplicateParents, req.ParentAND})
 	var cursor searchCursor
 	if req.Continuation != "" {
 		if err := tokens.open(req.Continuation, &cursor); err != nil || cursor.Query != queryID {
@@ -205,12 +213,30 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 				heap.Push(h, candidateHead{streams[head.stream][next], head.stream, next})
 			}
 		}
-		texts, err := snap.Texts(ctx, batch)
-		if err != nil {
-			return err
-		}
-		if len(texts) != len(batch) {
-			return ErrProjection
+		var texts []string
+		var parentMatches []bool
+		if req.ParentAND {
+			verifier, ok := snap.(ParentANDSnapshot)
+			if !ok || req.Phrase || !req.DeduplicateParents {
+				return ErrProjection
+			}
+			var err error
+			parentMatches, err = verifier.ParentMatches(ctx, batch, terms)
+			if err != nil {
+				return err
+			}
+			if len(parentMatches) != len(batch) {
+				return ErrProjection
+			}
+		} else {
+			var err error
+			texts, err = snap.Texts(ctx, batch)
+			if err != nil {
+				return err
+			}
+			if len(texts) != len(batch) {
+				return ErrProjection
+			}
 		}
 		page.VerificationBytes = bytes
 		verified := 0
@@ -219,15 +245,27 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 				verified++
 				continue
 			}
-			text := texts[i]
-			if len(text) != c.IndexedBytes {
-				return ErrProjection
+			text := ""
+			matched := false
+			if req.ParentAND {
+				matched = parentMatches[i]
+			} else {
+				text = texts[i]
+				if len(text) != c.IndexedBytes {
+					return ErrProjection
+				}
+				matched = matches(text, q.Normalized(), terms, req.Phrase)
 			}
 			page.Candidates++
 			key := c.Key
 			cursor.After = &key
 			verified++
-			if matches(text, q.Normalized(), terms, req.Phrase) {
+			// A parent-level rejection also settles all peer resources. Advance
+			// over its remaining comment history without materializing it.
+			if req.ParentAND {
+				key.RID = "~"
+			}
+			if matched {
 				if req.DeduplicateParents {
 					// The repository uses bounded decimal ordinal keys. Skip the
 					// rest of this parent without walking its comment history.

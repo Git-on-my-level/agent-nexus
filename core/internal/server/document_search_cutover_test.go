@@ -21,8 +21,12 @@ func TestDocumentSearchCutoverHTTP(t *testing.T) {
 	var err error
 	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
 	for _, title := range []string{"first", "second"} {
-		if _, _, err = s.CreateDocument(ctx, owner.ActorID, map[string]any{"title": title, "tags": []string{"knowledge"}, "hosts": []string{"laptop"}}, "httpneedle", "text", nil); err != nil {
-			t.Fatal(err)
+		doc, _, e := s.CreateDocument(ctx, owner.ActorID, map[string]any{"title": title, "tags": []string{"knowledge"}, "hosts": []string{"laptop"}}, "httpneedle", "text", nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.CreateDocumentComment(ctx, owner.ActorID, doc["id"].(string), "approved café", ""); e != nil {
+			t.Fatal(e)
 		}
 	}
 	private, _, err := s.CreateDocument(ctx, owner.ActorID, map[string]any{"title": "private"}, "privatecanary", "text", nil)
@@ -35,6 +39,12 @@ func TestDocumentSearchCutoverHTTP(t *testing.T) {
 	get := func(actor, path string) (int, map[string]any) {
 		t.Helper()
 		return hostHTTP(t, "GET", env.server.URL+path, tokens[actor], nil)
+	}
+	for _, q := range []string{"httpneedle approved", "httpneedle cafe", "httpneedle CAFÉ"} {
+		status, out := get("reader", "/docs/search?q="+url.QueryEscape(q)+"&knowledge=true&host=laptop")
+		if status != 200 || len(out["documents"].([]any)) != 2 {
+			t.Fatal("parent AND / diacritic HTTP", q, status, out)
+		}
 	}
 	status, out := get("reader", "/docs/search?q=httpneedle&knowledge=true&host=laptop&limit=1")
 	if status != 200 {
@@ -90,10 +100,10 @@ func TestDocumentSearchCutoverHTTP(t *testing.T) {
 	if status != 400 {
 		t.Fatal("authority change accepted old cursor", status, out)
 	}
-	if _, e = s.CreateDocumentComment(ctx, owner.ActorID, id, "privatecommentcanary", ""); e != nil {
+	if _, e = s.CreateDocumentComment(ctx, owner.ActorID, id, "privatecommentcanary café", ""); e != nil {
 		t.Fatal(e)
 	}
-	status, out = get("reader", "/docs/search?q=privatecommentcanary&limit=1")
+	status, out = get("reader", "/docs/search?q=privatecommentcanary+cafe&limit=1")
 	if status != 200 || len(out["documents"].([]any)) != 0 || out["next_cursor"] != nil {
 		t.Fatal("private comment escaped", status, out)
 	}
@@ -109,7 +119,14 @@ func TestDocumentSearchCutoverHTTP(t *testing.T) {
 		t.Fatal("archived filter", status, out)
 	}
 	t.Setenv("ANX_INDEPENDENT_DOCUMENT_SEARCH", "false")
-	status, out = get("owner", "/docs/search?q=privatecommentcanary&state=archived")
+	// Three comment-bearing parents are dirty. Each admission repairs one;
+	// a retryable 503 is required until the whole fallback is fresh.
+	for i := 0; i < 3; i++ {
+		status, out = get("owner", "/docs/search?q=privatecommentcanary&state=archived")
+		if status != 503 {
+			break
+		}
+	}
 	if status != 200 || len(out["documents"].([]any)) != 1 || out["search_coverage"].(map[string]any)["mode"] != "aggregate" {
 		t.Fatal("fresh HTTP fallback", status, out)
 	}

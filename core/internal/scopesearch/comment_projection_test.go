@@ -18,7 +18,7 @@ func TestCommentProjectionRawCoverage(t *testing.T) {
 		t.Fatal("split UTF-8 rune entered projection", got)
 	}
 	got = PrepareComment(strings.Repeat("!", MaxTextBytes-2) + "é")
-	if got.Truncated || got.Text != "é" || len(got.Terms) != 1 {
+	if got.Truncated || got.Text != "e" || len(got.Terms) != 1 {
 		t.Fatal("exact-boundary source lost", got)
 	}
 }

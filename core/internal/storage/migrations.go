@@ -1039,6 +1039,7 @@ var migrations = []migration{
 	{Version: 80, AfterApply: installPMWorkspaceContext},
 	{Version: 81, AfterApply: installProjectionRetryBackoff},
 	{Version: 82, AfterApply: installCommentSearch},
+	{Version: 83, AfterApply: upgradeSearchNormalization},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

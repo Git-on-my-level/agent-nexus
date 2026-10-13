@@ -43,12 +43,22 @@ Worker errors are rate limited and never include source payloads.
 
 ## Search semantics and response
 
-These intentional differences from aggregate FTS are executable contracts:
+The compatibility rules and remaining intentional differences are executable contracts:
 
-- AND/phrase terms must occur in one current document head or one live comment.
-  Separate comments, or a head and comment, cannot manufacture a match.
-- Unicode letters/numbers are lowercased. Accents remain significant:
-  `café` matches `CAFÉ`, not `cafe`. Canonical-equivalence folding is not promised.
+- Phrase-free AND matches across the current head and live comments of one
+  parent. Each term probe reads already-authorized postings; private resources
+  cannot supply a missing term. At most 4P driver keys and eight indexed term
+  probes per key are admitted per page; no comment history is hydrated.
+- Phrases must occur in one current head or one live comment. Cross-resource
+  phrases remain an intentional difference from the concatenated aggregate.
+- Terms use released unicode61 `remove_diacritics=1` Latin folding at both index
+  and query time: `cafe`, `CAFÉ` and decomposed `café` agree. This preserves
+  unicode61's historical exception for precomposed multi-diacritic characters.
+  Migration 83 adds normalization-version certification for preview-82 stores
+  and resets their two singleton job cursors, without scanning history. Online
+  workers re-normalize heads/comments in bounded chunks; independent search
+  requires both version-2 jobs complete and parent attachment complete. Until
+  then, reads use the repaired aggregate. Checkpoints survive restart.
 - Each source contributes at most 65,536 raw UTF-8 bytes, then at most 65,536
   normalized bytes and 4,096 distinct terms. Head metadata precedes body text.
   Truncation is retained even when the bounded body cache itself was clipped.
@@ -71,7 +81,7 @@ These intentional differences from aggregate FTS are executable contracts:
 `TestCommentSearchIntentionalSemanticImprovements` compares the differing
 semantics against actual aggregate FTS. The randomized test now runs **324**
 comparisons through the **production SearchDocuments reader**, versus actual
-aggregate FTS, across three seeds, mutation rounds and single/AND/phrase queries.
+aggregate FTS, across three seeds, mutation rounds and single/parent-AND/diacritic/phrase queries.
 It checks membership in their shared bounded ASCII domain rather than pretending
 different ranking or suffix coverage is parity.
 

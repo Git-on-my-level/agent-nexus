@@ -368,3 +368,173 @@ func TestDocumentSearchUncertifiedHeadWriteAndReparent(t *testing.T) {
 		t.Fatal("old thread terms survived reparent", got, err)
 	}
 }
+
+func TestDocumentSearchParentANDAndDiacritics(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	for _, tc := range []struct {
+		body     string
+		comments []string
+		query    string
+	}{
+		{"plan", []string{"approved"}, "plan approved"},
+		{"body", []string{"plan", "approved"}, "plan approved"},
+		{"CAFÉ", []string{"résumé"}, "cafe resume"},
+		{"cafe", []string{"resume"}, "CAFÉ RÉSUMÉ"},
+		{"cafe\u0301", []string{"approved"}, "cafe approved"},
+	} {
+		t.Run(tc.body+tc.query, func(t *testing.T) {
+			d, _, e := s.CreateDocument(ctx, "owner", map[string]any{"title": "findability"}, tc.body, "text", nil)
+			if e != nil {
+				t.Fatal(e)
+			}
+			id := anyStringValue(d["id"])
+			for _, c := range tc.comments {
+				if _, e = s.CreateDocumentComment(ctx, "owner", id, c, ""); e != nil {
+					t.Fatal(e)
+				}
+			}
+			for done := false; !done; {
+				done, e = s.repairAggregateSearchOne(ctx)
+				if e != nil {
+					t.Fatal(e)
+				}
+			}
+			want, _, e := s.searchAggregateDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: tc.query})
+			if e != nil {
+				t.Fatal(e)
+			}
+			coverage := DocumentSearchCoverage{}
+			got, _, e := s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: tc.query, Coverage: &coverage})
+			if e != nil || len(got) != len(want) || len(got) == 0 || coverage.Mode != "independent" {
+				t.Fatal(got, want, coverage, e)
+			}
+			// The private contributor must not make the parent match for a stranger.
+			if _, e = s.PatchThread(ctx, "owner", anyStringValue(d["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); e != nil {
+				t.Fatal(e)
+			}
+			for _, actor := range []string{"reader", "unauthorized-agent"} {
+				got, _, e = s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: actor}), DocumentSearchFilter{Query: tc.query})
+				if e != nil {
+					t.Fatal(e)
+				}
+				for _, hit := range got {
+					if anyStringValue(hit["id"]) == id {
+						t.Fatal("private parent AND leaked", hit)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDocumentSearchNormalizationUpgradeResumes(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := initializeTestWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { ws.Close() }()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	d, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "normalization"}, "café plan", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"résumé approved", "naïve"} {
+		if _, err = s.CreateDocumentComment(ctx, "owner", anyStringValue(d["id"]), text, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec := func(q string) {
+		t.Helper()
+		if _, e := ws.DB().Exec(q); e != nil {
+			t.Fatal(e)
+		}
+	}
+	// Recreate the shipped preview-82 job layout and case-only projections.
+	exec(`UPDATE comment_search_heads SET projection_json='{"text":"résumé approved","terms":["résumé","approved"],"truncated":false}';
+ UPDATE document_search_heads SET projection_json='{"text":"café plan","terms":["café","plan"],"truncated":false}';
+ ALTER TABLE comment_search_job DROP COLUMN normalization_version;
+ ALTER TABLE document_search_state DROP COLUMN normalization_version;
+ UPDATE comment_search_job SET done=1,cursor='zzzz';
+ UPDATE document_search_state SET done=1,cursor='zzzz';
+ DELETE FROM schema_migrations WHERE version=83`)
+	ws.Close()
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	var certified bool
+	if err = ws.DB().QueryRow(`SELECT c.done OR d.done FROM comment_search_job c,document_search_state d`).Scan(&certified); err != nil || certified {
+		t.Fatal("old normalization certified", certified, err)
+	}
+	coverage := DocumentSearchCoverage{}
+	if _, _, err = s.SearchDocuments(ctx, DocumentSearchFilter{Query: "cafe resume", Coverage: &coverage}); err != nil && !errors.Is(err, ErrSearchRepairPending) {
+		t.Fatal(err)
+	}
+	if coverage.Mode == "independent" {
+		t.Fatal("served uncertified normalization")
+	}
+	// Capture one checkpoint, reopen, then finish both online workers.
+	if _, err = ws.MaintainCommentSearchBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var checkpoint string
+	if err = ws.DB().QueryRow(`SELECT cursor FROM comment_search_job`).Scan(&checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	ws.Close()
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	var resumed string
+	if err = ws.DB().QueryRow(`SELECT cursor FROM comment_search_job`).Scan(&resumed); err != nil || resumed != checkpoint {
+		t.Fatal("lost checkpoint", resumed, checkpoint, err)
+	}
+	for i := 0; i < 100; i++ {
+		done, e := ws.MaintainCommentSearchBatch(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if done {
+			break
+		}
+		if i == 99 {
+			t.Fatal("comments not certified")
+		}
+	}
+	for i := 0; i < 100; i++ {
+		done, e := s.MaintainDocumentSearchBatch(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if done {
+			break
+		}
+		if i == 99 {
+			t.Fatal("heads not certified")
+		}
+	}
+	got, _, err := s.SearchDocuments(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), DocumentSearchFilter{Query: "cafe resume", Coverage: &coverage})
+	if err != nil || len(got) != 1 || coverage.Mode != "independent" {
+		t.Fatal("renormalized parent not searchable", got, coverage, err)
+	}
+	// Idempotent reopen must not restart an already certified v2 job.
+	ws.Close()
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.DB().QueryRow(`SELECT c.done AND d.done AND c.normalization_version=2 AND d.normalization_version=2 FROM comment_search_job c,document_search_state d`).Scan(&certified); err != nil || !certified {
+		t.Fatal(certified, err)
+	}
+}

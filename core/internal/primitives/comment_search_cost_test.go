@@ -72,34 +72,39 @@ func TestCommentSearchFullWriteCost1000Comments(t *testing.T) {
 	}
 	// Same source corpus and authorized request, with the fallback repaired
 	// before its sample. Both modes must return the edited parent.
-	for _, enabled := range []string{"false", "true"} {
-		t.Setenv("ANX_INDEPENDENT_DOCUMENT_SEARCH", enabled)
-		pool, capture, e := perfguard.Open("file:" + ws.Layout().DatabasePath)
-		if e != nil {
-			t.Fatal(e)
+	for _, query := range []string{"measured", "body measured", "history measured"} {
+		for _, enabled := range []string{"false", "true"} {
+			t.Setenv("ANX_INDEPENDENT_DOCUMENT_SEARCH", enabled)
+			pool, capture, e := perfguard.Open("file:" + ws.Layout().DatabasePath)
+			if e != nil {
+				t.Fatal(e)
+			}
+			measured := primitives.NewTestStore(pool, ws.Layout().ArtifactContentDir)
+			request := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "owner"})
+			limit := 1
+			coverage := primitives.DocumentSearchCoverage{}
+			filter := primitives.DocumentSearchFilter{Query: query, Limit: &limit, Coverage: &coverage}
+			if _, _, e = measured.SearchDocuments(request, filter); e != nil {
+				t.Fatal(e)
+			}
+			capture.Start()
+			start := time.Now()
+			docs, _, e := measured.SearchDocuments(request, filter)
+			elapsed := time.Since(start)
+			_, calls, rows := capture.Stop()
+			if e != nil || len(docs) != 1 || docs[0]["id"] != did {
+				t.Fatal(docs, e)
+			}
+			if e = capture.WorkError(); e != nil {
+				t.Fatal(e)
+			}
+			work := capture.Work()
+			if enabled == "true" && work.VMSteps > 50000 {
+				t.Fatalf("search exceeds bounded VM budget: %d", work.VMSteps)
+			}
+			t.Logf("query=%q search_mode=%s comments=1000 elapsed=%s sql_calls=%d rows=%d vm_steps=%d full_scan=%d", query, coverage.Mode, elapsed, calls, rows, work.VMSteps, work.FullScanSteps)
+			pool.Close()
 		}
-		measured := primitives.NewTestStore(pool, ws.Layout().ArtifactContentDir)
-		request := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "owner"})
-		limit := 1
-		coverage := primitives.DocumentSearchCoverage{}
-		filter := primitives.DocumentSearchFilter{Query: "measured", Limit: &limit, Coverage: &coverage}
-		if _, _, e = measured.SearchDocuments(request, filter); e != nil {
-			t.Fatal(e)
-		}
-		capture.Start()
-		start := time.Now()
-		docs, _, e := measured.SearchDocuments(request, filter)
-		elapsed := time.Since(start)
-		_, calls, rows := capture.Stop()
-		if e != nil || len(docs) != 1 || docs[0]["id"] != did {
-			t.Fatal(docs, e)
-		}
-		if e = capture.WorkError(); e != nil {
-			t.Fatal(e)
-		}
-		work := capture.Work()
-		t.Logf("search_mode=%s comments=1000 elapsed=%s sql_calls=%d rows=%d vm_steps=%d full_scan=%d", coverage.Mode, elapsed, calls, rows, work.VMSteps, work.FullScanSteps)
-		pool.Close()
-	}
 
+	}
 }

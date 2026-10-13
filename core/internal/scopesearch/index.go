@@ -80,8 +80,15 @@ func Prepare(scope, input string) Text {
 		return true
 	}
 	for _, r := range input {
+		// unicode61 consumes its recognized combining accents within a token.
+		if word.Len() > 0 && isDiacritic(r) {
+			continue
+		}
 		if unicode.IsLetter(r) || unicode.IsNumber(r) {
-			r = unicode.ToLower(r)
+			r = foldDiacritic(unicode.ToLower(r))
+			if r == 0 {
+				continue
+			}
 			remaining := MaxTextBytes - out.Len()
 			if out.Len() > 0 {
 				remaining--

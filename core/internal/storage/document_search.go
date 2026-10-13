@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS document_search_state(
  singleton INTEGER PRIMARY KEY CHECK(singleton=1),
  generation INTEGER NOT NULL CHECK(typeof(generation)='integer' AND generation>0),
  cursor_key BLOB NOT NULL CHECK(length(cursor_key)=32),
+ normalization_version INTEGER NOT NULL DEFAULT 2,
  cursor TEXT,done INTEGER NOT NULL DEFAULT 0 CHECK(done IN(0,1))
 );
 INSERT INTO document_search_state(singleton,generation,cursor_key,done) SELECT 1,1,randomblob(32),NOT EXISTS(SELECT 1 FROM documents LIMIT 1) ON CONFLICT DO NOTHING;
