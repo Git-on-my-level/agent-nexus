@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	"agent-nexus-core/internal/resourceaccess"
@@ -49,18 +50,24 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 		// transaction snapshot even when the shared/request cache is stale.
 		current := `(SELECT version FROM main.resource_access_epoch WHERE singleton=1)`
 		roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
-		query := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT COALESCE(` + current + `,-1),CASE WHEN ` + current + `=? THEN ? ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
+		query := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT COALESCE(` + current + `,-1),CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
 		snapshot := &denialSnapshot{}
-		if err := db.QueryRowContext(ctx, query, cached.epoch, cached.epoch, cached.rows).Scan(&snapshot.epoch, &snapshot.rows); err != nil {
+		var rows sql.NullString
+		if err := db.QueryRowContext(ctx, query, cached.epoch, cached.epoch).Scan(&snapshot.epoch, &rows); err != nil {
 			return ctx, err
 		}
 		if snapshot.epoch < 0 {
 			return ctx, errOverviewSnapshotUnavailable
 		}
-		if snapshot.epoch == cached.epoch && snapshot.rows == cached.rows {
+		if snapshot.epoch == cached.epoch {
+			snapshot.rows = cached.rows
 			cached.preparePointIndex()
 			snapshot.pointOnce.Do(func() { snapshot.pointIndex = cached.pointIndex })
 		} else {
+			if !rows.Valid {
+				return ctx, errOverviewSnapshotUnavailable
+			}
+			snapshot.rows = rows.String
 			snapshot.preparePointIndex()
 		}
 		if snapshot.pointIndex == nil {

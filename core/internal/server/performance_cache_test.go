@@ -49,7 +49,7 @@ func TestPerformanceReceiptCacheInvalidation(t *testing.T) {
 			if !stale && !strings.Contains(statement.SQL, "_anx_snapshot_epoch") {
 				return true
 			}
-			if stale && strings.Contains(statement.SQL, "_anx_snapshot_epoch") && len(statement.Args) == 5 && statement.Args[0] == epoch && statement.Args[1] == epoch && statement.Args[3] == epoch {
+			if stale && strings.Contains(statement.SQL, "_anx_snapshot_epoch") && len(statement.Args) == 3 && statement.Args[0] == epoch && statement.Args[1] == epoch && statement.Args[2] == epoch {
 				return true
 			}
 		}

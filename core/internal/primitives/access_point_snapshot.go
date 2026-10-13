@@ -3,12 +3,9 @@ package primitives
 import (
 	"context"
 	"database/sql/driver"
-	"encoding/json"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode/utf8"
 
 	"modernc.org/sqlite"
 )
@@ -51,47 +48,12 @@ func init() {
 	})
 }
 
-// SQLite identities can be TEXT or INTEGER (evidence-alias row IDs). Preserve
-// their equality spelling and skip NULL identities, which cannot match a row.
+// Point reads share the immutable decoded denial set with ordinary lookups.
+// The per-transaction token remains separate from the cached authority.
 func (s *denialSnapshot) preparePointIndex() {
 	s.pointOnce.Do(func() {
-		if !utf8.ValidString(s.rows) || !strings.HasPrefix(strings.TrimSpace(s.rows), "[") {
-			return
-		}
-		decoder := json.NewDecoder(strings.NewReader(s.rows))
-		decoder.UseNumber()
-		var rows [][]any
-		if decoder.Decode(&rows) != nil {
-			return
-		}
-		index := make(map[denialTarget]struct{}, len(rows))
-		for _, row := range rows {
-			if len(row) != 2 {
-				return
-			}
-			if row[0] == nil || row[1] == nil {
-				continue
-			}
-			kind, ok := row[0].(string)
-			if !ok {
-				return
-			}
-			var id string
-			switch value := row[1].(type) {
-			case string:
-				id = value
-			case json.Number:
-				numeric, err := value.Int64()
-				if err != nil {
-					return
-				}
-				id = strconv.FormatInt(numeric, 10)
-			default:
-				return
-			}
-			index[denialTarget{kind, id}] = struct{}{}
-		}
-		s.pointIndex = index
+		s.prepareTargetIndex()
+		s.pointIndex = s.targetIndex
 	})
 }
 

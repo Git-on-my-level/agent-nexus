@@ -5,8 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 type denialTarget struct{ kind, id string }
@@ -64,13 +68,41 @@ func (s *denialSnapshot) deniesAtom(key string) bool {
 // resource again on each warm stream poll.
 func (s *denialSnapshot) prepareTargetIndex() {
 	s.indexOnce.Do(func() {
-		var rows [][2]string
-		if json.Unmarshal([]byte(s.rows), &rows) != nil {
+		if !utf8.ValidString(s.rows) || !strings.HasPrefix(strings.TrimSpace(s.rows), "[") {
+			return
+		}
+		decoder := json.NewDecoder(strings.NewReader(s.rows))
+		decoder.UseNumber()
+		var rows [][]any
+		if decoder.Decode(&rows) != nil || decoder.Decode(new(any)) != io.EOF {
 			return
 		}
 		index := make(map[denialTarget]struct{}, len(rows))
 		for _, row := range rows {
-			index[denialTarget{row[0], row[1]}] = struct{}{}
+			if len(row) != 2 {
+				return
+			}
+			if row[0] == nil || row[1] == nil {
+				continue
+			}
+			kind, ok := row[0].(string)
+			if !ok {
+				return
+			}
+			var id string
+			switch value := row[1].(type) {
+			case string:
+				id = value
+			case json.Number:
+				numeric, err := value.Int64()
+				if err != nil {
+					return
+				}
+				id = strconv.FormatInt(numeric, 10)
+			default:
+				return
+			}
+			index[denialTarget{kind, id}] = struct{}{}
 		}
 		s.targetIndex = index
 	})
@@ -118,7 +150,8 @@ type denialCacheKey struct {
 }
 
 // Hold at most 32 immutable closures and 8 MiB of encoded rows, evicting oldest
-// insertions. DB identity separates
+// insertions, and only the newest epoch per database/principal/epoch table.
+// Active requests retain their own immutable snapshots. DB identity separates
 // workspaces even when their epochs and principal names happen to coincide.
 var readDenials = struct {
 	sync.Mutex
@@ -155,8 +188,19 @@ func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot)
 	key := denialCacheKey{db, scope, snapshot.epoch, epochTable}
 	readDenials.Lock()
 	defer readDenials.Unlock()
-	if readDenials.rows[key] != nil {
-		return
+	for i, old := range readDenials.keys {
+		if old.db != db || old.scope != scope || old.epochTable != epochTable {
+			continue
+		}
+		// A delayed capture must neither replace nor retain an obsolete epoch.
+		if old.epoch >= snapshot.epoch {
+			return
+		}
+		previous := readDenials.rows[old]
+		readDenials.bytes -= len(previous.rows) + len(previous.refs)
+		delete(readDenials.rows, old)
+		readDenials.keys = slices.Delete(readDenials.keys, i, i+1)
+		break
 	}
 	for len(readDenials.keys) >= 32 || readDenials.bytes+len(snapshot.rows)+len(snapshot.refs) > 8<<20 {
 		old := readDenials.keys[0]
@@ -214,29 +258,31 @@ func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable s
 				cached = cachedReadDenialForEpoch(raw, scope, epochTable)
 			}
 			candidate := &denialSnapshot{epochTable: epochTable}
+			var rows, refs sql.NullString
 			sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
 			var captureArgs []any
 			if cached != nil {
 				current := `(SELECT version FROM _anx_snapshot_epoch)`
 				roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
-				sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN ? ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
-				captureArgs = []any{cached.epoch, cached.epoch, cached.rows}
+				sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
+				captureArgs = []any{cached.epoch, cached.epoch}
 			}
 			sql = strings.ReplaceAll(sql, "main.resource_access_epoch", "main."+epochTable)
-			dest := []any{&candidate.epoch, &candidate.rows}
+			dest := []any{&candidate.epoch, &rows}
 			if epochTable == "receipt_access_epoch" {
 				refSQL := `COALESCE((SELECT json_group_array(json_array(kind,ref)) FROM (WITH ` + ownershipRefs("_anx_receipt_refs", "_anx_denied") + ` SELECT kind,ref FROM _anx_receipt_refs WHERE ref<>id)),'[]')`
 				if cached != nil {
-					refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN ? ELSE ` + refSQL + ` END`
-					captureArgs = append(captureArgs, cached.epoch, cached.refs)
+					refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN NULL ELSE ` + refSQL + ` END`
+					captureArgs = append(captureArgs, cached.epoch)
 				}
 				sql += "," + refSQL
-				dest = append(dest, &candidate.refs)
+				dest = append(dest, &refs)
 			}
 			if err := db.QueryRowContext(c, sql, captureArgs...).Scan(dest...); err == nil {
 				if cached != nil && candidate.epoch == cached.epoch {
 					state.snapshot = cached
-				} else {
+				} else if rows.Valid && (epochTable != "receipt_access_epoch" || refs.Valid) {
+					candidate.rows, candidate.refs = rows.String, refs.String
 					state.snapshot = candidate
 					rememberReadDenial(raw, scope, candidate)
 				}

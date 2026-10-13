@@ -3,19 +3,41 @@ package primitives
 import (
 	"agent-nexus-core/internal/resourceaccess"
 	"strings"
+	"sync"
 )
 
 // Each recursive term probes indexed children of the current resource. Avoid a
 // materialized union of every workspace record: unrelated public history must
 // not increase authorization cost. Fence shared authorization sets within each
 // statement so SQLite does not repeatedly flatten their recursive consumers.
+// Compile only the four fixed recursive SQL bodies. Roots still contain the
+// caller's current principal/epoch bindings; no authority or query data is cached.
+var ownershipTemplates = sync.OnceValue(func() map[string][2]string {
+	templates := make(map[string][2]string, 4)
+	for _, name := range []string{"_anx_denied", "_anx_fresh_denied", "_anx_desc", "_anx_private"} {
+		templates[name] = buildOwnershipTemplate(name, name == "_anx_private")
+	}
+	return templates
+})
+
 func ownershipClosure(name, roots string, owner bool) string {
+	var template [2]string
+	if owner == (name == "_anx_private") {
+		template = ownershipTemplates()[name]
+	}
+	if template[0] == "" {
+		template = buildOwnershipTemplate(name, owner)
+	}
+	return template[0] + roots + template[1]
+}
+
+func buildOwnershipTemplate(name string, owner bool) [2]string {
 	columns, carry := "kind,id", ""
 	if owner {
 		columns += ",owner"
 		carry = ",d.owner"
 	}
-	terms := []string{roots}
+	terms := []string{}
 	children := map[string][]string{}
 	parents := []string{}
 	edge := func(parent, child, table, parentCol, childCol string) {
@@ -139,7 +161,7 @@ func ownershipClosure(name, roots string, owner bool) string {
 	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||d.id) COLLATE NOCASE")
 	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities r ON r.kind=d.kind AND r.resource_id=d.id JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||r.ref) COLLATE NOCASE")
 	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"='topic:' COLLATE NOCASE WHERE "+emptyRef)
-	return name + "(" + columns + ") AS MATERIALIZED (" + strings.Join(terms, " UNION ") + ")"
+	return [2]string{name + "(" + columns + ") AS MATERIALIZED (", " UNION " + strings.Join(terms, " UNION ") + ")"}
 }
 
 // Resolve only the denied identities, including virtual revision handles and

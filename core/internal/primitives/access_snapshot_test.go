@@ -239,3 +239,35 @@ func TestResourceAccessRequestSnapshotSeesLateAliasAndProse(t *testing.T) {
 		t.Fatal("late alias escaped cached visibility")
 	}
 }
+
+// Epoch churn must not keep decoded copies of obsolete authority in the shared
+// cache. Out-of-order fills cannot revive an earlier visibility decision.
+func TestResourceAccessReadCacheReleasesObsoleteEpochs(t *testing.T) {
+	t.Parallel()
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	scope := AccessScope{ActorID: "epoch-memory-reader"}
+	var latest *denialSnapshot
+	for epoch := int64(1); epoch <= 40; epoch++ {
+		latest = &denialSnapshot{epoch: epoch, rows: `[["card","private"]]`}
+		rememberReadDenial(ws.DB(), scope, latest)
+	}
+	rememberReadDenial(ws.DB(), scope, &denialSnapshot{epoch: 1, rows: `[]`})
+	if got := cachedReadDenial(ws.DB(), scope); got != latest || !got.denies("card", "private") {
+		t.Fatal("delayed capture revived obsolete visibility")
+	}
+	readDenials.Lock()
+	defer readDenials.Unlock()
+	count := 0
+	for _, key := range readDenials.keys {
+		if key.db == ws.DB() && key.scope == scope {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("retained %d epochs for one reader, want 1", count)
+	}
+}
