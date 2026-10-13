@@ -13,6 +13,8 @@
   } from "$lib/urlState";
 
   import TopicDetailHeader from "$lib/components/topic-detail/TopicDetailHeader.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import WorkspaceResourceTabList from "$lib/components/WorkspaceResourceTabList.svelte";
   import TopicOverviewTab from "$lib/components/topic-detail/TopicOverviewTab.svelte";
   import TopicDocumentsPanel from "$lib/components/topic-detail/TopicDocumentsPanel.svelte";
@@ -352,6 +354,10 @@
   }
 </script>
 
+<svelte:head
+  ><title>{topic?.title || "Thread"} · Agent Nexus</title></svelte:head
+>
+
 <!--
   When the Messages tab is active we wrap the page in `page-dock-layout` so
   the composer stays pinned to the bottom of the page area (viewport on
@@ -360,17 +366,20 @@
 -->
 {#if topicLoading}
   <TopicDetailHeader {threadId} dense />
-  <p class="text-[13px] text-fg-muted">Loading...</p>
+  <div aria-busy="true">
+    <p class="sr-only" role="status">Loading thread…</p>
+    <Skeleton rows={4} class="mt-3 max-w-2xl" />
+  </div>
 {:else if topicError}
   <TopicDetailHeader {threadId} dense />
-  <p
-    class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text [overflow-wrap:anywhere]"
-  >
-    {topicError}
-  </p>
+  <StateError
+    title="This thread didn't load"
+    message={topicError}
+    onretry={() => void topicDetailStore.fullRefresh(threadId)}
+  />
 {:else if !topic}
   <TopicDetailHeader {threadId} dense />
-  <p class="text-[13px] text-fg-muted">Thread not found.</p>
+  <p class="text-meta text-fg-muted">Thread not found.</p>
 {:else}
   {@const isMessagesTab = activeTab === "messages"}
   <div

@@ -2,6 +2,7 @@
   import { env } from "$env/dynamic/public";
 
   import Button from "$lib/components/Button.svelte";
+  import { describeError } from "$lib/errorCopy.js";
   import {
     resolveHostedSupportUrl,
     supportLinkOpensInNewTab,
@@ -17,22 +18,24 @@
     class: className = "",
   } = $props();
 
+  let described = $derived(describeError(message));
+
   const supportHref = resolveHostedSupportUrl(env.PUBLIC_ANX_SUPPORT_URL);
   const supportExternal = supportLinkOpensInNewTab(supportHref);
 </script>
 
 <div role="alert" class="rounded-md bg-danger-soft px-4 py-3 {className}">
   {#if title}
-    <p class="text-subtitle font-medium text-danger-text">{title}</p>
+    <p class="text-meta font-semibold text-danger-text">{title}</p>
   {/if}
   <!-- Error text carries refs, ids and URLs with no break opportunity; without
        this they run straight out of the box. -->
   <p
-    class="text-body text-danger-text [overflow-wrap:anywhere] {title
-      ? 'mt-1'
+    class="text-meta text-danger-text [overflow-wrap:anywhere] {title
+      ? 'mt-0.5'
       : ''}"
   >
-    {message}
+    {described || message}
   </p>
   {#if supportHint && supportHref}
     <p class="mt-2 text-meta text-danger-text">
@@ -51,7 +54,7 @@
       onclick={onretry}
       busy={retrying}
       disabled={retrying}
-      class="mt-2"
+      class="mt-2.5"
     >
       {retrying ? "Retrying…" : retryLabel}
     </Button>

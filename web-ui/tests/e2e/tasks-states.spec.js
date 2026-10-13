@@ -913,7 +913,17 @@ for (const viewport of AUDIT_VIEWPORTS) {
       );
       await expectCleanLayout(page, "detail section errors", bothEnds);
 
+      // A missing card is a dead link, not an outage: no Retry.
       api.fail = { getWork: { status: 404, message: LONG_ERROR } };
+      await page.reload();
+      await expect(page.getByText("Task not found")).toBeVisible(firstPaint);
+      await expect(
+        page.getByRole("button", { name: "Back to tasks" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+      await expectCleanLayout(page, "detail not found", bothEnds);
+
+      api.fail = { getWork: { status: 500, message: LONG_ERROR } };
       await page.reload();
       await expect(page.getByText("Task unavailable")).toBeVisible(firstPaint);
       await expectCleanLayout(page, "detail unavailable", bothEnds);

@@ -590,7 +590,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       });
       api.hold.threadWorkspace = deferred();
       await page.goto(`${ROOT}/threads/${THREAD_ID}`);
-      await expect(page.getByText("Loading...")).toBeVisible();
+      await expect(page.getByText("Loading thread…")).toBeVisible();
       await expectCleanLayout(page, "thread detail loading");
 
       api.hold.threadWorkspace.resolve();

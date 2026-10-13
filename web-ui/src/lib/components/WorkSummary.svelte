@@ -72,7 +72,14 @@
    * tasks, most of which have no plan, would say so fifty times, which is
    * what moving `no_plan` out of the status was for.
    */
-  let hints = $derived(density === "row" ? [] : (summary?.hints ?? []));
+  let hints = $derived(
+    density === "row"
+      ? []
+      : (summary?.hints ?? []).filter(
+          // A hint that names the status itself is the badge said twice.
+          (hint) => hint.key !== summary?.status?.state,
+        ),
+  );
   let progress = $derived(summary?.progress ?? null);
   let attention = $derived(summary?.attention ?? null);
   /*
