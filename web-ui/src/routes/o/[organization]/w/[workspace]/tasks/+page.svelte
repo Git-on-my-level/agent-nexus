@@ -63,6 +63,7 @@
   } from "$lib/taskBoardMove.js";
 
   import { readerScopeKey } from "$lib/readerScope.js";
+  import { createInflightSlot, patchSearchParams } from "$lib/urlState.js";
   import {
     readWorkspaceView,
     writeWorkspaceView,
@@ -326,16 +327,35 @@
       void untrack(() => load(false, JSON.parse(key), { scanAll: local }));
   });
 
+  /*
+   * Each live control navigates on its own. Leaving a text field to click a
+   * select fires two `goto`s before `$page` updates; the second must patch
+   * the in-flight query, not the still-stale URL snapshot.
+   */
+  const inflightSearch = createInflightSlot();
+  $effect(() => {
+    void $page.url.search;
+    inflightSearch.clear();
+  });
+  function filterParams(changes) {
+    return patchSearchParams(
+      inflightSearch.get($page.url.searchParams),
+      changes,
+    );
+  }
   function queryHref(changes) {
-    const params = new URLSearchParams($page.url.searchParams);
-    for (const [key, value] of Object.entries(changes)) {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    }
-    return `${workspaceHref("/tasks")}?${params}`;
+    return `${workspaceHref("/tasks")}?${filterParams(changes)}`;
+  }
+  function navigateFilters(changes) {
+    const params = filterParams(changes);
+    inflightSearch.set(params);
+    void goto(`${workspaceHref("/tasks")}?${params}`, {
+      keepFocus: true,
+      noScroll: true,
+    });
   }
   function setFilter(key, value) {
-    void goto(queryHref({ [key]: value }), { keepFocus: true, noScroll: true });
+    navigateFilters({ [key]: value });
   }
   const PAGE_SIZE = 50;
   /*
@@ -1131,12 +1151,10 @@
         onsubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
-          void goto(
-            queryHref({
-              project_ref: String(data.get("project_ref") || "").trim(),
-              owner: String(data.get("owner") || "").trim(),
-            }),
-          );
+          navigateFilters({
+            project_ref: String(data.get("project_ref") || "").trim(),
+            owner: String(data.get("owner") || "").trim(),
+          });
         }}
       >
         <div class="flex items-end gap-2">

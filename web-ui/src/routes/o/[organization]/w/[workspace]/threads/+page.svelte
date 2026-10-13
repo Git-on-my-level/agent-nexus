@@ -22,6 +22,7 @@
     threadRowContextParts,
     threadSubjectRef,
   } from "$lib/threadListContext.js";
+  import { createInflightSlot } from "$lib/urlState";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import LifecycleStateFilter from "$lib/components/LifecycleStateFilter.svelte";
   import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
@@ -61,6 +62,16 @@
   let searchDraft = $state("");
   $effect(() => {
     searchDraft = query;
+  });
+  /*
+   * Each live control navigates on its own. Blurring search to click a
+   * lifecycle box fires two `goto`s before `$page` updates, so the second
+   * must not rebuild from the still-stale URL.
+   */
+  const inflightFilters = createInflightSlot();
+  $effect(() => {
+    void $page.url.search;
+    inflightFilters.clear();
   });
 
   let filterCount = $derived(
@@ -124,8 +135,13 @@
     void loadBackingThreadsFromState({ states, q: query });
   });
 
+  function currentFilters() {
+    return inflightFilters.get({ states, q: searchDraft });
+  }
+
   /** Apply filters by navigating: the list re-reads from the new URL. */
   function applyFilters(next) {
+    inflightFilters.set(next);
     const qs = buildTopicListSearchString(next);
     const base = workspaceHref("/threads");
     void goto(`${base}${qs ? `?${qs}` : ""}`, {
@@ -141,7 +157,8 @@
 
   /** @param {string} value */
   function toggleLifecycleState(value) {
-    const set = new Set(states);
+    const current = currentFilters();
+    const set = new Set(current.states);
     if (set.has(value)) {
       if (set.size <= 1) return;
       set.delete(value);
@@ -150,7 +167,7 @@
     }
     applyFilters({
       states: TOPIC_STATUSES.filter((s) => set.has(s)),
-      q: query,
+      q: current.q,
     });
   }
 </script>
@@ -187,7 +204,7 @@
         class="flex items-end gap-2"
         onsubmit={(event) => {
           event.preventDefault();
-          applyFilters({ states, q: searchDraft });
+          applyFilters({ states: currentFilters().states, q: searchDraft });
         }}
       >
         <label class="ui-label mb-0" for="thread-filter-search">Search</label>
@@ -198,7 +215,8 @@
           placeholder="Title or id…"
           type="search"
           autocomplete="off"
-          onchange={() => applyFilters({ states, q: searchDraft })}
+          onchange={() =>
+            applyFilters({ states: currentFilters().states, q: searchDraft })}
         />
       </form>
     {/snippet}

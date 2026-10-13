@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { readEnumSearchParamWithAliases } from "../../src/lib/urlState.js";
+import {
+  createInflightSlot,
+  patchSearchParams,
+  readEnumSearchParamWithAliases,
+} from "../../src/lib/urlState.js";
 
 describe("readEnumSearchParamWithAliases", () => {
   it("accepts values in the allowed list", () => {
@@ -37,5 +41,29 @@ describe("readEnumSearchParamWithAliases", () => {
         "",
       ),
     ).toBe("");
+  });
+});
+
+describe("createInflightSlot", () => {
+  it("returns the overlay until cleared, then the fallback", () => {
+    const slot = createInflightSlot();
+    expect(slot.get("fallback")).toBe("fallback");
+    slot.set("pending");
+    expect(slot.get("fallback")).toBe("pending");
+    slot.clear();
+    expect(slot.get("fallback")).toBe("fallback");
+  });
+});
+
+describe("patchSearchParams", () => {
+  it("layers a second patch onto the first without a live URL", () => {
+    const first = patchSearchParams("", { project_ref: "topic:a" });
+    const second = patchSearchParams(first, { source: "github" });
+    expect(second.toString()).toBe("project_ref=topic%3Aa&source=github");
+  });
+
+  it("deletes a key when the new value is empty", () => {
+    const params = patchSearchParams("source=github&q=one", { source: "" });
+    expect(params.toString()).toBe("q=one");
   });
 });
