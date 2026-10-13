@@ -17,9 +17,10 @@ repo and live in the private `agent-nexus-saas/controlplane` repo.
 `anx-core` reads configuration from flags (highest priority) and environment
 variables.
 
-The optional `--compact-access-shadow` / `ANX_COMPACT_ACCESS_SHADOW` switch is
+The optional `--compact-access-migration` / `ANX_COMPACT_ACCESS_MIGRATION` switch is
 off by default. See [compact access shadow migration](compact-access-shadow.md)
-for resumable dual writes, verification, disk overhead and rollback.
+for certified reader cutover, stable edge IDs, verified file reclamation and
+rollback. Default activation awaits the documented retention decision.
 
 | Purpose                                                                                           | Flag                            | Env                                       | Default                                           |
 | ------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------- | ------------------------------------------------- |

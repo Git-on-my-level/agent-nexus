@@ -54,7 +54,7 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 		return err
 	} else if exists {
 		insert := func(prefix, from string) string {
-			return `INSERT INTO resource_access_edges SELECT 'series',json_array(` + prefix + `series,` + prefix + `labels),` + prefix + `target_ref FROM ` + from + `(SELECT 1) WHERE true ON CONFLICT DO NOTHING;`
+			return `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) SELECT 'series',json_array(` + prefix + `series,` + prefix + `labels),` + prefix + `target_ref FROM ` + from + `(SELECT 1) WHERE true ON CONFLICT DO NOTHING;`
 		}
 		for _, q := range []string{
 			insert("r.", "resource_access_series_refs r, "),

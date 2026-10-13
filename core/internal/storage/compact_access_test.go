@@ -3,8 +3,10 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"modernc.org/sqlite"
 	"os"
 	"os/exec"
 	"strings"
@@ -70,7 +72,7 @@ func TestCompactAccessDefaultOffResumeAndImports(t *testing.T) {
 	w := compactFixture(t, 450)
 	ctx := context.Background()
 	var n int
-	if err := w.db.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name LIKE '%compact%'`).Scan(&n); err != nil || n != 0 {
+	if err := w.db.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE type='trigger' AND name LIKE 'access_compact%'`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("default installed shadow: %d %v", n, err)
 	}
 	if err := w.InitializeCompactAccessShadow(ctx); err != nil {
@@ -193,6 +195,7 @@ func TestCompactAccessRollbackAndCorruption(t *testing.T) {
 var compactAccessRollbackSQL = []string{
 	`DROP TRIGGER access_compact_insert`, `DROP TRIGGER access_compact_update`, `DROP TRIGGER access_compact_delete`,
 	`DROP VIEW resource_access_compact_reconstructed`, `DROP TABLE resource_access_compact_edges`, `DROP TABLE resource_access_compact_job`,
+	`DROP TRIGGER access_stable_insert`, `DROP TRIGGER access_stable_update`, `DROP TRIGGER access_stable_delete`, `DROP TABLE resource_access_stable_edges`,
 }
 
 func TestCompactAccessYieldsAndUsesKeyset(t *testing.T) {
@@ -254,7 +257,7 @@ func TestCompactAccessSignedInitialKeysAndConcurrentWrites(t *testing.T) {
 	var verifyErr error
 	go func() {
 		defer close(finished)
-		w.RunCompactAccessShadow(ctx, func(result CompactAccessVerification, err error) {
+		w.RunCompactAccessMigration(ctx, func(result CompactAccessVerification, err error) {
 			verification, verifyErr = result, err
 		})
 	}()
@@ -300,6 +303,28 @@ func TestCompactAccessProcessCrash(t *testing.T) {
 			if _, err = tx.Exec(`INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges; UPDATE resource_access_compact_job SET cursor=3`); err != nil {
 				t.Fatal(err)
 			}
+		case "cutover_uncommitted", "cutover_committed":
+			proof := compactCertify(t, w)
+			if os.Getenv("ANX_COMPACT_CRASH_PHASE") == "cutover_uncommitted" {
+				if err = sqlite.RegisterScalarFunction("anx_test_crash_cutover", 0, func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) { os.Exit(23); return nil, nil }); err != nil {
+					t.Fatal(err)
+				}
+				// Reopen the pool so the newly registered function is available.
+				root := w.Layout().RootDir
+				w.Close()
+				w, err = InitializeWorkspace(context.Background(), root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				proof, err = w.VerifyCompactAccessCutover(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				compactExec(t, w, `CREATE TRIGGER crash_cutover AFTER UPDATE OF reader ON resource_access_compact_control WHEN NEW.reader=1 BEGIN SELECT anx_test_crash_cutover(); END`)
+			}
+			if err = w.CutoverCompactAccess(context.Background(), proof); err != nil {
+				t.Fatal(err)
+			}
 		case "committed":
 			if _, err = w.MaintainCompactAccessBatch(context.Background()); err != nil {
 				t.Fatal(err)
@@ -307,7 +332,7 @@ func TestCompactAccessProcessCrash(t *testing.T) {
 		}
 		os.Exit(23) // No DB.Close, rollback, or Go cleanup; SQLite must recover WAL.
 	}
-	for _, phase := range []string{"installed", "uncommitted", "committed"} {
+	for _, phase := range []string{"installed", "uncommitted", "committed", "cutover_uncommitted", "cutover_committed"} {
 		t.Run(phase, func(t *testing.T) {
 			w := compactFixture(t, 3)
 			root := w.Layout().RootDir
@@ -332,8 +357,18 @@ func TestCompactAccessProcessCrash(t *testing.T) {
 			if err = w.db.QueryRow(`SELECT cursor FROM resource_access_compact_job`).Scan(&cursor); err != nil {
 				t.Fatal(err)
 			}
-			if cursor.Valid != (phase == "committed") || (cursor.Valid && cursor.Int64 != 3) {
+			if cursor.Valid != (phase == "committed" || strings.HasPrefix(phase, "cutover_")) || (cursor.Valid && cursor.Int64 != 3) {
 				t.Fatalf("crash lost checkpoint atomicity: %+v", cursor)
+			}
+			if strings.HasPrefix(phase, "cutover_") {
+				var stable int
+				if err = w.db.QueryRow(`SELECT stable FROM resource_access_compact_control`).Scan(&stable); err != nil {
+					t.Fatal(err)
+				}
+				if (stable == 1) != (phase == "cutover_committed") {
+					t.Fatalf("partial cutover published: stable=%d", stable)
+				}
+				compactExec(t, w, `DROP TRIGGER IF EXISTS crash_cutover`)
 			}
 			if result := compactFinish(t, w); result.Rows != 3 {
 				t.Fatal(result)

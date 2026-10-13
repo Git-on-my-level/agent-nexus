@@ -106,20 +106,20 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 	// Publishing the same key is not a reference to another publisher: it must
 	// not let hidden evidence suppress visible resolution candidates. Other
 	// inventory fields (including plan and work refs) inherit the key's owner.
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON d.kind='external_key' AND e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')")
+	terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d", carry, "d.kind='external_key' AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')", []string{resourceaccess.AtomKeySQL("d.id")})...)
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_external_edges e ON d.kind='external_key' AND e.target_key="+resourceaccess.AtomKeySQL("d.id")+"")
 	// Document full-text materialization includes comment text. A private
 	// contributor must constrain the document before MATCH/rank/limit are applied.
 	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
 		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
-		keys := "=" + resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")
+		keys := []string{resourceaccess.AtomKeySQL("(d.kind||':'||" + ref + ")")}
 		if join == "" {
 			// Raw and typed ID atoms use the same target index. One recursive
 			// term avoids visiting and deduplicating the same children twice.
-			keys = " IN (" + resourceaccess.AtomKeySQL("(d.kind||':'||d.id)") + ",CASE WHEN d.kind<>'plan' THEN " + resourceaccess.AtomKeySQL("d.id") + " END)"
+			keys = []string{resourceaccess.AtomKeySQL("(d.kind||':'||d.id)"), "CASE WHEN d.kind<>'plan' THEN " + resourceaccess.AtomKeySQL("d.id") + " END"}
 		}
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key"+keys+" WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
+		terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d "+join, carry, "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')", keys)...)
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
@@ -129,6 +129,11 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 		{"resource_access_exact_edges", " AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')"},
 		{"resource_access_external_edges", ""},
 	} {
+		if e.table == "resource_access_exact_edges" {
+			terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id", carry, "m.authority<>'nexus'"+e.where, []string{resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")})...)
+			terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", carry, "(r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where, []string{resourceaccess.AtomKeySQL("r.ref")})...)
+			continue
+		}
 		// Keep the recursive vertex outside the metadata lookup. Reordering this
 		// join starts with every source-owned card for each recursion step.
 		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'"+e.where)
@@ -152,9 +157,9 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 	// SQLite otherwise evaluates the legacy spelling probes before discovering
 	// that no empty edge exists. Gate them with a cheap covering-index lookup.
 	emptyNavigation := "EXISTS(SELECT 1 FROM main.ref_edges empty WHERE empty.target_type=d.kind AND empty.target_id='' COLLATE NOCASE AND empty.edge_type='ref')"
-	emptyExact := "EXISTS(SELECT 1 FROM main.resource_access_exact_edges empty WHERE empty.target_key=" + resourceaccess.AtomKeySQL("(d.kind||':')") + ")"
+	emptyExact := resourceaccess.ExactEdgeExists(resourceaccess.AtomKeySQL("(d.kind||':')"))
 	terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id='' COLLATE NOCASE AND e.edge_type='ref' WHERE "+validKind+" AND CASE WHEN "+emptyNavigation+" THEN "+emptyRef+" ELSE 0 END")
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':')")+" WHERE "+validKind+" AND CASE WHEN "+emptyExact+" THEN "+emptyRef+" ELSE 0 END")
+	terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d", carry, validKind+" AND CASE WHEN "+emptyExact+" THEN "+emptyRef+" ELSE 0 END", []string{resourceaccess.AtomKeySQL("(d.kind||':')")})...)
 	// Prose ownership is resolved atomically at writes, including new/renamed
 	// identities matching older text. Reads never inspect stored mention text.
 	terms = append(terms, "SELECT m.source_kind,m.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id JOIN main.resource_access_mentions m ON m.identity_id=i.identity_id")

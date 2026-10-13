@@ -274,6 +274,41 @@ func TestResourceAccessStorageInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	columns := liveAccessColumns(t, ws.DB())
+	// Review the union of transitional and committed storage columns.
+	for done := false; !done; {
+		done, err = ws.MaintainCompactAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for done := false; !done; {
+		done, err = ws.MaintainStableAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof, err := ws.VerifyCompactAccessCutover(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.CutoverCompactAccess(ctx, proof); err != nil {
+		t.Fatal(err)
+	}
+	for table, cols := range liveAccessColumns(t, ws.DB()) {
+		for _, col := range cols {
+			found := false
+			for _, prior := range columns[table] {
+				if prior == col {
+					found = true
+				}
+			}
+			if !found {
+				columns[table] = append(columns[table], col)
+			}
+		}
+		sort.Strings(columns[table])
+	}
+
 	writers := liveAccessWriters(t)
 	path := "testdata/resource_access_storage.json"
 	var inventory accessInventory

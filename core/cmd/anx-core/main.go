@@ -100,7 +100,7 @@ func main() {
 		streamPollInterval          = envDuration("ANX_STREAM_POLL_INTERVAL", time.Second)
 		projectionMode              = envString("ANX_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
-		compactAccessShadow         = envBool("ANX_COMPACT_ACCESS_SHADOW", false)
+		compactAccessMigration      = envBool("ANX_COMPACT_ACCESS_MIGRATION", false)
 		scopedInboxReader           = envBool("ANX_SCOPED_INBOX_READER", false)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		answerWakeQuietWindow       = envDuration("ANX_ANSWER_WAKE_QUIET_WINDOW", server.DefaultAnswerWakeQuietWindow)
@@ -169,7 +169,7 @@ func main() {
 	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
-	flag.BoolVar(&compactAccessShadow, "compact-access-shadow", compactAccessShadow, "opt in to compact access dual writes and verification; legacy reads remain authoritative")
+	flag.BoolVar(&compactAccessMigration, "compact-access-migration", compactAccessMigration, "enable online compact access migration and certified reader cutover")
 	flag.BoolVar(&scopedInboxReader, "scoped-inbox-reader", scopedInboxReader, "enable the scoped inbox index with legacy authorization and fallback")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
@@ -621,16 +621,16 @@ func main() {
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
 	go workspace.RunAskSubjectsMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask subject maintenance: retrying bounded batch") })
 	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
-	if compactAccessShadow {
+	if compactAccessMigration {
 		compactDone := make(chan struct{})
 		go func() {
 			defer close(compactDone)
-			workspace.RunCompactAccessShadow(maintenanceCtx, func(result storage.CompactAccessVerification, err error) {
+			workspace.RunCompactAccessMigration(maintenanceCtx, func(result storage.CompactAccessVerification, err error) {
 				if err != nil {
-					fmt.Fprintln(os.Stderr, "compact access shadow: incomplete or verification failed; legacy reads retained")
+					fmt.Fprintln(os.Stderr, "compact access migration: incomplete or verification failed; current reader retained")
 					return
 				}
-				fmt.Fprintf(os.Stderr, "compact access shadow: verified rows=%d epoch=%d; legacy reads retained\n", result.Rows, result.Epoch)
+				fmt.Fprintf(os.Stderr, "compact access migration: certified rows=%d epoch=%d; compact reader active\n", result.Rows, result.Epoch)
 			})
 		}()
 		defer func() { maintenanceCancel(); <-compactDone }()

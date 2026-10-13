@@ -47,6 +47,19 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for done := false; !done; {
+		done, err = env.workspace.MaintainStableAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof, err := env.workspace.VerifyCompactAccessCutover(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = env.workspace.CutoverCompactAccess(ctx, proof); err != nil {
+		t.Fatal(err)
+	}
 	db.SetMaxOpenConns(1)
 	paths := []string{"/cards/" + anyString(card.Card["id"]), "/boards/" + anyString(board["id"]) + "/cards/" + anyString(card.Card["id"]), "/inbox?limit=50", "/overview", "/overview?summary=1&work_view=summary", "/overview/changes"}
 	for _, live := range []bool{false, true} {

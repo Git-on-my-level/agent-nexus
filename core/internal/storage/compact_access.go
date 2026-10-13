@@ -13,6 +13,25 @@ import (
 // InitializeCompactAccessShadow opts this database into the expand-only shadow
 // experiment. It does no historical copying. The old ledger remains authoritative
 // and all installed triggers persist even when the maintenance worker is paused.
+func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`CREATE TABLE IF NOT EXISTS resource_access_compact_control(singleton INTEGER PRIMARY KEY CHECK(singleton=1), reader INTEGER NOT NULL DEFAULT 0 CHECK(reader IN (0,1,2)), stable INTEGER NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 0, raw_cursor INTEGER, raw_done INTEGER NOT NULL DEFAULT 0)`,
+		`INSERT INTO resource_access_compact_control(singleton) VALUES(1) ON CONFLICT DO NOTHING`,
+		`CREATE TABLE IF NOT EXISTS resource_access_compact_edges(edge_id INTEGER PRIMARY KEY,target_key BLOB NOT NULL CHECK(typeof(target_key)='blob' AND length(target_key)=32))`,
+		`CREATE INDEX IF NOT EXISTS idx_access_compact_target ON resource_access_compact_edges(target_key)`,
+	} {
+		if _, err = tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) error {
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
@@ -45,6 +64,9 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("install compact access shadow: %w", err)
 		}
+	}
+	if err = installStableAccessEdges(ctx, tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -113,12 +135,14 @@ func (w *Workspace) maintainCompactAccessChunk(ctx context.Context, limit int) (
 	return done, tx.Commit()
 }
 
-// CompactAccessVerification describes ONE read snapshot, never a cutover token.
-// Subsequent writes can invalidate the result. A future reader switch needs its
-// own transactional capability/epoch handshake and fanout performance gate.
+// CompactAccessVerification identifies one certified snapshot. Cutover rechecks
+// both epoch and ledger generation under its write lease before publication.
 type CompactAccessVerification struct {
-	Rows  int64
-	Epoch int64
+	Rows           int64
+	Epoch          int64
+	Generation     int64
+	stableVerified bool
+	database       *sql.DB
 }
 
 var ErrCompactAccessMismatch = errors.New("compact access shadow differs from canonical edges; legacy reads retained")
@@ -130,6 +154,16 @@ func (w *Workspace) VerifyCompactAccessShadow(ctx context.Context) (CompactAcces
 		return result, err
 	}
 	defer tx.Rollback()
+	result, err = verifyCompactAccess(ctx, tx)
+	if err != nil {
+		return result, err
+	}
+	return result, tx.Commit()
+}
+
+func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerification, error) {
+	var result CompactAccessVerification
+	var err error
 	var done bool
 	if err = tx.QueryRowContext(ctx, `SELECT done FROM resource_access_compact_job WHERE singleton=1`).Scan(&done); err != nil {
 		return result, err
@@ -138,6 +172,9 @@ func (w *Workspace) VerifyCompactAccessShadow(ctx context.Context) (CompactAcces
 		return result, errors.New("compact access backfill is incomplete")
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT version FROM resource_access_epoch WHERE singleton=1`).Scan(&result.Epoch); err != nil {
+		return result, err
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT generation FROM resource_access_compact_control WHERE singleton=1`).Scan(&result.Generation); err != nil {
 		return result, err
 	}
 	// Both EXCEPT directions compare every field byte-for-byte. Also check raw
@@ -163,13 +200,13 @@ func (w *Workspace) VerifyCompactAccessShadow(ctx context.Context) (CompactAcces
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM resource_access_compact_edges`).Scan(&result.Rows); err != nil {
 		return result, err
 	}
-	return result, tx.Commit()
+	return result, nil
 }
 
-// RunCompactAccessShadow is opt-in server maintenance, never startup readiness
+// RunCompactAccessMigration is server maintenance, never startup readiness
 // or request work. Verification holds a WAL read snapshot, not a writer lease.
 // Errors contain no resource contents; callers should log only generic status.
-func (w *Workspace) RunCompactAccessShadow(ctx context.Context, report func(CompactAccessVerification, error)) {
+func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(CompactAccessVerification, error)) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	installed := false
@@ -189,7 +226,17 @@ func (w *Workspace) RunCompactAccessShadow(ctx context.Context, report func(Comp
 		}
 		var done bool
 		if err == nil {
+			var mode int
+			if err = w.db.QueryRowContext(ctx, `SELECT reader FROM resource_access_compact_control WHERE singleton=1`).Scan(&mode); err == nil && mode != 0 {
+				return
+			}
+		}
+		if err == nil {
 			done, err = w.MaintainCompactAccessBatch(ctx)
+		}
+		if err == nil {
+			rawDone, rawErr := w.MaintainStableAccessBatch(ctx)
+			done, err = done && rawDone, rawErr
 		}
 		if err != nil {
 			if report != nil && ctx.Err() == nil && time.Since(lastReport) >= time.Minute {
@@ -200,8 +247,16 @@ func (w *Workspace) RunCompactAccessShadow(ctx context.Context, report func(Comp
 		}
 		if done {
 			verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-			result, err := w.VerifyCompactAccessShadow(verifyCtx)
+			result, err := w.VerifyCompactAccessCutover(verifyCtx)
 			cancel()
+			if err == nil {
+				cutoverCtx, finish := context.WithTimeout(ctx, 10*time.Second)
+				err = w.CutoverCompactAccess(cutoverCtx, result)
+				finish()
+				if errors.Is(err, ErrCompactAccessChanged) {
+					continue
+				}
+			}
 			if report != nil && ctx.Err() == nil {
 				report(result, err)
 			}

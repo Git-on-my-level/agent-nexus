@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -32,6 +34,11 @@ func TestPerformanceCompactAccessShadow(t *testing.T) {
 		}
 		return info.Size()
 	}
+	var rawTargetBytes int64
+	if err := w.db.QueryRow(`SELECT sum(pgsize) FROM dbstat WHERE name='idx_resource_access_edges_target'`).Scan(&rawTargetBytes); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("raw_target_index_bytes=%d", rawTargetBytes)
 	before := size()
 	start := time.Now()
 	if err := w.InitializeCompactAccessShadow(ctx); err != nil {
@@ -69,6 +76,65 @@ func TestPerformanceCompactAccessShadow(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("verified_rows=%d verification=%s epoch=%d old_component_bytes=%d compact_component_bytes=%d db_file_before=%d db_file_after=%d reclaimed_bytes=0", result.Rows, time.Since(start), result.Epoch, oldBytes, compactBytes, before, after)
+	for done := false; !done; {
+		var err error
+		done, err = w.MaintainStableAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof, err := w.VerifyCompactAccessCutover(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutoverStarted := time.Now()
+	if err = w.CutoverCompactAccess(ctx, proof); err != nil {
+		t.Fatal(err)
+	}
+	cutoverElapsed := time.Since(cutoverStarted)
+	afterCutover := size()
+	// A new file is prepared during a maintenance window; no serving database is
+	// overwritten. The operator must stop writers before replacing the old file.
+	destination := filepath.Join(t.TempDir(), "reclaimed.sqlite")
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = ReclaimCompactAccessOffline(ctx, w.Layout().DatabasePath, destination); err != nil {
+		t.Fatal(err)
+	}
+	copyDB, err := sql.Open("sqlite", sqliteDSN(destination))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copyDB.Close()
+	copyWorkspace := &Workspace{db: copyDB}
+	if verified, err := copyWorkspace.VerifyCompactAccessCutover(ctx); err != nil || verified.Rows != result.Rows {
+		t.Fatalf("reclaimed verification: %+v %v", verified, err)
+	}
+	if _, err = copyDB.ExecContext(ctx, `ATTACH DATABASE ? AS original`, w.Layout().DatabasePath); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`SELECT EXISTS(SELECT rowid,source_kind,source_id,CAST(target_ref AS BLOB) FROM original.resource_access_edges EXCEPT SELECT rowid,source_kind,source_id,CAST(target_ref AS BLOB) FROM main.resource_access_edges)`,
+		`SELECT EXISTS(SELECT rowid,kind,id FROM original.pm_records EXCEPT SELECT rowid,kind,id FROM main.pm_records)`,
+	} {
+		var mismatch bool
+		if err = copyDB.QueryRowContext(ctx, q).Scan(&mismatch); err != nil || mismatch {
+			t.Fatalf("reclamation changed identities: %v %v", mismatch, err)
+		}
+	}
+	var integrity string
+	if err = copyDB.QueryRow(`PRAGMA quick_check`).Scan(&integrity); err != nil || integrity != "ok" {
+		t.Fatal(integrity, err)
+	}
+	info, err := os.Stat(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("db_file_before=%d after_cutover=%d after_reclamation=%d saved_bytes=%d cutover=%s legacy_rollback_retained=true", before, afterCutover, info.Size(), before-info.Size(), cutoverElapsed)
+	if info.Size() >= before {
+		t.Fatal("no real file saving")
+	}
 	if result.Rows < 100000 || compactBytes >= oldBytes || after < before {
 		t.Fatal("unexpected dense fixture size/cardinality")
 	}
