@@ -7265,6 +7265,7 @@ Inputs:
   - body `patch.resolution_refs` (list<any>)
   - body `patch.risk` (string)
   - body `patch.topic_ref` (string)
+  - body `request_key` (string)
   Enum values: patch.resolution: done; patch.risk: critical, high, low, medium
 
 Local Help: cards patch

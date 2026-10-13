@@ -45,6 +45,15 @@ const visible = (entry) => entry.state !== "superseded";
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "cards.patch") {
+    const result = await client.updateBoardCard(
+      "",
+      entry.request.id,
+      entry.request.body,
+    );
+    if (!result.card?.id) throw new Error("Assignment receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "work.create") {
     const result = await client.createWork(entry.request.body);
     if (!result.work?.ref && !result.work?.id)
@@ -152,15 +161,20 @@ export function enqueueDiscussionMessage({ event, ...options }) {
 
 export function enqueueAuthoring({ operation, body, id = "", ...options }) {
   if (
-    !["work.create", "docs.create", "docs.patch", "docs.revise"].includes(
-      operation,
-    )
+    ![
+      "work.create",
+      "docs.create",
+      "docs.patch",
+      "docs.revise",
+      "cards.patch",
+    ].includes(operation)
   )
     throw new Error("This authoring operation has not been audited.");
   const key = crypto.randomUUID();
   const draft = options.draft || {};
   const preview =
-    operation === "work.create"
+    options.preview ??
+    (operation === "work.create"
       ? [
           ["Outcome", draft.title],
           ["Context", draft.summary],
@@ -178,7 +192,7 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
         ? [draft.title, draft.summary, draft.content]
             .filter(Boolean)
             .join("\n\n")
-        : (draft.content ?? draft.summary ?? draft.text ?? "");
+        : (draft.content ?? draft.summary ?? draft.text ?? ""));
   return enqueueLocalMutation({
     ...options,
     key,
@@ -405,7 +419,11 @@ async function attempt(entry) {
     if (!active(entry)) return;
     entry.failure = mutationFailure(
       error,
-      entry.operation === "artifacts.attachments.create" ? "file" : "response",
+      entry.operation === "artifacts.attachments.create"
+        ? "file"
+        : entry.operation === "cards.patch"
+          ? "assignment"
+          : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =

@@ -29,12 +29,23 @@ export function mutationFailure(error, subject = "response") {
       422: "This file needs a correction before it can be uploaded.",
     });
   }
+  if (subject === "assignment") {
+    Object.assign(messages, {
+      400: "This assignment needs a correction before it can be sent.",
+      401: "Sign in again to send this assignment.",
+      403: "You do not have permission to assign this task.",
+      409: "This task changed. Your selected person is saved. Review the assignment.",
+      422: "This assignment needs a correction before it can be sent.",
+    });
+  }
   return {
     state: retryable ? "retrying" : "attention",
     message: retryable
       ? subject === "file"
         ? "The service could not confirm the upload. Your file is kept on this device."
-        : "The service could not confirm your response. Your text is kept on this device."
+        : subject === "assignment"
+          ? "The service could not confirm the assignment. Your selection is kept on this device."
+          : "The service could not confirm your response. Your text is kept on this device."
       : messages[status] ||
         "This response needs your attention. Your text is kept on this device.",
     // A bounded diagnostic, rendered only behind a disclosure as plain text.

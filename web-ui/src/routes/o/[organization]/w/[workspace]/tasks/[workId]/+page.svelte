@@ -1,4 +1,5 @@
 <script>
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { decisionRowStatus } from "$lib/inboxMailbox.js";
   import { onMount, untrack } from "svelte";
   import { get } from "svelte/store";
@@ -930,6 +931,7 @@
             href={pmHref}>Ask PM about this</a
           >{/if}{/snippet}
     </WorkspacePageHeader>
+    <MutationSendStatus target={`card:${workId}:assignment`} />
     <div
       class="grid gap-6 {railCollapsed
         ? ''

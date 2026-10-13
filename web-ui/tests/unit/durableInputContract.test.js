@@ -59,6 +59,7 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
           "patchDocument",
           "updateDocument",
           "setCardPlan",
+          "updateBoardCard",
         ].includes(node.property?.name)
       ) {
         throw new Error(
@@ -111,6 +112,7 @@ it("PM chat and decision notes use durable form snapshots", () => {
 it("task and document authoring surfaces checkpoint complete forms", () => {
   for (const [path, expected] of [
     ["routes/o/[organization]/w/[workspace]/tasks/new/+page.svelte", 1],
+    ["lib/components/CommandPalette.svelte", 1],
     ["routes/o/[organization]/w/[workspace]/docs/+page.svelte", 1],
     [
       "routes/o/[organization]/w/[workspace]/docs/[documentId]/edit/+page.svelte",

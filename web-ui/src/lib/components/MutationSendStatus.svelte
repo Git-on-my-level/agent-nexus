@@ -89,7 +89,9 @@
             onclick={edit}
             >{entry.operation === "artifacts.attachments.create"
               ? "Choose replacement"
-              : "Edit message"}</button
+              : entry.operation === "cards.patch"
+                ? "Edit assignment"
+                : "Edit message"}</button
           >
           <button
             type="button"

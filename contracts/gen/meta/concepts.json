@@ -5692,6 +5692,10 @@
               {
                 "name": "patch.topic_ref",
                 "type": "string"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
               }
             ]
           },
@@ -9949,6 +9953,10 @@
               },
               {
                 "name": "patch.topic_ref",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
                 "type": "string"
               }
             ]
@@ -22950,6 +22958,10 @@
               },
               {
                 "name": "patch.topic_ref",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
                 "type": "string"
               }
             ]

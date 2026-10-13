@@ -4139,6 +4139,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.topic_ref",
           "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },

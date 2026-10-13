@@ -201,16 +201,36 @@ responses previously changed field order on replay. Decoding uses `json.Number`
 to retain integer precision. This applies to all routes using the general atomic
 wrapper; plain unkeyed writes retain their existing behavior.
 
-The remaining UI card edit is command-palette assignment in
-`CommandPalette.svelte:assignContextTask`. It currently fetches a card token and
-calls `cards.patch` directly. Task moves run through `taskBoardMove.js`; the board
-also collects completion evidence. These are still open. `cards.patch` writes its
-card first and emits a lifecycle event and assignment wake afterward. Blindly
-putting that handler in the wrapper would reacquire quota locks in `AppendEvent`
-and `CreateArtifact`; wake preparation also reads authentication state. Audit
-those writes, ownership and durable wake scheduling before migrating assignment,
-card metadata or lifecycle requests. Content revisions are a separate endpoint,
-not metadata PATCH.
+Command-palette assignment now checkpoints the selected person, task identity,
+original timestamp and other assignees as a complete durable snapshot. The
+`cards.patch` adapter freezes its original body and actor-bound key in the shared
+outbox. Task and palette status stay inline; editing from the task reopens the
+saved selection. The palette says the assignment is saved until confirmation; attention
+retains copy/edit/retry actions. Editing restores the selected person and original
+base. Only “Use latest version” updates the base and a subsequent send gets a new
+key. Navigation, principal changes and late refreshes are fenced.
+
+Keyed `PATCH /cards/{id}` commits card/board metadata, the lifecycle event, the
+assignment wake artifact and queue row, and the original receipt together.
+Authentication target lookup uses the existing bounded indexed notification
+lookup before the primitive transaction; authorization of canonical resource
+refs still applies to every nested write. `AppendEvent` and `CreateArtifact` skip
+reacquiring the quota mutex only when this same Store already owns it through
+`ExecuteWithReplay`. Quota usage, blob ledger, promotion and wake-row writes were
+audited with quota-enabled single-connection tests. Content-addressed promotion
+can leave an unreferenced blob after rollback, as with existing uploads; no
+artifact, ledger ownership or wake survives a failed receipt. Projection
+maintenance is notified only after commit. Unkeyed handlers retain best-effort
+wake behavior. Tests inject failures at event, wake artifact, wake queue and
+receipt storage, and prove full rollback, eight concurrent exact replays, changed
+body rejection and denied replay after resource ownership is revoked.
+
+Task moves still run through `taskBoardMove.js`, including PM proposals for
+source-owned tasks and board completion evidence. These remain open. Card content
+revisions are separate from metadata PATCH: `CreateCardRevision` holds the quota
+lock, may initialize the blob ledger, stages content, then updates the revision
+and card/board heads in its own transaction. Audit and adapt those nested writes
+before adding replay; there is no current UI card text editor to migrate.
 
 ## Replay audit
 
@@ -231,14 +251,15 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                            | Task creation covered; existing card edits and lifecycle remain rollout work                                                                          |
 | `POST /docs`, `PATCH /docs/{id}`, `POST /docs/{id}/revisions`                     | Document/revision/metadata writes and original response commit with replay; exact body/base-token retries and changed-key conflicts                                                                                            | Creation, description, text revision and inline title adapters covered; legacy PUT and other lifecycle/knowledge forms remain gaps                    |
 | `PUT /cards/{id}/plan`                                                            | Graph, timestamps, work version, event and original response commit together; concurrent quota-enabled/single-connection replay, original projection, rollback and revocation tests                                            | Keyed core API covered; CLI helpers currently send unkeyed requests, and the UI has no plan editor. Future composers still need durable drafts/outbox |
+| `PATCH /cards/{id}`                                                               | Card metadata, event, assignment wake packet/queue and original receipt commit together; quota-enabled single-connection concurrency, rollback at four writes, changed-body and revoked-access tests                           | Command-palette assignment covered; card revisions and lifecycle remain rollout work                                                                  |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                           | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules
 
 `durableInputContract.test.js` parses the Svelte AST to require durable draft
 actions on every authored Inbox response field, requires the shared discussion
-composer action, PM answer/chat actions, and rejects direct Inbox/event/PM answer/chat/upload/task/document authoring sends
-in any Svelte surface. This is a guard for the migrated scope; subsequent stages
+composer action, PM answer/chat and assignment actions, and rejects direct Inbox/event/PM answer/chat/upload/task/document authoring sends
+and assignment sends in any Svelte surface. This is a guard for the migrated scope; subsequent stages
 must extend it to all mutation forms. Do not present it as whole-UI enforcement.
 
 `durable-inbox.spec.js` covers reload/navigation/new-tab drafts, timeout and 524,

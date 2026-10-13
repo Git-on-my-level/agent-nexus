@@ -11848,6 +11848,7 @@ components:
     PatchCardRequest:
       type: object
       properties:
+        request_key: {type: string, maxLength: 256, description: Optional actor-bound replay key; preserve the original patch and concurrency token on retry.}
         actor_id: { type: string }
         patch: { $ref: '#/components/schemas/CardPatchInput' }
         if_updated_at:
