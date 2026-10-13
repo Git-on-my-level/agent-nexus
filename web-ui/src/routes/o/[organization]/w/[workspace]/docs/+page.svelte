@@ -87,6 +87,7 @@
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let documents = $state([]);
   // Search pages followed beyond the first before the list says "more".
@@ -457,9 +458,9 @@
   let confirmModalTitle = $derived(lifecycle.confirmTitle());
   let confirmModalMessage = $derived(lifecycle.confirmMessage());
   let confirmModalBusy = $derived(lifecycle.confirmBusy());
-</script>
 
-<svelte:head><title>Docs · Agent Nexus</title></svelte:head>
+  usePageTitle(() => "Docs · Agent Nexus");
+</script>
 
 <WorkspacePageShell data-tour="docs">
   <WorkspacePageHeader title="Docs">

@@ -71,6 +71,7 @@
     onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache.js";
   import { reliableRead } from "$lib/reliableRead.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let listController;
   let pendingLiveRead = null;
   let listCacheKey = $state("");
@@ -957,9 +958,10 @@
       shortcutsOpener = null;
     }
   });
+
+  usePageTitle(() => "Tasks · Agent Nexus");
 </script>
 
-<svelte:head><title>Tasks · Agent Nexus</title></svelte:head>
 <svelte:window onkeydown={handleShortcutKeydown} />
 <WorkspacePageShell>
   <WorkspacePageHeader title="Tasks">

@@ -44,6 +44,7 @@
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
   import { tick } from "svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   function isHttpUrl(value) {
     return /^https?:\/\//i.test(String(value ?? "").trim());
@@ -1116,13 +1117,12 @@
   function clearDocumentTextComment() {
     pendingDocumentComment = null;
   }
-</script>
 
-<svelte:head
-  ><title
-    >{document?.title ? `${document.title} · Docs` : "Docs"} · Agent Nexus</title
-  ></svelte:head
->
+  usePageTitle(
+    () =>
+      `${document?.title ? `${document.title} · Docs` : "Docs"} · Agent Nexus`,
+  );
+</script>
 
 {#if loading}
   <nav

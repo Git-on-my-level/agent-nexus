@@ -18,6 +18,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import { workspacePath } from "$lib/workspacePaths";
   import { devActorMode } from "$lib/workspaceContext";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   function isAlreadyAtWorkspaceHome(pathname, org, ws) {
     const dest = normalizeAppPath(workspacePath(org, ws));
@@ -216,9 +217,9 @@
       loadingDevLogin = false;
     }
   }
-</script>
 
-<svelte:head><title>Sign in · Agent Nexus</title></svelte:head>
+  usePageTitle(() => "Sign in · Agent Nexus");
+</script>
 
 {#if $authenticatedAgent}
   <main class="min-h-screen bg-bg px-4 py-6 text-fg">

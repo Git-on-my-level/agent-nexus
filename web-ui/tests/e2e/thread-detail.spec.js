@@ -678,6 +678,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
   ).toBeVisible();
+  await expect(page).toHaveTitle("Customer Onboarding Workflow · Agent Nexus");
 
   await page.getByRole("tab", { name: "About" }).click();
   await page.getByRole("button", { name: "Edit" }).click();
@@ -690,6 +691,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   await expect(
     page.getByRole("heading", { name: "Server updated title" }),
   ).toBeVisible();
+  await expect(page).toHaveTitle("Server updated title · Agent Nexus");
 
   await page.getByRole("tab", { name: "About" }).click();
   await page.getByRole("button", { name: "Edit" }).click();

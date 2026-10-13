@@ -52,6 +52,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { replayWorkspaceTour } from "$lib/tourState";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   const scope = readerScopeKey();
   const cacheKey = `${scope}:overview`;
@@ -552,9 +553,9 @@
       stopDenied();
     };
   });
-</script>
 
-<svelte:head><title>Overview · Agent Nexus</title></svelte:head>
+  usePageTitle(() => "Overview · Agent Nexus");
+</script>
 
 <WorkspacePageShell>
   <!--

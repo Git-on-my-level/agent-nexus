@@ -41,6 +41,7 @@
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
   import SetupPrompt from "$lib/components/setup/SetupPrompt.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let { data } = $props();
 
@@ -728,9 +729,9 @@
       stopAgentChanges();
     };
   });
-</script>
 
-<svelte:head><title>Access · Agent Nexus</title></svelte:head>
+  usePageTitle(() => "Access · Agent Nexus");
+</script>
 
 {#if !canManageAccess}
   <div class="space-y-4">

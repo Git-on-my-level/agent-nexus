@@ -135,6 +135,7 @@
     isReadAccessDenied,
   } from "$lib/reliableRead.js";
   import { commitInboxView } from "$lib/inboxViewCache.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let reconnecting = $state(false);
   let confirmed = $state(false);
@@ -1590,6 +1591,8 @@
       document.removeEventListener("visibilitychange", onVisible);
     };
   });
+
+  usePageTitle(() => "Inbox · Agent Nexus");
 </script>
 
 <svelte:window
@@ -1609,7 +1612,6 @@
     }
   }}
 />
-<svelte:head><title>Inbox · Agent Nexus</title></svelte:head>
 <WorkspacePageShell data-tour="inbox">
   <WorkspacePageHeader title="Inbox">
     {#snippet actions()}

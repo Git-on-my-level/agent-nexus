@@ -21,6 +21,7 @@
   import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
   import { topicDiscussionSurface } from "$lib/discussionSurface";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   const TOPIC_DETAIL_TABS = ["messages", "about", "documents", "timeline"];
   const TOPIC_TAB_ALIASES = { overview: "about" };
@@ -352,11 +353,9 @@
       keepFocus: true,
     });
   }
-</script>
 
-<svelte:head
-  ><title>{topic?.title || "Thread"} · Agent Nexus</title></svelte:head
->
+  usePageTitle(() => `${topic?.title || "Thread"} · Agent Nexus`);
+</script>
 
 <!--
   When the Messages tab is active we wrap the page in `page-dock-layout` so

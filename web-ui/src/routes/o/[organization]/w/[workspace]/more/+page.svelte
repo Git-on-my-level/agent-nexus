@@ -26,6 +26,7 @@
   import { settingsNavGroups } from "$lib/navigation";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -110,9 +111,10 @@
     const org = entry?.organizationSlug ?? organizationSlug;
     await goto(workspacePath(org, slug, "/"));
   }
+
+  usePageTitle(() => "Settings · Agent Nexus");
 </script>
 
-<svelte:head><title>Settings · Agent Nexus</title></svelte:head>
 <div class="space-y-3 sm:space-y-4">
   <h1 class="text-title text-fg">Settings</h1>
   <!-- Secondary navigation, grouped: Settings, then Diagnostics. The group

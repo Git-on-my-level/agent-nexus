@@ -29,6 +29,7 @@
   import SetupPrompt from "$lib/components/setup/SetupPrompt.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let workspaceSlug = $derived($page.params.workspace);
   let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
@@ -156,11 +157,11 @@
       release();
     };
   });
+
+  usePageTitle(() => "Agents · Agent Nexus");
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
-<svelte:head><title>Agents · Agent Nexus</title></svelte:head>
-
 <WorkspacePageShell data-tour="agents-page">
   <WorkspacePageHeader title="Agents">
     {#snippet subtitle()}

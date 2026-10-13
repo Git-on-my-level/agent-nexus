@@ -1024,6 +1024,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.getByRole("heading", { name: /Sign in/ }).first(),
       ).toBeVisible(FIRST_PAINT);
+      await expect(page).toHaveTitle("Sign in · Agent Nexus");
       await expectCleanLayout(page, "login form", bothEnds);
 
       await page.getByText("Local sign-in help").click();

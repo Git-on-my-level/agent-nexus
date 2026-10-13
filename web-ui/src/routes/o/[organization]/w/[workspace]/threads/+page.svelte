@@ -36,6 +36,7 @@
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let loading = $state(false);
   let error = $state("");
@@ -170,9 +171,9 @@
       q: current.q,
     });
   }
-</script>
 
-<svelte:head><title>Threads · Agent Nexus</title></svelte:head>
+  usePageTitle(() => "Threads · Agent Nexus");
+</script>
 
 <WorkspacePageShell>
   <WorkspacePageHeader title="Threads">

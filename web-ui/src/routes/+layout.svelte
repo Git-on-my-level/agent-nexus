@@ -118,8 +118,10 @@
     pmPresence,
     refreshPmPresence,
   } from "$lib/pm/presence.js";
+  import { providePageTitle } from "$lib/pageTitle.svelte.js";
 
   let { children, data } = $props();
+  const pageTitleOverride = providePageTitle();
 
   function onWorkspaceRenderError(error) {
     if (currentAppPath === "/overview" || currentAppPath === "/") {
@@ -1028,7 +1030,7 @@
 </script>
 
 <svelte:head>
-  <title>{pageTitle()}</title>
+  <title>{$pageTitleOverride || pageTitle()}</title>
 </svelte:head>
 
 <svelte:window

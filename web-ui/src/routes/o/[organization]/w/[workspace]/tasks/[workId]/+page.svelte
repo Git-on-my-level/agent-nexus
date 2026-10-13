@@ -84,6 +84,7 @@
     pmFeaturesVisible,
   } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let work = $state(null),
     /**
      * True while `work` is the row the list already had rather than the card
@@ -826,10 +827,11 @@
       window.clearInterval(clock);
     };
   });
+
+  usePageTitle(() => `${work?.title || "Task"} · Agent Nexus`);
 </script>
 
 <svelte:window bind:innerWidth={viewportWidth} />
-<svelte:head><title>{work?.title || "Task"} · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-fg-muted hover:text-fg"

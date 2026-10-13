@@ -11,6 +11,7 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let boards = $state([]),
     loading = $state(true),
     saving = $state(false),
@@ -109,6 +110,8 @@
   onMount(() => {
     void load();
   });
+
+  usePageTitle(() => "New task · Agent Nexus");
 </script>
 
 <svelte:window
@@ -119,7 +122,6 @@
     }
   }}
 />
-<svelte:head><title>New task · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-accent-text hover:underline"

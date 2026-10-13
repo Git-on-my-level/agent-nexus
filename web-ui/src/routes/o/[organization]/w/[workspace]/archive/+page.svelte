@@ -9,6 +9,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { listAllPages } from "$lib/inboxSources.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let groups = $state(null);
   let error = $state("");
@@ -71,9 +72,10 @@
   onMount(() => {
     void load();
   });
+
+  usePageTitle(() => "Archive · Agent Nexus");
 </script>
 
-<svelte:head><title>Archive · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <!-- No subtitle: "Archived work and context remain available here" under a
        heading reading "Archive" is the heading again. -->

@@ -881,6 +881,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.getByRole("heading", { name: LONG_TITLE }),
       ).toBeVisible();
+      await expect(page).toHaveTitle(`${LONG_TITLE} · Agent Nexus`);
       await expectCleanLayout(page, "detail populated", bothEnds);
 
       await page.getByRole("button", { name: "Check GitHub now" }).click();
