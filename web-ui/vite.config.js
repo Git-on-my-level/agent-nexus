@@ -3,6 +3,39 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 
+// Dev/preview only: lets the e2e harness prove the server it is about to drive
+// was started from THIS checkout. A run pointed at another worktree's server
+// (`PLAYWRIGHT_REUSE_EXISTING_*`, a pinned `PLAYWRIGHT_PORT`) otherwise fails
+// as "element(s) not found" and reads as an app bug. See
+// tests/serverIdentity.js. No build hook, so it never reaches the bundle.
+export const E2E_IDENTITY_PATH = "/__anx/e2e-identity";
+
+function e2eIdentityPlugin() {
+  let root = process.cwd();
+  const handler = (_req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        root: realpathSync(root),
+        pid: process.pid,
+        basePath: process.env.ANX_UI_BASE_PATH ?? "",
+      }),
+    );
+  };
+  return {
+    name: "anx-e2e-identity",
+    configResolved(config) {
+      root = config.root;
+    },
+    configureServer(server) {
+      server.middlewares.use(E2E_IDENTITY_PATH, handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(E2E_IDENTITY_PATH, handler);
+    },
+  };
+}
+
 function linkedPackageRoots() {
   const roots = new Set();
   for (const spec of ["@sveltejs/kit", "@fontsource/inter"]) {
@@ -34,7 +67,7 @@ export default defineConfig(() => {
   }
 
   return {
-    plugins: [sveltekit()],
+    plugins: [sveltekit(), e2eIdentityPlugin()],
     server: {
       fs: {
         allow: [

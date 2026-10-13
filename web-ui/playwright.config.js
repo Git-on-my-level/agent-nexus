@@ -102,6 +102,10 @@ const webServer = preview
 
 export default defineConfig({
   testDir: "tests/e2e",
+  // Prove the servers belong to this checkout before any spec runs: a reused
+  // or mis-pinned server fails as "element(s) not found" and reads as an app
+  // regression. See e2eIdentity.js.
+  globalSetup: "./playwright.identity.js",
   fullyParallel: true,
   forbidOnly: isCi,
   retries: isCi ? 2 : 0,
