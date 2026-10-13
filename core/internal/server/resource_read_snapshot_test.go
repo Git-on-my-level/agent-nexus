@@ -21,6 +21,9 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
+	if err := env.workspace.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "page-owner", "page-owner-actor", "page.owner", "page-owner-token")
 	stranger := seedMachinePrincipalForLockoutTest(t, ctx, db, "page-stranger", "page-stranger-actor", "page.stranger", "page-stranger-token")
 	s := env.primitiveStore.(*primitives.Store)
@@ -37,6 +40,26 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 	}
 	thread := anyString(card.Card["thread_id"])
 	seedStreamPrivacyInbox(t, s, thread, streamPrivacyInboxItem(thread, "page-private-inbox", "PrivatePageSentinel"))
+	for done := false; !done; {
+		var err error
+		done, err = env.workspace.MaintainCompactAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for done := false; !done; {
+		done, err = env.workspace.MaintainStableAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof, err := env.workspace.VerifyCompactAccessCutover(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = env.workspace.CutoverCompactAccess(ctx, proof); err != nil {
+		t.Fatal(err)
+	}
 	db.SetMaxOpenConns(1)
 	paths := []string{"/cards/" + anyString(card.Card["id"]), "/boards/" + anyString(board["id"]) + "/cards/" + anyString(card.Card["id"]), "/inbox?limit=50", "/overview", "/overview?summary=1&work_view=summary", "/overview/changes"}
 	for _, live := range []bool{false, true} {
@@ -61,28 +84,36 @@ func TestResourcePageSnapshotAuthenticationAndSingleConnection(t *testing.T) {
 					t.Fatal("private page disclosed")
 				}
 			}
-			for _, path := range paths {
-				request(owner.AccessToken, path, 200)
-				status := 404
-				if strings.HasPrefix(path, "/inbox") || strings.HasPrefix(path, "/overview") {
-					status = 200
-				}
-				request(stranger.AccessToken, path, status)
-			}
-			// Warm closure caches never extend credential lifetime or bypass revocation.
-			for _, column := range []string{"expires_at", "revoked_at"} {
-				if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`='2000-01-01T00:00:00Z' WHERE agent_id=?`, owner.AgentID); err != nil {
+			for _, forceLegacy := range []bool{false, true, false} {
+				if err := env.workspace.SetCompactAccessLegacyReads(ctx, forceLegacy); err != nil {
 					t.Fatal(err)
 				}
 				for _, path := range paths {
-					request(owner.AccessToken, path, 401)
+					request(owner.AccessToken, path, 200)
+					status := 404
+					if strings.HasPrefix(path, "/inbox") || strings.HasPrefix(path, "/overview") {
+						status = 200
+					}
+					request(stranger.AccessToken, path, status)
 				}
-				reset := `NULL`
-				if column == "expires_at" {
-					reset = `'2099-01-01T00:00:00Z'`
-				}
-				if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`=`+reset+` WHERE agent_id=?`, owner.AgentID); err != nil {
+				if _, err := env.workspace.VerifyCompactAccessShadow(ctx); err != nil {
 					t.Fatal(err)
+				}
+				// Warm closure caches never extend credential lifetime or bypass revocation.
+				for _, column := range []string{"expires_at", "revoked_at"} {
+					if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`='2000-01-01T00:00:00Z' WHERE agent_id=?`, owner.AgentID); err != nil {
+						t.Fatal(err)
+					}
+					for _, path := range paths {
+						request(owner.AccessToken, path, 401)
+					}
+					reset := `NULL`
+					if column == "expires_at" {
+						reset = `'2099-01-01T00:00:00Z'`
+					}
+					if _, err = db.Exec(`UPDATE auth_access_tokens SET `+column+`=`+reset+` WHERE agent_id=?`, owner.AgentID); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 		})

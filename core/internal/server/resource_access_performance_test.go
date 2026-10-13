@@ -27,6 +27,14 @@ import (
 // every canonical collection. The former closure matched all stored prose once
 // per denied identity, making even identity and bounded collection reads stall.
 func TestResourceAccessCommonReadPerformance(t *testing.T) {
+	testResourceAccessCommonReadPerformance(t, false)
+}
+
+func TestCompactAccessCommonReadPerformance(t *testing.T) {
+	testResourceAccessCommonReadPerformance(t, true)
+}
+
+func testResourceAccessCommonReadPerformance(t *testing.T, compact bool) {
 	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
@@ -187,6 +195,27 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 		`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<16383) INSERT INTO host_keys(id,host_id,public_key,created_at,revoked_at) SELECT 'scale-key-'||i,'scale-host-'||(i/4),'fixture',printf('2026-01-01T00:00:%02dZ',i%4),'revoked' FROM n`,
 	} {
 		if _, err := env.workspace.DB().ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if compact {
+		if err := env.workspace.InitializeCompactAccessShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, batch := range []func(context.Context) (bool, error){env.workspace.MaintainCompactAccessBatch, env.workspace.MaintainStableAccessBatch} {
+			for done := false; !done; {
+				var err error
+				done, err = batch(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		proof, err := env.workspace.VerifyCompactAccessCutover(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = env.workspace.CutoverCompactAccess(ctx, proof); err != nil {
 			t.Fatal(err)
 		}
 	}

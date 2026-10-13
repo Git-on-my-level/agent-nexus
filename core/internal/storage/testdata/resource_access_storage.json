@@ -704,7 +704,32 @@
       "target_id": "scope:edge-endpoints",
       "target_type": "scope:edge-endpoints"
     },
+    "resource_access_compact_control": {
+      "force_legacy": "internal:authorization",
+      "generation": "internal:authorization",
+      "raw_cursor": "internal:authorization",
+      "raw_done": "internal:authorization",
+      "reader": "internal:authorization",
+      "singleton": "internal:authorization",
+      "stable": "internal:authorization"
+    },
+    "resource_access_compact_edges": {
+      "edge_id": "internal:authorization",
+      "target_key": "internal:authorization"
+    },
+    "resource_access_compact_job": {
+      "cursor": "internal:authorization",
+      "done": "internal:authorization",
+      "singleton": "internal:authorization"
+    },
+    "resource_access_compact_reconstructed": {
+      "edge_id": "internal:authorization",
+      "source_id": "internal:authorization",
+      "source_kind": "internal:authorization",
+      "target_key": "internal:authorization"
+    },
     "resource_access_edges": {
+      "edge_id": "internal:authorization",
       "source_id": "internal:authorization",
       "source_kind": "internal:authorization",
       "target_ref": "internal:authorization"
@@ -756,6 +781,12 @@
     "resource_access_series_unknown": {
       "labels": "internal:authorization",
       "series": "internal:authorization"
+    },
+    "resource_access_stable_edges": {
+      "edge_id": "internal:authorization",
+      "source_id": "internal:authorization",
+      "source_kind": "internal:authorization",
+      "target_ref": "internal:authorization"
     },
     "resource_access_tombstones": {
       "id": "internal:authorization",
@@ -1011,9 +1042,10 @@
     }
   },
   "writers": {
+    "../../cmd/anx-access-reclaim/main.go:main": "568c3b7d462b7b62611eeea0859465ab930b6e5adc4ffc816d6c5d2fc12b275e",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-    "../../cmd/anx-core/main.go:main": "9157deef5fc0470bf866bd7d8a7a08732c1df08ef494a7256df5565171aaccf2",
+    "../../cmd/anx-core/main.go:main": "ab6b07b207c0db9ab15979754339cd3f038326d81f2f569fdc1598ba0be995d3",
     "../../cmd/anx-core/main.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
     "../../cmd/anx-observe/main.go:load": "07b08a12c195d92fa958af2c0f460af0ca25a9acd678f9db3ce624675b73407f",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
@@ -1743,7 +1775,7 @@
     "../primitives/receipt_stream.go:*Store:advanceReceiptVisibility": "c082294cdfc2520a53499c32f1fc87f9cb4026b6849efd2e94fba93f4f7a32f5",
     "../primitives/receipt_stream.go:*Store:listReceiptSnapshotPage": "39d852280d5074cab60a9791ae10f626e9851237ea718bbd06b6ee20cffa57b5",
     "../primitives/receipt_stream.go:*Store:listReceiptTailPage": "1b7fc78d975ce945a97c4353bd02a737ab1686d461e505719c07ac4fcc0b5098",
-    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "55bbebed7e2b83f9bb7cf1a2cd9cb56b86628b8992b409784dc08b17e5b857b3",
+    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "1e1be78c90fc7343823c2a8dc5de32697c2d97a1859a08d3be8ec91869726c1b",
     "../primitives/receipt_stream.go:*Store:receiptDenial": "3da86b58d83c174f9ebf2d0d0ce6a930c70e2d1e03e2cb7f5575887af3fe30fc",
     "../primitives/receipt_stream.go:*Store:receiptStreamHead": "1aba0745bc7e013e78c4a5ffd401b6b045b95a6d44e6405c3bda6d13180ec340",
     "../primitives/receipt_stream.go:*Store:receiptThreadDenied": "1e8d1a0bb697e38ea451ac80b4c4ce9bacba820b06728a7ced021fc54f935076",
@@ -1968,7 +2000,7 @@
     "../resourceaccess/database.go:*Tx:Rollback": "7159b2ff622c9a278d74fed8c19c308e7b8420f69dae46a0e1ed4461b0c80a5f",
     "../resourceaccess/database.go:ReadQuery": "6473044fc64daeebe4e9c46d0103a0139729e7e65c2de5aa5b8fede3b1d3ad79",
     "../resourceaccess/database.go:readOnDB": "587aaf349c448a43c1f35314dc751f9f885498dca758e226e1292ad95ac61a91",
-    "../resourceaccess/pm_index.go:InstallPMAccess": "51a61104a6ae0833167d3bd63a564b8d1573b27e461ffc61dd3890c934acdd26",
+    "../resourceaccess/pm_index.go:InstallPMAccess": "e5983be65ecf7a23050b7617587562dfd1fbdf4e72009ed6e41cdae4b364cfad",
     "../resourceaccess/sql_values.go:StructuredSQLArguments": "15fd80936159abac6e905b50ef115fb5fbbef559d33e10fb9c87aac41f51b30a",
     "../router/models.go:type:AgentBridgeCheckin": "404f6a97ca734891541a5ad4ac357497fed04ec438f886ccc6d6736f6eda501e",
     "../router/router.go:*Service:Run": "024d53af4c127c31b494427871d44923950d433816d8d81c4c115b32ca9204c1",
@@ -2567,7 +2599,7 @@
     "../sidecar/host.go:*Host:Snapshot": "608c2d62a7e43ac5ac617777db0e0d0e2fccf8a01dc703fbc0dc8fb5eb2489d6",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunk": "de0470922100f7cb4a40ddce4962d1bf996fff6eea6907277a3e07d70595acd5",
     "../storage/access_mentions.go:installResourceAccessEpochTriggers": "53b0d7bb0a166d97a798350b8ba03aefc195661b13da7d35ba216b5305cee768",
-    "../storage/access_mentions.go:installResourceAccessMentions": "4ee1da164b6a3145fe46446b0621713ee980722537520962bccd88e48fc75d96",
+    "../storage/access_mentions.go:installResourceAccessMentions": "f7b61863795e452021d96de8d321538ec48220053a3bc02d8398ee91fc69bb8a",
     "../storage/access_mentions.go:installResourceAccessRevisionHandles": "27726e0607b67094a2951130e0294cde68339533fd4baa9cb1b8e300c4b5f4d7",
     "../storage/access_read_indexes.go:indexResourceAccessProfiles": "58b4b107d6f9aa1dac75b7abe56cf93cc21fccbd76fad4349c1def7b87e8f5e1",
     "../storage/access_read_indexes.go:repairResourceAccessReadIndexes": "c3ef8b7596eb7f3bec8c1f92fef267caf0cd54ca6b8fe4875a07ee430d22ed7d",
@@ -2579,6 +2611,21 @@
     "../storage/ask_subjects.go:installAskSubjects": "256cd223e74c3b5a38b36e68cef15494e480414766aa0026cfbaba42320d842e",
     "../storage/ask_subscriptions.go:installAskSubscriptions": "97c43a9ed98833feb66fed18b255bbcef09d5d77c1d6da7ecd8f8b73a3aefc69",
     "../storage/board_role_migration.go:applyMigration64BoardRole": "88b96b88270c47c83030c7978ee37a37e17d8c51eb84781939269baf5a49187e",
+    "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "51252c93d11c4d16fbc5d173e0c4f7a8af6c89c4e707f4ada6f4370b894e5f0d",
+    "../storage/compact_access.go:*Workspace:MaintainCompactAccessBatch": "3899faa70168581d6146877248687e99deb04e7be9627998b10caf013e2834ed",
+    "../storage/compact_access.go:*Workspace:RunCompactAccessMigration": "e0eb5501c43c5517450fb0f3051f12b28682ddd8b255892c30b3daef7e1416e9",
+    "../storage/compact_access.go:*Workspace:VerifyCompactAccessShadow": "9e9c68f1e05618dfb7451808926292a19243ebf98b003940ea02195c17bc5011",
+    "../storage/compact_access.go:*Workspace:initializeCompactAccessMetadata": "371955198f4c4cae4708a41447b4185c79b5de0627dc92176afd930dcb7f6111",
+    "../storage/compact_access.go:*Workspace:maintainCompactAccessChunk": "6ca313f4ed2b76dbf755cae21135a7fe03a6e77e5469b1039b91825c7a9b6e4e",
+    "../storage/compact_access.go:verifyCompactAccess": "3e7e4a80e75f3e82a636b6bee2ea2752eb182b05200f68cf675051fcb99adc44",
+    "../storage/compact_access_cutover.go:*Workspace:CutoverCompactAccess": "a6f3728fc8398d81bba5ee85f45f750dd40efa34dd0e21e58d8b0caac24ffe07",
+    "../storage/compact_access_cutover.go:*Workspace:MaintainStableAccessBatch": "e6c0f18c5eac75a75f3404927f4485173d4cb5f1647b52f86a1c58c4c187a897",
+    "../storage/compact_access_cutover.go:*Workspace:RollbackCompactAccess": "dfc304fbb120339563b175348e5193be25b05260e6aab07a6917069d40d627f1",
+    "../storage/compact_access_cutover.go:*Workspace:SetCompactAccessLegacyReads": "ac0828b6336d8f7c5b246d0c63bb97deac54fc14d0438e3f1d2b0051785592a1",
+    "../storage/compact_access_cutover.go:*Workspace:VerifyCompactAccessCutover": "5feac3c8a4f838877ccb6c107f22d1d185c674f61637f5c2bbb0c0cc7cc08d03",
+    "../storage/compact_access_cutover.go:enableCompactAccessLease": "f92b83fff6ddffb1fc7c7e208fb4ec9b3d61cdf24ed546dae63018c0c8027775",
+    "../storage/compact_access_cutover.go:installStableAccessEdges": "f1bf07771df2a2eb637d83ade6925b8e697fe0e8d85e0c05bf9cf4081d67260c",
+    "../storage/compact_access_reclaim.go:ReclaimCompactAccessOffline": "250f2bd14832a500bbfad7499f02d59fc67d3bc519b5c847319158963ebbc887",
     "../storage/event_stream.go:indexBoundedEventStreamReads": "7f9a37b118d152e0762d5704c3dded5b9a9397e3597911f792568e926638518c",
     "../storage/evidence_index.go:applyMigration65EvidenceIndex": "e4bb6d285505af13d6d4b8be58137cb4272e1794e6d611e25dd791d2d0cf8bdb",
     "../storage/evidence_index.go:installExternalKeyReferenceEdges": "c3c9b2d93298de4cb8fe93e5147f4684f610c627af17e67d07eefc5ebe7d3557",
@@ -2669,7 +2716,7 @@
     "../storage/work_summary_indexes.go:maintainWorkSummaryAttention": "39940fe3c14d8538654700187433ab43e4de57640603cc00240900187f371741",
     "../storage/work_summary_indexes.go:repairPrimaryCardPhases": "49c21d3672445b805d50bb684a01480d7ee4b51af79492ab148af1cc957da19e",
     "../storage/workspace.go:*Workspace:Close": "6b1509132109f1701d126c71e60fdebb81153a932ca4d2be98377f4b08a5c17b",
-    "../storage/workspace.go:InitializeWorkspace": "7bcdef5bd6ccc8c665fe7fa601d844d1e26533d3e5bb005442db6cfe0d2909ba",
+    "../storage/workspace.go:InitializeWorkspace": "71629dd9f1a06ec16cd090006e2206f90b3eb775244ba86b897c19b6abbcac02",
     "../storage/workspace.go:sqliteDSN": "657b24a5c4048f37634b9530f18e3aef82a44d24bf012430f8df28e7ee364de5",
     "../testsql/counter.go:*connector:Connect": "6c0bcceccbaad39f0a9b8405b6635e57ec5bc0ef689e3fe03e0e7dc7fde23c9e",
     "../testsql/counter.go:*countedConn:ExecContext": "19b105025025cd75a56e6a8f55e870f8a82976666fc26612ded2ec71d4a01ce4",

@@ -2,7 +2,9 @@ package primitives
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -23,7 +25,7 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 	defer ws.Close()
 	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
 	rng := rand.New(rand.NewSource(747))
-	owners := []string{"", "alice", "bob", "carol"}
+	owners := []string{"", "alice", "bob", "carol", "agent-owner", "agent-stranger"}
 	var threads, refs []string
 	for i := 0; i < 24; i++ {
 		related := []string{}
@@ -58,6 +60,28 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 		if _, err = s.CreateBoardCard(ctx, "alice", board["id"].(string), AddBoardCardInput{Title: fmt.Sprintf("Card %d", i), ColumnKey: "ready", Refs: []string{refs[rng.Intn(len(refs))]}}); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err = ws.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		done, err = ws.MaintainCompactAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for done := false; !done; {
+		done, err = ws.MaintainStableAccessBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof, err := ws.VerifyCompactAccessCutover(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.CutoverCompactAccess(ctx, proof); err != nil {
+		t.Fatal(err)
 	}
 	queries := []string{
 		`SELECT id FROM cards ORDER BY id`,
@@ -105,6 +129,9 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		if _, err = ws.VerifyCompactAccessShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
 		for _, owner := range owners {
 			scope := AccessScope{ActorID: owner}
 			pin, closeRead, err := s.BeginResourceRead(WithRequestAccessScope(ctx, scope))
@@ -132,8 +159,29 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 				closeRead()
 				t.Fatal("reference policy was bypassed")
 			}
+			// Test-only reader substitution exercises the SAME canonical policy over
+			// the reconstructed compact relation. Production cannot select this view.
+			compact := resourceaccess.WithPolicy(WithAccessScope(ctx, scope), resourceaccess.Policy{
+				Read: func(q string) string {
+					return strings.ReplaceAll(scopeRead(WithAccessScope(ctx, scope), q), resourceaccess.CompactReaderSQL, "1")
+				},
+			})
+			legacy := resourceaccess.WithPolicy(WithAccessScope(ctx, scope), resourceaccess.Policy{
+				Read: func(q string) string {
+					return strings.ReplaceAll(scopeRead(WithAccessScope(ctx, scope), q), resourceaccess.CompactReaderSQL, "0")
+				},
+			})
+			// Compare the complete denial closure once per principal/round. Every
+			// relation predicate uses this same closure; the remaining ordered-query
+			// matrix checks the original pinned and point-reader policies below.
+			closure := `SELECT json_array(kind,id) FROM _anx_denied ORDER BY kind,id`
+			if got, want := read(compact, closure), read(legacy, closure); got != want {
+				closeRead()
+				t.Fatalf("compact denial divergence round=%d actor=%q got=%s want=%s", round, owner, got, want)
+			}
+			comparisons++
 			for _, q := range queries {
-				want := read(WithAccessScope(ctx, scope), q)
+				want := read(legacy, q)
 				for _, c := range []context.Context{old, pin} {
 					if got := read(c, q); got != want {
 						closeRead()
@@ -164,6 +212,52 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 			}
 			closeRead()
 		}
+	}
+	writeCtx, stopWrites := context.WithCancel(ctx)
+	writerDone := make(chan error, 1)
+	go func() {
+		for i := 0; ; i++ {
+			if writeCtx.Err() != nil {
+				writerDone <- nil
+				return
+			}
+			_, err := ws.DB().ExecContext(writeCtx, `UPDATE threads SET body_json=json_set(body_json,'$.pm_actor_id',?) WHERE id=?`, owners[i%len(owners)], threads[0])
+			if err != nil {
+				if errors.Is(err, context.Canceled) || writeCtx.Err() != nil {
+					err = nil
+				}
+				writerDone <- err
+				return
+			}
+		}
+	}()
+	defer func() {
+		stopWrites()
+		if err := <-writerDone; err != nil {
+			t.Error(err)
+		}
+	}()
+	for i := 0; i < 40; i++ {
+		scoped := WithAccessScope(ctx, AccessScope{ActorID: owners[i%len(owners)]})
+		query := scopeRead(scoped, `SELECT coalesce(json_group_array(json_array(kind,id)),'[]') FROM (SELECT kind,id FROM _anx_denied ORDER BY kind,id)`)
+		tx, err := ws.DB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var legacyResult, compactResult string
+		if err = tx.QueryRowContext(ctx, strings.ReplaceAll(query, resourceaccess.CompactReaderSQL, "0")).Scan(&legacyResult); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err = tx.QueryRowContext(ctx, strings.ReplaceAll(query, resourceaccess.CompactReaderSQL, "1")).Scan(&compactResult); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		tx.Rollback()
+		if legacyResult != compactResult {
+			t.Fatal("concurrent old/compact authorization divergence")
+		}
+		comparisons++
 	}
 	t.Logf("seed=747 byte-equivalent result comparisons=%d Overview comparisons=%d", comparisons, overviewComparisons)
 }

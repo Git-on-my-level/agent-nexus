@@ -29,6 +29,7 @@ type Workspace struct {
 	closeOnce           sync.Once
 	askSubjectsBatch    adaptiveMaintenanceBatch
 	inboxLifecycleBatch adaptiveMaintenanceBatch
+	compactAccessBatch  adaptiveMaintenanceBatch
 	closeErr            error
 }
 
@@ -78,6 +79,10 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		return nil, err
 	}
 
+	if err := enableCompactAccessLease(ctx, db, processLock, layout.RootDir); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := applyWorkspaceMigrations(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -94,8 +99,13 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		return nil, err
 	}
 
+	w := &Workspace{layout: layout, db: db, processLock: processLock}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	succeeded = true
-	return &Workspace{layout: layout, db: db, processLock: processLock}, nil
+	return w, nil
 }
 
 func ensureLayout(layout Layout) error {

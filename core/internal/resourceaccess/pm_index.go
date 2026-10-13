@@ -27,9 +27,9 @@ func InstallPMAccess(ctx context.Context, tx *sql.Tx, rebuild bool) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS resource_access_pm_refs(kind TEXT NOT NULL,id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(kind,id,target_ref))`,
 		`CREATE INDEX IF NOT EXISTS idx_access_pm_refs_source ON resource_access_pm_refs(id,target_ref)`,
-		`CREATE TRIGGER IF NOT EXISTS access_pm_ref_insert AFTER INSERT ON resource_access_pm_refs BEGIN INSERT INTO resource_access_edges VALUES('pm',NEW.id,NEW.target_ref) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS access_pm_ref_insert AFTER INSERT ON resource_access_pm_refs BEGIN INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('pm',NEW.id,NEW.target_ref) ON CONFLICT DO NOTHING; END`,
 		`CREATE TRIGGER IF NOT EXISTS access_pm_ref_delete AFTER DELETE ON resource_access_pm_refs BEGIN DELETE FROM resource_access_edges WHERE source_kind='pm' AND source_id=OLD.id AND target_ref=OLD.target_ref AND NOT EXISTS(SELECT 1 FROM resource_access_pm_refs WHERE id=OLD.id AND target_ref=OLD.target_ref); END`,
-		`CREATE TRIGGER IF NOT EXISTS access_pm_ref_update AFTER UPDATE ON resource_access_pm_refs BEGIN DELETE FROM resource_access_edges WHERE source_kind='pm' AND source_id=OLD.id AND target_ref=OLD.target_ref AND NOT EXISTS(SELECT 1 FROM resource_access_pm_refs WHERE id=OLD.id AND target_ref=OLD.target_ref); INSERT INTO resource_access_edges VALUES('pm',NEW.id,NEW.target_ref) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS access_pm_ref_update AFTER UPDATE ON resource_access_pm_refs BEGIN DELETE FROM resource_access_edges WHERE source_kind='pm' AND source_id=OLD.id AND target_ref=OLD.target_ref AND NOT EXISTS(SELECT 1 FROM resource_access_pm_refs WHERE id=OLD.id AND target_ref=OLD.target_ref); INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('pm',NEW.id,NEW.target_ref) ON CONFLICT DO NOTHING; END`,
 		`DROP TRIGGER IF EXISTS access_pm_records_insert`,
 		`DROP TRIGGER IF EXISTS access_pm_records_update`,
 		`DROP TRIGGER IF EXISTS access_pm_records_delete`,

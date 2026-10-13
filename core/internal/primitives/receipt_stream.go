@@ -334,8 +334,9 @@ func (s *Store) loadVisibleReceipts(ctx context.Context, threadID string, ids []
 	}
 	keys, _ := json.Marshal(ids)
 	rows, err := s.db.QueryContext(ctx, `SELECT p.wakeup_id,p.thread_id,p.trigger_event_id,
-  COALESCE((SELECT json_group_array(x.target_key) FROM resource_access_edges e
-   CROSS JOIN resource_access_exact_edges x ON x.edge_id=e.rowid WHERE e.source_kind='wakeup' AND e.source_id=p.wakeup_id),'[]'),
+  COALESCE((SELECT json_group_array(CASE WHEN (SELECT reader=1 AND force_legacy=0 FROM resource_access_compact_control WHERE singleton=1) THEN
+    (SELECT lower(hex(c.target_key)) FROM resource_access_compact_edges c WHERE c.edge_id=e.rowid) ELSE
+    (SELECT x.target_key FROM resource_access_exact_edges x WHERE x.edge_id=e.rowid) END) FROM resource_access_edges e WHERE e.source_kind='wakeup' AND e.source_id=p.wakeup_id),'[]'),
   COALESCE((SELECT json_group_array(json_array(i.kind,i.resource_id)) FROM resource_access_edges e
    CROSS JOIN resource_access_mentions m ON m.edge_id=e.rowid
    JOIN resource_access_identities i ON i.identity_id=m.identity_id WHERE e.source_kind='wakeup' AND e.source_id=p.wakeup_id),'[]'),
