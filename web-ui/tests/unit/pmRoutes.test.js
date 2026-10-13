@@ -9,6 +9,8 @@ import {
 } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { clearPrincipalLocalWork } from "../../src/lib/localWorkStore.js";
+import { readerScope } from "../../src/lib/readerScope.js";
 const state = vi.hoisted(() => {
   let value = {
     url: new URL("http://localhost/o/local/w/local/tasks"),
@@ -71,6 +73,7 @@ const capturedScopes = vi.hoisted(() => []);
 vi.mock("$app/stores", () => ({ page: { subscribe: state.subscribe } }));
 vi.mock("$lib/coreClient", () => ({
   coreClient: client,
+  createLocalMutationClient: () => client,
   createInboxSourceClient: () => client,
   // The sender is bound to one workspace; record which, so a test can tell
   // where an answer was actually sent.
@@ -147,7 +150,8 @@ function deferred() {
   });
   return { promise, resolve };
 }
-beforeEach(() => {
+beforeEach(async () => {
+  await clearPrincipalLocalWork(getStore(readerScope));
   localStorage.clear();
   Object.defineProperty(navigator, "locks", {
     configurable: true,
@@ -175,7 +179,8 @@ beforeEach(() => {
       new Promise((resolve) => signal?.addEventListener("abort", resolve)),
   );
 });
-afterEach(() => {
+afterEach(async () => {
+  await clearPrincipalLocalWork(getStore(readerScope));
   cleanup();
   resetInboxResponseQueue();
   capturedScopes.length = 0;
@@ -734,10 +739,13 @@ describe("PM operator interactions", () => {
       target: { value: "What remains uncertain?" },
     });
     await fireEvent.submit(input.closest("form"));
-    await screen.findByText("Bridge unavailable");
-    expect(input.value).toBe("What remains uncertain?");
-    await fireEvent.submit(input.closest("form"));
-    await waitFor(() => expect(client.sendPmMessage).toHaveBeenCalledTimes(2));
+    await screen.findByText("Retrying");
+    expect(screen.getByLabelText("Saved message").value).toBe(
+      "What remains uncertain?",
+    );
+    await waitFor(() => expect(client.sendPmMessage).toHaveBeenCalledTimes(2), {
+      timeout: 4000,
+    });
     expect(client.sendPmMessage.mock.calls[0][1]).toEqual(
       client.sendPmMessage.mock.calls[1][1],
     );
@@ -786,11 +794,16 @@ describe("PM operator interactions", () => {
     });
     await fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await screen.findByText("Pending delivery", { exact: true });
-    expect(client.answerPmDecision).toHaveBeenCalledWith("decision-one", {
-      revision: 2,
-      approve: true,
-      text: "Within the stated scope",
-    });
+    expect(client.answerPmDecision).toHaveBeenCalledWith(
+      "decision-one",
+      expect.objectContaining({
+        revision: 2,
+        approve: true,
+        text: "Within the stated scope",
+        actor_id: "human",
+        request_key: expect.any(String),
+      }),
+    );
     expect(client.dispatchPmDecision).not.toHaveBeenCalled();
     await fireEvent.click(
       screen.getByRole("button", { name: "Deliver approved instruction" }),
@@ -1255,7 +1268,7 @@ describe("PM operator interactions", () => {
     ).toBe(false);
     pending.resolve({ refresh: { state: "queued" } });
   });
-  it("blocks navigation while a PM message is being submitted", async () => {
+  it("allows navigation after a PM message has been saved locally", async () => {
     state.route("/pm?conversation=conversation-one");
     client.getPmConversation.mockResolvedValue({
       conversation: { id: "conversation-one", title: "Sample discussion" },
@@ -1270,8 +1283,8 @@ describe("PM operator interactions", () => {
     await fireEvent.submit(input.closest("form"));
     await waitFor(() => expect(client.sendPmMessage).toHaveBeenCalledTimes(1));
     const cancel = vi.fn();
-    navigation.guards[0]({ cancel });
-    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(navigation.guards).toEqual([]);
+    expect(cancel).not.toHaveBeenCalled();
     pending.resolve({ id: "turn-one" });
   });
 

@@ -233,7 +233,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				ctx = s.deps.BindRequesterContext(ctx, p)
 			}
 		}
-		out = s.decisionResponse(ctx, p, value)
+		if len(value.AnswerReplayJSON) > 0 {
+			out = value.AnswerReplayJSON
+		} else {
+			out = s.decisionResponse(ctx, p, value)
+		}
 	case Page[Decision]:
 		items := make([]any, 0, len(value.Items))
 		for _, d := range value.Items {

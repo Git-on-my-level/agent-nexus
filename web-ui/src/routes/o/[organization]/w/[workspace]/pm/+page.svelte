@@ -1,7 +1,12 @@
 <script>
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
-  import { beforeNavigate, goto } from "$app/navigation";
+  import { goto } from "$app/navigation";
+  import { get } from "svelte/store";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { enqueuePmMessage, mutationOutbox } from "$lib/mutationOutbox.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
@@ -85,17 +90,24 @@
   let threadInnerElement = $state(null);
   let composerElement = $state(null);
   let olderLoaded = false;
-  let creationKey, requestKey, requestText, createdConversationId;
-  // Conversations this tab created whose first message was refused: they
-  // exist at core, but nothing was said in them, so History skips them until
-  // a message lands (the retry still uses the same conversation).
-  let unsentConversations = $state(new Set());
+  let createdConversationId = $state("");
+  let unsentConversations = $derived(
+    new Set(
+      $mutationOutbox
+        .filter(
+          (entry) =>
+            entry.operation === "pm.chat.send" &&
+            !entry.request.conversation_id,
+        )
+        .map((entry) => entry.receipt?.conversationId)
+        .filter(Boolean),
+    ),
+  );
   let requestId = 0;
   let decisionFetch = 0;
   let pollInFlight = false;
   let anchored = false;
   const pendingDecisions = new Set();
-  const retryKeys = new Map();
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
@@ -159,28 +171,21 @@
     turns.flatMap((turn) => candidateDecisionIdsFromTurn(turn)),
   );
   let waiting = $derived(hasPendingTurn(turns, now));
-  // "Your draft stays in the composer" holds across navigation too: the
-  // draft is kept per conversation for this tab until it is sent.
-  function draftStorageKey(scope) {
-    return `anx.pm.draft:${$page.params.workspace}:${String(scope ?? "").split("\n")[0] || "new"}`;
+  let composerTarget = $derived(
+    selectedId
+      ? `pm:conversation:${selectedId}`
+      : `pm:new:${JSON.stringify([workRef, pinnedRefs(null, $page.url.searchParams)])}`,
+  );
+  let savedMessage = $derived(
+    $mutationOutbox.find((entry) => entry.target === composerTarget),
+  );
+  function composerSnapshot() {
+    return { text: draft, conversationId: createdConversationId };
   }
-  function readDraft(scope) {
-    try {
-      return sessionStorage.getItem(draftStorageKey(scope)) || "";
-    } catch {
-      return "";
-    }
+  function restoreComposer(value) {
+    draft = value?.text ?? "";
+    createdConversationId = value?.conversationId ?? "";
   }
-  $effect(() => {
-    const key = draftStorageKey(conversationScope);
-    const text = draft;
-    try {
-      if (text.trim()) sessionStorage.setItem(key, text);
-      else sessionStorage.removeItem(key);
-    } catch {
-      // Storage may be unavailable; the draft still lives in the composer.
-    }
-  });
   let sessionExpired = $state(false);
   function signInAgain() {
     restartSession({
@@ -227,21 +232,6 @@
     expandedSources = new Set([...expandedSources, turnId]);
   }
 
-  beforeNavigate(({ cancel, type }) => {
-    if (sending) {
-      cancel();
-      return;
-    }
-    // Full-page unloads are covered by onbeforeunload.
-    if (type === "leave") return;
-    if (
-      draft.trim() &&
-      !sending &&
-      !window.confirm("Leave with an unsent PM message?")
-    )
-      cancel();
-  });
-
   let conversationScope;
   $effect(() => {
     const key = selectedKey;
@@ -255,13 +245,7 @@
       historyOpen = false;
       // A reload or deep link lands here once with an empty composer; the
       // draft promised to the reader is in this tab's storage.
-      if (firstRun && !draft.trim()) draft = readDraft(key);
       if (switched) {
-        createdConversationId = "";
-        creationKey = "";
-        requestKey = "";
-        requestText = "";
-        draft = readDraft(key);
         anchored = false;
       }
       void loadConversation(key.split("\n")[0]);
@@ -579,84 +563,91 @@
     return true;
   }
 
-  async function send(event) {
+  async function send(event, key) {
     event?.preventDefault?.();
     const pointerSend =
       event?.type === "submit" && event.submitter instanceof HTMLElement;
     const text = draft.trim();
-    if (!text || sending || !ready) return;
+    if (!text || sending || !ready || savedMessage) return;
+    const target = composerTarget;
+    const scope = get(localWorkScope);
+    const original = draft;
     sending = true;
     error = "";
     errorFromSend = false;
-    if (!requestKey || text !== requestText) {
-      requestKey = crypto.randomUUID();
-      requestText = text;
-    }
     try {
-      let id = selectedId || createdConversationId;
-      if (!id) {
-        creationKey ||= crypto.randomUUID();
-        const result = await coreClient.createPmConversation({
-          request_key: creationKey,
-          title: text.slice(0, 100),
-          ...(workRef ? { work_ref: workRef } : {}),
-          ...(contextRefs.length ? { context_refs: contextRefs } : {}),
-        });
-        if (!result.id)
-          throw new Error(
-            "Conversation creation did not return an identifier. Retry with the same request.",
-          );
-        id = result.id;
-        createdConversationId = id;
-        unsentConversations = new Set([...unsentConversations, id]);
-      }
-      const turn = await coreClient.sendPmMessage(id, {
-        request_key: requestKey,
+      await enqueuePmMessage({
+        conversationId: selectedId || createdConversationId,
         text,
+        workRef,
+        contextRefs,
+        key,
+        target,
+        draft: composerSnapshot(),
+        href: workspaceHref(`/pm${$page.url.search}`),
+        title: "Saved PM message",
       });
-      if (!turn.id)
-        throw new Error(
-          "The message receipt is incomplete. Your draft is retained; retry uses the same request key.",
-        );
-      draft = "";
-      requestKey = "";
-      requestText = "";
-      if (unsentConversations.has(id)) {
-        const next = new Set(unsentConversations);
-        next.delete(id);
-        unsentConversations = next;
+      if (
+        scope === get(localWorkScope) &&
+        target === composerTarget &&
+        draft === original
+      )
+        draft = "";
+    } catch {
+      if (scope === get(localWorkScope) && target === composerTarget) {
+        error =
+          "Your message is still here. Check its saved status below, or copy it before closing this tab.";
+        errorFromSend = true;
       }
-      await loadList();
-      if (selectedId !== id) {
-        sending = false;
-        await goto(workspaceHref(`/pm?conversation=${encodeURIComponent(id)}`));
-      } else await loadConversation(id, true);
-    } catch (err) {
-      if (await redirectIfPmGone(err)) return;
-      error = errorMessage(err);
-      errorFromSend = true;
     } finally {
       sending = false;
-      // Keyboard send keeps the caret in the composer; pointer send should not
-      // yank focus back after the operator clicked Send.
-      if (!pointerSend) {
+      if (
+        !pointerSend &&
+        scope === get(localWorkScope) &&
+        target === composerTarget
+      )
         void tick().then(() => composerElement?.focus());
-      }
     }
   }
-  /**
-   * Resend a turn the PM never answered. The key is stable per turn, so
-   * repeated retries of the same message stay one intent at core.
-   */
   async function retryTurn(turn) {
-    const text = String(turn?.text ?? "").trim();
-    if (!text || sending || !ready) return;
-    if (!retryKeys.has(turn.id)) retryKeys.set(turn.id, crypto.randomUUID());
-    requestKey = retryKeys.get(turn.id);
-    requestText = text;
-    draft = text;
-    await send();
+    if (sending || savedMessage || !ready || !turn?.text) return;
+    draft = turn.text;
+    await send(null, `pm-retry:${turn.id}`);
   }
+  onMount(() => {
+    const confirmed = async (event) => {
+      const entry = event.detail;
+      if (
+        entry?.operation !== "pm.chat.send" ||
+        entry.scope !== get(localWorkScope)
+      )
+        return;
+      try {
+        await loadList();
+        if (
+          entry.target !== composerTarget ||
+          entry.scope !== get(localWorkScope)
+        )
+          return;
+        const id =
+          entry.result?.conversationId ||
+          entry.receipt?.conversationId ||
+          entry.request.conversation_id;
+        if (!id) return;
+        createdConversationId = id;
+        if (selectedId !== id && !draft.trim())
+          await goto(
+            workspaceHref(`/pm?conversation=${encodeURIComponent(id)}`),
+          );
+        else await loadConversation(id, true);
+      } catch {
+        /* Confirmation stays true even when its read refresh fails. */
+      }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
   function onComposerKeydown(event) {
     if (event.key !== "Enter" || event.isComposing || event.shiftKey) return;
     event.preventDefault();
@@ -781,14 +772,6 @@
   </ol>
 {/snippet}
 
-<svelte:window
-  onbeforeunload={(event) => {
-    if (draft.trim()) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-  }}
-/>
 <WorkspacePageShell class="pm-page">
   <div class="pm-head">
     <!--
@@ -1213,7 +1196,17 @@
         >Jump to latest ↓</button
       >
     {/if}
-    <form class="pm-composer" onsubmit={send}>
+    <form
+      class="pm-composer"
+      onsubmit={send}
+      use:durableForm={{
+        target: composerTarget,
+        value: composerSnapshot(),
+        read: composerSnapshot,
+        onRestore: restoreComposer,
+      }}
+    >
+      <MutationSendStatus target={composerTarget} />
       {#if !turns.length && !loading}
         <div class="pm-suggestions" role="group" aria-label="Starter questions">
           {#each prompts as prompt}
@@ -1253,7 +1246,7 @@
           class="pm-send"
           type="submit"
           aria-label="Send message"
-          disabled={sending || !draft.trim() || !ready}
+          disabled={sending || Boolean(savedMessage) || !draft.trim() || !ready}
         >
           <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
             <path

@@ -7,15 +7,15 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 ## Rollout and acceptance
 
 SCA-781 permits reviewable stages. The first changes cover the human-attention
-response path, the production timeout trigger, and shared discussion composers. It does not claim that every UI
+response path, the production timeout trigger, shared discussion composers, Inbox PM answers and Ask PM chat. It does not claim that every UI
 mutation already satisfies the invariant.
 
 | Stage                     | Coverage                                                                                                              | Acceptance gate                                                                                                                                                 |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Inbox response foundation | Freeform responses, suggested picks, acknowledgement/access/review outcomes, and context notes in both Inbox surfaces | IndexedDB/journal recovery, persisted requests, original-key retries, attention UX, cross-tab lock, privacy cleanup, timeout/524/offline/reload/duplicate tests |
 | Discussion foundation     | Shared thread, topic, card and document replies/comments, including reply targets and selected-quote anchors          | Atomic message-event replay, durable composer context, shared scope lock, exact-key recovery and attention UX                                                   |
-| Complete urgent surfaces  | Inbox PM decision responses and file-upload data                                                                      | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
-| Remaining authoring       | Ask PM chat, cards, documents, plans, settings and all other mutation forms                                           | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
+| PM foundation             | Inbox PM decision responses and Ask PM chat                                                                           | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
+| Remaining authoring       | Upload bytes, cards, documents, plans, settings and all other mutation forms                                          | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
 
 The issue remains in progress until all stages pass. Do not enable blind retries
 for an unaudited endpoint: an HTTP timeout can occur after the mutation committed.
@@ -27,7 +27,7 @@ principal. The scope is the existing organization/workspace/agent/actor tuple.
 A separate synchronous localStorage entry for each record checkpoints each input
 event before yielding; it closes the tab-close gap and is the fallback when
 IndexedDB is denied. IndexedDB still works when localStorage hits quota. If both
-fail, the UI warns and does not send; text stays in the open tab with a copy path.
+fail, the UI warns and does not send; text stays in memory across same-tab navigation with a copy path.
 An unavailable device store cannot honestly promise recovery after closing a tab.
 If no checkpoint has succeeded yet, closing or reloading prompts the reader to
 keep the tab open. JSON snapshots make reactive state cloneable in IndexedDB, and
@@ -98,26 +98,54 @@ a refresh error does not turn a confirmed post back into a failed send.
 
 File selection/upload itself is not yet migrated to a device blob outbox. Only
 confirmed artifact references are in these snapshots; pending upload bytes and
-other mutation operations remain explicit rollout work. PM decisions and chat
-are also still pending. This is not whole-UI coverage.
+other mutation operations remain explicit rollout work. This is not whole-UI coverage.
+
+## PM composers and answers
+
+Ask PM and the Inbox decision note use explicit `durableForm` targets. Notes,
+choice and conversation context restore under the submitting principal. The
+legacy unattributed PM session draft is no longer automatically restored and is
+removed on privacy cleanup. Normal navigation no longer discards a note or asks
+readers to abandon work that was already checkpointed.
+
+The chat adapter freezes separate creation and message keys, original actor,
+context refs and text before sending. It checkpoints the created conversation ID
+before sending its first message. A timeout or reload resumes the same step; an
+attention-state edit retains that conversation ID and uses a fresh message key.
+Conversation creation can be replayed after PM disconnect so accepted work can
+still be confirmed. Confirmation preserves newer composer text and refreshes
+history without converting a refresh failure into an uncertain mutation.
+
+The decision adapter freezes the answer revision, choice, note and original actor.
+Its original server response is saved before any existing native auto-apply step.
+The canonical action ID and guarded dispatch/reconcile flow are reused; an
+uncertain delivery is not blindly re-dispatched. Source-owned approvals retain
+separate delivery controls. Confirmed answers enter the scoped Inbox cache even
+when the originating component has unmounted. Epoch fencing still discards writes
+after sign-out or principal replacement.
 
 ## Replay audit
 
-No HTTP routes or canonical contracts change in this stage.
+No HTTP routes or database migrations are added. PM request contracts now accept
+an optional original `actor_id`, which must match the authenticated actor; decision
+answers also accept an optional `request_key`. Generated clients and CLI registries
+are regenerated from the canonical OpenAPI contract.
 
-| Path                                                  | Current evidence                                                                                                                                                                              | Next action                                                                                                              |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `POST /inbox/{id}/respond`                            | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse | Preserve full original request/key through device recovery; covered here                                                 |
-| `POST /events` (`message_posted`, including comments) | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                   | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event |
-| Document/card comments                                | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                       |
-| PM decision answers and chat                          | Separate PM commands and lifecycle                                                                                                                                                            | Audit retry keys and replay behavior before automatic retry                                                              |
-| Card/doc/plan edits and other forms                   | Diverse create/patch/action commands                                                                                                                                                          | Inventory each command, freeze original mutation intent and concurrency token, add atomic replay and durable adapters    |
+| Path                                                                              | Current evidence                                                                                                                                                                                                               | Next action                                                                                                                              |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /inbox/{id}/respond`                                                        | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse                                  | Preserve full original request/key through device recovery; covered here                                                                 |
+| `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                    | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                 |
+| Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                 | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                       |
+| `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                          |
+| PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                | Covered by composite chat adapter; replay returns the canonical turn, whose lifecycle status may advance                                 |
+| Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                   | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery |
+| Card/doc/plan edits and other forms                                               | Diverse create/patch/action commands                                                                                                                                                                                           | Inventory each command, freeze original mutation intent and concurrency token, add atomic replay and durable adapters                    |
 
 ## Checks and extension rules
 
 `durableInputContract.test.js` parses the Svelte AST to require durable draft
 actions on every authored Inbox response field, requires the shared discussion
-composer action, and rejects direct Inbox/event sends
+composer action, PM answer/chat actions, and rejects direct Inbox/event/PM answer/chat sends
 in any Svelte surface. This is a guard for the migrated scope; subsequent stages
 must extend it to all mutation forms. Do not present it as whole-UI enforcement.
 
@@ -133,7 +161,13 @@ failure, copy/edit states and state screenshots. The document layout spec also
 checks that a selected quote survives reload and is posted with its instruction
 at all four viewports.
 
-Message replay performs an indexed point lookup on the existing
+`durable-pm.spec.js` covers draft reload/tab closure, offline submission, lost
+creation/message confirmation, original-key replay across tabs, attention-state
+editing without duplicate conversation creation, newer text preservation and
+decision-answer recovery. Backend tests assert atomic decision/action/receipt
+rollback, concurrent replay, exact HTTP snapshots and fresh authorization.
+
+Message and PM answer replay perform indexed point lookups on the existing
 `(scope, actor_id, request_key)` primary key and bounded event/replay inserts in
 one transaction. Existing ownership triggers and scoped query wrappers remain
 active. No new GET/stream path, schema or migration is added.

@@ -8903,6 +8903,10 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
           "name": "context_refs",
           "type": "list\u003cstring\u003e"
         },
@@ -9118,6 +9122,12 @@ export const commandRegistry: CommandSpec[] = [
           "name": "text",
           "type": "string"
         }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
       ]
     },
     "path_params": [
@@ -9200,6 +9210,16 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "text",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]

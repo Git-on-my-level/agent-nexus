@@ -29,7 +29,11 @@ func NewStore(db *sql.DB) (*Store, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS pm_onboarding_backfill (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, first_seen_at TEXT, last_seen_at TEXT);
+	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS idempotency_replays (
+ scope TEXT NOT NULL, actor_id TEXT NOT NULL, request_key TEXT NOT NULL, request_hash TEXT NOT NULL,
+ response_status INTEGER NOT NULL, response_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(scope,actor_id,request_key));
+ CREATE TABLE IF NOT EXISTS pm_onboarding_backfill (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, first_seen_at TEXT, last_seen_at TEXT);
  CREATE TABLE IF NOT EXISTS pm_registration (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, runner TEXT NOT NULL, host TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS pm_presence (workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL, last_seen_at TEXT NOT NULL, signal TEXT NOT NULL, PRIMARY KEY(workspace_id,actor_id));
  CREATE TABLE IF NOT EXISTS pm_records (
@@ -208,7 +212,7 @@ func scanBodies[T any](rows *sql.Rows) ([]T, error) {
 }
 
 // answer commits exact approval and durable handoff intent in one transaction.
-func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int) error {
+func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int, replays ...*answerReplay) error {
 	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -242,6 +246,11 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int)
 		_, err = tx.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('action',?,?,?,?,1,?)`, a.ID, a.WorkspaceID, a.ActorID, d.ID, b)
 		if err != nil {
 			return fmt.Errorf("persist action intent: %w", err)
+		}
+	}
+	if len(replays) > 0 {
+		if err := writeAnswerReplayTx(ctx, tx, replays[0]); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()

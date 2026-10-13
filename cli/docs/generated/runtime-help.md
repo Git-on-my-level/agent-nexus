@@ -4028,6 +4028,7 @@ Inputs:
   - body `request_key` (string)
   - body `title` (string)
   Optional:
+  - body `actor_id` (string)
   - body `context_refs` (list<string>)
   - body `work_ref` (string)
 
@@ -4137,6 +4138,8 @@ Inputs:
   - path `conversation_id`
   - body `request_key` (string)
   - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4177,6 +4180,9 @@ Inputs:
   - body `approve` (boolean)
   - body `revision` (integer)
   - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 

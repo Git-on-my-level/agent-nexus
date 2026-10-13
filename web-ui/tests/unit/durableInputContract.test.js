@@ -47,7 +47,13 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
     walk(ast.instance, (node) => {
       if (
         node.type === "MemberExpression" &&
-        ["respondInboxItem", "createEvent"].includes(node.property?.name)
+        [
+          "respondInboxItem",
+          "createEvent",
+          "createPmConversation",
+          "sendPmMessage",
+          "answerPmDecision",
+        ].includes(node.property?.name)
       ) {
         throw new Error(
           `${path.slice(root.length)} bypasses a durable mutation outbox`,
@@ -73,4 +79,25 @@ it("discussion text and metadata use a durable composer and outbox", () => {
       composer += 1;
   });
   expect(composer).toBe(1);
+});
+
+it("PM chat and decision notes use durable form snapshots", () => {
+  for (const path of [
+    "routes/o/[organization]/w/[workspace]/pm/+page.svelte",
+    "lib/components/pm/DecisionPanel.svelte",
+  ]) {
+    const ast = parse(readFileSync(`${root}/${path}`, "utf8"));
+    let forms = 0;
+    walk(ast.html, (node) => {
+      if (
+        node.type === "Element" &&
+        node.name === "form" &&
+        node.attributes.some(
+          (a) => a.type === "Action" && a.name === "durableForm",
+        )
+      )
+        forms++;
+    });
+    expect(forms).toBe(1);
+  }
 });

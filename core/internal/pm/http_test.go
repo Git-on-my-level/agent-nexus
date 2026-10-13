@@ -17,7 +17,7 @@ func TestHTTPRejectsActorInjectionAndCannotApproveByDiscussion(t *testing.T) {
 		path, body string
 		status     int
 	}{
-		{"/pm/conversations", `{"request_key":"c","title":"Review","actor_id":"admin"}`, 400},
+		{"/pm/conversations", `{"request_key":"c","title":"Review","actor_id":"admin"}`, 403},
 		{"/pm/conversations", `{"request_key":"c","title":"Review"}{}`, 400},
 		{"/pm/conversations", `{"request_key":"c","title":"Review"}`, 201},
 		{"/pm/conversations", `{"request_key":"c","title":"Changed"}`, 409},

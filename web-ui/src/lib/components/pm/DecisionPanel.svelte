@@ -1,4 +1,7 @@
 <script>
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { mutationOutbox } from "$lib/mutationOutbox.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { proposalVoidReason } from "$lib/inboxMailbox.js";
@@ -40,6 +43,19 @@
     onRefreshReceipt,
   } = $props();
 
+  let draftTarget = $derived(
+    selected ? `pm:decision:${selected.id}:answer` : "",
+  );
+  let savedAnswer = $derived(
+    $mutationOutbox.find((entry) => entry.target === draftTarget),
+  );
+  function answerSnapshot() {
+    return { text: answer, choice };
+  }
+  function restoreAnswer(value) {
+    answer = value?.text ?? "";
+    choice = value?.choice ?? "";
+  }
   let summary = $derived(decisionSummary(selected, taskTitle));
   let proposal = $derived(
     decisionPayload(selected)
@@ -112,7 +128,7 @@
   );
   function dismissVoid(event) {
     event.preventDefault();
-    if (busy || !voidReason) return;
+    if (busy || savedAnswer || !voidReason) return;
     choice = "reject";
     answer = gone
       ? "The task this proposal refers to no longer exists."
@@ -133,13 +149,14 @@
   function decide(event, value) {
     event.preventDefault();
     choice = value;
-    if (busy || noteMissing) return;
+    if (busy || savedAnswer || noteMissing) return;
     onAnswer?.(event);
   }
 </script>
 
 {#if selected}
   <div class="space-y-6 p-4 sm:p-5">
+    <MutationSendStatus target={draftTarget} />
     <header>
       <h2 class="text-subtitle font-semibold text-fg">
         {#if workHref && !selected?.work_missing}
@@ -321,6 +338,12 @@
            Approve and a note field would only ask for work that goes nowhere. -->
     {:else if selected.status === "awaiting_answer"}
       <form
+        use:durableForm={{
+          target: draftTarget,
+          value: answerSnapshot(),
+          read: answerSnapshot,
+          onRestore: restoreAnswer,
+        }}
         class="space-y-3 border-t border-line-subtle pt-4"
         onsubmit={(event) => decide(event, choice || "approve")}
       >
@@ -343,6 +366,7 @@
             type="submit"
             onclick={(event) => decide(event, "approve")}
             disabled={busy ||
+              Boolean(savedAnswer) ||
               noteMissing ||
               unappliable ||
               stale ||
@@ -362,7 +386,7 @@
             class="ui-btn-secondary"
             type="button"
             onclick={(event) => decide(event, "reject")}
-            disabled={busy || noteMissing}
+            disabled={busy || Boolean(savedAnswer) || noteMissing}
             >{busy && choice === "reject" ? "Declining…" : "Decline"}</button
           >
           {#if noteMissing}

@@ -65,6 +65,7 @@ it("purges the principal across workspaces and fences late saves", async () => {
   const otherWorkspace = JSON.stringify(["org", "other", "human", "actor"]);
   const otherPrincipal = JSON.stringify(["org", "workspace", "other", "other"]);
   const epoch = localWorkEpoch(scope);
+  sessionStorage.setItem("anx.pm.draft:workspace:new", "Legacy PM draft");
   localStorage.setItem(
     "anx.human-response.draft:workspace:item",
     "Legacy private text",
@@ -78,6 +79,7 @@ it("purges the principal across workspaces and fences late saves", async () => {
     "Another person's draft",
   );
   await clearPrincipalLocalWork(scope);
+  expect(sessionStorage.getItem("anx.pm.draft:workspace:new")).toBeNull();
   expect(
     localStorage.getItem("anx.human-response.draft:workspace:item"),
   ).toBeNull();
@@ -99,6 +101,8 @@ it("reports total storage failure instead of claiming work was saved", async () 
   await expect(
     saveLocalWork(scope, "draft", "reply", "Unsaved text"),
   ).rejects.toMatchObject({ localPersistence: true });
+  expect(await loadLocalWork(scope, "draft", "reply")).toBe("Unsaved text");
+  expect((await listLocalWork(scope, "draft"))[0].value).toBe("Unsaved text");
   const leaving = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(leaving);
   expect(leaving.defaultPrevented).toBe(true);

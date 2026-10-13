@@ -103,10 +103,10 @@ func (s *Service) CreateConversation(ctx context.Context, p Principal, in Create
 	return s.createConversation(ctx, p, in, nil)
 }
 func (s *Service) createConversation(ctx context.Context, p Principal, in CreateConversation, origin *Origin) (Conversation, error) {
-	if err := s.authorize(ctx, p, "pm.read", in.WorkRef); err != nil {
-		return Conversation{}, err
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Conversation{}, ErrForbidden
 	}
-	if err := s.RequireOnboarded(ctx); err != nil {
+	if err := s.authorize(ctx, p, "pm.read", in.WorkRef); err != nil {
 		return Conversation{}, err
 	}
 	refs, err := conversationRefs(in.WorkRef, in.ContextRefs)
@@ -130,6 +130,9 @@ func (s *Service) createConversation(ctx context.Context, p Principal, in Create
 		}
 		return prior, nil
 	} else if !errors.Is(err, ErrNotFound) {
+		return Conversation{}, err
+	}
+	if err := s.RequireOnboarded(ctx); err != nil {
 		return Conversation{}, err
 	}
 	if s.deps.EnsureThread == nil {
@@ -235,14 +238,11 @@ func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, qu
 	return page, nil
 }
 func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID string, in MessageInput) (Turn, error) {
-	if strings.TrimSpace(s.AgentActorID()) == "" {
-		return Turn{}, ErrPMIdentity
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Turn{}, ErrForbidden
 	}
 	c, err := s.conversation(ctx, p, conversationID)
 	if err != nil {
-		return Turn{}, err
-	}
-	if err = s.RequireOnboarded(ctx); err != nil {
 		return Turn{}, err
 	}
 	if !validText(in.Text, 16000) || !validText(in.RequestKey, 256) {
@@ -258,6 +258,12 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 		}
 		return prior, nil
 	} else if !errors.Is(err, ErrNotFound) {
+		return Turn{}, err
+	}
+	if strings.TrimSpace(s.AgentActorID()) == "" {
+		return Turn{}, ErrPMIdentity
+	}
+	if err = s.RequireOnboarded(ctx); err != nil {
 		return Turn{}, err
 	}
 	if s.deps.Dispatch != nil && s.cfg.AgentHandle == "" {

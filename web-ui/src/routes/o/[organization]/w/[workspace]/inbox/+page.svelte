@@ -3,7 +3,11 @@
   import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
-  import { beforeNavigate, goto } from "$app/navigation";
+  import { goto } from "$app/navigation";
+  import {
+    enqueuePmDecisionAnswer,
+    mutationOutbox,
+  } from "$lib/mutationOutbox.js";
   import { coreClient, createInboxSourceClient } from "$lib/coreClient";
   import {
     actorDisplayLabel,
@@ -644,24 +648,6 @@
     }
   }
 
-  beforeNavigate(({ cancel, type }) => {
-    // recordAnswer pins the answered row with goto() while busy is still
-    // true; cancelling that navigation drops the Approved/Declined notice.
-    if (busy && type !== "goto") {
-      cancel();
-      return;
-    }
-    // Full-page unloads are covered by onbeforeunload; a confirm() here would
-    // be blocked by the browser during beforeunload anyway.
-    if (type === "leave") return;
-    if (
-      answer.trim() &&
-      !busy &&
-      !window.confirm("Leave without recording this decision?")
-    )
-      cancel();
-  });
-
   /**
    * Loads every source. A quiet load (live update, a committed response)
    * keeps the list on screen and never clears an error the reader has not
@@ -899,17 +885,60 @@
   async function recordAnswer(event) {
     event.preventDefault();
     if (!selectedDecision || busy || !answer.trim() || !choice) return;
-    busy = true;
+    const id = selectedDecision.id;
+    const target = `pm:decision:${id}:answer`;
+    if ($mutationOutbox.some((entry) => entry.target === target)) return;
     const scope = readerScopeKey();
+    if (!urlItem) heldItem = `decision:${id}`;
+    const original = answer;
+    const selectedChoice = choice;
+    busy = true;
     error = "";
     try {
-      const result = await coreClient.answerPmDecision(selectedDecision.id, {
+      await enqueuePmDecisionAnswer({
+        decisionId: id,
         revision: selectedDecision.revision,
-        approve: choice === "approve",
+        approve: selectedChoice === "approve",
         text: answer.trim(),
+        autoApply:
+          selectedChoice === "approve" &&
+          Boolean(selectedWork && isNexusOwned(selectedWork)),
+        target,
+        draft: { text: answer, choice: selectedChoice },
+        href: href({ item: `decision:${id}` }),
+        title:
+          selectedChoice === "approve" ? "Saved approval" : "Saved decline",
       });
-      commitInboxView(scope, { decision: result });
-      if (scope !== readerScopeKey()) return;
+      if (
+        scope === readerScopeKey() &&
+        selectedDecision?.id === id &&
+        answer === original
+      ) {
+        answer = "";
+        choice = "";
+      }
+    } catch {
+      if (scope === readerScopeKey() && selectedDecision?.id === id)
+        error =
+          "Your note is still here. Check its saved status, or copy it before closing this tab.";
+    } finally {
+      busy = false;
+    }
+  }
+
+  onMount(() => {
+    const confirmed = async (event) => {
+      const entry = event.detail;
+      if (
+        entry?.operation !== "pm.decision.answer" ||
+        entry.scope !== readerScopeKey()
+      )
+        return;
+      const result = entry.result?.decision || entry.receipt?.decision;
+      if (!result) {
+        void load({ quiet: true });
+        return;
+      }
       requestId++;
       loadController?.abort();
       selectionRequest++;
@@ -917,89 +946,56 @@
       decisionResolvedFor = `decision:${result.id}`;
       loading = false;
       refreshPending = false;
-      const approved = choice === "approve";
+      const currentlySelected = selectedDecision?.id === result.id;
       const pinId = `decision:${result.id}`;
-      const wasUnpinned = !urlItem;
+      const wasUnpinned = currentlySelected && !urlItem;
       if (wasUnpinned) heldItem = pinId;
       decisions = decisions.map((item) =>
         item.id === result.id ? result : item,
       );
-      answer = "";
-      choice = "";
-      notice = approved ? "Approved." : "Declined.";
-      // The answered row leaves this mailbox. Hold it, then pin it in the
-      // URL so a reload keeps the same row (and the notice) in view.
-      if (wasUnpinned) {
-        const moved = rows.find((row) => row.id === pinId);
-        await goto(
-          href({
-            item: pinId,
-            mailbox: moved?.mailbox || mailbox,
-          }),
-          { replaceState: true, noScroll: true, keepFocus: true },
-        );
-        heldItem = "";
+      if (!currentlySelected) {
+        void load({ quiet: true });
+        return;
       }
-      if (result.action_id) {
-        try {
+      const applied = entry.result?.action;
+      notice = entry.request.answer.approve
+        ? applied?.status === "verified"
+          ? "Approved and applied."
+          : applied?.status === "failed"
+            ? "Approved. Applying it needs your attention."
+            : "Approved."
+        : "Declined.";
+      if (applied)
+        actions = [
+          ...actions.filter((item) => item.id !== applied.id),
+          applied,
+        ];
+      try {
+        if (wasUnpinned) {
+          const moved = rows.find((row) => row.id === pinId);
+          await goto(
+            href({ item: pinId, mailbox: moved?.mailbox || mailbox }),
+            { replaceState: true, noScroll: true, keepFocus: true },
+          );
+          heldItem = "";
+        }
+        if (entry.scope !== readerScopeKey()) return;
+        if (result.action_id && !applied) {
           const receipt = await coreClient.getPmAction(result.action_id);
+          if (entry.scope !== readerScopeKey()) return;
           actions = [
             ...actions.filter((item) => item.id !== receipt.id),
             receipt,
           ];
-        } catch (err) {
-          actionError = errorMessage(err);
         }
-        // A Nexus-owned change has no one to deliver to but core itself, so
-        // approving applies it in the same breath. Source-owned requests keep
-        // the explicit deliver step, because delivery there has a receipt.
-        if (approved && selectedWork && isNexusOwned(selectedWork)) {
-          try {
-            let applied = await coreClient.dispatchPmDecision(result.id);
-            // Core reports the write, then verifies it by reading the
-            // canonical record back; for Nexus-owned work both are local.
-            if (applied.status !== "failed") {
-              applied = await coreClient.reconcilePmAction(applied.id);
-            }
-            actions = [
-              ...actions.filter((item) => item.id !== applied.id),
-              applied,
-            ];
-            notice =
-              applied.status === "verified"
-                ? "Approved and applied."
-                : applied.status === "failed"
-                  ? `Approved, but applying it failed: ${applied.receipt?.detail || "see the receipt below"}.`
-                  : "Approved. Delivery is in progress.";
-          } catch (err) {
-            actionError = errorMessage(err);
-            // Core records why (stale revision, no path); show that record,
-            // not the pre-dispatch snapshot with a live Deliver button.
-            await refreshReceipt();
-          }
-        }
+      } catch {
+        /* A receipt read failure does not reverse a confirmed answer. */
       }
-    } catch (err) {
-      if (errorCode(err) === "source_revision_changed") {
-        // Core refused a knowingly stale approval; this page was behind.
-        // Reload so the row shows why, and leave the reader the decline.
-        const reason = String(
-          err?.body?.error?.details?.reason ?? err?.details?.reason ?? "",
-        );
-        error =
-          reason === "work_missing"
-            ? "The task this proposal refers to no longer exists, so it cannot be approved. You can still decline it."
-            : reason === "already_at_target"
-              ? "The task is already where this proposal asks, so there is nothing to approve. You can dismiss it."
-              : "The task changed after this was proposed, so approving it is refused. Decline it or wait for a fresh proposal.";
-        void load();
-        return;
-      }
-      error = supersededMessage(err) || errorMessage(err);
-    } finally {
-      busy = false;
-    }
-  }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
 
   /**
    * A 409 on an answer or delivery can mean the PM replaced this proposal;
@@ -1603,15 +1599,7 @@
   usePageTitle(() => "Inbox · Agent Nexus");
 </script>
 
-<svelte:window
-  onkeydown={handleKeydown}
-  onbeforeunload={(event) => {
-    if (answer.trim()) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-  }}
-/>
+<svelte:window onkeydown={handleKeydown} />
 <WorkspacePageShell data-tour="inbox">
   <WorkspacePageHeader title="Inbox">
     {#snippet actions()}

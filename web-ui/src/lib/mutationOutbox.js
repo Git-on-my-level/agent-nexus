@@ -12,6 +12,7 @@ import {
   localWorkPrincipal,
   onLocalWorkChanged,
 } from "$lib/localWorkStore.js";
+import { commitInboxView } from "$lib/inboxViewCache.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
 
 export const mutationOutbox = writable([]);
@@ -35,28 +36,141 @@ const visible = (entry) => entry.state !== "superseded";
 /** Only audited adapters belong here. A new endpoint must first prove atomic
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
-  if (entry.operation !== "events.create")
-    throw Object.assign(new Error("Unknown saved operation"), { status: 400 });
-  return createLocalMutationClient(entry.scope).createEvent(entry.request);
+  const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "events.create")
+    return client.createEvent(entry.request);
+  if (entry.operation === "pm.chat.send") {
+    let id = entry.receipt?.conversationId || entry.request.conversation_id;
+    if (!id) {
+      const conversation = await client.createPmConversation(
+        entry.request.creation,
+      );
+      if (!conversation.id)
+        throw new Error("Conversation receipt is incomplete.");
+      id = conversation.id;
+      entry.receipt = { ...entry.receipt, conversationId: id };
+      await persist(entry);
+    }
+    if (!active(entry))
+      throw new Error("The submitting identity is no longer active.");
+    const turn = await client.sendPmMessage(id, entry.request.message);
+    if (!turn.id) throw new Error("Message receipt is incomplete.");
+    return { conversationId: id, turn };
+  }
+  if (entry.operation === "pm.decision.answer") {
+    const decision =
+      entry.receipt?.decision ||
+      (await client.answerPmDecision(
+        entry.request.decision_id,
+        entry.request.answer,
+      ));
+    if (!decision.id) throw new Error("Decision receipt is incomplete.");
+    entry.receipt = { ...entry.receipt, decision };
+    await persist(entry);
+    commitInboxView(entry.scope, { decision });
+    if (!entry.request.autoApply) return { decision };
+    if (!active(entry))
+      throw new Error("The submitting identity is no longer active.");
+    let action = await client.dispatchPmDecision(decision.id);
+    if (!action.id) throw new Error("Action receipt is incomplete.");
+    if (action.status !== "failed") {
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      action = await client.reconcilePmAction(action.id);
+    }
+    return { decision, action };
+  }
+  throw Object.assign(new Error("Unknown saved operation"), { status: 400 });
 }
 
 function confirm(entry, result = null) {
-  mutationOutbox.update((rows) => rows.filter((row) => row.key !== entry.key));
-  mutationConfirmations.update((rows) => ({
-    ...rows,
-    [entry.target]: { ...entry, state: "sent", result },
-  }));
+  const decision = result?.decision || entry.receipt?.decision;
+  if (entry.operation === "pm.decision.answer" && decision)
+    commitInboxView(entry.scope, { decision });
+  mutationOutbox.update((rows) =>
+    rows.filter((row) => row.key !== entry.key || row.scope !== entry.scope),
+  );
+  if (active(entry))
+    mutationConfirmations.update((rows) => ({
+      ...rows,
+      [entry.target]: { ...entry, state: "sent", result },
+    }));
   window.dispatchEvent(
     new CustomEvent("anx:mutation-confirmed", { detail: { ...entry, result } }),
   );
 }
 
-export async function enqueueDiscussionMessage({
-  event,
+export function enqueueDiscussionMessage({ event, ...options }) {
+  const key = crypto.randomUUID();
+  return enqueueLocalMutation({
+    ...options,
+    key,
+    operation: "events.create",
+    request: { request_key: key, event },
+  });
+}
+
+export function enqueuePmMessage({
+  conversationId = "",
+  text,
+  workRef = "",
+  contextRefs = [],
+  key = crypto.randomUUID(),
+  ...options
+}) {
+  const actor_id = JSON.parse(get(localWorkScope))[3];
+  return enqueueLocalMutation({
+    ...options,
+    key,
+    operation: "pm.chat.send",
+    request: {
+      conversation_id: conversationId,
+      ...(!conversationId
+        ? {
+            creation: {
+              request_key: crypto.randomUUID(),
+              actor_id,
+              title: text.slice(0, 100),
+              ...(workRef ? { work_ref: workRef } : {}),
+              ...(contextRefs.length ? { context_refs: contextRefs } : {}),
+            },
+          }
+        : {}),
+      message: { request_key: key, actor_id, text },
+    },
+  });
+}
+
+export function enqueuePmDecisionAnswer({
+  decisionId,
+  revision,
+  approve,
+  text,
+  autoApply = false,
+  ...options
+}) {
+  const key = crypto.randomUUID();
+  const actor_id = JSON.parse(get(localWorkScope))[3];
+  return enqueueLocalMutation({
+    ...options,
+    key,
+    operation: "pm.decision.answer",
+    request: {
+      decision_id: decisionId,
+      autoApply,
+      answer: { request_key: key, actor_id, revision, approve, text },
+    },
+  });
+}
+
+async function enqueueLocalMutation({
+  operation,
+  request,
+  key,
   target,
   draft,
   href,
-  title = "Saved comment",
+  title = "Saved response",
 }) {
   const scope = get(localWorkScope);
   if (!canUseLocalWorkScope(scope))
@@ -68,18 +182,17 @@ export async function enqueueDiscussionMessage({
     )
   )
     throw new Error("Review the saved message before posting another.");
-  const key = crypto.randomUUID();
   const entry = snapshot({
     key,
     scope,
     epoch: localWorkEpoch(scope),
-    operation: "events.create",
-    request: { request_key: key, event },
+    operation,
+    request,
     target,
     draft,
     href,
     title,
-    text: draft?.text ?? event.payload?.text ?? "",
+    text: draft?.text ?? "",
     state: "pending",
     attempts: 0,
     nextAt: Date.now(),
@@ -137,10 +250,11 @@ async function attempt(entry) {
           rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
         );
         const result = await send(entry);
-        if (!active(entry)) return;
+        if (entry.epoch !== localWorkEpoch(entry.scope)) return;
         await saveLocalWork(entry.scope, "mutation", entry.key, null, {
           epoch: entry.epoch,
           deletionReason: "confirmed",
+          confirmation: result,
         });
         volatile.delete(entry.key);
         // Preserve any newer composer contents, even in another tab.
@@ -211,7 +325,7 @@ export async function recoverMutations() {
         if (!active(entry) || rows.has(entry.key)) continue;
         const latest = await loadLocalWorkRecord(scope, "mutation", entry.key);
         if (latest?.deleted && latest.deletionReason === "confirmed")
-          confirm(entry);
+          confirm(entry, latest.confirmation);
       }
       let entries = [...rows.values()]
         .filter((entry) => active(entry) && visible(entry))
@@ -265,14 +379,17 @@ export async function editMutation(key) {
   if (!entry || !active(entry) || entry.state !== "attention") return;
   // Transfer to a durable composer before superseding; retain the old exact
   // request for recovery history rather than silently discarding it.
-  await saveLocalWork(entry.scope, "draft", entry.target, entry.draft, {
+  const draft = entry.receipt?.conversationId
+    ? { ...entry.draft, conversationId: entry.receipt.conversationId }
+    : entry.draft;
+  await saveLocalWork(entry.scope, "draft", entry.target, draft, {
     epoch: entry.epoch,
   });
   await persist({ ...entry, state: "superseded" });
   volatile.delete(key);
   window.dispatchEvent(
     new CustomEvent("anx:edit-form", {
-      detail: { scope: entry.scope, target: entry.target, value: entry.draft },
+      detail: { scope: entry.scope, target: entry.target, value: draft },
     }),
   );
   requestRecovery();

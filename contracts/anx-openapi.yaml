@@ -9409,6 +9409,9 @@ components:
       type: object
       additionalProperties: true
       properties:
+        actor_id:
+          type: string
+          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
         request_key:
           type: string
         title:
@@ -9427,6 +9430,9 @@ components:
       type: object
       additionalProperties: true
       properties:
+        actor_id:
+          type: string
+          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
         request_key:
           type: string
         text:
@@ -9596,9 +9602,16 @@ components:
       - scope
       - target_revision
     PMDecisionAnswerRequest:
+      description: Optional request_key binds the decision, revision, approve flag and text to an actor-scoped replay. The answer, action intent and original response commit atomically; identical keyed retries replay that response after fresh authorization, and changed key reuse returns 409. Unkeyed clients retain revision-based answer replay.
       type: object
       additionalProperties: true
       properties:
+        actor_id:
+          type: string
+          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
+        request_key:
+          type: string
+          maxLength: 256
         revision:
           type: integer
         approve:

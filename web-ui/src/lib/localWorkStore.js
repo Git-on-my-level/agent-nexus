@@ -220,7 +220,11 @@ export function saveLocalWork(
   kind,
   target,
   value,
-  { epoch = localWorkEpoch(scope), deletionReason = "" } = {},
+  {
+    epoch = localWorkEpoch(scope),
+    deletionReason = "",
+    confirmation = null,
+  } = {},
 ) {
   if (epoch !== localWorkEpoch(scope)) {
     throw new Error("The identity that authored this work has signed out.");
@@ -237,6 +241,7 @@ export function saveLocalWork(
     updatedAt: lastWrite,
     deleted: value === null,
     deletionReason,
+    confirmation,
     epoch,
   };
   let journalSaved = false;
@@ -253,7 +258,7 @@ export function saveLocalWork(
   }
   const token = Symbol();
   if (journalSaved) uncheckpointed.delete(key);
-  else uncheckpointed.set(key, { scope, epoch, token });
+  else uncheckpointed.set(key, { scope, epoch, token, record: storedRecord });
   const saved = serialized(async () => {
     if (epoch !== localWorkEpoch(scope)) {
       throw new Error("The identity that authored this work has signed out.");
@@ -301,6 +306,14 @@ export async function listLocalWork(scope, kind) {
     if (!previous || record.updatedAt >= previous.updatedAt)
       merged.set(record.key, record);
   }
+  // Failed disk writes still survive navigation in this tab. They remain
+  // uncheckpointed, so sending is blocked and closing the tab still warns.
+  for (const { record } of uncheckpointed.values()) {
+    if (!record || record.scope !== scope) continue;
+    const previous = merged.get(record.key);
+    if (!previous || record.updatedAt >= previous.updatedAt)
+      merged.set(record.key, record);
+  }
   return [...merged.values()].filter(
     (record) =>
       record.epoch === localWorkEpoch(scope) &&
@@ -328,6 +341,9 @@ export async function loadLocalWorkRecord(scope, kind, target) {
   } catch {
     /* IndexedDB can still serve this record. */
   }
+  const memory = uncheckpointed.get(key)?.record;
+  if (memory && (!stored || memory.updatedAt >= stored.updatedAt))
+    stored = memory;
   return stored?.epoch === localWorkEpoch(scope) ? stored : null;
 }
 
@@ -359,6 +375,14 @@ export function clearPrincipalLocalWork(
     }
   } catch {
     /* IndexedDB cleanup still runs below. */
+  }
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("anx.pm.draft:")) sessionStorage.removeItem(key);
+    }
+  } catch {
+    /* Legacy session copies are never automatically restored. */
   }
   epochs.set(principal, epoch);
   try {

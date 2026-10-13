@@ -4,6 +4,7 @@ package pm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -151,12 +152,14 @@ type Conversation struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 type CreateConversation struct {
+	ActorID     string   `json:"actor_id,omitempty"`
 	ContextRefs []string `json:"context_refs,omitempty"`
 	RequestKey  string   `json:"request_key"`
 	Title       string   `json:"title"`
 	WorkRef     string   `json:"work_ref,omitempty"`
 }
 type MessageInput struct {
+	ActorID    string `json:"actor_id,omitempty"`
 	RequestKey string `json:"request_key"`
 	Text       string `json:"text"`
 }
@@ -267,42 +270,45 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
-	SourceAuthority        string         `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
-	WorkMissing            bool           `json:"-"`                          // Current work projection; never persisted.
-	TargetCurrent          *bool          `json:"-"`
-	AlreadyAtTarget        *bool          `json:"-"`
-	Replayed               bool           `json:"-"` // Response-only proposal reuse; never persisted.
-	ProposedBy             string         `json:"proposed_by,omitempty"`
-	OriginKind             string         `json:"origin_kind,omitempty"`
-	TurnID                 string         `json:"turn_id,omitempty"`
-	SupersededByProposedBy string         `json:"superseded_by_proposed_by,omitempty"`
-	SupersededByOriginKind string         `json:"superseded_by_origin_kind,omitempty"`
-	SupersededBy           string         `json:"superseded_by,omitempty"`
-	SupersededReason       string         `json:"superseded_reason,omitempty"`
-	Supersedes             string         `json:"supersedes,omitempty"`
-	SupersedesProposedBy   string         `json:"supersedes_proposed_by,omitempty"`
-	SupersedesOriginKind   string         `json:"supersedes_origin_kind,omitempty"`
-	CanAnswer              bool           `json:"can_answer"`
-	Payload                *ActionPayload `json:"payload,omitempty"`
-	ID                     string         `json:"id"`
-	WorkspaceID            string         `json:"workspace_id"`
-	ActorID                string         `json:"actor_id"`
-	WorkRef                string         `json:"work_ref"`
-	Instruction            string         `json:"instruction"`
-	Scope                  string         `json:"scope"`
-	TargetRevision         string         `json:"target_revision"`
-	Status                 Status         `json:"status"`
-	Revision               int            `json:"revision"`
-	Answer                 string         `json:"answer,omitempty"`
-	AnsweredBy             string         `json:"answered_by,omitempty"`
-	ActionID               string         `json:"action_id,omitempty"`
-	Origin                 *Origin        `json:"origin,omitempty"`
-	CreatedAt              time.Time      `json:"created_at"`
+	AnswerReplayJSON       json.RawMessage `json:"-"`                          // Original keyed HTTP receipt; never part of the canonical decision body.
+	SourceAuthority        string          `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
+	WorkMissing            bool            `json:"-"`                          // Current work projection; never persisted.
+	TargetCurrent          *bool           `json:"-"`
+	AlreadyAtTarget        *bool           `json:"-"`
+	Replayed               bool            `json:"-"` // Response-only proposal reuse; never persisted.
+	ProposedBy             string          `json:"proposed_by,omitempty"`
+	OriginKind             string          `json:"origin_kind,omitempty"`
+	TurnID                 string          `json:"turn_id,omitempty"`
+	SupersededByProposedBy string          `json:"superseded_by_proposed_by,omitempty"`
+	SupersededByOriginKind string          `json:"superseded_by_origin_kind,omitempty"`
+	SupersededBy           string          `json:"superseded_by,omitempty"`
+	SupersededReason       string          `json:"superseded_reason,omitempty"`
+	Supersedes             string          `json:"supersedes,omitempty"`
+	SupersedesProposedBy   string          `json:"supersedes_proposed_by,omitempty"`
+	SupersedesOriginKind   string          `json:"supersedes_origin_kind,omitempty"`
+	CanAnswer              bool            `json:"can_answer"`
+	Payload                *ActionPayload  `json:"payload,omitempty"`
+	ID                     string          `json:"id"`
+	WorkspaceID            string          `json:"workspace_id"`
+	ActorID                string          `json:"actor_id"`
+	WorkRef                string          `json:"work_ref"`
+	Instruction            string          `json:"instruction"`
+	Scope                  string          `json:"scope"`
+	TargetRevision         string          `json:"target_revision"`
+	Status                 Status          `json:"status"`
+	Revision               int             `json:"revision"`
+	Answer                 string          `json:"answer,omitempty"`
+	AnsweredBy             string          `json:"answered_by,omitempty"`
+	ActionID               string          `json:"action_id,omitempty"`
+	Origin                 *Origin         `json:"origin,omitempty"`
+	CreatedAt              time.Time       `json:"created_at"`
 }
 type AnswerInput struct {
-	Revision int    `json:"revision"`
-	Approve  bool   `json:"approve"`
-	Text     string `json:"text"`
+	ActorID    string `json:"actor_id,omitempty"`
+	RequestKey string `json:"request_key,omitempty"`
+	Revision   int    `json:"revision"`
+	Approve    bool   `json:"approve"`
+	Text       string `json:"text"`
 }
 type Action struct {
 	DeliveryPath           string         `json:"delivery_path"`
