@@ -189,3 +189,11 @@ ANX_PERFORMANCE_TEST=1 go test ./internal/storage -run 'TestPerformanceCommentSe
 The PR records full test logs, the broader scale-gate result, and any outstanding
 performance review. The original uncalled `scopedrepo.SearchCanonicalHook` and
 its parallel schema have been removed.
+
+The scoped `document_search_postings` authority shadow is explicitly
+`NOT MATERIALIZED`. Parent-AND probes keep their `(term,doc_n,res_n)` index seeks
+and canonical authority predicates instead of relying on SQLite's default CTE
+inlining decision. Plan regressions cover two/eight terms under canonical,
+pinned-denial and point-snapshot policies. The production-reader VM regression
+uses 100 and 10,000 unrelated documents with a private matching control;
+only warm work after authority admission is budgeted, not cold closure creation.

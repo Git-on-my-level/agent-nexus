@@ -86,7 +86,14 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 		if !needed[table] {
 			return
 		}
-		graph += ", " + table + " AS (SELECT * FROM main." + table + " AS _row WHERE " + where + ")"
+		materialization := ""
+		if table == "document_search_postings" {
+			// Parent AND probes this shadow once per query term. Keep each
+			// authority-filtered probe inlined into its (term,doc_n) seek;
+			// copying the workspace's postings would defeat the page budget.
+			materialization = "NOT MATERIALIZED "
+		}
+		graph += ", " + table + " AS " + materialization + "(SELECT * FROM main." + table + " AS _row WHERE " + where + ")"
 	}
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
 		add(resourceTables[kind], denied(kind, "_row.id"))
