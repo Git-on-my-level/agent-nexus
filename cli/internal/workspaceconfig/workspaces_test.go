@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agent-nexus-cli/internal/hostidentity"
@@ -223,4 +224,74 @@ func TestDirectoryRulesRespectCaseAfterWildcards(t *testing.T) {
 		t.Fatalf("exact case: %s via %s err=%v", base, source, err)
 	}
 	t.Logf("verified wildcard matching with case-insensitive=%v", insensitive)
+}
+
+func TestForgeRegistry(t *testing.T) {
+	f := File{Aliases: map[string]string{"ws": "https://core.example.test"}}
+	if err := f.SetForge("ws", "Forge.Example.test", "forgejo"); err != nil {
+		t.Fatal(err)
+	}
+	// Idempotent per host: re-adding replaces the kind.
+	if err := f.SetForge("ws", "forge.example.test", "gitea"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.ForgesFor("https://core.example.test"); len(got) != 1 || got[0].Kind != "gitea" {
+		t.Fatalf("%+v", got)
+	}
+	if got := f.ForgesFor("https://core.example.test/"); len(got) != 1 {
+		t.Fatalf("trailing slash workspace mismatch: %+v", got)
+	}
+	if got := f.ForgesFor("https://other.example.test"); len(got) != 0 {
+		t.Fatalf("other workspace saw forges: %+v", got)
+	}
+	removed, err := f.RemoveForge("ws", "FORGE.example.test")
+	if err != nil || !removed {
+		t.Fatal(removed, err)
+	}
+	if removed, err := f.RemoveForge("ws", "forge.example.test"); err != nil || removed {
+		t.Fatal("removed unknown host", removed, err)
+	}
+	for _, tc := range []struct{ workspace, host, kind string }{
+		{"ws", "", "github"},
+		{"ws", "https://not-a-host", "github"},
+		{"ws", "forge.example.test/path", "github"},
+		{"ws", "forge.example.test:99999", "forgejo"},
+		{"ws", "forge.example.test:65536", "forgejo"},
+		{"ws", "forge.example.test:0443", "forgejo"},
+		{"ws", "forge.example.test:0", "forgejo"},
+		{"unknown", "forge.example.test", "forgejo"},
+		{"ws", "forge.example.test", "sourcehut"},
+		{"ws", "forge.example.test", ""},
+	} {
+		if err := f.SetForge(tc.workspace, tc.host, tc.kind); err == nil {
+			t.Fatalf("accepted %+v", tc)
+		}
+	}
+	// Port normalization: omitted port means the HTTPS default 443; ports are
+	// exact, canonical and in range. Origins are canonical https URLs.
+	for _, tc := range []struct{ host, want string }{
+		{"forge.example.test", "https://forge.example.test:443"},
+		{"FORGE.Example.test", "https://forge.example.test:443"},
+		{"forge.example.test:8443", "https://forge.example.test:8443"},
+		{"forge.example.test:65535", "https://forge.example.test:65535"},
+	} {
+		got, ok := CanonicalForgeOrigin(tc.host)
+		if !ok || got != tc.want {
+			t.Fatalf("%s: %q %v", tc.host, got, ok)
+		}
+	}
+	for _, host := range []string{"", "forge.example.test:99999", "forge.example.test:65536", "forge.example.test:0443", "forge.example.test:0", "forge.example:test", "https://forge.example.test", "*.example.test", "forge.example.test."} {
+		if _, ok := CanonicalForgeOrigin(host); ok {
+			t.Fatalf("accepted %q", host)
+		}
+	}
+	// Load validation rejects hand-edited files with bad entries.
+	broken := File{Aliases: map[string]string{}, Forges: map[string][]Forge{"https://core.example.test": {{Host: "bad host", Kind: "forgejo"}}}}
+	if err := broken.ValidateForges(); err == nil {
+		t.Fatal("accepted malformed host")
+	}
+	data, _ := json.Marshal(f)
+	if !strings.Contains(string(data), `"forges"`) && len(f.Forges) > 0 {
+		t.Fatal("forges lost on marshal")
+	}
 }

@@ -5,6 +5,7 @@ package workspaceconfig
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,6 +24,83 @@ type File struct {
 	Aliases     map[string]string `json:"aliases"`
 	Rules       map[string]string `json:"directory_rules,omitempty"`
 	AskDelivery string            `json:"ask_delivery,omitempty"`
+	// Forges registers non-GitHub code forge hosts per workspace (keyed by the
+	// workspace base URL) so evidence URLs on those hosts can satisfy ask
+	// evidence linting. github.com is built in and needs no entry.
+	Forges map[string][]Forge `json:"forges,omitempty"`
+}
+
+// Forge maps one forge host to its URL dialect. Kind is one of the
+// ValidForgeKinds.
+type Forge struct {
+	Host string `json:"host"`
+	Kind string `json:"kind"`
+}
+
+// ValidForgeKinds are the recognized forge URL dialects. forgejo also covers
+// Gitea; gitlab and bitbucket are recognized for evidence linting only.
+var ValidForgeKinds = []string{"github", "forgejo", "gitea", "gitlab", "bitbucket"}
+
+// ValidateForgeKind reports whether kind names a known forge dialect.
+func ValidateForgeKind(kind string) bool {
+	for _, valid := range ValidForgeKinds {
+		if kind == valid {
+			return true
+		}
+	}
+	return false
+}
+
+var forgeHostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?$`)
+
+// ValidateForgeHost accepts a DNS hostname with an optional port. Never a URL,
+// wildcard or path — one entry is one origin. The port must be a canonical
+// decimal in 1..65535; an omitted port means the HTTPS default 443.
+func ValidateForgeHost(host string) error {
+	value := strings.ToLower(strings.TrimSpace(host))
+	if value == "" || len(value) > 255 || !forgeHostPattern.MatchString(value) || strings.Contains(value, "..") {
+		return fmt.Errorf("forge host must be a hostname with an optional port: %q", host)
+	}
+	if _, ok := CanonicalForgeOrigin(value); !ok {
+		return fmt.Errorf("forge host port must be a canonical 1..65535 port; an omitted port means 443: %q", host)
+	}
+	return nil
+}
+
+// CanonicalForgeOrigin normalizes a registered forge host to the canonical
+// origin the lint compares URL origins against. Registrations name an HTTPS
+// origin — an omitted port means 443 — so the result always carries the
+// https scheme and can never match an http:// evidence URL. ok is false for
+// malformed entries, including out-of-range, zero, or leading-zero ports.
+func CanonicalForgeOrigin(host string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(host))
+	if value == "" || len(value) > 255 || !forgeHostPattern.MatchString(value) || strings.Contains(value, "..") {
+		return "", false
+	}
+	if _, port, err := net.SplitHostPort(value); err == nil {
+		if !canonicalPort(port) {
+			return "", false
+		}
+		return "https://" + strings.TrimSuffix(value, ":"+port) + ":" + port, true
+	}
+	if strings.Contains(value, ":") {
+		return "", false
+	}
+	return "https://" + value + ":443", true
+}
+
+func canonicalPort(port string) bool {
+	if port == "" || len(port) > 5 || (len(port) > 1 && port[0] == '0') {
+		return false
+	}
+	number := 0
+	for _, c := range port {
+		if c < '0' || c > '9' {
+			return false
+		}
+		number = number*10 + int(c-'0')
+	}
+	return number >= 1 && number <= 65535
 }
 
 type Workspace struct {
@@ -61,6 +139,9 @@ func Load(configDir string) (Catalog, error) {
 		if err := ValidateURL(base); err != nil {
 			return Catalog{}, err
 		}
+	}
+	if err := f.ValidateForges(); err != nil {
+		return Catalog{}, err
 	}
 	hosts, err := hostidentity.ListAt(configDir)
 	if err != nil {
@@ -150,6 +231,128 @@ func ValidateURL(base string) error {
 		return fmt.Errorf("workspace must be an alias or an absolute http(s) base URL: %q", base)
 	}
 	return nil
+}
+
+// ValidateForges bounds the registry (at most 32 hosts per workspace) and
+// rejects unknown kinds, malformed hosts, and duplicate hosts on one workspace.
+func (f *File) ValidateForges() error {
+	for key, entries := range f.Forges {
+		if err := ValidateURL(key); err != nil {
+			return fmt.Errorf("forge registry key must be a workspace base URL: %w", err)
+		}
+		if len(entries) > 32 {
+			return fmt.Errorf("workspace %q registers more than 32 forge hosts", key)
+		}
+		seen := map[string]bool{}
+		for _, forge := range entries {
+			if err := ValidateForgeHost(forge.Host); err != nil {
+				return err
+			}
+			if !ValidateForgeKind(strings.ToLower(strings.TrimSpace(forge.Kind))) {
+				return fmt.Errorf("unknown forge kind %q; use one of %s", forge.Kind, strings.Join(ValidForgeKinds, ", "))
+			}
+			host := strings.ToLower(strings.TrimSpace(forge.Host))
+			if seen[host] {
+				return fmt.Errorf("forge host %q is registered twice on one workspace", host)
+			}
+			seen[host] = true
+		}
+	}
+	return nil
+}
+
+// ForgesFor returns the forge hosts registered for the workspace the given base
+// URL resolves to. The built-in github.com entry needs no registration and is
+// applied by the lint directly.
+func (f File) ForgesFor(baseURL string) []Forge {
+	out := []Forge{}
+	for key, entries := range f.Forges {
+		if sameURL(key, baseURL) {
+			out = append(out, entries...)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Host < out[j].Host })
+	return out
+}
+
+// SetForge registers or replaces one forge host on a workspace. The workspace
+// must already be an alias or an absolute base URL.
+func (f *File) SetForge(workspace, host, kind string) error {
+	base, err := func() (string, error) {
+		if base, ok := f.Aliases[workspace]; ok {
+			return base, nil
+		}
+		if err := ValidateURL(workspace); err != nil {
+			return "", fmt.Errorf("unknown workspace %q; run anx config workspaces to list aliases", workspace)
+		}
+		return strings.TrimRight(workspace, "/"), nil
+	}()
+	if err != nil {
+		return err
+	}
+	normalized := Forge{Host: strings.ToLower(strings.TrimSpace(host)), Kind: strings.ToLower(strings.TrimSpace(kind))}
+	if err := ValidateForgeHost(normalized.Host); err != nil {
+		return err
+	}
+	if !ValidateForgeKind(normalized.Kind) {
+		return fmt.Errorf("unknown forge kind %q; use one of %s", kind, strings.Join(ValidForgeKinds, ", "))
+	}
+	if f.Forges == nil {
+		f.Forges = map[string][]Forge{}
+	}
+	entries := f.Forges[base]
+	replaced := false
+	for i, existing := range entries {
+		if strings.EqualFold(existing.Host, normalized.Host) {
+			entries[i] = normalized
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		if len(entries) >= 32 {
+			return fmt.Errorf("workspace already registers 32 forge hosts; remove one first")
+		}
+		entries = append(entries, normalized)
+	}
+	f.Forges[base] = entries
+	return nil
+}
+
+// RemoveForge drops every entry for one host on a workspace and reports
+// not_found when nothing was registered.
+func (f *File) RemoveForge(workspace, host string) (bool, error) {
+	base, err := func() (string, error) {
+		if base, ok := f.Aliases[workspace]; ok {
+			return base, nil
+		}
+		if err := ValidateURL(workspace); err != nil {
+			return "", fmt.Errorf("unknown workspace %q; run anx config workspaces to list aliases", workspace)
+		}
+		return strings.TrimRight(workspace, "/"), nil
+	}()
+	if err != nil {
+		return false, err
+	}
+	entries := f.Forges[base]
+	kept := entries[:0:0]
+	removed := false
+	for _, existing := range entries {
+		if strings.EqualFold(existing.Host, host) {
+			removed = true
+			continue
+		}
+		kept = append(kept, existing)
+	}
+	if !removed {
+		return false, nil
+	}
+	if len(kept) == 0 {
+		delete(f.Forges, base)
+	} else {
+		f.Forges[base] = kept
+	}
+	return true, nil
 }
 
 func (c Catalog) Target(target string) (string, error) {

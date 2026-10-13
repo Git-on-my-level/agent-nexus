@@ -73,6 +73,17 @@ func (a *App) workspaceCatalog(cfg config.Resolved) (workspaceconfig.Catalog, st
 	return catalog, dir, err
 }
 
+// workspaceForges resolves the forge hosts registered for the workspace the
+// command targets. A broken local config degrades to the built-in github.com
+// registry rather than blocking authoring; ask linting stays offline.
+func (a *App) workspaceForges(cfg config.Resolved) []workspaceconfig.Forge {
+	catalog, _, err := a.workspaceCatalog(cfg)
+	if err != nil {
+		return nil
+	}
+	return catalog.File.ForgesFor(cfg.BaseURL)
+}
+
 func (a *App) resolveWorkspace(cfg config.Resolved, alias *string) (config.Resolved, error) {
 	if alias == nil && cfg.Sources["base_url"] != "default" {
 		return cfg, nil

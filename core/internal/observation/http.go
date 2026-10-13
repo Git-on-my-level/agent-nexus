@@ -30,11 +30,14 @@ type HTTPConfig struct {
 	SourceWorkspaceID string
 	CredentialHandle  string
 	ResolveCredential CredentialResolver
-	RootCAs           *x509.CertPool
-	AllowedNetworks   []netip.Prefix
-	MaxPages          int
-	MaxBytes          int64
-	Timeout           time.Duration
+	// TokenScheme selects the Authorization prefix for the resolved credential:
+	// "" / "bearer" (default) or "token" for Gitea/Forgejo personal tokens.
+	TokenScheme     string
+	RootCAs         *x509.CertPool
+	AllowedNetworks []netip.Prefix
+	MaxPages        int
+	MaxBytes        int64
+	Timeout         time.Duration
 }
 type httpSource struct {
 	config HTTPConfig
@@ -64,6 +67,9 @@ func newHTTPSource(c HTTPConfig) (*httpSource, error) {
 	}
 	if c.CredentialHandle != "" && c.ResolveCredential == nil {
 		return nil, failure(ErrConfiguration, "credential handle requires a scoped resolver")
+	}
+	if c.TokenScheme != "" && c.TokenScheme != "bearer" && c.TokenScheme != "token" {
+		return nil, failure(ErrConfiguration, "unsupported credential token scheme")
 	}
 	c.AllowedNetworks = append([]netip.Prefix(nil), c.AllowedNetworks...)
 	if c.RootCAs != nil {
@@ -186,7 +192,11 @@ func (s *readSession) get(ctx context.Context, endpoint string, out any) (http.H
 	req.Header.Set("User-Agent", "Agent-Nexus-Observation/1")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if s.token != "" {
-		req.Header.Set("Authorization", "Bearer "+s.token)
+		prefix := "Bearer"
+		if s.source.config.TokenScheme == "token" {
+			prefix = "token"
+		}
+		req.Header.Set("Authorization", prefix+" "+s.token)
 	}
 	if s.source.config.SourceWorkspaceID != "" {
 		req.Header.Set("X-Workspace-ID", s.source.config.SourceWorkspaceID)

@@ -238,7 +238,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if utf8.RuneCountInString(title) > 160 {
 		return nil, errnorm.Usage("ask_title_too_long", "ask title exceeds the hard maximum of 160 characters; move detail into --body or --body-file ask.md")
 	}
-	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links)
+	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links, a.workspaceForges(cfg))
 	if titleErr := lintAskTitle(title); titleErr != nil {
 		lintErr = titleErr
 	}

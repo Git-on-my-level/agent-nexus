@@ -649,7 +649,7 @@ func reconcileSourceRead(ctx context.Context, store *primitives.Store, runtime *
 	}
 	source := workSourceMap(w)
 	authority := anyString(source["authority"])
-	if authority != "github" && authority != "multica" && authority != "git" && authority != "ssh_git" {
+	if authority != "github" && authority != "forgejo" && authority != "gitea" && authority != "multica" && authority != "git" && authority != "ssh_git" {
 		return pm.Receipt{}, pm.ErrUnavailable
 	}
 	report, err := runtime.ReadOne(ctx, a.WorkRef)

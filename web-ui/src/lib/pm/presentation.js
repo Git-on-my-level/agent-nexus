@@ -495,6 +495,8 @@ export function sourceLabel(source) {
     {
       nexus: "Nexus",
       github: "GitHub",
+      forgejo: "Forgejo",
+      gitea: "Gitea",
       multica: "Multica",
       git: "Git",
       ssh_git: "Git over SSH",

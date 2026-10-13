@@ -35,7 +35,12 @@ Use `evidence: [{label: Change, url: https://example.org/repository/pull/123}]`
 for external links; use typed document/card/topic refs in `refs`. The equivalent
 CLI option is `--evidence 'Change=https://example.org/repository/pull/123'`.
 Summarise source changes and link PRs or commit-pinned file lines instead of
-pasting code. Obvious missing refs/links and pointer-only bodies fail locally;
+pasting code. A named "PR #N" is satisfied by a pull-request URL on a
+registered forge host — github.com is built in; register other forges with
+`anx config forge add <alias|url> <host> <github|forgejo|gitea|gitlab|bitbucket>`
+(Forgejo/Gitea `/pulls/N`, GitLab `/-/merge_requests/N`, Bitbucket
+`/pull-requests/N`; commit-pinned file permalinks follow each kind's own form).
+Obvious missing refs/links and pointer-only bodies fail locally;
 other incomplete structure produces warnings. `--force --reason 'explanation'`
 records the author's deliberate lint override in the event.
 
