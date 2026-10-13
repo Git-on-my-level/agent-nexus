@@ -130,3 +130,20 @@ it("task and document authoring surfaces checkpoint complete forms", () => {
     expect(actions).toBe(expected);
   }
 });
+
+it("task moves checkpoint full drafts and have no legacy direct sender", () => {
+  for (const [path, action] of [
+    ["routes/o/[organization]/w/[workspace]/tasks/+page.svelte", "durableForm"],
+    ["lib/components/CommandPalette.svelte", "durableMoveForm"],
+  ]) {
+    const ast = parse(readFileSync(`${root}/${path}`, "utf8"));
+    let count = 0;
+    walk(ast.html, (node) => {
+      if (node.type === "Action" && node.name === action) count++;
+    });
+    expect(count).toBe(1);
+  }
+  expect(readFileSync(`${root}/lib/taskBoardMove.js`, "utf8")).not.toMatch(
+    /(?:moveBoardCard|createPmDecision|applyTaskPhaseMove)/,
+  );
+});

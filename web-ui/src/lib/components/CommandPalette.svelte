@@ -3,6 +3,8 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { focusTrap } from "$lib/actions/focusTrap.js";
+  import { durableForm as durableMoveForm } from "$lib/actions/durableForm.js";
+  import { enqueueTaskMove, taskMoveDraft } from "$lib/taskMoveWork.js";
   import { durableForm } from "$lib/actions/durableForm.js";
   import { localWorkScope } from "$lib/localWorkScope.js";
   import { enqueueAuthoring, mutationOutbox } from "$lib/mutationOutbox.js";
@@ -19,7 +21,6 @@
   import { copyText } from "$lib/clipboard.js";
   import { absoluteUrl } from "$lib/absoluteUrl.js";
   import { modSymbol } from "$lib/keyboardHints.js";
-  import { applyTaskPhaseMove } from "$lib/taskBoardMove.js";
   import { searchDocuments, searchWork } from "$lib/searchHelpers";
   import {
     resourceDisplayLabel,
@@ -43,13 +44,11 @@
   } from "$lib/commandPaletteModel.js";
   import { workspacePath } from "$lib/workspacePaths";
   import {
-    PM_STATES,
-    isPmNotOnboardedRefusal,
     pmFeaturesVisible,
     pmKnownAbsent,
     pmSetupOffered,
   } from "$lib/pm/onboardingState.js";
-  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
+  import { pmPresence } from "$lib/pm/presence.js";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workSummaryModel } from "$lib/workSummary.js";
 
@@ -81,6 +80,55 @@
   let inputEl = $state(null);
   let running = $state(false);
   let contextWork = $state(null);
+  let contextBoardToken = $state("");
+  let moveDraft = $state(null);
+  let moveError = $state("");
+  let moveTarget = $derived(workId ? `task:${workId}:move` : "");
+  let movePending = $derived(
+    $mutationOutbox.some((row) => row.target === moveTarget),
+  );
+  function restoreMove(value, reason) {
+    moveDraft = value;
+    if (reason === "privacy") {
+      moveError = "";
+      contextBoardToken = "";
+      contextWork = null;
+      contextRequestId += 1;
+      close();
+    }
+  }
+  async function rebaseMove() {
+    const draft = moveDraft;
+    const scope = $localWorkScope;
+    const target = moveTarget;
+    try {
+      const result = await coreClient.getWork(
+        draft.work.ref || workKey(draft.work),
+        { summary: 1 },
+      );
+      const board = isNexusOwned(result.work)
+        ? await coreClient.getBoard(
+            result.work.board_ref || result.work.board_id,
+          )
+        : null;
+      if (
+        scope !== $localWorkScope ||
+        target !== moveTarget ||
+        draft !== moveDraft
+      )
+        return;
+      moveDraft = {
+        ...draft,
+        work: result.work,
+        boardToken: (board?.board || board)?.updated_at || "",
+        approved: false,
+      };
+      moveError = "";
+    } catch (err) {
+      if (scope === $localWorkScope && target === moveTarget)
+        moveError = errorMessage(err);
+    }
+  }
   let assignmentDraft = $state(null);
   let assignmentError = $state("");
   let assignmentTarget = $derived(workId ? `card:${workId}:assignment` : "");
@@ -155,9 +203,17 @@
     if (task)
       void coreClient
         .getWork(task, { summary: 1 })
-        .then((result) => {
-          if (ticket === contextRequestId && scope === $localWorkScope)
-            contextWork = result?.work ?? null;
+        .then(async (result) => {
+          if (ticket !== contextRequestId || scope !== $localWorkScope) return;
+          contextWork = result?.work ?? null;
+          contextBoardToken = "";
+          if (contextWork && isNexusOwned(contextWork)) {
+            const board = await coreClient.getBoard(
+              contextWork.board_ref || contextWork.board_id,
+            );
+            if (ticket === contextRequestId && scope === $localWorkScope)
+              contextBoardToken = (board?.board || board)?.updated_at || "";
+          }
         })
         .catch(() => {});
     if (!task) contextWork = null;
@@ -229,54 +285,48 @@
       .sort((a, b) => a.name.localeCompare(b.name)),
   );
 
-  async function moveContextTask(phase) {
-    const work = contextWork;
-    close();
-    let result;
-    try {
-      result = await applyTaskPhaseMove(coreClient, work, phase, {
-        pmOnboarded: !pmAbsent,
-      });
-    } catch (err) {
-      /*
-       * The move was attempted because presence had not answered yet, and
-       * core has now settled it. Record that so the shell stops waiting and
-       * offers setup, and say it the way the absent case does instead of
-       * passing core's sentence through as a raw failure.
-       */
-      if (!isPmNotOnboardedRefusal(err)) throw err;
-      publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
-      result = { kind: "needs_pm", work };
-    }
-    if (result.kind === "moved") {
-      contextWork = { ...work, phase };
-      return {
-        text: `Moved “${work.title}” to ${phaseLabel(phase)}.`,
-        tone: "ok",
-      };
-    }
-    if (result.kind === "requested") {
-      return {
-        text: `Requested a move to ${phaseLabel(phase)} at ${sourceLabel(work.source)}. It waits in Inbox for a yes.`,
-        href: result.decision?.id
-          ? href(
-              `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
-            )
-          : "",
-        hrefLabel: "Open in Inbox",
-      };
-    }
-    if (result.kind === "needs_pm") {
-      // The rows above are absent once a PM is known to be missing; this
-      // covers running the row before presence answered, and a state that
-      // changed while the palette was open.
+  async function moveContextTask(phase = moveDraft?.phase) {
+    if (movePending) return;
+    const originInput = inputEl;
+    const work = moveDraft?.work || contextWork;
+    if (!work) return;
+    if (!isNexusOwned(work) && pmAbsent)
       return {
         text: `Changing work owned by ${sourceLabel(work.source)} is a request a PM carries out, and this workspace has none.`,
         href: href("/pm/setup"),
         hrefLabel: "Set up your PM",
       };
+    let draft = moveDraft
+      ? {
+          ...moveDraft,
+          phase,
+          approved: moveDraft.phase === phase && moveDraft.approved,
+        }
+      : taskMoveDraft(work, phase, { boardToken: contextBoardToken });
+    moveDraft = draft;
+    if (!isNexusOwned(work) && !draft.approved) {
+      if (
+        !window.confirm(
+          `Ask the PM to request moving “${work.title}” to ${phaseLabel(phase)} at ${sourceLabel(work.source)}? You approve the request in Inbox.`,
+        )
+      )
+        return;
+      draft = { ...draft, approved: true };
+      moveDraft = draft;
     }
-    return null;
+    moveError = "";
+    try {
+      await enqueueTaskMove(draft, {
+        href: href(`/tasks/${encodeURIComponent(workId)}`),
+      });
+      if (inputEl === originInput) close();
+      return {
+        text: `Saved move to ${phaseLabel(phase)}. Waiting for confirmation.`,
+      };
+    } catch (err) {
+      moveError = errorMessage(err);
+      subpage = "move";
+    }
   }
 
   async function submitAssignment(draft = assignmentDraft) {
@@ -789,6 +839,11 @@
       } else if (key === "a") {
         event.preventDefault();
         openAt("assign");
+        if (
+          event.detail?.scope === $localWorkScope &&
+          event.detail?.target === moveTarget
+        )
+          openAt("move");
       } else if (key === "o") {
         // The page's own source link: a real click, so no popup blocker.
         const link = document.querySelector("[data-task-source-link]");
@@ -838,6 +893,12 @@
 </script>
 
 <div
+  use:durableMoveForm={{
+    target: moveTarget,
+    value: moveDraft,
+    read: () => moveDraft,
+    onRestore: restoreMove,
+  }}
   use:durableForm={{
     target: assignmentTarget,
     value: assignmentDraft,
@@ -857,6 +918,30 @@
       use:focusTrap={{ initialFocus: () => inputEl, fallbackFocus }}
     >
       <div class="cmd-modal ui-pop-in">
+        {#if subpage === "move"}
+          <div class="p-3">
+            <MutationSendStatus target={moveTarget} />
+            {#if moveDraft && !movePending}
+              <p>
+                Saved move: “{moveDraft.work.title}” to {phaseLabel(
+                  moveDraft.phase,
+                )}.
+              </p>
+              <button
+                type="button"
+                class="rounded border border-line px-2 py-1"
+                onclick={() => run({ run: () => moveContextTask() })}
+                >Send move</button
+              >
+              <button
+                type="button"
+                class="rounded border border-line px-2 py-1"
+                onclick={rebaseMove}>Use latest version</button
+              >
+            {/if}
+            {#if moveError}<p role="alert">{moveError}</p>{/if}
+          </div>
+        {/if}
         {#if subpage === "assign"}
           <div class="p-3">
             <MutationSendStatus target={assignmentTarget} />

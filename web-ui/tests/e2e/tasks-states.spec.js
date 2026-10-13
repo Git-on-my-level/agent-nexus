@@ -282,7 +282,7 @@ function buildDecisions() {
 async function installTasksApi(page, overrides = {}) {
   const digest = await getExpectedCommandRegistryDigest();
   const api = {
-    work: buildWork(),
+    work: buildWork().map((work) => ({ ...work, version: 1 })),
     workNextCursor: "",
     boards: [
       {
@@ -455,7 +455,17 @@ async function installTasksApi(page, overrides = {}) {
         board: api.boards.find((b) => b.ref === path.slice(8)) || api.boards[0],
       }));
     if (/^\/cards\/.+\/move$/.test(path))
-      return respond("moveCard", () => ({ ok: true }));
+      return respond("moveCard", () => {
+        const body = request.postDataJSON();
+        const work = api.work.find((item) => item.ref === path.slice(7, -5));
+        work.phase = body.column_key;
+        work.version += 1;
+        const board = api.boards.find((item) => item.ref === work.board_ref);
+        board.updated_at = new Date(
+          Date.parse(board.updated_at) + 1,
+        ).toISOString();
+        return { card: { ...work, id: work.handle }, board };
+      });
     if (path === "/work/capabilities")
       return json(200, {
         capabilities: {
@@ -779,11 +789,18 @@ for (const viewport of AUDIT_VIEWPORTS) {
       };
       await page.getByLabel(/needs evidence/).fill(`artifact:${LONG_ID}`);
       await page.getByRole("button", { name: "Mark done" }).click();
-      await expect(page.getByText(/Nothing exists at artifact:/)).toBeVisible();
+      await expect(
+        page.locator('[data-mutation-state="attention"]'),
+      ).toBeVisible();
+      await expect(page.getByLabel(/needs evidence/)).toHaveValue(
+        `artifact:${LONG_ID}`,
+      );
       await expectCleanLayout(page, "evidence rejected", bothEnds);
 
       api.fail = {};
-      await page.getByRole("button", { name: "Mark done" }).click();
+      await page
+        .getByRole("button", { name: "Retry send", exact: true })
+        .click();
       await expect(evidence).toHaveCount(0);
       await expect(notice).toBeVisible();
       await expectCleanLayout(page, "done applied", bothEnds);

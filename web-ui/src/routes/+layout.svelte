@@ -1592,6 +1592,9 @@
       </aside>
 
       <div class="shell-main">
+        {#if identityReady && !renderLoginOnly && !gateVisible}
+          <UnsentIndicator />
+        {/if}
         <main class="shell-main-scroll">
           <div
             class={`shell-content shell-content--${shellContentConfig.mode}`}
@@ -1782,9 +1785,6 @@
     />
   {/if}
 
-  {#if identityReady && !renderLoginOnly && !gateVisible}
-    <UnsentIndicator />
-  {/if}
   <LocalSaveWarning />
 
   <!-- The one tooltip layer every `use:tooltip` reports into. -->

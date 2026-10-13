@@ -932,6 +932,7 @@
           >{/if}{/snippet}
     </WorkspacePageHeader>
     <MutationSendStatus target={`card:${workId}:assignment`} />
+    <MutationSendStatus target={`task:${workId}:move`} />
     <div
       class="grid gap-6 {railCollapsed
         ? ''

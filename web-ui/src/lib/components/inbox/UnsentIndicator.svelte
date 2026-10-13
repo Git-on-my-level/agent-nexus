@@ -13,7 +13,7 @@
 
 {#if $inboxUnsentResponses.length + $mutationOutbox.length}
   <details
-    class="fixed right-4 top-16 z-40 max-h-[70vh] w-fit open:w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-md border border-line bg-panel p-3 shadow-[var(--shadow-menu)]"
+    class="m-3 self-end shrink-0 max-h-[70vh] w-fit open:w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-md border border-line bg-panel p-3 shadow-[var(--shadow-menu)]"
     bind:open
     data-unsent-indicator
   >

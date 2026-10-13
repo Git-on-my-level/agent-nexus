@@ -89,9 +89,11 @@
             onclick={edit}
             >{entry.operation === "artifacts.attachments.create"
               ? "Choose replacement"
-              : entry.operation === "cards.patch"
-                ? "Edit assignment"
-                : "Edit message"}</button
+              : ["cards.move", "pm.decisions.create"].includes(entry.operation)
+                ? "Edit move"
+                : entry.operation === "cards.patch"
+                  ? "Edit assignment"
+                  : "Edit message"}</button
           >
           <button
             type="button"

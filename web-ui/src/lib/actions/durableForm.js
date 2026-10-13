@@ -66,12 +66,13 @@ export function durableForm(node, options) {
       return;
     generation += 1;
     paused = false;
+    event.preventDefault();
     options.onRestore(event.detail.value);
   }
   function confirmed(event) {
     if (
       event.detail?.scope !== scope ||
-      event.detail?.target !== options.target
+      (event.detail?.draftTarget || event.detail?.target) !== options.target
     )
       return;
     if (

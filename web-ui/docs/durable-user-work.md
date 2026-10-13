@@ -227,8 +227,13 @@ wake behavior. Tests inject failures at event, wake artifact, wake queue and
 receipt storage, and prove full rollback, eight concurrent exact replays, changed
 body rejection and denied replay after resource ownership is revoked.
 
-Task moves still run through `taskBoardMove.js`, including PM proposals for
-source-owned tasks and board completion evidence. Their UI migration remains open.
+Task moves now use `taskMoveWork.js` and the shared mutation outbox. Board drops,
+keyboard and palette moves checkpoint complete intents; completion evidence drafts
+restore across navigation/reload. Native requests freeze the observed board token,
+task version, destination and ordering anchor. Source requests freeze the original
+actor, revision, immutable intent key and separate original-receipt replay key.
+`taskBoardMove.js` now contains only pure proposal/badge helpers; its direct sender
+has been removed.
 Keyed `POST /cards/{id}/move` now atomically commits board placement/rank, native
 work version, completion resolution/evidence, dirty projections, lifecycle events
 and the original receipt. The handler binds the canonical card/parent board,
@@ -270,11 +275,16 @@ recovery, revoked resource/principal/origin access, and unchanged legacy/setup
 behavior. Leased PM-turn proposals retain their existing path; this mode is for
 human decision creation.
 
-The move UI still needs its durable adapters and complete snapshots. They must
-bind the original actor and freeze destination/evidence, ordering anchors and
-board/task tokens before sending. Preserve PM setup guards, source-move approval
-prompts and ordering/undo fixes. Confirmation should refresh canonical display
-state without rewriting the original request or receipt.
+Move/evidence attention states retain copy/edit/retry actions. Editing transfers
+the saved snapshot into its original composer; only “Use latest version” refreshes
+the task/board bases, preserving destination, anchor and evidence. Missing bases
+fail closed with the draft visible. One uncertain send per task prevents duplicate
+intent keys, including board/palette submissions. Both paths preserve PM setup
+guards and explicit source-move approval; recovery does not prompt again.
+Confirmation refreshes canonical task/decision display without rewriting the
+original request or receipt. Newer evidence in another tab survives confirmation.
+Board undo submits a new intent using explicitly refreshed current bases;
+pending moves never claim to have moved the task.
 
 Card content
 revisions are separate from metadata PATCH: `CreateCardRevision` holds the quota
@@ -302,8 +312,8 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /docs`, `PATCH /docs/{id}`, `POST /docs/{id}/revisions`                     | Document/revision/metadata writes and original response commit with replay; exact body/base-token retries and changed-key conflicts                                                                                                              | Creation, description, text revision and inline title adapters covered; legacy PUT and other lifecycle/knowledge forms remain gaps                    |
 | `PUT /cards/{id}/plan`                                                            | Graph, timestamps, work version, event and original response commit together; concurrent quota-enabled/single-connection replay, original projection, rollback and revocation tests                                                              | Keyed core API covered; CLI helpers currently send unkeyed requests, and the UI has no plan editor. Future composers still need durable drafts/outbox |
 | `PATCH /cards/{id}`                                                               | Card metadata, event, assignment wake packet/queue and original receipt commit together; quota-enabled single-connection concurrency, rollback at four writes, changed-body and revoked-access tests                                             | Command-palette assignment covered; card revisions and lifecycle remain rollout work                                                                  |
-| `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay covered; board/palette moves and completion draft/outbox migration still open                                                       |
-| `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode covered; source-owned move UI still needs original actor/request/replay-key recovery and durable destination/evidence snapshots     |
+| `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                          |
+| `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                             | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules
@@ -313,9 +323,11 @@ actions on every authored Inbox response field, requires the shared discussion
 composer action, PM answer/chat and assignment actions, and rejects direct Inbox/event/PM answer/chat/upload/task/document authoring sends
 and assignment sends in any Svelte surface. This is a guard for the migrated scope; subsequent stages
 must extend it to all mutation forms. Do not present it as whole-UI enforcement.
-The guard also rejects new direct `moveBoardCard` and `createPmDecision` calls in Svelte. Existing moves
-are centralized in `taskBoardMove.js`; that helper still needs its durable
-outbox migration, including source-owned PM proposals.
+The guard rejects direct `moveBoardCard` and `createPmDecision` calls in Svelte,
+requires durable board/palette move snapshots, and rejects reintroducing the
+legacy direct helper. `durable-moves.spec.js` verifies exact original bases/key
+after uncertain delivery, offline completion/tab closure, explicit conflict
+rebasing, source proposal recovery and cross-tab preservation of newer evidence.
 
 `durable-inbox.spec.js` covers reload/navigation/new-tab drafts, timeout and 524,
 closing an offline tab, interrupted confirmation with a duplicate retry across

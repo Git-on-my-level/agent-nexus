@@ -1,3 +1,4 @@
+import { goto } from "$app/navigation";
 import { get, writable } from "svelte/store";
 import { createLocalMutationClient } from "$lib/coreClient.js";
 import { localWorkScope, canUseLocalWorkScope } from "$lib/localWorkScope.js";
@@ -21,6 +22,8 @@ import {
   uploadedAttachments,
 } from "$lib/attachmentWork.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
+import { isPmNotOnboardedRefusal, PM_STATES } from "$lib/pm/onboardingState.js";
+import { publishPmPresence } from "$lib/pm/presence.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
 
 export const mutationOutbox = writable([]);
@@ -45,6 +48,21 @@ const visible = (entry) => entry.state !== "superseded";
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "cards.move") {
+    const result = await client.moveBoardCard(
+      entry.request.board,
+      entry.request.id,
+      entry.request.body,
+    );
+    if (!result.card?.id || !result.board?.updated_at)
+      throw new Error("Move receipt is incomplete.");
+    return result;
+  }
+  if (entry.operation === "pm.decisions.create") {
+    const decision = await client.createPmDecision(entry.request.body);
+    if (!decision.id) throw new Error("Proposal receipt is incomplete.");
+    return { decision };
+  }
   if (entry.operation === "cards.patch") {
     const result = await client.updateBoardCard(
       "",
@@ -300,7 +318,8 @@ export function enqueuePmDecisionAnswer({
   });
 }
 
-async function enqueueLocalMutation({
+export async function enqueueLocalMutation({
+  draftTarget,
   operation,
   request,
   key,
@@ -327,6 +346,7 @@ async function enqueueLocalMutation({
     operation,
     request,
     target,
+    draftTarget: draftTarget || target,
     draft,
     href,
     title,
@@ -401,11 +421,21 @@ async function attempt(entry) {
         });
         volatile.delete(entry.key);
         // Preserve any newer composer contents, even in another tab.
-        const current = await loadLocalWork(entry.scope, "draft", entry.target);
+        const current = await loadLocalWork(
+          entry.scope,
+          "draft",
+          entry.draftTarget || entry.target,
+        );
         if (JSON.stringify(current) === JSON.stringify(entry.draft))
-          await saveLocalWork(entry.scope, "draft", entry.target, null, {
-            epoch: entry.epoch,
-          });
+          await saveLocalWork(
+            entry.scope,
+            "draft",
+            entry.draftTarget || entry.target,
+            null,
+            {
+              epoch: entry.epoch,
+            },
+          );
         if (entry.operation === "events.create")
           await consumeUploadedAttachments(
             entry.scope,
@@ -417,13 +447,23 @@ async function attempt(entry) {
     );
   } catch (error) {
     if (!active(entry)) return;
+    if (
+      entry.operation === "pm.decisions.create" &&
+      isPmNotOnboardedRefusal(error)
+    ) {
+      publishPmPresence(JSON.parse(entry.scope)[1], PM_STATES.NOT_ONBOARDED);
+      error.publicMessage =
+        "This workspace has no PM to carry out this source move. Set up your PM, then retry. Your destination and evidence are saved.";
+    }
     entry.failure = mutationFailure(
       error,
       entry.operation === "artifacts.attachments.create"
         ? "file"
-        : entry.operation === "cards.patch"
-          ? "assignment"
-          : "response",
+        : ["cards.move", "pm.decisions.create"].includes(entry.operation)
+          ? "move"
+          : entry.operation === "cards.patch"
+            ? "assignment"
+            : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =
@@ -545,16 +585,30 @@ export async function editMutation(key) {
   const draft = entry.receipt?.conversationId
     ? { ...entry.draft, conversationId: entry.receipt.conversationId }
     : entry.draft;
-  await saveLocalWork(entry.scope, "draft", entry.target, draft, {
-    epoch: entry.epoch,
-  });
+  await saveLocalWork(
+    entry.scope,
+    "draft",
+    entry.draftTarget || entry.target,
+    draft,
+    {
+      epoch: entry.epoch,
+    },
+  );
   await persist({ ...entry, state: "superseded" });
   volatile.delete(key);
-  window.dispatchEvent(
+  if (!active(entry)) return;
+  const unhandled = window.dispatchEvent(
     new CustomEvent("anx:edit-form", {
-      detail: { scope: entry.scope, target: entry.target, value: draft },
+      cancelable: true,
+      detail: {
+        scope: entry.scope,
+        target: entry.draftTarget || entry.target,
+        value: draft,
+      },
     }),
   );
+  if (unhandled && entry.href) await goto(entry.href);
+
   requestRecovery();
 }
 
