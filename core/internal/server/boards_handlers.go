@@ -1987,11 +1987,11 @@ func emitBoardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID s
 	if opts.primitiveStore == nil || event == nil {
 		return nil
 	}
-	stored, err := opts.primitiveStore.AppendEvent(ctx, actorID, event)
+	_, err := opts.primitiveStore.AppendEvent(ctx, actorID, event)
 	if err != nil {
 		return err
 	}
-	enqueueTopicProjectionsBestEffort(ctx, opts, []string{anyString(stored["thread_id"])}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 	return nil
 }
 
@@ -2007,18 +2007,7 @@ func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID st
 	if err != nil {
 		return nil, err
 	}
-	threadIDs := []string{anyString(stored["thread_id"])}
-	payload, _ := stored["payload"].(map[string]any)
-	if refs, err := extractStringSlice(payload["related_refs"]); err == nil {
-		for _, ref := range refs {
-			prefix, id, err := schema.SplitTypedRef(ref)
-			if err != nil || prefix != "thread" {
-				continue
-			}
-			threadIDs = append(threadIDs, id)
-		}
-	}
-	enqueueTopicProjectionsBestEffort(ctx, opts, threadIDs, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 	// Projection work is durable and coalesced by the maintenance queue.
 	// Never replay thread history on the mutation response path.
 	return stored, nil

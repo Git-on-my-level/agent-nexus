@@ -239,7 +239,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	threadID := anyString(stored["thread_id"])
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 	if opts.pmRuntime != nil {
 		if store, ok := opts.primitiveStore.(*primitives.Store); ok {
 			if err := opts.pmRuntime.SyncBridgeReply(r.Context(), store, stored); err != nil {

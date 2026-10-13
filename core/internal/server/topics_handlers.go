@@ -169,7 +169,7 @@ func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	primaryThreadID := topicPrimaryThreadID(result.Topic)
 	if primaryThreadID != "" {
-		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{primaryThreadID}, time.Now().UTC())
+		notifyProjectionMaintainer(opts)
 	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "topics.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{
@@ -277,7 +277,7 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	if primaryThreadID := topicPrimaryThreadID(result.Topic); primaryThreadID != "" {
-		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{primaryThreadID}, time.Now().UTC())
+		notifyProjectionMaintainer(opts)
 	}
 
 	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"topic": result.Topic}))
@@ -361,7 +361,7 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 	}
 
 	if primaryThreadID := topicPrimaryThreadID(topic); primaryThreadID != "" {
-		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{primaryThreadID}, time.Now().UTC())
+		notifyProjectionMaintainer(opts)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"topic": topic})

@@ -8,10 +8,10 @@ Derived projections (thread views, board workspaces, etc.) are convenience reads
 
 Two maintenance modes:
 
-| Mode | Behavior | Use case |
-|---|---|---|
-| `background` | Async worker rebuilds dirty projections | Default, most workloads |
-| `manual` | Writes queue dirty work, no auto-rebuild | Maintenance windows, operator control |
+| Mode         | Behavior                                 | Use case                              |
+| ------------ | ---------------------------------------- | ------------------------------------- |
+| `background` | Async worker rebuilds dirty projections  | Default, most workloads               |
+| `manual`     | Writes queue dirty work, no auto-rebuild | Maintenance windows, operator control |
 
 ## Background mode
 
@@ -19,14 +19,18 @@ Default: `ANX_PROJECTION_MODE=background`
 
 Configuration:
 
-| Variable | Purpose | Default |
-|---|---|---|
-| `ANX_PROJECTION_MAINTENANCE_INTERVAL` | Loop tick | `5s` |
-| `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` | Projections per tick | `50` |
+| Variable                                | Purpose              | Default |
+| --------------------------------------- | -------------------- | ------- |
+| `ANX_PROJECTION_MAINTENANCE_INTERVAL`   | Loop tick            | `5s`    |
+| `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` | Projections per tick | `50`    |
 
 Behavior:
-- Writes queue dirty projection records
-- Background loop picks up dirty work every interval
+
+- Projection invalidation commits with its canonical mutation; handler wakeups are only latency hints
+- Background loop picks up eligible dirty work every interval
+- A failed projection retains its original dirty age and visible per-thread error; healthy entries in the batch continue
+- Retry eligibility survives restart, with exponential backoff from 5 seconds to a 5-minute cap; new writes retain that delay and success resets it
+- Generation-based recovery also applies when a crash removed the queue row before refresh completed
 - Explicit rebuild can repair projections that missed incremental dirty markers
 - Eventual consistency: projections may lag briefly behind canonical state
 
@@ -45,16 +49,19 @@ Health monitoring via `/ops/health`:
 ```
 
 Key indicators:
+
 - `pending_dirty_count`: backlog size
 - `oldest_dirty_lag_seconds`: how far behind the oldest dirty projection is
 - `last_error`: most recent failure, if any
 
 Normal operation:
+
 - `pending_dirty_count` fluctuates but trends to zero
 - `oldest_dirty_lag_seconds` stays low (single-digit seconds)
 - `last_error` is null
 
 Warning signs:
+
 - `pending_dirty_count` grows unbounded
 - `oldest_dirty_lag_seconds` exceeds maintenance interval significantly
 - `last_error` is set repeatedly
@@ -64,11 +71,13 @@ Warning signs:
 Enable with `ANX_PROJECTION_MODE=manual`.
 
 Behavior:
+
 - Writes still queue dirty projection records
 - Background loop is disabled
 - Projections stay stale until explicit rebuild
 
 Use cases:
+
 - Planned maintenance windows
 - Debugging projection logic
 - Operator-controlled rebuild timing
@@ -90,8 +99,9 @@ scripts/hosted/rebuild-derived.sh --actor-id operator_ws_example
 ```
 
 The rebuild endpoint:
-- Processes all queued dirty projections
-- Returns when backlog is cleared
+
+- Processes eligible queued dirty projections
+- Returns an error if a refresh fails or projections remain in retry backoff; it does not report a cleared backlog while delayed work remains
 - Safe to call repeatedly
 
 Switching modes at runtime requires restarting the workspace core. The example
@@ -189,6 +199,7 @@ High-write workloads may benefit from:
 - Higher `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` (more work per tick)
 
 Trade-offs:
+
 - Lower intervals = more CPU, faster catch-up
 - Higher batch size = longer tick duration, more memory per tick
 

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
@@ -231,7 +230,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{
 		"document": document,
@@ -329,7 +328,7 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	if threadID := documentBackingThreadID(document); threadID != "" {
-		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
+		notifyProjectionMaintainer(opts)
 	}
 	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{
 		"document": document,
@@ -534,7 +533,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	previousDocument, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+	_, _, err = opts.primitiveStore.GetDocument(r.Context(), documentID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
@@ -543,7 +542,6 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load document")
 		return
 	}
-	previousThreadID := documentBackingThreadID(previousDocument)
 
 	document, revision, err := opts.primitiveStore.UpdateDocument(
 		r.Context(),
@@ -571,16 +569,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		return
 	}
-	refreshNow := time.Now().UTC()
-	threadIDsToRefresh := map[string]struct{}{
-		previousThreadID:                  {},
-		documentBackingThreadID(document): {},
-	}
-	threadIDs := make([]string, 0, len(threadIDsToRefresh))
-	for threadID := range threadIDsToRefresh {
-		threadIDs = append(threadIDs, threadID)
-	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, threadIDs, refreshNow)
+	notifyProjectionMaintainer(opts)
 
 	writeJSON(w, successStatus, hygiene.attach(map[string]any{
 		"document": document,
@@ -769,7 +758,7 @@ func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -828,7 +817,7 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -879,7 +868,7 @@ func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -931,7 +920,7 @@ func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -1147,7 +1136,7 @@ func handlePutDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update document")
 			return
 		}
-		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+		notifyProjectionMaintainer(opts)
 		writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"document": document, "revision": nextRevision}))
 		return
 	}
@@ -1172,7 +1161,7 @@ func handlePutDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	notifyProjectionMaintainer(opts)
 	writeJSON(w, http.StatusCreated, hygiene.attach(map[string]any{"document": document, "revision": revision}))
 }
 

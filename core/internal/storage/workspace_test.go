@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
@@ -183,7 +184,7 @@ func TestProjectionQueueStatsAndListingRecoverStrandedGenerationRows(t *testing.
 		t.Fatalf("seed stranded projection status: %v", err)
 	}
 
-	entries, err := store.ListDerivedTopicProjectionDirtyEntries(ctx, 10)
+	entries, err := store.ListDerivedTopicProjectionDirtyEntries(ctx, 10, time.Now())
 	if err != nil {
 		t.Fatalf("list dirty projection entries: %v", err)
 	}
