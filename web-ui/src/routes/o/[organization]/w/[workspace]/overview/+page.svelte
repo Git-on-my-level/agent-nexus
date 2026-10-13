@@ -35,6 +35,8 @@
   } from "$lib/overviewUrgent.js";
   import UrgentBand from "$lib/components/overview/UrgentBand.svelte";
   import MorningBrief from "$lib/components/overview/MorningBrief.svelte";
+  import FirstAgentPanel from "$lib/components/onboarding/FirstAgentPanel.svelte";
+  import { isColdStart } from "$lib/firstRun.js";
   import { morningBriefModel } from "$lib/morningBrief.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workspacePath } from "$lib/workspacePaths";
@@ -69,6 +71,34 @@
 
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
+  );
+  /*
+   * Cold start: a workspace nothing has ever reported into.
+   *
+   * Read off the snapshot this page already loads, so it costs no request and
+   * nothing that grows with the workspace — see `firstRun.js`. The sections
+   * below are all empty in this state and their only call to action (pin a
+   * visual report) cannot be taken until an agent has written one, so the
+   * page spends its first screen on connecting that agent instead.
+   */
+  let coldStart = $derived(isColdStart(model));
+  /*
+   * The flip, kept in the page rather than the panel: the same live refresh
+   * that fills the sections ends the cold state, and the reader who was
+   * watching deserves to be told that is what just happened. Per visit — a
+   * reload of a workspace that now has agents is not an arrival.
+   */
+  let sawColdStart = $state(false);
+  $effect(() => {
+    if (coldStart) sawColdStart = true;
+  });
+  let justConnected = $derived(sawColdStart && model && !coldStart);
+  let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
+  let cliInstallCommand = $derived(
+    $page.data?.workspace?.cliInstallCommand ?? "",
+  );
+  let workspaceLabel = $derived(
+    $page.data?.workspace?.label || $page.params.workspace || "",
   );
   let reports = $derived(
     model?.reports?.status === "ok" ? model.reports.reports : [],
@@ -532,7 +562,17 @@
   {:else}
     <div role="status" aria-label="Loading overview"><Skeleton rows={6} /></div>
   {/if}
-  {#if model}
+  {#if model && coldStart}
+    <FirstAgentPanel
+      {cliBaseUrl}
+      {cliInstallCommand}
+      {workspaceLabel}
+      hrefFor={workspaceHref}
+    />
+  {:else if model}
+    {#if justConnected}
+      <FirstAgentPanel connected hrefFor={workspaceHref} />
+    {/if}
     <!--
       Initiatives, worst first: blocked, at risk, stale, on track, done. The
       sort lives in `planHealth.js` so this section and the band above it

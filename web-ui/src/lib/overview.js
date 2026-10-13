@@ -485,6 +485,15 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
             ...(() => {
               const summary = rosterSummary(snapshot.agents.items);
               return {
+                /*
+                 * Every identity the roster holds, including the ones that
+                 * have never checked in. The state counts below deliberately
+                 * leave those out, which makes "all four are zero" an unsafe
+                 * reading of "nothing has ever connected" — and that reading
+                 * is what decides whether this workspace still needs its
+                 * first agent. See `firstRun.js`.
+                 */
+                known: summary.total + summary.inactiveTotal,
                 working: summary.working,
                 waiting: summary.waiting_on_human,
                 /*
