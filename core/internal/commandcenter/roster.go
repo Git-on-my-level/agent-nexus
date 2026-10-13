@@ -112,6 +112,7 @@ type OpenAsk struct {
 	Severity         *string `json:"severity"`
 	CreatedAt        string  `json:"created_at"`
 	Kind             string  `json:"kind,omitempty"`
+	Delivery         string  `json:"delivery,omitempty"`
 	SubjectRef       *string `json:"subject_ref,omitempty"`
 	SubjectTitle     string  `json:"subject_title,omitempty"`
 	RequesterActorID string  `json:"requester_actor_id,omitempty"`
@@ -441,7 +442,7 @@ func (s *Store) openAsksLimit(ctx context.Context, limit int, ids, identities st
 			_ = json.Unmarshal([]byte(inboxRaw), &inbox)
 		}
 		ask := OpenAsk{Total: total, ID: id, InboxItemID: stringPtr(inboxID), CreatedAt: at,
-			Kind: str(p["kind"]), SubjectRef: stringPtr(str(p["subject_ref"])),
+			Kind: str(p["kind"]), Delivery: str(p["delivery"]), SubjectRef: stringPtr(str(p["subject_ref"])),
 			SubjectTitle: str(p["subject_title"]), RequesterActorID: str(p["requester_actor_id"]),
 			RequesterAgentID: stringPtr(str(p["requester_agent_id"]))}
 		ask.Title = str(p["title"])

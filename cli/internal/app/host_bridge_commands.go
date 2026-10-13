@@ -57,7 +57,11 @@ func (a *App) hostBridgeCall(ctx context.Context, cfg config.Resolved, hostID, k
 	if kind != "bridge-check-in" {
 		headers["X-ANX-Host-Id"] = hostID
 	}
-	result, err := a.hostCall(ctx, cfg, http.MethodPost, path, body, headers)
+	// Host-proof endpoints reject requests that also carry a bearer token; the
+	// bridge resolves its own agent identity, so drop it for the signed call.
+	proofCfg := cfg
+	proofCfg.AccessToken = ""
+	result, err := a.hostCall(ctx, proofCfg, http.MethodPost, path, body, headers)
 	if err != nil {
 		return nil, err
 	}

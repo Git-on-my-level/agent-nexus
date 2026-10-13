@@ -19,9 +19,10 @@ import (
 const Filename = "workspaces.json"
 
 type File struct {
-	Default string            `json:"default,omitempty"`
-	Aliases map[string]string `json:"aliases"`
-	Rules   map[string]string `json:"directory_rules,omitempty"`
+	Default     string            `json:"default,omitempty"`
+	Aliases     map[string]string `json:"aliases"`
+	Rules       map[string]string `json:"directory_rules,omitempty"`
+	AskDelivery string            `json:"ask_delivery,omitempty"`
 }
 
 type Workspace struct {

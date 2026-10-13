@@ -1042,6 +1042,24 @@ var migrations = []migration{
 	{Version: 83, AfterApply: upgradeSearchNormalization},
 	{Version: 84, AfterApply: upgradeExternalCommentSearch},
 	{Version: 85, AfterApply: upgradeCommentSearchPendingCursor},
+	// Agent-inbox asks filter by the requester recorded inside the ask payload.
+	// The partial expression index turns that predicate from a scan over every
+	// ask event into a seek on one principal's asks; the expression must match
+	// the query in primitives/human_attention_inbox.go exactly. The one-time
+	// build happens inside this migration; inserts after it only touch the
+	// index for human_attention_requested rows. Legacy fixtures may predate
+	// the events table, so the index is conditional like the other event
+	// indexes (see the overview-answers migration).
+	{Version: 86, AfterApply: installAskRequesterIndex},
+}
+
+func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "events")
+	if err != nil || !exists {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_ask_requester ON events(trim(COALESCE(json_extract(payload_json,'$.payload.requester_actor_id'),'')), ts DESC, id DESC) WHERE type='human_attention_requested' AND COALESCE(trashed_at,'')=''`)
+	return err
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

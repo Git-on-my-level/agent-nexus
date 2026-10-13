@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 func lockAskBridge(path string) (func(), error) {
@@ -20,6 +21,41 @@ func lockAskBridge(path string) (func(), error) {
 		return nil, fmt.Errorf("answer bridge already running")
 	}
 	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
+// askBridgeLockState probes whether an exclusive answer-bridge lock is held
+// without taking one. A shared non-blocking lock succeeds alongside other
+// probes and fails only when `anx bridge run` holds exclusive; holding
+// exclusive here would starve a starting bridge and look like a live one
+// to a concurrent ask/orient. Anything that cannot be inspected — open
+// failures, unexpected flock errors — is unknown, never "running": delivery
+// selection must not accept a resume ask on an unverifiable probe.
+func askBridgeLockState(path string) answerBridgeProbe {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return answerBridgeUnknown
+	}
+	defer f.Close()
+	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+			return answerBridgeRunning
+		}
+		return answerBridgeUnknown
+	}
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return answerBridgeAbsent
+}
+
+// lockAskBridgeReady takes the exclusive answer-bridge lock, retrying briefly
+// so a concurrent shared liveness probe cannot abort `anx bridge run`.
+func lockAskBridgeReady(path string) (func(), error) {
+	unlock, err := lockAskBridge(path)
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for err != nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		unlock, err = lockAskBridge(path)
+	}
+	return unlock, err
 }
 
 // Kill the process group before Wait returns so timeout retries cannot overlap

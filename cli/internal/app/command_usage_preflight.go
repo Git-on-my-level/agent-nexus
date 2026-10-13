@@ -22,6 +22,9 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if len(args) >= 2 && args[0] == "bridge" && args[1] == "run" {
 		return "bridge run", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"max-attempts": {kind: preflightFlagString}, "command-timeout": {kind: preflightFlagString}})
 	}
+	if len(args) >= 2 && args[0] == "bridge" && args[1] == "install" && !bridgeInstallTargetsRuntime(args[2:]) {
+		return "bridge install", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"as": {kind: preflightFlagString}, "dry-run": {kind: preflightFlagBool}})
+	}
 	if args[0] == "update" {
 		o, err := parseUpdateOptions(args[1:])
 		name := "update"
@@ -558,7 +561,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	})
 	for _, kind := range []string{"ask", "review", "escalate"} {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {
-			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString},
+			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
 			"recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString},
 			"from-file": {kind: preflightFlagString}, "subject-ref": {kind: preflightFlagString},
 			"thread-id": {kind: preflightFlagString}, "ref": {kind: preflightFlagString},
@@ -785,6 +788,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"full-id":   boolFlag,
 			"status":    valueFlag,
 			"unread":    boolFlag,
+			"limit":     valueFlag,
+			"cursor":    valueFlag,
 		},
 		"inbox respond": {
 			"from-file":     valueFlag,
@@ -966,6 +971,12 @@ func hasHelpToken(args []string) bool {
 
 func preflightConfigArgs(args []string) error {
 	if len(args) == 0 {
+		return nil
+	}
+	if args[0] == "ask-delivery" {
+		if len(args) > 2 {
+			return errnorm.Usage("invalid_args", "use anx help config ask-delivery for command arguments")
+		}
 		return nil
 	}
 	expected := map[string]int{"show": 0, "workspaces": 0, "use": 1, "map": 2, "unmap": 1}
