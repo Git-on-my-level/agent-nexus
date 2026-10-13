@@ -20,6 +20,8 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import {
     actorDisplayLabel,
@@ -82,6 +84,7 @@
     pmFeaturesVisible,
   } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let work = $state(null),
     /**
      * True while `work` is the row the list already had rather than the card
@@ -94,6 +97,7 @@
     nextCursor = $state(""),
     loading = $state(true),
     error = $state(""),
+    notFound = $state(false),
     evidenceError = $state(""),
     decisions = $state([]),
     actions = $state([]),
@@ -563,6 +567,7 @@
     const read = beginRead();
     loading = true;
     error = "";
+    notFound = false;
     evidenceError = "";
     decisionsError = "";
     refreshing = false;
@@ -624,6 +629,7 @@
       }
     } else if (read.live()) {
       error = errorMessage(results[0].reason);
+      notFound = results[0].reason?.status === 404;
       // A failed read must not leave a list row on screen looking like one.
       work = null;
       workPartial = false;
@@ -821,28 +827,48 @@
       window.clearInterval(clock);
     };
   });
+
+  usePageTitle(() => `${work?.title || "Task"} · Agent Nexus`);
 </script>
 
 <svelte:window bind:innerWidth={viewportWidth} />
-<svelte:head><title>{work?.title || "Task"} · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-fg-muted hover:text-fg"
     href={workspaceHref("/tasks")}>← Tasks</a
   >
-  {#if error}<StateError
+  {#if error && notFound}
+    <!-- A missing task is not an outage: retrying a 404 cannot help. -->
+    <StateEmpty
+      title="Task not found"
+      helper="It may have been removed, or this link points somewhere else."
+      actionLabel="Back to tasks"
+      actionHref={workspaceHref("/tasks")}
+    />
+  {:else if error}<StateError
       title="Task unavailable"
       message={error}
       onretry={() => load()}
       retrying={loading}
     />{/if}
-  {#if loading && !work}<p class="py-10 text-meta text-fg-muted" role="status">
-      Loading…
-    </p>{/if}
+  {#if loading && !work}
+    <!-- The header and first section in the places they will land. -->
+    <div class="ui-skeleton-reveal space-y-3" aria-busy="true">
+      <p class="sr-only" role="status">Loading…</p>
+      <div class="h-6 w-2/5 animate-pulse rounded bg-panel-hover"></div>
+      <div class="flex gap-1.5">
+        <div class="h-5 w-20 animate-pulse rounded bg-panel-hover"></div>
+        <div class="h-5 w-24 animate-pulse rounded bg-panel-hover"></div>
+      </div>
+      <Skeleton rows={4} class="max-w-2xl pt-4" />
+    </div>
+  {/if}
   {#if work}
     <WorkspacePageHeader title={work.title || "Untitled task"}>
       {#snippet subtitle()}
-        <span class="flex flex-wrap items-center gap-1.5">
+        <!-- Baseline, not centre: the summary can run to a second line, and
+             the badges belong on its first. -->
+        <span class="flex flex-wrap items-baseline gap-1.5">
           <!--
             The card's computed state, with the reason core gave for it and,
             when the board disagrees, what it is filed as. The header used to

@@ -358,6 +358,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.getByRole("link", { name: /Access/ }).first(),
       ).toBeVisible();
+      await expect(page).toHaveTitle("Settings · Agent Nexus");
       // Threads is infrastructure, not an operator noun, so it belongs here
       // under Diagnostics rather than in primary nav — but it must be reachable
       // by link, not only by typing the URL.

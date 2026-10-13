@@ -1,12 +1,11 @@
 <script>
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let { data } = $props();
-</script>
 
-<svelte:head>
-  <title>{data.report.title} · Report preview</title>
-</svelte:head>
+  usePageTitle(() => `${data.report.title} · Report preview`);
+</script>
 
 <main class="preview">
   <VisualReport report={data.report} previewObservations={data.observations} />

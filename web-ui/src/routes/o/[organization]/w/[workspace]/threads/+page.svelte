@@ -28,7 +28,7 @@
   import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
-  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
@@ -36,6 +36,7 @@
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let loading = $state(false);
   let error = $state("");
@@ -170,6 +171,8 @@
       q: current.q,
     });
   }
+
+  usePageTitle(() => "Threads · Agent Nexus");
 </script>
 
 <WorkspacePageShell>
@@ -223,7 +226,7 @@
   </WorkspaceListFilters>
 
   {#if loading && backingThreads.length === 0}
-    <Skeleton rows={6} />
+    <SkeletonList rows={6} rowClass="h-14" trailing={false} />
   {:else if backingThreads.length === 0 && !error}
     <StateEmpty
       title={hasActiveFilters
@@ -245,7 +248,7 @@
         {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
         <div class="flex items-stretch {i > 0 ? 'border-t border-line' : ''}">
           <a
-            class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-line-subtle"
+            class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-panel-hover"
             href={workspaceHref(
               `/threads/${encodeURIComponent(resourceRouteSegment(thread, "thread"))}`,
             )}
@@ -275,8 +278,7 @@
                 >{/each}Updated <Time
                 value={thread.updated_at}
                 fallback="—"
-              />{#if topicSeg}
-                · linked to a topic{/if}
+              />{#if topicSeg}{" · "}linked to a topic{/if}
             </p>
           </a>
           {#if thread.ref || thread.handle}

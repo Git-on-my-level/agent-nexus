@@ -365,7 +365,7 @@
         {#if replyTo}
           <button
             type="button"
-            class="mb-1 flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left text-micro text-fg-subtle transition-colors hover:text-fg"
+            class="mb-1 flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left text-micro text-fg-subtle transition-colors hover:text-fg [@media(hover:none)]:pr-28"
             onclick={scrollToReplyParent}
             title={truncateReplyText(replyTo.text, 500)}
             aria-label={`Jump to message from ${actorName(replyTo.authorActorId)}: ${truncateReplyText(replyTo.text, 80)}`}
@@ -383,7 +383,11 @@
           </button>
         {/if}
 
-        <div class="mb-1.5 flex min-w-0 w-full items-start gap-2 pr-16">
+        <!-- Without hover the action bar never hides, so the header keeps
+             clear of all of it rather than the part a hover overlay covers. -->
+        <div
+          class="mb-1.5 flex min-w-0 w-full items-start gap-2 pr-16 [@media(hover:none)]:pr-28"
+        >
           <ActorAvatar
             label={actorLine}
             seed={String(message.actor_id ?? actorLine)}

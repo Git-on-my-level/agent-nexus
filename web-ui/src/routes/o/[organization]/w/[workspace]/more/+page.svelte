@@ -26,6 +26,7 @@
   import { settingsNavGroups } from "$lib/navigation";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -110,19 +111,27 @@
     const org = entry?.organizationSlug ?? organizationSlug;
     await goto(workspacePath(org, slug, "/"));
   }
+
+  usePageTitle(() => "Settings · Agent Nexus");
 </script>
 
 <div class="space-y-3 sm:space-y-4">
+  <h1 class="text-title text-fg">Settings</h1>
   <!-- Secondary navigation, grouped: Settings, then Diagnostics. The group
        label is rendered from the data so a new group cannot silently land
        under the wrong heading. -->
   {#each settingsNavGroups as group (group.label)}
     <section>
-      <p class="ui-label mb-1.5 sm:mb-2">{group.label}</p>
+      <!-- The page heading already names the first group. -->
+      {#if group.label !== "Settings"}
+        <p class="ui-label mb-1.5 sm:mb-2">{group.label}</p>
+      {:else}
+        <h2 class="sr-only">{group.label}</h2>
+      {/if}
       <div class="overflow-hidden rounded-md border border-line bg-panel">
         {#each group.items as item, i}
           <a
-            class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3 {i >
+            class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-panel-hover sm:gap-3 sm:px-4 sm:py-3 {i >
             0
               ? 'border-t border-line'
               : ''}"
@@ -180,7 +189,7 @@
       <p class="ui-label mb-1.5 sm:mb-2">Account</p>
       <div class="overflow-hidden rounded-md border border-line bg-panel">
         <a
-          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3"
+          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-panel-hover sm:gap-3 sm:px-4 sm:py-3"
           href={hostedAccountPath}
         >
           <svg
@@ -229,7 +238,7 @@
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}
           <button
-            class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-meta transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3 {i >
+            class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-meta transition-colors hover:bg-panel-hover sm:gap-3 sm:px-4 sm:py-3 {i >
             0
               ? 'border-t border-line'
               : ''} {isCurrent ? 'font-medium text-fg' : 'text-fg-muted'}"
@@ -294,7 +303,7 @@
         {/if}
       </div>
       <button
-        class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-meta font-medium text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg sm:px-4 sm:py-3"
+        class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-meta font-medium text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg sm:px-4 sm:py-3"
         onclick={switchIdentity}
         type="button"
       >

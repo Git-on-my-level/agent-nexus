@@ -56,6 +56,7 @@
     publishPmPresence,
     refreshPmPresence,
   } from "$lib/pm/presence.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let conversations = $state([]),
     conversation = $state(null),
@@ -741,6 +742,8 @@
       clearInterval(timer);
     };
   });
+
+  usePageTitle(() => "PM · Agent Nexus");
 </script>
 
 {#snippet runningLine(view, turn)}
@@ -786,7 +789,6 @@
     }
   }}
 />
-<svelte:head><title>PM · Agent Nexus</title></svelte:head>
 <WorkspacePageShell class="pm-page">
   <div class="pm-head">
     <!--

@@ -15,6 +15,14 @@ describe("avatarModel", () => {
     expect(initialsOf("")).toBe("·");
   });
 
+  it("initialsOf ignores bracketed roles and punctuation", () => {
+    expect(initialsOf("Jordan (Human operator)")).toBe("JO");
+    expect(initialsOf("Zara (Ops AI)")).toBe("ZA");
+    expect(initialsOf("Iris Park [docs]")).toBe("IP");
+    expect(initialsOf("“Quoted” Name")).toBe("QN");
+    expect(initialsOf("(bot)")).toBe("BO");
+  });
+
   it("paletteForSeed is deterministic for the same seed", () => {
     const a = paletteForSeed("actor-123", "fallback");
     const b = paletteForSeed("actor-123", "other");

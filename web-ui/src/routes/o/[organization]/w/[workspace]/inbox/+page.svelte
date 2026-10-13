@@ -104,7 +104,7 @@
   import InfoTip from "$lib/components/InfoTip.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
+  import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
@@ -135,6 +135,7 @@
     isReadAccessDenied,
   } from "$lib/reliableRead.js";
   import { commitInboxView } from "$lib/inboxViewCache.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let reconnecting = $state(false);
   let confirmed = $state(false);
@@ -1590,6 +1591,8 @@
       document.removeEventListener("visibilitychange", onVisible);
     };
   });
+
+  usePageTitle(() => "Inbox · Agent Nexus");
 </script>
 
 <svelte:window
@@ -1609,7 +1612,6 @@
     }
   }}
 />
-<svelte:head><title>Inbox · Agent Nexus</title></svelte:head>
 <WorkspacePageShell data-tour="inbox">
   <WorkspacePageHeader title="Inbox">
     {#snippet actions()}
@@ -1634,7 +1636,11 @@
         </svg>
       </button>
       {#if pmVisible}
-        <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+        <!-- Below lg the bottom bar carries Ask PM; a second copy here
+             pushed the header onto two rows. -->
+        <a class="ui-btn-secondary max-lg:hidden" href={workspaceHref("/pm")}
+          >Ask PM</a
+        >
       {/if}
     {/snippet}
   </WorkspacePageHeader>
@@ -1708,16 +1714,25 @@
     </p>
   {/if}
   {#if !ready}
+    <!-- The loaded split view's own geometry: 52px rows on the left, the
+         reading pane on the right from lg up. After a failed read the shape
+         stays but stops pulsing, so it no longer claims to be loading. -->
     <div
-      class="rounded-md border border-line p-4"
+      class="grid overflow-hidden rounded-md border border-line bg-panel lg:min-h-[30rem] lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)] {error
+        ? 'opacity-50 [&_*]:animate-none'
+        : ''}"
       data-inbox-loading
-      aria-busy="true"
+      aria-busy={error ? undefined : "true"}
     >
-      <p class="mb-3 text-meta text-fg-muted" role="status">
-        {explicitId ? "Loading requested item…" : "Loading inbox…"}
-      </p>
-      <SkeletonInboxRow
-        count={Math.min(
+      {#if !error}
+        <p class="sr-only" role="status">
+          {explicitId ? "Loading requested item…" : "Loading inbox…"}
+        </p>
+      {/if}
+      <SkeletonList
+        bare
+        class="border-line lg:border-r"
+        rows={Math.min(
           10,
           Math.max(
             1,
@@ -1727,6 +1742,20 @@
           ),
         )}
       />
+      <div
+        class="ui-skeleton-reveal hidden flex-col gap-3 px-4 py-4 lg:flex"
+        aria-hidden="true"
+      >
+        <span class="block h-2.5 w-16 animate-pulse rounded bg-panel-hover"
+        ></span>
+        <span class="block h-4 w-3/5 animate-pulse rounded bg-panel-hover"
+        ></span>
+        <span class="block h-8 w-full animate-pulse rounded-md bg-panel-hover"
+        ></span>
+        <span
+          class="mt-2 block h-20 w-full animate-pulse rounded-md bg-panel-hover"
+        ></span>
+      </div>
     </div>
   {:else}
     {@const showDetail = Boolean(selectedId)}
@@ -1827,8 +1856,8 @@
               when there is nothing to list).
             -->
             {#if (!confirmed || streamPartial) && !staleRows.length && !lateRows.length}
-              <li class="p-4" aria-busy="true">
-                <SkeletonInboxRow count={1} />
+              <li aria-busy="true">
+                <SkeletonList bare rows={1} />
               </li>
             {:else if !staleRows.length && !lateRows.length}
               <li class="px-5 py-8">

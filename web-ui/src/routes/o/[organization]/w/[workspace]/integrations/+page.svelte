@@ -20,6 +20,7 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let work = $state([]),
     capabilities = $state(null),
     loading = $state(true),
@@ -117,9 +118,10 @@
       clearInterval(timer);
     };
   });
+
+  usePageTitle(() => "Integrations · Agent Nexus");
 </script>
 
-<svelte:head><title>Integrations · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <!-- No subtitle. The rows already carry each tool's last read, and the
        empty state says what to do when a tool has nothing here yet. -->

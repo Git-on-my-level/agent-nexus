@@ -20,6 +20,7 @@
     pmUninstallCommand,
   } from "$lib/pm/onboardingState.js";
   import { pmPresence, startPmPresencePoll } from "$lib/pm/presence.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   /**
    * One surface for the PM's whole lifecycle: set it up when there is none,
@@ -130,9 +131,9 @@
   });
 
   onDestroy(() => stopPoll?.());
-</script>
 
-<svelte:head><title>PM setup · Agent Nexus</title></svelte:head>
+  usePageTitle(() => "PM setup · Agent Nexus");
+</script>
 
 <WorkspacePageShell>
   <WorkspacePageHeader title={setupOffered ? "Set up your PM" : "Your PM"}>

@@ -8,6 +8,7 @@
    * "where am I?", which is the one question a blank screen with a spinner
    * cannot. Nothing here reads anything; it adds no requests.
    */
+  import SkeletonList from "../state/SkeletonList.svelte";
   import WorkspacePageHeader from "./WorkspacePageHeader.svelte";
   import WorkspacePageShell from "./WorkspacePageShell.svelte";
 
@@ -16,26 +17,5 @@
 
 <WorkspacePageShell>
   <WorkspacePageHeader {title} />
-  <div
-    class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
-    aria-hidden="true"
-  >
-    {#each Array.from({ length: rows }, (_, index) => index) as index (index)}
-      <div
-        class="flex flex-col gap-1.5 px-3 py-3 {index > 0
-          ? 'border-t border-line'
-          : ''}"
-      >
-        <div
-          class="h-3.5 animate-pulse rounded bg-panel-hover"
-          style="width: {index % 3 === 0
-            ? '62%'
-            : index % 3 === 1
-              ? '45%'
-              : '53%'}"
-        ></div>
-        <div class="h-2.5 w-28 animate-pulse rounded bg-panel-hover"></div>
-      </div>
-    {/each}
-  </div>
+  <SkeletonList {rows} />
 </WorkspacePageShell>

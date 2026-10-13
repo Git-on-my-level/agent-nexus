@@ -11,6 +11,7 @@
   import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import WorkViews from "$lib/components/pm/WorkViews.svelte";
   import {
     liveWorkspaceEvents,
@@ -70,6 +71,7 @@
     onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache.js";
   import { reliableRead } from "$lib/reliableRead.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let listController;
   let pendingLiveRead = null;
   let listCacheKey = $state("");
@@ -956,14 +958,21 @@
       shortcutsOpener = null;
     }
   });
+
+  usePageTitle(() => "Tasks · Agent Nexus");
 </script>
 
-<svelte:head><title>Tasks · Agent Nexus</title></svelte:head>
 <svelte:window onkeydown={handleShortcutKeydown} />
 <WorkspacePageShell>
   <WorkspacePageHeader title="Tasks">
     {#snippet subtitle()}
-      {#if visible.length}
+      {#if !visible.length && loading && !records.length}
+        <!-- Holds the counts line so the page does not shift when it lands. -->
+        <span
+          class="ui-skeleton-reveal inline-block h-2.5 w-32 rounded bg-panel-hover align-middle"
+          aria-hidden="true"
+        ></span>
+      {:else if visible.length}
         <span class="text-fg-muted"
           >{visible.length}{nextCursor ? "+" : ""} tracked</span
         >{#if blockedCount}<span class="mx-1 text-fg-subtle">·</span><a
@@ -1003,7 +1012,11 @@
         </svg>
       </button>
       {#if pmVisible}
-        <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+        <!-- Below lg the bottom bar carries Ask PM; a second copy here
+             pushed the header onto two rows. -->
+        <a class="ui-btn-secondary max-lg:hidden" href={workspaceHref("/pm")}
+          >Ask PM</a
+        >
       {/if}
       <a class="ui-btn-primary" href={workspaceHref("/tasks/new")}>New task</a>
     {/snippet}
@@ -1297,11 +1310,54 @@
   {/if}
 
   {#if (loading && !records.length) || initiativesPending}
-    <p class="py-10 text-center text-meta text-fg-muted" role="status">
-      {initiativesPending && !loading
-        ? "Reading the initiatives board…"
-        : "Loading tasks…"}
-    </p>
+    <div aria-busy="true" data-tasks-loading>
+      <p class="sr-only" role="status">
+        {initiativesPending && !loading
+          ? "Reading the initiatives board…"
+          : "Loading tasks…"}
+      </p>
+      {#if view === "board"}
+        <div
+          class="ui-skeleton-reveal flex gap-3 overflow-hidden"
+          aria-hidden="true"
+        >
+          {#each [3, 2, 1, 2] as cards, column (column)}
+            <div
+              class="flex w-[13.5rem] shrink-0 flex-col gap-2 rounded-md bg-panel p-2.5"
+            >
+              <span
+                class="block h-2.5 w-16 animate-pulse rounded bg-panel-hover"
+              ></span>
+              {#each Array.from({ length: cards }, (_, index) => index) as index (index)}
+                <span
+                  class="block h-16 animate-pulse rounded-md border border-line bg-bg-soft"
+                ></span>
+              {/each}
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <!-- The table's own frame: header strip, then 40px rows. -->
+        <div
+          class="ui-skeleton-reveal overflow-hidden rounded-md border border-line"
+          aria-hidden="true"
+        >
+          <div
+            class="hidden h-8 items-center gap-6 border-b border-line px-3 sm:flex"
+          >
+            <span class="block h-2 w-10 rounded bg-panel-hover"></span>
+            <span class="ml-[40%] block h-2 w-12 rounded bg-panel-hover"></span>
+            <span class="block h-2 w-12 rounded bg-panel-hover"></span>
+          </div>
+          <SkeletonList
+            bare
+            rows={6}
+            rowClass="h-12 sm:h-10"
+            class="bg-panel"
+          />
+        </div>
+      {/if}
+    </div>
   {:else if !error && !visible.length}
     <section class="py-14 text-center">
       <h2 class="text-subtitle font-semibold text-fg">

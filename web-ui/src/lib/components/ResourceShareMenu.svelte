@@ -139,7 +139,7 @@
         </button>
         {#if menuOpen}
           <div
-            class="absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-line bg-panel py-1 shadow-lg"
+            class="ui-pop-in absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-line bg-panel py-1 shadow-lg"
             role="menu"
           >
             {#if refCopyable}

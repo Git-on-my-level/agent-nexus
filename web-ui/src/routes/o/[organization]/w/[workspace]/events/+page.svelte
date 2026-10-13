@@ -21,6 +21,7 @@
   import { HOME_FEED_PRESET, normalizeEventRow } from "$lib/events/eventRows";
   import { datetimeLocalToIso, isoToDatetimeLocal } from "$lib/formatDate";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   const EVENT_GROUP_LABELS = {
     messages: "Messages",
@@ -192,6 +193,8 @@
       current.has(value),
     );
   }
+
+  usePageTitle(() => "Audit · Agent Nexus");
 </script>
 
 <div class="min-w-0 max-w-full space-y-5">

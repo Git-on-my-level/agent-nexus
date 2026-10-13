@@ -1,5 +1,7 @@
 import { get, writable } from "svelte/store";
 
+import { initialsOf } from "$lib/avatarModel.js";
+
 // Optional external account profile. The standalone workspace needs no account service.
 export const hostedSession = writable({ phase: "unauthed", account: null });
 export async function loadHostedSession() {
@@ -9,11 +11,6 @@ export async function loadHostedSession() {
 export function initialsFor(account) {
   const name = String(account?.display_name ?? "").trim();
   const email = String(account?.email ?? "").trim();
-  if (name) {
-    const parts = name.split(/\s+/).filter(Boolean);
-    return parts.length >= 2
-      ? (parts[0][0] + parts[1][0]).toUpperCase()
-      : name.slice(0, 2).toUpperCase();
-  }
+  if (name) return initialsOf(name);
   return email ? email.slice(0, 2).toUpperCase() : "·";
 }

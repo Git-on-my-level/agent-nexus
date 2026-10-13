@@ -1,6 +1,4 @@
 <script>
-  import { page } from "$app/stores";
-
   import {
     authenticatedAgent,
     isHumanWorkspacePrincipal,
@@ -11,6 +9,7 @@
   import InlineAlert from "$lib/components/InlineAlert.svelte";
   import { coreClient } from "$lib/coreClient";
   import Time from "$lib/time/Time.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let secrets = $state([]);
   let loading = $state(true);
@@ -31,7 +30,6 @@
 
   const agent = $derived($authenticatedAgent);
   const isHuman = $derived(isHumanWorkspacePrincipal(agent));
-  const workspaceSlug = $derived($page.params.workspace ?? "");
 
   $effect(() => {
     if (!isHuman) {
@@ -116,11 +114,9 @@
       // Fallback: ignored
     }
   }
-</script>
 
-<svelte:head>
-  <title>Secrets{workspaceSlug ? ` - ${workspaceSlug}` : ""} · ANX</title>
-</svelte:head>
+  usePageTitle(() => "Secrets · Agent Nexus");
+</script>
 
 <div class="mx-auto max-w-3xl sm:px-4 sm:py-6">
   <div class="mb-3 flex items-center justify-between gap-3 sm:mb-4">

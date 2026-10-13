@@ -256,6 +256,48 @@
   }
 }
 
+/*
+ * Placeholders wait before they appear: a read that lands inside the delay
+ * never paints grey bars, so a fast page does not flash. QA captures skip the
+ * wait so the loading scene is deterministic.
+ */
+.ui-skeleton-reveal {
+  animation: anx-fade-in var(--motion-base) 220ms both;
+}
+
+:root[data-qa="1"] .ui-skeleton-reveal {
+  animation-delay: 0s !important;
+}
+
+/* Popovers, menus and dialogs: a short fade and a few pixels of travel. */
+.ui-pop-in {
+  animation: anx-pop-in var(--motion-fast) both;
+}
+
+.ui-fade-in {
+  animation: anx-fade-in var(--motion-fast) both;
+}
+
+@keyframes anx-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes anx-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @layer components {
   .shell-root {
     min-height: 100vh;
@@ -2111,6 +2153,15 @@
     white-space: nowrap;
   }
 
+  .shell-bottom-nav-label-stack {
+    display: inline-grid;
+    justify-items: center;
+  }
+
+  .shell-bottom-nav-label-stack > * {
+    grid-area: 1 / 1;
+  }
+
   .shell-bottom-nav-button {
     border: 0;
     background: transparent;
@@ -2132,13 +2183,16 @@
     color: var(--accent-text);
   }
 
-  .shell-bottom-nav-accent-glyph {
+  .shell-bottom-nav-glyph {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 2rem;
     height: 1.5rem;
     border-radius: var(--radius-full);
+  }
+
+  .shell-bottom-nav-item--accent .shell-bottom-nav-glyph {
     background: var(--accent-soft);
   }
 

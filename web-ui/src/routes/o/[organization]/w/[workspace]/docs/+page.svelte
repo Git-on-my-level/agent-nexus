@@ -23,7 +23,7 @@
   import WorkspaceListFilters from "$lib/components/WorkspaceListFilters.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
-  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -87,6 +87,7 @@
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let documents = $state([]);
   // Search pages followed beyond the first before the list says "more".
@@ -457,6 +458,8 @@
   let confirmModalTitle = $derived(lifecycle.confirmTitle());
   let confirmModalMessage = $derived(lifecycle.confirmMessage());
   let confirmModalBusy = $derived(lifecycle.confirmBusy());
+
+  usePageTitle(() => "Docs · Agent Nexus");
 </script>
 
 <WorkspacePageShell data-tour="docs">
@@ -679,7 +682,7 @@
   {/if}
 
   {#if loading && documents.length === 0}
-    <Skeleton rows={6} />
+    <SkeletonList rows={6} lines={1} rowClass="h-[34px]" />
   {:else if error}
     <StateError
       message={error}

@@ -35,6 +35,7 @@
   import CopyButton from "$lib/components/CopyButton.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let agentKey = $derived(decodeURIComponent($page.params.agentId ?? ""));
   let workspaceSlug = $derived($page.params.workspace);
@@ -325,11 +326,11 @@
       release();
     };
   });
-</script>
 
-<svelte:head>
-  <title>{agent?.display_name || agentKey} · Agents · Agent Nexus</title>
-</svelte:head>
+  usePageTitle(
+    () => `${agent?.display_name || agentKey} · Agents · Agent Nexus`,
+  );
+</script>
 
 <WorkspacePageShell>
   <nav class="text-micro text-fg-muted" aria-label="Breadcrumb">

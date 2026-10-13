@@ -27,8 +27,9 @@
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import SetupPrompt from "$lib/components/setup/SetupPrompt.svelte";
-  import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
+  import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let workspaceSlug = $derived($page.params.workspace);
   let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
@@ -156,11 +157,11 @@
       release();
     };
   });
+
+  usePageTitle(() => "Agents · Agent Nexus");
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
-<svelte:head><title>Agents · Agent Nexus</title></svelte:head>
-
 <WorkspacePageShell data-tour="agents-page">
   <WorkspacePageHeader title="Agents">
     {#snippet subtitle()}
@@ -204,10 +205,15 @@
   {/if}
 
   {#if loading}
-    <div class="overflow-hidden rounded-md border border-line bg-bg-soft">
-      {#each [0, 1, 2] as index (index)}
-        <SkeletonInboxRow />
-      {/each}
+    <div class="space-y-1.5" aria-busy="true">
+      <p class="sr-only" role="status">Loading agents…</p>
+      <div
+        class="ui-skeleton-reveal mb-1.5 h-2.5 w-24 rounded bg-panel-hover"
+        aria-hidden="true"
+      ></div>
+      <div class="overflow-hidden rounded-md border border-line bg-bg-soft">
+        <SkeletonList bare leading rows={3} rowClass="h-[52px]" />
+      </div>
     </div>
   {:else if failed}
     <StateError

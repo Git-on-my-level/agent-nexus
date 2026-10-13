@@ -20,7 +20,7 @@
   {#if helper}
     <!-- Helpers can quote user input (a search query): wrap, do not clip. -->
     <p
-      class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle [overflow-wrap:anywhere]"
+      class="mx-auto mt-1.5 max-w-md text-meta text-fg-muted [overflow-wrap:anywhere]"
     >
       {helper}
     </p>
