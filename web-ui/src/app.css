@@ -2153,6 +2153,15 @@
     white-space: nowrap;
   }
 
+  .shell-bottom-nav-label-stack {
+    display: inline-grid;
+    justify-items: center;
+  }
+
+  .shell-bottom-nav-label-stack > * {
+    grid-area: 1 / 1;
+  }
+
   .shell-bottom-nav-button {
     border: 0;
     background: transparent;
@@ -2174,13 +2183,16 @@
     color: var(--accent-text);
   }
 
-  .shell-bottom-nav-accent-glyph {
+  .shell-bottom-nav-glyph {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 2rem;
     height: 1.5rem;
     border-radius: var(--radius-full);
+  }
+
+  .shell-bottom-nav-item--accent .shell-bottom-nav-glyph {
     background: var(--accent-soft);
   }
 

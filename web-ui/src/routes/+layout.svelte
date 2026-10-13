@@ -1691,12 +1691,21 @@
           {/if}
         </a>
       {/each}
-      <!-- Same rule as the sidebar slot: hold the tab, say nothing yet. -->
+      <!--
+        Same rule as the sidebar slot: hold the tab, say nothing yet. All
+        three states share the glyph box and a label sized to the longer of
+        the two, so the bar keeps its geometry when the PM read lands.
+      -->
+      {#snippet pmTabLabel(shown)}
+        <span class="shell-bottom-nav-label shell-bottom-nav-label-stack">
+          <span class:invisible={shown !== "ask"}>Ask PM</span>
+          <span class:invisible={shown !== "setup"}>PM setup</span>
+        </span>
+      {/snippet}
       {#if !pmSlotKnown}
         <span class="shell-bottom-nav-item" aria-hidden="true">
-          <!-- The glyph wrapper sets the tab's height; match it exactly. -->
-          <span class="shell-bottom-nav-accent-glyph"></span>
-          <span class="shell-bottom-nav-label">&nbsp;</span>
+          <span class="shell-bottom-nav-glyph"></span>
+          {@render pmTabLabel("")}
         </span>
       {:else}
         <a
@@ -1707,7 +1716,7 @@
           data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
           aria-current={pmActionActive ? "page" : undefined}
         >
-          {#if pmNeedsSetup}
+          <span class="shell-bottom-nav-glyph" aria-hidden="true">
             <svg
               fill="none"
               viewBox="0 0 24 24"
@@ -1715,33 +1724,17 @@
               stroke-width="1.5"
               stroke-linecap="round"
               stroke-linejoin="round"
-              aria-hidden="true"
             >
               <path d={navIconPath("askPm")} />
             </svg>
-          {:else}
-            <span class="shell-bottom-nav-accent-glyph" aria-hidden="true">
-              <svg
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d={navIconPath("askPm")} />
-              </svg>
-            </span>
-          {/if}
+          </span>
           <!--
             Neither "Set up your PM" nor "Set up PM" fits a phone tab: at
             390px seven tabs leave about 48px each, and "Set up PM" wrapped
             onto a second line, pushing this tab's glyph out of line with the
             other six. The page the tab opens says the rest.
           -->
-          <span class="shell-bottom-nav-label"
-            >{pmNeedsSetup ? "PM setup" : "Ask PM"}</span
-          >
+          {@render pmTabLabel(pmNeedsSetup ? "setup" : "ask")}
         </a>
       {/if}
       <a

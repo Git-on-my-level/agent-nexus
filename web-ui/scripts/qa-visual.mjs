@@ -256,6 +256,11 @@ export const QA_SCENES = [
       await page
         .getByRole("button", { name: "Revoke administration", exact: true })
         .waitFor();
+      // The PM slot resolves on its own read; audit the shell once it has.
+      await page
+        .locator("[data-pm-nav]")
+        .first()
+        .waitFor({ state: "attached" });
     },
   },
   {

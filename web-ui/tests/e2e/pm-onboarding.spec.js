@@ -271,6 +271,47 @@ test.describe("before core answers, and when it never does", () => {
   });
 
   /*
+   * The phone bar must not move when the slot resolves: a later layout check
+   * would otherwise measure whichever geometry it happened to catch. 320px
+   * is where "PM setup" is widest relative to its tab.
+   */
+  for (const [name, pm] of [
+    ["setup", NOT_ONBOARDED],
+    ["ask", CONNECTED],
+  ]) {
+    test(`the phone bar keeps its geometry as the slot resolves to ${name} @states`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 568 });
+      const api = await installWorkspaceApi(page, { pm });
+      api.hold.pmPresence = deferred();
+      const bottomNav = page.getByRole("navigation", {
+        name: "Primary navigation",
+      });
+      const tabBoxes = () =>
+        bottomNav.evaluate((nav) =>
+          [...nav.children].map((tab) => {
+            const box = tab.getBoundingClientRect();
+            return [box.x, box.y, box.width, box.height];
+          }),
+        );
+
+      await page.goto(`${ROOT}/tasks`);
+      await waitForAppReady(page);
+      await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+      await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
+      const pending = await tabBoxes();
+
+      api.hold.pmPresence.resolve();
+      await expect(bottomNav.locator("[data-pm-nav]")).toHaveAttribute(
+        "data-pm-nav",
+        name,
+      );
+      expect(await tabBoxes()).toEqual(pending);
+    });
+  }
+
+  /*
    * A read that never succeeds used to leave Ask PM on screen forever, which
    * is a button that cannot work. It stays absent instead.
    */
