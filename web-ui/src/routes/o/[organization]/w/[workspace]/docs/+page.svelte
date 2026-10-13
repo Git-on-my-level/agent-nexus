@@ -5,6 +5,8 @@
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import Time from "$lib/time/Time.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
+  import { navIconPath } from "$lib/icons.js";
+  import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
@@ -425,6 +427,30 @@
 <WorkspacePageShell data-tour="docs">
   <WorkspacePageHeader title="Docs">
     {#snippet actions()}
+      <!-- Every list header carries workspace search, because ⌘K is not
+           reachable on a phone: the sidebar that holds it is hidden below
+           1024px, and without this Docs was the one list with no way out of
+           itself. -->
+      <button
+        class="ui-icon-btn"
+        onclick={openCommandPalette}
+        aria-label="Search workspace"
+        aria-keyshortcuts="Meta+K"
+        title="Search workspace (⌘K)"
+        type="button"
+      >
+        <svg
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d={navIconPath("search")} />
+        </svg>
+      </button>
       <button
         class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle {!documents.length &&
         !loading
@@ -641,7 +667,7 @@
           <textarea
             bind:value={draft.content}
             class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-2 text-meta text-fg placeholder:text-fg-subtle font-mono leading-relaxed resize-y"
-            placeholder="# Document title&#10;&#10;Write your content here..."
+            placeholder="# Document title&#10;&#10;Write your content here…"
             rows="10"
           ></textarea>
         </label>
@@ -820,7 +846,7 @@
               </WorkspaceResourceListRow>
               <span
                 class="hidden shrink-0 self-start whitespace-nowrap pt-0.5 text-right text-micro text-fg-muted sm:inline"
-                ><Time value={doc.updated_at} fallback="—" /></span
+                >Updated <Time value={doc.updated_at} fallback="—" /></span
               >
             </div>
             <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
@@ -898,9 +924,11 @@
           </div>
         {/snippet}
         {#snippet meta()}
+          <!-- Same words as the phone row: a bare "7 min ago" at the end of a
+               row does not say which of a doc's several timestamps it is. -->
           <span
             class="hidden whitespace-nowrap text-right text-fg-muted sm:inline"
-            ><Time value={doc.updated_at} fallback="—" /></span
+            >Updated <Time value={doc.updated_at} fallback="—" /></span
           >
         {/snippet}
         {#snippet actions()}

@@ -185,8 +185,8 @@ test.describe("no PM agent onboarded", () => {
     await page.goto(`${ROOT}/pm/setup`);
     await waitForAppReady(page);
     await expect(page.locator("[data-pm-install-command]")).toBeVisible();
-    // The bottom bar keeps the PM slot, with copy that fits a tab.
-    await expect(page.getByRole("link", { name: "Set up PM" })).toBeVisible();
+    // The bottom bar keeps the PM slot, with copy that fits a tab on one line.
+    await expect(page.getByRole("link", { name: "PM setup" })).toBeVisible();
     await expectCleanLayout(page, "pm setup phone");
   });
 });

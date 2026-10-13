@@ -33,6 +33,43 @@ async function withConnectedPm(page) {
   );
 }
 
+/** Report a PM that has never been onboarded, so the slot offers setup. */
+async function withPmNotOnboarded(page) {
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ state: "not_onboarded" }),
+    }),
+  );
+}
+
+/** Tabs whose own label does not fit on one line at this viewport. */
+async function crowdedBottomNavTabs(bottomNav) {
+  return bottomNav.locator(".shell-bottom-nav-item").evaluateAll((els) =>
+    els
+      .map((el) => {
+        const label = el.querySelector(":scope > .shell-bottom-nav-label");
+        return {
+          text: (label?.textContent || el.textContent || "")
+            .replace(/\s+/g, " ")
+            .trim(),
+          itemOverflow: el.scrollWidth > el.clientWidth + 1,
+          labelOverflow: label
+            ? label.scrollWidth > label.clientWidth + 1
+            : false,
+          labelWrapped: label
+            ? label.scrollHeight > label.clientHeight + 1 ||
+              label.getClientRects().length > 1
+            : false,
+        };
+      })
+      .filter(
+        (item) => item.itemOverflow || item.labelOverflow || item.labelWrapped,
+      ),
+  );
+}
+
 test("blocks shell with actor gate when no actor is selected", async ({
   page,
 }) => {
@@ -118,7 +155,7 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   // Search left the bottom bar: the bar carries Overview, the product
   // surfaces, the PM slot and More. Workspace search is ⌘K plus a button in
   // each list header. The PM slot reads "Ask PM" because this test says a PM
-  // is connected; with none onboarded it reads "Set up PM", and until core
+  // is connected; with none onboarded it reads "PM setup", and until core
   // answers it holds its space with no link at all.
   await expect(
     bottomNav.getByRole("button", { name: "Search workspace" }),
@@ -134,27 +171,52 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   ]) {
     await expect(bottomNav.getByRole("link", { name })).toBeVisible();
   }
-  const crowded = await bottomNav
-    .locator(".shell-bottom-nav-item")
-    .evaluateAll((els) =>
-      els
-        .map((el) => {
-          const label = el.querySelector(":scope > span:last-of-type");
-          return {
-            text: (label?.textContent || el.textContent || "")
-              .replace(/\s+/g, " ")
-              .trim(),
-            itemOverflow: el.scrollWidth > el.clientWidth + 1,
-            labelWrapped: label
-              ? label.scrollHeight > label.clientHeight + 1 ||
-                label.getClientRects().length > 1
-              : false,
-          };
-        })
-        .filter((item) => item.itemOverflow || item.labelWrapped),
-    );
-  expect(crowded).toEqual([]);
+  expect(await crowdedBottomNavTabs(bottomNav)).toEqual([]);
 
+  await page.getByRole("button", { name: "Search workspace" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Command palette" }),
+  ).toBeVisible();
+});
+
+test("bottom navigation keeps one line per tab while the PM is unconfigured", async ({
+  page,
+}) => {
+  // The narrowest phone the shell targets, and the state the connected-PM
+  // test above never reaches: the PM slot reads setup copy there, which is
+  // the longest label the bar ever carries.
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => {
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  });
+  await withPmNotOnboarded(page);
+
+  await page.goto(`${WS_HOME}/docs`);
+  await unlockShellWithActor(page, `Setup User ${Date.now()}`);
+
+  const bottomNav = page.getByRole("navigation", {
+    name: "Primary navigation",
+  });
+  const pmTab = bottomNav.locator('[data-pm-nav="setup"]');
+  await expect(pmTab).toBeVisible();
+
+  expect(await crowdedBottomNavTabs(bottomNav)).toEqual([]);
+});
+
+test("Docs reaches workspace search without the sidebar", async ({ page }) => {
+  // Below 1024px the sidebar that holds ⌘K is hidden, so a phone can only
+  // reach workspace search through a list header.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  });
+
+  await page.goto(`${WS_HOME}/docs`);
+  await unlockShellWithActor(page, `Docs Search User ${Date.now()}`);
+
+  await expect(
+    page.getByRole("heading", { name: "Docs", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Search workspace" }).click();
   await expect(
     page.getByRole("dialog", { name: "Command palette" }),

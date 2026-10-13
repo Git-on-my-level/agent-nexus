@@ -2126,6 +2126,16 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /*
+   * One line per tab, always. A label that wraps drops its own glyph out of
+   * line with the other six and makes the bar read as two rows of chrome; a
+   * label that no longer fits is a copy problem, and overflowing says so
+   * where `shell.spec.js` can see it instead of hiding it in a second line.
+   */
+  .shell-bottom-nav-label {
+    white-space: nowrap;
+  }
+
   .shell-bottom-nav-button {
     border: 0;
     background: transparent;
