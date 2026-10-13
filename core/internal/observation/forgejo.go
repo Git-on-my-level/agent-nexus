@@ -127,7 +127,7 @@ func (r *ForgejoReader) Read(ctx context.Context, t Target) (Report, error) {
 					if e != nil {
 						partial(&out, e)
 					} else {
-						out.Facts["status_check"] = selectFields(combined, "status", "total_count")
+						out.Facts["status_check"] = selectFields(combined, "state", "total_count")
 						statuses, _ := combined["statuses"].([]any)
 						for i, raw := range statuses {
 							if i >= 20 {

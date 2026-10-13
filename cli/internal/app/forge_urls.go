@@ -17,16 +17,16 @@ var builtinForgeHosts = map[string]string{"github.com": "github"}
 // the host is not a registered forge for this workspace.
 func forgeKindFor(forges []workspaceconfig.Forge, rawHost string) string {
 	host := strings.ToLower(rawHost)
-	if kind, ok := builtinForgeHosts[host]; ok {
-		return kind
-	}
 	hostname := host
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		hostname = h
 	}
+	if kind, ok := builtinForgeHosts[hostname]; ok {
+		return kind
+	}
 	for _, forge := range forges {
 		entry := strings.ToLower(strings.TrimSpace(forge.Host))
-		if entry == host || (!strings.Contains(entry, ":") && entry == hostname) {
+		if entry == host {
 			return strings.ToLower(forge.Kind)
 		}
 	}
@@ -61,6 +61,9 @@ func forgePRNumber(kind, rawPath string) (string, bool) {
 	if kind == "gitlab" {
 		if i := strings.LastIndex(path, "/-/"); i > 0 {
 			segments := strings.Split(path[i+3:], "/")
+			if n := len(segments); n > 1 && prViewSegments[segments[n-1]] {
+				segments = segments[:n-1]
+			}
 			if len(segments) == 2 && segments[0] == "merge_requests" && digitsOnly(segments[1]) {
 				return segments[1], true
 			}

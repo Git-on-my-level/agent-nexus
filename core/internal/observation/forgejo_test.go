@@ -40,7 +40,7 @@ func forgeFixture(t *testing.T, merged bool, check func(r *http.Request)) (HTTPC
 		case "/api/v1/repos/hermes/hub/pulls/2/reviews":
 			fmt.Fprint(w, `[{"id":1,"state":"APPROVED","official":true,"commit_id":"`+forgeFixtureSHA+`","user":{"login":"david"},"pull_request_url":"https://forge.example.test/hermes/hub/pulls/2"}]`)
 		case "/api/v1/repos/hermes/hub/commits/" + forgeFixtureSHA + "/status":
-			fmt.Fprint(w, `{"sha":"`+forgeFixtureSHA+`","status":"success","total_count":1,"statuses":[{"id":1,"status":"success","context":"ci/build","description":"build ok","target_url":"https://forge.example.test/hermes/hub/actions/runs/9"}]}`)
+			fmt.Fprint(w, `{"sha":"`+forgeFixtureSHA+`","state":"success","total_count":1,"statuses":[{"id":1,"status":"success","context":"ci/build","description":"build ok","target_url":"https://forge.example.test/hermes/hub/actions/runs/9"}]}`)
 		case "/api/v1/repos/hermes/hub/issues/2/comments":
 			fmt.Fprint(w, `[{"id":5,"html_url":"https://forge.example.test/hermes/hub/pulls/2#issuecomment-5","updated_at":"2026-10-13T09:30:00Z","user":{"login":"david"}}]`)
 		default:
@@ -92,6 +92,9 @@ func TestForgejoPullRequestOpenAndMerged(t *testing.T) {
 		}
 		if report.Title != "Hub gate" || report.Facts["owner"] != "david" || report.Facts["head_sha"] != forgeFixtureSHA {
 			t.Fatalf("facts %+v", report.Facts)
+		}
+		if check, _ := report.Facts["status_check"].(map[string]any); check["state"] != "success" || check["total_count"] != float64(1) {
+			t.Fatalf("combined status %+v", report.Facts["status_check"])
 		}
 		if report.URL != "https://forge.example.test/hermes/hub/pulls/2" {
 			t.Fatalf("report URL %q", report.URL)

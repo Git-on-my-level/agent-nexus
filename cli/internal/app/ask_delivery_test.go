@@ -196,6 +196,15 @@ func TestForgeURLMatching(t *testing.T) {
 	if kind := forgeKindFor(forges, "other.example.test"); kind != "" {
 		t.Fatal(kind)
 	}
+	if kind := forgeKindFor(forges, "forge.example.test:8443"); kind != "" {
+		t.Fatal("portless registration matched a different port:", kind)
+	}
+	if kind := forgeKindFor(nil, "github.com"); kind != "github" {
+		t.Fatal(kind)
+	}
+	if kind := forgeKindFor(nil, "github.com:443"); kind != "github" {
+		t.Fatal("github.com with explicit port rejected:", kind)
+	}
 	if _, ok := forgePRNumber("forgejo", "/o/r/pulls/12"); !ok {
 		t.Fatal("forgejo PR form")
 	}
@@ -232,6 +241,9 @@ func TestForgeURLMatching(t *testing.T) {
 	}
 	if n, ok := forgePRNumber("gitlab", u.Path); !ok || n != "4" {
 		t.Fatal(n, ok)
+	}
+	if n, ok := forgePRNumber("gitlab", "/g/sub/repo/-/merge_requests/4/commits"); !ok || n != "4" {
+		t.Fatal("gitlab commits tab rejected:", n, ok)
 	}
 }
 func TestAskCreatesSubjectAndKeepsCommandLocal(t *testing.T) {
