@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testsql"
 )
@@ -76,6 +77,10 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	if _, err = store.MoveBoardCard(ctx, "actor-1", anyString(board["id"]), anyString(done["id"]), primitives.MoveBoardCardInput{ColumnKey: "done", Resolution: &resolution, ResolutionRefs: &resolutionRefs}); err != nil {
 		t.Fatalf("move done card: %v", err)
 	}
+	parked := work("Parked")
+	if err = store.SetCardPlan(ctx, "actor-1", anyString(parked["id"]), anyString(parked["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "ship", Title: "Ship", Ref: anyString(done["ref"]), After: []string{}}}}); err != nil {
+		t.Fatal(err)
+	}
 	body := readBriefV1(t, store)
 	if body["schema"] != "brief.v1" {
 		t.Fatal(body)
@@ -104,6 +109,9 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	r := states["Report"]
 	if r["state"] != "moving" || r["last_evidence_at"] == nil || r["blocked_count"].(float64) != 1 {
 		t.Fatalf("report = %v", r)
+	}
+	if p := states["Parked"]; p["placement"] != "backlog" || p["possibly_moot"].(map[string]any)["flagged"] != true {
+		t.Fatalf("parked = %v", p)
 	}
 	if f, ok := states["Finished"]; ok && f["state"] != "done" {
 		t.Fatalf("finished = %v", f)
