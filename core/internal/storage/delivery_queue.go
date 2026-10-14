@@ -16,7 +16,8 @@ import (
 // packet rows in agent_wakeups and the bridge keeps claiming them there;
 // triggers mirror every wake insert and status change into this queue in the
 // same transaction, so the queue and its receipts cover wakes without a second
-// write path.
+// write path. Signed ask webhooks are mirrored the same way (channel
+// "webhook").
 //
 // ask_deadlines is the bounded, indexed open-ask ledger the escalation clock
 // and the heartbeat read. Triggers add a row when an ask event is appended and
@@ -160,6 +161,31 @@ var deliveryQueueWakeTriggers = []string{
 	END`,
 }
 
+// Signed ask webhooks keep their sender and attempt log in ask_deliveries;
+// the queue mirrors each webhook delivery and its outcome (channel "webhook").
+var deliveryQueueWebhookTriggers = []string{
+	`CREATE TRIGGER IF NOT EXISTS deliveries_webhook_insert AFTER INSERT ON ask_deliveries WHEN NEW.kind='webhook' BEGIN
+		INSERT OR IGNORE INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, max_attempts, next_attempt_at, created_at, updated_at)
+		SELECT 'dlv_webhook_'||NEW.id, 'webhook:'||NEW.id, s.actor_id, 'webhook', 'webhook', 'pending',
+			json_object('ask_delivery_id', NEW.id), 'event:'||NEW.ask_id, NEW.attempts, 5, NEW.next_at, NEW.next_at, NEW.next_at
+		FROM ask_subscriptions s WHERE s.id=NEW.subscription_id;
+	END`,
+	`CREATE TRIGGER IF NOT EXISTS deliveries_webhook_state AFTER UPDATE ON ask_deliveries
+	WHEN NEW.kind='webhook' AND (NEW.state<>OLD.state OR NEW.attempts<>OLD.attempts) BEGIN
+		UPDATE deliveries SET
+			status=CASE NEW.state WHEN 'delivered' THEN 'delivered' WHEN 'failed' THEN 'failed' ELSE 'pending' END,
+			attempts=NEW.attempts, next_attempt_at=NEW.next_at, last_error=NEW.reason,
+			updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+			delivered_at=CASE WHEN NEW.state='delivered' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE delivered_at END,
+			failed_at=CASE WHEN NEW.state='failed' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE failed_at END
+		WHERE idempotency_key='webhook:'||NEW.id;
+		INSERT INTO delivery_receipts(delivery_id, outcome, attempt, error, recorded_by, created_at)
+		SELECT 'dlv_webhook_'||NEW.id, CASE NEW.state WHEN 'delivered' THEN 'notification_delivered' ELSE 'notification_failed' END,
+			MAX(1, NEW.attempts), NEW.reason, 'webhook', strftime('%Y-%m-%dT%H:%M:%fZ','now')
+		WHERE NEW.state<>OLD.state AND NEW.state IN ('delivered','failed') AND EXISTS (SELECT 1 FROM deliveries WHERE idempotency_key='webhook:'||NEW.id);
+	END`,
+}
+
 func installDeliveryQueue(ctx context.Context, tx *sql.Tx) error {
 	for _, statement := range deliveryQueueStatements {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {
@@ -196,6 +222,15 @@ func installDeliveryQueue(ctx context.Context, tx *sql.Tx) error {
 		for _, statement := range deliveryQueueResolutionTriggers {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
 				return fmt.Errorf("install ask resolution triggers: %w", err)
+			}
+		}
+	}
+	if ok, err := sqliteTableExists(ctx, tx, "ask_deliveries"); err != nil {
+		return err
+	} else if ok {
+		for _, statement := range deliveryQueueWebhookTriggers {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("install webhook delivery triggers: %w", err)
 			}
 		}
 	}

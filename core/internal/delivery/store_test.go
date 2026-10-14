@@ -423,3 +423,28 @@ func TestSettingsAndChannels(t *testing.T) {
 		t.Fatal("failed replace must not clobber settings")
 	}
 }
+
+func TestWebhookAskDeliveriesMirrorIntoQueue(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.db.Exec(`INSERT INTO ask_subscriptions(id,actor_id,ask_id,kind,label,endpoint,created_at,enabled) VALUES('sub-1','agent-1','','webhook','hook','https://hooks.example.test/x',?,1)`, rfc(baseNow)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.db.Exec(`INSERT INTO ask_deliveries(id,subscription_id,ask_id,kind,next_at) VALUES('sub-1.ask-1','sub-1','ask-1','webhook',?)`, rfc(baseNow)); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM deliveries WHERE idempotency_key='webhook:sub-1.ask-1' AND channel='webhook' AND kind='webhook' AND principal_id='agent-1' AND status='pending'`); n != 1 {
+		t.Fatalf("webhook delivery not mirrored: %d", n)
+	}
+	if _, err := e.db.Exec(`UPDATE ask_deliveries SET attempts=1, state='delivered' WHERE id='sub-1.ask-1'`); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM deliveries WHERE idempotency_key='webhook:sub-1.ask-1' AND status='delivered' AND attempts=1`); n != 1 {
+		t.Fatalf("webhook outcome not mirrored")
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id='dlv_webhook_sub-1.ask-1' AND outcome='notification_delivered'`); n != 1 {
+		t.Fatalf("webhook receipt missing")
+	}
+	if delivery.ValidChannel("webhook") || delivery.ValidChannel("bridge") {
+		t.Fatal("reserved channels must not be adapter-deliverable")
+	}
+}

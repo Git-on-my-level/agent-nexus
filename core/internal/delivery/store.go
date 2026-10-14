@@ -25,7 +25,8 @@ const (
 	KindPush   = "push"
 	KindDigest = "digest"
 
-	ChannelBridge = "bridge"
+	ChannelBridge  = "bridge"
+	ChannelWebhook = "webhook"
 
 	StatusPending   = "pending"
 	StatusClaimed   = "claimed"
@@ -59,11 +60,11 @@ var (
 	channelName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 )
 
-// ValidChannel reports whether name is a deliverable channel name. The bridge
-// channel is reserved for agent wakes, which the bridge claims through the
-// wake routes.
+// ValidChannel reports whether name is an adapter-deliverable channel name.
+// The bridge and webhook channels are reserved: agent wakes are claimed
+// through the wake routes and ask webhooks are signed and sent by core.
 func ValidChannel(name string) bool {
-	return channelName.MatchString(name) && name != ChannelBridge
+	return channelName.MatchString(name) && name != ChannelBridge && name != ChannelWebhook
 }
 
 type Delivery struct {
