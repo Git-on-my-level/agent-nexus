@@ -53,6 +53,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
       if (
         node.type === "MemberExpression" &&
         [
+          "setWorkspaceDashboard",
           "markHomeRead",
           "archiveCard",
           "dispatchPmDecision",
@@ -99,9 +100,13 @@ it("all existing browser mutation and transport exceptions are explicitly invent
   const expected = {};
   for (const [path, entry] of Object.entries(inventory)) {
     expect(entry.reason.length).toBeGreaterThan(15);
-    expect(["outbox", "transport", "read-helper", "stage-2"]).toContain(
-      entry.classification,
-    );
+    expect([
+      "outbox",
+      "transport",
+      "read-helper",
+      "manual-protocol",
+      "stage-2",
+    ]).toContain(entry.classification);
     expect(entry.followup).toBe("durable-user-work.md#stage-2-handoff");
     expected[path] = entry.references;
   }

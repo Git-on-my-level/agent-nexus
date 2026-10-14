@@ -58,7 +58,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/actors",
     "operation_id": "createActor",
     "summary": "Create actor (dev fixture)",
-    "why": "Dev-only actor registration when dev_actor_mode is enabled.",
+    "why": "Dev-only actor registration when dev_actor_mode is enabled. Optional request_key binds the complete actor payload to an atomic original receipt; retain the actor ID and key on explicit resend. No session or credentials are issued.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -67,7 +67,8 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "auth_required",
       "invalid_request",
-      "dev_actor_mode_disabled"
+      "dev_actor_mode_disabled",
+      "actor_exists"
     ],
     "concepts": [
       "actors",
@@ -75,6 +76,20 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "utility",
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor",
+          "type": "object"
+        }
+      ],
+      "optional": [
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
     "adjacent_commands": [
       "actors.list"
     ],
@@ -13395,12 +13410,13 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns the workspace Overview projection.",
+    "output_envelope": "Legacy requests return the workspace Overview projection. Keyed requests return the atomic original { ok, updated_at, document_ref } receipt.",
     "error_codes": [
       "auth_required",
       "invalid_request",
       "invalid_token",
       "not_found",
+      "conflict",
       "quota_exceeded"
     ],
     "concepts": [
@@ -13410,7 +13426,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "projection",
-    "agent_notes": "Pass a document ref to pin it; pass null to return to newest-report selection.",
+    "agent_notes": "Pass a document ref to pin it; pass null to return to newest-report selection. Keyed requests require the captured if_updated_at (null for no prior setting); retries reuse the original key and base.",
     "body_schema": {
       "required": [
         {
@@ -13421,6 +13437,14 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "if_updated_at",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]

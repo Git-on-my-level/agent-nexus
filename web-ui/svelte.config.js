@@ -8,6 +8,8 @@ const { basePath, useNodeAdapter } = resolveUiBuildConfig();
 const config = {
   preprocess: vitePreprocess(),
   kit: {
+    // Isolate standalone renderers from the active workspace dev server.
+    outDir: process.env.ANX_REPORT_PREVIEW_OUT_DIR || ".svelte-kit",
     csp: { mode: "auto", directives: { "script-src": ["self"] } },
     adapter: useNodeAdapter ? adapterNode({ out: "build" }) : adapterAuto(),
     paths: {

@@ -72,13 +72,15 @@ export default defineConfig(() => {
     // Playwright starts root and base-path Vite servers together. Their
     // optimizer hashes differ; sharing a cache makes one server reject the
     // other's dependencies with 504 Outdated Optimize Dep before hydration.
-    cacheDir: path.resolve(
-      "node_modules",
-      `.vite-${createHash("sha256")
-        .update(process.env.ANX_UI_BASE_PATH ?? "")
-        .digest("hex")
-        .slice(0, 12)}`,
-    ),
+    cacheDir: process.env.ANX_REPORT_PREVIEW_OUT_DIR
+      ? path.join(process.env.ANX_REPORT_PREVIEW_OUT_DIR, "vite-cache")
+      : path.resolve(
+          "node_modules",
+          `.vite-${createHash("sha256")
+            .update(process.env.ANX_UI_BASE_PATH ?? "")
+            .digest("hex")
+            .slice(0, 12)}`,
+        ),
     server: {
       fs: {
         allow: [

@@ -218,7 +218,14 @@ async function installOverview(
     })),
     documents: [dashboard.document],
   });
-  const state = { pinned: null, writes: [], selectorReads: 0, cursors: [] };
+  const state = {
+    pinUpdated: null,
+    receipts: new Map(),
+    pinned: null,
+    writes: [],
+    selectorReads: 0,
+    cursors: [],
+  };
   const snapshot = () => ({
     generated_at: NOW,
     work: { status: "ok", total: active.length, human_count: 0, items: active },
@@ -259,6 +266,7 @@ async function installOverview(
     dashboard: {
       status: "ok",
       pinned_ref: state.pinned,
+      pin_updated_at: state.pinUpdated,
       has_more: true,
       next_cursor: paged ? "page-two" : undefined,
       reports: [{ ...dashboard.document, segment: "demo-dashboard", report }],
@@ -289,8 +297,22 @@ async function installOverview(
           },
         });
       if (request.method() === "PUT") {
-        state.writes.push(request.postDataJSON());
-        state.pinned = request.postDataJSON().document_ref;
+        const body = request.postDataJSON();
+        state.writes.push(body);
+        if (body.request_key && state.receipts.has(body.request_key))
+          return route.fulfill({ json: state.receipts.get(body.request_key) });
+        if (body.request_key && body.if_updated_at !== state.pinUpdated)
+          return route.fulfill({
+            status: 409,
+            json: { error: { code: "conflict" } },
+          });
+        state.pinned = body.document_ref;
+        state.pinUpdated = new Date().toISOString();
+        if (body.request_key) {
+          const receipt = { ok: true, updated_at: state.pinUpdated };
+          state.receipts.set(body.request_key, receipt);
+          return route.fulfill({ json: receipt });
+        }
       }
       return route.fulfill({ json: snapshot() });
     }
@@ -580,11 +602,13 @@ test("dashboard can be pinned and unpinned from the same menu", async ({
   await page.goto(OVERVIEW);
   await picker(page).click();
   await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
-  expect(state.writes[0].document_ref).toBe("document:demo-dashboard");
+  await expect
+    .poll(() => state.writes[0]?.document_ref)
+    .toBe("document:demo-dashboard");
   await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
   await picker(page).click();
   await page.getByRole("menuitem", { name: "Use newest report" }).click();
-  expect(state.writes[1].document_ref).toBeNull();
+  await expect.poll(() => state.writes[1]?.document_ref).toBeNull();
   await expect(page.locator("[data-overview-report-pinned]")).toHaveCount(0);
 });
 
@@ -1215,4 +1239,137 @@ test("a resolved bookmark keeps its canonical link and selection when the catalo
   await expect(
     page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
   ).toBeVisible();
+});
+
+test("dashboard recovery reuses the original key without restoring a later pin", async ({
+  page,
+}) => {
+  const api = await installOverview(page),
+    bodies = [];
+  let confirm = false;
+  await page.route("**/workspace/dashboard", (route) => {
+    const body = route.request().postDataJSON();
+    bodies.push(body);
+    if (!api.receipts.has(body.request_key)) {
+      api.pinned = body.document_ref;
+      api.pinUpdated = "2026-10-14T11:00:00Z";
+      api.receipts.set(body.request_key, {
+        ok: true,
+        updated_at: api.pinUpdated,
+      });
+    }
+    return route.fulfill(
+      confirm
+        ? { json: api.receipts.get(body.request_key) }
+        : { status: 503, json: { error: { code: "unavailable" } } },
+    );
+  });
+  await page.goto(OVERVIEW);
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
+  const original = bodies[0];
+  expect(original.if_updated_at).toBeNull();
+  api.pinned = "document:older-dashboard";
+  api.pinUpdated = "2026-10-14T12:00:00Z";
+  confirm = true;
+  await page.reload();
+  await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible({
+    timeout: 20_000,
+  });
+  expect(bodies.length).toBeGreaterThan(1);
+  expect(
+    bodies.every((body) => JSON.stringify(body) === JSON.stringify(original)),
+  ).toBe(true);
+  expect(api.pinned).toBe("document:older-dashboard");
+});
+
+test("a concurrent dashboard setting conflicts until explicit latest-version review", async ({
+  page,
+}, testInfo) => {
+  const api = await installOverview(page);
+  await page.goto(OVERVIEW);
+  await picker(page).click();
+  api.pinUpdated = "2026-10-14T12:00:00Z";
+  api.pinned = "document:older-dashboard";
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  expect(api.pinned).toBe("document:older-dashboard");
+  await page.screenshot({
+    path: testInfo.outputPath("dashboard-conflict.png"),
+  });
+  const original = api.writes[0];
+  await page.getByRole("button", { name: "Edit request", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Use latest version", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save dashboard choice", exact: true })
+    .click();
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+  expect(api.writes[1].request_key).not.toBe(original.request_key);
+  expect(api.writes[1].if_updated_at).toBe("2026-10-14T12:00:00Z");
+  expect(api.writes[1].document_ref).toBe(original.document_ref);
+});
+
+test("a rejected dashboard choice can be discarded before choosing again", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  let reject = true;
+  await page.route("**/workspace/dashboard", (route) =>
+    reject
+      ? route.fulfill({
+          status: 400,
+          json: { error: { code: "invalid_request" } },
+        })
+      : route.fallback(),
+  );
+  await page.goto(OVERVIEW);
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  await page.getByRole("button", { name: "Edit request", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Discard saved choice", exact: true })
+    .click();
+  await expect(
+    page.getByText("Saved dashboard choice:", { exact: false }),
+  ).toHaveCount(0);
+  reject = false;
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+  expect(api.writes).toHaveLength(1);
+});
+
+test("a later selector read never refreshes the frozen base of an older displayed pin", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  api.pinned = "document:demo-dashboard";
+  api.pinUpdated = "2026-10-14T10:00:00Z";
+  const catalog = deferred();
+  await page.route("**/workspace/dashboard/reports**", async (route) => {
+    await catalog.promise;
+    await route.fulfill({
+      json: { ...api.snapshot().dashboard, has_more: false },
+    });
+  });
+  await page.goto(OVERVIEW);
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+  await picker(page).click();
+  await expect(
+    page.getByText("Loading reports…", { exact: true }),
+  ).toBeVisible();
+  api.pinned = "document:older-dashboard";
+  api.pinUpdated = "2026-10-14T11:00:00Z";
+  catalog.resolve();
+  await expect(page.getByText("Loading reports…", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole("menuitem", { name: "Use newest report" }).click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  expect(api.writes[0].if_updated_at).toBe("2026-10-14T10:00:00Z");
+  expect(api.pinned).toBe("document:older-dashboard");
 });

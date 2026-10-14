@@ -1,4 +1,21 @@
 <script>
+  import {
+    beginIdentityAttempt,
+    retireIdentityRequest,
+    rejectIdentityAttempt,
+    identityAttemptUncertain,
+  } from "$lib/identityAttemptJournal.js";
+  import { readerScopeKey } from "$lib/readerScope.js";
+  import {
+    observePublicIdentity,
+    protocolDraft,
+  } from "$lib/actions/protocolDraft.js";
+  let identityWork = $state(null);
+  let identityDraftReady = $state(false);
+  let identityRequest = $state(null);
+  let identityRejected = $state(false);
+  let identityUncertain = $state(false);
+  let savedIdentityRequests = $state([]);
   import UnsentIndicator from "$lib/components/inbox/UnsentIndicator.svelte";
   import LocalSaveWarning from "$lib/components/LocalSaveWarning.svelte";
   import {
@@ -15,7 +32,7 @@
   import { browser } from "$app/environment";
   import { goto, preloadData } from "$app/navigation";
   import { page } from "$app/stores";
-  import { tick, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { get } from "svelte/store";
 
   import "../app.css";
@@ -806,23 +823,56 @@
     return `actor-${base || "user"}-${suffix}`;
   }
 
+  onMount(() => {
+    observePublicIdentity();
+  });
+
   async function createActor() {
+    if (creatingActor) return;
     if (!newActorName.trim()) {
       actorError = "Display name is required.";
       return;
     }
 
+    const scope = readerScopeKey();
+    const control = identityWork;
+    const previouslyUncertain = identityUncertain;
+    let attempted = false;
+    let attempt = null;
     creatingActor = true;
     actorError = "";
 
     try {
-      const payload = buildActorCreatePayload({
-        id: buildActorId(newActorName),
-        displayName: newActorName.trim(),
-        tags: ["human"],
-      });
-
-      const response = await coreClient.createActor(payload);
+      if (!identityDraftReady || !control)
+        throw new Error("Identity draft is loading");
+      identityRequest ||= {
+        ...buildActorCreatePayload({
+          id: buildActorId(newActorName),
+          displayName: newActorName.trim(),
+          tags: ["human"],
+        }),
+        request_key: crypto.randomUUID(),
+      };
+      // A tab can disappear before any response or catch handler runs.
+      // Journal an uncertain attempt before giving the request to transport.
+      const initial = await control.persist();
+      if (scope !== readerScopeKey()) return;
+      attempt = await beginIdentityAttempt(
+        scope,
+        initial.request.request_key,
+        previouslyUncertain,
+      );
+      if (scope !== readerScopeKey()) return;
+      identityUncertain = true;
+      const saved = await control.persist();
+      if (scope !== readerScopeKey()) return;
+      attempted = true;
+      const response = await coreClient.createActor(saved.request);
+      if (scope !== readerScopeKey()) return;
+      if (response.actor?.id !== saved.request.actor.id)
+        throw new Error("Incomplete identity confirmation");
+      if (!(await control.clear(saved))) return;
+      if (scope !== readerScopeKey()) return;
       const createdActor = response.actor;
       replaceActorRegistry(
         [...$actorRegistry, createdActor],
@@ -830,9 +880,96 @@
       );
       chooseActor(createdActor.id, localStorage, activeWorkspaceSlug);
       newActorName = "";
+      identityRequest = null;
+      identityRejected = false;
+      identityUncertain = false;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      actorError = `Failed to create identity: ${reason}`;
+      if (scope !== readerScopeKey()) return;
+      let uncertain = previouslyUncertain;
+      if (
+        attempt &&
+        (!attempted ||
+          (error?.status >= 400 &&
+            error.status < 500 &&
+            ![408, 429].includes(error.status)))
+      ) {
+        try {
+          uncertain = await rejectIdentityAttempt(attempt);
+        } catch {
+          uncertain = true;
+        }
+      } else if (!attempted) uncertain = previouslyUncertain;
+      else {
+        try {
+          uncertain = await identityAttemptUncertain(
+            scope,
+            attempt.requestKey,
+            true,
+          );
+        } catch {
+          uncertain = true;
+        }
+      }
+      if (scope !== readerScopeKey()) return;
+      identityRejected = [400, 403, 409, 422].includes(error?.status);
+      identityUncertain = uncertain;
+      try {
+        await control?.persist();
+      } catch {
+        /* Keep the frozen request visible; no transport without a durable checkpoint. */
+      }
+      if (scope !== readerScopeKey()) return;
+      actorError =
+        "Your identity request is retained. Try again to confirm the same identity; it will not be created twice.";
+    } finally {
+      creatingActor = false;
+    }
+  }
+
+  async function editSavedIdentity() {
+    if (creatingActor || !identityDraftReady || !identityRequest) return;
+    const scope = readerScopeKey(),
+      original = identityRequest;
+    creatingActor = true;
+    try {
+      const allowed = await retireIdentityRequest(
+        scope,
+        original.request_key,
+        identityUncertain,
+      );
+      if (scope !== readerScopeKey() || identityRequest !== original) return;
+      if (!allowed) {
+        identityUncertain = true;
+        return;
+      }
+      identityRequest = null;
+      identityRejected = false;
+      identityUncertain = false;
+      actorError = "";
+    } catch {
+      actorError =
+        "The original identity request must be confirmed before editing.";
+    } finally {
+      creatingActor = false;
+    }
+  }
+  async function reviewSavedIdentity(saved) {
+    if (creatingActor || !identityDraftReady) return;
+    const scope = readerScopeKey();
+    creatingActor = true;
+    try {
+      const uncertain = await identityAttemptUncertain(
+        scope,
+        saved.request.request_key,
+        saved.uncertain === true,
+      );
+      if (scope !== readerScopeKey()) return;
+      newActorName = saved.name;
+      identityRequest = saved.request;
+      identityRejected = saved.rejected === true;
+      identityUncertain = uncertain;
+    } catch {
+      actorError = "Could not restore the saved identity request.";
     } finally {
       creatingActor = false;
     }
@@ -1087,6 +1224,34 @@
 
         <form
           class="actor-gate-create"
+          use:protocolDraft={{
+            target: "identity:create",
+            fields: ["name", "request", "rejected", "uncertain"],
+            value: {
+              name: newActorName,
+              request: identityRequest,
+              rejected: identityRejected,
+              uncertain: identityUncertain,
+            },
+            read: () => ({
+              name: newActorName,
+              request: identityRequest,
+              rejected: identityRejected,
+              uncertain: identityUncertain,
+            }),
+            onRestore: (value) => {
+              newActorName = value?.name || "";
+              identityRequest = value?.request || null;
+              identityRejected = value?.rejected === true;
+              identityUncertain = value?.uncertain === true;
+            },
+            onReady: (value) => (identityDraftReady = value),
+            onControl: (value) => (identityWork = value),
+            onPending: (values) => (savedIdentityRequests = values),
+          }}
+          onlocal-save-error={() =>
+            (actorError =
+              "Local saving is unavailable. Keep this page open and copy your display name before leaving.")}
           onsubmit={(event) => {
             event.preventDefault();
             createActor();
@@ -1096,16 +1261,48 @@
           <div class="actor-gate-input-row">
             <input
               bind:value={newActorName}
+              readonly={!!identityRequest}
+              disabled={!identityDraftReady}
               id="actor-display-name"
               name="actor-display-name"
               placeholder="Type a name"
               type="text"
             />
-            <button disabled={creatingActor} type="submit">
+            <button
+              disabled={creatingActor || !identityDraftReady}
+              type="submit"
+            >
               {creatingActor ? "Creating…" : "Create and continue"}
             </button>
           </div>
         </form>
+
+        {#if savedIdentityRequests.some((saved) => saved.request?.request_key !== identityRequest?.request_key)}
+          <div class="actor-gate-empty">
+            <p>Other saved identity requests</p>
+            {#each savedIdentityRequests.filter((saved) => saved.request?.request_key !== identityRequest?.request_key) as saved}
+              <button
+                type="button"
+                disabled={creatingActor || !identityDraftReady}
+                onclick={() => reviewSavedIdentity(saved)}
+                >Review {saved.name}</button
+              >
+            {/each}
+          </div>
+        {/if}
+
+        {#if identityRequest}
+          <p class="actor-gate-empty">
+            Your original creation request is saved. Try again to confirm it.
+          </p>
+          {#if identityRejected && !identityUncertain}
+            <button
+              type="button"
+              disabled={creatingActor || !identityDraftReady}
+              onclick={editSavedIdentity}>Edit saved identity</button
+            >
+          {/if}
+        {/if}
 
         <p class="actor-gate-empty">
           Prefer authenticated access? <a href={workspaceHref("/login")}

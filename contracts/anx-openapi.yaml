@@ -5144,13 +5144,13 @@ paths:
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: workspace.dashboard.set
-      x-anx-agent-notes: Pass a document ref to pin it; pass null to return to newest-report selection.
+      x-anx-agent-notes: Pass a document ref to pin it; pass null to return to newest-report selection. Keyed requests require the captured if_updated_at (null for no prior setting); retries reuse the original key and base.
       x-anx-cli-path: workspace dashboard set
       x-anx-why: Pin an active visual-report document as the workspace dashboard; null clears the pin.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns the workspace Overview projection."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, quota_exceeded]
+      x-anx-output-envelope: "Legacy requests return the workspace Overview projection. Keyed requests return the atomic original { ok, updated_at, document_ref } receipt."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [home, documents, cards]
       x-anx-stability: beta
       requestBody:
@@ -5163,15 +5163,19 @@ paths:
               properties:
                 document_ref: { type: string, nullable: true }
                 actor_id: { type: string }
+                request_key: { type: string, maxLength: 256 }
+                if_updated_at: { type: string, nullable: true, description: Frozen dashboard setting timestamp; required with request_key. }
       responses:
         '409':
           $ref: '#/components/responses/ErrorResponse'
         '200':
-          description: Workspace projection
+          description: Workspace projection or keyed original receipt
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OverviewResponse'
+                oneOf:
+                - { $ref: '#/components/schemas/OverviewResponse' }
+                - { type: object, required: [ok, updated_at], properties: { ok: { type: boolean }, updated_at: { type: string }, document_ref: { type: string, nullable: true } } }
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -6474,11 +6478,11 @@ paths:
       x-anx-surface: utility
       x-anx-command-id: actors.create
       x-anx-cli-path: actors create
-      x-anx-why: Dev-only actor registration when dev_actor_mode is enabled.
+      x-anx-why: Dev-only actor registration when dev_actor_mode is enabled. Optional request_key binds the complete actor payload to an atomic original receipt; retain the actor ID and key on explicit resend. No session or credentials are issued.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ actor }`."
-      x-anx-error-codes: [auth_required, invalid_request, dev_actor_mode_disabled]
+      x-anx-error-codes: [auth_required, invalid_request, dev_actor_mode_disabled, actor_exists]
       x-anx-concepts: [actors, auth]
       x-anx-stability: beta
       requestBody:
@@ -6486,15 +6490,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/JsonObject'
+              type: object
+              required: [actor]
+              properties:
+                actor: { $ref: '#/components/schemas/JsonObject' }
+                request_key: { type: string, maxLength: 256 }
       responses:
-        '200':
-          description: Actor created
+        '201':
+          description: Actor created or original creation receipt
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/JsonValue'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
         '403':
           $ref: '#/components/responses/ErrorResponse'
@@ -13186,6 +13196,7 @@ components:
         has_more: { type: boolean, description: Unread candidate documents may contain more reports. }
         next_cursor: { type: string, description: Cursor for the next report candidate page. }
         pinned_ref: { type: string, nullable: true }
+        pin_updated_at: { type: string, nullable: true, description: Frozen visible setting base; null when no visible setting. Insert-only admission refuses a hidden occupied setting without exposing its timestamp. }
         warning: { type: string }
         message: { type: string }
         reports: { type: array, items: { $ref: '#/components/schemas/OverviewReport' } }

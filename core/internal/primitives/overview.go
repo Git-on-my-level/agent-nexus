@@ -161,12 +161,18 @@ func (s *Store) dashboardPage(ctx context.Context, all bool, cursor string) (map
 			return nil, ErrInvalidCursor
 		}
 	}
-	var pin sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT document_id FROM workspace_dashboard WHERE singleton=1`).Scan(&pin)
+	var pin, pinUpdated sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT document_id,updated_at FROM workspace_dashboard WHERE singleton=1`).Scan(&pin, &pinUpdated)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 	result := map[string]any{"status": "ok", "pinned_ref": nil, "reports": []map[string]any{}, "has_more": false}
+	if pin.String == "" {
+		result["pin_updated_at"] = nil
+		if pinUpdated.Valid {
+			result["pin_updated_at"] = pinUpdated.String
+		}
+	}
 	// One metadata read, with the pin first; only read candidate blobs until the
 	// selected valid report is found. No per-document GetDocument queries.
 	candidates := `SELECT id FROM documents WHERE COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')='' AND id<>? AND ` + backingThreadLifecycleSQL(ctx, `documents.thread_id`, false)
@@ -235,6 +241,7 @@ func (s *Store) dashboardPage(ctx context.Context, all bool, cursor string) (map
 	for i, h := range heads {
 		if h.id == pin.String {
 			result["pinned_ref"] = "document:" + h.handle
+			result["pin_updated_at"] = pinUpdated.String
 		}
 		if h.archived != "" || h.trashed != "" || strings.HasPrefix(h.id, "agentreg.") {
 			continue
@@ -270,17 +277,67 @@ func (s *Store) dashboardPage(ctx context.Context, all bool, cursor string) (map
 }
 
 func (s *Store) SetWorkspaceDashboard(ctx context.Context, actor, id string) error {
-	if id != "" {
-		d, rev, err := s.GetDocument(ctx, id)
+	_, err := s.SetWorkspaceDashboardIf(ctx, actor, id, nil)
+	return err
+}
+
+// A pointer to an empty base represents a setting that has never been written.
+// Validation and the setting CAS share the receipt writer's transaction.
+func (s *Store) SetWorkspaceDashboardIf(ctx context.Context, actor, id string, base *string) (map[string]any, error) {
+	var result map[string]any
+	err := s.db.WriteTransaction(ctx, func(ctx context.Context, tx *resourceaccess.Tx) error {
+		var updated string
+		err := tx.QueryRowContext(ctx, `SELECT updated_at FROM workspace_dashboard WHERE singleton=1`).Scan(&updated)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if base != nil && *base != updated {
+			return ErrConflict
+		}
+		if id != "" {
+			d, rev, err := s.GetDocument(ctx, id)
+			if err != nil {
+				return err
+			}
+			if d["state"] != "active" || ParseDashboardReport(rev["content"]) == nil {
+				return fmt.Errorf("%w: dashboard must be an active visual-report document", ErrInvalidWorkRequest)
+			}
+		}
+		now := time.Now().UTC()
+		if before, err := time.Parse(time.RFC3339Nano, updated); err == nil && !now.After(before) {
+			now = before.Add(time.Nanosecond)
+		}
+		stamp := now.Format(time.RFC3339Nano)
+		var changed sql.Result
+		if base != nil && *base == "" {
+			// A hidden existing setting is indistinguishable from absence in
+			// scoped reads. Insert-only admission refuses both hidden and stale
+			// occupied singletons without revealing their ID or timestamp.
+			changed, err = tx.ExecContext(ctx, `INSERT INTO workspace_dashboard(singleton,document_id,updated_at,updated_by) VALUES(1,?,?,?) ON CONFLICT(singleton) DO NOTHING`, id, stamp, actor)
+		} else if base != nil {
+			changed, err = tx.ExecContext(ctx, `UPDATE workspace_dashboard SET document_id=?,updated_at=?,updated_by=? WHERE singleton=1 AND updated_at=?`, id, stamp, actor, *base)
+		} else {
+			changed, err = tx.ExecContext(ctx, `INSERT INTO workspace_dashboard(singleton,document_id,updated_at,updated_by) VALUES(1,?,?,?) ON CONFLICT(singleton) DO UPDATE SET document_id=excluded.document_id,updated_at=excluded.updated_at,updated_by=excluded.updated_by`, id, stamp, actor)
+		}
 		if err != nil {
 			return err
 		}
-		if d["state"] != "active" || ParseDashboardReport(rev["content"]) == nil {
-			return fmt.Errorf("%w: dashboard must be an active visual-report document", ErrInvalidWorkRequest)
+		if base != nil {
+			count, e := changed.RowsAffected()
+			if e != nil {
+				return e
+			}
+			if count != 1 {
+				return ErrConflict
+			}
 		}
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_dashboard(singleton,document_id,updated_at,updated_by) VALUES(1,?,?,?) ON CONFLICT(singleton) DO UPDATE SET document_id=excluded.document_id,updated_at=excluded.updated_at,updated_by=excluded.updated_by`, id, time.Now().UTC().Format(time.RFC3339Nano), actor)
-	return err
+		result = map[string]any{"ok": true, "updated_at": stamp, "document_ref": nil}
+		if id != "" {
+			result["document_ref"] = "document:" + id
+		}
+		return err
+	})
+	return result, err
 }
 
 func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNames map[string]bool) (map[string]any, error) {

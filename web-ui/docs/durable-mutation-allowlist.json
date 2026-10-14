@@ -103,7 +103,8 @@
       "updateTopic": 1,
       "acknowledgePmAction": 1,
       "archiveCard": 1,
-      "markHomeRead": 1
+      "markHomeRead": 1,
+      "setWorkspaceDashboard": 1
     }
   },
   "lib/workspaceActivation.js": {
@@ -124,8 +125,8 @@
     }
   },
   "routes/+layout.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: dev actor creation form needs complete durable snapshots and an audited creation receipt.",
+    "classification": "manual-protocol",
+    "reason": "Dev-only identity creation occurs before a verified principal exists. Only non-secret name and frozen actor/key are journaled; explicit resend recovers the original creation receipt, and identity selection never happens automatically after reload.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "createActor": 2
@@ -185,14 +186,6 @@
       "passkeyLoginVerify": 1,
       "passkeyRegisterOptions": 1,
       "passkeyRegisterVerify": 1
-    }
-  },
-  "routes/o/[organization]/w/[workspace]/overview/+page.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: dashboard selection needs complete intent and original receipt recovery.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "setWorkspaceDashboard": 1
     }
   },
   "routes/o/[organization]/w/[workspace]/pm/+page.svelte": {

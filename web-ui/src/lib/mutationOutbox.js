@@ -57,6 +57,12 @@ async function send(entry) {
     throw new Error("The submitting identity is no longer active.");
   if (replayExpired(entry.createdAt)) throw expiredReplayError();
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "workspace.dashboard.set") {
+    const result = await client.setWorkspaceDashboard(entry.request);
+    if (result.ok !== true || !result.updated_at)
+      throw new Error("Dashboard confirmation is incomplete.");
+    return result;
+  }
   if (entry.operation === "inbox.controls") {
     for (const item of entry.request.items) {
       if (
@@ -902,21 +908,23 @@ async function attempt(entry) {
     }
     entry.failure = mutationFailure(
       error,
-      entry.operation === "artifacts.attachments.create"
-        ? "file"
-        : ["cards.move", "pm.decisions.create"].includes(entry.operation)
-          ? "move"
-          : entry.operation === "cards.patch"
-            ? "assignment"
-            : entry.operation === "inbox.controls"
-              ? "inbox action"
-              : entry.operation === "events.lifecycle"
-                ? "event action"
-                : entry.operation === "docs.lifecycle"
-                  ? "document action"
-                  : entry.operation === "topics.patch"
-                    ? "topic edit"
-                    : "response",
+      entry.operation === "workspace.dashboard.set"
+        ? "dashboard choice"
+        : entry.operation === "artifacts.attachments.create"
+          ? "file"
+          : ["cards.move", "pm.decisions.create"].includes(entry.operation)
+            ? "move"
+            : entry.operation === "cards.patch"
+              ? "assignment"
+              : entry.operation === "inbox.controls"
+                ? "inbox action"
+                : entry.operation === "events.lifecycle"
+                  ? "event action"
+                  : entry.operation === "docs.lifecycle"
+                    ? "document action"
+                    : entry.operation === "topics.patch"
+                      ? "topic edit"
+                      : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =

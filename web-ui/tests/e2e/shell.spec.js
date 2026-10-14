@@ -246,3 +246,366 @@ test("sidebar account menu reaches settings and sign out", async ({ page }) => {
     menu.getByRole("button", { name: /Sign out|Switch identity/ }),
   ).toBeVisible();
 });
+
+test("identity input and its original creation key survive reload and a lost confirmation", async ({
+  page,
+}, testInfo) => {
+  const bodies = [];
+  await page.route("**/actors", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    bodies.push(body);
+    const created = await route.fetch();
+    expect(created.status()).toBe(201);
+    if (bodies.length === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: "unavailable" } },
+      });
+    return route.fulfill({ response: created });
+  });
+  await page.goto(WS_HOME);
+  await page.getByLabel("Display name").fill("Saved identity");
+  await page.reload();
+  await expect(page.getByLabel("Display name")).toHaveValue("Saved identity");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("Display name")).toHaveAttribute("readonly", "");
+  await page.screenshot({ path: testInfo.outputPath("saved-identity.png") });
+  await page.reload();
+  await expect(page.getByLabel("Display name")).toHaveValue("Saved identity");
+  expect(bodies).toHaveLength(1); // Restoration is never an automatic resend.
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(page).toHaveURL(/\/overview/);
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+});
+
+test("two pre-identity tabs retain their own original requests", async ({
+  context,
+}) => {
+  const bodies = [];
+  await context.route("**/actors", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 503,
+      json: { error: { code: "unavailable" } },
+    });
+  });
+  const a = await context.newPage(),
+    b = await context.newPage();
+  await a.goto(WS_HOME);
+  await a.getByLabel("Display name").fill("Identity A");
+  await a.getByRole("button", { name: "Create and continue" }).click();
+  await expect(a.getByRole("alert")).toBeVisible();
+  await b.goto(WS_HOME);
+  await b.getByLabel("Display name").fill("Identity B");
+  await b.getByRole("button", { name: "Create and continue" }).click();
+  await expect(b.getByRole("alert")).toBeVisible();
+  const first = [...bodies];
+  await a.reload();
+  await b.reload();
+  await expect(a.getByLabel("Display name")).toHaveValue("Identity A");
+  await expect(b.getByLabel("Display name")).toHaveValue("Identity B");
+  expect(bodies).toHaveLength(2);
+  await a.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => bodies.length).toBe(3);
+  await b.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => bodies.length).toBe(4);
+  expect(bodies[2]).toEqual(first[0]);
+  expect(bodies[3]).toEqual(first[1]);
+});
+
+test("a definitively rejected identity remains editable after reload", async ({
+  page,
+}) => {
+  const bodies = [],
+    actors = [];
+  await page.route("**/actors", (route) => {
+    if (route.request().method() !== "POST")
+      return route.fulfill({ json: { actors } });
+    const body = route.request().postDataJSON();
+    bodies.push(body);
+    if (bodies.length === 1)
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: "actor_exists" } },
+      });
+    actors.push(body.actor);
+    return route.fulfill({ status: 201, json: { actor: body.actor } });
+  });
+  await page.goto(WS_HOME);
+  await page.getByLabel("Display name").fill("Rejected identity");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Edit saved identity" }).click();
+  await page.getByLabel("Display name").fill("Corrected identity");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(page).toHaveURL(/\/overview/);
+  expect(bodies[1].request_key).not.toBe(bodies[0].request_key);
+  expect(bodies[1].actor.id).not.toBe(bodies[0].actor.id);
+});
+
+test("sign-in purges closed public forms after reloading on the login route", async ({
+  page,
+}) => {
+  await page.route("**/actors", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 503, json: { error: { code: "unavailable" } } })
+      : route.fallback(),
+  );
+  await page.goto(WS_HOME);
+  await page.getByLabel("Display name").fill("Closed identity draft");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  const entries = () =>
+    page.evaluate(() =>
+      Object.keys(localStorage).filter(
+        (key) =>
+          key.startsWith("anx:public-input:v1:") &&
+          key.includes("identity:create"),
+      ),
+    );
+  expect((await entries()).length).toBeGreaterThan(0);
+  await page.goto(`${WS_HOME}/login`);
+  await page.reload();
+  // Exercise the actual user session boundary after a fresh login-route load.
+  // No token, credential or browser challenge is stored by this fixture.
+  const agent = {
+    agent_id: "verified-person",
+    actor_id: "verified-person",
+    principal_kind: "human",
+  };
+  await page.route("**/auth/passkey/dev/login", (route) =>
+    route.fulfill({ json: { agent } }),
+  );
+  await page
+    .getByLabel("Principal username (optional)")
+    .fill("verified-person");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview$/);
+  await expect.poll(entries).toEqual([]);
+  await page.evaluate(async () => {
+    const { clearAuthSession } = await import("/src/lib/authSession.js");
+    clearAuthSession("local", { organizationSlug: "local", clearActor: true });
+  });
+  expect(await entries()).toEqual([]);
+  await page.goto(WS_HOME);
+  await expect(page.getByLabel("Display name")).toHaveValue("");
+});
+
+test("identity draft-changing controls are locked while explicit resend is in flight", async ({
+  page,
+}) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let attempts = 0;
+  await page.route("**/actors", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (++attempts === 1)
+      return route.fulfill({
+        status: 403,
+        json: { error: { code: "forbidden" } },
+      });
+    await gate;
+    await route.fulfill({ status: 201, json: { actor: body.actor } });
+  });
+  await page.goto(WS_HOME);
+  await page.getByLabel("Display name").fill("Protected request");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => attempts).toBe(2);
+  await expect(
+    page.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Display name")).toHaveAttribute("readonly", "");
+  release();
+  await expect(page).toHaveURL(/\/overview/);
+});
+
+test("an uncertain creation stays frozen after a later permission refusal", async ({
+  page,
+}) => {
+  let attempts = 0;
+  await page.route("**/actors", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: ++attempts === 1 ? 503 : 403,
+          json: { error: { code: "unavailable" } },
+        })
+      : route.fallback(),
+  );
+  await page.goto(WS_HOME);
+  await page.getByLabel("Display name").fill("Uncertain identity");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => attempts).toBe(2);
+  await expect(
+    page.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByLabel("Display name")).toHaveValue(
+    "Uncertain identity",
+  );
+  await expect(page.getByLabel("Display name")).toHaveAttribute("readonly", "");
+  await expect(
+    page.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+});
+
+test("a tab closed before the response keeps its original creation frozen on denial", async ({
+  context,
+}) => {
+  let firstBody,
+    attempted = false;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  await context.route("**/actors", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (!attempted) {
+      attempted = true;
+      firstBody = body;
+      const committed = await route.fetch();
+      expect(committed.status()).toBe(201);
+      await gate;
+      return route.fulfill({ response: committed }).catch(() => {});
+    }
+    expect(body).toEqual(firstBody);
+    return route.fulfill({
+      status: 403,
+      json: { error: { code: "forbidden" } },
+    });
+  });
+  const page = await context.newPage();
+  await page.goto(WS_HOME);
+  await page.getByLabel("Display name").fill("Unconfirmed identity");
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => attempted).toBe(true);
+  await page.reload();
+  release();
+  await expect(page.getByLabel("Display name")).toHaveValue(
+    "Unconfirmed identity",
+  );
+  await page.getByRole("button", { name: "Create and continue" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Display name")).toHaveAttribute("readonly", "");
+});
+
+test("a rejection in one tab cannot clear another tab's uncertain attempt", async ({
+  context,
+}) => {
+  let requests = 0,
+    release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  await context.route("**/actors", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const count = ++requests;
+    if (count === 1)
+      return route.fulfill({
+        status: 400,
+        json: { error: { code: "invalid_request" } },
+      });
+    if (count === 2) {
+      await gate;
+      return route
+        .fulfill({ status: 503, json: { error: { code: "unavailable" } } })
+        .catch(() => {});
+    }
+    return route.fulfill({
+      status: 403,
+      json: { error: { code: "forbidden" } },
+    });
+  });
+  const a = await context.newPage(),
+    b = await context.newPage();
+  await a.goto(WS_HOME);
+  await a.getByLabel("Display name").fill("Shared original request");
+  await a.getByRole("button", { name: "Create and continue" }).click();
+  await expect(
+    a.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await b.goto(WS_HOME);
+  await b
+    .getByRole("button", { name: "Review Shared original request" })
+    .click();
+  await expect(
+    b.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await a.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => requests).toBe(2);
+  await expect(
+    b.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+  await b.getByRole("button", { name: "Create and continue" }).click();
+  await expect.poll(() => requests).toBe(3);
+  await expect(b.getByRole("alert")).toBeVisible();
+  await expect(
+    b.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+  await b.reload();
+  await expect(
+    b.getByRole("button", { name: "Edit saved identity" }),
+  ).toHaveCount(0);
+  await expect(b.getByLabel("Display name")).toHaveAttribute("readonly", "");
+  release();
+});
+
+test("a retired request in a stale tab remains editable after resend and reload", async ({
+  context,
+}) => {
+  let sends = 0;
+  await context.route("**/actors", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    sends++;
+    return route.fulfill({
+      status: 400,
+      json: { error: { code: "invalid_request" } },
+    });
+  });
+  const a = await context.newPage(),
+    b = await context.newPage();
+  await a.goto(WS_HOME);
+  await a.getByLabel("Display name").fill("Retired identity");
+  await a.getByRole("button", { name: "Create and continue" }).click();
+  await expect(
+    a.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await b.goto(WS_HOME);
+  await b.getByRole("button", { name: "Review Retired identity" }).click();
+  await a.getByRole("button", { name: "Edit saved identity" }).click();
+  await expect(a.getByLabel("Display name")).not.toHaveAttribute(
+    "readonly",
+    "",
+  );
+  await b.getByRole("button", { name: "Create and continue" }).click();
+  await expect(b.getByRole("alert")).toBeVisible();
+  expect(sends).toBe(1);
+  await b.reload();
+  await expect(
+    b.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await b.getByRole("button", { name: "Edit saved identity" }).click();
+  await expect(b.getByLabel("Display name")).not.toHaveAttribute(
+    "readonly",
+    "",
+  );
+});

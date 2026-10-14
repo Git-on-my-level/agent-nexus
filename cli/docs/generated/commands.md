@@ -13,9 +13,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Dev-only actor registration when dev_actor_mode is enabled.
+- Why: Dev-only actor registration when dev_actor_mode is enabled. Optional request_key binds the complete actor payload to an atomic original receipt; retain the actor ID and key on explicit resend. No session or credentials are issued.
 - Concepts: `actors`, `auth`
-- Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
+- Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`, `actor_exists`
 - Output: Returns `{ actor }`.
 
 ## `actors.list`
@@ -2838,7 +2838,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Pin an active visual-report document as the workspace dashboard; null clears the pin.
 - Concepts: `home`, `documents`, `cards`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
-- Output: Returns the workspace Overview projection.
-- Agent notes: Pass a document ref to pin it; pass null to return to newest-report selection.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
+- Output: Legacy requests return the workspace Overview projection. Keyed requests return the atomic original { ok, updated_at, document_ref } receipt.
+- Agent notes: Pass a document ref to pin it; pass null to return to newest-report selection. Keyed requests require the captured if_updated_at (null for no prior setting); retries reuse the original key and base.
 
