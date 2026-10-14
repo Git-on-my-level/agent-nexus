@@ -60,7 +60,7 @@ func (s *Store) HumanAttentionResponseReplay(ctx context.Context, actorID, key, 
 // AppendHumanAttentionResponse serializes the event and its unique source
 // request claim in one transaction. A concurrent response loses the unique
 // claim and its event insert is rolled back with the transaction.
-func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourceEventID, inboxItemID, key, hash string, event map[string]any, initialNotify map[string]any) (map[string]any, bool, error) {
+func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourceEventID, inboxItemID, key, hash string, event map[string]any, initialNotify map[string]any, responseFields ...map[string]any) (map[string]any, bool, error) {
 	if sourceEventID == "" {
 		return nil, false, fmt.Errorf("source event id is required")
 	}
@@ -75,6 +75,8 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
 		return nil, false, err
 	}
+	ctx, closeAdmission := withResponseMutationReads(ctx)
+	defer closeAdmission()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, false, err
@@ -116,7 +118,14 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 	}
 	publicNotify := cloneMap(initialNotify)
 	delete(publicNotify, "quiet_window_ns")
-	response := map[string]any{"event": prepared.Body, "notify": publicNotify, "task_outcome": taskOutcome}
+	response := map[string]any{"notify": publicNotify}
+	if len(responseFields) > 0 {
+		for k, v := range responseFields[0] {
+			response[k] = v
+		}
+	}
+	response["event"] = prepared.Body
+	response["task_outcome"] = taskOutcome
 	raw, err := json.Marshal(response)
 	if err != nil {
 		return nil, false, err
@@ -145,6 +154,11 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 		return nil, false, ErrHumanAttentionAlreadyResponded
 	}
 	if err := queueHumanAttentionAnswerWakeBatchTx(ctx, tx, sourceEventID, prepared.Body, initialNotify); err != nil {
+		return nil, false, err
+	}
+	// Remove just the resolved row atomically. Replaying the entire backing
+	// thread is maintenance work; the source transaction already dirties it.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE id=?`, inboxItemID); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {

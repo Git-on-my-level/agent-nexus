@@ -1419,8 +1419,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Advance durable per-group Home read cursors for the authenticated operator.
 - Concepts: `home`, `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ ok, unread_count, group_count }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Keyed requests return the original `{ ok: true }` receipt; legacy requests return `{ ok, unread_count, group_count }`.
 
 ## `home.unread`
 
@@ -1431,8 +1431,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.
 - Concepts: `home`, `events`
-- Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ groups, unread_count, group_count, generated_at }`.
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`
+- Output: Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history.
 
 ## `hosts.bridge.check_in`
 

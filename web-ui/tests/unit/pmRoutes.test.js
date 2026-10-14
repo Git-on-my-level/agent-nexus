@@ -890,6 +890,50 @@ describe("PM operator interactions", () => {
       readWorkspaceView(`${readerScopeKey()}:inbox`)[0].value.items[0].status,
     ).toBe("answered");
   });
+  it("a confirmed inbox control reloads sources and fences a stale selected decision", async () => {
+    state.route("/inbox?item=decision:control-refresh");
+    const stale = {
+      id: "control-refresh",
+      instruction: "Control refresh",
+      work_ref: "card:one",
+      status: "awaiting_answer",
+      revision: 1,
+    };
+    const getter = deferred();
+    client.listPmDecisions.mockResolvedValue({ items: [] });
+    client.getPmDecision.mockReturnValue(getter.promise);
+    render(InboxPage);
+    await waitFor(() => expect(client.getPmDecision).toHaveBeenCalled());
+    client.listPmDecisions.mockResolvedValue({
+      items: [
+        {
+          ...stale,
+          status: "answered",
+          revision: 2,
+          answer: "Already approved",
+        },
+      ],
+    });
+    window.dispatchEvent(
+      new CustomEvent("anx:mutation-confirmed", {
+        detail: {
+          operation: "inbox.controls",
+          scope: readerScopeKey(),
+          request: { items: [] },
+          result: { controls: [] },
+        },
+      }),
+    );
+    await screen.findByRole("heading", { name: "Control refresh" });
+    getter.resolve(stale);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Approve", exact: true }),
+      ).toBeNull(),
+    );
+    expect(client.listPmDecisions.mock.calls.length).toBeGreaterThan(1);
+    expect(screen.getByText("Already approved")).toBeTruthy();
+  });
   it("loads a directly linked decision and receipt beyond the partial list", async () => {
     state.route("/inbox?item=decision:older-decision");
     client.listPmDecisions.mockResolvedValue({ items: [], has_more: true });

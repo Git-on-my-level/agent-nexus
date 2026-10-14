@@ -13,7 +13,7 @@ import (
 
 const derivedProjectionMaxAge = time.Minute
 
-func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, actorID string) error {
+func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, actorID string, startedGeneration ...int64) error {
 	ctx = primitives.CanonicalMaintenanceContext(ctx)
 	if opts.primitiveStore == nil {
 		return nil
@@ -21,6 +21,15 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil
+	}
+
+	statuses, err := opts.primitiveStore.GetTopicProjectionRefreshStatuses(ctx, []string{threadID})
+	if err != nil {
+		return err
+	}
+	generation := statuses[threadID].DesiredGeneration
+	if len(startedGeneration) > 0 {
+		generation = startedGeneration[0]
 	}
 
 	thread, err := opts.primitiveStore.GetThread(ctx, threadID)
@@ -114,7 +123,10 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 	}
 	summary["open_card_count"] = workItemSummary.OpenCount
 
-	if err := opts.primitiveStore.ReplaceDerivedInboxItems(ctx, threadID, projectionItems); err != nil {
+	if err := opts.primitiveStore.ReplaceDerivedInboxItems(ctx, threadID, projectionItems, generation); err != nil {
+		if errors.Is(err, primitives.ErrProjectionGenerationChanged) {
+			return nil // A newer generation stays dirty (or has already been published).
+		}
 		return err
 	}
 	return opts.primitiveStore.PutDerivedTopicProjection(ctx, primitives.DerivedTopicProjection{

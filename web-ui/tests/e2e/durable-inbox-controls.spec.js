@@ -336,3 +336,111 @@ test("denied storage retains the visible inbox intent and sends nothing", async 
   );
   expect(fixture.writes).toHaveLength(0);
 });
+
+for (const lostStage of ["dispatch", "reconcile"]) {
+  test(`approval auto-apply resumes keyed ${lostStage} after a lost confirmation`, async ({
+    page,
+    context,
+  }) => {
+    let healthy = false;
+    const receipts = new Map();
+    const fixture = await prepare(context, (route, { path, body, action }) => {
+      const stage = path.endsWith("/dispatch") ? "dispatch" : "reconcile";
+      if (!receipts.has(body.request_key)) {
+        receipts.set(body.request_key, {
+          ...action,
+          revision: stage === "dispatch" ? 2 : 4,
+          status: stage === "dispatch" ? "sending" : "verified",
+        });
+        // Dispatch's original receipt stays at admission while source completion
+        // advances the canonical action before the separate read-back fence.
+        action.revision = stage === "dispatch" ? 3 : 4;
+        action.status = stage === "dispatch" ? "delivered" : "verified";
+      }
+      return !healthy && stage === lostStage
+        ? json(route, { error: { code: "upstream_timeout" } }, 524)
+        : json(route, receipts.get(body.request_key));
+    });
+    let answers = 0;
+    await context.route(
+      /\/pm\/decisions\/control-decision\/answer$/,
+      (route) => {
+        answers++;
+        return json(route, fixture.decision);
+      },
+    );
+    await page.goto(url);
+    await expect(page.locator("[data-inbox-row]").first()).toBeVisible();
+    await page.evaluate(async () => {
+      const { enqueuePmDecisionAnswer } =
+        await import("/src/lib/mutationOutbox.js");
+      await enqueuePmDecisionAnswer({
+        decisionId: "control-decision",
+        revision: 2,
+        approve: true,
+        text: "Apply the approved change",
+        autoApply: true,
+        target: "pm:decision:control-decision:answer",
+      });
+    });
+    await expect
+      .poll(() =>
+        fixture.writes.some((row) => row.path.endsWith(`/${lostStage}`)),
+      )
+      .toBe(true);
+    await expect
+      .poll(async () => (await records(page))[0]?.value?.state)
+      .toBe("retrying");
+    const first = fixture.writes.find((row) =>
+      row.path.endsWith(`/${lostStage}`),
+    );
+    const saved = (await records(page))[0].value;
+    expect(saved.request.autoDispatch).toEqual({
+      request_key: expect.any(String),
+      if_revision: 3,
+      if_action_revision: 1,
+    });
+    if (lostStage === "reconcile") {
+      expect(saved.receipt.dispatchedAction.status).toBe("sending");
+      expect(saved.request.autoReconcile).toEqual({
+        request_key: expect.any(String),
+        if_revision: 3,
+      });
+    }
+    // Neither a canonical revision change nor a reload may change an uncertain
+    // stage's body. Completed answer/delivery stages must not be sent again.
+    fixture.action.revision = 9;
+    healthy = true;
+    await page.reload();
+    await expect
+      .poll(
+        () =>
+          fixture.writes.filter((row) => row.path.endsWith(`/${lostStage}`))
+            .length,
+      )
+      .toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => (await records(page)).length).toBe(0);
+    const attempts = fixture.writes.filter((row) =>
+      row.path.endsWith(`/${lostStage}`),
+    );
+    expect(attempts.length).toBeGreaterThanOrEqual(2);
+    expect(
+      attempts.every(
+        (row) => JSON.stringify(row.body) === JSON.stringify(first.body),
+      ),
+    ).toBe(true);
+    expect(answers).toBe(1);
+    if (lostStage === "reconcile")
+      expect(
+        fixture.writes.filter((row) => row.path.endsWith("/dispatch")),
+      ).toHaveLength(1);
+    expect(receipts.size).toBe(2);
+    const dispatch = fixture.writes.find((row) =>
+      row.path.endsWith("/dispatch"),
+    );
+    const reconcile = fixture.writes.find((row) =>
+      row.path.endsWith("/reconcile"),
+    );
+    expect(dispatch.body.request_key).not.toBe(reconcile.body.request_key);
+  });
+}

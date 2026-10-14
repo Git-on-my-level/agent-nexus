@@ -328,12 +328,62 @@ async function send(entry) {
     if (!entry.request.autoApply) return { decision };
     if (!active(entry))
       throw new Error("The submitting identity is no longer active.");
-    let action = await client.dispatchPmDecision(decision.id);
-    if (!action.id) throw new Error("Action receipt is incomplete.");
+    // Persist each stage's original key and base before sending. A replayed
+    // dispatch receipt describes admission, so read the current action once to
+    // capture the separate read-back base; never refresh an already saved base.
+    if (!entry.request.autoDispatch) {
+      const base = await client.getPmAction(decision.action_id);
+      if (
+        base.id !== decision.action_id ||
+        !Number.isInteger(base.revision) ||
+        !Number.isInteger(decision.revision)
+      )
+        throw new Error("Delivery base is incomplete.");
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      entry.request.autoDispatch = {
+        request_key: crypto.randomUUID(),
+        if_revision: decision.revision,
+        if_action_revision: base.revision,
+      };
+      await persist(entry);
+    }
+    let action = entry.receipt.dispatchedAction;
+    if (!action) {
+      action = await client.dispatchPmDecision(
+        decision.id,
+        entry.request.autoDispatch,
+      );
+      if (action.id !== decision.action_id)
+        throw new Error("Action receipt is incomplete.");
+      entry.receipt = { ...entry.receipt, dispatchedAction: action };
+      await persist(entry);
+    }
     if (action.status !== "failed") {
       if (!active(entry))
         throw new Error("The submitting identity is no longer active.");
-      action = await client.reconcilePmAction(action.id);
+      if (!entry.request.autoReconcile) {
+        const base = await client.getPmAction(action.id);
+        if (base.id !== action.id || !Number.isInteger(base.revision))
+          throw new Error("Read-back base is incomplete.");
+        if (!active(entry))
+          throw new Error("The submitting identity is no longer active.");
+        entry.request.autoReconcile = {
+          request_key: crypto.randomUUID(),
+          if_revision: base.revision,
+        };
+        await persist(entry);
+      }
+      action =
+        entry.receipt.reconciledAction ||
+        (await client.reconcilePmAction(
+          action.id,
+          entry.request.autoReconcile,
+        ));
+      if (action.id !== decision.action_id)
+        throw new Error("Read-back receipt is incomplete.");
+      entry.receipt = { ...entry.receipt, reconciledAction: action };
+      await persist(entry);
     }
     return { decision, action };
   }

@@ -23,14 +23,15 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
     cursor = result?.next_cursor || "";
     more = Boolean(cursor) || result?.has_more === true;
     onPage?.({
-      [key]: [...collected],
+      [key]:
+        key === "groups" ? mergeHomeUnreadGroups(collected) : [...collected],
       has_more: more,
       archived_refs: [...archived],
     });
     if (!cursor) break;
   }
   return {
-    [key]: collected,
+    [key]: key === "groups" ? mergeHomeUnreadGroups(collected) : collected,
     has_more: more,
     archived_refs: [...archived],
   };
@@ -191,7 +192,14 @@ export async function loadInboxSources({
           client.listInboxItems({ status: "completed", limit: 50, cursor }),
         "items",
       ),
-    () => bounded(() => (withHistory ? client.getHomeUnread() : null)),
+    () =>
+      withHistory
+        ? pages(
+            5,
+            (cursor) => client.getHomeUnread({ limit: 200, cursor }),
+            "groups",
+          )
+        : bounded(() => null),
   ];
   try {
     await Promise.all(
@@ -257,4 +265,94 @@ export function mergeInboxItems(openItems = [], completedItems = []) {
         .map((item) => [item.id, item]),
     ).values(),
   ];
+}
+
+/** Home pages can split one group. Merge event identities without inflating its
+ * count when a live write or repeated page overlaps an earlier snapshot. */
+export function mergeHomeUnreadGroups(groups) {
+  const merged = new Map();
+  for (const group of groups) {
+    const key = group.group_ref;
+    if (!key) continue;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...group, events: [...(group.events || [])] });
+      continue;
+    }
+    const events = new Map(current.events.map((event) => [event.id, event]));
+    for (const event of group.events || []) events.set(event.id, event);
+    current.events = [...events.values()].sort(
+      (a, b) =>
+        String(b.ts).localeCompare(String(a.ts)) ||
+        String(b.id).localeCompare(String(a.id)),
+    );
+    current.unread_count = current.events.length;
+    current.newest_event = current.events[0] || current.newest_event;
+  }
+  return [...merged.values()].sort(compareHomeUnreadGroups);
+}
+
+function homeUnreadImportance(events) {
+  let rank = 0;
+  for (const event of events || []) {
+    const kind = event?.type;
+    const column = event?.payload?.column_key;
+    if (
+      kind === "human_attention_requested" ||
+      kind === "human_attention_responded"
+    ) {
+      return 3;
+    }
+    if (
+      kind === "card_resolved" ||
+      (kind === "card_moved" && (column === "done" || column === "blocked"))
+    ) {
+      rank = 2;
+    }
+  }
+  return rank;
+}
+
+function homeUnreadNearTied(left, right) {
+  const start = Date.parse(left);
+  const end = Date.parse(right);
+  if (Number.isNaN(start) || Number.isNaN(end)) return false;
+  return Math.abs(start - end) <= 5 * 60 * 1000;
+}
+
+function homeUnreadPriorityRank(priority) {
+  switch (
+    String(priority ?? "")
+      .trim()
+      .toUpperCase()
+  ) {
+    case "P0":
+      return 0;
+    case "P1":
+      return 1;
+    case "P2":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function compareHomeUnreadGroups(left, right) {
+  const importance =
+    homeUnreadImportance(right.events) - homeUnreadImportance(left.events);
+  if (importance) return importance;
+  const leftTS = String(left.newest_event?.ts ?? "");
+  const rightTS = String(right.newest_event?.ts ?? "");
+  if (leftTS === rightTS) {
+    return String(left.group_ref ?? "").localeCompare(
+      String(right.group_ref ?? ""),
+    );
+  }
+  if (homeUnreadNearTied(leftTS, rightTS)) {
+    const priority =
+      homeUnreadPriorityRank(left.priority) -
+      homeUnreadPriorityRank(right.priority);
+    if (priority) return priority;
+  }
+  return rightTS.localeCompare(leftTS);
 }

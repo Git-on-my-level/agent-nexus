@@ -13,8 +13,11 @@ import (
 // PM list presentation needs only phase and revision. Resolve and project those
 // fields in one scoped read, preserving the point reader's reference precedence
 // and card lifecycle without hydrating report-only thread and attempt context.
-func (s *Store) decisionWorkSnapshots(ctx context.Context, refs []string) (map[string]map[string]any, error) {
+func (s *Store) decisionWorkSnapshots(ctx context.Context, refs []string, includeHidden ...bool) (map[string]map[string]any, error) {
 	out := map[string]map[string]any{}
+	if len(refs) > 200 {
+		return nil, invalidBoardRequest("refs must contain at most 200 strings per batch")
+	}
 	if len(refs) == 0 {
 		return out, nil
 	}
@@ -63,7 +66,7 @@ func (s *Store) decisionWorkSnapshots(ctx context.Context, refs []string) (map[s
 	// scoped ref_edges relation for both its ID lookup and metadata hydration
 	// duplicates expensive authorization SQL preparation. Metadata is NOT NULL,
 	// so a NULL lookup retains the existing missing-placement behavior.
-	rows, err = s.db.QueryContext(ctx, `WITH _decision_placements AS MATERIALIZED (
+	query := `WITH _decision_placements AS MATERIALIZED (
  SELECT json_extract(j.value,'$.ref') AS ref,json_extract(j.value,'$.id') AS id,
  (SELECT CASE WHEN re.id IS NOT NULL THEN re.metadata_json END FROM ref_edges re WHERE re.source_type='board' AND re.edge_type='board_card' AND re.target_id=json_extract(j.value,'$.id') LIMIT 1) AS metadata_json
  FROM json_each(?) j)
@@ -71,7 +74,11 @@ func (s *Store) decisionWorkSnapshots(ctx context.Context, refs []string) (map[s
  COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),o.body_json
  FROM _decision_placements selected CROSS JOIN cards c ON c.id=selected.id
  LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
- WHERE selected.metadata_json IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, string(raw), boardDefaultColumn)
+ WHERE selected.metadata_json IS NOT NULL`
+	if len(includeHidden) == 0 || !includeHidden[0] {
+		query += ` AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`
+	}
+	rows, err = s.db.QueryContext(ctx, query, string(raw), boardDefaultColumn)
 	if err != nil {
 		return nil, err
 	}
@@ -95,4 +102,10 @@ func (s *Store) decisionWorkSnapshots(ctx context.Context, refs []string) (map[s
 		out[ref] = projectWork(map[string]any{"column_key": phase, "head_revision_number": head}, m, version, latest, nil, nil)
 	}
 	return out, rows.Err()
+}
+
+// WorkRoutingSnapshots retains the point GetWork reader's archived/trashed
+// routing semantics, without hydrating full work context for each legacy action.
+func (s *Store) WorkRoutingSnapshots(ctx context.Context, refs []string) (map[string]map[string]any, error) {
+	return s.decisionWorkSnapshots(ctx, refs, true)
 }

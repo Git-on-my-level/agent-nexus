@@ -1360,8 +1360,10 @@ export function createAnxCoreClient(options = {}) {
 
       return { contentType, content: await response.arrayBuffer() };
     },
-    getHomeUnread: () =>
-      invokeCommand("home.unread", { options: { query: readerQuery() } }),
+    getHomeUnread: (filters = {}) =>
+      invokeCommand("home.unread", {
+        options: { query: { ...readerQuery(), ...filters } },
+      }),
     markHomeRead: (payload) =>
       invokeCommand("home.read", {
         options: { body: normalizeHomeReadPayload(payload) },

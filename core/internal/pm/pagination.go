@@ -173,6 +173,21 @@ func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, curs
 }
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
 	page, err := recordPage(ctx, s, p, "action", limit, cursor, func(a Action) string { return a.WorkRef })
+	if err != nil {
+		return page, err
+	}
+	if s.deps.BeginDeliveryRead != nil {
+		refs := []string{}
+		for _, a := range page.Items {
+			if a.SourceAuthority == "" {
+				refs = append(refs, a.WorkRef)
+			}
+		}
+		ctx, err = s.deps.BeginDeliveryRead(ctx, refs)
+		if err != nil {
+			return page, err
+		}
+	}
 	for i, a := range page.Items {
 		page.Items[i] = s.actionForReader(ctx, a)
 	}

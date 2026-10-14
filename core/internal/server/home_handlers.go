@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +21,31 @@ func handleGetHomeUnread(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if !ok {
 		return
 	}
-	groups, unreadCount, err := opts.primitiveStore.ListHomeUnread(r.Context(), readerID)
+	limit := 200
+	var err error
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		limit, err = strconv.Atoi(raw)
+	}
+	if err != nil || limit < 1 || limit > 200 {
+		writeError(w, 400, "invalid_request", "limit must be between 1 and 200")
+		return
+	}
+	var groups []primitives.HomeUnreadGroup
+	var unreadCount int
+	var next string
+	if reader, ok := opts.primitiveStore.(interface {
+		ListHomeUnreadPage(context.Context, string, string, int) (primitives.HomeUnreadPage, error)
+	}); ok {
+		var page primitives.HomeUnreadPage
+		page, err = reader.ListHomeUnreadPage(r.Context(), readerID, r.URL.Query().Get("cursor"), limit)
+		groups, unreadCount, next = page.Groups, page.UnreadCount, page.NextCursor
+	} else {
+		groups, unreadCount, err = opts.primitiveStore.ListHomeUnread(r.Context(), readerID)
+	}
+	if errors.Is(err, primitives.ErrInvalidCursor) {
+		writeError(w, 400, "invalid_request", "invalid cursor")
+		return
+	}
 	if err != nil {
 		log.Printf("anx-core: home unread failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load home unread activity")
@@ -43,6 +68,7 @@ func handleGetHomeUnread(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		"unread_count": unreadCount,
 		"group_count":  len(payloadGroups),
 		"generated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"next_cursor":  next, "has_more": next != "",
 	})
 }
 

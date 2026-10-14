@@ -10,6 +10,7 @@ func TestStructuredSQLArgumentsPreserveScalarIdentities(t *testing.T) {
 		q    string
 		want map[int]bool
 	}{
+		{`INSERT INTO derived_inbox_items(id,data_json) SELECT * FROM (VALUES (?,?)) WHERE NOT EXISTS (SELECT 1 FROM human_attention_request_resolutions WHERE request_event_id=?)`, map[int]bool{1: true}},
 		{`INSERT INTO artifacts(id,refs_json,metadata_json) VALUES(?,?,?)`, map[int]bool{1: true, 2: true}},
 		{`INSERT OR IGNORE INTO artifacts("id","refs_json") VALUES(?,json(?)),(?,?) ON CONFLICT DO NOTHING`, map[int]bool{1: true, 3: true}},
 		{`UPDATE documents SET title=?,refs_json=json(?),summary=COALESCE(?,summary) WHERE id=?`, map[int]bool{1: true}},

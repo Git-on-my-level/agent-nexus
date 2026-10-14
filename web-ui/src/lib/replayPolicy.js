@@ -28,6 +28,8 @@ export function requestIntent(request) {
     value,
     value.body,
     value.answer,
+    value.autoDispatch,
+    value.autoReconcile,
     value.creation,
     value.message,
     ...(value.items || []).map((item) => item.body),
@@ -65,6 +67,8 @@ export function freshRequest(request, operation = "", receipt = null) {
     value,
     value.body,
     value.answer,
+    value.autoDispatch,
+    value.autoReconcile,
     value.creation,
     value.message,
     ...(value.items || []).map((item) => item.body),
@@ -75,6 +79,13 @@ export function freshRequest(request, operation = "", receipt = null) {
     if (
       operation === "inbox.controls" &&
       receipt?.controls?.some((done) => done.key === body.request_key)
+    )
+      continue;
+    if (
+      operation === "pm.decision.answer" &&
+      ((body === value.answer && receipt?.decision) ||
+        (body === value.autoDispatch && receipt?.dispatchedAction) ||
+        (body === value.autoReconcile && receipt?.reconciledAction))
     )
       continue;
     for (const field of ["request_key", "replay_key"]) {

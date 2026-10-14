@@ -107,7 +107,22 @@ func TestSummaryBundlesBoundCandidatesAndLegacyArchiveIsComplete(t *testing.T) {
 	}
 	for _, path := range []string{"/cards", "/boards/" + anyString(b["id"]) + "/cards", "/topics/" + anyString(topic.Topic["id"]) + "/workspace", "/topics/" + anyString(topic.Topic["id"]) + "/timeline", "/cards/" + anyString(cards[0]["id"]) + "/timeline", "/boards/" + anyString(b["id"]) + "/workspace"} {
 		body := workGetJSON(t, h.baseURL+path, 200)
-		assertLegacyCardShape(t, body)
+		if path == "/topics/"+anyString(topic.Topic["id"])+"/workspace" {
+			if len(body["cards"].([]any)) != 50 || body["cards_truncated"] != true || body["resources_truncated"] != true {
+				t.Fatalf("topic preview lost bounded truncation: %#v", body)
+			}
+			// Preview pagination is explicit; the individual card shape stays
+			// compatible and other default collection/timeline routes stay full.
+			shape := map[string]any{}
+			for key, value := range body {
+				if key != "cards_truncated" && key != "resources_truncated" {
+					shape[key] = value
+				}
+			}
+			assertLegacyCardShape(t, shape)
+		} else {
+			assertLegacyCardShape(t, body)
+		}
 		if strings.HasSuffix(path, "/cards") && len(body["cards"].([]any)) != len(cards) {
 			t.Fatal("legacy collection lost cards", path)
 		}

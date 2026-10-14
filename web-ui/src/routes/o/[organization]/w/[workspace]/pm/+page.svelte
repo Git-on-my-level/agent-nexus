@@ -712,9 +712,10 @@
       reducedMotion = Boolean(event.matches);
     };
     motion?.addEventListener?.("change", onMotionChange);
-    // A pending turn resolves in the background whether or not this tab is in
-    // front: keep polling while hidden, and refresh the moment it comes back.
+    // Pending turns keep resolving server-side. Resume reads when this tab
+    // becomes visible; hidden tabs need no conversation projection polls.
     const pollNow = (force = false) => {
+      if (document.hidden) return;
       if (!selectedId || sending || loading || loadingOlder || pollInFlight)
         return;
       // Nothing changes on its own once every turn is answered or failed;

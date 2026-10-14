@@ -182,9 +182,10 @@ still be confirmed. Confirmation preserves newer composer text and refreshes
 history without converting a refresh failure into an uncertain mutation.
 
 The decision adapter freezes the answer revision, choice, note and original actor.
-Its original server response is saved before any existing native auto-apply step.
-The canonical action ID and guarded dispatch/reconcile flow are reused; an
-uncertain delivery is not blindly re-dispatched. Source-owned approvals retain
+Its original server response is saved before native auto-apply. Each delivery and
+read-back stage journals its own original key and frozen revision before sending,
+then checkpoints its receipt. Recovery skips confirmed stages and retries an
+uncertain stage with its exact original body. Source-owned approvals retain
 separate delivery controls. Confirmed answers enter the scoped Inbox cache even
 when the originating component has unmounted. Epoch fencing still discards writes
 after sign-out or principal replacement.
@@ -572,7 +573,8 @@ writer. Legacy unkeyed calls retain their existing response/count behavior.
 
 `POST /cards/{id}/archive` opts into atomic original receipts with `request_key`,
 `if_version`, `if_lifecycle` and `if_latest_observation_id`. The lifecycle tuple
-protects archive/restore races that do not advance the work version. An empty
+protects visibility changes. Archive and restore also advance the monotonic work
+version, so an archive/restore round trip conflicts with a never-committed archive. An empty
 observation ID explicitly fences “no successful observation yet”, so a first
 successful refresh also conflicts. Archive and its receipt commit together;
 receipt failure rolls back the archive. Legacy unkeyed behavior is retained.
@@ -585,8 +587,8 @@ source call. Its stored receipt confirms that admission, not delivery, and
 later source results cannot alter the original receipt. Recovery never repeats
 an admitted source handoff or read-back. A crash between admission and handoff
 leaves a sending action for read-back/explicit human handling; automatic recovery
-must not invent a new external send. Existing unkeyed auto-apply follows its
-existing action identity and revision guards. Every replay rechecks current
+must not invent a new external send. Approval auto-apply uses the same keyed control protocol with separate frozen
+delivery and read-back bases. Every replay rechecks current
 scope, owner and permission before returning a receipt.
 
 The bounded read proof uses event/group ID and partial handle indexes, and the

@@ -250,7 +250,6 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	w.WriteHeader(status)
 	// All turn-bearing endpoints share the same public projection, including
 	// idempotent message replays. Only the runner claim returns credentials.
 	switch value := out.(type) {
@@ -275,6 +274,19 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out = s.decisionResponse(ctx, p, value)
 		}
 	case Page[Decision]:
+		if s.deps.BeginDeliveryRead != nil {
+			refs := []string{}
+			for _, d := range value.Items {
+				if d.SourceAuthority == "" {
+					refs = append(refs, d.WorkRef)
+				}
+			}
+			ctx, err = s.deps.BeginDeliveryRead(ctx, refs)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+		}
 		items := make([]any, 0, len(value.Items))
 		for _, d := range value.Items {
 			items = append(items, s.decisionResponse(ctx, p, d))
@@ -300,6 +312,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Turns []any `json:"turns"`
 		}{value, turns}
 	}
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(out)
 }
 func queryLimit(r *http.Request) (int, error) {

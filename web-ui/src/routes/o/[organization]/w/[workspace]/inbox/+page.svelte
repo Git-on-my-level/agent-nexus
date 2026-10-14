@@ -399,6 +399,8 @@
   $effect(() => {
     const id = selectedId;
     void contextEpoch;
+    const scope = readerScopeKey();
+    let cancelled = false;
     const row = untrack(() => selected);
     if (!row || row.kind !== "inbox") {
       context = null;
@@ -413,14 +415,19 @@
     contextLoading = true;
     void loadInboxContext(row.item, row.subject).then(
       (value) => {
-        if (contextFor !== id) return;
+        if (cancelled || scope !== readerScopeKey() || contextFor !== id)
+          return;
         context = value;
         contextLoading = false;
       },
       () => {
-        if (contextFor === id) contextLoading = false;
+        if (!cancelled && scope === readerScopeKey() && contextFor === id)
+          contextLoading = false;
       },
     );
+    return () => {
+      cancelled = true;
+    };
   });
   /*
    * The ask behind the selected item: its durable outcome (status, staleness,
@@ -446,6 +453,8 @@
     const askRef = selectedAskRef;
     const id = selectedId;
     void contextEpoch;
+    const scope = readerScopeKey();
+    let cancelled = false;
     if (!askRef) {
       askDetail = null;
       askDetailFor = "";
@@ -460,14 +469,19 @@
     askDetailLoading = true;
     void loadAskDetail(item).then(
       (value) => {
-        if (askDetailFor !== id) return;
+        if (cancelled || scope !== readerScopeKey() || askDetailFor !== id)
+          return;
         askDetail = value;
         askDetailLoading = false;
       },
       () => {
-        if (askDetailFor === id) askDetailLoading = false;
+        if (!cancelled && scope === readerScopeKey() && askDetailFor === id)
+          askDetailLoading = false;
       },
     );
+    return () => {
+      cancelled = true;
+    };
   });
   let askEvidence = $derived(
     selected?.kind === "inbox"
@@ -876,6 +890,7 @@
     clearTimeout(liveTimer);
     liveTimer = setTimeout(() => {
       liveTimer = null;
+      if (document.hidden) return;
       if (busy) {
         scheduleLiveRefresh();
         return;
@@ -957,8 +972,25 @@
               done.result,
             ];
         }
+        // Cancel both list and selected-detail reads begun before confirmation.
+        // The respond queue independently invalidates these same read tickets.
+        requestId++;
+        loadController?.abort();
+        selectionRequest++;
+        selectedController?.abort();
+        loading = false;
+        refreshPending = false;
+        invalidateInboxContext();
+        invalidateAskDetail();
+        contextEpoch += 1;
         notice = "Inbox request confirmed.";
-        void load({ quiet: true });
+        await load({ quiet: true });
+        if (
+          entry.scope === readerScopeKey() &&
+          explicitId.startsWith("decision:") &&
+          decisionResolvedFor !== explicitId
+        )
+          void loadSelected(explicitId.slice("decision:".length));
         return;
       }
       if (
@@ -1593,7 +1625,10 @@
       refreshIfInFlight();
     }, 15_000);
     const onVisible = () => {
-      if (!document.hidden) refreshIfInFlight();
+      if (!document.hidden) {
+        refreshIfInFlight();
+        scheduleLiveRefresh();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {

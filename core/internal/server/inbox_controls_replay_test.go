@@ -106,11 +106,32 @@ func TestInboxReadAndCardArchiveAtomicReplay(t *testing.T) {
 					t.Fatalf("receipt changed: %d %s", replay.Code, replay.Body.String())
 				}
 			}
+			if op == "archive" {
+				// Another device restores after archive. The tuple is back at the
+				// original base, but a never-committed offline archive must conflict.
+				if _, err := store.RestoreArchivedBoardCard(ctx, owner.ActorID, "", id, primitives.RemoveBoardCardInput{}); err != nil {
+					t.Fatal(err)
+				}
+				current, err := store.GetWork(ctx, id)
+				if err != nil || current["version"] == card["version"] || current["archived_at"] != nil {
+					t.Fatalf("restore did not advance work fence: %v %v", current, err)
+				}
+				// The already committed key still returns its original receipt
+				// without re-archiving the restored card.
+				replay := call(body)
+				if replay.Code != 200 || replay.Body.String() != first.Body.String() {
+					t.Fatalf("round-trip replay: %d %s", replay.Code, replay.Body.String())
+				}
+			}
 			body["request_key"] = "fresh-stale"
 			if op == "archive" {
 				out := call(body)
 				if out.Code != 409 {
 					t.Fatalf("stale archive: %d %s", out.Code, out.Body.String())
+				}
+				current, err := store.GetWork(ctx, id)
+				if err != nil || current["archived_at"] != nil {
+					t.Fatalf("stale archive overwrote restored task: %v %v", current, err)
 				}
 			} else {
 				delete(body, "expected_newest_event_cursor")

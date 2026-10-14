@@ -72,3 +72,24 @@ it("renewing an expired inbox batch keeps confirmed member keys and frozen remai
   expect(fresh.items[1].body.if_revision).toBe(7);
   expect(request.items[1].body.request_key).toBe("pending");
 });
+
+it("renewing auto-apply rotates only the unconfirmed stage and retains its revision", () => {
+  const request = {
+    answer: { request_key: "answered", revision: 2 },
+    autoDispatch: {
+      request_key: "admitted",
+      if_revision: 3,
+      if_action_revision: 1,
+    },
+    autoReconcile: { request_key: "uncertain", if_revision: 3 },
+  };
+  const fresh = freshRequest(request, "pm.decision.answer", {
+    decision: { id: "decision" },
+    dispatchedAction: { id: "action" },
+  });
+  expect(fresh.answer).toEqual(request.answer);
+  expect(fresh.autoDispatch).toEqual(request.autoDispatch);
+  expect(fresh.autoReconcile.request_key).not.toBe("uncertain");
+  expect(fresh.autoReconcile.if_revision).toBe(3);
+  expect(requestIntent(fresh)).toEqual(requestIntent(request));
+});

@@ -1069,6 +1069,7 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_human_attention_batch_response_claims_inbox
 		ON human_attention_batch_response_claims(inbox_item_id)`},
 	},
+	{Version: 88, AfterApply: installTopicWorkspacePageIndexes},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

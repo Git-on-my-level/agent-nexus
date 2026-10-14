@@ -2517,6 +2517,13 @@ func (s *Store) RemoveBoardCard(ctx context.Context, actorID, boardID, identifie
 	}, nil
 }
 
+// Lifecycle transitions advance the existing work fence even when the visibility
+// tuple later returns to its original value. Preserve source-owned annotations.
+func advanceCardLifecycleVersion(ctx context.Context, tx *resourceaccess.Tx, cardID, actorID, now string) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,'nexus','{"source":{"authority":"nexus"}}',1,?,?) ON CONFLICT(card_id) DO UPDATE SET version=work_metadata.version+1,updated_at=excluded.updated_at,updated_by=excluded.updated_by`, cardID, now, actorID)
+	return err
+}
+
 func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifier string, input RemoveBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
@@ -2655,6 +2662,10 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			return BoardCardMutationResult{}, ErrConflict
 		}
 	}
+	if err := advanceCardLifecycleVersion(ctx, tx, cardRow.CardID, actorID, now); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -2770,6 +2781,10 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		cardRow.ArchivedBy = sql.NullString{}
 	}
 
+	if err := advanceCardLifecycleVersion(ctx, tx, cardRow.CardID, actorID, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
