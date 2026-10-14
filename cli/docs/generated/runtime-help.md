@@ -3016,7 +3016,11 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.archived_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
+  - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3048,7 +3052,11 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.archived_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
+  - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3078,9 +3086,13 @@ Generated Help: events trash
 Inputs:
   Required:
   - path `event_id`
-  - body `reason` (string)
   Optional:
   - body `actor_id` (string)
+  - body `if_lifecycle.archived_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
+  - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3112,7 +3124,11 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.archived_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
+  - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.

@@ -39,6 +39,13 @@ export function mutationFailure(error, subject = "response") {
       422: "Check the destination and evidence before sending this move.",
     });
   }
+  if (subject === "event action") {
+    Object.assign(messages, {
+      400: "Check the saved event request before sending it.",
+      403: "You do not have permission to change this event.",
+      409: "This event changed. Your request is saved; use latest version to review its visibility.",
+    });
+  }
   if (subject === "document action") {
     Object.assign(messages, {
       400: "This document request needs a correction. Its action and versions are saved.",

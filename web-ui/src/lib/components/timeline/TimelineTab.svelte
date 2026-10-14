@@ -1,11 +1,11 @@
 <script>
+  import EventLifecycleWork from "$lib/components/EventLifecycleWork.svelte";
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
   import { tick } from "svelte";
 
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { emptyTimelineConfirmModal } from "$lib/confirmModal.js";
-  import { coreClient } from "$lib/coreClient";
   import {
     scrollAndHighlightTarget,
     timelineTargetFromHash,
@@ -85,6 +85,7 @@
   let selectedTimelineIds = $state(new Set());
   let confirmModal = $state(emptyTimelineConfirmModal());
   let lifecycleBusy = $state(false);
+  let lifecycleWork = $state(null);
   let lifecycleError = $state("");
   let handledDeepLinkKey = $state("");
 
@@ -253,56 +254,23 @@
     selectedTimelineIds = next;
   }
 
-  async function bulkUnarchiveTimelineEvents(ids) {
-    if (!ids.length || lifecycleBusy) return;
-    lifecycleBusy = true;
+  async function queueEventAction(ids, action) {
     lifecycleError = "";
     try {
-      for (const id of ids) {
-        await coreClient.unarchiveEvent(id, {});
-      }
-      await refreshTimeline();
+      await lifecycleWork.queue(
+        ids.map((id) => timeline.find((event) => event.id === id)),
+        action,
+      );
       clearTimelineSelection();
-    } catch (e) {
-      lifecycleError = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
+    } catch {
+      lifecycleError =
+        "Your event request is retained. Review the saved work below.";
     }
   }
-
-  async function bulkArchiveTimelineEvents(ids) {
-    if (!ids.length || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      for (const id of ids) {
-        await coreClient.archiveEvent(id, {});
-      }
-      await refreshTimeline();
-      clearTimelineSelection();
-    } catch (e) {
-      lifecycleError = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
-
-  async function bulkTrashTimelineEvents(ids) {
-    if (!ids.length || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      for (const id of ids) {
-        await coreClient.trashEvent(id, {});
-      }
-      await refreshTimeline();
-      clearTimelineSelection();
-    } catch (e) {
-      lifecycleError = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
+  const bulkUnarchiveTimelineEvents = (ids) =>
+    queueEventAction(ids, "unarchive");
+  const bulkArchiveTimelineEvents = (ids) => queueEventAction(ids, "archive");
+  const bulkTrashTimelineEvents = (ids) => queueEventAction(ids, "trash");
 
   function handleConfirm() {
     const { action, eventId } = confirmModal;
@@ -319,54 +287,22 @@
       else if (action === "trash") void bulkTrashTimelineEvents(bulk);
       return;
     }
-    if (action === "archive") void archiveEvent(eventId);
-    else if (action === "trash") void trashEvent(eventId);
+    if (action === "archive") void archiveTimelineEvent(eventId);
+    else if (action === "trash") void trashTimelineEvent(eventId);
   }
 
-  async function archiveEvent(eventId) {
-    if (!eventId || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      await coreClient.archiveEvent(eventId, {});
-      await refreshTimeline();
-    } catch (e) {
-      lifecycleError = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
-
-  async function unarchiveEvent(eventId) {
-    if (!eventId || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      await coreClient.unarchiveEvent(eventId, {});
-      await refreshTimeline();
-    } catch (e) {
-      lifecycleError = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
-
-  async function trashEvent(eventId) {
-    if (!eventId || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      await coreClient.trashEvent(eventId, {});
-      await refreshTimeline();
-    } catch (e) {
-      lifecycleError = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
+  const archiveTimelineEvent = (id) => queueEventAction([id], "archive");
+  const unarchiveTimelineEvent = (id) => queueEventAction([id], "unarchive");
+  const trashTimelineEvent = (id) => queueEventAction([id], "trash");
 </script>
 
 <div class="flex flex-col gap-1">
+  <EventLifecycleWork
+    bind:this={lifecycleWork}
+    target={`event-lifecycle:${threadId ? `thread:${threadId}` : `board:${boardId}`}`}
+    href={$page.url.pathname + "?tab=timeline"}
+    onconfirmed={refreshTimeline}
+  />
   {#if hasAnyTimelineEvents}
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-3">
@@ -559,7 +495,7 @@
                           eventRawType: event.rawType,
                           bulkIds: null,
                         })}
-                      onunarchive={() => unarchiveEvent(event.id)}
+                      onunarchive={() => unarchiveTimelineEvent(event.id)}
                     />
                     <TrashButton
                       busy={lifecycleBusy}

@@ -62,6 +62,12 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
 		needed[strings.ToLower(token)] = true
 	}
+	// Bounded internal edge probes name main.ref_edges deliberately; their
+	// candidate event rows still use the scoped event relation. An unused edge
+	// shadow would force workspace-sized denial/ref materialization unnecessarily.
+	if needed["ref_edges"] && !resourceaccess.UsesShadowedSQLIdentifier(query, "ref_edges") {
+		delete(needed, "ref_edges")
+	}
 	if needed["ask_delivery_attempts"] {
 		needed["ask_deliveries"] = true
 	}

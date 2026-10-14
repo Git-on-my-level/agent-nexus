@@ -7,9 +7,9 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 ## Rollout and acceptance
 
 Stage 1 (SCA-781, PR #390) is merged. Stage 2 is tracked by SCA-786 and
-ships in separate reviewable PRs grouped by surface. Topic metadata recovery is
-the first Stage 2 surface; the remaining audit below is still open. Stage 1 and
-this topic migration do not claim whole-UI acceptance.
+ships in separate reviewable PRs grouped by surface. Topic metadata and event
+single/bulk lifecycle recovery are migrated; the remaining audit below is still
+open. These migrations do not claim whole-UI acceptance.
 
 SCA-781 permits reviewable stages. The existing changes cover the human-attention
 response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat attachment uploads, task creation and document authoring. It does not claim that every UI
@@ -358,6 +358,76 @@ revision sends. The move browser suite additionally covers network timeouts,
 journal fallback, total storage failure preventing sends, and authenticated
 principal replacement clearing other tabs and fencing late failures.
 
+## Event lifecycle recovery
+
+Timeline and Messages archive/unarchive/trash actions share a principal-scoped
+thread draft containing every selected event, action, reason and original
+`archived_at`/`trashed_at` pair. Board timelines use a board target. The draft and
+complete per-item requests are saved before sending. Reload, tab changes, offline
+closure and lost acknowledgement retain the original actor, key and base.
+Definitive failures retain copy/edit controls; editing creates fresh keys only
+for unfinished items. Explicit “Use latest version” changes only their lifecycle
+bases. Confirmation clears only the exact submitted draft. Principal replacement
+removes private work and fences late completion.
+
+The four existing event lifecycle routes accept optional `request_key` and
+`if_lifecycle` fields. Keyed requests require both original lifecycle fields,
+including nulls. Current access is checked before original-receipt replay, and the complete
+receipt is authorized before returning any previously affected descendant IDs.
+CAS, parent/reply visibility changes and the receipt commit in one scoped SQLite
+writer transaction. Legacy unkeyed calls preserve their envelopes and error
+codes. Event payloads, refs and timestamps remain append-only.
+
+A keyed receipt optionally includes `affected_event_ids`, containing only scoped
+rows actually changed in that transaction. Selected ancestors send first; their
+receipts cover selected replies without stale extra requests. The outbox freezes
+one shared `selected_bases` map alongside the per-item requests and sends it
+unchanged with each ancestor. Inside the same writer transaction, every scoped
+selected member of that cascade must still match its captured lifecycle pair,
+including members the action would otherwise skip. A mismatch conflicts the
+whole cascade and receipt. Legacy single-event request hashes remain compatible;
+older saved bulk requests without this map require explicit copy/edit recovery
+before sending. The shared map avoids duplicating snapshots in device storage.
+Every partial
+receipt is persisted before the next item. Confirmed items are skipped after
+reload; editing unfinished work retains the earlier confirmation history.
+
+Cascade discovery uses one recursive query capped at 2,000 descendants and
+cycles deduplicated by `UNION`. Each expansion reads at most 2,002 indexed raw
+candidate edges (at most 2,001 inbound raw reference edges per expanded event)
+and fails closed on saturated raw fanout, including inaccessible
+or non-message sources. Only candidate IDs bypass relation shadow filtering;
+scoped event rows authorize every candidate before recursion or output. No
+plaintext or inaccessible IDs enter the response. This prevents filtering hidden
+edges from defeating the cap. Raw target lookups pin the existing `idx_ref_edges_target`
+index before filtering edge kinds; event candidates use their primary key. At most 2,002 expansions each
+inspect 2,002 edges, independent of workspace size. Selected-row reads and writes
+use bounded primary-key sets, with no per-reply SQL calls.
+
+`event_lifecycle_replay_test.go` covers all four actions, child/receipt rollback,
+quota-enabled single-connection concurrent replay, changed bodies/targets/actors,
+stale or incomplete bases, original results after later actions and revoked
+access. `event_lifecycle_cost_test.go` checks the actual scoped SQL plan and VM
+budget against the 4,096-row scale corpus, cycles and 3,000/33,000 inaccessible
+cross-thread edges. `durable-event-lifecycle.spec.js` covers frozen retry,
+partial bulk recovery, covered replies, explicit conflict rebase, edited reasons,
+offline closure, storage denial and cross-tab principal fences. The AST guard
+rejects new direct event lifecycle sends in Svelte.
+
+The consuming cascade query is bounded after epoch admission; its private-fanout
+fixture uses 78,403 VM steps and zero full scans at both sizes. The standard
+4,096-row corpus measures 18 read calls, 12 returned rows and 3,979 VM steps for
+the primitive action. These are distinct from inherited cold/stale authorization
+closure admission and canonical business-write validation, whose cost can grow
+with denied resources. The existing mutation exclusions in
+`core/internal/server/testdata/performance_write_routes.json` still apply; this
+slice does not claim that the entire HTTP mutation has workspace-independent
+cost.
+
+Review screenshots: [retrying](images/durable-event-retrying.png),
+[partial bulk confirmation](images/durable-event-bulk-partial.png), and
+[conflict](images/durable-event-conflict.png).
+
 ## Document lifecycle recovery
 
 Archive, unarchive, trash and restore now accept an optional `request_key` and
@@ -470,7 +540,6 @@ need protocol-specific review before persistence, not blind generic retries.
 | Access administrator grants     | Grant/revoke mutations in `AuthAdminGrants`                                                                        |
 | Setup prompt and workspace tour | Enrollment token issuance/revocation; audit their cleanup and authentication boundaries                            |
 | Secrets                         | Creation/deletion; preserve complete owner-scoped authored work and audit original receipt/private result handling |
-| Timeline and messages           | Event archive/unarchive/trash, including bulk actions                                                              |
 | Inbox lifecycle and PM delivery | Card archive, decision dispatch, action reconcile and acknowledgement                                              |
 | Task refresh                    | `requestWorkRefresh`; preserve the requested target and original intent                                            |
 | PM setup and lifecycle          | Audit the setup wizard and remaining retry/cancel/control adapters, beyond direct SDK-call matching                |
@@ -484,9 +553,11 @@ groups in separate reviewable PRs; do not expand the merged Stage 1 PR.
 - Topic title/summary editor: migrated in the first SCA-786 surface PR; see
   [Topic metadata recovery](#topic-metadata-recovery). Topic creation and
   lifecycle are separate server prerequisites below.
-- Event single/bulk lifecycle, remaining Inbox card archive and explicit PM
-  dispatch/reconcile/acknowledgement, task refresh, dashboard selection and dev
-  actor creation: audit receipts and migrate full intents before automatic retry.
+- Event single/bulk lifecycle: migrated through the shared event outbox; see
+  [Event lifecycle recovery](#event-lifecycle-recovery).
+- Remaining Inbox card archive and explicit PM dispatch/reconcile/acknowledgement,
+  task refresh, dashboard selection and dev actor creation: audit receipts and
+  migrate full intents before automatic retry.
 - Access/host/enrollment/invite/admin/principal controls, Secrets, setup/tour
   choices, workspace activation and login/session controls: design authorization,
   private-result and credential handling before choosing device persistence.
@@ -503,7 +574,8 @@ groups in separate reviewable PRs; do not expand the merged Stage 1 PR.
   exclusions. Existing exceptions are not permission for new bypasses.
 
 Review boundary: the invariant tests enforce migrated Inbox/discussion/PM,
-uploads, task/document authoring, assignments, moves and document lifecycle.
+uploads, task/document authoring, assignments, moves, document lifecycle, topic
+metadata and event lifecycle.
 The separate exact callsite inventory makes all remaining known SDK/transport
 exceptions visible. Neither test claims complete semantic analysis or complete
 delivery of the issue's original acceptance criteria.
@@ -628,7 +700,7 @@ are regenerated from the canonical OpenAPI contract.
 | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /inbox/{id}/respond`                                                        | Existing `idempotency_key` contract; `AppendHumanAttentionResponse` atomically commits response and replay; concurrent eight-request test proves one event and rejects changed-body key reuse                                                         | Preserve full original request/key through device recovery; covered here                                                                              |
 | `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                                           | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                              |
-| Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                                        | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                                    |
+| Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                                        | Covered by MessagesTab, including selected-text metadata; single/bulk event lifecycle also migrated                                                   |
 | `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests                        | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                                       |
 | PM conversation creation and messages                                             | Opt-in replay_key atomically commits new thread/conversation/original 201 receipt, or turn/event/artifact/ledger/wake/original public 202 receipt; concurrency, rollback, legacy-collision and revoked-access tests. Legacy replay remains compatible | Composite chat adapter and original receipt opt-in covered for new requests; old pending bodies retain legacy recovery                                |
 | Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                                          | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery              |
@@ -641,6 +713,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics      | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                                   | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
 | `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                      | Current detail/list/bulk lifecycle UI covered; unused legacy adapters removed; purge remains an API audit                                             |
+| `POST /events/{id}/{archive,unarchive,trash,restore}`                             | Atomic original receipt and bounded scoped reply cascade; actor/action/target/body/lifecycle base bound; rollback, concurrent replay and revoked access checks                                                                                        | Timeline and Messages single/bulk actions covered; restore has a replay-safe adapter but no current UI entrypoint                                     |
 | `PATCH /topics/{id}`                                                              | Actor/canonical-target/body/base-bound atomic topic/thread/refs/event/original receipt; concurrent replay, quota/cold-ledger/write rollback, integer precision and revoked-ownership tests                                                            | Core replay and live topic metadata draft/outbox recovery covered; topic creation/lifecycle remain open                                               |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                                  | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 

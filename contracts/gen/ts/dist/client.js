@@ -6162,8 +6162,24 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
-                    "name": "if_updated_at",
-                    "type": "datetime"
+                    "name": "if_lifecycle.archived_at",
+                    "type": "string"
+                },
+                {
+                    "name": "if_lifecycle.trashed_at",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
@@ -6413,8 +6429,24 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
-                    "name": "if_updated_at",
-                    "type": "datetime"
+                    "name": "if_lifecycle.archived_at",
+                    "type": "string"
+                },
+                {
+                    "name": "if_lifecycle.trashed_at",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
@@ -6498,16 +6530,30 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "body_schema": {
-            "required": [
-                {
-                    "name": "reason",
-                    "type": "string"
-                }
-            ],
             "optional": [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_lifecycle.archived_at",
+                    "type": "string"
+                },
+                {
+                    "name": "if_lifecycle.trashed_at",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
@@ -6561,8 +6607,24 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
-                    "name": "if_updated_at",
-                    "type": "datetime"
+                    "name": "if_lifecycle.archived_at",
+                    "type": "string"
+                },
+                {
+                    "name": "if_lifecycle.trashed_at",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
