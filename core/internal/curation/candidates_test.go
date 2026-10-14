@@ -147,7 +147,7 @@ func TestMootCandidatesPrivacy(t *testing.T) {
 func TestMootCandidatesSortedByKey(t *testing.T) {
 	var asks []AskInfo
 	for i := 0; i < 8; i++ {
-		asks = append(asks, AskInfo{ID: fmt.Sprintf("a%d", i), Title: "t", SubjectRef: "card:x"})
+		asks = append(asks, AskInfo{ID: fmt.Sprintf("a%d", i), Title: "t", SubjectRef: "card:x", RelatedRefs: []string{"card:y"}})
 	}
 	got := MootCandidates(asks, flagAll)
 	for i := 1; i < len(got); i++ {
@@ -160,7 +160,7 @@ func TestMootCandidatesSortedByKey(t *testing.T) {
 func TestCandidatesCapAsks(t *testing.T) {
 	var asks []AskInfo
 	for i := 0; i < MaxAsks+5; i++ {
-		asks = append(asks, AskInfo{ID: fmt.Sprintf("a%d", i), Title: "t", SubjectRef: "card:x"})
+		asks = append(asks, AskInfo{ID: fmt.Sprintf("a%d", i), Title: "t", SubjectRef: "card:x", RelatedRefs: []string{"card:y"}})
 	}
 	calls := 0
 	got := MootCandidates(asks, func(refs []string) MootResult { calls++; return flagAll(refs) })

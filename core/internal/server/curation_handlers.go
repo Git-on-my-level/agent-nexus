@@ -34,14 +34,6 @@ func curationStore(w http.ResponseWriter, opts handlerOptions) (*primitives.Stor
 	return store, true
 }
 
-// curationScoped reports a principal under an access policy. Curation reads
-// the workspace-wide formula inputs, so scoped principals see nothing and may
-// not file proposals.
-func curationScoped(r *http.Request) bool {
-	_, scoped := resourceaccess.PolicyFrom(r.Context())
-	return scoped
-}
-
 func handleCurationCandidates(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
@@ -54,12 +46,7 @@ func handleCurationCandidates(w http.ResponseWriter, r *http.Request, opts handl
 	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
 		return
 	}
-	if curationScoped(r) {
-		writeJSON(w, http.StatusOK, map[string]any{"candidates": []any{}, "limitations": []string{"curation needs workspace-wide read access"}})
-		return
-	}
 	candidates, limitations, err := store.CurationCandidates(r.Context(), planVisibility(r, opts), time.Now().UTC())
-	log.Printf("DBGERR %v", err)
 	if err != nil {
 		workStoreError(w, r, err)
 		return
@@ -92,10 +79,6 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
 	if !ok {
-		return
-	}
-	if curationScoped(r) {
-		writeError(w, http.StatusForbidden, "forbidden", "curation needs workspace-wide read access")
 		return
 	}
 	var body struct {
@@ -169,11 +152,8 @@ func handleCurationRun(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
 		return
 	}
-	if curationScoped(r) {
-		writeError(w, http.StatusForbidden, "forbidden", "curation needs workspace-wide read access")
-		return
-	}
-	proposals, skipped, err := RunCurationFormula(r.Context(), store)
+	// The pass files as the system principal, exactly like the hourly loop.
+	proposals, skipped, err := RunCurationFormula(resourceaccess.WithoutPolicy(r.Context()), store)
 	if err != nil {
 		curationStoreError(w, r, err)
 		return
@@ -194,7 +174,9 @@ func RunCurationFormula(ctx context.Context, store *primitives.Store) ([]map[str
 	for _, c := range candidates {
 		rec, created, err := fileCurationProposal(ctx, store, actors.SystemActorID, c, curationSourceFormula)
 		if err != nil {
-			if errors.Is(err, primitives.ErrNotFound) || errors.Is(err, primitives.ErrInvalidWorkRequest) {
+			// A closed subject refuses new asks; the lifecycle sweep withdraws
+			// asks on closed subjects itself, so there is nothing to propose.
+			if errors.Is(err, primitives.ErrNotFound) || errors.Is(err, primitives.ErrInvalidWorkRequest) || errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) || errors.Is(err, primitives.ErrConflict) {
 				skipped++
 				continue
 			}
@@ -303,12 +285,7 @@ func handleCurationMetrics(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 		days = n
 	}
-	if curationScoped(r) {
-		writeJSON(w, http.StatusOK, map[string]any{"metrics": map[string]any{}, "limitations": []string{"curation needs workspace-wide read access"}})
-		return
-	}
 	metrics, err := store.CurationMetrics(r.Context(), time.Duration(days)*24*time.Hour, time.Now().UTC())
-	log.Printf("DBGERR %v", err)
 	if err != nil {
 		workStoreError(w, r, err)
 		return

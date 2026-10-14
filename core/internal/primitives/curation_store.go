@@ -11,6 +11,7 @@ import (
 
 	"agent-nexus-core/internal/curation"
 	"agent-nexus-core/internal/plans"
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 // Curation reads are bounded by these caps, independent of workspace size:
@@ -52,6 +53,13 @@ func (s *Store) CurationCandidates(ctx context.Context, visible func(string, str
 	strict := func(thread, owner string) bool {
 		return owner == "" && (visible == nil || visible(thread, owner))
 	}
+	// The system pass has no reader scope; ref facts then resolve unfiltered
+	// (sources are only counted, never named) while asks and cards keep the
+	// strict rule.
+	resolveVisible := strict
+	if visible == nil {
+		resolveVisible = nil
+	}
 	limitations := []string{}
 	asks, truncated, err := s.curationOpenAsks(ctx, strict)
 	if err != nil {
@@ -67,7 +75,7 @@ func (s *Store) CurationCandidates(ctx context.Context, visible func(string, str
 	if len(cards) >= curationCardLimit {
 		limitations = append(limitations, fmt.Sprintf("reviewed the %d most recently updated open initiatives", curationCardLimit))
 	}
-	moot, skipped, err := s.curationMootFunc(ctx, asks, strict, now)
+	moot, skipped, err := s.curationMootFunc(ctx, asks, resolveVisible, now)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,7 +92,7 @@ func (s *Store) CurationCandidates(ctx context.Context, visible func(string, str
 // keeps open current through its resolution trigger), then hydrates only
 // those rows. Restricted asks are dropped, not flagged.
 func (s *Store) curationOpenAsks(ctx context.Context, visible func(string, string) bool) ([]curation.AskInfo, bool, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT ask_id FROM ask_subjects INDEXED BY ask_subjects_due WHERE open=1 ORDER BY due_at,ask_id LIMIT ?`, curationAskLimit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT ask_id FROM ask_subjects WHERE open=1 ORDER BY due_at,ask_id LIMIT ?`, curationAskLimit+1)
 	if err != nil {
 		return nil, false, err
 	}
@@ -148,7 +156,9 @@ func (s *Store) curationOpenAsks(ctx context.Context, visible func(string, strin
 		}
 		asks = append(asks, ask)
 		if strings.HasPrefix(ask.SubjectRef, "card:") {
-			subjects = append(subjects, map[string]any{"id": strings.TrimPrefix(ask.SubjectRef, "card:")})
+			// The prefixed ref keeps handle subjects resolvable: FilterCardAccess
+			// reports handle aliases only under their "card:" form.
+			subjects = append(subjects, map[string]any{"id": ask.SubjectRef})
 		}
 	}
 	if err = rows.Err(); err != nil {
@@ -162,7 +172,7 @@ func (s *Store) curationOpenAsks(ctx context.Context, visible func(string, strin
 	}
 	ok := map[string]bool{}
 	for _, card := range readable {
-		ok["card:"+workString(card["id"])] = true
+		ok[workString(card["id"])] = true
 	}
 	out := asks[:0]
 	for _, ask := range asks {
@@ -240,11 +250,18 @@ func (s *Store) curationMootFunc(ctx context.Context, asks []curation.AskInfo, v
 	}, skipped, nil
 }
 
+// curationInternal drops the reader's policy for curation_proposals only: it
+// is an internal dedupe index keyed by proposal hashes, never returned to a
+// reader except through a proposal ask the reader can already see.
+func curationInternal(ctx context.Context) context.Context {
+	return resourceaccess.WithoutPolicy(ctx)
+}
+
 // CurationProposal returns the dedupe row for a key, or ErrNotFound.
 func (s *Store) CurationProposal(ctx context.Context, key string) (CurationProposalRecord, error) {
 	var rec CurationProposalRecord
 	var targets string
-	err := s.db.QueryRowContext(ctx, `SELECT key,proposal_event_id,action,source,status,targets_json FROM curation_proposals WHERE key=?`, key).
+	err := s.db.QueryRowContext(curationInternal(ctx), `SELECT key,proposal_event_id,action,source,status,targets_json FROM curation_proposals WHERE key=?`, key).
 		Scan(&rec.Key, &rec.ProposalEventID, &rec.Action, &rec.Source, &rec.Status, &targets)
 	if err == sql.ErrNoRows {
 		return rec, ErrNotFound
@@ -259,7 +276,7 @@ func (s *Store) CurationProposal(ctx context.Context, key string) (CurationPropo
 // CurationProposalByEvent finds the proposal behind an ask event, or ErrNotFound.
 func (s *Store) CurationProposalByEvent(ctx context.Context, eventID string) (CurationProposalRecord, error) {
 	var key string
-	err := s.db.QueryRowContext(ctx, `SELECT key FROM curation_proposals WHERE proposal_event_id=?`, eventID).Scan(&key)
+	err := s.db.QueryRowContext(curationInternal(ctx), `SELECT key FROM curation_proposals WHERE proposal_event_id=?`, eventID).Scan(&key)
 	if err == sql.ErrNoRows {
 		return CurationProposalRecord{}, ErrNotFound
 	}
@@ -288,7 +305,7 @@ func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curati
 	targets, _ := json.Marshal(c.Targets)
 	// Accepted keys may be proposed again (the target came back); the upsert
 	// keeps one row per key either way.
-	_, err = s.db.ExecContext(ctx, `INSERT INTO curation_proposals(key,proposal_event_id,action,source,status,targets_json,created_at) VALUES(?,?,?,?,?,?,?)
+	_, err = s.db.ExecContext(curationInternal(ctx), `INSERT INTO curation_proposals(key,proposal_event_id,action,source,status,targets_json,created_at) VALUES(?,?,?,?,?,?,?)
  ON CONFLICT(key) DO UPDATE SET proposal_event_id=excluded.proposal_event_id,status=excluded.status,source=excluded.source,created_at=excluded.created_at,resolved_at=NULL`,
 		rec.Key, rec.ProposalEventID, rec.Action, rec.Source, rec.Status, string(targets), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -300,7 +317,7 @@ func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curati
 // ResolveCurationProposal marks a proposal accepted or dismissed. Only an
 // open row moves, so a replayed answer never flips a decision.
 func (s *Store) ResolveCurationProposal(ctx context.Context, key, status string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE curation_proposals SET status=?,resolved_at=? WHERE key=? AND status='open'`, status, time.Now().UTC().Format(time.RFC3339Nano), key)
+	res, err := s.db.ExecContext(curationInternal(ctx), `UPDATE curation_proposals SET status=?,resolved_at=? WHERE key=? AND status='open'`, status, time.Now().UTC().Format(time.RFC3339Nano), key)
 	if err != nil {
 		return false, err
 	}
@@ -337,7 +354,7 @@ func (s *Store) CurationMetrics(ctx context.Context, window time.Duration, now t
 	since := start.UTC().Format(time.RFC3339Nano)
 	truncated := false
 	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.ts,e.payload_json,r.resolution_type,COALESCE(x.ts,''),COALESCE(x.payload_json,'')
- FROM events e INDEXED BY idx_events_type_ts_id
+ FROM events e
  LEFT JOIN human_attention_request_resolutions r ON r.request_event_id=e.id
  LEFT JOIN events x ON x.id=r.resolution_event_id
  WHERE e.type='human_attention_requested' AND e.ts>=? AND COALESCE(e.trashed_at,'')=''
@@ -407,7 +424,7 @@ func (s *Store) curationNoteRecords(ctx context.Context, since string) ([]curati
 			truncated = true
 			break
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(e.thread_id,''),e.ts,e.payload_json FROM events e INDEXED BY idx_events_type_ts_id
+		rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(e.thread_id,''),e.ts,e.payload_json FROM events e
  WHERE e.type=? AND e.ts>=? AND COALESCE(e.trashed_at,'')=''
  ORDER BY e.ts DESC,e.id DESC LIMIT ?`, kind, since, remaining+1)
 		if err != nil {
@@ -431,7 +448,7 @@ func (s *Store) curationNoteRecords(ctx context.Context, since string) ([]curati
 				_ = json.Unmarshal([]byte(payloadJSON), &wrapper)
 				payload := asMapValue(wrapper["payload"])
 				rec.NextAt = curationPromiseAt(asMapValue(payload["next"])["at"])
-				rec.Reset = len(anyStringSlice(payload["evidence_refs"])) > 0 || anyStringValue(payload["evidence"]) != "" || len(anyStringSlice(payload["evidence"])) > 0
+				rec.Reset = len(anyStringSlice(payload["evidence_refs"])) > 0
 				if rec.NextAt.IsZero() && !rec.Reset {
 					continue
 				}

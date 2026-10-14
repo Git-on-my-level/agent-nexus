@@ -192,7 +192,14 @@ func MootCandidates(asks []AskInfo, moot func(refs []string) MootResult) []Candi
 		if a.Restricted || a.Proposal {
 			continue
 		}
-		refs := dedupeRefs(append([]string{a.SubjectRef}, a.RelatedRefs...))
+		// The subject card is the ask's container, not a source: a closed
+		// subject already withdraws the ask through the lifecycle sweep, so
+		// only the related sources decide whether the ask was overtaken.
+		subject := a.SubjectRef
+		if strings.HasPrefix(subject, "card:") {
+			subject = ""
+		}
+		refs := dedupeRefs(append([]string{subject}, a.RelatedRefs...))
 		if len(refs) == 0 {
 			continue
 		}

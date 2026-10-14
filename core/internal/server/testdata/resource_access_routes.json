@@ -1230,6 +1230,6 @@
   {
     "method": "POST",
     "path": "/curation/run",
-    "policy": "reference-write"
+    "policy": "maintenance"
   }
 ]
