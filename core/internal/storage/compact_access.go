@@ -222,7 +222,7 @@ func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(C
 	w.runCompactAccessMigration(ctx, compactMigrationSchedule{
 		budget:       10 * time.Minute,
 		initialDelay: time.Second + time.Duration(rand.Int64N(int64(time.Second))),
-		batchDelay:   100 * time.Millisecond,
+		batchDelay:   25 * time.Millisecond,
 		retryMin:     250 * time.Millisecond,
 		retryMax:     5 * time.Second,
 	}, report)
@@ -310,11 +310,19 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 		if lastErr == nil {
 			stage = "compact_backfill"
 			done, lastErr = w.MaintainCompactAccessBatch(ctx)
+			// A committed copy is progress even if the following raw copy
+			// loses the writer. Do not carry an old contention penalty forward.
+			if lastErr == nil && !done {
+				retry = schedule.retryMin
+			}
 		}
 		if lastErr == nil {
 			stage = "stable_backfill"
 			rawDone, err := w.MaintainStableAccessBatch(ctx)
 			done, lastErr = done && rawDone, err
+			if err == nil && !rawDone {
+				retry = schedule.retryMin
+			}
 		}
 		if lastErr == nil && done {
 			stage = "verification"

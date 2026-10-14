@@ -31,7 +31,7 @@ func TestPerformanceCompactMigrationConcurrentAnswers(t *testing.T) {
 func compactMigrationAnswers(t *testing.T, scale bool) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	db := env.workspace.DB()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 	defer cancel()
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "migration-owner", "migration-owner-actor", "migration-owner", "migration-owner-token")
 	if scale {

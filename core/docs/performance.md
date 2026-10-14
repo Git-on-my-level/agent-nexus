@@ -628,10 +628,11 @@ upgrade. The HTTP scale guard covers the full response, persisted replay and
 single committed claim under read load.
 
 Compact certification maintenance has a ten-minute overall startup budget. It
-starts after a randomized one-to-two-second delay, then yields 100 ms between
+starts after a randomized one-to-two-second delay, then yields 25 ms between
 successful copying batches. Contention, stale proofs and expired leases use
 exponential equal-jitter backoff (initial 125–250 ms, capped at 2.5–5 seconds).
-Every retry releases its transaction and pinned connection before waiting;
+A committed copy resets contention backoff even if the following raw-edge
+copy loses the writer. Every retry releases its transaction and pinned connection before waiting;
 maintenance's busy handler remains nonblocking so serving writers keep their
 normal admission behavior. Installation and cutover have five-second leases;
 copying retains adaptive 100 ms leases. Verification remains unchanged and
