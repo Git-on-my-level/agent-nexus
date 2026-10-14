@@ -729,11 +729,11 @@ export function resendInboxResponse(itemId, overrides = {}) {
   const want = String(itemId ?? "").trim();
   const failed = failedByItem.get(want);
   if (!failed) return null;
-  const { idempotency_key: _previousKey, ...request } = failed.request ?? {};
+  // queueInboxResponse assigns the new request its own idempotency key.
   const id = queueInboxResponse({
     itemId: failed.itemId,
     item: failed.item,
-    request: { ...request, ...overrides },
+    request: { ...failed.request, ...overrides },
     message: failed.message,
     restore: failed.restore,
   });
