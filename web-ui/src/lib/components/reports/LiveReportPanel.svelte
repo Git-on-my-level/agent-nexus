@@ -3,7 +3,6 @@
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
-  import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
   import Time from "$lib/time/Time.svelte";
   import { formatElapsed, instantIso, instantMs } from "$lib/time/format.js";
@@ -86,9 +85,8 @@
         {#each items as item (item.id)}
           <li>
             {#if canNavigate}<a
-                href={workspaceHref(
-                  `/decide?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
-                )}>{item.title}</a
+                href={workspaceHref(`/decide/${encodeURIComponent(item.id)}`)}
+                >{item.title}</a
               >{:else}<strong>{item.title}</strong>{/if}
             <p class="muted">
               <!-- The state word only where the panel holds both kinds. A

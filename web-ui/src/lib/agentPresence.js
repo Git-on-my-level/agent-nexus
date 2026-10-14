@@ -1,5 +1,4 @@
 import { formatWait } from "$lib/inboxMailbox.js";
-import { inboxItemMailboxId } from "$lib/inboxUtils.js";
 
 /**
  * Presentation model for the Agents roster and agent pages.
@@ -161,15 +160,12 @@ export function askKindLabel(kind) {
 }
 
 /**
- * Inbox deep link for an open ask (`AgentOpenAsk.inbox_item_id`), or the
- * Needs you list while core's inbox projection has not caught up.
+ * Decide permalink for an open ask (`AgentOpenAsk.inbox_item_id`), or the
+ * Decide list while core's inbox projection has not caught up.
  */
 export function inboxAskPath(ask) {
-  const params = new URLSearchParams({ mailbox: "needs-you" });
   const itemId = text(ask?.inbox_item_id);
-  const id = itemId ? inboxItemMailboxId({ id: itemId }) : "";
-  if (id) params.set("item", id);
-  return `/decide?${params.toString()}`;
+  return itemId ? `/decide/${encodeURIComponent(itemId)}` : "/decide";
 }
 
 /**
