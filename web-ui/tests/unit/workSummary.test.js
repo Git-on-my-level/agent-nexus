@@ -299,19 +299,6 @@ describe("hints", () => {
     ).toEqual([]);
   });
 
-  it("reads a core that still reports no plan as the status", () => {
-    // Between the two contracts the same fact arrives in the old place.
-    for (const row of [
-      { ref: "card:x", work_summary: { status: { state: "no_plan" } } },
-      { ref: "card:x", plan_health: { state: "no_plan" } },
-    ]) {
-      expect(
-        workSummaryModel(row, { now: NOW }).hints.map((hint) => hint.key),
-        JSON.stringify(row),
-      ).toEqual(["no_plan"]);
-    }
-  });
-
   it("prefers the hints core sent over anything derived from the status", () => {
     expect(withHints([], { state: "no_plan" }).hints).toEqual([]);
   });
@@ -390,23 +377,23 @@ describe("what a planless task reads as", () => {
    * shown when present. Whether `no_plan` should lead a status column for the
    * majority of tasks is a question about the computation, not the renderer.
    */
-  it("leads with no plan and carries the phase as the stored one", () => {
+  it("leads with no promise and carries the phase as the stored one", () => {
     const model = workSummaryModel(
       {
         ref: "card:plain",
         phase: "in_progress",
         work_summary: {
           status: {
-            state: "no_plan",
-            label: "No plan",
-            reason: "Card has no plan steps.",
+            state: "no_promise",
+            label: "No promise",
+            reason: "No promise.",
           },
           set_status: { state: "in_progress", label: "In progress" },
         },
       },
       { now: NOW },
     );
-    expect(model.status.label).toBe("No plan");
+    expect(model.status.label).toBe("No promise");
     expect(model.setStatus.label).toBe("In progress");
     expect(model.progress).toBeNull();
     expect(model.hasPlan).toBe(false);
@@ -417,17 +404,32 @@ describe("the legacy fallback", () => {
   const model = (overrides) =>
     workSummaryModel(legacy(overrides), { now: NOW });
 
-  it("reads health through the same vocabulary the computed path uses", () => {
-    expect(model({ health: { status: "stalled" } }).status).toMatchObject({
-      state: "stale",
-      label: "Stale",
-      tone: "warn",
-    });
-    expect(model({ health: { status: "blocked" } }).status.tone).toBe("danger");
+  it("reads plan_health through the same vocabulary the computed path uses", () => {
     expect(
-      model({ plan_health: { state: "at_risk", reason: "two steps slipped" } })
-        .status,
-    ).toMatchObject({ state: "at_risk", reason: "two steps slipped" });
+      model({
+        plan_health: {
+          state: "past_promise",
+          reason: "Past its note promise.",
+        },
+      }).status,
+    ).toMatchObject({
+      state: "past_promise",
+      label: "Past promise",
+      tone: "warn",
+      reason: "Past its note promise.",
+    });
+    expect(model({ plan_health: { state: "moving" } }).status.tone).toBe("ok");
+    expect(
+      model({ plan_health: { state: "no_promise" } }).status,
+    ).toMatchObject({ label: "No promise", tone: "neutral" });
+  });
+
+  it("ignores the removed health fields", () => {
+    const status = model({
+      health: { status: "blocked" },
+      plan_state: { ...legacy().plan_state, health: "stalled" },
+    }).status;
+    expect(status.state).toBe("in_progress");
   });
 
   it("falls back to the stored phase when core computed no health at all", () => {
@@ -590,7 +592,7 @@ describe("the legacy fallback", () => {
 
   it("says the phase disagrees once core has computed a health to compare", () => {
     expect(
-      model({ plan_health: { state: "blocked", reason: "" } }).setStatus,
+      model({ plan_health: { state: "past_promise", reason: "" } }).setStatus,
     ).toMatchObject({ state: "in_progress", label: "In progress" });
   });
 
@@ -626,31 +628,19 @@ describe("the legacy fallback", () => {
   });
 });
 
-describe("the risk states, in either spelling", () => {
-  /*
-   * Core's tokens are `at_risk` (whose reason is "overdue or due within 24
-   * hours") and `stale`; the specification calls the same two risks
-   * "overdue" and "stalled". Reading both costs nothing, and is the
-   * difference between an overdue card leading the dashboard and sorting
-   * below Done.
-   */
-  it("tones and names both spellings the same", () => {
-    for (const [token, alias] of [
-      ["at_risk", "overdue"],
-      ["stale", "stalled"],
-    ]) {
-      const of = (state) =>
-        workSummaryModel(
-          { ref: "card:x", work_summary: { status: { state } } },
-          { now: NOW },
-        ).status;
-      expect(of(alias).tone, alias).toBe(of(token).tone);
-      expect(of(alias).rank, alias).toBeLessThan(statusRank("on_track"));
-      expect(of(alias).label, alias).not.toBe(alias);
-    }
+describe("the risk states", () => {
+  it("tones a past promise as a warning, ahead of a moving card", () => {
+    const of = (state) =>
+      workSummaryModel(
+        { ref: "card:x", work_summary: { status: { state } } },
+        { now: NOW },
+      ).status;
+    expect(of("past_promise").tone).toBe("warn");
+    expect(of("past_promise").rank).toBeLessThan(statusRank("moving"));
+    expect(of("past_promise").label).toBe("Past promise");
   });
 
-  it("counts both as needing attention", () => {
+  it("counts every attention state as needing attention", () => {
     for (const state of ATTENTION_STATES) {
       expect(
         needsAttention(
@@ -742,10 +732,12 @@ describe("the two paths agree", () => {
    * states must match.
    */
   it("reports the same state from work_summary and from the legacy fields", () => {
-    const row = legacy({ plan_health: { state: "blocked", reason: "r" } });
+    const row = legacy({ plan_health: { state: "past_promise", reason: "r" } });
     const alsoComputed = {
       ...row,
-      work_summary: { status: { state: "blocked", label: "Blocked" } },
+      work_summary: {
+        status: { state: "past_promise", label: "Past promise" },
+      },
     };
     expect(workSummaryModel(row, { now: NOW }).status.state).toBe(
       workSummaryModel(alsoComputed, { now: NOW }).status.state,
@@ -755,7 +747,7 @@ describe("the two paths agree", () => {
   it("prefers work_summary when a row carries both", () => {
     const row = {
       ...legacy(),
-      plan_health: { state: "on_track", reason: "fine" },
+      plan_health: { state: "moving", reason: "fine" },
       work_summary: { status: { state: "blocked", label: "Blocked" } },
     };
     expect(workSummaryModel(row, { now: NOW }).status.state).toBe("blocked");
@@ -1120,17 +1112,17 @@ describe("summaryFromStatus", () => {
   it("builds the same model from a state and a reason alone", () => {
     const model = summaryFromStatus(
       {
-        state: "at_risk",
-        reason: "two steps slipped",
+        state: "past_promise",
+        reason: "Past its note promise.",
         progress: { done: 1, total: 4 },
       },
       { now: NOW },
     );
     expect(model.status).toMatchObject({
-      state: "at_risk",
-      label: "At risk",
+      state: "past_promise",
+      label: "Past promise",
       tone: "warn",
-      reason: "two steps slipped",
+      reason: "Past its note promise.",
     });
     expect(model.progress.count).toBe("1/4");
     expect(model.setStatus).toBeNull();
@@ -1144,10 +1136,10 @@ describe("summaryFromStatus", () => {
 
 describe("statusChip", () => {
   it("labels and tones a tally from the same table a card reads", () => {
-    expect(statusChip("no_plan", 3)).toMatchObject({
-      state: "no_plan",
+    expect(statusChip("no_promise", 3)).toMatchObject({
+      state: "no_promise",
       count: 3,
-      label: "No plan",
+      label: "No promise",
       tone: "neutral",
     });
     expect(statusChip("blocked", 1).tone).toBe("danger");
@@ -1159,67 +1151,5 @@ describe("statusChip", () => {
       count: 2,
       tone: "neutral",
     });
-  });
-});
-
-describe("the dark state", () => {
-  /*
-   * Dark means nothing will surface this card soon: no open step due, no card
-   * due, no wake date inside the horizon — or none at all. It is a warning
-   * about the future, one step quieter than stale, and never an alarm-band
-   * state.
-   */
-  it("renders as a warn chip below stale", () => {
-    const model = workSummaryModel(
-      { ref: "card:x", work_summary: { status: { state: "dark" } } },
-      { now: NOW },
-    );
-    expect(model.status.state).toBe("dark");
-    expect(model.status.label).toBe("Dark");
-    expect(model.status.tone).toBe("warn");
-    expect(model.status.rank).toBeLessThan(statusRank("on_track"));
-    expect(model.status.rank).toBeGreaterThan(statusRank("stale"));
-    expect(needsAttention(model)).toBe(false);
-  });
-});
-
-describe("the possibly-moot flag", () => {
-  it("rides the row into the model with its evidence", () => {
-    const model = workSummaryModel(
-      {
-        ref: "card:decision",
-        possibly_moot: {
-          flagged: true,
-          reason: "all 2 linked sources are merged",
-          sources: 2,
-        },
-        work_summary: { status: { state: "on_track" } },
-      },
-      { now: NOW },
-    );
-    expect(model.moot).toEqual({
-      flagged: true,
-      reason: "all 2 linked sources are merged",
-      sources: 2,
-    });
-  });
-
-  it("is absent when the row carries none", () => {
-    expect(
-      workSummaryModel(
-        { ref: "card:x", work_summary: { status: { state: "on_track" } } },
-        { now: NOW },
-      ).moot,
-    ).toBeNull();
-    expect(
-      workSummaryModel(
-        {
-          ref: "card:x",
-          possibly_moot: { flagged: false, sources: 0 },
-          work_summary: { status: { state: "on_track" } },
-        },
-        { now: NOW },
-      ).moot,
-    ).toMatchObject({ flagged: false });
   });
 });

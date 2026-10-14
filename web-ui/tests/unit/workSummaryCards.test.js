@@ -82,7 +82,7 @@ describe("cardGroup", () => {
   it("sends finished cards to their own block", () => {
     expect(cardGroup(summary("done"))).toBe("done");
     expect(cardGroup(summary("cancelled"))).toBe("done");
-    for (const state of ["blocked", "at_risk", "stale", "on_track"]) {
+    for (const state of ["blocked", "past_promise", "moving", "no_promise"]) {
       expect(cardGroup(summary(state))).toBe("attention");
     }
   });
@@ -102,10 +102,6 @@ describe("cardGroup", () => {
     expect(cardGroup(summary("awaiting_vendor"))).toBe("attention");
   });
 
-  it("still folds a core that reports no plan as the status", () => {
-    expect(cardGroup(summary("no_plan"))).toBe("no_plan");
-  });
-
   it("never folds a card that is in trouble, plan or no plan", () => {
     /*
      * Core replaces the phase-derived state with a risk state precisely
@@ -113,7 +109,7 @@ describe("cardGroup", () => {
      * reason to collapse a blocked one out of the dashboard — it is
      * arguably a reason it is blocked.
      */
-    for (const state of ["blocked", "at_risk", "stale"]) {
+    for (const state of ["blocked", "past_promise"]) {
       expect(cardGroup(summary(state, ["no_plan"])), state).toBe("attention");
     }
     // The quiet ones still fold.
@@ -130,9 +126,9 @@ describe("cardGroup", () => {
     expect(cardGroup(summary("unknown", ["no_plan"]))).toBe("attention");
   });
 
-  it("reads the specification's spelling of the two risk states", () => {
-    for (const state of ["overdue", "stalled"]) {
-      expect(cardGroup(summary(state, ["no_plan"])), state).toBe("attention");
+  it("does not treat the removed risk states as attention", () => {
+    for (const state of ["at_risk", "stale", "overdue", "stalled"]) {
+      expect(cardGroup(summary(state, ["no_plan"])), state).toBe("no_plan");
     }
   });
 });
@@ -141,17 +137,17 @@ describe("workSummaryCards", () => {
   it("sorts by attention, worst first", () => {
     const cards = workSummaryCards(
       [
-        row("on_track", { ref: "card:ok" }),
-        row("stale", { ref: "card:stale" }),
+        row("moving", { ref: "card:ok" }),
+        row("no_promise", { ref: "card:none" }),
         row("blocked", { ref: "card:blocked" }),
-        row("at_risk", { ref: "card:risk" }),
+        row("past_promise", { ref: "card:risk" }),
       ],
       { now: NOW },
     );
     expect(cards.map((card) => card.ref)).toEqual([
       "card:blocked",
       "card:risk",
-      "card:stale",
+      "card:none",
       "card:ok",
     ]);
   });
@@ -198,8 +194,14 @@ describe("groupedWorkSummaryCards", () => {
     const grouped = groupedWorkSummaryCards(
       [
         row("blocked", { ref: "card:blocked" }),
-        row("on_track", { ref: "card:ok" }),
-        row("no_plan", { ref: "card:none" }),
+        row("moving", { ref: "card:ok" }),
+        row("in_progress", {
+          ref: "card:none",
+          work_summary: {
+            status: { state: "in_progress" },
+            hints: ["no_plan"],
+          },
+        }),
         row("done", { ref: "card:done" }),
       ],
       { now: NOW },

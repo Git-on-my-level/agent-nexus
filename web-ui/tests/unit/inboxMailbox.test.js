@@ -960,7 +960,7 @@ it("ranks decisions by the linked work priority when the proposal has none", () 
 });
 
 it("does not revive a stored blocker when core says its plan is done or moving", () => {
-  for (const state of ["done", "on_track", "stale"]) {
+  for (const state of ["done", "moving", "past_promise"]) {
     const item = {
       ref: `card:${state}`,
       phase: "blocked",
@@ -974,7 +974,7 @@ it("does not revive a stored blocker when core says its plan is done or moving",
     const rows = buildInboxRows({ work: [item] });
     expect(filterMailbox(rows, "needs-you")).toEqual([]);
     expect(isStaleBlockedTask(item)).toBe(false);
-    if (state === "stale") expect(rows[0].mailbox).toBe("watching");
+    if (state === "past_promise") expect(rows[0].mailbox).toBe("watching");
   }
 });
 

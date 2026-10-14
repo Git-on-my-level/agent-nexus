@@ -6,9 +6,10 @@ import LiveInitiativeDetails from "../../src/lib/components/reports/LiveInitiati
 afterEach(cleanup);
 
 it.each([
-  [{ health: "stalled" }, "stale"],
-  [{ health: "on_track", plan_health: { state: "done" } }, "done"],
-  [{ health: "on_track", plan_state: { health_state: "at_risk" } }, "at_risk"],
+  [{ plan_health: { state: "past_promise" } }, "past_promise"],
+  [{ plan_health: { state: "moving" } }, "moving"],
+  [{ plan_health: { state: "no_promise" } }, "no_promise"],
+  [{ plan_health: { state: "done" } }, "done"],
 ])("report detail preserves canonical health %j", (health, state) => {
   const { container } = render(LiveInitiativeDetails, {
     items: [{ ref: "card:ship", title: "Ship", ...health }],
