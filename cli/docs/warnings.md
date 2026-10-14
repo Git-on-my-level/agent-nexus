@@ -26,7 +26,11 @@ a usage error (exit 2); a missing one is never an error.
 
 How each warning is computed, and what it costs:
 
-- `ask_no_deadline`: no `--by` and no `--blocks` on `anx ask`. No request.
+- `ask_no_deadline`: no `--by` and no `--blocks` on `anx ask`. After the write
+  the CLI makes one best-effort `GET /brief` and appends the count of open
+  decisions with a `decide_by` ("at least N" when the brief's decisions are
+  truncated). A failed read leaves the generic message; `--dry-run` makes no
+  request.
 - `ask_overtaken_subject`: reuses the subject card read that grounds the ask
   thread and checks its `possibly_moot.flagged`. No extra request.
 - `ask_auto_subject`: the ask had no subject and no current card, so the CLI

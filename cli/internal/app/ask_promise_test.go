@@ -57,13 +57,15 @@ func TestAskMalformedByAndBlocksAreUsageErrors(t *testing.T) {
 	}
 }
 
-func askSubjectServer(t *testing.T, card string) *httptest.Server {
+func askSubjectServer(t *testing.T, card string, brief ...string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/agents/agent-1":
 			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"},"open_asks":[]}`)
+		case r.URL.Path == "/brief" && len(brief) > 0:
+			fmt.Fprint(w, brief[0])
 		case r.URL.Path == "/work" && r.Method == http.MethodPost:
 			fmt.Fprint(w, `{"work":{"ref":"card:new-subject"}}`)
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
@@ -103,5 +105,36 @@ func TestAskWarningAutoSubject(t *testing.T) {
 	doc := dailyJSON(t, out)
 	if msg := warningCodes(doc)["ask_auto_subject"]; !strings.Contains(msg, "created a subject card") || !strings.Contains(msg, "--subject-ref") {
 		t.Fatalf("warnings=%#v", doc["warnings"])
+	}
+}
+
+func askNoDeadlineMessage(t *testing.T, brief ...string) string {
+	t.Helper()
+	server := askSubjectServer(t, `{"card":{"id":"card-1","ref":"card:labels","thread_id":"thread-1"}}`, brief...)
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick label scheme?", "--body", "Context", "--recommend", "Short", "--subject-ref", "card:labels"}); exit != 0 {
+		t.Fatalf("exit=%d %s", exit, out.String())
+	}
+	return warningCodes(dailyJSON(t, out))["ask_no_deadline"]
+}
+
+func TestAskWarningNoDeadlineCountsDeadlineDecisions(t *testing.T) {
+	msg := askNoDeadlineMessage(t, `{"decisions":[{"decide_by":"2026-10-20T00:00:00Z"},{"decide_by":null},{"decide_by":"2026-10-21T00:00:00Z"},{}],"truncated":{"decisions":false}}`)
+	if !strings.Contains(msg, "no --by or --blocks") || !strings.Contains(msg, "sort below 2 decisions that have a deadline") {
+		t.Fatalf("message=%q", msg)
+	}
+	msg = askNoDeadlineMessage(t, `{"decisions":[{"decide_by":"2026-10-20T00:00:00Z"}],"truncated":{"decisions":true}}`)
+	if !strings.Contains(msg, "sort below at least 1 decisions that have a deadline") {
+		t.Fatalf("message=%q", msg)
+	}
+}
+
+func TestAskWarningNoDeadlineSurvivesBriefFailure(t *testing.T) {
+	// The test server answers /brief with 404; the ask still succeeds and the
+	// warning keeps its trigger phrase without a count.
+	msg := askNoDeadlineMessage(t)
+	if !strings.Contains(msg, "no --by or --blocks") || strings.Contains(msg, "decisions that have a deadline") {
+		t.Fatalf("message=%q", msg)
 	}
 }

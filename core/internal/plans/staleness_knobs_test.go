@@ -24,10 +24,7 @@ func TestStalenessKnobs(t *testing.T) {
 	envKnob := regexp.MustCompile(`ANX_[A-Z0-9_]*(STALE|STALL|DARK|AFTER)[A-Z0-9_]*`)
 	durationName := regexp.MustCompile(`(?i)(stale|stall|dark|fallback)`)
 	durationValue := regexp.MustCompile(`\btime\.(Hour|Minute|Second|Duration)\b`)
-	// Machine liveness is not work state: the roster's agent silence split
-	// (contracts command_center stale_signal_seconds) is about whether an
-	// agent process is alive, never about an initiative. It is named here so
-	// the exemption is explicit and cannot grow silently.
+	// SignalStaleness measures agent process liveness, not initiative health.
 	exempt := map[string]bool{"commandcenter.SignalStaleness": true}
 	root := filepath.Join("..", "..", "..")
 	found := map[string]bool{}

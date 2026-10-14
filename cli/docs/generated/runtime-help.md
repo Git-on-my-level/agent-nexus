@@ -296,7 +296,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `pm card` (command): Read any visible card in full under the requesting reader.
 - `pm propose` (command): Propose a card status or note for human approval in Inbox.
-- `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 
 
@@ -10286,28 +10285,6 @@ Propose a card status or note for human approval in Inbox.
 ```text
 Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]
 Proposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.
-```
-
-## `work context`
-
-Compose work, a bounded observation page and refresh status using read-only requests.
-
-```text
-Local Help: work context
-
-Side effect class: read_only
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Compose work, a bounded observation page and refresh status using read-only requests.
-
-Usage: anx work context <ref> (or --work-id <ref>)
-  --limit <value>
-  --cursor <value>
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
 ```
 
 ## `work freshness`

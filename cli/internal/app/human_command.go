@@ -478,6 +478,17 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		asMap(asMap(result.Data)["body"])["webhook"] = commandResultBody(sub)
 	}
 	for i := range loopWarnings {
+		if loopWarnings[i].Code == "ask_no_deadline" {
+			// Best effort: a warning never rejects a write, and a failed brief
+			// read leaves the generic message.
+			if count, atLeast, ok := a.briefDeadlineDecisions(ctx, cfg); ok && count > 0 {
+				qualifier := ""
+				if atLeast {
+					qualifier = "at least "
+				}
+				loopWarnings[i].Message = fmt.Sprintf("no --by or --blocks; it will sort below %s%d decisions that have a deadline", qualifier, count)
+			}
+		}
 		if askRef := anyString(asMap(asMap(result.Data)["body"])["ask_id"]); askRef != "" {
 			loopWarnings[i].Message = strings.ReplaceAll(loopWarnings[i].Message, "<ask-id>", askRef)
 			if details := asMap(loopWarnings[i].Details); details != nil {
@@ -609,4 +620,24 @@ func askAuthoringWarnings(warnings []string) []output.Warning {
 		out = append(out, output.Warning{Code: "ask_authoring", Message: warning})
 	}
 	return out
+}
+
+// briefDeadlineDecisions counts open decisions with a decide_by in one brief.v1
+// read. atLeast is true when the brief's decisions section is truncated.
+func (a *App) briefDeadlineDecisions(ctx context.Context, cfg config.Resolved) (count int, atLeast bool, ok bool) {
+	result, err := a.invokeTypedJSON(ctx, cfg, "orient", "brief.get", nil, nil, nil)
+	if err != nil {
+		return 0, false, false
+	}
+	brief := commandResultBody(result)
+	if brief == nil {
+		return 0, false, false
+	}
+	for _, raw := range asSlice(brief["decisions"]) {
+		if strings.TrimSpace(anyString(asMap(raw)["decide_by"])) != "" {
+			count++
+		}
+	}
+	truncated, _ := asMap(brief["truncated"])["decisions"].(bool)
+	return count, truncated, true
 }
