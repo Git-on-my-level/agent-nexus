@@ -111,14 +111,7 @@
       "reconcilePmAction": 1,
       "sendPmMessage": 1,
       "updateBoardCard": 1,
-      "updateDocument": 1
-    }
-  },
-  "lib/pages/WorkspaceTopicThreadDetailPage.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: topic editor title/summary snapshot and canonical base; remove swallowed-409 close path during migration. Server prerequisite exists.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
+      "updateDocument": 1,
       "updateTopic": 1
     }
   },

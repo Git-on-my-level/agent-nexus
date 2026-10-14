@@ -1,10 +1,12 @@
 <script>
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
-  import { get, derived } from "svelte/store";
   import { page } from "$app/stores";
+  import { onMount } from "svelte";
+  import { get, derived } from "svelte/store";
 
   import { coreClient } from "$lib/coreClient";
+  import { localWorkScope } from "$lib/localWorkScope.js";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import { setTimelineContext } from "$lib/timelineContext";
   import {
@@ -86,26 +88,8 @@
     { id: "timeline", label: "Timeline" },
   ]);
 
-  let conflictWarning = $state("");
-  let editNotice = $state("");
-
   const STREAM_RECONNECT_DELAY_MS = 1_500;
   const RECONCILE_INTERVAL_MS = 120_000;
-
-  function topicIdFromTopic(topicRow) {
-    const ref = String(topicRow?.topic_ref ?? "").trim();
-    const match = /^topic:(.+)$/.exec(ref);
-    return match ? match[1].trim() : "";
-  }
-
-  /** Maps overview edits to canonical TopicPatchInput fields. */
-  function topicEditPatchToTopicPatch(topicEditPatch) {
-    const out = {};
-    if (topicEditPatch.title !== undefined) out.title = topicEditPatch.title;
-    if (topicEditPatch.summary !== undefined)
-      out.summary = topicEditPatch.summary;
-    return out;
-  }
 
   function getLatestKnownEventId(events) {
     let latestEventId = "";
@@ -188,47 +172,28 @@
     };
   });
 
-  async function handleSaveTopic(threadId, patch, ifUpdatedAt) {
-    conflictWarning = "";
-    editNotice = "";
-    const topicRow = get(topicDetailStore).topic;
-    const topicId = topicIdFromTopic(topicRow);
-    if (!topicId) {
-      throw new Error(
-        "Missing topic reference on this topic row; cannot save edits.",
-      );
-    }
-    const topicPatch = topicEditPatchToTopicPatch(patch);
-    if (Object.keys(topicPatch).length === 0) {
-      editNotice = "No topic-level fields changed.";
-      return;
-    }
-    try {
-      await coreClient.updateTopic(topicId, {
-        patch: {
-          ...topicPatch,
-          provenance: { sources: ["event:ui"] },
-        },
-        if_updated_at: ifUpdatedAt,
-      });
-      await topicDetailStore.queueRefreshTopicDetail(threadId, {
+  // Display refresh must outlive the About tab. The editor is destroyed when
+  // leaving About, but confirmation still has to update the header snapshot.
+  onMount(() => {
+    const confirmed = (event) => {
+      const topicId =
+        /^topic:(.+)$/.exec(String(topic?.topic_ref ?? ""))?.[1] || "";
+      const target = topicId ? `topic:${topicId}:metadata` : "";
+      if (
+        event.detail.scope !== get(localWorkScope) ||
+        event.detail.target !== target
+      )
+        return;
+      if (!threadId) return;
+      void topicDetailStore.queueRefreshTopicDetail(threadId, {
         workspace: true,
         timeline: true,
       });
-      editNotice = "Changes saved.";
-    } catch (error) {
-      if (error?.status === 409) {
-        conflictWarning =
-          "Topic was updated elsewhere. Reloaded — reapply your changes.";
-        await topicDetailStore.queueRefreshTopicDetail(threadId, {
-          workspace: true,
-          timeline: true,
-        });
-      } else {
-        throw error;
-      }
-    }
-  }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
 
   /** @param {string} routeScopeId topic id or thread id for listTopicTimeline / refresh coalescing */
   async function handleMessagePost(routeScopeId, result) {
@@ -399,12 +364,9 @@
 
     {#if activeTab === "about"}
       <div role="tabpanel" tabindex="0">
-        <TopicOverviewTab
-          {threadId}
-          onSave={handleSaveTopic}
-          {conflictWarning}
-          {editNotice}
-        />
+        {#key topic.topic_ref || threadId}
+          <TopicOverviewTab {threadId} />
+        {/key}
       </div>
     {/if}
 

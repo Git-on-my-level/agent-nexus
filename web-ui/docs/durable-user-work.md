@@ -6,13 +6,10 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 
 ## Rollout and acceptance
 
-PR #390 is frozen for stage-1 review by the coordinator's 2026-10-14 scope
-instruction. Do not add further mutation surfaces to that branch or queue
-self-continuation work. The existing completed stages and server prerequisites
-are retained for review; the topic editor migration has not started. SCA-781
-is handed off in review at the published head, without claiming whole-UI
-acceptance. The coordinator will file stage 2 after #390 merges; see
-[Stage 2 handoff](#stage-2-handoff).
+Stage 1 (SCA-781, PR #390) is merged. Stage 2 is tracked by SCA-786 and
+ships in separate reviewable PRs grouped by surface. Topic metadata recovery is
+the first Stage 2 surface; the remaining audit below is still open. Stage 1 and
+this topic migration do not claim whole-UI acceptance.
 
 SCA-781 permits reviewable stages. The existing changes cover the human-attention
 response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat attachment uploads, task creation and document authoring. It does not claim that every UI
@@ -414,6 +411,47 @@ replay audit: physical blob deletion occurs after the database commit and needs
 an authorization/tombstone recovery design. Legacy knowledge PUT also remains an
 API audit; it has no current authoring form.
 
+## Topic metadata recovery
+
+The About editor checkpoints the complete title, summary and canonical topic
+base under `topic:<id>:metadata`. Opening the editor loads `GET /topics/{id}`;
+the backing thread projection's timestamp is never used as the topic base.
+Initialization waits for device hydration; opening/closing clicks cannot replace
+an unread authored draft.
+Drafts restore on navigation/reload, including an explicitly empty summary.
+Closing the editor keeps its saved work; **Discard draft** is the explicit
+removal action. Storage denial is visible and prevents unpersisted sends.
+
+`topics.patch` joins the scope-wide mutation outbox. It freezes the original
+actor, canonical id, complete patch, concurrency token and UUID before sending.
+Timeouts, offline closure and lost acknowledgements recover through the already
+audited atomic PATCH receipt. Confirmation clears only the exact submitted
+draft and refreshes display separately; newer edits survive. Version conflicts
+stay in Needs attention with Copy/Edit/Retry. **Use latest version** fetches the
+canonical topic before retiring the failed request, keeps current authored text,
+and explicitly replaces its concurrency token while retaining the original
+content comparison base; resubmission uses a new key. Untouched fields stay
+omitted, preserving concurrent changes. Metadata saves omit provenance so
+existing sources and notes survive. Failed reads
+keep the original request recoverable. Identity epochs fence late topic loads
+and the shared store/outbox enforce principal privacy and the 25-day cutoff.
+
+`durable-topic.spec.js` covers canonical topic/thread timestamp separation,
+complete draft navigation/reload/discard, offline tab closure, 524/network lost
+confirmation and cross-tab exact-key replay, retained conflicts and explicit
+rebase and failed-read recovery, newer empty-summary preservation, delayed device
+hydration, cross-tab principal replacement/late sends and total storage denial.
+The AST guard now forbids direct topic PATCH in all Svelte surfaces and requires a durable
+snapshot on the About editor; its old callsite exception is removed. Core's
+`TestTopicPatchAtomicOriginalReceiptAndAuthority` remains the replay prerequisite,
+covering concurrency, quota/receipt rollback, changed-body rejection and revoked
+authority.
+
+No HTTP route or API shape changes. The additional read is one canonical topic
+lookup by primary key, O(1) in workspace size, with existing scoped authorization;
+no new list/stream queries or server polling. Device recovery remains O(records
+in the current device scope) through the existing scope index.
+
 ## Remaining live UI mutation audit
 
 The following are actual direct SDK calls found in current browser code. Each
@@ -432,7 +470,6 @@ need protocol-specific review before persistence, not blind generic retries.
 | Access administrator grants     | Grant/revoke mutations in `AuthAdminGrants`                                                                        |
 | Setup prompt and workspace tour | Enrollment token issuance/revocation; audit their cleanup and authentication boundaries                            |
 | Secrets                         | Creation/deletion; preserve complete owner-scoped authored work and audit original receipt/private result handling |
-| Topic detail                    | `updateTopic` in `WorkspaceTopicThreadDetailPage`; the edit snapshot and conflict recovery remain open             |
 | Timeline and messages           | Event archive/unarchive/trash, including bulk actions                                                              |
 | Inbox lifecycle and PM delivery | Card archive, decision dispatch, action reconcile and acknowledgement                                              |
 | Task refresh                    | `requestWorkRefresh`; preserve the requested target and original intent                                            |
@@ -440,15 +477,13 @@ need protocol-specific review before persistence, not blind generic retries.
 
 ## Stage 2 handoff
 
-The follow-up owner is the coordinator, who will file a new issue after #390
-merges. This section is the follow-up pointer for every remaining exception in
-`durable-mutation-allowlist.json`; no follow-up issue number exists yet. Do not
-expand #390 to implement these TODOs.
+SCA-786 owns the remaining rollout. This section is the follow-up pointer for
+every remaining exception in `durable-mutation-allowlist.json`. Keep surface
+groups in separate reviewable PRs; do not expand the merged Stage 1 PR.
 
-- Topic title/summary editor: complete snapshot, canonical topic timestamp,
-  retained conflicts, explicit latest-version action and outbox recovery. Atomic
-  PATCH receipts are present, but the current UI still catches 409 and closes
-  the form; this is a known input-loss gap outside frozen stage 1.
+- Topic title/summary editor: migrated in the first SCA-786 surface PR; see
+  [Topic metadata recovery](#topic-metadata-recovery). Topic creation and
+  lifecycle are separate server prerequisites below.
 - Event single/bulk lifecycle, remaining Inbox card archive and explicit PM
   dispatch/reconcile/acknowledgement, task refresh, dashboard selection and dev
   actor creation: audit receipts and migrate full intents before automatic retry.
@@ -568,14 +603,16 @@ Regression tests cover patch/archive/unarchive/trash/restore. Topic metadata and
 patch decoding preserve large integer values, including through later edits and
 changed-body rejection; other endpoint decoders retain their existing behavior.
 
-**The live topic editor remains rollout work.** Its current parent catches a 409,
-refreshes and returns success to the child, allowing it to close the unsaved form.
-The next stage must replace that direct sender with a complete durable snapshot
-and the outbox. Only title and summary are editable today; owners/resource refs
-are display-only. Initialize the base from canonical `getTopic`, not the backing
-thread projection's timestamp. Retain the authored fields across conflicts and
-refresh bases only through an explicit latest-version action. Topic lifecycle
-original receipts, legacy knowledge PUT, purge and remaining live forms stay open.
+**The live topic title/summary editor is migrated.** Its complete durable
+snapshot and outbox retain conflicts instead of closing the unsaved form.
+Canonical `getTopic` supplies the initial topic version; the backing thread
+projection's timestamp is not used. The explicit latest-version action refreshes
+only the concurrency token, retaining the original content comparison base so
+untouched fields remain omitted from the patch. Title/summary saves omit
+provenance, preserving its existing source list and notes. Owners/resource refs
+remain display-only. See [Topic metadata recovery](#topic-metadata-recovery).
+Topic lifecycle original receipts, legacy knowledge PUT, purge and remaining live
+forms stay open.
 The existing `POST /topics` helper records replay after creation and can adopt a
 legacy ID collision without a receipt; it needs a separate atomic replay audit
 before a topic-creation outbox is added. No current Svelte caller was found.
@@ -604,7 +641,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics      | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                                   | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
 | `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                      | Current detail/list/bulk lifecycle UI covered; unused legacy adapters removed; purge remains an API audit                                             |
-| `PATCH /topics/{id}`                                                              | Actor/canonical-target/body/base-bound atomic topic/thread/refs/event/original receipt; concurrent replay, quota/cold-ledger/write rollback, integer precision and revoked-ownership tests                                                            | Server prerequisite covered; live topic editor draft/outbox migration remains open                                                                    |
+| `PATCH /topics/{id}`                                                              | Actor/canonical-target/body/base-bound atomic topic/thread/refs/event/original receipt; concurrent replay, quota/cold-ledger/write rollback, integer precision and revoked-ownership tests                                                            | Core replay and live topic metadata draft/outbox recovery covered; topic creation/lifecycle remain open                                               |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                                  | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules

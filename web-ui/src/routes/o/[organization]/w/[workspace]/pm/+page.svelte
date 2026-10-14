@@ -327,12 +327,19 @@
    */
   $effect(() => {
     const inner = threadInnerElement;
-    if (!inner || typeof ResizeObserver === "undefined") return;
+    const viewport = threadElement;
+    if (!inner || !viewport || typeof ResizeObserver === "undefined") return;
     let last = inner.getBoundingClientRect().height;
+    let lastViewport = viewport.clientHeight;
     const observer = new ResizeObserver(() => {
       const height = inner.getBoundingClientRect().height;
       const grew = height > last + 1;
       last = height;
+      // Async header notices can shrink the readable viewport without
+      // changing content height. Keep a parked reader above the composer.
+      const viewportHeight = viewport.clientHeight;
+      const shrank = viewportHeight < lastViewport - 1;
+      lastViewport = viewportHeight;
       /*
        * Only downward, only for a reader genuinely parked at the end of a
        * thread that already scrolled, and never mid-prepend — `olderTurns`
@@ -343,13 +350,14 @@
        * both of those, opening a run log on a short conversation would have
        * scrolled the thing the reader just opened off the top.
        */
-      if (!grew) return;
+      if (!grew && !shrank) return;
       untrack(() => {
         if (!pinnedToBottom || loadingOlder) return;
         scrollToLatest("auto");
       });
     });
     observer.observe(inner);
+    observer.observe(viewport);
     return () => observer.disconnect();
   });
 

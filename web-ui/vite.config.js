@@ -1,5 +1,6 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 
@@ -68,6 +69,16 @@ export default defineConfig(() => {
 
   return {
     plugins: [sveltekit(), e2eIdentityPlugin()],
+    // Playwright starts root and base-path Vite servers together. Their
+    // optimizer hashes differ; sharing a cache makes one server reject the
+    // other's dependencies with 504 Outdated Optimize Dep before hydration.
+    cacheDir: path.resolve(
+      "node_modules",
+      `.vite-${createHash("sha256")
+        .update(process.env.ANX_UI_BASE_PATH ?? "")
+        .digest("hex")
+        .slice(0, 12)}`,
+    ),
     server: {
       fs: {
         allow: [
