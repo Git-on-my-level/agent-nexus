@@ -696,7 +696,7 @@ func main() {
 		LinkBase:      publicWebUIWorkspaceURL,
 		DigestHourUTC: envInt("ANX_DIGEST_HOUR_UTC", delivery.DefaultDigestHourUTC),
 		CanRead:       server.NewEscalationReadCheck(primitiveStore),
-		AskPM:         server.NewEscalationPMWaker(workspace.DB(), primitiveStore, authStore, pmRuntime.AgentActorID, workspaceID, workspaceName),
+		AskPM:         server.NewEscalationPMWaker(workspace.DB(), primitiveStore, authStore, pmRuntime.AgentActorID, server.NewEscalationReadCheck(primitiveStore), workspaceID, workspaceName),
 	}
 	go escalator.Run(maintenanceCtx)
 	sidecarHost.Run(maintenanceCtx)

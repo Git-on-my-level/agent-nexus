@@ -205,7 +205,7 @@ func requireDeliveringAgent(r *http.Request, store *delivery.Store, actor *auth.
 	if actor == nil || isHumanPrincipal(actor) || actor.SeriesAdapter != "" {
 		return delivery.ErrForbidden
 	}
-	channels, err := store.ChannelsForAgent(r.Context(), actor.ActorID)
+	channels, err := store.ChannelsForAgent(r.Context(), actor.AgentID)
 	if err != nil {
 		return err
 	}

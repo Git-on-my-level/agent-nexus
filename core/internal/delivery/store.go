@@ -192,9 +192,9 @@ func (s Store) Get(ctx context.Context, id string) (Delivery, error) {
 
 // ChannelsForAgent returns the channels the agent's active adapter
 // declarations deliver. Bounded by the agent's own declarations.
-func (s Store) ChannelsForAgent(ctx context.Context, agentActorID string) ([]string, error) {
+func (s Store) ChannelsForAgent(ctx context.Context, agentID string) ([]string, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT c.channel FROM adapter_channels c JOIN series_adapters a ON a.name=c.adapter
-		WHERE a.agent_id=? AND a.revoked_at IS NULL AND a.deleted_at IS NULL ORDER BY c.channel LIMIT 64`, strings.TrimSpace(agentActorID))
+		WHERE a.agent_id=? AND a.revoked_at IS NULL AND a.deleted_at IS NULL ORDER BY c.channel LIMIT 64`, strings.TrimSpace(agentID))
 	if err != nil {
 		return nil, err
 	}

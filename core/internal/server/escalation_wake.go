@@ -22,10 +22,10 @@ type escalationWakeStore interface {
 // ask passes decide_by unanswered it wakes the workspace PM (through the
 // ordinary durable wake path) to answer, withdraw or re-ask. The wake id is
 // derived from the ask, so a repeated escalation is a no-op. It returns nil
-// when no PM is configured.
-func NewEscalationPMWaker(db *sql.DB, store PrimitiveStore, authStore *auth.Store, pmActorID func() string, workspaceID, workspaceName string) func(context.Context, string, time.Time) error {
+// when no PM is configured. The PM is only woken for asks it can read.
+func NewEscalationPMWaker(db *sql.DB, store PrimitiveStore, authStore *auth.Store, pmActorID func() string, canRead func(context.Context, string, string) bool, workspaceID, workspaceName string) func(context.Context, string, time.Time) error {
 	wakeStore, ok := store.(escalationWakeStore)
-	if !ok || db == nil || authStore == nil || pmActorID == nil {
+	if !ok || db == nil || authStore == nil || pmActorID == nil || canRead == nil {
 		return nil
 	}
 	if strings.TrimSpace(workspaceID) == "" {
@@ -33,7 +33,9 @@ func NewEscalationPMWaker(db *sql.DB, store PrimitiveStore, authStore *auth.Stor
 	}
 	return func(ctx context.Context, askID string, decideBy time.Time) error {
 		actorID := strings.TrimSpace(pmActorID())
-		if actorID == "" {
+		// PM designation grants no extra read authority: a PM that cannot read
+		// the ask is not told about it.
+		if actorID == "" || !canRead(ctx, actorID, askID) {
 			return nil
 		}
 		principal, found, err := findAgentPrincipalByActorID(ctx, authStore, actorID)
