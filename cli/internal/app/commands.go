@@ -361,7 +361,13 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		Body:    requestBody,
 	})
 	if err != nil {
+		a.writes.record(method, err)
 		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "failed to perform request", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		a.writes.record(method, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body))
+	} else {
+		a.writes.record(method, nil)
 	}
 
 	parsedBody := parseResponseBody(resp.Body)

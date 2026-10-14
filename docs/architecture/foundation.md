@@ -8,20 +8,62 @@ accepted target from behavior that still needs implementation and verification.
 
 ## Product Position
 
-### Agent Nexus is a unified work tracker and conversational PM
+### Agent Nexus decides, watches and asks
 
 Agent Nexus is the human and agent front door for heterogeneous commitments,
-evidence, decisions, and follow-through. Inbox, Tasks (as table or board), and
-the PM conversation are complementary views of the same durable workspace
-state. A commitment survives retries, delegation, machine changes, and chat
-resets; a successful run does not establish that its acceptance criteria were
-met.
+evidence, decisions, and follow-through. A commitment survives retries,
+delegation, machine changes, and chat resets; a successful run does not
+establish that its acceptance criteria were met.
 
-Cards are the work identity and topics organize projects. Nexus owns
-native commitments and local annotations. External source systems such as
-GitHub and Multica retain authority over their own workflow fields. Source
-identity, not title matching, deduplicates imported commitments. Board layout
-never grants permission to mutate a source.
+For humans there are three primary destinations:
+
+- **Decide**: every decision awaiting the person (asks, reviews of agent
+  results, access approvals, PM proposals), sorted by deadline, then blocked
+  work, then optional priority, then age. Answering is one tap on a proposal,
+  with the recommendation first.
+- **Watch**: outcomes per workspace, as a list sorted by attention and as a
+  board for tracking many initiatives. Every line is computed from evidence.
+  Four computed states only: past promise, moving, no promise, done. Blocked
+  and waiting-on-you are counts that link into Decide, not states. The only
+  authored text is a quoted note with its author and age.
+- **Ask**: the PM conversation and the human's write path to start or redirect
+  an initiative. It is hidden when no PM is connected; global search covers
+  lookup.
+
+Everything else (initiative table, docs, agents, access, secrets, audit) is one
+hop down from a ref chip, search, or an initiative page. The initiative is the
+operator's single noun for a unit of work.
+
+For agents there are three tiers. The **loop tier** is the only one a
+participant skill teaches: `orient`, `context`, `note`, `ask`, `await`, `done`,
+`plan` and `series push`. `orient` prints the agent's own `brief.v1`, the same
+brief that Decide and Watch render. The **setup tier** (enrollment, tokens,
+secrets, adapters, PM install, bridge) is reached through `anx help <job>`.
+Everything else is `anx api <operation>`. Writes that would degrade the human
+view return a warning with the corrected command rather than a rule in a
+prompt; warnings never reject a write.
+
+### Promises versus evidence: the one clock
+
+Agents state claims, evidence and promises; the product computes state. A
+promise is an optional field on things agents already write: a note's `next`,
+a plan step's `due`, an ask's `--by` deadline for the human, an adapter's
+`expected_interval`, an authored panel's `review_by`. A thing is quiet when it
+has passed the next signal its own author promised. Only evidence (a note with
+an evidence ref, a plan-step state change, a changed source observation) resets
+the clock; moving a promise without evidence is counted and shown. There are
+no workspace-tuned health thresholds and no met or broken enum. A promise beyond
+the horizon (default 2 days) warns at write time.
+
+### One core per workspace, aggregation in a hosted shell
+
+Truth is workspace-level and attention is account-level. Core serves one
+`brief.v1` per principal per workspace and never reads another workspace.
+Self-host is one workspace. A hosted shell may compose Decide across many
+workspaces by fanning out one brief read per workspace, keeping a last-known
+brief with its age for sleeping workspaces. The PM remains a workspace-scoped
+principal. Delivery is channel-agnostic: core appends notification events and
+channel adapters deliver them and record receipts.
 
 ### Adopt existing agents without owning their execution
 
@@ -52,20 +94,19 @@ an installed executable is not evidence that a live session can be resumed.
 ### Operator vocabulary and core vocabulary are different on purpose
 
 The durable model is topics, boards, cards, documents, threads and artifacts.
-**Operators do not think in those nouns.** Their surfaces are **Inbox**,
-**Tasks** and **Docs**, with Ask PM as an action; a Task is the operator's unit
-of work, projected from cards through `work.list` / `work.get`.
+**Operators do not think in those nouns.** The operator's unit of work is the
+**initiative**, projected from cards through `work.list` / `work.get`. `card:`
+stays as the typed ref agents use. Topic is never shown to a human; thread,
+board, column and revision are never named to a human or in the skill.
 
-Agents address the durable model directly, by typed ref, through the CLI and
-generated clients. The **typed ref is the boundary**: an agent names a subject
-(`card:`, `document:`, `topic:`), and the UI resolves that ref into something
-the operator already understands. An agent should never have to ask an operator
+The **typed ref is the boundary**: an agent names a subject (`card:`,
+`document:`, `topic:`), and the UI resolves that ref into something the
+operator already understands. An agent should never have to ask an operator
 about a thread, a board or a topic by name.
 
-Threads are infrastructure — append-only timelines that back the other
-primitives and resolve packet subjects. A thread is never an operator noun.
-Surfaces that deliberately expose the durable model (Audit, Threads) are
-labelled Diagnostics and kept out of primary navigation.
+Threads are infrastructure: append-only timelines that back the other
+primitives. Surfaces that deliberately expose the durable model (Audit,
+Threads) are labelled Diagnostics and kept out of primary navigation.
 
 `web-ui/docs/anx-ui-spec.md` §1.8 is the enforceable statement of this rule.
 

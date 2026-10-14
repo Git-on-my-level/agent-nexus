@@ -31,6 +31,12 @@ type ErrorPayload struct {
 	ExitCode    int          `json:"exit_code"`
 	Details     any          `json:"details"`
 	NextActions []NextAction `json:"next_actions"`
+	// Phase is preflight (nothing mutating was sent), write (the mutating
+	// request failed or its outcome is unknown) or postflight (a write
+	// succeeded and a later step failed). WriteSent is true when a mutating
+	// request reached the server or may have.
+	Phase     string `json:"phase,omitempty"`
+	WriteSent *bool  `json:"write_sent,omitempty"`
 }
 
 type Envelope struct {
@@ -83,7 +89,14 @@ func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) er
 	envelope.Init()
 	var lines []string
 	if envelope.Error != nil {
-		lines = append(lines, "error code="+quote(envelope.Error.Code)+" message="+quote(envelope.Error.Message)+" retryable="+strconv.FormatBool(envelope.Error.Retryable)+" exit_code="+strconv.Itoa(envelope.Error.ExitCode))
+		line := "error code=" + quote(envelope.Error.Code) + " message=" + quote(envelope.Error.Message) + " retryable=" + strconv.FormatBool(envelope.Error.Retryable) + " exit_code=" + strconv.Itoa(envelope.Error.ExitCode)
+		if envelope.Error.Phase != "" {
+			line += " phase=" + envelope.Error.Phase
+		}
+		if envelope.Error.WriteSent != nil {
+			line += " write_sent=" + strconv.FormatBool(*envelope.Error.WriteSent)
+		}
+		lines = append(lines, line)
 		project(&lines, "detail", envelope.Error.Details)
 	} else {
 		lines = append(lines, "ok command="+quote(envelope.Command))
