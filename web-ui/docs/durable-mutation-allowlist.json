@@ -93,6 +93,7 @@
       "setNotificationSettings": 1,
       "updateBoardCard": 1,
       "updateDocument": 1,
+      "ungroupCurationBatch": 1,
       "updateTopic": 1,
       "acknowledgePmAction": 1,
       "archiveCard": 1,

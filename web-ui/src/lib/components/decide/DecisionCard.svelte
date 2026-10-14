@@ -18,10 +18,12 @@
     retryInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import {
+    enqueueCurationUngroup,
     enqueuePmDecisionAnswer,
     mutationOutbox,
   } from "$lib/mutationOutbox.js";
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
+  import { refreshBrief } from "$lib/briefStore.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -108,6 +110,45 @@
   let confirming = $state("");
   let pmSent = $state(false);
   let saveError = $state("");
+
+  let batchTarget = $derived(
+    decision.batch ? `curation-batch:${decision.batch.key}` : "",
+  );
+  let ungroupQueued = $derived(
+    Boolean(batchTarget) &&
+      ($mutationOutbox ?? []).some((entry) => entry.target === batchTarget),
+  );
+  let ungroupError = $state("");
+
+  async function ungroup() {
+    ungroupError = "";
+    try {
+      // Persisted before it is sent; a storage failure stops the send.
+      await enqueueCurationUngroup({
+        key: decision.batch.key,
+        target: batchTarget,
+        href: href("/decide"),
+        title: "Ungroup asks",
+        preview: `Ungroup ${decision.batch.count} grouped asks`,
+      });
+    } catch {
+      ungroupError =
+        "Couldn’t save this on your device, so it was not sent. Try again.";
+    }
+  }
+
+  $effect(() => {
+    if (!batchTarget) return;
+    const confirmed = (event) => {
+      if (event.detail?.target === batchTarget) {
+        void refreshBrief();
+        onAnswered?.(decision);
+      }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
 
   function outcomeFor(proposal) {
     if (!structured) return "answered";
@@ -303,6 +344,38 @@
                 humanize
                 showRaw={false}
               />
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  {/if}
+
+  {#if decision.batch}
+    <div class="mt-2 text-meta text-fg-muted" data-decision-batch>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-medium text-fg" data-decision-batch-count
+          >{decision.batch.count} grouped asks</span
+        >
+        {#if ungroupQueued}
+          <MutationSendStatus target={batchTarget} />
+        {:else}
+          <button
+            type="button"
+            class="min-h-11 rounded-md border border-line px-2 py-1 text-meta text-fg hover:bg-panel-hover sm:min-h-0"
+            data-decision-ungroup
+            onclick={ungroup}>Ungroup</button
+          >
+        {/if}
+      </div>
+      {#if ungroupError}
+        <p class="mt-1 text-danger-text" role="alert">{ungroupError}</p>
+      {/if}
+      {#if decision.batch.members.length}
+        <ul class="mt-1 list-disc pl-4" data-decision-batch-members>
+          {#each decision.batch.members as member, index (member.ref || index)}
+            <li class="[overflow-wrap:anywhere]">
+              {member.title || member.ref}
             </li>
           {/each}
         </ul>

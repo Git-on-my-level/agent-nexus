@@ -24,6 +24,7 @@ vi.mock("$lib/inboxResponseQueue.js", () => ({
 }));
 const outbox = vi.hoisted(() => ({
   enqueuePmDecisionAnswer: vi.fn(async () => ({})),
+  enqueueCurationUngroup: vi.fn(async () => ({})),
 }));
 vi.mock("$lib/mutationOutbox.js", () => ({
   ...outbox,

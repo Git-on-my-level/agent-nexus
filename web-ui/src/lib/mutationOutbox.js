@@ -254,6 +254,12 @@ async function send(entry) {
       throw new Error("Move receipt is incomplete.");
     return result;
   }
+  if (entry.operation === "curation.ungroup") {
+    const result = await client.ungroupCurationBatch(entry.request.body);
+    if (typeof result?.ungrouped !== "boolean")
+      throw new Error("Ungroup receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "pm.decisions.create") {
     const decision = await client.createPmDecision(entry.request.body);
     if (!decision.id) throw new Error("Proposal receipt is incomplete.");
@@ -720,6 +726,19 @@ export function enqueuePmDecisionAnswer({
       autoApply,
       answer: { request_key: key, actor_id, revision, approve, text },
     },
+  });
+}
+
+/**
+ * Undo an accepted batch. Ungrouping by key is idempotent in core, so a
+ * retry of the saved request is replay-safe.
+ */
+export function enqueueCurationUngroup({ key: batchKey, ...options }) {
+  return enqueueLocalMutation({
+    ...options,
+    key: crypto.randomUUID(),
+    operation: "curation.ungroup",
+    request: { body: { key: batchKey } },
   });
 }
 

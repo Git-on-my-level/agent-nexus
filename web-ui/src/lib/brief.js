@@ -137,8 +137,29 @@ function normalizeDecision(raw) {
     // A host enrollment answers on the Access page's own routes.
     accessRequestId: text(raw.access_request_id),
     curation: normalizeCuration(raw.curation, refTitle(raw.subject)),
+    batch: normalizeBatch(raw.batch),
     // Core orders proposals with the recommendation first; keep that order.
     proposals: decisionProposals(raw),
+  };
+}
+
+/** An accepted curation batch: several open asks shown as one decision. */
+function normalizeBatch(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const key = text(raw.key);
+  if (!key) return null;
+  const members = (Array.isArray(raw.members) ? raw.members : [])
+    .filter((member) => member && typeof member === "object")
+    .map((member) => ({
+      ref: text(member.ref),
+      inboxItemId: text(member.inbox_item_id),
+      title: text(member.title),
+    }))
+    .filter((member) => member.ref || member.title);
+  return {
+    key,
+    count: Math.max(Number(raw.count) || 0, members.length),
+    members,
   };
 }
 
