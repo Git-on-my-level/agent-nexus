@@ -28,7 +28,11 @@ async function setup(context, briefRoute) {
   await context.route(
     /\/(?:stream\/(?:events|inbox)|inbox\/stream)(?:\?.*)?$/,
     (route) =>
-      route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: "",
+      }),
   );
   await context.route(
     (url) => url.pathname === "/brief",
@@ -45,29 +49,41 @@ test("lists initiatives by computed state with sources tagged", async ({
   await setup(context);
   await page.goto(WATCH);
   const groups = page.locator("[data-watch-group]");
-  await expect(groups.first()).toHaveAttribute("data-watch-group", "past_promise");
+  await expect(groups.first()).toHaveAttribute(
+    "data-watch-group",
+    "past_promise",
+  );
   const battery = page.locator('[data-watch-row="card:battery-measurement"]');
   await expect(battery).toContainText("9d past");
   await expect(
     battery.locator('[data-source="computed:initiatives.past_promise_for"]'),
   ).toHaveText(/9d past/);
-  await expect(page.locator('[data-source="computed:generated_at"]')).toContainText(
-    "as of",
-  );
+  await expect(
+    page.locator('[data-source="computed:generated_at"]'),
+  ).toContainText("as of");
   // Waiting-on-you is a badge linking into Decide, not a state.
   await battery
     .locator('[data-source="computed:initiatives.waiting_on_you_count"]')
     .click();
-  await expect(page).toHaveURL(/\/decide\?initiative=card%3Abattery-measurement|\/decide\?initiative=card:battery-measurement/);
+  await expect(page).toHaveURL(
+    /\/decide\?initiative=card%3Abattery-measurement|\/decide\?initiative=card:battery-measurement/,
+  );
 });
 
-test("the by-stage view shows the five placements", async ({ page, context }) => {
+test("the by-stage view shows the five placements", async ({
+  page,
+  context,
+}) => {
   await setup(context);
   await page.goto(`${WATCH}?view=board`);
   for (const placement of ["backlog", "ready", "in_progress", "review", "done"])
-    await expect(page.locator(`[data-watch-column="${placement}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-watch-column="${placement}"]`),
+    ).toBeVisible();
   await expect(
-    page.locator('[data-watch-column="review"] [data-work-ref="card:fleet-onboarding"]'),
+    page.locator(
+      '[data-watch-column="review"] [data-work-ref="card:fleet-onboarding"]',
+    ),
   ).toBeVisible();
 });
 

@@ -60,7 +60,9 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   ).toBeVisible();
 
   await expect(
-    page.locator(`a[href="${appPath("/o/local/w/local/tasks")}"]`).first(),
+    page
+      .locator(`a[href="${appPath("/o/local/w/local/initiatives")}"]`)
+      .first(),
   ).toBeVisible();
   await expect(
     page.locator(`a[href="${appPath("/o/local/w/local/docs")}"]`).first(),

@@ -78,10 +78,10 @@ test("blocks shell with actor gate when no actor is selected", async ({
   await expect(
     page.getByRole("heading", { name: "Select Actor Identity" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Inbox" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Decide" })).toHaveCount(0);
 });
 
-test("registers actor, unlocks shell, and opens Overview", async ({ page }) => {
+test("registers actor, unlocks shell, and opens Decide", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
@@ -90,19 +90,22 @@ test("registers actor, unlocks shell, and opens Overview", async ({ page }) => {
   await page.getByLabel("Display name").fill("E2E User");
   await page.getByRole("button", { name: "Create and continue" }).click();
 
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/decide/);
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Tasks", exact: true }).first(),
+    page.getByRole("link", { name: "Watch", exact: true }).first(),
   ).toBeVisible();
+  // Docs is one hop down, not a primary destination.
   await expect(
-    page.getByRole("link", { name: "Docs", exact: true }).first(),
-  ).toBeVisible();
+    page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("link", { name: "Docs", exact: true }),
+  ).toHaveCount(0);
 });
 
-test("workspace root routes to Overview after activation without reloading", async ({
+test("workspace root routes to Decide after activation without reloading", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -120,13 +123,13 @@ test("workspace root routes to Overview after activation without reloading", asy
   );
   await expect(page.getByLabel("Display name")).toBeVisible();
   const historyLength = await page.evaluate(() => history.length);
-  await unlockShellWithActor(page, `Inbox User ${Date.now()}`);
+  await unlockShellWithActor(page, `Decide User ${Date.now()}`);
 
   await expect(page).toHaveURL(
-    `${test.info().project.use.baseURL}${WS_HOME}/overview?dashboard=weekly#overview-reports`,
+    `${test.info().project.use.baseURL}${WS_HOME}/decide?dashboard=weekly#overview-reports`,
   );
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
   expect(documents).toHaveLength(1);
   expect(await page.evaluate(() => history.length)).toBe(historyLength);
@@ -139,52 +142,44 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   });
   await withConnectedPm(page);
 
-  await page.goto(`${WS_HOME}/inbox`);
+  await page.goto(`${WS_HOME}/decide`);
   await unlockShellWithActor(page, `Mobile User ${Date.now()}`);
 
   const bottomNav = page.getByRole("navigation", {
     name: "Primary navigation",
   });
-  await bottomNav.getByRole("link", { name: "Tasks" }).click();
+  await bottomNav.getByRole("link", { name: "Watch" }).click();
 
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/tasks/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/watch/);
   await expect(
-    page.getByRole("heading", { name: "Tasks", exact: true }),
+    page.getByRole("heading", { name: "Watch", exact: true }),
   ).toBeVisible();
 
-  // Search left the bottom bar: the bar carries Overview, the product
-  // surfaces, the PM slot and More. Workspace search is ⌘K plus a button in
-  // each list header. The PM slot reads "Ask PM" because this test says a PM
-  // is connected; with none onboarded it reads "PM setup", and until core
-  // answers it holds its space with no link at all.
+  // Search left the bottom bar: the bar carries Decide, Watch, Ask
+  // (only while a PM is connected) and More. Workspace search is ⌘K plus a
+  // button in each list header. Everything else is one hop down in More.
   await expect(
     bottomNav.getByRole("button", { name: "Search workspace" }),
   ).toHaveCount(0);
-  for (const name of [
-    "Overview",
-    "Inbox",
-    "Agents",
-    "Tasks",
-    "Docs",
-    "Ask PM",
-    "More",
-  ]) {
+  for (const name of ["Decide", "Watch", "Ask", "More"]) {
     await expect(bottomNav.getByRole("link", { name })).toBeVisible();
   }
   expect(await crowdedBottomNavTabs(bottomNav)).toEqual([]);
 
+  // Decide and Watch carry no search button; Initiatives and Docs do.
+  await page.goto(`${WS_HOME}/initiatives`);
   await page.getByRole("button", { name: "Search workspace" }).click();
   await expect(
     page.getByRole("dialog", { name: "Command palette" }),
   ).toBeVisible();
 });
 
-test("bottom navigation keeps one line per tab while the PM is unconfigured", async ({
+test("bottom navigation hides Ask and keeps one line per tab while the PM is unconfigured", async ({
   page,
 }) => {
-  // The narrowest phone the shell targets, and the state the connected-PM
-  // test above never reaches: the PM slot reads setup copy there, which is
-  // the longest label the bar ever carries.
+  // The narrowest phone the shell targets, in the state the connected-PM
+  // test above never reaches: with no PM, Ask is absent and the bar holds
+  // Decide, Watch and More.
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
@@ -197,8 +192,8 @@ test("bottom navigation keeps one line per tab while the PM is unconfigured", as
   const bottomNav = page.getByRole("navigation", {
     name: "Primary navigation",
   });
-  const pmTab = bottomNav.locator('[data-pm-nav="setup"]');
-  await expect(pmTab).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Watch" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Ask" })).toHaveCount(0);
 
   expect(await crowdedBottomNavTabs(bottomNav)).toEqual([]);
 });
@@ -228,7 +223,7 @@ test("sidebar account menu reaches settings and sign out", async ({ page }) => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
-  await page.goto(`${WS_HOME}/inbox`);
+  await page.goto(`${WS_HOME}/decide`);
   await unlockShellWithActor(page, `Menu User ${Date.now()}`);
 
   const sidebar = page.getByRole("complementary", { name: "Primary" });
@@ -239,7 +234,14 @@ test("sidebar account menu reaches settings and sign out", async ({ page }) => {
   await sidebar.getByRole("button", { expanded: false }).last().click();
 
   const menu = page.getByRole("menu");
-  for (const name of ["Access", "Secrets", "Integrations", "Audit"]) {
+  for (const name of [
+    "Initiatives",
+    "Docs",
+    "Access",
+    "Secrets",
+    "Integrations",
+    "Audit",
+  ]) {
     await expect(menu.getByRole("menuitem", { name })).toBeVisible();
   }
   await expect(

@@ -464,7 +464,7 @@ test("a loud status never squeezes the task link off a phone", async ({
 
   // And the link does what a link does.
   await link.click();
-  await expect(page).toHaveURL(/\/tasks\/card%3Atune-core-combat-loop$/);
+  await expect(page).toHaveURL(/\/initiatives\/card%3Atune-core-combat-loop$/);
 });
 
 test("the task link stays a usable target at every audited width", async ({

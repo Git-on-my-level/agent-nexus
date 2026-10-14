@@ -80,7 +80,7 @@ async function choose(page) {
   ).toBeVisible();
 }
 async function evidence(page) {
-  await page.goto(`${root}/tasks?view=board`);
+  await page.goto(`${root}/initiatives?view=board`);
   const card = page.locator('[data-work-ref="card:move"]');
   await expect(card).toBeVisible();
   await card.focus();
@@ -99,7 +99,7 @@ test("uncertain palette move reloads and retries its exact bases and key", async
       ? json(route, receipt())
       : json(route, { error: { message: "Private move diagnostics" } }, 524);
   });
-  await page.goto(`${root}/tasks/card%3Amove`);
+  await page.goto(`${root}/initiatives/card%3Amove`);
   await choose(page);
   await openPalette(page);
   await expect(
@@ -169,7 +169,7 @@ test("completion draft and offline send survive original tab closure", async ({
   });
   await page.close();
   const next = await context.newPage();
-  await next.goto(`${root}/tasks?view=board`);
+  await next.goto(`${root}/initiatives?view=board`);
   await expect(next.locator('[data-mutation-state="sent"]')).toBeVisible();
   expect(attempts).toHaveLength(1);
   expect(attempts[0]).toMatchObject({
@@ -321,7 +321,7 @@ test("confirmation in one tab preserves newer completion evidence in another", a
   await page.getByRole("button", { name: "Mark done", exact: true }).click();
   await expect(page.locator('[data-mutation-state="sending"]')).toBeVisible();
   const other = await context.newPage();
-  await other.goto(`${root}/tasks?view=board`);
+  await other.goto(`${root}/initiatives?view=board`);
   await expect(other.getByLabel(/needs evidence/)).toHaveValue(
     "artifact:original",
   );
@@ -350,9 +350,9 @@ test("editing a failed board move from task detail returns to its durable compos
   await page.getByLabel(/needs evidence/).fill("event:keep-through-navigation");
   await page.getByRole("button", { name: "Mark done", exact: true }).click();
   await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
-  await page.goto(`${root}/tasks/card%3Amove`);
+  await page.goto(`${root}/initiatives/card%3Amove`);
   await page.getByRole("button", { name: "Edit move", exact: true }).click();
-  await expect(page).toHaveURL(/\/tasks\?view=board$/);
+  await expect(page).toHaveURL(/\/initiatives\?view=board$/);
   await expect(page.getByLabel(/needs evidence/)).toHaveValue(
     "event:keep-through-navigation",
   );
@@ -409,7 +409,7 @@ test("timed-out move retries the exact actor, body and original key", async ({
     attempts.push(route.request().postDataJSON());
     return healthy ? json(route, receipt()) : route.abort("timedout");
   });
-  await page.goto(`${root}/tasks/card%3Amove`);
+  await page.goto(`${root}/initiatives/card%3Amove`);
   await choose(page);
   await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
   await page.reload();
@@ -482,7 +482,7 @@ test("principal changes purge move work in other tabs and fence a late failure",
     return store.readerScopeKey();
   });
   const other = await context.newPage();
-  await other.goto(`${root}/tasks?view=board`);
+  await other.goto(`${root}/initiatives?view=board`);
   await expect(other.getByLabel(/needs evidence/)).toHaveValue(
     "artifact:private-owner-proof",
   );

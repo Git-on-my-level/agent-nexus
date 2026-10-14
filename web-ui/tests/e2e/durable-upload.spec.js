@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { setup } from "./helpers/durable-discussion.js";
-import { setup as setupInbox, ITEM } from "./helpers/durable-inbox.js";
 
 const url = "/o/local/w/local/threads/thread-durable-comment?tab=messages";
 const file = {
@@ -81,50 +80,6 @@ const artifact = {
   mime_type: file.mimeType,
   refs: ["thread:thread-durable-comment"],
 };
-
-test("Inbox upload survives reload and its ref is sent with the answer", async ({
-  page,
-  context,
-}) => {
-  let healthy = false;
-  const responses = [];
-  await setupInbox(context, (route) => {
-    responses.push(route.request().postDataJSON());
-    return json(route, { event: { id: "response-upload" } }, 201);
-  });
-  await context.route("**/artifacts/attachments", (route) =>
-    healthy
-      ? json(route, { artifact }, 201)
-      : json(route, { error: { message: "Private upload failure" } }, 503),
-  );
-  await page.goto(`/o/local/w/local/inbox/${ITEM.id}`);
-  await page
-    .getByRole("textbox", { name: "Your response", exact: true })
-    .fill("The evidence is attached.");
-  await page.getByLabel("Attach file", { exact: true }).setInputFiles(file);
-  await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Send response", exact: true }),
-  ).toBeDisabled();
-  await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue("The evidence is attached.");
-  healthy = true;
-  await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(
-    page.getByRole("button", { name: `Remove artifact:${artifact.id}` }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
-  await page.evaluate(async () => {
-    const queue = await import("/src/lib/inboxResponseQueue.js");
-    await queue.flushInboxResponse();
-  });
-  await expect.poll(() => responses.length).toBe(1);
-  expect(responses[0].related_refs).toContain(`artifact:${artifact.id}`);
-});
 
 test("offline file selection survives tab close and is included in the recovered post", async ({
   page,

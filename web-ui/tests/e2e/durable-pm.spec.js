@@ -239,7 +239,7 @@ test("definitive message failure keeps text and edits in its already-created con
   expect(sends[1].body.text).toBe("A corrected question");
 });
 
-test("decision note and exact answer survive reload and uncertain acknowledgement", async ({
+test("a PM decision answer survives reload and uncertain acknowledgement", async ({
   page,
 }, testInfo) => {
   let healthy = false;
@@ -262,36 +262,77 @@ test("decision note and exact answer survive reload and uncertain acknowledgemen
       return true;
     },
   });
-  await page.goto(`${root}/inbox?item=decision:decision-sample`);
-  const note = page.getByLabel("Your note (recorded with the decision)");
-  await note.fill("Wait for the acceptance evidence.");
-  await page.reload();
-  await expect(note).toHaveValue("Wait for the acceptance evidence.");
-  await page.getByRole("button", { name: "Decline", exact: true }).click();
-  await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
+  // Decide renders the PM's proposal from the brief; answering it goes
+  // through the durable PM decision route, not the inbox.
+  await page.route(
+    (url) => url.pathname === "/brief",
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          schema: "brief.v1",
+          generated_at: new Date().toISOString(),
+          principal: {
+            id: "human:operator",
+            display: "Operator",
+            kind: "human",
+          },
+          decisions: [
+            {
+              ref: "inbox:ask-pm",
+              kind: "pm_proposal",
+              inbox_item_id: "ask-pm",
+              title: "Update the sample handoff note",
+              body: "The PM proposes a change.",
+              requested_by: { id: "agent:pm", display: "PM" },
+              created_at: new Date().toISOString(),
+              decide_by: null,
+              overdue_for_seconds: null,
+              blocks: [],
+              subject: null,
+              proposals: ["Approve", "Decline"],
+              blocks_count: 0,
+              age_seconds: 60,
+              pm_decision: { id: "decision-sample", revision: 2 },
+            },
+          ],
+          initiatives: [],
+          your_asks: [],
+          answered_for_you: [],
+          truncated: {
+            decisions: false,
+            initiatives: false,
+            your_asks: false,
+            answered_for_you: false,
+          },
+        }),
+      }),
+  );
+  await page.goto(`${root}/decide`);
+  await page
+    .locator('[data-decision-ref="inbox:ask-pm"] [data-decision-proposal="2"]')
+    .click();
+  await expect(page.locator('[data-mutation-state="retrying"]')).toHaveCount(
+    1,
+    { timeout: 15000 },
+  );
   await page.screenshot({
     path: testInfo.outputPath("pm-decision-retrying.png"),
     fullPage: true,
   });
   await page.reload();
-  await expect(page.getByLabel("Saved message", { exact: true })).toHaveValue(
-    "Wait for the acceptance evidence.",
-  );
   healthy = true;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible({
-    timeout: 15000,
-  });
-  expect(attempts.length).toBeGreaterThan(1);
+  await expect
+    .poll(() => attempts.length, { timeout: 15000 })
+    .toBeGreaterThan(1);
   for (const attempt of attempts) expect(attempt).toEqual(attempts[0]);
   expect(attempts[0]).toMatchObject({
     actor_id: "actor-sample",
     revision: 2,
     approve: false,
-  });
-  await page.screenshot({
-    path: testInfo.outputPath("pm-decision-sent.png"),
-    fullPage: true,
+    text: "Decline",
   });
 });
 

@@ -18,7 +18,7 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const WORKSPACE = "/o/local/w/local";
 const CARD_REF = "card:release-b";
-const CARD_PATH = `${WORKSPACE}/tasks/${encodeURIComponent(CARD_REF)}`;
+const CARD_PATH = `${WORKSPACE}/initiatives/${encodeURIComponent(CARD_REF)}`;
 const NOW = "2026-10-04T12:00:00Z";
 
 const plan = {
@@ -1094,7 +1094,7 @@ for (const viewport of [
     // The whole tile is the link to the initiative page.
     await expect(tiles.first()).toHaveAttribute(
       "href",
-      new RegExp("/tasks/card%3Arelease-b$"),
+      new RegExp("/initiatives/card%3Arelease-b$"),
     );
 
     // The initiatives come first, then what changed, then the dashboard.

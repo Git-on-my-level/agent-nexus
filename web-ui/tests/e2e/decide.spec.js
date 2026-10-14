@@ -30,11 +30,17 @@ async function setup(context, { respond, briefRoute } = {}) {
   await context.route(
     /\/(?:stream\/(?:events|inbox)|inbox\/stream)(?:\?.*)?$/,
     (route) =>
-      route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: "",
+      }),
   );
   await context.route(
     (url) => url.pathname === "/brief",
-    briefRoute ?? ((route) => json(route, { ...brief, generated_at: new Date().toISOString() })),
+    briefRoute ??
+      ((route) =>
+        json(route, { ...brief, generated_at: new Date().toISOString() })),
   );
   const bodies = [];
   await context.route(/\/inbox\/[^/]+\/respond$/, (route) => {
@@ -62,9 +68,10 @@ test.describe("phone", () => {
     const row = page.locator(`[data-decision-ref="${MERGE.ref}"]`);
     await expect(row).toBeVisible();
     // Recommended first, and the order is decide_by first.
-    await expect(
-      page.locator("[data-decision-ref]").first(),
-    ).toHaveAttribute("data-decision-ref", "inbox:ask-88");
+    await expect(page.locator("[data-decision-ref]").first()).toHaveAttribute(
+      "data-decision-ref",
+      "inbox:ask-88",
+    );
     await row.locator('[data-decision-proposal="1"]').tap();
     await expect(row.locator("[data-decision-answered]")).toBeVisible();
     await flush(page);
@@ -77,7 +84,10 @@ test.describe("phone", () => {
   });
 });
 
-test("Undo takes an answer back before it is sent", async ({ page, context }) => {
+test("Undo takes an answer back before it is sent", async ({
+  page,
+  context,
+}) => {
   const bodies = await setup(context);
   await page.goto(LIST);
   const row = page.locator(`[data-decision-ref="${MERGE.ref}"]`);

@@ -378,7 +378,7 @@ async function runGoldenPath(page, request) {
       { timeout: 30_000 },
     ),
     page.goto(
-      `/o/local/w/local/tasks/${encodeURIComponent(`card:${resolvedCardId}`)}`,
+      `/o/local/w/local/initiatives/${encodeURIComponent(`card:${resolvedCardId}`)}`,
     ),
   ]);
   expect(workResponse.status()).toBe(200);

@@ -16,7 +16,7 @@ import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
  */
 
 const ROOT = "/o/local/w/local";
-const TASKS = `${ROOT}/tasks`;
+const TASKS = `${ROOT}/initiatives`;
 
 const LONG_ID =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -569,7 +569,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const api = await installTasksApi(page);
       api.hold.work = deferred();
       await page.goto(TASKS);
-      await expect(page.getByText("Loading tasks…")).toBeVisible(firstPaint);
+      await expect(page.getByText("Loading initiatives…")).toBeVisible(
+        firstPaint,
+      );
       await expectCleanLayout(page, "initial loading");
 
       api.hold.work.resolve();
@@ -618,9 +620,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
         fail: { work: { status: 500, message: LONG_ERROR } },
       });
       await page.goto(TASKS);
-      await expect(page.getByText("Tasks could not be refreshed")).toBeVisible(
-        firstPaint,
-      );
+      await expect(
+        page.getByText("Initiatives could not be refreshed"),
+      ).toBeVisible(firstPaint);
       await expect(page.getByRole("link", { name: LONG_TITLE })).toHaveCount(0);
       await expect(
         page.getByText("Showing the previously loaded records.", {
@@ -635,9 +637,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.work = [];
       await retry.click();
       await expect(page.getByText("Nothing tracked yet")).toBeVisible();
-      await expect(page.getByText("Tasks could not be refreshed")).toHaveCount(
-        0,
-      );
+      await expect(
+        page.getByText("Initiatives could not be refreshed"),
+      ).toHaveCount(0);
       await expectCleanLayout(page, "empty workspace", bothEnds);
     });
 
@@ -675,7 +677,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByLabel("Owner", { exact: true }).fill(LONG_OWNER);
       // The free-text filters apply on Enter, like the selects apply on change.
       await page.keyboard.press("Enter");
-      await expect(page.getByText("No matching tasks")).toBeVisible();
+      await expect(page.getByText("No matching initiatives")).toBeVisible();
       await expectCleanLayout(
         page,
         "every filter active, no matches",
@@ -686,10 +688,10 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
 
       await page
-        .getByRole("searchbox", { name: "Search tasks" })
+        .getByRole("searchbox", { name: "Search initiatives" })
         .fill(`no-such-task-${LONG_ID}`);
       await page.keyboard.press("Enter");
-      await expect(page.getByText("No matching tasks")).toBeVisible();
+      await expect(page.getByText("No matching initiatives")).toBeVisible();
       await expectCleanLayout(page, "search with no matches");
     });
 
@@ -699,7 +701,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await installTasksApi(page);
       await page.goto(`${TASKS}?view=board`);
       await expect(
-        page.getByRole("region", { name: "Task board grouped by phase" }),
+        page.getByRole("region", { name: "Initiatives grouped by phase" }),
       ).toBeVisible(firstPaint);
       await expect(
         page.locator('[data-work-ref="card:release"]'),
@@ -744,7 +746,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await focusCard(page, "card:unreachable");
       await page.keyboard.press("ArrowRight");
       await expect(
-        notice.getByRole("link", { name: "Open in Inbox" }),
+        notice.getByRole("link", { name: "Open in Decide" }),
       ).toBeVisible();
       await expectCleanLayout(page, "requested move notice", bothEnds);
 
@@ -831,11 +833,13 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.boards.resolve();
       api.hold = {};
       await expect(page.getByLabel("Outcome")).toBeVisible();
-      await expect(page.getByLabel("Board")).toBeVisible();
+      await expect(page.getByLabel("Group", { exact: true })).toBeVisible();
       await expectCleanLayout(page, "new task empty form", bothEnds);
 
       await page.getByLabel("Outcome").fill(LONG_TITLE);
-      await page.getByLabel("Board").selectOption("board:archive");
+      await page
+        .getByLabel("Group", { exact: true })
+        .selectOption("board:archive");
       await page.getByLabel("Context").fill(`${LONG_ERROR}\n${LONG_ID}`);
       await page.getByLabel("Acceptance criteria").fill(LONG_ACTION);
       await page.getByLabel("Accountable owner").fill(LONG_OWNER);
@@ -885,7 +889,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
         await expect(page.getByLabel(field, { exact: true })).toHaveValue(
           value,
         );
-      await expect(page.getByLabel("Board")).toHaveValue("board:archive");
+      await expect(page.getByLabel("Group", { exact: true })).toHaveValue(
+        "board:archive",
+      );
       await expect(
         saved.getByRole("button", { name: "Copy text" }),
       ).toBeVisible();
@@ -911,7 +917,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         await page.getByLabel(field, { exact: true }).fill("");
       await page.reload();
       await expect(page.getByLabel("Outcome")).toBeVisible(firstPaint);
-      await expect(page.getByLabel("Board")).toHaveCount(0);
+      await expect(page.getByLabel("Group", { exact: true })).toHaveCount(0);
       await expect(
         page.getByText("This workspace has no board yet"),
       ).toHaveCount(0);
@@ -972,16 +978,20 @@ for (const viewport of AUDIT_VIEWPORTS) {
       // A missing card is a dead link, not an outage: no Retry.
       api.fail = { getWork: { status: 404, message: LONG_ERROR } };
       await page.reload();
-      await expect(page.getByText("Task not found")).toBeVisible(firstPaint);
+      await expect(page.getByText("Initiative not found")).toBeVisible(
+        firstPaint,
+      );
       await expect(
-        page.getByRole("button", { name: "Back to tasks" }),
+        page.getByRole("button", { name: "Back to initiatives" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
       await expectCleanLayout(page, "detail not found", bothEnds);
 
       api.fail = { getWork: { status: 500, message: LONG_ERROR } };
       await page.reload();
-      await expect(page.getByText("Task unavailable")).toBeVisible(firstPaint);
+      await expect(page.getByText("Initiative unavailable")).toBeVisible(
+        firstPaint,
+      );
       await expectCleanLayout(page, "detail unavailable", bothEnds);
     });
 
@@ -1061,7 +1071,7 @@ test("the Owner column reads one way for a person and an agent", async ({
 
   // The signed-in identity is this actor too, and the account menu shows a
   // name in full on purpose. Only the table is under test here.
-  const table = page.getByRole("region", { name: "Task table" });
+  const table = page.getByRole("region", { name: "Initiative table" });
   const owner = (name) => table.locator(`[data-owner-name="${name}"]`).first();
   await expect(owner("Maya Chen")).toBeVisible();
   await expect(table.locator("[data-owner-pending]")).toHaveCount(1);

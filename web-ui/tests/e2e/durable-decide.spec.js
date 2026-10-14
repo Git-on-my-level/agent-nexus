@@ -1,8 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { ITEM, setup } from "./helpers/durable-inbox.js";
+import { LIST, ROW, URL, setup } from "./helpers/durable-decide.js";
 
+/**
+ * Durability of a Decide reply (the former inbox durability specs): the
+ * draft, the persisted outbox request and its idempotency key survive
+ * reload, tab closure, offline periods and lost confirmations.
+ */
 const TEXT = "Use Monday. Keep the second region on Thursday.";
-const URL = `/o/local/w/local/inbox/${ITEM.id}`;
 const json = (route, body, status = 200) =>
   route.fulfill({
     status,
@@ -25,15 +29,16 @@ async function records(page, kind = "inbox-send") {
   }, kind);
 }
 
+/** Open the permalink (its composer is always open) and type the reply. */
 async function begin(page) {
   await page.goto(URL);
-  await expect(
-    page.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("textbox", { name: "Your response", exact: true })
-    .fill(TEXT);
+  const reply = page.locator(`${ROW} [data-decision-reply]`);
+  await expect(reply).toBeVisible();
+  await reply.fill(TEXT);
 }
+
+const sendReply = (page) =>
+  page.locator(ROW).getByRole("button", { name: "Send reply" }).click();
 
 test("drafts restore after reload, navigation and in another tab", async ({
   page,
@@ -44,25 +49,22 @@ test("drafts restore after reload, navigation and in another tab", async ({
   );
   await begin(page);
   await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(TEXT);
-  await page.goto("/o/local/w/local/inbox");
-  await page.getByTestId(`inbox-row-${ITEM.id}`).click();
-  await expect(
-    page.getByRole("textbox", { name: "Reply", exact: true }),
-  ).toHaveValue(TEXT);
+  await expect(page.locator(`${ROW} [data-decision-reply]`)).toHaveValue(TEXT);
+  await page.goto(LIST);
+  const row = page.locator(ROW);
+  await row.locator("[data-decision-reply-toggle]").click();
+  await expect(row.locator("[data-decision-reply]")).toHaveValue(TEXT);
   const revised = `${TEXT} Include verification.`;
-  await page.getByRole("textbox", { name: "Reply", exact: true }).fill(revised);
+  await row.locator("[data-decision-reply]").fill(revised);
   await page.goto(URL);
-  await expect(
-    page.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(revised);
+  await expect(page.locator(`${ROW} [data-decision-reply]`)).toHaveValue(
+    revised,
+  );
   const other = await context.newPage();
   await other.goto(URL);
-  await expect(
-    other.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(revised);
+  await expect(other.locator(`${ROW} [data-decision-reply]`)).toHaveValue(
+    revised,
+  );
 });
 
 for (const failure of ["timeout", "524"]) {
@@ -80,22 +82,19 @@ for (const failure of ["timeout", "524"]) {
       return json(route, { event: { id: "response-one" } }, 201);
     });
     await begin(page);
-    await page
-      .getByRole("button", { name: "Send response", exact: true })
-      .click();
+    await sendReply(page);
     await flush(page);
-    const status = page.locator('[data-inbox-send-state="retrying"]').first();
-    await expect(status).toBeVisible();
-    await expect(
-      status.getByRole("textbox", { name: "Saved response" }),
-    ).toHaveValue(TEXT);
-    await expect(status.locator("p").nth(1)).not.toContainText(
+    await expect.poll(() => bodies.length).toBe(1);
+    await expect(page.locator("body")).not.toContainText(
       "cloudflare-secret-error-body",
     );
-    expect((await records(page))[0].value.request.response_text).toBe(TEXT);
+    await expect
+      .poll(async () => (await records(page))[0]?.value.request.response_text)
+      .toBe(TEXT);
     await page.reload();
     await expect.poll(() => bodies.length).toBe(2);
     expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies[0].idempotency_key).toBeTruthy();
     await expect.poll(async () => (await records(page)).length).toBe(0);
   });
 }
@@ -111,9 +110,7 @@ test("offline work survives closing its tab and resumes in a new tab", async ({
   });
   await begin(page);
   await context.setOffline(true);
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
+  await sendReply(page);
   await expect(page.locator("[data-unsent-indicator]")).toContainText(
     "1 unsent",
   );
@@ -150,9 +147,7 @@ test("a lost confirmation and reload mid-send replay once across tabs", async ({
     return json(route, { event: { id: "response-one" }, replayed: true }, 201);
   });
   await begin(page);
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
+  await sendReply(page);
   // Do not await the deliberately interrupted request.
   const sending = flush(page).catch(() => {});
   await expect.poll(() => bodies.length).toBe(1);
@@ -182,21 +177,13 @@ test("definitive failures keep editable text without automatic retry", async ({
     );
   });
   await begin(page);
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
+  await sendReply(page);
   await flush(page);
-  await page.reload();
-  const status = page.locator('[data-inbox-send-state="attention"]').first();
-  await expect(status).toBeVisible();
-  await expect(
-    status.getByRole("textbox", { name: "Saved response" }),
-  ).toHaveValue(TEXT);
-  await expect(status.getByRole("button", { name: "Copy text" })).toBeVisible();
-  await status.getByRole("button", { name: "Edit response" }).click();
-  await expect(
-    page.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(TEXT);
+  const failed = page.locator(`${ROW} [data-decision-failed]`);
+  await expect(failed).toBeVisible();
+  await expect(failed.getByRole("button", { name: "Retry" })).toBeVisible();
+  await failed.getByRole("button", { name: "Edit" }).click();
+  await expect(page.locator(`${ROW} [data-decision-reply]`)).toHaveValue(TEXT);
   expect(attempts).toBe(1);
 });
 
@@ -214,30 +201,23 @@ test("IndexedDB denial uses the journal and total storage failure prevents sendi
   });
   await begin(page);
   await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(TEXT);
+  const reply = page.locator(`${ROW} [data-decision-reply]`);
+  await expect(reply).toHaveValue(TEXT);
   await page.evaluate(() => {
     Storage.prototype.setItem = () => {
       throw new Error("quota");
     };
   });
-  await page
-    .getByRole("textbox", { name: "Your response", exact: true })
-    .fill("Keep this additional text.");
+  await reply.fill("Keep this additional text.");
   await expect(page.locator("[data-local-save-warning]")).toBeVisible();
   await page
     .locator("[data-local-save-warning]")
     .getByRole("button", { name: "Dismiss" })
     .click();
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
+  await sendReply(page);
   await flush(page);
-  await expect(
-    page.getByRole("textbox", { name: "Saved response" }).first(),
-  ).toHaveValue("Keep this additional text.");
   expect(attempts).toBe(0);
+  await expect(reply).toHaveValue("Keep this additional text.");
 });
 
 test("principal switches clear other tabs and fence a late failed send", async ({
@@ -255,21 +235,15 @@ test("principal switches clear other tabs and fence a late failed send", async (
   await begin(page);
   const other = await context.newPage();
   await other.goto(URL);
-  await expect(
-    other.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(TEXT);
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
+  await expect(other.locator(`${ROW} [data-decision-reply]`)).toHaveValue(TEXT);
+  await sendReply(page);
   const flight = flush(page);
   await expect.poll(() => attempts).toBe(1);
   await page.evaluate(async () => {
     const actors = await import("/src/lib/actorSession.js");
     actors.chooseActor("actor-other-reader");
   });
-  await expect(
-    other.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue("");
+  await expect(other.locator(`${ROW} [data-decision-reply]`)).toHaveValue("");
   release();
   await flight;
   expect(await records(other)).toEqual([]);
@@ -277,78 +251,24 @@ test("principal switches clear other tabs and fence a late failed send", async (
   await expect(other.locator("[data-unsent-indicator]")).toHaveCount(0);
 });
 
-test("all delivery states are reviewable", async ({
+test("a proposal tap is persisted before it is sent and reuses its key", async ({
   page,
   context,
-}, testInfo) => {
-  let attempts = 0;
+}) => {
+  const bodies = [];
   await setup(context, (route) => {
-    attempts += 1;
-    if (attempts === 1) return json(route, { upstream: "cloudflare" }, 524);
-    if (attempts === 2)
-      return json(route, { error: { code: "conflict" } }, 409);
-    return json(route, { event: { id: "response-one" } }, 201);
+    bodies.push(route.request().postDataJSON());
+    return bodies.length === 1
+      ? json(route, { error: { code: "upstream_timeout" } }, 524)
+      : json(route, { event: { id: "response-one" } }, 201);
   });
-  await begin(page);
-  await page.clock.install();
-  await page.clock.pauseAt(new Date());
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
-  await page.clock.runFor(10);
-  await expect(page.locator("[data-unsent-indicator]")).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          new Promise((resolve, reject) => {
-            const opening = indexedDB.open("anx-local-work-v1", 1);
-            opening.onerror = () => reject(opening.error);
-            opening.onsuccess = () => {
-              const db = opening.result;
-              const read = db
-                .transaction("work", "readonly")
-                .objectStore("work")
-                .getAll();
-              read.onsuccess = () => {
-                db.close();
-                resolve(
-                  read.result.filter(
-                    (record) => record.kind === "inbox-send" && !record.deleted,
-                  ).length,
-                );
-              };
-              read.onerror = () => reject(read.error);
-            };
-          }),
-      ),
-    )
-    .toBe(1);
-  await page.screenshot({
-    path: testInfo.outputPath("pending.png"),
-    fullPage: true,
-  });
+  await page.goto(LIST);
+  await page.locator(`${ROW} [data-decision-proposal="1"]`).click();
   await flush(page);
-  await page.clock.runFor(10);
-  await expect(
-    page.locator('[data-inbox-send-state="retrying"]').first(),
-  ).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath("retrying.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Retry send" }).first().click();
-  await expect(
-    page.locator('[data-inbox-send-state="attention"]').first(),
-  ).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath("needs-attention.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Retry send" }).first().click();
-  await expect(page.locator('[data-inbox-toast="sent"]')).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath("sent.png"),
-    fullPage: true,
-  });
+  await expect.poll(() => bodies.length).toBe(1);
+  await page.reload();
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(bodies[0]).toMatchObject({ response_text: "Use the Monday window." });
+  await expect.poll(async () => (await records(page)).length).toBe(0);
 });

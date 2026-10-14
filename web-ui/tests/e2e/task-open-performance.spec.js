@@ -25,7 +25,7 @@ import { nextPaint } from "../helpers/pageReady.js";
  */
 
 const ROOT = "/o/local/w/local";
-const TASKS = `${ROOT}/tasks`;
+const TASKS = `${ROOT}/initiatives`;
 
 /**
  * One simulated round trip. Every endpoint costs exactly this.
@@ -305,7 +305,7 @@ test("opening a task card costs one round trip, not four", async ({
    * seconds on a cold hit and is not what this measures — it does not exist in
    * a built bundle, and it would swamp the figure either way.
    */
-  await page.goto(`${ROOT}/tasks/${encodeURIComponent(OTHER.ref)}`);
+  await page.goto(`${ROOT}/initiatives/${encodeURIComponent(OTHER.ref)}`);
   await expect(page.getByRole("heading", { name: CARD.title })).toBeVisible({
     timeout: 60_000,
   });
@@ -313,7 +313,7 @@ test("opening a task card costs one round trip, not four", async ({
   await page.goto(TASKS);
   const row = page.locator('[data-work-ref="card:tune-combat"] a').first();
   await expect(row.first()).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Loading tasks…")).toHaveCount(0);
+  await expect(page.getByText("Loading initiatives…")).toHaveCount(0);
 
   const navBefore = calls.length;
   const callMark = calls.length;
@@ -438,7 +438,7 @@ test("pointing at a row reads the card before the click", async ({ page }) => {
   await page.goto(TASKS);
   const row = page.locator('[data-work-ref="card:tune-combat"] a').first();
   await expect(row).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Loading tasks…")).toHaveCount(0);
+  await expect(page.getByText("Loading initiatives…")).toHaveCount(0);
 
   const before = calls.length;
   await row.hover();
