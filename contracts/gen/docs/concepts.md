@@ -123,13 +123,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `64`
+- Commands: `65`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
   - `boards.cards.batch_add`
   - `boards.cards.get`
   - `boards.cards.list`
+  - `brief.get`
   - `cards.archive`
   - `cards.create`
   - `cards.get`
@@ -323,8 +324,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `home`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
+  - `brief.get`
   - `home.read`
   - `home.unread`
   - `overview.changes`
@@ -354,7 +356,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `20`
+- Commands: `21`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -367,6 +369,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `asks.get`
   - `asks.stream`
   - `asks.subscribe`
+  - `brief.get`
   - `deliveries.claim`
   - `deliveries.list`
   - `deliveries.receipt`

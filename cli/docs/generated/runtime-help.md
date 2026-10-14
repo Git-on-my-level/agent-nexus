@@ -308,12 +308,14 @@ anx ask "Accept merge at 40a2b0f?" --body-file ask.md --recommend "Accept"
 Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
 anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
 ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
+Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
 Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
+Stability: stable
 ```
 
 ## `onboarding`
@@ -327,10 +329,10 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 
 1. Enroll this machine once per workspace with anx host enroll; a human or granted auth-admin agent approves it.
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
-3. Run anx orient. Confirm your handle, host, assigned work and next actions.
-4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
-5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
-6. Run anx work done --evidence <url|ref> when the card is complete.
+3. Run anx orient. Confirm your handle, host, answers, initiatives and the next command.
+4. Run anx context card:<slug>, then anx note card:<slug> "Progress" --next <when> "<what>" as you go.
+5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" --by <when> and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
+6. Run anx done card:<slug> --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
 Install the bundled skill: anx install skill --path ./SKILL.md
@@ -454,7 +456,7 @@ Executive workspace
 - For source ingestion through an external adapter, route linked source evidence to existing initiatives. Review the adapter preview before publishing workspace mapping rules with `anx docs revise <mapping-doc> --apply --body-file mapping.json`. Keep unmatched items visible for deliberate triage. Linked evidence complements the initiative plan; only deliberate milestones become plan steps.
 - Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
 - For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; The default `anx report init` contains live asks, initiatives and activity. Prefer live-cards for filtered work and live-timeline for adapter-fed events. File missing sync work instead of a manual status panel. Hand-write only unavoidable narrative, always with author, authored_at and review_by; never paste live numbers into it. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
-- Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
+- Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx done <card> --evidence event:<response_event_id>`.
 - Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
 
 
@@ -475,13 +477,13 @@ Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a fu
 
 Daily loop
 
-1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.
-2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
+1. Run `anx orient` to see your identity, answers for you, asks waiting on a human, your initiatives against their promises, and the next command.
+2. Read `anx context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --body-file ask.md --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
 6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
-7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
+7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
 
 Runs and output
@@ -828,6 +830,14 @@ Global flags:
 One bridge per enrolled host for derived-agent wake routing.
 
 ```text
+Deliver answers to this host (agent bridge)
+
+  anx bridge install [--as <name>]           install the per-host answer bridge service
+  anx bridge start|stop                      start or stop the bridge service
+  anx bridge status                          show bridge state
+  anx bridge doctor                          diagnose delivery for this host
+  anx bridge run                             consume answer wakes in the foreground
+
 Bridge: one process per enrolled host
 
 anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]
@@ -927,6 +937,15 @@ Tip: `anx help <command path>` for full command-level generated details.
 Declare and administer scoped host-local live data sources
 
 ```text
+Declare host-local live data sources (adapters and series)
+
+  anx adapters declare --body-file <path|->  declare an adapter and its allowed series
+  anx adapters list                          list declared sources and grant state
+  anx adapters token <name>                  exchange owner identity for a push-only token
+  anx adapters revoke <name>                 revoke a grant immediately; keep observations
+  anx adapters delete <name>                 delete a source and its series history
+  anx series push <name> <value> [--adapter <name>]  push one point (loop tier)
+
 Generated Help: adapters
 
 Commands:
@@ -969,7 +988,7 @@ Tip: `anx help <command path>` for full command-level generated details.
 Query commitments, evidence, freshness and refresh state
 
 ```text
-Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.
+Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|->; anx work list. Progress and completion are loop verbs: anx note <card> "<text>" [--next <when> "<what>"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.
 ```
 
 ## `pm`
@@ -977,6 +996,14 @@ Daily work: anx work start [card]; anx work note <text> [card]; anx work block <
 Read and operate durable PM conversations, decisions and action receipts
 
 ```text
+Install and run the workspace PM
+
+  anx --as pm pm install [--runner <runner>] install the local PM runner (interactive wizard on a terminal)
+  anx pm status                              show PM connection and runner state
+  anx pm serve                               run the PM turn loop in the foreground
+  anx pm channels doctor                     check channel bindings
+  anx pm uninstall                           remove the local PM runner
+
 Local Help: pm
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
@@ -4923,7 +4950,6 @@ Inputs:
   - body `actor_id` (string)
   - body `blockers` (list<string>)
   - body `board_ref` (string)
-  - body `dark_after` (string)
   - body `definition_of_done` (list<string>)
   - body `document_ref` (string)
   - body `due_at` (string)
@@ -5073,7 +5099,6 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `patch.blockers` (list<string>)
-  - body `patch.dark_after` (string)
   - body `patch.due_at` (string)
   - body `patch.executions` (list<object>)
   - body `patch.labels` (list<string>)
@@ -5815,7 +5840,7 @@ Generated Help: series push
 - CLI path: `series push`
 - HTTP: `POST /series/{name}/points`
 - Side effect class: `remote_coordination_write`
-- Stability: `beta`
+- Stability: `stable`
 - Input mode: `flags`
 - Why: Push one declared series point.
 - Output: Returns JSON with provenance and explicit freshness.
@@ -5867,6 +5892,7 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx series push ... ; anx --json series push ... ; anx series push ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+Stability: stable
 ```
 
 ## `adapters declare`

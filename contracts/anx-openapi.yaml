@@ -454,7 +454,7 @@ paths:
       x-anx-concepts: [documents]
       x-anx-surface: canonical
       x-anx-agent-notes: Explicit declared push source; core never fetches external data.
-      x-anx-stability: beta
+      x-anx-stability: stable
       parameters:
       - name: name
         in: path
@@ -902,7 +902,7 @@ paths:
                 $ref: '#/components/schemas/PMDecisionListResponse'
     post:
       operationId: pmDecisionsCreate
-      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, dark_after. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
+      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
       summary: Propose a scoped PM decision
       tags:
       - pm
@@ -1732,7 +1732,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
-      description: For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, dark_after. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
+      description: For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -4648,7 +4648,7 @@ paths:
       x-anx-why: Read live initiative steps, progress and health.
       x-anx-input-mode: flags
       x-anx-concepts: [cards, read]
-      x-anx-stability: beta
+      x-anx-stability: stable
       parameters:
         - $ref: '#/components/parameters/CardID'
       responses:
@@ -4672,7 +4672,7 @@ paths:
       x-anx-why: Add linked steps rather than writing progress prose. Never select a view.
       x-anx-input-mode: json-body
       x-anx-concepts: [cards, write]
-      x-anx-stability: beta
+      x-anx-stability: stable
       parameters:
         - $ref: '#/components/parameters/CardID'
       requestBody:
@@ -5244,6 +5244,35 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /brief:
+    get:
+      operationId: getBrief
+      summary: Read the caller's brief.v1 for this workspace
+      description: >
+        Decisions waiting on the caller, initiatives against their promises, the caller's own open
+        asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: brief.get
+      x-anx-agent-notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
+      x-anx-cli-path: orient
+      x-anx-why: One brief for the human surfaces and the agent orient loop.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns the bare brief.v1 object."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [home, inbox, cards]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: The caller's brief.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brief'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /overview:
     get:
       operationId: getOverview
@@ -5251,7 +5280,7 @@ paths:
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: overview.get
-      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.
+      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.
       x-anx-cli-path: overview
       x-anx-why: Read the same active-work Overview projection used by the web UI.
       x-anx-input-mode: none
@@ -10414,14 +10443,14 @@ components:
 
     WorkSummary:
       type: object
-      description: Computed card presentation, independent of board role. Planless cards use workflow phase with blocked, overdue (at_risk), or inactivity (stale) overrides; no_plan is a hint and never a status. Planned cards retain plan health. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
+      description: Computed card presentation, independent of board role. status.state is the card's promise state (past_promise, moving, no_promise, done), the same value plan_health.state carries; label and reason are computed from it. no_plan is a hint and never a status. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
       required: [status]
       properties:
         status:
           type: object
           required: [state, label, reason]
           properties:
-            state: {type: string}
+            state: {type: string, enum: [past_promise, moving, no_promise, done]}
             label: {type: string}
             reason: {type: string}
             since: {type: string, nullable: true, format: date-time}
@@ -10429,13 +10458,6 @@ components:
           type: array
           description: Secondary non-status facts. no_plan means there are no plan steps; the client decides whether to show it.
           items: {type: string}
-        set_status:
-          type: object
-          description: Stored phase, present only when it disagrees with computed health.
-          required: [state, label]
-          properties:
-            state: {type: string}
-            label: {type: string}
         progress:
           type: object
           required: [done, total, unit]
@@ -10496,9 +10518,6 @@ components:
           type: string
         wake_condition: &id006
           type: string
-        dark_after:
-          type: string
-          description: Duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty clears; default 168h.
         start_at: &id007
           type: string
         due_at: &id008
@@ -10710,10 +10729,6 @@ components:
         next_actor: *id004
         next_action: *id005
         wake_condition: *id006
-        dark_after:
-          type: string
-          nullable: true
-          description: Duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty clears; default 168h.
         start_at: *id007
         due_at: *id008
         blockers: *id009
@@ -10753,10 +10768,6 @@ components:
             next_actor: *id004
             next_action: *id005
             wake_condition: *id006
-            dark_after:
-              type: string
-              nullable: true
-              description: Duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty clears; default 168h.
             start_at: *id007
             due_at: *id008
             blockers: *id009
@@ -11250,17 +11261,19 @@ components:
         critical_path: {type: array, items: {type: string}}
         next_steps: {type: array, items: {type: string}}
         shape: {type: string, enum: [chain, dag, lanes]}
-        health: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done, cancelled], description: Legacy projection; richer states are in plan_health.state.}
-        health_state: {type: string, enum: [no_plan, stale, blocked, at_risk, dark, on_track, done, cancelled]}
         last_movement_at: {type: string, format: date-time}
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "Computed on read. Precedence is no_plan (recent absent or empty plan; stale once inactive for the threshold), done (all steps done), blocked (any unfinished blocked step), at_risk (card or unfinished step due within 24h or overdue), stale (no card/plan/step activity for 72h), dark (active only — stored phase in progress or in review, and not archived — otherwise on_track, and the next dated signal — earliest of open step dues, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition — lies strictly beyond the dark horizon or does not exist), on_track. The horizon defaults to 168h, overridden by ANX_PLAN_DARK_AFTER and per card by the dark_after annotation. ANX_PLAN_STALLED_AFTER overrides the workspace service threshold. since is the condition's reproducible anchor, not a stored transition timestamp: activity for done/blocked/on_track, due minus 24h for at_risk, last activity plus threshold for stale, the next dated signal for dark (when the card stops being dark; null when it has no dated signal at all), creation for no_plan; null if unavailable."
+      description: "Computed on read from one clock, promise versus evidence (anx-schema promises). The counted promise is the earliest unmet at among open plan-step due dates, the latest note next per author, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition. Resets are a note carrying resolved evidence, a plan-step state change (a linked step resource moving, or a plan edit) and a changed source observation; last_evidence_at is the newest reset. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (open, nothing promised). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
       properties:
-        state: {type: string, enum: [no_plan, stale, blocked, at_risk, dark, on_track, done, cancelled]}
+        state: {type: string, enum: [past_promise, moving, no_promise, done]}
         reason: {type: string}
         since: {type: string, format: date-time, nullable: true}
+        promise: { $ref: '#/components/schemas/BriefPromise' }
+        past_promise_for_seconds: {type: integer, minimum: 0, description: now minus promise.at; present only for past_promise. Excluded from stream change detection.}
+        promise_moves: {type: integer, minimum: 0, description: Moves of a note promise since the last reset; omitted when zero.}
+        last_evidence_at: {type: string, format: date-time, description: Newest reset event; omitted when none.}
     PossiblyMoot:
       type: object
       required: [flagged, sources]
@@ -11494,15 +11507,11 @@ components:
           type: string
           format: date-time
           nullable: true
-        stale: { type: boolean }
-        risk_state:
-          type: string
-          nullable: true
         due_at:
           type: string
           format: date-time
           nullable: true
-      required: [decision_request_count, decision_count, recommendation_count, document_count, inbox_count, latest_activity_at, stale, risk_state]
+      required: [decision_request_count, decision_count, recommendation_count, document_count, inbox_count, latest_activity_at]
 
     BoardWorkspaceCard:
       type: object
@@ -11533,10 +11542,6 @@ components:
         kind:
           type: string
           description: Open classifier; v1 known values are ask, review, escalate and report_review. report_review is a nonactionable author-only deadline reminder.
-        is_stale: {type: boolean, description: Computed for open attention requests from linked card updated_at using the ask delivery stale threshold (default seven days). False for non-card or unavailable subjects. Staleness does not close the ask; durable response or withdrawal does.}
-        stale_at: {type: string, format: date-time, description: Subject inactivity deadline; present for an available linked card even before it becomes stale.}
-        stale_reason: {type: string, enum: [subject_inactive], description: Present only when is_stale is true.}
-        stale_since: {type: string, format: date-time, description: Linked card updated_at plus the configured ask delivery stale threshold; present only when is_stale is true.}
         response_proposals:
           type: array
           description: >
@@ -12256,16 +12261,12 @@ components:
         reason: {type: string, description: source_owned means source phase was preserved.}
     AskOutcome:
       type: object
-      required: [ask_id, status, subject_ref, is_stale, delivery]
+      required: [ask_id, status, subject_ref, delivery]
       properties:
         ask_id: {type: string}
         access_request_ref: {type: string, description: Set when the ask is the caller's own access request, or a human is reading that request's event. Absent for ordinary asks.}
         status: {type: string, enum: [open, answered, needs_context, withdrawn, expired]}
         subject_ref: {type: string}
-        is_stale: {type: boolean}
-        stale_at: {type: string, format: date-time, description: Subject inactivity deadline; present for an available linked card even before it becomes stale.}
-        stale_reason: {type: string, enum: [subject_inactive]}
-        stale_since: {type: string, format: date-time}
         response: {type: object, additionalProperties: true, nullable: true}
         task_outcome:
           type: object
@@ -13148,6 +13149,122 @@ components:
             status: { type: string, enum: [ok, unavailable] }
             message: { type: string }
             items: { type: array, items: { type: object, additionalProperties: true } }
+    Brief:
+      type: object
+      required: [schema, generated_at, principal, decisions, initiatives, your_asks, answered_for_you, truncated]
+      description: brief.v1. See anx-schema.yaml `brief` and `promises` for ordering and derivation rules.
+      properties:
+        schema: { type: string, enum: [brief.v1] }
+        generated_at: { type: string, format: date-time }
+        principal: { $ref: '#/components/schemas/BriefPrincipal' }
+        decisions: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
+        initiatives: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefInitiative' } }
+        your_asks: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
+        answered_for_you: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefAnswered' } }
+        truncated:
+          type: object
+          required: [decisions, initiatives, your_asks, answered_for_you]
+          properties:
+            decisions: { type: boolean }
+            initiatives: { type: boolean }
+            your_asks: { type: boolean }
+            answered_for_you: { type: boolean }
+    BriefPrincipal:
+      type: object
+      required: [id, display]
+      properties:
+        id: { type: string }
+        display: { type: string }
+        kind: { type: string, enum: [human, agent, service] }
+    BriefRefTitle:
+      type: object
+      required: [ref]
+      properties:
+        ref: { type: string }
+        title: { type: string }
+    BriefDecision:
+      type: object
+      required: [ref, inbox_item_id, kind, title, requested_by, created_at, age_seconds, decide_by, overdue_for_seconds, blocks, blocks_count, proposals]
+      properties:
+        ref: { type: string, description: "inbox:<id>" }
+        inbox_item_id: { type: string }
+        kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
+        title: { type: string }
+        body: { type: string }
+        requested_by: { $ref: '#/components/schemas/BriefPrincipal' }
+        subject: { $ref: '#/components/schemas/BriefRefTitle' }
+        created_at: { type: string, format: date-time }
+        age_seconds: { type: integer }
+        decide_by: { type: string, format: date-time, nullable: true }
+        overdue_for_seconds: { type: integer, nullable: true, description: "now - decide_by when positive, 0 before decide_by, null without decide_by." }
+        blocks: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/BriefRefTitle' }, description: Open blocked refs the reader can see. Terminal refs clear automatically. }
+        blocks_count: { type: integer }
+        priority: { type: string }
+        proposals: { type: array, maxItems: 6, items: { type: string }, description: First is the recommended response. }
+        pm_decision:
+          type: object
+          description: Present on a PM decision record awaiting this human; answer it through the PM decision answer route with this revision.
+          required: [id, revision]
+          properties:
+            id: { type: string }
+            revision: { type: integer }
+        curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts." }
+    BriefPromise:
+      type: object
+      required: [at, what, source]
+      properties:
+        at: { type: string, format: date-time }
+        what: { type: string, maxLength: 160 }
+        source: { type: string, enum: [note, plan_step, due_at, wake_condition] }
+        source_ref: { type: string }
+        author: { $ref: '#/components/schemas/BriefPrincipal' }
+    BriefNote:
+      type: object
+      required: [text, author, at]
+      properties:
+        text: { type: string }
+        author: { $ref: '#/components/schemas/BriefPrincipal' }
+        at: { type: string, format: date-time }
+    BriefInitiative:
+      type: object
+      required: [ref, title, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot]
+      properties:
+        ref: { type: string, description: "card:<handle-or-id>" }
+        title: { type: string }
+        state: { type: string, enum: [past_promise, moving, no_promise, done] }
+        placement: { type: string, enum: [backlog, ready, in_progress, review, done] }
+        promise: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefPromise' }] }
+        past_promise_for_seconds: { type: integer, nullable: true }
+        promise_moves: { type: integer }
+        last_evidence_at: { type: string, format: date-time, nullable: true }
+        progress:
+          type: object
+          nullable: true
+          required: [done, total]
+          properties:
+            done: { type: integer }
+            total: { type: integer }
+        blocked_count: { type: integer, description: Open asks and blocks refs holding this initiative. }
+        waiting_on_you_count: { type: integer, description: Open decisions addressed to the reader about this initiative. }
+        note: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefNote' }] }
+        possibly_moot:
+          type: object
+          required: [flagged]
+          properties:
+            flagged: { type: boolean }
+            reason: { type: string }
+    BriefAnswered:
+      type: object
+      required: [ref, inbox_item_id, title, answer, answered_at, answered_by, followed_recommendation]
+      properties:
+        ref: { type: string }
+        inbox_item_id: { type: string }
+        title: { type: string }
+        answer: { type: string }
+        outcome: { type: string }
+        answered_at: { type: string, format: date-time }
+        answered_by: { $ref: '#/components/schemas/BriefPrincipal' }
+        followed_recommendation: { type: boolean }
     OverviewBrief:
       type: object
       required: [status, generated_at, decisions, since_last_look, at_risk, machine, initiatives]
@@ -13252,9 +13369,8 @@ components:
       type: object
       required: [status, count, items, more]
       description: >
-        Initiatives and work that are off track, worst first (blocked, at_risk, stale) then longest-standing. Every row carries
-        the computed reason for its state — plan health's reason, or recorded blockers for a card in the blocked column. A row
-        with no computed reason is omitted rather than guessed at.
+        Initiatives and work past their promise, longest past first. Every row carries the computed promise reason. A row with
+        no computed reason is omitted rather than guessed at.
       properties:
         status: { type: string, enum: [ok] }
         count: { type: integer }
@@ -13269,7 +13385,7 @@ components:
               ref: { type: string }
               title: { type: string }
               href: { type: string }
-              state: { type: string, enum: [blocked, at_risk, stale] }
+              state: { type: string, enum: [past_promise] }
               reason: { type: string }
               since: { type: string, format: date-time }
               progress:
@@ -13315,9 +13431,8 @@ components:
       type: object
       required: [status, count, items, more, by_state, href]
       description: >
-        Every initiative's honest state, worst first in the shared health order (blocked, at_risk, stale, on_track, done,
-        no_plan). by_state counts all of them by state, so an initiative with no plan is visible as a gap rather than reported
-        as on track.
+        Every initiative's promise state, in the shared order (past_promise, no_promise, moving, done). by_state counts all
+        of them by state, so an initiative with no promise is visible as a gap rather than reported as moving.
       properties:
         status: { type: string, enum: [ok] }
         count: { type: integer }
@@ -13334,7 +13449,7 @@ components:
               ref: { type: string }
               title: { type: string }
               href: { type: string }
-              state: { type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled] }
+              state: { type: string, enum: [past_promise, moving, no_promise, done] }
               reason: { type: string }
               phase: { type: string }
               next_step: { type: string }
@@ -13359,7 +13474,7 @@ components:
 
     OverviewInitiative:
       type: object
-      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, plan_step_digest, health, geometry]
+      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, plan_step_digest, plan_health, geometry]
       properties:
         plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
         plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
@@ -13368,7 +13483,6 @@ components:
         plan_step_digest: { $ref: '#/components/schemas/PlanStepDigest' }
         status_mismatch: {type: boolean}
         possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
-        health: { $ref: '#/components/schemas/InitiativeHealth' }
         geometry: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativeGeometry' }]}
         ref: { type: string }
         title: { type: string }
@@ -13388,13 +13502,6 @@ components:
           properties:
             done: { type: integer }
             total: { type: integer }
-    InitiativeHealth:
-      type: object
-      required: [status, reason]
-      properties:
-        status: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done, cancelled], description: Legacy projection for older clients; use plan_health.state for detailed health.}
-        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]}
-        reason: {type: string}
     InitiativeGeometry:
       type: object
       required: [shape, nodes, total_nodes, collapsed_nodes]
@@ -13428,8 +13535,7 @@ components:
             type: object
             required: [kind, ref, title]
             properties:
-              kind: {type: string, enum: [step_completed, initiative_stalled, initiative_stale, initiative_blocked, ask_answered, decision_created], description: Legacy kind is emitted for v0.12.10 clients.}
-              kind_v2: {type: string, enum: [step_completed, initiative_stale, initiative_blocked, ask_answered, decision_created], description: Additive detailed vocabulary; stale transitions carry initiative_stale here and initiative_stalled in kind.}
+              kind: {type: string, enum: [step_completed, initiative_past_promise, ask_answered, decision_created]}
               ref: {type: string}
               title: {type: string}
               step_id: {type: string}

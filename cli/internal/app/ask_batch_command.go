@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"agent-nexus-cli/internal/config"
@@ -41,6 +42,10 @@ type askBatchEntry struct {
 	Supersedes   string            `json:"supersedes"`
 	Delivery     string            `json:"delivery"`
 	OnAnswer     string            `json:"on_answer"`
+	By           string            `json:"by"`
+	Blocks       []string          `json:"blocks"`
+	Priority     string            `json:"priority"`
+	decision     askDecision
 
 	proposals      []any               `json:"-"`
 	decided        askDeliveryDecision `json:"-"`
@@ -251,6 +256,18 @@ func decodeAskBatchEntry(raw any, index int) (askBatchEntry, error) {
 			entry.Evidence = append(entry.Evidence, askEvidenceLink{Label: anyString(link["label"]), URL: anyString(link["url"])})
 		}
 	}
+	entry.By = strings.TrimSpace(anyString(object["by"]))
+	entry.Priority = strings.TrimSpace(anyString(object["priority"]))
+	if rawBlocks, ok := object["blocks"].([]any); ok {
+		for _, value := range rawBlocks {
+			entry.Blocks = append(entry.Blocks, anyString(value))
+		}
+	}
+	decision, err := parseAskDecisionFlags(trackedString{value: entry.By, set: entry.By != ""}, entry.Blocks, trackedString{value: entry.Priority, set: entry.Priority != ""}, time.Now())
+	if err != nil {
+		return invalid(err.Error())
+	}
+	entry.decision = decision
 	return entry, nil
 }
 
@@ -390,6 +407,7 @@ func (a *App) buildAskBatchMember(entry *askBatchEntry) map[string]any {
 	if entry.CoverageHint != "" {
 		payload["coverage_hint"] = entry.CoverageHint
 	}
+	entry.decision.apply(payload)
 	if entry.Supersedes != "" {
 		payload["supersedes"] = entry.Supersedes
 		refs = uniqueStringsInOrder(append(refs, entry.Supersedes))

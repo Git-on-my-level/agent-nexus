@@ -701,6 +701,18 @@ reference_conventions:
 
     message_posted:
       thread_id: "required as thread_ref when the message belongs to a backing thread"
+      optional_payload:
+        next:
+          description: >
+            The author's promise for the next signal on the subject: {at, what}. `at` uses
+            the review_by grammar (UTC date, zoned RFC3339 timestamp or positive s/m/h/d
+            duration resolved from the event ts); `what` is free text of at most 160
+            characters and is never validated. A missing or far promise never rejects a write.
+        evidence_refs:
+          description: >
+            Typed refs that evidence progress. A note resets the promise clock only when at
+            least one evidence ref resolves (bounded check, at most 8 refs). A note that only
+            moves `next` records a promise move.
 
     document_created:
       refs_must_include: ["document:<document_handle>", "document_revision:<revision_handle>", "artifact:<artifact_handle>"]
@@ -746,6 +758,18 @@ reference_conventions:
     human_attention_requested:
       refs_must_include: ["thread:<thread_id>"]
       payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id", "response_proposals"]
+      optional_payload:
+        by:
+          description: >
+            The requester's deadline for the human (review_by grammar, resolved from the
+            request event ts). Core derives decide_by and overdue_for from it. It is not a
+            promise by the agent.
+        blocks:
+          description: >
+            Typed refs (at most 20) this decision blocks. A blocks ref that reaches a
+            terminal state stops counting automatically; readers only see refs they can read.
+        priority:
+          description: Optional agent-set badge (p0..p3 or critical/high/medium/low). A sort key after decide_by and blocks, never a deadline.
       authoring: >
         Reuse payload.title for a one-line decision (recommended maximum 100 Unicode
         characters; hard maximum 160 on new writes) and payload.body for Markdown
@@ -784,8 +808,6 @@ derived:
       document_count: { type: integer, required: true }
       inbox_count: { type: integer, required: true }
       latest_activity_at: { type: datetime, required: false }
-      stale: { type: boolean, required: true }
-      risk_state: { type: string, required: false }
       due_at: { type: datetime, required: false }
 
   projection_freshness:
@@ -800,10 +822,6 @@ derived:
     fields:
       id: { type: string, required: true }
       kind: { type: string, required: true, description: "Open classifier; v1 known values are ask, review, escalate and report_review. report_review is an author-only deadline reminder." }
-      is_stale: {type: boolean, required: false, description: Open card attention request whose subject updated_at is older than the ask delivery threshold (default seven days); false for unavailable or non-card subjects. Does not close the ask.}
-      stale_at: {type: datetime, required: false, description: Subject inactivity deadline; present for available card subjects even before they become stale.}
-      stale_reason: {type: string, required: false, description: subject_inactive when is_stale is true.}
-      stale_since: {type: datetime, required: false, description: Subject updated_at plus the ask delivery threshold; present only when stale.}
       response_proposals:
         type: "list<string>"
         required: true
@@ -921,8 +939,7 @@ work_tracking:
   observation_status: [reported, verified, uncertain, error]
   refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
-  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs, dark_after]
-  dark_after: {type: string, description: 'Optional duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty string or null clears; default 168h (7 days).'}
+  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
@@ -1117,18 +1134,16 @@ initiative_plan:
       due: {type: datetime, description: RFC3339 instant or YYYY-MM-DD date.}
       status: {type: string, values: [done, active, blocked, not_started], description: Fallback only when ref has no known workflow state.}
   computed:
-    fields: [steps, progress, critical_path, next_steps, shape, health, health_state, last_movement_at]
+    fields: [steps, progress, critical_path, next_steps, shape, last_movement_at]
     progress: {fields: [done, total]}
     shape: [chain, dag, lanes]
-    health: [on_track, stalled, blocked, no_plan, stale, at_risk, done]
     semantics:
       - A chain is a connected path (including an empty plan); lanes are multiple disconnected paths; all other graphs are dag.
       - Critical path maximizes unfinished steps through sink nodes; done steps have zero weight. Ties use lexicographic step ids.
-      - Detailed health uses one vocabulary across plan_state.health_state, plan_health.state and Overview health.state. Legacy health fields report every state they can name and rename only stale to stalled; an unrecognized state falls back to on_track. No steps is no_plan until the stale threshold; completed plans are done; any unfinished blocked step is blocked; open due dates within 24 hours are at_risk; inactivity beyond the threshold is stale; an active (in progress or in review) otherwise-on-track initiative whose next dated signal lies beyond the dark horizon or does not exist is dark; otherwise on_track.
+      - plan_state carries no health; plan_health.state is the one promise vocabulary (see promises).
       - Next steps are unfinished, unblocked steps whose dependencies are all done.
       - Known card/source workflow states override fallback status; context refs (docs/topics) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/in_review/active/review/open to active; other states map to not_started.
       - Source activity and meaningful progress reset recency; unchanged observation timestamps do not. Plan edits reset recency.
-      - Default stall threshold is 259200 seconds (72 hours), configurable with ANX_PLAN_STALLED_AFTER duration.
       - Plan writes require if_updated_at from cards get or plan show; edits and before/after plans are atomic card_updated events, visible in the card timeline.
       - Live initiatives keep the existing progress and needs array; a plan supplies computed progress, blocked step titles in needs, plan_state and health. Cards without plans keep the existing summary projection.
 
@@ -1192,12 +1207,12 @@ delivery:
 initiative_overview:
   max_initiatives: 2000
   geometry_max_nodes: 24
-  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, plan_step_digest, status_mismatch, possibly_moot, health, geometry]
+  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, plan_step_digest, status_mismatch, possibly_moot, geometry]
   semantics:
     - If any board has role initiatives, only its cards appear as initiatives. Other active cards remain in work. Without a designated board, Overview keeps the existing selection and returns initiatives.hint suggesting the role.
     - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.
-    - Planless initiatives return null plan_state and geometry, with no_plan health until the stale threshold and stale afterward. Summary progress is preserved.
-    - Health contains status (no_plan, stale, blocked, at_risk, on_track, done) and a reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
+    - Planless initiatives return null plan_state and geometry; plan_health still reads the promise state from the card due_at, wake_condition and notes. Summary progress is preserved.
+    - plan_health carries the promise state (past_promise, moving, no_promise, done) and a computed reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
     - Geometry uses dependency depth as layer, topological order with lexicographic ties, and at most 24 nodes. Edges only name included nodes; collapsed_nodes counts omitted nodes.
     - plan_step_digest answers what just finished, what is moving and what is next as three lists of at most 3 steps each with the remainder counted in more, from the same steps and referenced facts the read already loaded. completed lists steps a linked resource finished whose resource moved within window_hours (168), newest movement first; a step marked done inline, or linked to a resource whose state says nothing, has no completion time and is omitted rather than dated from a plan edit or a comment. current lists active and blocked steps and next lists ready unstarted steps, so one step never appears in both; both keep the topological order with lexicographic ties that geometry uses. Null without a plan. Overview initiatives only: card and work reads keep their existing plan fields.
     - Open initiatives are selected before closed history, newest update first; counts describe the visible bounded candidate set and truncated declares that additional candidates exist.
@@ -1215,9 +1230,9 @@ overview_brief:
     - decisions ranks needs_you by blocking open work (1000 per visible dependent), then overdue (600) or due within 48 hours (300), then priority (critical/p0 320, high/p1 200, medium/p2 80, low/p3 20), then a blocked phase (150), then age at a third of a point per hour capped at 30 days (240); ties break oldest first then by id. Work priorities p0-p3 and the word spellings fold to one scale. Age tops out below critical so a stale question cannot outrank a fresh p0. reason carries at most three computed clauses.
     - since_last_look groups changes against the previous visit baseline; first_visit distinguishes no baseline from no change. Groups are ordered and empty groups omitted. A completed-step row carries step_id, because two steps of one initiative share its ref.
     - newly_blocked counts transitions, not current state: the visit snapshot records each card's phase, and a card already blocked at the previous visit, or one whose previous phase is unknown, is reported as updated. Editing a blocked card is not a new blocker.
-    - at_risk reports only blocked, at_risk and stale rows with a computed reason, worst first then longest standing; a row without a computed reason is omitted. Dark is information about the future, not an alarm, and stays out of this section; the initiative's own card carries it.
+    - at_risk reports only past_promise rows with a computed reason, longest past first; a row without a computed reason is omitted.
     - machine reuses the roster's derived states and the three-way silence split: stuck requires an open run or a held card, so offline and never-enrolled identities are not alarms. finished_24h and agents_finished_24h come from visible cards closed inside throughput_hours and survive a roster read failure.
-    - initiatives orders by the shared health order and reports by_state counts for all of them, so no_plan is visible as a gap rather than reported as on track.
+    - initiatives orders by the shared promise order (past_promise, no_promise, moving, done) and reports by_state counts for all of them, so no_promise is visible as a gap rather than reported as moving.
 overview_changes:
   route: GET /overview/changes
   max_items: 100
@@ -1226,22 +1241,21 @@ overview_changes:
   semantics:
     - GET /overview includes since_you_last_looked computed against the previous visit, then atomically records the current visit timestamp and bounded state snapshot. The changes endpoint reads without advancing the baseline.
     - A first visit or unauthenticated dev read has null since and no changes; no anonymous shared baseline is stored.
-    - Steps completed and health transitions are net changes from previously visible plan step statuses and health; newly visible initiatives have no prior state and are not reported as transitions.
-    - Completed steps include now-closed initiatives. Newly blocked or stale health is reported once relative to the saved baseline, including time-only stale transitions.
+    - Steps completed and promise transitions are net changes from previously visible plan step statuses and promise state; newly visible initiatives have no prior state and are not reported as transitions.
+    - Completed steps include now-closed initiatives. An initiative newly past its promise is reported once relative to the saved baseline as initiative_past_promise, including time-only transitions.
     - Asks answered use canonical human_attention_responded events in (since, generated_at]; new decisions use permission-filtered PM records created in that interval.
     - Items expose only current readable refs and generic answer or decision labels, never private conversation text. Ref visibility is rechecked before publication.
     - Results are capped at 100; truncated covers candidate or output limits and bounded snapshots. Repeated digest reads do not change the baseline.
 
-initiative_plan_health:
-  fields: [state, reason, since]
-  states: [no_plan, stale, blocked, at_risk, dark, on_track, done, cancelled]
+plan_health:
+  fields: [state, reason, since, promise, past_promise_for_seconds, promise_moves, last_evidence_at]
+  states: [past_promise, moving, no_promise, done]
   semantics:
     - Added on card reads, lists, refs resolve, reports and initiative overview alongside existing plan_state and progress.
-    - Precedence is no_plan for recent absent/empty plans (stale after the inactivity threshold), done for all completed steps, blocked for any unfinished blocked step (including dependencies), at_risk for card/unfinished step due within 24 hours or overdue, stale after 72 hours without card/plan/step activity, dark for an active card — stored phase in progress or in review, and not archived — whose next dated signal lies further out than the dark horizon or does not exist (planless active cards read dark here too, replacing no_plan, so agents reading this field see the same thing the summary chip says), then on_track. Done, cancelled, blocked, backlog, ready and archived cards keep the states they already read and never darken.
-    - The next dated signal is the earliest of open (unfinished) plan step due dates, the effective card due_at, and the first RFC3339 instant or YYYY-MM-DD date contained in the wake_condition annotation (date-only resolves to midnight UTC; the first 1024 bytes are scanned). A past signal still counts, so an already-due wake is never dark.
-    - The dark horizon defaults to 168 hours (7 days), is overridden workspace-wide by ANX_PLAN_DARK_AFTER, and per card by the dark_after annotation (duration string; empty clears). A signal exactly at the horizon is not dark; only strictly beyond it is.
-    - ANX_PLAN_STALLED_AFTER overrides the workspace service stale threshold. Observing unchanged source state does not count as activity.
-    - since is a reproducible condition anchor, not a historical transition record. Uses last activity for done/blocked/on_track, earliest relevant due minus 24 hours for at_risk, last activity plus threshold for stale, the next dated signal for dark (the moment the card stops being dark), creation for no_plan; null when unknown, including for dark cards with no dated signal at all.
+    - The state is the promise fold (see promises) over open plan-step due dates, the effective card due_at, the first RFC3339 instant or YYYY-MM-DD date inside wake_condition (date-only resolves to midnight UTC; the first 1024 bytes are scanned) and note next fields. A done or cancelled card is done.
+    - Resets are a linked plan-step resource moving, a plan edit, a changed source observation and a note carrying resolved evidence. Card discussion without evidence is not a reset.
+    - There is no inactivity threshold and no per-card horizon. NoPromiseFallback (7 days) only orders no_promise rows by last evidence.
+    - since is promise.at for past_promise, last_evidence_at for moving and no_promise, and null for done or when unknown.
     - next_step contains id/title/ref of a ready unblocked unfinished step, preferring critical path then lexicographic id; unreadable linked resources are skipped. Null when none is ready.
     - status_mismatch is true only for backlog cards with completed plan steps. Computation never changes phase.
 
@@ -1274,15 +1288,12 @@ source_refs:
     - Omission preserves the list; an explicit array replaces it and an empty array clears it. Readers and ref resolution honor the card and board access scope.
     - Core consumes only structured annotations, source identities and observations. Adapter markdown is never parsed, and unchanged source polls are not meaningful activity.
 
-health_compatibility:
+plan_health_inputs:
   semantics:
-    - plan_health.state is the detailed vocabulary. Legacy plan_state.health and initiative health.status rename stale to stalled and otherwise emit the detailed state unchanged; only a state this core does not recognize falls back to on_track. Dark is unnamed in the legacy fields and reads on_track there, matching pre-dark behavior; the detailed fields are authoritative. A missing plan is never reported as on_track, because an unplanned initiative rendered green is how planless work stayed invisible. Old enum values remain readable and the legacy enum already admitted every pre-dark emitted value.
-    - Digest kind emits initiative_stalled for stale transitions; additive kind_v2 emits initiative_stale on the same item, avoiding duplicate notifications. Consumers accept both kinds.
-    - Effective due_at uses an explicitly present work annotation (including clearing) before cards.due_at. Activity uses the same maximum of meaningful source activity/progress, plan edits and discussion for every health read; unchanged polls are excluded.
+    - Effective due_at uses an explicitly present work annotation (including clearing) before cards.due_at. Unchanged source polls are not observations.
     - Aggregated plan refs resolve in batches of at most 200; source evidence uses an indexed, transactionally maintained projection and candidate pages of at most 200.
 
-# Compatibility: aliases is an exact-key alternate spelling of identifier_aliases;
-# detailed health also appears in plan_state.health_state and initiative health.state.
+# Compatibility: aliases is an exact-key alternate spelling of identifier_aliases.
 
 access_requests:
   grants: [auth-admin]
@@ -1321,9 +1332,53 @@ work_summary:
   semantics:
     - Supported card-bearing reads opt in with summary=1 to computed work_summary.status with state, label and reason. Default card collections preserve legacy shapes and complete results. Board roles select cards only.
     - Card and work write inputs retain their string summary. Card revision content remains prose. Default responses add no summary fields or pagination; summary=1 adds work_summary, aliases it at summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
-    - Planned cards use shared plan health. Planless cards use workflow phase (backlog, ready, in_progress, review, done or cancelled), overridden only by blocked, overdue (at_risk), inactivity beyond the threshold (stale), or an active card (in progress or in review) whose next dated signal lies beyond the dark horizon or does not exist (dark) — the same cards plan_health reads dark, so the chip and the field agree. no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context. set_status is included only when stored phase genuinely disagrees with the computed state.
+    - status is the card's promise state (past_promise, moving, no_promise, done), identical to plan_health.state, with a computed label and reason. Placement (the stored phase) is not a status. no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context.
     - Agent detail opts in with summary=1 to at most 50 recent-card candidates, selected through indexed assignment and current/recent-run refs before hydration and batch enrichment; cards_truncated marks the bounded preview and is always true for scoped readers so hidden candidate counts cannot be inferred.
     - Progress appears for a nonempty plan or explicit child relations; next and steps appear only for a plan. Owner, due, age, last_movement_at and external source appear only when known.
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
     - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.
     - Inbox stream identity uses canonical summary inputs, creation and oldest-ask timestamps. Elapsed age, oldest_age, rolling digest windows and timer-only health changes never change event IDs; underlying plan, progress, ownership, due, movement, source and attention changes do.
+
+promises:
+  description: >
+    One clock: promise versus evidence. A promise is a field on things agents already write,
+    never an object, table or status enum. Durations are computed at read time.
+  sources: [note, plan_step, due_at, wake_condition]
+  rules:
+    - "Which promise counts: a card's promise is the earliest unmet `at` among open plan-step due dates, the latest message_posted payload.next per principal on the card, the effective due_at, and the first date inside wake_condition."
+    - "Met: a promise is met when a reset event lands before its `at`. A met promise no longer counts."
+    - "Reset: only a note carrying a resolvable evidence ref, a plan-step state change, or a changed source observation resets the clock (last_evidence_at)."
+    - "Move: a note that changes the author's latest next.at without a resolving evidence ref records a move. promise_moves counts moves since the last reset."
+    - "Grammar: `at` reuses the review_by grammar; `what` is free text up to 160 characters."
+    - "Horizon: a promise beyond 2 days warns at write time and shows its distance; it is never a state."
+    - "Blocks: human_attention_requested payload.blocks refs that reach a terminal state clear automatically."
+    - "Fallback: an active initiative with no promise reads no_promise. The only duration fallback is ANX_NO_PROMISE_FALLBACK (default 7d), used solely to order no_promise rows by last evidence; it never creates a state."
+  derived_outputs: [past_promise_for, promise_moves, decide_by, overdue_for]
+  states:
+    past_promise: "The counted promise's `at` is in the past and no reset event landed since."
+    moving: "A counted promise exists and is still in the future."
+    no_promise: "An open initiative with no counted promise."
+    done: "The initiative is done or cancelled."
+
+brief:
+  schema: brief.v1
+  route: GET /brief
+  description: >
+    The principal's brief for this workspace: what needs their decision, how each initiative
+    stands against its promise, their own open asks, and asks answered for them. The same
+    object backs Decide, Watch and `anx orient --json`. Facts are materialized on write events;
+    durations (age, overdue_for, past_promise_for) are computed at read time. One workspace
+    only; aggregation across workspaces happens in a hosted shell, never in core.
+  sections: [decisions, initiatives, your_asks, answered_for_you]
+  section_limit: 50
+  decision_kinds: [ask, review, access, host, pm_proposal]
+  initiative_states: [past_promise, moving, no_promise, done]
+  placements: [backlog, ready, in_progress, review, done]
+  decision_order: "decide_by ascending (absent last), then blocks_count descending, then priority (critical/p0, high/p1, medium/p2, low/p3, absent), then created_at ascending, then ref."
+  initiative_order: "past_promise (longest past first), moving (soonest promise first), no_promise (oldest last evidence first), done (most recent first)."
+  rules:
+    - "Every count and ref is filtered by the reader's access; nothing reveals a withheld ref, title or value."
+    - "Reads are bounded: indexed lookups, at most section_limit rows per section, truncated flags when more exist."
+    - "decide_by is derived from human_attention_requested payload.by; overdue_for is now minus decide_by when positive, 0 before, null without decide_by."
+    - "followed_recommendation is true when the response text equals the first response proposal."
+

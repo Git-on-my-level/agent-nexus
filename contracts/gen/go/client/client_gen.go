@@ -839,6 +839,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"boards.archive", "boards.cards.batch_add", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.trash", "boards.unarchive"},
 	},
 	{
+		CommandID: "brief.get",
+		CLIPath:   "orient",
+		Group:     "orient",
+		Method:    "GET",
+		Path:      "/brief",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"home", "inbox", "cards"},
+	},
+	{
 		CommandID:  "cards.archive",
 		CLIPath:    "cards archive",
 		Group:      "cards",
@@ -1913,7 +1923,7 @@ var CommandRegistry = []CommandSpec{
 		Path:       "/cards/{card_id}/plan",
 		PathParams: []string{"card_id"},
 		InputMode:  "json-body",
-		Stability:  "beta",
+		Stability:  "stable",
 		Concepts:   []string{"cards", "write"},
 		Adjacent:   []string{"plan.show"},
 	},
@@ -1925,7 +1935,7 @@ var CommandRegistry = []CommandSpec{
 		Path:       "/cards/{card_id}/plan",
 		PathParams: []string{"card_id"},
 		InputMode:  "flags",
-		Stability:  "beta",
+		Stability:  "stable",
 		Concepts:   []string{"cards", "read"},
 		Adjacent:   []string{"plan.set"},
 	},
@@ -2406,7 +2416,7 @@ var CommandRegistry = []CommandSpec{
 		Path:       "/series/{name}/points",
 		PathParams: []string{"name"},
 		InputMode:  "flags",
-		Stability:  "beta",
+		Stability:  "stable",
 		Concepts:   []string{"documents"},
 		Adjacent:   []string{"series.list", "series.query", "series.show"},
 		Examples: []Example{
@@ -3211,6 +3221,10 @@ func (c *Client) BoardsUnarchive(ctx context.Context, pathParams map[string]stri
 
 func (c *Client) BoardsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "boards.workspace", pathParams, opts)
+}
+
+func (c *Client) BriefGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "brief.get", nil, opts)
 }
 
 func (c *Client) CardsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

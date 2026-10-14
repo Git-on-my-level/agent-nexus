@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `229`
+- Commands: `230`
 
 ## `actors.create`
 
@@ -873,6 +873,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `boards`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
+
+## `brief.get`
+
+- CLI path: `orient`
+- HTTP: `GET /brief`
+- Stability: `stable`
+- Surface: `projection`
+- Input mode: `none`
+- Why: One brief for the human surfaces and the agent orient loop.
+- Concepts: `home`, `inbox`, `cards`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns the bare brief.v1 object.
+- Agent notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
 
 ## `cards.archive`
 
@@ -1924,13 +1937,13 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `documents`, `cards`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns the workspace Overview projection.
-- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.
+- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.
 
 ## `plan.set`
 
 - CLI path: `plan set`
 - HTTP: `PUT /cards/{card_id}/plan`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `json-body`
 - Why: Add linked steps rather than writing progress prose. Never select a view.
@@ -1943,7 +1956,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `plan show`
 - HTTP: `GET /cards/{card_id}/plan`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `flags`
 - Why: Read live initiative steps, progress and health.
@@ -2487,7 +2500,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `series push`
 - HTTP: `POST /series/{name}/points`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `flags`
 - Why: Push one declared series point.

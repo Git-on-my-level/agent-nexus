@@ -641,6 +641,17 @@
   },
   {
     "method": "GET",
+    "path": "/brief",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "brief.v1 reads materialized facts with indexed, limited seeks; at most 50 rows per section.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
     "path": "/overview",
     "max_queries": 100,
     "max_rows": 1024,

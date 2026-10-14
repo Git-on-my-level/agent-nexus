@@ -241,7 +241,8 @@ func TestParticipantGuideUsesExplicitTaskTargets(t *testing.T) {
 		{"cards", "message", "card:example", "--body", "Blocked: reason and next step"},
 		{"ask", "Question", "--subject-ref", "card:example", "--recommend", "Preferred answer"},
 		{"work", "block", "Why", "card:example", "--ask", "--recommend", "Preferred answer"},
-		{"work", "done", "card:example", "--evidence", "https://example.test/receipt"},
+		{"done", "card:example", "--evidence", "https://example.test/receipt"},
+		{"note", "card:example", "Progress", "--next", "2d", "checkpoint", "--evidence", "https://example.test/pr/1"},
 	} {
 		if _, err := preflightConfigIndependentUsage(argv); err != nil {
 			t.Fatalf("guide command rejected: %v: %v", argv, err)
