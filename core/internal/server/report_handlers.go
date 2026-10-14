@@ -338,7 +338,7 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			if !summaryFormat {
 				ctx = primitives.WithLegacyCardPlans(ctx)
 			}
-			if err := store.EnrichCardPlans(ctx, work, planVisibility(reader.r, reader.opts), reader.now, planStalledAfter()); err != nil {
+			if err := store.EnrichCardPlans(ctx, work, planVisibility(reader.r, reader.opts), reader.now); err != nil {
 				return nil, false, err
 			}
 		}
@@ -385,12 +385,11 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 				}
 			}
 			if health, ok := row["plan_health"].(plans.Health); ok {
-				item["health"] = plans.LegacyHealth(health.State)
+				item["health"] = health.State
 			}
 			if state, ok := row["plan_state"].(plans.State); ok {
 				item["progress"] = state.Progress
 				item["plan_state"] = state
-				item["health"] = state.Health
 				blocked := map[string]bool{}
 				for _, step := range state.Steps {
 					if step.Status == "blocked" {

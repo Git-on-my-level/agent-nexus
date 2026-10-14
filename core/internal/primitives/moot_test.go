@@ -3,7 +3,6 @@ package primitives
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"agent-nexus-core/internal/plans"
 )
@@ -162,42 +161,5 @@ func TestCardPossiblyMootEligibility(t *testing.T) {
 	moot := cardPossiblyMoot(cardHealthInput{Phase: "ready", Related: []string{"https://example.test/pr/1"}}, nil, facts)
 	if !moot.Flagged || moot.Sources != 1 {
 		t.Fatal(moot)
-	}
-}
-
-func TestParseDarkAfter(t *testing.T) {
-	t.Parallel()
-	for raw, want := range map[string]time.Duration{
-		"":         0,
-		"   ":      0,
-		"168h":     168 * time.Hour,
-		"30m":      30 * time.Minute,
-		"7d":       7 * 24 * time.Hour,
-		"0.5d":     12 * time.Hour,
-		"-48h":     0,
-		"nonsense": 0,
-		"7":        0,
-		"3650d":    3650 * 24 * time.Hour,
-		"3651d":    0,
-		"-3d":      0,
-	} {
-		if got := parseDarkAfter(raw); got != want {
-			t.Fatalf("parseDarkAfter(%q)=%v want %v", raw, got, want)
-		}
-	}
-}
-
-func TestDarkAfterDefaultEnvOverride(t *testing.T) {
-	t.Setenv("ANX_PLAN_DARK_AFTER", "")
-	if got := DarkAfterDefault(); got != plans.DefaultDarkAfter {
-		t.Fatalf("default horizon: got %v want %v", got, plans.DefaultDarkAfter)
-	}
-	t.Setenv("ANX_PLAN_DARK_AFTER", "48h")
-	if got := DarkAfterDefault(); got != 48*time.Hour {
-		t.Fatalf("env horizon: got %v want 48h", got)
-	}
-	t.Setenv("ANX_PLAN_DARK_AFTER", "nonsense")
-	if got := DarkAfterDefault(); got != plans.DefaultDarkAfter {
-		t.Fatalf("invalid env must fall back: got %v", got)
 	}
 }

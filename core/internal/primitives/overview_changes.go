@@ -17,7 +17,6 @@ const maxOverviewSubjectRefs = 4000
 
 type OverviewChange struct {
 	Kind   string `json:"kind"`
-	KindV2 string `json:"kind_v2,omitempty"`
 	Ref    string `json:"ref"`
 	Title  string `json:"title"`
 	StepID string `json:"step_id,omitempty"`
@@ -41,10 +40,6 @@ func (d *OverviewChanges) Add(item OverviewChange) {
 		d.Truncated = true
 		return
 	}
-	if item.Kind == "initiative_stale" {
-		item.KindV2 = item.Kind
-		item.Kind = "initiative_stalled"
-	}
 	d.Items = append(d.Items, item)
 }
 
@@ -65,7 +60,7 @@ func overviewSnapshot(work []map[string]any) map[string]visitState {
 		// blocked from one that was already blocked and merely edited. A
 		// snapshot written by an older core has no phase, which reads as
 		// "unknown" rather than as a transition.
-		v := visitState{Health: anyStringValue(initiativeHealth(w)["status"]), Phase: anyStringValue(w["phase"]), Steps: map[string]string{}}
+		v := visitState{Health: initiativeHealthState(w), Phase: anyStringValue(w["phase"]), Steps: map[string]string{}}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			p := w["plan"].(plans.Plan)
 			for i, step := range state.Steps {
@@ -137,15 +132,10 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 			continue
 		}
 		ref, title := anyStringValue(w["ref"]), anyStringValue(w["title"])
-		health := anyStringValue(initiativeHealth(w)["status"])
-		if health == "stalled" {
-			health = "stale"
-		}
-		if old.Health == "stalled" {
-			old.Health = "stale"
-		} // Saved visits from older cores.
-		if health != old.Health && (health == "stale" || health == "blocked") && w["phase"] != "done" && w["phase"] != "cancelled" {
-			out.Add(OverviewChange{Kind: "initiative_" + health, Ref: ref, Title: title})
+		// A saved visit from an older core holds a retired health word; any
+		// value other than past_promise reads as "was not past".
+		if health := initiativeHealthState(w); health == plans.PromisePast && old.Health != plans.PromisePast {
+			out.Add(OverviewChange{Kind: "initiative_past_promise", Ref: ref, Title: title})
 		}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			p := w["plan"].(plans.Plan)
@@ -299,8 +289,8 @@ func digestSubjectRef(ref string) bool {
 	return kind == "card" || kind == "board" || kind == "topic" || kind == "doc" || kind == "document"
 }
 
-func (s *Store) LoadOverviewChanges(ctx context.Context, principal string, visible func(string, string) bool, now time.Time, threshold time.Duration) (OverviewChanges, error) {
-	work, truncated, _, err := s.overviewWork(ctx, visible, now, threshold, true)
+func (s *Store) LoadOverviewChanges(ctx context.Context, principal string, visible func(string, string) bool, now time.Time) (OverviewChanges, error) {
+	work, truncated, _, err := s.overviewWork(ctx, visible, now, true)
 	if err != nil {
 		return OverviewChanges{}, err
 	}

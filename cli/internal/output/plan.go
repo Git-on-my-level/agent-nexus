@@ -24,12 +24,6 @@ func projectPlan(lines *[]string, result any) {
 	health, _ := root["plan_health"].(map[string]any)
 	progress, _ := state["progress"].(map[string]any)
 	status := health["state"]
-	if status == nil {
-		status = state["health_state"]
-	}
-	if status == nil {
-		status = state["health"]
-	}
 	line := "plan"
 	for _, field := range []struct {
 		key   string
@@ -43,7 +37,7 @@ func projectPlan(lines *[]string, result any) {
 	}
 	*lines = append(*lines, line)
 	// Keep the reason and its timestamp: a compact status is not sufficient evidence.
-	for _, key := range []string{"reason", "since"} {
+	for _, key := range []string{"reason", "since", "past_promise_for_seconds", "promise_moves", "last_evidence_at"} {
 		project(lines, "result.plan_health."+key, health[key])
 	}
 	project(lines, "result.plan_state.last_movement_at", state["last_movement_at"])

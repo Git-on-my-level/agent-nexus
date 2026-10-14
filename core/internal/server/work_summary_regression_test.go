@@ -37,9 +37,9 @@ type countedSummaryStore struct {
 	candidates int
 }
 
-func (s *countedSummaryStore) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time, threshold time.Duration) error {
+func (s *countedSummaryStore) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time) error {
 	s.candidates += len(cards)
-	return s.Store.EnrichCardPlans(ctx, cards, visible, now, threshold)
+	return s.Store.EnrichCardPlans(ctx, cards, visible, now)
 }
 
 func TestSummaryBundlesBoundCandidatesAndLegacyArchiveIsComplete(t *testing.T) {
@@ -148,10 +148,9 @@ func TestSummaryBundlesBoundCandidatesAndLegacyArchiveIsComplete(t *testing.T) {
 	}
 }
 
-func TestInboxSummaryStreamIdleAcrossElapsedAgesAndHealthThreshold(t *testing.T) {
+func TestInboxSummaryStreamIdleAcrossElapsedAges(t *testing.T) {
 	// Serial: this file mutates process-wide environment, logging or counters.
 	requireIntegrationTest(t)
-	t.Setenv("ANX_PLAN_STALLED_AFTER", "1s")
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(50*time.Millisecond))
 	s := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()
@@ -197,7 +196,7 @@ func TestInboxSummaryStreamIdleAcrossElapsedAgesAndHealthThreshold(t *testing.T)
 		t.Fatal("meaningful plan edit did not emit", changed)
 	}
 	rows := changed.Data["item"].(map[string]any)["related_cards"].([]any)
-	if rows[0].(map[string]any)["summary"].(map[string]any)["status"].(map[string]any)["state"] != "blocked" {
+	if rows[0].(map[string]any)["summary"].(map[string]any)["status"].(map[string]any)["state"] != "no_promise" {
 		t.Fatal("new event lost changed summary")
 	}
 }
@@ -225,7 +224,7 @@ func TestInboxChangeDigestRetainsPayloadAndAttentionAnchors(t *testing.T) {
 	}
 }
 
-func TestDefaultWorkAndOverviewRetainLegacyPlanlessHealth(t *testing.T) {
+func TestDefaultWorkAndOverviewReadPlanlessPromise(t *testing.T) {
 	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
@@ -247,7 +246,7 @@ func TestDefaultWorkAndOverviewRetainLegacyPlanlessHealth(t *testing.T) {
 			switch v := value.(type) {
 			case map[string]any:
 				if v["title"] == "Due soon" {
-					if health, ok := v["plan_health"].(map[string]any); ok && health["state"] != "no_plan" {
+					if health, ok := v["plan_health"].(map[string]any); ok && health["state"] != "moving" {
 						t.Fatal("default health changed", path, health)
 					}
 				}
@@ -263,8 +262,8 @@ func TestDefaultWorkAndOverviewRetainLegacyPlanlessHealth(t *testing.T) {
 		check(legacy)
 		computed := workGetJSON(t, h.baseURL+path+"?summary=1", 200)
 		for _, row := range collectSummaryCards(computed) {
-			if row["work_summary"].(map[string]any)["status"].(map[string]any)["state"] != "in_progress" {
-				t.Fatal("near due date replaced planless workflow", path, row)
+			if row["work_summary"].(map[string]any)["status"].(map[string]any)["state"] != "moving" {
+				t.Fatal("a future due date must read moving", path, row)
 			}
 		}
 	}

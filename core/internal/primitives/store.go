@@ -181,7 +181,6 @@ type Store struct {
 	askWebhookEncryption *secrets.Encryptor
 	askWebhookAllowHosts []string
 	askNextActorOrder    []string
-	askStaleAfter        time.Duration
 	scopeInbox           *scopeInboxRuntime
 	streamDB             *sql.DB // Used only by the read-only commit-version observer.
 	db                   *accessDB

@@ -124,7 +124,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		r = r.WithContext(ctx)
 	}
 	if scoped {
-		payload, err = visitStore.OverviewVisible(r.Context(), humanIDs, agentNames, planVisibility(r, opts), now, planStalledAfter())
+		payload, err = visitStore.OverviewVisible(r.Context(), humanIDs, agentNames, planVisibility(r, opts), now)
 	} else {
 		payload, err = store.Overview(r.Context(), humanIDs, agentNames)
 	}
@@ -230,7 +230,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 						visible = nil
 					}
 				}
-				previews, err := resolver.ResolveRefs(r.Context(), refs, visible, now, planStalledAfter())
+				previews, err := resolver.ResolveRefs(r.Context(), refs, visible, now)
 				if err != nil {
 					e = err
 				} else {

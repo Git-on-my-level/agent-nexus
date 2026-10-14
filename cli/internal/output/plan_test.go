@@ -18,7 +18,7 @@ func TestPlanTextKeepsEvidenceAndEffectiveState(t *testing.T) {
 			"critical_path": []any{"build", "qa"}, "next_steps": []any{"qa"},
 			"steps": []any{map[string]any{"id": "build", "status": "done", "resolvable": true}},
 		},
-		"plan_health": map[string]any{"state": "on_track", "reason": "Open steps are progressing.", "since": "2026-10-13T00:00:00Z"},
+		"plan_health": map[string]any{"state": "moving", "reason": "Next: Build by 2026-10-20T00:00:00Z.", "since": "2026-10-13T00:00:00Z"},
 		"summary":     map[string]any{"attention_truncated": true, "owner": "actor:owner"},
 	}
 	doc := Envelope{OK: true, Command: "plan show", Result: result, NextActions: []NextAction{{Label: "Read", Argv: []string{"anx", "plan", "show", "card:launch"}, SideEffectClass: "read_only"}}}
@@ -57,11 +57,11 @@ func TestPlanTextKeepsEvidenceAndEffectiveState(t *testing.T) {
 func TestPlanTextEmptyAndLegacyState(t *testing.T) {
 	for _, command := range []string{"plan show", "plan set", "plan step add", "plan step update", "plan step rm"} {
 		var buf bytes.Buffer
-		err := WriteEnvelopeText(&buf, Envelope{OK: true, Command: command, Result: map[string]any{"card_ref": "card:launch", "plan": nil, "plan_state": map[string]any{"health": "no_plan"}}})
+		err := WriteEnvelopeText(&buf, Envelope{OK: true, Command: command, Result: map[string]any{"card_ref": "card:launch", "plan": nil, "plan_health": map[string]any{"state": "no_promise"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(buf.String(), "health=no_plan steps=0") {
+		if !strings.Contains(buf.String(), "health=no_promise steps=0") {
 			t.Fatal(buf.String())
 		}
 	}

@@ -1,47 +1,65 @@
 package plans
 
 import (
-	"fmt"
 	"regexp"
 	"time"
 )
 
+// Health is the promise state of one card: past_promise, moving, no_promise
+// or done (contracts/anx-schema.yaml plan_health). It is computed on read
+// from FoldPromise; there are no inactivity thresholds.
 type Health struct {
-	State  string  `json:"state"`
-	Reason string  `json:"reason"`
-	Since  *string `json:"since"`
+	State                 string         `json:"state"`
+	Reason                string         `json:"reason"`
+	Since                 *string        `json:"since"`
+	Promise               *HealthPromise `json:"promise,omitempty"`
+	PastPromiseForSeconds *int64         `json:"past_promise_for_seconds,omitempty"`
+	PromiseMoves          int            `json:"promise_moves,omitempty"`
+	LastEvidenceAt        *string        `json:"last_evidence_at,omitempty"`
 }
+
+// HealthPromise is the counted promise in the BriefPromise wire shape.
+type HealthPromise struct {
+	At        string           `json:"at"`
+	What      string           `json:"what"`
+	Source    string           `json:"source"`
+	SourceRef string           `json:"source_ref,omitempty"`
+	Author    *HealthPrincipal `json:"author,omitempty"`
+}
+
+// HealthPrincipal is the author of a note promise. Display falls back to the id.
+type HealthPrincipal struct {
+	ID      string `json:"id"`
+	Display string `json:"display"`
+}
+
 type NextStep struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	Ref   string `json:"ref"`
 }
 
-// DefaultDarkAfter is the horizon beyond which an active card with no nearer
-// dated signal reads dark: nothing will bring it back to attention until then.
-const DefaultDarkAfter = 7 * 24 * time.Hour
-
-// DarkInput carries the per-card dark inputs. Wake is the raw wake_condition
-// annotation; Threshold is the per-card horizon, where zero means the default.
-// Phase and Archived gate who can go dark at all: dark is a statement about
-// active work going quiet, so only an unarchived card whose stored phase is
-// active (in progress or in review) may read dark. Callers that know no phase
-// pass none, and the card simply never darkens.
-type DarkInput struct {
-	Wake      string
-	Threshold time.Duration
-	Phase     string
-	Archived  bool
+// HealthInput is everything HealthFor reads for one card.
+type HealthInput struct {
+	// Ref is the card ref used for promise source refs ("card:<handle>").
+	Ref   string
+	Plan  *Plan
+	State State
+	// Facts are the resolved step refs; a linked step resource moving is a
+	// plan-step state change and resets the clock.
+	Facts map[string]Fact
+	// Phase is the card's stored phase; done or cancelled reads done.
+	Phase   string
+	CardDue string
+	// Wake is the raw wake_condition annotation; its first date is a promise.
+	Wake string
+	// PlanEditedAt is the last plan edit, a plan-step state change.
+	PlanEditedAt time.Time
+	// Observations are changed source observation times.
+	Observations []time.Time
+	// Notes are the card's message_posted facts; nil when unavailable.
+	Notes []PromiseNote
 }
-
-// DarkApplies reports whether this card may read dark at all: unarchived,
-// with a stored phase that says the work is active.
-func DarkApplies(dark DarkInput) bool {
-	return !dark.Archived && Status(dark.Phase) == "active"
-}
-
-// darkApplies is the internal spelling.
-func darkApplies(dark DarkInput) bool { return DarkApplies(dark) }
 
 // wakeTimePattern matches an embedded RFC3339 instant or YYYY-MM-DD date.
 // Order matters: the instant alternative must win over its own date prefix.
@@ -50,9 +68,7 @@ var wakeTimePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:
 // WakeTime extracts the first dated signal inside a wake_condition annotation.
 // The condition is prose, so this is deliberately lenient: the first
 // RFC3339 instant or YYYY-MM-DD date in the first 1024 bytes wins, dates
-// resolving to midnight UTC. Anything unparsable contributes no signal. The
-// bound can split an instant at the cut, whose date prefix then reads as
-// midnight — accepted, since the scan is a hint over prose, not a parser.
+// resolving to midnight UTC. Anything unparsable contributes no promise.
 func WakeTime(wake string) time.Time {
 	if len(wake) > 1024 {
 		wake = wake[:1024]
@@ -68,174 +84,73 @@ func WakeTime(wake string) time.Time {
 	return time.Time{}
 }
 
-// NextSignal returns the earliest dated thing that will surface this card
-// again: the earliest open (unfinished) step due date, the card due date and
-// the wake_condition date. A signal in the past still counts — it was
-// scheduled, so the card is not dark about the future. Zero when none exists.
-func NextSignal(p *Plan, state State, cardDue, wake string) time.Time {
-	signal := earliestDue(p, state, cardDue)
-	if at := WakeTime(wake); !at.IsZero() && (signal.IsZero() || at.Before(signal)) {
-		signal = at
-	}
-	return signal
+// HealthDone reports whether a stored phase is terminal (done or cancelled).
+func HealthDone(phase string) bool {
+	return Status(phase) == "done" || phase == "cancelled"
 }
 
-// earliestDue is the earliest date among the card due and open step dues.
-func earliestDue(p *Plan, state State, cardDue string) time.Time {
-	earliest := time.Time{}
-	consider := func(raw string) {
-		d, err := time.Parse(time.RFC3339, raw)
-		if err != nil {
-			d, err = time.Parse("2006-01-02", raw)
-		}
-		if err == nil && (earliest.IsZero() || d.Before(earliest)) {
-			earliest = d
-		}
+// PromiseInputFor builds the fold input for one card.
+func PromiseInputFor(in HealthInput) PromiseInput {
+	done := HealthDone(in.Phase)
+	if in.Phase == "" && in.Plan != nil && len(in.Plan.Steps) > 0 && in.State.Progress.Total > 0 && in.State.Progress.Done == in.State.Progress.Total {
+		done = true
 	}
-	consider(cardDue)
-	if p != nil {
-		for i, step := range state.Steps {
-			if step.Status == "done" || i >= len(p.Steps) {
+	out := PromiseInput{Ref: in.Ref, Done: done, Notes: in.Notes, CardDue: ParseDue(in.CardDue), Wake: WakeTime(in.Wake), Observations: in.Observations}
+	if !in.PlanEditedAt.IsZero() {
+		out.StepChanges = append(out.StepChanges, in.PlanEditedAt)
+	}
+	if in.Plan != nil {
+		for i, step := range in.Plan.Steps {
+			if fact, ok := in.Facts[step.Ref]; step.Ref != "" && ok && fact.Known && !fact.MovementAt.IsZero() {
+				out.StepChanges = append(out.StepChanges, fact.MovementAt)
+			}
+			status := step.Status
+			if i < len(in.State.Steps) {
+				status = in.State.Steps[i].Status
+			}
+			if status == "done" {
 				continue
 			}
-			consider(p.Steps[i].Due)
+			if due := ParseDue(step.Due); !due.IsZero() {
+				out.Steps = append(out.Steps, PromiseStep{ID: step.ID, Title: step.Title, Due: due})
+			}
 		}
 	}
-	return earliest
+	return out
 }
 
-// DarkOutcome decides the dark state for a card that would otherwise read
-// on_track (or, for a planless card, in progress). The reason, the anchor
-// instant (zero when there is none) and whether dark applies come back; the
-// state is always "dark" when ok is true.
-func DarkOutcome(p *Plan, state State, cardDue string, dark DarkInput, now time.Time) (reason string, anchor time.Time, ok bool) {
-	signal := NextSignal(p, state, cardDue, dark.Wake)
-	horizon := dark.Threshold
-	if horizon <= 0 {
-		horizon = DefaultDarkAfter
-	}
-	if signal.IsZero() {
-		return "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card.", time.Time{}, true
-	}
-	if signal.After(now.Add(horizon)) {
-		days := int((signal.Sub(now) + 24*time.Hour - time.Nanosecond) / (24 * time.Hour))
-		return fmt.Sprintf("Next dated signal is %s, %d days out; nothing prompts this card until then.", formatSignal(signal), days), signal, true
-	}
-	return "", time.Time{}, false
+// HealthFor folds a card's promise facts and reads the result at now.
+func HealthFor(in HealthInput, now time.Time) Health {
+	return HealthFromState(FoldPromise(PromiseInputFor(in)).At(now), now)
 }
 
-func formatSignal(at time.Time) string {
-	// A date-only signal parses to UTC midnight; show it as the date it names.
-	if at.Location() == time.UTC && at.Hour() == 0 && at.Minute() == 0 && at.Second() == 0 && at.Nanosecond() == 0 {
-		return at.Format("2006-01-02")
+// HealthFromState renders a read promise state in the PlanHealth shape.
+func HealthFromState(s PromiseState, now time.Time) Health {
+	h := Health{State: s.State, Reason: s.Reason(now), PromiseMoves: s.Moves}
+	format := func(at time.Time) *string {
+		if at.IsZero() {
+			return nil
+		}
+		v := at.UTC().Format(time.RFC3339Nano)
+		return &v
 	}
-	return at.UTC().Format(time.RFC3339)
-}
-
-// HealthFor supplies the shared plan and initiative health contract. Anchors are derived, never persisted transition times.
-func HealthFor(p *Plan, state State, movement, created, now time.Time, threshold time.Duration, cardDue string, dark DarkInput, cardPhase ...string) Health {
-	if threshold <= 0 {
-		threshold = DefaultStalledAfter
+	h.LastEvidenceAt = format(s.LastEvidenceAt)
+	if s.Promise != nil {
+		p := &HealthPromise{At: s.Promise.At.UTC().Format(time.RFC3339Nano), What: s.Promise.What, Source: s.Promise.Source, SourceRef: s.Promise.SourceRef}
+		if s.Promise.Author != "" {
+			p.Author = &HealthPrincipal{ID: s.Promise.Author, Display: s.Promise.Author}
+		}
+		h.Promise = p
 	}
-	anchor := movement
-	h := Health{State: "on_track", Reason: "Open steps are progressing."}
-	if p == nil || len(p.Steps) == 0 {
-		// Planless work still has workflow, blocked and due facts. Callers that
-		// omit phase retain the legacy initiative no-plan vocabulary.
-		phase := ""
-		if len(cardPhase) > 0 {
-			phase = cardPhase[0]
-		}
-		switch {
-		case Status(phase) == "done":
-			h.State, h.Reason = "done", "The card is complete."
-		case phase == "cancelled":
-			h.State, h.Reason = "cancelled", "The card was cancelled."
-		case phase == "blocked":
-			h.State, h.Reason = "blocked", "The card is blocked."
-		default:
-			h.State, h.Reason, anchor = "no_plan", "Card has no plan steps.", created
-			if len(cardPhase) == 0 {
-				h.Reason = "Initiative has no plan steps."
-			}
-			d, err := time.Parse(time.RFC3339, cardDue)
-			if err != nil {
-				d, err = time.Parse("2006-01-02", cardDue)
-			}
-			if len(cardPhase) > 0 && err == nil && !d.After(now.Add(24*time.Hour)) {
-				h.State, h.Reason, anchor = "at_risk", "The card is overdue or due within 24 hours.", d.Add(-24*time.Hour)
-			} else if movement.IsZero() || now.Sub(movement) >= threshold {
-				h.State, h.Reason = "stale", "Card has no plan and no recent card or discussion activity."
-				if len(cardPhase) == 0 {
-					h.Reason = "Initiative has no plan and no recent card or discussion activity."
-				}
-				if !movement.IsZero() {
-					anchor = movement.Add(threshold)
-				}
-			} else if darkApplies(dark) {
-				// A planless active card is exactly the card rule (a) names: it
-				// is being worked and nothing is dated, so it reads dark on
-				// plan_health too, not only in the summary. Callers that omit
-				// the phase keep the legacy no-plan vocabulary.
-				if reason, at, ok := DarkOutcome(nil, State{}, cardDue, dark, now); ok {
-					h.State, h.Reason = "dark", reason
-					anchor = at
-				}
-			}
-		}
-	} else if state.Progress.Done == state.Progress.Total {
-		h.State, h.Reason = "done", "All plan steps are complete."
-	} else {
-		blocked := false
-		var riskAt time.Time
-		due := func(raw string) {
-			d, err := time.Parse(time.RFC3339, raw)
-			if err != nil {
-				d, err = time.Parse("2006-01-02", raw)
-			}
-			if err == nil && !d.After(now.Add(24*time.Hour)) {
-				onset := d.Add(-24 * time.Hour)
-				if riskAt.IsZero() || onset.Before(riskAt) {
-					riskAt = onset
-				}
-			}
-		}
-		due(cardDue)
-		for i, step := range state.Steps {
-			if step.Status == "done" {
-				continue
-			}
-			if step.Status == "blocked" {
-				blocked = true
-			}
-			due(p.Steps[i].Due)
-		}
-		switch {
-		case blocked:
-			h.State, h.Reason = "blocked", "An unfinished step or dependency is blocked."
-		case !riskAt.IsZero():
-			h.State, h.Reason, anchor = "at_risk", "An open step or initiative is overdue or due within 24 hours.", riskAt
-		case movement.IsZero() || now.Sub(movement) >= threshold:
-			h.State, h.Reason = "stale", "No card, plan or step activity within the configured stale threshold."
-			if !movement.IsZero() {
-				anchor = movement.Add(threshold)
-			}
-		default:
-			// Dark describes active work going quiet. Done, cancelled, blocked,
-			// parked (backlog/ready) and archived cards keep the states they
-			// already read; only an active card with a missing or distant
-			// signal darkens.
-			if darkApplies(dark) {
-				if reason, at, ok := DarkOutcome(p, state, cardDue, dark, now); ok {
-					h.State, h.Reason = "dark", reason
-					anchor = at
-				}
-			}
-		}
+	if s.PastPromiseFor != nil {
+		secs := int64(*s.PastPromiseFor / time.Second)
+		h.PastPromiseForSeconds = &secs
 	}
-	if !anchor.IsZero() {
-		at := anchor.UTC().Format(time.RFC3339Nano)
-		h.Since = &at
+	switch s.State {
+	case PromisePast:
+		h.Since = format(s.Promise.At)
+	case PromiseMoving, PromiseNone:
+		h.Since = h.LastEvidenceAt
 	}
 	return h
 }
@@ -260,24 +175,4 @@ func ReadyStep(p Plan, state State, readable func(Step) bool) *NextStep {
 		}
 	}
 	return nil
-}
-
-// LegacyHealth preserves the pre-detailed-health client vocabulary. Detailed
-// state remains available in the additive plan_health field.
-//
-// A state this field can name is never collapsed into "on_track". An
-// initiative with no plan steps has no basis for a green chip, and reporting
-// one made every planless initiative read as healthy; the same went for
-// at_risk and done. Only a genuinely unnamed state falls back to on_track.
-// Dark is genuinely unnamed there: legacy readers saw on_track for these
-// cards before dark existed, and they keep seeing it.
-func LegacyHealth(state string) string {
-	switch state {
-	case "stale", "stalled":
-		return "stalled"
-	case "blocked", "no_plan", "at_risk", "done", "on_track", "cancelled":
-		return state
-	default:
-		return "on_track"
-	}
 }

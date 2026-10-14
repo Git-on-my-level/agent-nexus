@@ -103,7 +103,7 @@ func TestWorkReadsHidePrivateCardAndBoardEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, card := range privateCards {
-		items, err := s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{anyString(card["ref"])}, func(_, owner string) bool { return owner != "another-human" }, time.Now(), 0)
+		items, err := s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{anyString(card["ref"])}, func(_, owner string) bool { return owner != "another-human" }, time.Now())
 		if err != nil || items[0].Resolvable {
 			t.Fatalf("hidden preview: %v %v", items, err)
 		}

@@ -46,7 +46,7 @@ func TestEvidenceProjectionIDsDoNotBecomeExternalResourceIdentities(t *testing.T
 		if _, err = s.GetWork(scope, anyStringValue(public["id"])); err != nil {
 			t.Fatal(err)
 		}
-		previews, err := s.ResolveRefs(scope, []string{authority + ":" + nativeID}, nil, time.Now(), 0)
+		previews, err := s.ResolveRefs(scope, []string{authority + ":" + nativeID}, nil, time.Now())
 		if err != nil || !previews[0].Resolvable || previews[0].ConnectionID != "public" {
 			t.Fatalf("numeric public identity hidden by private projection: %+v %v", previews, err)
 		}
@@ -99,7 +99,7 @@ func TestSourceRefsAndEvidenceProjectionsUseCentralOwnership(t *testing.T) {
 		if allowed && err != nil || !allowed && !errors.Is(err, ErrNotFound) {
 			t.Fatalf("%s work access: %v", actor, err)
 		}
-		previews, err := s.ResolveRefs(scope, []string{"private-alias"}, nil, time.Now(), 0)
+		previews, err := s.ResolveRefs(scope, []string{"private-alias"}, nil, time.Now())
 		if err != nil || previews[0].Resolvable != allowed {
 			t.Fatalf("%s evidence resolution: %+v %v", actor, previews, err)
 		}

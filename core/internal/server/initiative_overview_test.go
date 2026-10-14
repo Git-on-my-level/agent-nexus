@@ -69,12 +69,14 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		state := item["plan_state"].(map[string]any)
 		state["last_movement_at"] = "2026-10-04T12:00:00Z"
 		health := item["plan_health"].(map[string]any)
-		// A dark card with no dated signal carries a null anchor.
-		if since, ok := health["since"]; ok && since != nil {
-			if _, err = time.Parse(time.RFC3339Nano, since.(string)); err != nil {
-				t.Fatal(err)
+		// Anchors are real timestamps; the fixture pins them.
+		for _, key := range []string{"since", "last_evidence_at"} {
+			if at, ok := health[key]; ok && at != nil {
+				if _, err = time.Parse(time.RFC3339Nano, at.(string)); err != nil {
+					t.Fatal(err)
+				}
+				health[key] = "2026-10-04T12:00:00Z"
 			}
-			health["since"] = "2026-10-04T12:00:00Z"
 		}
 		if !reflect.DeepEqual(item["summary"], item["work_summary"]) {
 			t.Fatal("computed summary alias differs from work_summary")
@@ -209,8 +211,9 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 			if len(d.Items) != min(i, 100) || d.Truncated != (i > 100) {
 				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
 			}
-			// Each full 200-row page needs an empty-page check for previews and plan facts.
-			wantQueries := int64(7 + 2*(i/200) + 2*((i+49)/50-1))
+			// Each full 200-row page needs an empty-page check for previews and plan facts;
+			// each 50-card plan batch loads its promise notes in one statement.
+			wantQueries := int64(7 + 2*(i/200) + 2*((i+49)/50-1) + (i+49)/50)
 			// Main captures the immutable denial snapshot on the first read only;
 			// later writes use its statement-level epoch fallback without recapture.
 			if i == 1 {

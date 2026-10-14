@@ -44,7 +44,7 @@ func TestOverviewAndReportBudgetsIgnoreInaccessibleWork(t *testing.T) {
 	assert := func() {
 		t.Helper()
 		counter.Reset()
-		body, err := store.OverviewVisible(readCtx, nil, nil, allowed, time.Now().UTC(), 0)
+		body, err := store.OverviewVisible(readCtx, nil, nil, allowed, time.Now().UTC())
 		if err != nil {
 			t.Fatal(err)
 		}

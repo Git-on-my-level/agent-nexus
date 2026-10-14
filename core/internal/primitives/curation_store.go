@@ -232,7 +232,7 @@ func (s *Store) curationMootFunc(ctx context.Context, asks []curation.AskInfo, v
 	}
 	facts := map[string]plans.Fact{}
 	if len(refs) > 0 {
-		previews, err := s.ResolveRefs(ctx, refs, visible, now, 0)
+		previews, err := s.ResolveRefs(ctx, refs, visible, now)
 		if err != nil {
 			return nil, false, err
 		}

@@ -20,7 +20,6 @@ type WorkSummary struct {
 	Hints               []string          `json:"hints,omitempty"`
 	Steps               *plans.StepDigest `json:"steps,omitempty"`
 	Status              SummaryStatus     `json:"status"`
-	SetStatus           *SummaryStatus    `json:"set_status,omitempty"`
 	Progress            *SummaryProgress  `json:"progress,omitempty"`
 	Next                *SummaryNext      `json:"next,omitempty"`
 	Owner               string            `json:"owner,omitempty"`
@@ -61,7 +60,7 @@ type SummaryAttention struct {
 // Stream identity uses canonical inputs, never health age thresholds or the
 // rolling completed-step window. Select only this card's admitted facts; other
 // cards in the shared resolution batch cannot invalidate its event identity.
-func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]plans.Fact, summary *WorkSummary, threshold time.Duration) string {
+func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]plans.Fact, summary *WorkSummary) string {
 	selected := map[string]plans.Fact{}
 	refs := append([]string{}, input.Children...)
 	if p != nil {
@@ -96,13 +95,12 @@ func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]pla
 		Facts              map[string]plans.Fact
 		Attention          *SummaryAttention
 		AttentionTruncated bool
-		Threshold          time.Duration
-	}{metrics, summary.MetricsTruncated, input, p, selected, attention, summary.AttentionTruncated, threshold})
+	}{metrics, summary.MetricsTruncated, input, p, selected, attention, summary.AttentionTruncated})
 	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
 
 func summaryLabel(state string) string {
-	if label := map[string]string{"on_track": "In progress", "no_plan": "No plan", "stale": "Stale", "blocked": "Blocked", "at_risk": "At risk", "dark": "Dark", "done": "Done", "cancelled": "Cancelled", "backlog": "Backlog", "ready": "Ready", "in_progress": "In progress", "review": "In review", "in_review": "In review", "unknown": "Unknown"}[state]; label != "" {
+	if label := map[string]string{plans.PromisePast: "Past promise", plans.PromiseMoving: "Moving", plans.PromiseNone: "No promise", plans.PromiseDone: "Done"}[state]; label != "" {
 		return label
 	}
 	return strings.ReplaceAll(state, "_", " ")
@@ -113,109 +111,15 @@ func ageSeconds(now, at time.Time) int64 {
 	}
 	return int64(now.Sub(at) / time.Second)
 }
-func summaryWorkflowPhase(phase string) string {
-	switch {
-	case plans.Status(phase) == "done":
-		return "done"
-	case phase == "in_review":
-		return "review"
-	case phase == "active" || phase == "open":
-		return "in_progress"
-	case phase == "" || phase == "no_plan":
-		return "unknown"
-	default:
-		return phase
-	}
-}
-
-func summaryHealth(input cardHealthInput, p *plans.Plan, state plans.State, at, now time.Time, threshold time.Duration) plans.Health {
-	health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.darkInput(), input.Phase)
-	if p != nil && len(p.Steps) > 0 {
-		return health
-	}
-	// Preserve legacy plan health. Presentation uses workflow and only an
-	// overdue date overrides it; near due dates must not hide inactivity risk.
-	if health.State == "at_risk" {
-		due, err := time.Parse(time.RFC3339, input.Due)
-		if err != nil {
-			due, err = time.Parse("2006-01-02", input.Due)
-		}
-		if err == nil && !due.After(now) {
-			health.Reason = "The card is overdue."
-			anchor := due.UTC().Format(time.RFC3339Nano)
-			health.Since = &anchor
-			return health
-		}
-		// The recompute answers one question — is the card also stale — so it
-		// drops the near due and, with it, the dark gate: a due-soon card
-		// stays at_risk here and returns to its phase, never dark.
-		recompute := input.darkInput()
-		recompute.Phase = ""
-		health = plans.HealthFor(nil, state, at, input.Created, now, threshold, "", recompute)
-	}
-	if health.State == "no_plan" {
-		health.State = summaryWorkflowPhase(input.Phase)
-		health.Reason = "The card is marked " + summaryLabel(health.State) + "."
-		// An active planless card with no dated signal inside the horizon is
-		// dark: it reads as moving but nothing will surface it again. The gate
-		// is the same one plan_health uses, so the chip and the field agree.
-		if plans.DarkApplies(input.darkInput()) {
-			if reason, anchor, ok := plans.DarkOutcome(nil, plans.State{}, input.Due, input.darkInput(), now); ok {
-				health.State, health.Reason = "dark", reason
-				health.Since = nil
-				if !anchor.IsZero() {
-					formatted := anchor.UTC().Format(time.RFC3339Nano)
-					health.Since = &formatted
-				}
-			}
-		}
-	}
-	return health
-}
-
-func summaryPhaseAgrees(phase string, health plans.Health, state plans.State) bool {
-	if summaryWorkflowPhase(phase) == health.State {
-		return true
-	}
-	switch health.State {
-	case "done":
-		return plans.Status(phase) == "done"
-	case "cancelled":
-		return phase == "cancelled"
-	case "blocked":
-		return phase == "blocked"
-	case "on_track":
-		if plans.Status(phase) == "active" {
-			return true
-		}
-		// A ready/backlog card with an untouched plan is still waiting to start.
-		if phase == "backlog" || phase == "ready" {
-			for _, step := range state.Steps {
-				if step.Status != "not_started" {
-					return false
-				}
-			}
-			return true
-		}
-	// Dark is about the future, not a contradiction of the stored phase: the
-	// same phases that agree with on_track keep agreeing when the card is dark.
-	case "dark":
-		return summaryPhaseAgrees(phase, plans.Health{State: "on_track"}, state)
-	}
-	return false
-}
-func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, facts map[string]plans.Fact, now time.Time, threshold time.Duration) *WorkSummary {
+func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, facts map[string]plans.Fact, now time.Time) *WorkSummary {
 	at := input.Activity
 	if moved, err := time.Parse(time.RFC3339Nano, state.LastMovementAt); err == nil && moved.After(at) {
 		at = moved
 	}
-	health := summaryHealth(input, p, state, at, now, threshold)
+	health := input.health("", p, state, facts, now)
 	out := &WorkSummary{Status: SummaryStatus{State: health.State, Label: summaryLabel(health.State), Reason: health.Reason, Since: health.Since}, Owner: input.Owner, Due: input.Due}
 	if p == nil || len(p.Steps) == 0 {
 		out.Hints = []string{"no_plan"}
-	}
-	if input.Phase != "" && !summaryPhaseAgrees(input.Phase, health, state) {
-		out.SetStatus = &SummaryStatus{State: input.Phase, Label: summaryLabel(input.Phase)}
 	}
 	if !input.Created.IsZero() {
 		age := ageSeconds(now, input.Created)
@@ -267,8 +171,8 @@ func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, f
 
 // BasicWorkSummary supports mutation echoes and lightweight test stores. Current
 // reads replace it with the same presentation built from batched canonical facts.
-func BasicWorkSummary(card map[string]any, now time.Time, threshold time.Duration) *WorkSummary {
-	input := cardHealthInput{Phase: firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])), Due: workString(card["due_at"]), Owner: workString(card["owner"]), Source: workMap(card["source"]), Wake: workString(card["wake_condition"]), DarkAfter: parseDarkAfter(workString(card["dark_after"])), Archived: strings.TrimSpace(workString(card["archived_at"])) != ""}
+func BasicWorkSummary(card map[string]any, now time.Time) *WorkSummary {
+	input := cardHealthInput{Phase: firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])), Due: workString(card["due_at"]), Owner: workString(card["owner"]), Source: workMap(card["source"]), Wake: workString(card["wake_condition"]), Handle: workString(card["handle"])}
 	input.Created, _ = time.Parse(time.RFC3339Nano, workString(card["created_at"]))
 	input.Activity = latestCardActivity(workString(card["updated_at"]))
 	if input.Owner == "" {
@@ -277,5 +181,5 @@ func BasicWorkSummary(card map[string]any, now time.Time, threshold time.Duratio
 			input.Owner = refs[0]
 		}
 	}
-	return buildWorkSummary(input, nil, plans.State{}, nil, now, threshold)
+	return buildWorkSummary(input, nil, plans.State{}, nil, now)
 }

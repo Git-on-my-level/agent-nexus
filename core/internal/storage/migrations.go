@@ -1074,9 +1074,10 @@ var migrations = []migration{
 	// brief.v1 facts materialized on write events (asks, notes, plan and
 	// card changes), with a one-time backfill. See brief_facts.go.
 	{Version: 90, AfterApply: installBriefFacts},
+	{Version: 91, AfterApply: installBriefAskBlocks},
 	// Curation proposals: one row per action+targets key, so the formula and
 	// the PM propose a key at most once while open and never after a dismissal.
-	{Version: 91, Statements: []string{`CREATE TABLE IF NOT EXISTS curation_proposals (
+	{Version: 92, Statements: []string{`CREATE TABLE IF NOT EXISTS curation_proposals (
 		key TEXT PRIMARY KEY,
 		proposal_event_id TEXT NOT NULL,
 		action TEXT NOT NULL,

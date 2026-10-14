@@ -220,6 +220,10 @@
     "milliseconds": 4911
   },
   {
+    "key": "GET /brief",
+    "milliseconds": 20000
+  },
+  {
     "key": "GET /overview",
     "milliseconds": 81860
   },

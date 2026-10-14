@@ -128,7 +128,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	previews, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now(), 0)
+	previews, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now())
 	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" || counter.Count() != 3 {
 		t.Fatalf("private parent-thread ref: %+v queries=%d error=%v", previews, counter.Count(), err)
 	}

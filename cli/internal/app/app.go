@@ -263,6 +263,11 @@ func (a *App) Run(args []string) int {
 		warnings = append(result.Warnings, warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
+	if !resolved.JSON {
+		if ref := createdRef(identity.Command, value); ref != "" {
+			a.writeOutput(a.Stdout, "created "+ref+"\n")
+		}
+	}
 	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}

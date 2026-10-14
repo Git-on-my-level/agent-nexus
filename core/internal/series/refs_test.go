@@ -151,7 +151,7 @@ func TestCardSeriesRefsPlanAndAdmission(t *testing.T) {
 	if e = store.SetCardPlan(ctx, "owner", fmt.Sprint(card["id"]), fmt.Sprint(card["updated_at"]), plan); e != nil {
 		t.Fatal(e)
 	}
-	out, e := store.ResolveRefs(ctx, []string{ref, refs[0], "series:broken?_range=91d"}, nil, now, 0)
+	out, e := store.ResolveRefs(ctx, []string{ref, refs[0], "series:broken?_range=91d"}, nil, now)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -181,7 +181,7 @@ func TestCardCanonicalSeriesRefs(t *testing.T) {
 	if _, e = s.DB.Exec(`INSERT INTO series_points(series,labels,ts,value,received_day) VALUES('builds','{}',?,8,0)`, now.Add(-time.Minute).UnixNano()); e != nil {
 		t.Fatal(e)
 	}
-	out, e := store.ResolveRefs(ctx, []string{fmt.Sprint(card["ref"])}, nil, now, 0)
+	out, e := store.ResolveRefs(ctx, []string{fmt.Sprint(card["ref"])}, nil, now)
 	if e != nil {
 		t.Fatal(e)
 	}
