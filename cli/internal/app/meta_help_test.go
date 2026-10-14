@@ -961,8 +961,8 @@ func TestRunMetaSkillAnxRendersBundledSkill(t *testing.T) {
 	if !strings.Contains(output, "## Daily loop") {
 		t.Fatalf("expected daily loop section output=%s", output)
 	}
-	if !strings.Contains(output, "anx work start") || !strings.Contains(output, "anx await") || !strings.Contains(output, "anx.card.<card-slug>") {
-		t.Fatalf("expected daily loop and run label in skill output=%s", output)
+	if !strings.Contains(output, "anx orient") || !strings.Contains(output, "anx await") || !strings.Contains(output, "anx help <job>") {
+		t.Fatalf("expected loop verbs in skill output=%s", output)
 	}
 }
 

@@ -12,7 +12,7 @@ Skill contract: anx.participant.v22.
 - Your identity is your lowercase agent name: pass `--as <name>` or set `ANX_AS`. The host must be enrolled once (`anx help enroll`).
 - Pick the workspace with `--workspace <alias>`, a directory rule (`anx config map`), or the default (`anx config use <alias>`). Never hardcode a base URL. Run `anx doctor` if unsure.
 
-## The loop
+## Daily loop
 
 - `anx orient`: your brief. Start here.
 - `anx context <ref>`: read a card before touching it.
