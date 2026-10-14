@@ -331,20 +331,17 @@ func TestOverviewBriefRanksOnlyAuthorizedRowsAndTellsTheTruthAboutPlans(t *testi
 		t.Fatalf("the row two cards wait on did not rank first with its reason: %v", top)
 	}
 
-	// The health lie, end to end: no plan must not arrive as on_track in
-	// either the legacy status field or the brief.
+	// Nothing is promised in this workspace: every initiative reads
+	// no_promise, visible as a gap and never as moving.
 	for _, raw := range payload["initiatives"].(map[string]any)["items"].([]any) {
-		health := raw.(map[string]any)["health"].(map[string]any)
-		if anyString(health["state"]) == "no_plan" && anyString(health["status"]) != "no_plan" {
-			t.Fatalf("planless initiative still reports %q: %v", health["status"], health)
+		item := raw.(map[string]any)
+		if item["health"] != nil || anyString(item["plan_health"].(map[string]any)["state"]) != "no_promise" {
+			t.Fatalf("initiative health is not the promise state: %v", item)
 		}
 	}
 	byState := brief["initiatives"].(map[string]any)["by_state"].(map[string]any)
-	if byState["no_plan"] == nil {
-		t.Fatalf("brief does not count the planless initiatives: %v", byState)
-	}
-	if byState["on_track"] != nil {
-		t.Fatalf("an unplanned workspace reported healthy initiatives: %v", byState)
+	if byState["no_promise"] == nil || byState["moving"] != nil {
+		t.Fatalf("brief does not count the unpromised initiatives: %v", byState)
 	}
 	machine := brief["machine"].(map[string]any)
 	if anyString(machine["status"]) != "ok" || machine["finished_24h"] == nil {

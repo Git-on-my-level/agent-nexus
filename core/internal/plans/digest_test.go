@@ -28,7 +28,7 @@ func TestDigestSplitsRecentCurrentAndNext(t *testing.T) {
 		"card:build":  {Known: true, Status: "done", MovementAt: now.Add(-36 * time.Hour)},
 		"card:ship":   {Known: true, Status: "in_progress", MovementAt: now.Add(-2 * time.Hour)},
 	}
-	state := Compute(p, facts, now, now, 0)
+	state := Compute(p, facts, now)
 	got := Digest(p, state, facts, now, 0, 0)
 
 	if got.WindowHours != 168 {
@@ -72,7 +72,7 @@ func TestDigestBoundsEveryListAndCountsTheRest(t *testing.T) {
 	if err := Validate(p); err != nil {
 		t.Fatal(err)
 	}
-	state := Compute(p, facts, now, now, 0)
+	state := Compute(p, facts, now)
 	got := Digest(p, state, facts, now, 0, 0)
 
 	for _, list := range []DigestList{got.Completed, got.Current, got.Next} {
@@ -92,7 +92,7 @@ func TestDigestBoundsEveryListAndCountsTheRest(t *testing.T) {
 
 func TestDigestOfAnEmptyPlanListsNothing(t *testing.T) {
 	now := time.Now().UTC()
-	state := Compute(Plan{Steps: []Step{}}, nil, now, now, 0)
+	state := Compute(Plan{Steps: []Step{}}, nil, now)
 	got := Digest(Plan{Steps: []Step{}}, state, nil, now, 0, 0)
 	for _, list := range []DigestList{got.Completed, got.Current, got.Next} {
 		if list.Items == nil || len(list.Items) != 0 || list.More != 0 {
@@ -104,7 +104,7 @@ func TestDigestOfAnEmptyPlanListsNothing(t *testing.T) {
 func TestDigestReportsBlockedStepsAsCurrent(t *testing.T) {
 	now := time.Now().UTC()
 	p := Plan{Steps: []Step{{ID: "a", Title: "A", Status: "blocked", After: []string{}}, {ID: "b", Title: "B", After: []string{"a"}}}}
-	state := Compute(p, nil, now, now, 0)
+	state := Compute(p, nil, now)
 	got := Digest(p, state, nil, now, 0, 0)
 	if len(got.Current.Items) != 1 || got.Current.Items[0].Status != "blocked" {
 		t.Fatalf("current=%+v", got.Current)
@@ -130,7 +130,7 @@ func TestDigestClaimsOnlyWhatALinkedResourceFinished(t *testing.T) {
 		"card:unknown": {Known: true, Status: "unknown", MovementAt: now.Add(-24 * time.Hour)},
 		"card:shipped": {Known: true, Status: "done", MovementAt: now.Add(-48 * time.Hour)},
 	}
-	state := Compute(p, facts, now, now, 0)
+	state := Compute(p, facts, now)
 	got := Digest(p, state, facts, now, 0, 0)
 	if len(got.Completed.Items) != 1 || got.Completed.Items[0].ID != "linked" {
 		t.Fatalf("completed=%+v", got.Completed)
@@ -147,7 +147,7 @@ func TestDigestWindowBoundaryKeepsTheOldestRecentStep(t *testing.T) {
 		"card:edge":  {Known: true, Status: "done", MovementAt: now.Add(-StepDigestWindow)},
 		"card:older": {Known: true, Status: "done", MovementAt: now.Add(-StepDigestWindow - time.Second)},
 	}
-	state := Compute(p, facts, now, now, 0)
+	state := Compute(p, facts, now)
 	got := Digest(p, state, facts, now, 0, 0)
 	if len(got.Completed.Items) != 1 || got.Completed.Items[0].ID != "edge" {
 		t.Fatalf("completed=%+v", got.Completed)
@@ -164,7 +164,7 @@ func TestDigestOrdersStepsTopologicallyNotAsWritten(t *testing.T) {
 		{ID: "zeta", Title: "Zeta", After: []string{}},
 		{ID: "alpha", Title: "Alpha", After: []string{}},
 	}}
-	state := Compute(p, nil, now, now, 0)
+	state := Compute(p, nil, now)
 	got := Digest(p, state, nil, now, 0, 0)
 	if fmt.Sprint(titles(got.Next)) != fmt.Sprint([]string{"Alpha", "Zeta"}) {
 		t.Fatalf("next=%+v", got.Next)
@@ -173,7 +173,7 @@ func TestDigestOrdersStepsTopologicallyNotAsWritten(t *testing.T) {
 		{ID: "second", Title: "Second", After: []string{"first"}},
 		{ID: "first", Title: "First", After: []string{}},
 	}}
-	state = Compute(p, nil, now, now, 0)
+	state = Compute(p, nil, now)
 	// A dependency still comes before what depends on it.
 	if got = Digest(p, state, nil, now, 0, 0); got.Next.Items[0].ID != "first" {
 		t.Fatalf("next=%+v", got.Next)

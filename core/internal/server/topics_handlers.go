@@ -516,7 +516,7 @@ func buildTopicWorkspacePayload(ctx context.Context, opts handlerOptions, topicI
 				}
 			}
 			if opts.summaryFormat && err == nil {
-				err = canonical.EnrichCardPlans(ctx, bundle.Cards, opts.readVisibility, time.Now().UTC(), planStalledAfter())
+				err = canonical.EnrichCardPlans(ctx, bundle.Cards, opts.readVisibility, time.Now().UTC())
 			}
 			for _, thread := range bundle.Threads {
 				primitives.StripThreadPlanningFieldsForAPI(thread)
@@ -736,7 +736,7 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		cards, cardsTruncated = summaryCandidates(cards)
 	}
 	if store, ok := opts.primitiveStore.(planStore); ok && opts.summaryFormat {
-		if err := store.EnrichCardPlans(ctx, cards, opts.readVisibility, time.Now().UTC(), planStalledAfter()); err != nil {
+		if err := store.EnrichCardPlans(ctx, cards, opts.readVisibility, time.Now().UTC()); err != nil {
 			return topicResourceBundle{}, err
 		}
 		for _, card := range cards {

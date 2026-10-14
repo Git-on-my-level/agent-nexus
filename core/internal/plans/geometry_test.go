@@ -17,7 +17,7 @@ func TestTileGeometryBoundsDepthAndEffectiveStatus(t *testing.T) {
 	}
 	p.Steps[0].Ref = "card:done"
 	now := time.Now()
-	state := Compute(p, map[string]Fact{"card:done": {Known: true, Status: "done"}}, now, now, 0)
+	state := Compute(p, map[string]Fact{"card:done": {Known: true, Status: "done"}}, now)
 	g := TileGeometry(p, state)
 	if len(g.Nodes) != MaxTileNodes || g.CollapsedNodes != MaxSteps-MaxTileNodes || g.Shape != "chain" {
 		t.Fatal(g)
@@ -28,12 +28,12 @@ func TestTileGeometryBoundsDepthAndEffectiveStatus(t *testing.T) {
 		}
 	}
 	p = Plan{Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}, {ID: "c", Title: "C", After: []string{"a", "b"}}}}
-	g = TileGeometry(p, Compute(p, nil, now, now, 0))
+	g = TileGeometry(p, Compute(p, nil, now))
 	if g.Shape != "dag" || g.Nodes[2].Layer != 1 || len(g.Nodes[2].After) != 2 {
 		t.Fatal(g)
 	}
 	p = Plan{Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}}
-	if g = TileGeometry(p, Compute(p, nil, now, now, 0)); g.Shape != "lanes" {
+	if g = TileGeometry(p, Compute(p, nil, now)); g.Shape != "lanes" {
 		t.Fatal(g)
 	}
 }

@@ -67,7 +67,7 @@ func TestPerformanceWorkSummaryBudgetAndPlans(t *testing.T) {
 			}
 			capture.Start()
 			start := time.Now()
-			err = s.EnrichCardPlans(ctx, page.Work, func(string, string) bool { return true }, time.Now().UTC(), 0)
+			err = s.EnrichCardPlans(ctx, page.Work, func(string, string) bool { return true }, time.Now().UTC())
 			elapsed := time.Since(start)
 			statements, queries, rows := capture.Stop()
 			work := capture.Work()

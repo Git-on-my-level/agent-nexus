@@ -23,18 +23,11 @@
       "build"
     ],
     "shape": "chain",
-    "health": "on_track",
-    "last_movement_at": "2026-10-04T12:00:00Z",
-    "health_state": "on_track"
+    "last_movement_at": "2026-10-04T12:00:00Z"
   },
   "progress": {
     "done": 1,
     "total": 2
-  },
-  "health": {
-    "status": "on_track",
-    "reason": "Open steps are progressing.",
-    "state": "on_track"
   },
   "geometry": {
     "shape": "chain",
@@ -61,14 +54,10 @@
   "title": "Initiative",
   "summary": {
     "status": {
-      "state": "on_track",
-      "label": "In progress",
-      "reason": "Open steps are progressing.",
+      "state": "no_promise",
+      "label": "No promise",
+      "reason": "No promise; last evidence 0m ago.",
       "since": "2026-10-04T12:00:00Z"
-    },
-    "set_status": {
-      "state": "backlog",
-      "label": "Backlog"
     },
     "progress": {
       "done": 1,
@@ -113,9 +102,10 @@
   "board_ref": "board:portfolio",
   "updated_at": "2026-10-04T12:00:00Z",
   "plan_health": {
-    "state": "on_track",
-    "reason": "Open steps are progressing.",
-    "since": "2026-10-04T12:00:00Z"
+    "state": "no_promise",
+    "reason": "No promise; last evidence 0m ago.",
+    "since": "2026-10-04T12:00:00Z",
+    "last_evidence_at": "2026-10-04T12:00:00Z"
   },
   "next_step": {
     "id": "build",
@@ -152,14 +142,10 @@
   "summary_text": "",
   "work_summary": {
     "status": {
-      "state": "on_track",
-      "label": "In progress",
-      "reason": "Open steps are progressing.",
+      "state": "no_promise",
+      "label": "No promise",
+      "reason": "No promise; last evidence 0m ago.",
       "since": "2026-10-04T12:00:00Z"
-    },
-    "set_status": {
-      "state": "backlog",
-      "label": "Backlog"
     },
     "progress": {
       "done": 1,

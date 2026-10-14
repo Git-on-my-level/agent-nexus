@@ -94,11 +94,11 @@ func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
 	if err = json.Unmarshal(out.Body.Bytes(), &batch); err != nil || len(batch.Items) != 1 || batch.Items[0].Resolvable || batch.Items[0].Title != "" {
 		t.Fatalf("private HTTP preview: %s error=%v", out.Body.String(), err)
 	}
-	previews, err := store.ResolveRefs(req.Context(), []string{anyString(hidden["ref"])}, planVisibility(req, opts), time.Now(), 0)
+	previews, err := store.ResolveRefs(req.Context(), []string{anyString(hidden["ref"])}, planVisibility(req, opts), time.Now())
 	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" {
 		t.Fatalf("private store preview: %+v error=%v", previews, err)
 	}
-	if err = store.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []map[string]any{parent}, planVisibility(req, opts), time.Now(), 0); err != nil {
+	if err = store.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []map[string]any{parent}, planVisibility(req, opts), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if parent["plan"] != nil || parent["plan_state"] != nil || parent["next_step"] != nil {
@@ -175,20 +175,16 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	}
 }
 
-func TestPlanThresholdAndRefLimits(t *testing.T) {
-	// Serial: this file mutates process-wide environment, logging or counters.
+func TestPlanRefLimits(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
-	t.Setenv("ANX_PLAN_STALLED_AFTER", "24h")
-	if planStalledAfter().Hours() != 24 {
-		t.Fatal("threshold ignored")
-	}
 	h := newPrimitivesTestServer(t)
 	for _, req := range []any{map[string]any{"refs": make([]string, 201)}, map[string]any{}, map[string]any{"refs": []string{strings.Repeat("a", 2049)}}} {
 		planRequest(t, "POST", h.baseURL+"/refs/resolve", req, 400)
 	}
 }
 
-func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
+func TestPromiseHealthAndPossiblyMootEndToEnd(t *testing.T) {
 	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
@@ -230,11 +226,10 @@ func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
 	if moot["flagged"] != true || moot["sources"] != float64(2) || anyString(moot["reason"]) == "" {
 		t.Fatal("plan response lost the moot flag", put)
 	}
-	// The decision card is parked in Ready: dark is for active work, so the
-	// card stays on_track even with nothing dated — the moot flag is what
-	// speaks up here.
-	if put["plan_health"].(map[string]any)["state"] != "on_track" {
-		t.Fatal("a ready decision card must not read dark", put)
+	// Nothing is promised on the decision card; the moot flag is what speaks
+	// up here.
+	if put["plan_health"].(map[string]any)["state"] != "no_promise" {
+		t.Fatal("an undated decision card reads no_promise", put)
 	}
 	read := workGetJSON(t, h.baseURL+"/work/"+anyString(decision["ref"]), 200)["work"].(map[string]any)
 	if read["possibly_moot"].(map[string]any)["flagged"] != true {
@@ -272,26 +267,13 @@ func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
 		t.Fatal("an unobserved source must withhold the flag entirely", halfMoot)
 	}
 
-	// Dark sequencing on a fresh active card: nothing dated reads dark with no
-	// anchor, a far wake date supplies the anchor, a near due leaves the dark
-	// state, and a per-card horizon re-darkens it.
+	// Promise sequencing on a fresh active card: nothing dated reads
+	// no_promise, a past wake date is a missed promise, a future due moves it.
 	quiet := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Quiet initiative","phase":"in_progress"}`, 201)["work"].(map[string]any)
-	quietEndpoint := h.baseURL + "/cards/" + anyString(quiet["ref"]) + "/plan"
-	quietBefore := workGetJSON(t, quietEndpoint, 200)
-	planRequest(t, "PUT", quietEndpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": quietBefore["if_updated_at"], "plan": map[string]any{"steps": []any{
-		map[string]any{"id": "only", "title": "Only step"},
-	}}}, 200)
 	quietRead := workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
-	health := quietRead["plan_health"].(map[string]any)
-	if health["state"] != "dark" || health["since"] != nil {
-		t.Fatal("no dated signal must read dark with a null anchor", health)
+	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "no_promise" {
+		t.Fatal("nothing dated must read no_promise", quietRead["plan_health"])
 	}
-	// Patch with the version fence each read carries; the patch echo is the
-	// lightweight projection, so the re-read supplies the health. A rejected
-	// patch must leave the fence untouched. Signal dates derive from the
-	// clock: a wake well past the horizon, then a due date inside it.
-	wakeDate := time.Now().UTC().Add(30 * 24 * time.Hour).Format("2006-01-02")
-	dueDate := time.Now().UTC().Add(3 * 24 * time.Hour).Format(time.RFC3339)
 	version := int64(quietRead["version"].(float64))
 	patchAndRead := func(patch map[string]any, status int) map[string]any {
 		body, err := json.Marshal(map[string]any{"actor_id": "actor-1", "if_version": version, "patch": patch})
@@ -304,24 +286,15 @@ func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
 		}
 		return workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
 	}
-	patchAndRead(map[string]any{"wake_condition": "check the metric " + wakeDate}, 200)
-	quietRead = workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
-	health = quietRead["plan_health"].(map[string]any)
-	if health["state"] != "dark" || health["since"] != wakeDate+"T00:00:00Z" {
-		t.Fatal("wake_condition must anchor the dark state", health)
+	wakeDate := time.Now().UTC().Add(-3 * 24 * time.Hour).Format("2006-01-02")
+	health := patchAndRead(map[string]any{"wake_condition": "check the metric " + wakeDate}, 200)["plan_health"].(map[string]any)
+	if health["state"] != "past_promise" || health["since"] != wakeDate+"T00:00:00Z" || health["promise"].(map[string]any)["source"] != "wake_condition" || health["past_promise_for_seconds"] == nil {
+		t.Fatal("a past wake date is a missed promise", health)
 	}
-	quietRead = patchAndRead(map[string]any{"due_at": dueDate}, 200)
-	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "on_track" {
-		t.Fatal("a due date inside the horizon leaves dark", state)
-	}
-	quietRead = patchAndRead(map[string]any{"dark_after": "1h"}, 200)
-	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "dark" {
-		t.Fatal("a per-card horizon must re-darken the card", state)
-	}
-	patchAndRead(map[string]any{"dark_after": "soon"}, 400)
-	quietRead = patchAndRead(map[string]any{"dark_after": ""}, 200)
-	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "on_track" {
-		t.Fatal("clearing dark_after restores the default horizon", state)
+	dueDate := time.Now().UTC().Add(3 * 24 * time.Hour).Format(time.RFC3339)
+	health = patchAndRead(map[string]any{"wake_condition": "", "due_at": dueDate}, 200)["plan_health"].(map[string]any)
+	if health["state"] != "moving" || health["promise"].(map[string]any)["source"] != "due_at" {
+		t.Fatal("a future due date is a moving promise", health)
 	}
 }
 

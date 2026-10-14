@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -15,9 +14,6 @@ import (
 // Non-card linked sources resolve in a second bounded budget so open asks can
 // carry the possibly-moot flag without widening the card preview budget.
 func enrichInboxCardSummaries(r *http.Request, opts handlerOptions, items []map[string]any) error {
-	if err := enrichInboxAskStaleness(r, opts, items); err != nil {
-		return err
-	}
 	store, ok := opts.primitiveStore.(planStore)
 	if !ok {
 		return nil
@@ -59,7 +55,7 @@ func enrichInboxCardSummaries(r *http.Request, opts handlerOptions, items []map[
 	if len(refs) == 0 && len(mootRefs) == 0 {
 		return nil
 	}
-	previews, err := store.ResolveRefs(r.Context(), append(append([]string{}, refs...), mootRefs...), planVisibility(r, opts), time.Now().UTC(), planStalledAfter())
+	previews, err := store.ResolveRefs(r.Context(), append(append([]string{}, refs...), mootRefs...), planVisibility(r, opts), time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -134,15 +130,4 @@ func isContextRef(ref string) bool {
 		return true
 	}
 	return false
-}
-
-func enrichInboxAskStaleness(r *http.Request, opts handlerOptions, items []map[string]any) error {
-	if store, ok := opts.primitiveStore.(interface {
-		EnrichInboxAskStaleness(context.Context, []map[string]any, time.Time) error
-	}); ok {
-		if err := store.EnrichInboxAskStaleness(r.Context(), items, time.Now().UTC()); err != nil {
-			return err
-		}
-	}
-	return nil
 }

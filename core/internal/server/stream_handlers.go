@@ -367,7 +367,6 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	partialSweep := filter.BeforeID != ""
 	var lastRevision, sweepRevision int64
 	caughtUp := false
-	var nextStaleAt time.Time
 	ticker := time.NewTicker(streamPollInterval(opts))
 	defer ticker.Stop()
 
@@ -379,7 +378,7 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to observe stream changes")
 			return
 		}
-		if observed && caughtUp && revision == lastRevision && (nextStaleAt.IsZero() || time.Now().Before(nextStaleAt)) {
+		if observed && caughtUp && revision == lastRevision {
 			if err := writeSSEKeepalive(controller, w); err != nil {
 				clearSSEWriteDeadline(controller)
 				return
@@ -394,7 +393,6 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		}
 		if filter.BeforeID == "" || sweepRevision == 0 {
 			sweepRevision = revision
-			nextStaleAt = time.Time{}
 			caughtUp = false
 		}
 		allRecords, page, err := opts.streamReads.inboxPage(r, opts, filter, revision, observed)
@@ -412,13 +410,6 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		currentDigestByItem := make(map[string]string, len(allRecords))
 		for _, record := range allRecords {
 			currentDigestByItem[record.itemID] = record.digest
-			// Track one deadline while admitting this bounded page. Idle ticks
-			// need only an O(1) clock comparison, with no map or SQL scan.
-			if record.data["is_stale"] != true {
-				if at, err := time.Parse(time.RFC3339Nano, anyString(record.data["stale_at"])); err == nil && (nextStaleAt.IsZero() || at.Before(nextStaleAt)) {
-					nextStaleAt = at
-				}
-			}
 		}
 		for _, record := range records {
 			previousDigest, seen := lastDigestByItem[record.itemID]

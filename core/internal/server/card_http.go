@@ -33,7 +33,7 @@ func canonicalCardView(card map[string]any) map[string]any {
 		if computed, ok := card["work_summary"].(*primitives.WorkSummary); ok {
 			out["work_summary"] = computed
 		} else {
-			out["work_summary"] = primitives.BasicWorkSummary(card, time.Now().UTC(), planStalledAfter())
+			out["work_summary"] = primitives.BasicWorkSummary(card, time.Now().UTC())
 		}
 		out["summary"] = out["work_summary"]
 	}
