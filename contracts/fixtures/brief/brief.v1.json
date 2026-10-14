@@ -118,6 +118,34 @@
       ],
       "blocks_count": 0,
       "age_seconds": 10800
+    },
+    {
+      "ref": "decision:pm_7",
+      "kind": "pm_proposal",
+      "inbox_item_id": "pm_7",
+      "title": "Move \"BLE reliability\" to In progress?",
+      "body": "Requested from the initiative page; the source is outside this workspace.",
+      "requested_by": {
+        "id": "agent:pm",
+        "display": "PM"
+      },
+      "created_at": "2026-10-15T07:00:00Z",
+      "age_seconds": 7200,
+      "decide_by": null,
+      "overdue_for_seconds": null,
+      "blocks": [],
+      "blocks_count": 0,
+      "subject": {
+        "ref": "card:ble-reliability"
+      },
+      "proposals": [
+        "Approve",
+        "Reject"
+      ],
+      "pm_decision": {
+        "id": "pm_7",
+        "revision": 3
+      }
     }
   ],
   "initiatives": [

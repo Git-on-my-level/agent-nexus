@@ -22,6 +22,8 @@ vi.mock("$lib/inboxResponseQueue.js", () => ({
   inboxResponseOverlay: writable({}),
   inboxUnsentResponses: writable([]),
 }));
+const outbox = vi.hoisted(() => ({ enqueuePmDecisionAnswer: vi.fn(async () => ({})) }));
+vi.mock("$lib/mutationOutbox.js", () => outbox);
 vi.mock("$lib/actions/durableDraft.js", () => ({
   durableDraft: () => ({ update() {}, destroy() {} }),
 }));
@@ -146,5 +148,28 @@ describe("DecisionCard", () => {
       expect(lintComputed(container), decision.ref).toEqual([]);
       cleanup();
     }
+  });
+
+  it("answers a PM decision record through the durable PM route", async () => {
+    const record = brief.decisions.find((d) => d.ref === "decision:pm_7");
+    const { container, findByText } = render(DecisionCard, {
+      decision: record,
+      now: NOW,
+    });
+    await fireEvent.click(container.querySelector('[data-decision-proposal="2"]'));
+    expect(outbox.enqueuePmDecisionAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ decisionId: "pm_7", revision: 3, approve: false }),
+    );
+    expect(queue.queueInboxResponse).not.toHaveBeenCalled();
+    await findByText(/Sending to your PM/);
+  });
+
+  it("keeps the answer and says so when it cannot be saved", async () => {
+    outbox.enqueuePmDecisionAnswer.mockRejectedValueOnce(new Error("quota"));
+    const record = brief.decisions.find((d) => d.ref === "decision:pm_7");
+    const { container, findByRole } = render(DecisionCard, { decision: record, now: NOW });
+    await fireEvent.click(container.querySelector('[data-decision-proposal="1"]'));
+    expect((await findByRole("alert")).textContent).toContain("not sent");
+    expect(container.querySelector('[data-decision-proposal="1"]')).not.toBeNull();
   });
 });

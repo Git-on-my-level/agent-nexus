@@ -4,4 +4,6 @@ Merge battery-v2 calibration? 2d · by Oct 17 high blocks 2: Battery curve v2, C
 ---
 Give fleet-agent access to this workspace Access 3h from fleet-agent Requested by fleet-agent for host m6-mini. Approve(recommended)Deny Copy ref Reply Send reply
 ---
+Move "BLE reliability" to In progress? PM proposal 2h from PM Requested from the initiative page; the source is outside this workspace. Approve(recommended)Reject Copy ref Reply Send reply
+---
 Withdraw "pick label scheme"? PM proposal 2m from PM Overtaken: PR #212 and #214 merged since the initiative last moved. Withdraw(recommended)Keep Reply… Copy ref Reply Send reply
