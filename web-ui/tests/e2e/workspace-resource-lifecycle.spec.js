@@ -13,6 +13,8 @@ function baseResource(id, label) {
     created_by: actorId,
     updated_at: timestamp,
     updated_by: actorId,
+    head_revision_id: "revision-lifecycle",
+    head_revision_number: 1,
     archived_at: null,
     archived_by: null,
     trashed_at: null,
@@ -27,6 +29,7 @@ function baseResource(id, label) {
 
 function archiveResource(resource) {
   Object.assign(resource, {
+    updated_at: new Date(Date.parse(resource.updated_at) + 1000).toISOString(),
     state: "archived",
     archived_at: timestamp,
     archived_by: actorId,
@@ -35,6 +38,7 @@ function archiveResource(resource) {
 
 function unarchiveResource(resource) {
   Object.assign(resource, {
+    updated_at: new Date(Date.parse(resource.updated_at) + 1000).toISOString(),
     state: "active",
     archived_at: null,
     archived_by: null,
@@ -43,6 +47,7 @@ function unarchiveResource(resource) {
 
 function trashResource(resource) {
   Object.assign(resource, {
+    updated_at: new Date(Date.parse(resource.updated_at) + 1000).toISOString(),
     state: "trashed",
     trashed_at: timestamp,
     trashed_by: actorId,
@@ -69,6 +74,15 @@ async function setupActor(page) {
 
 async function routeLifecycleEndpoint(page, config, resource) {
   const calls = { archive: 0, unarchive: 0, trash: 0 };
+  const keys = new Set();
+  function checkOriginalBase(route) {
+    const body = route.request().postDataJSON();
+    expect(body.if_updated_at).toBe(resource.updated_at);
+    expect(body.request_key).toEqual(expect.any(String));
+    expect(body.request_key.length).toBeGreaterThan(0);
+    expect(keys.has(body.request_key)).toBe(false);
+    keys.add(body.request_key);
+  }
 
   await page.route(config.listPattern, async (route) => {
     const request = route.request();
@@ -88,6 +102,7 @@ async function routeLifecycleEndpoint(page, config, resource) {
   });
 
   await page.route(config.archivePattern, async (route) => {
+    checkOriginalBase(route);
     calls.archive += 1;
     archiveResource(resource);
     await route.fulfill({
@@ -98,6 +113,7 @@ async function routeLifecycleEndpoint(page, config, resource) {
   });
 
   await page.route(config.unarchivePattern, async (route) => {
+    checkOriginalBase(route);
     calls.unarchive += 1;
     unarchiveResource(resource);
     await route.fulfill({
@@ -108,6 +124,7 @@ async function routeLifecycleEndpoint(page, config, resource) {
   });
 
   await page.route(config.trashPattern, async (route) => {
+    checkOriginalBase(route);
     calls.trash += 1;
     trashResource(resource);
     await route.fulfill({
@@ -142,6 +159,9 @@ async function exerciseLifecycleList(page, config) {
     .getByRole("button", { name: "Archive" })
     .click();
   await expect.poll(() => calls.archive).toBe(1);
+  await expect(
+    page.locator('[data-document-lifecycle-work] [data-mutation-state="sent"]'),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: `Select ${config.label}` }).click();
   await page
@@ -149,6 +169,9 @@ async function exerciseLifecycleList(page, config) {
     .getByRole("button", { name: "Unarchive" })
     .click();
   await expect.poll(() => calls.unarchive).toBe(1);
+  await expect(
+    page.locator('[data-document-lifecycle-work] [data-mutation-state="sent"]'),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: `Select ${config.label}` }).click();
   await page
@@ -160,6 +183,9 @@ async function exerciseLifecycleList(page, config) {
     .getByRole("button", { name: "Trash" })
     .click();
   await expect.poll(() => calls.trash).toBe(1);
+  await expect(
+    page.locator('[data-document-lifecycle-work] [data-mutation-state="sent"]'),
+  ).toBeVisible();
 }
 
 test("workspace resource list lifecycle actions share archive, unarchive, and trash behavior", async ({
@@ -179,6 +205,15 @@ test("workspace resource list lifecycle actions share archive, unarchive, and tr
     listPayload: (document) => ({
       documents: document.trashed_at ? [] : [document],
     }),
-    itemPayload: (document) => ({ document }),
+    itemPayload: (document) => ({
+      document,
+      revision: {
+        revision_id: "revision-lifecycle",
+        revision_number: 1,
+        content_type: "text",
+        content: "Lifecycle document",
+        created_at: timestamp,
+      },
+    }),
   });
 });

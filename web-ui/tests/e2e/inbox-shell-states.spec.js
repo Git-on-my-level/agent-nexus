@@ -730,6 +730,27 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "update marked read", bothEnds);
     });
 
+    test("inbox decision uncertain answer retains the note", async ({
+      page,
+    }) => {
+      const api = await installWorkspaceApi(page);
+      api.fail.answer = { status: 500, message: LONG_ERROR };
+      await gotoInbox(page, `?item=decision:dec_${LONG_HASH}`);
+      const note = `Keep this uncertain approval. ${LONG_HASH}`;
+      await page.getByLabel(/Your note/).fill(note);
+      await page.getByRole("button", { name: "Approve", exact: true }).click();
+      const retrying = page.locator('[data-mutation-state="retrying"]:visible');
+      await expect(retrying).toBeVisible();
+      await expect(
+        retrying.getByLabel("Saved message", { exact: true }),
+      ).toHaveValue(note);
+      await expect(retrying.locator("details[open]")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Approve", exact: true }),
+      ).toBeDisabled();
+      await expectCleanLayout(page, "decision answer uncertain", bothEnds);
+    });
+
     test("inbox decision panel and answer flow", async ({ page }) => {
       const api = await installWorkspaceApi(page);
       await gotoInbox(page);
@@ -748,17 +769,33 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByLabel(/Your note/).fill(`Approved. ${LONG_HASH}`);
       await expectCleanLayout(page, "decision note filled", bothEnds);
 
-      api.fail.answer = { message: LONG_ERROR };
+      // A definitive refusal retains the exact note for an explicit outbox
+      // retry. The uncertain-answer case above preserves PM 5xx coverage.
+      api.fail.answer = { status: 422, message: LONG_ERROR };
       await page.getByRole("button", { name: "Approve" }).click();
-      await expect(page.getByRole("alert").first()).toBeVisible();
+      const attention = page.locator(
+        '[data-mutation-state="attention"]:visible',
+      );
+      await expect(attention).toBeVisible();
+      await expect(
+        attention.getByLabel("Saved message", { exact: true }),
+      ).toHaveValue(`Approved. ${LONG_HASH}`);
+      await expect(attention.locator("details[open]")).toHaveCount(0);
       await expectCleanLayout(page, "decision answer failed", bothEnds);
+      await attention.locator("summary").click();
+      await expectCleanLayout(page, "decision saved error details", bothEnds);
 
       api.fail = {};
       api.hold.answer = deferred();
-      await page.getByRole("button", { name: "Approve" }).click();
+      await attention
+        .getByRole("button", { name: "Retry send", exact: true })
+        .click();
       await expect(
-        page.getByRole("button", { name: "Approving…" }),
+        page.locator('[data-mutation-state="sending"]:visible'),
       ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Approve", exact: true }),
+      ).toBeDisabled();
       await expectCleanLayout(page, "decision approving");
       api.hold.answer.resolve();
       api.hold = {};
@@ -1079,15 +1116,31 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await options.first().click();
       await expectCleanLayout(page, "item route actor chosen", bothEnds);
 
-      // Sending returns to the Inbox behind the undo toast; a refused
-      // response surfaces there once the window closes.
+      // An unconfirmed send stays on its item. Close the Undo window explicitly
+      // so this geometry check observes the actual outbox failure, not a timer.
       api.fail.respond = { message: LONG_ERROR };
       await page.getByRole("button", { name: "Send response" }).click();
-      await expect(page).toHaveURL(/\/inbox$/);
+      await expect(page).toHaveURL(/\/inbox\/inbox-review$/);
+      await expect(
+        page.locator('[data-inbox-send-state="pending"]'),
+      ).toBeVisible();
+      await page.evaluate(async () => {
+        const { flushInboxResponse } =
+          await import("/src/lib/inboxResponseQueue.js");
+        await flushInboxResponse();
+      });
       await expect(page.locator('[data-inbox-toast="failed"]')).toBeVisible({
         timeout: 15_000,
       });
+      const retrying = page.locator('[data-inbox-send-state="retrying"]');
+      await expect(
+        retrying.getByLabel("Saved response", { exact: true }),
+      ).toHaveValue(LONG_HASH.repeat(2));
+      await expect(retrying.locator("details[open]")).toHaveCount(0);
+      await expect(page).toHaveURL(/\/inbox\/inbox-review$/);
       await expectCleanLayout(page, "item route submit failed", bothEnds);
+      await retrying.locator("summary").click();
+      await expectCleanLayout(page, "item route saved error details", bothEnds);
     });
 
     // The route's own header renders the subject, the requester and the ref
@@ -1210,7 +1263,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
         },
       };
       await page.getByRole("button", { name: "Approve" }).click();
-      await expect(page.getByRole("alert").first()).toBeVisible();
+      const attention = page.locator(
+        '[data-mutation-state="attention"]:visible',
+      );
+      await expect(attention).toBeVisible();
+      await expect(
+        attention.getByLabel("Saved message", { exact: true }),
+      ).toHaveValue("Approving this one.");
+      await expect(attention.locator("details[open]")).toHaveCount(0);
       await expectCleanLayout(page, "superseded on answer", bothEnds);
 
       // Acknowledging an inbox item waits behind the undo toast.
@@ -1219,8 +1279,16 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByTestId("inbox-row-inbox-plain").click(FIRST_PAINT);
       await page.getByRole("button", { name: "Acknowledge" }).click();
       await expect(page.locator('[data-inbox-toast="pending"]')).toContainText(
-        "Acknowledged",
+        "Response saved. Waiting to send.",
       );
+      const queued = await page.evaluate(async () => {
+        const { listLocalWork } = await import("/src/lib/localWorkStore.js");
+        const { readerScopeKey } = await import("/src/lib/readerScope.js");
+        const records = await listLocalWork(readerScopeKey(), "inbox-send");
+        return records.find(({ value }) => value.itemId === "inbox-plain").value
+          .request;
+      });
+      expect(queued.outcome).toBe("acknowledged");
       await expectCleanLayout(page, "dismissed notice", bothEnds);
     });
 

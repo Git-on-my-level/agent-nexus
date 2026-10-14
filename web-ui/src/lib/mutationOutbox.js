@@ -658,11 +658,51 @@ export async function recoverMutations() {
         mutationOutbox.set([]);
         break;
       }
+      const records = await listLocalWork(scope, "mutation", {
+        includeDeleted: true,
+      });
+      if (scope !== get(localWorkScope) || !canUseLocalWorkScope(scope))
+        continue;
+      // A tab can mount after a batch already confirmed elsewhere. Recover
+      // its delivery display from the persisted receipt, without replaying
+      // confirmation events, clearing drafts or issuing historical refreshes.
+      mutationConfirmations.update((previous) => {
+        const next = { ...previous };
+        for (const record of records) {
+          const receipt = record.confirmation;
+          const submitted = record.submission;
+          if (
+            !record.deleted ||
+            record.deletionReason !== "confirmed" ||
+            submitted?.operation !== "docs.lifecycle" ||
+            !Array.isArray(receipt?.documents)
+          )
+            continue;
+          const current = next[submitted.target];
+          if (
+            (current?.confirmedAt ?? current?.createdAt ?? 0) >
+            submitted.confirmedAt
+          )
+            continue;
+          next[submitted.target] = {
+            key: record.target,
+            scope,
+            epoch: record.epoch,
+            target: submitted.target,
+            operation: submitted.operation,
+            state: "sent",
+            confirmedAt: submitted.confirmedAt,
+            receipt,
+            result: receipt,
+            request: { items: receipt.documents.map(({ id }) => ({ id })) },
+          };
+        }
+        return next;
+      });
       const rows = new Map(
-        (await listLocalWork(scope, "mutation")).map((record) => [
-          record.target,
-          record.value,
-        ]),
+        records
+          .filter((record) => !record.deleted)
+          .map((record) => [record.target, record.value]),
       );
       for (const [key, entry] of volatile) {
         if (!active(entry)) continue;

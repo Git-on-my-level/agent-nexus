@@ -137,7 +137,12 @@ test("complete bulk checkpoint precedes first send; 524 recovery reuses all keys
     expect(attempt.body).toEqual(
       request.items.find((item) => attempt.url.includes(item.id)).body,
     );
+  // Mount after confirmation, not just while another tab is sending. Sent
+  // must come from the persisted receipt even without a prior in-memory row.
+  const confirmedAttempts = attempts.length;
+  await page.reload();
   await expect(status(page, "sent")).toBeVisible();
+  expect(attempts).toHaveLength(confirmedAttempts);
   await page.screenshot({ path: info.outputPath("sent.png"), fullPage: true });
 });
 
