@@ -283,6 +283,9 @@ intent keys, including board/palette submissions. Both paths preserve PM setup
 guards and explicit source-move approval; recovery does not prompt again.
 Confirmation refreshes canonical task/decision display without rewriting the
 original request or receipt. Newer evidence in another tab survives confirmation.
+An unfinished evidence draft must be sent or explicitly discarded before another
+task or destination can replace it. Submitted snapshots remain in the outbox
+while the composer can move on to other tasks.
 Board undo submits a new intent using explicitly refreshed current bases;
 pending moves never claim to have moved the task.
 

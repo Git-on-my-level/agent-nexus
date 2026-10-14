@@ -627,33 +627,42 @@
       noticeNoPm(sourceLabel(work.source), { pointer });
       return;
     }
-    let draft =
-      evidenceFor?.key === key && evidenceFor.phase === phase
-        ? evidenceFor
-        : null;
-    if (!draft) {
-      draft = taskMoveDraft(work, phase, {
-        key,
-        ref: "",
-        undo,
-        pointer,
-        boardToken: boardToken(work),
-        ...(Number.isInteger(index)
-          ? {
-              beforeCardId: beforeCardRefForInsert(
-                work,
-                boardPhasePeers(
-                  dedupeWorkBySource(records).records,
-                  phase,
-                  key,
-                ),
-                index,
-              ),
-            }
-          : {}),
-      });
-      evidenceFor = draft;
+    if (
+      evidenceFor &&
+      (evidenceFor.key !== key ||
+        (evidenceFor.phase !== phase && evidenceFor.ref?.trim())) &&
+      !$mutationOutbox.some(
+        (entry) => entry.target === taskMoveTarget(evidenceFor.work),
+      )
+    ) {
+      moveError = `Finish or discard the saved move for “${evidenceFor.work.title}” before choosing another move.`;
+      return;
     }
+    let draft =
+      evidenceFor?.key === key
+        ? {
+            ...evidenceFor,
+            phase,
+            approved: evidenceFor.phase === phase && evidenceFor.approved,
+          }
+        : taskMoveDraft(work, phase, {
+            key,
+            ref: "",
+            undo,
+            pointer,
+            boardToken: boardToken(work),
+          });
+    if (Number.isInteger(index))
+      draft = {
+        ...draft,
+        beforeCardId: beforeCardRefForInsert(
+          work,
+          boardPhasePeers(dedupeWorkBySource(records).records, phase, key),
+          index,
+        ),
+        pointer,
+      };
+    evidenceFor = draft;
     if (phase === "done" && !draft.ref?.trim()) {
       void loadEvidenceSuggestions();
       setMoveNotice(null);

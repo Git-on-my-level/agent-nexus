@@ -360,3 +360,41 @@ test("editing a failed board move from task detail returns to its durable compos
     page.getByRole("button", { name: "Mark done", exact: true }),
   ).toBeEnabled();
 });
+
+test("another board drop cannot replace unfinished completion evidence", async ({
+  page,
+  context,
+}) => {
+  await prepare(context, (route) => json(route, receipt()));
+  const second = {
+    ...base,
+    ref: "card:second",
+    handle: "second",
+    title: "Another task",
+  };
+  await context.route(/\/work(?:\?.*)?$/, (route) =>
+    json(route, { work: [base, second] }),
+  );
+  await evidence(page);
+  await page.getByLabel(/needs evidence/).fill("event:unfinished-proof");
+  const card = page.locator('[data-work-ref="card:second"][tabindex="0"]');
+  const from = await card.boundingBox();
+  const to = await page.locator('[data-work-phase="done"]').boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 12, from.y + 20, {
+    steps: 3,
+  });
+  await page.mouse.move(to.x + to.width / 2, to.y + 65, { steps: 8 });
+  await page.mouse.up();
+  await expect(
+    page.getByText(/Finish or discard the saved move/),
+  ).toBeVisible();
+  await expect(page.getByLabel(/needs evidence/)).toHaveValue(
+    "event:unfinished-proof",
+  );
+  await page.reload();
+  await expect(page.getByLabel(/needs evidence/)).toHaveValue(
+    "event:unfinished-proof",
+  );
+});
