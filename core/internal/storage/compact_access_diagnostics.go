@@ -37,6 +37,9 @@ func compactMigrationError(stage string, err error) error {
 	}
 	e := &CompactAccessMigrationError{Stage: stage, Reason: "unexpected_error", cause: err}
 	var code interface{ Code() int }
+	if errors.As(err, &code) {
+		e.SQLiteCode = code.Code()
+	}
 	var mismatch *compactMismatchError
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
@@ -49,8 +52,7 @@ func compactMigrationError(stage string, err error) error {
 		e.Reason = "ledger_mismatch_requires_offline_verification"
 	case errors.Is(err, ErrCompactAccessChanged):
 		e.Reason = "ledger_changed_retry"
-	case errors.As(err, &code):
-		e.SQLiteCode = code.Code()
+	case code != nil:
 		e.Reason = "sqlite_error"
 		if e.SQLiteCode&255 == 5 || e.SQLiteCode&255 == 6 {
 			e.Reason = "write_contention_retry"

@@ -8,25 +8,53 @@ import (
 	"time"
 )
 
+type compactDriverCode int
+
+func (compactDriverCode) Error() string { return "driver-secret SQLITE_INTERRUPT" }
+func (e compactDriverCode) Code() int   { return int(e) }
+
 func TestCompactMigrationDiagnosticsAreSafeAndClassified(t *testing.T) {
 	for _, tc := range []struct {
 		stage  string
 		cause  error
 		reason string
+		code   int
 	}{
-		{"shadow_install", context.DeadlineExceeded, "deadline_exceeded"},
-		{"verification", ErrCompactAccessMismatch, "ledger_mismatch_requires_offline_verification"},
-		{"cutover", ErrCompactAccessChanged, "ledger_changed_retry"},
-		{"shadow_install", errors.New("SQL contains private-sentinel"), "unexpected_error"},
+		{"shadow_install", context.DeadlineExceeded, "deadline_exceeded", 0},
+		{"shadow_install", errors.Join(context.DeadlineExceeded, compactDriverCode(9)), "deadline_exceeded", 9},
+		{"compact_backfill", errors.Join(context.DeadlineExceeded, compactDriverCode(5)), "deadline_exceeded", 5},
+		{"verification", ErrCompactAccessMismatch, "ledger_mismatch_requires_offline_verification", 0},
+		{"cutover", ErrCompactAccessChanged, "ledger_changed_retry", 0},
+		{"shadow_install", errors.New("SQL contains private-sentinel"), "unexpected_error", 0},
+		{"shadow_install", compactDriverCode(5), "write_contention_retry", 5},
 	} {
 		err := compactMigrationError(tc.stage, tc.cause)
 		var diagnostic *CompactAccessMigrationError
-		if !errors.As(err, &diagnostic) || diagnostic.Stage != tc.stage || diagnostic.Reason != tc.reason || !errors.Is(err, tc.cause) {
-			t.Fatalf("wrong diagnostic: %v", err)
+		if !errors.As(err, &diagnostic) || diagnostic.Stage != tc.stage || diagnostic.Reason != tc.reason || diagnostic.SQLiteCode != tc.code || !errors.Is(err, tc.cause) {
+			t.Fatalf("wrong diagnostic: %+v", diagnostic)
 		}
-		if strings.Contains(err.Error(), "private-sentinel") {
+		if strings.Contains(err.Error(), "private-sentinel") || strings.Contains(err.Error(), "driver-secret") {
 			t.Fatal("driver contents leaked")
 		}
+	}
+}
+
+func TestCompactMigrationDeadlineJoinKeepsSQLiteCode(t *testing.T) {
+	var batch adaptiveMaintenanceBatch
+	_, err := batch.run(context.Background(), 3, func(ctx context.Context, _ int) (bool, error) {
+		<-ctx.Done()
+		return false, compactDriverCode(9)
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected joined deadline: %v", err)
+	}
+	diagnostic := compactMigrationError("compact_backfill", err).(*CompactAccessMigrationError)
+	if diagnostic.Reason != "deadline_exceeded" || diagnostic.SQLiteCode != 9 || strings.Contains(diagnostic.Error(), "driver-secret") {
+		t.Fatalf("lost driver code: %+v error=%q", diagnostic, diagnostic.Error())
+	}
+	diagnostic.Reason = "budget_exhausted_" + diagnostic.Reason
+	if diagnostic.Reason != "budget_exhausted_deadline_exceeded" || diagnostic.SQLiteCode != 9 {
+		t.Fatalf("budget prefix dropped code: %+v", diagnostic)
 	}
 }
 

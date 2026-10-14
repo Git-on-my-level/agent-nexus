@@ -282,6 +282,7 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 	}()
 	delay, retry := schedule.initialDelay, schedule.retryMin
 	installed := false
+	compactFinished := false
 	for compactMigrationWait(ctx, delay) {
 		lastErr = nil
 		// Inspect the durable mode before taking a writer: restarts must neither
@@ -312,9 +313,11 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 			done, lastErr = w.MaintainCompactAccessBatch(ctx)
 			// A committed copy is progress even if the following raw copy
 			// loses the writer. Do not carry an old contention penalty forward.
-			if lastErr == nil && !done {
+			// The finishing keyset also commits copied rows; !done would skip it.
+			if lastErr == nil && !compactFinished {
 				retry = schedule.retryMin
 			}
+			compactFinished = compactFinished || (lastErr == nil && done)
 		}
 		if lastErr == nil {
 			stage = "stable_backfill"
