@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `229`
+- Commands: `230`
 
 ## `actors.create`
 
@@ -1094,6 +1094,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`
 - Output: Returns `{ proposals, skipped }`.
 - Agent notes: Proposals only; nothing is withdrawn or merged until a human accepts.
+
+## `curation.ungroup`
+
+- CLI path: `curation ungroup`
+- HTTP: `POST /curation/ungroup`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Undo a batch a human accepted.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
+- Output: Returns `{ ungrouped }`.
+- Agent notes: Human principals only. Returns whether any grouping was removed.
 
 ## `derived.rebuild`
 

@@ -462,5 +462,13 @@
   {
     "key": "GET /stream/agent-wakeups",
     "milliseconds": 1000
+  },
+  {
+    "key": "GET /curation/candidates",
+    "milliseconds": 20000
+  },
+  {
+    "key": "GET /curation/metrics",
+    "milliseconds": 20000
   }
 ]

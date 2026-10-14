@@ -628,5 +628,10 @@
     "method": "POST",
     "path": "/curation/run",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/curation/ungroup",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   }
 ]

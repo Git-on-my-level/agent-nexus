@@ -4708,7 +4708,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "curation.metrics",
       "curation.propose",
-      "curation.run"
+      "curation.run",
+      "curation.ungroup"
     ],
     "go_method": "CurationCandidates",
     "ts_method": "curationCandidates"
@@ -4743,7 +4744,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "curation.candidates",
       "curation.propose",
-      "curation.run"
+      "curation.run",
+      "curation.ungroup"
     ],
     "go_method": "CurationMetrics",
     "ts_method": "curationMetrics"
@@ -4808,7 +4810,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "curation.candidates",
       "curation.metrics",
-      "curation.run"
+      "curation.run",
+      "curation.ungroup"
     ],
     "go_method": "CurationPropose",
     "ts_method": "curationPropose"
@@ -4843,10 +4846,56 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "curation.candidates",
       "curation.metrics",
-      "curation.propose"
+      "curation.propose",
+      "curation.ungroup"
     ],
     "go_method": "CurationRun",
     "ts_method": "curationRun"
+  },
+  {
+    "command_id": "curation.ungroup",
+    "cli_path": "curation ungroup",
+    "group": "curation",
+    "method": "POST",
+    "path": "/curation/ungroup",
+    "operation_id": "ungroupCurationBatch",
+    "summary": "Undo an accepted batch proposal",
+    "description": "Removes the grouping an accepted batch proposal recorded, so its member asks show as separate decisions again. The key is the proposal key named in the batch decision and in the applied trail's undo. Nothing else changes; no ask is answered or withdrawn.",
+    "why": "Undo a batch a human accepted.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ungrouped }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only. Returns whether any grouping was removed.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.metrics",
+      "curation.propose",
+      "curation.run"
+    ],
+    "go_method": "CurationUngroup",
+    "ts_method": "curationUngroup"
   },
   {
     "command_id": "derived.rebuild",
@@ -14044,6 +14093,10 @@ export class AnxClient {
 
   curationRun(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("curation.run", {}, options);
+  }
+
+  curationUngroup(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.ungroup", {}, options);
   }
 
   derivedRebuild(options: RequestOptions = {}): Promise<InvokeResult> {

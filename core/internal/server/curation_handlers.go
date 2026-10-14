@@ -140,6 +140,47 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 	writeJSON(w, http.StatusCreated, map[string]any{"proposal": curationProposalJSON(rec, created)})
 }
 
+// handleCurationUngroup undoes an accepted batch: its members become separate
+// decisions again. Only a human ungroups, mirroring who accepted it.
+func handleCurationUngroup(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+		return
+	}
+	store, ok := curationStore(w, opts)
+	if !ok {
+		return
+	}
+	if _, ok := requireHumanPrincipal(w, r, opts); !ok {
+		return
+	}
+	var body struct {
+		Key string `json:"key"`
+	}
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	body.Key = strings.TrimSpace(body.Key)
+	if body.Key == "" || len(body.Key) > 64 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "key is required")
+		return
+	}
+	rec, err := store.ReadableCurationProposal(r.Context(), body.Key, planVisibility(r, opts))
+	if err == nil && rec.Action != string(curation.ActionBatch) {
+		err = primitives.ErrNotFound
+	}
+	if err != nil {
+		curationStoreError(w, r, err)
+		return
+	}
+	removed, err := store.UngroupCurationBatch(r.Context(), rec.Key)
+	if err != nil {
+		curationStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ungrouped": removed})
+}
+
 func handleCurationRun(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")

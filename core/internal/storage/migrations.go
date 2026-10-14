@@ -1087,8 +1087,19 @@ var migrations = []migration{
 		created_at TEXT NOT NULL,
 		resolved_at TEXT
 	)`,
-		`CREATE INDEX IF NOT EXISTS idx_curation_proposals_event ON curation_proposals(proposal_event_id)`},
+		`CREATE INDEX IF NOT EXISTS idx_curation_proposals_event ON curation_proposals(proposal_event_id)`,
+		// Accepted batch proposals: one row per member ask, so brief.v1
+		// decisions collapse members with a primary-key seek per page.
+		`CREATE TABLE IF NOT EXISTS curation_batch_members (
+		ask_id TEXT PRIMARY KEY,
+		batch_key TEXT NOT NULL,
+		proposal_event_id TEXT NOT NULL,
+		created_at TEXT NOT NULL
+	)`,
+		`CREATE INDEX IF NOT EXISTS idx_curation_batch_members_key ON curation_batch_members(batch_key)`},
 	},
+	// S20 seeks promised notes by due time instead of scanning brief_notes.
+	{Version: 93, AfterApply: installBriefNotesNextAtIndex},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

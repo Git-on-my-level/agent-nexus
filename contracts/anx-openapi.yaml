@@ -5960,6 +5960,51 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
+  /curation/ungroup:
+    post:
+      operationId: ungroupCurationBatch
+      summary: Undo an accepted batch proposal
+      description: >
+        Removes the grouping an accepted batch proposal recorded, so its member asks show as
+        separate decisions again. The key is the proposal key named in the batch decision and in
+        the applied trail's undo. Nothing else changes; no ask is answered or withdrawn.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: curation.ungroup
+      x-anx-cli-path: curation ungroup
+      x-anx-why: Undo a batch a human accepted.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Human principals only. Returns whether any grouping was removed.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ ungrouped }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, forbidden]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Ungroup result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ungrouped]
+                properties:
+                  ungrouped: { type: boolean }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
   /curation/run:
     post:
       operationId: runCurationFormula
@@ -13265,7 +13310,24 @@ components:
           properties:
             id: { type: string }
             revision: { type: integer }
-        curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts." }
+        curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts. Omitted entirely, with the decision, when the reader cannot read every target." }
+        batch:
+          type: object
+          description: Present when a human accepted a batch proposal over these asks. The decision stands for every member; answer each member by its own inbox_item_id. Members the reader cannot see are not listed or counted.
+          required: [key, count, members]
+          properties:
+            key: { type: string }
+            count: { type: integer, description: Open members listed here, including this decision. }
+            members:
+              type: array
+              maxItems: 10
+              items:
+                type: object
+                required: [ref, inbox_item_id, title]
+                properties:
+                  ref: { type: string }
+                  inbox_item_id: { type: string }
+                  title: { type: string }
     BriefPromise:
       type: object
       required: [at, what, source]

@@ -143,6 +143,7 @@ export declare class AnxClient {
     curationMetrics(options?: RequestOptions): Promise<InvokeResult>;
     curationPropose(options?: RequestOptions): Promise<InvokeResult>;
     curationRun(options?: RequestOptions): Promise<InvokeResult>;
+    curationUngroup(options?: RequestOptions): Promise<InvokeResult>;
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
     docsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCommentsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
