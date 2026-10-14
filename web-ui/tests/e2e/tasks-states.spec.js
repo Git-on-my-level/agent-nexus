@@ -1202,12 +1202,16 @@ test("a brief denial clears Tasks and rejects a pending snapshot", async ({
   });
   // The shell reads the reader's brief for the Decide count; a denial on
   // it revokes every display snapshot for the principal.
-  await page.route("**/brief**", (route) =>
-    route.fulfill({
-      status: 403,
-      contentType: "application/json",
-      body: JSON.stringify({ error: { message: "Read permission denied" } }),
-    }),
+  // Match the API path exactly: a "**/brief**" glob also catches the
+  // briefStore.js module and breaks the page instead of denying the read.
+  await page.route(
+    (url) => url.pathname === "/brief",
+    (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Read permission denied" } }),
+      }),
   );
   await page.reload();
   await expect(page.getByRole("alert").first()).toBeVisible();
