@@ -179,7 +179,20 @@ func (s *Service) conversation(ctx context.Context, p Principal, id string) (Con
 	if c.WorkspaceID != p.WorkspaceID || c.ActorID != p.ActorID {
 		return Conversation{}, ErrForbidden
 	}
-	return c, s.authorize(ctx, p, "pm.read", c.WorkRef)
+	if err := s.authorize(ctx, p, "pm.read", c.WorkRef); err != nil {
+		return Conversation{}, err
+	}
+	// Pinned context can be private independently of the primary work. Recheck
+	// it before exposing conversation history, a turn, or a replayed message.
+	for _, ref := range c.ContextRefs {
+		if ref == c.WorkRef {
+			continue
+		}
+		if err := s.authorize(ctx, p, "pm.read", ref); err != nil {
+			return Conversation{}, err
+		}
+	}
+	return c, nil
 }
 func (s *Service) GetConversation(ctx context.Context, p Principal, id string) (ConversationDetail, error) {
 	return s.ConversationHistory(ctx, p, id, 200, "")

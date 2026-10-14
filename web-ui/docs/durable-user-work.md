@@ -362,14 +362,60 @@ principal replacement with late-send fencing. Existing lifecycle layout checks
 cover four viewports. The AST guard rejects new direct document lifecycle calls
 in Svelte surfaces and requires both routes to mount the durable composer.
 
-The shared workspace-trash helper still contains a direct document restore call,
-but has no current callers and there is no workspace-trash route. Retire or guard
-this unused legacy adapter during whole-UI enforcement. Permanent purge remains
-a separate server replay gap. Legacy knowledge PUT and
-purge remain separate replay audits; purge includes post-commit physical blob
-deletion and needs a tombstone/access recovery design. Remaining settings and
-lifecycle surfaces, original PM chat HTTP receipts and whole-UI enforcement stay
-open. This does not claim the full issue invariant.
+Unused generic bulk/trash adapters have been removed after confirming they have
+no callers. There is no workspace-trash route. Permanent purge remains a server
+replay audit: physical blob deletion occurs after the database commit and needs
+an authorization/tombstone recovery design. Legacy knowledge PUT also remains an
+API audit; it has no current authoring form.
+
+## Remaining live UI mutation audit
+
+The following are actual direct SDK calls found in current browser code. This is
+a rollout inventory; it does not yet cover every dynamic command, raw fetch,
+authentication control or authored control. The migrated-surface guard must grow
+into a complete enforcement rule before issue acceptance.
+
+| Surface                         | Remaining direct mutations                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Root actor creation             | `createActor` in the shell; preserve the complete creation form                                                    |
+| Overview dashboard chooser      | `setWorkspaceDashboard`; preserve the selected document                                                            |
+| Access and agent details        | Host patches/revocation, enrollment token creation/revocation, human invites/revocation and principal revocation   |
+| Access administrator grants     | Grant/revoke mutations in `AuthAdminGrants`                                                                        |
+| Setup prompt and workspace tour | Enrollment token issuance/revocation; audit their cleanup and authentication boundaries                            |
+| Secrets                         | Creation/deletion; preserve complete owner-scoped authored work and audit original receipt/private result handling |
+| Topic detail                    | `updateTopic` in `WorkspaceTopicThreadDetailPage`; the edit snapshot and conflict recovery remain open             |
+| Timeline and messages           | Event archive/unarchive/trash, including bulk actions                                                              |
+| Inbox lifecycle and PM delivery | Card archive, decision dispatch, action reconcile and acknowledgement                                              |
+| Task refresh                    | `requestWorkRefresh`; preserve the requested target and original intent                                            |
+| PM setup and lifecycle          | Audit the setup wizard and remaining retry/cancel/control adapters, beyond direct SDK-call matching                |
+
+## PM chat HTTP recovery prerequisite
+
+Known owner/workspace-bound conversation and message keys can now pass the HTTP
+onboarding gate after disconnect and restart. The normal service still validates
+the original body and current permissions; new writes retain their setup gate,
+including the legacy response for an invalid fresh body. Recovery returns the
+same conversation/turn and creates no additional dispatch. Legacy message replay
+continues to return the canonical turn, whose lifecycle status can advance.
+
+Conversation access now checks every pinned context ref as well as primary work
+before exposing message replay, history or a human turn read. SQLite handler
+tests cover disconnect/restart, duplicate recovery, changed bodies, fresh-write
+refusals and pinned-reference revocation. A real scoped core test confirms that
+resource ownership revocation denies recovery/readback with a one-connection
+pool; scoped rows may become invisible before the recovery peek, retaining the
+setup refusal without exposing private existence.
+
+**Original chat HTTP receipts remain open.** Conversation creation currently
+ensures the backing thread before inserting its PM record. Message creation
+inserts a pending turn, separately advances it to sending, and calls
+`NexusBridge.Dispatch`, which checks raw runtime readiness, appends a trigger
+event, creates a wake artifact and upserts the queue row in separate writes.
+A safe receipt mode must preflight authentication outside the writer, audit
+thread/event/artifact quota locking and blob staging, and commit the durable
+thread/turn/dispatch intent and original result together. Do not wrap the legacy
+service blindly or claim its advancing canonical response is an original receipt.
+Remaining live forms, general replay gaps and whole-UI enforcement stay open.
 
 ## Replay audit
 
@@ -384,7 +430,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                                      | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                              |
 | Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                                   | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                                    |
 | `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests                   | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                                       |
-| PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                                  | Covered by composite chat adapter; replay returns the canonical turn, whose lifecycle status may advance                                              |
+| PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                                  | Composite chat adapter and disconnected HTTP recovery covered; original frozen receipts and atomic dispatch intent remain open                        |
 | Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                                     | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery              |
 | `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests                   | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                              |
 | `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                                              | Task creation covered; existing card edits and lifecycle remain rollout work                                                                          |
@@ -394,7 +440,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                          |
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                              | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
-| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Current detail/list/bulk lifecycle UI covered; unused legacy trash helper needs retirement/guarding, and purge remains open                           |
+| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Current detail/list/bulk lifecycle UI covered; unused legacy adapters removed; purge remains an API audit                                             |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                             | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules

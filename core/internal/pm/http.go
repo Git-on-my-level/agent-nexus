@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,7 +51,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Proposal creation owns its onboarding gate: an opt-in stored receipt can
 	// be recovered after disconnect, while both legacy and fresh writes gate.
 	proposal := r.Method == http.MethodPost && len(path) == 1 && path[0] == "decisions"
-	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer && !proposal {
+	// Chat services check existing keys before their fresh-write setup gate.
+	// A lost confirmation must remain recoverable after PM disconnect.
+	chat := r.Method == http.MethodPost && (len(path) == 1 && path[0] == "conversations" || len(path) == 3 && path[0] == "conversations" && path[2] == "messages")
+	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer && !proposal && !chat {
 		if err = h.Service.RequireOnboarded(ctx); err != nil {
 			writeError(w, err)
 			return
@@ -80,8 +84,13 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodPost:
 		var in CreateConversation
 		if err = decode(&in); err == nil {
-			out, err = s.CreateConversation(ctx, p, in)
+			err = s.requireChatReplayOrSetup(ctx, p, "conversation", stableID("conversation", p.WorkspaceID, p.ActorID, in.RequestKey), in.RequestKey)
+			if err == nil {
+				out, err = s.CreateConversation(ctx, p, in)
+			}
 			status = http.StatusCreated
+		} else if gate := s.RequireOnboarded(ctx); gate != nil {
+			err = gate
 		}
 	case len(path) == 2 && path[0] == "conversations" && r.Method == http.MethodGet:
 		var limit int
@@ -96,8 +105,13 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 3 && path[0] == "conversations" && path[2] == "messages" && r.Method == http.MethodPost:
 		var in MessageInput
 		if err = decode(&in); err == nil {
-			out, err = s.PostMessage(ctx, p, path[1], in)
+			err = s.requireChatReplayOrSetup(ctx, p, "turn", stableID("turn", path[1], in.RequestKey), in.RequestKey)
+			if err == nil {
+				out, err = s.PostMessage(ctx, p, path[1], in)
+			}
 			status = http.StatusAccepted
+		} else if gate := s.RequireOnboarded(ctx); gate != nil {
+			err = gate
 		}
 	case len(path) == 1 && path[0] == "context" && r.Method == http.MethodGet:
 		var limit int
@@ -402,4 +416,32 @@ func writeAuthenticationError(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusUnauthorized)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": code, "message": message, "recoverable": true, "hint": hint}})
+}
+
+// Keep the legacy fresh-write onboarding response (including invalid fresh
+// bodies), but allow a known owner-bound key to reach normal body/access checks.
+// This peek exposes no record and never grants resource access by itself.
+func (s *Service) requireChatReplayOrSetup(ctx context.Context, p Principal, kind, id, key string) error {
+	gate := s.RequireOnboarded(ctx)
+	if gate == nil {
+		return nil
+	}
+	if !errors.Is(gate, ErrNotOnboarded) || !validText(key, 256) {
+		return gate
+	}
+	var prior struct {
+		WorkspaceID string `json:"workspace_id"`
+		ActorID     string `json:"actor_id"`
+	}
+	err := s.store.get(ctx, kind, id, &prior)
+	if errors.Is(err, ErrNotFound) {
+		return gate
+	}
+	if err != nil {
+		return err
+	}
+	if prior.WorkspaceID != p.WorkspaceID || prior.ActorID != p.ActorID {
+		return gate
+	}
+	return nil
 }
