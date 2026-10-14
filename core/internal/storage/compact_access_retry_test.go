@@ -71,8 +71,10 @@ func TestCompactMigrationBudgetExhaustionReportsOnce(t *testing.T) {
 	var failure error
 	started := time.Now()
 	w.runCompactAccessMigration(context.Background(), compactRetrySchedule(150*time.Millisecond), func(_ CompactAccessVerification, e error) { reports++; failure = e })
+	// A busy wait using the final lease budget may join DeadlineExceeded
+	// with SQLite BUSY. Both labels retain the exact stage and driver code.
 	var diagnostic *CompactAccessMigrationError
-	if reports != 1 || !errors.As(failure, &diagnostic) || diagnostic.Stage != "shadow_install" || diagnostic.Reason != "budget_exhausted_write_contention_retry" || diagnostic.SQLiteCode&255 != 5 {
+	if reports != 1 || !errors.As(failure, &diagnostic) || diagnostic.Stage != "shadow_install" || (diagnostic.Reason != "budget_exhausted_write_contention_retry" && diagnostic.Reason != "budget_exhausted_deadline_exceeded") || diagnostic.SQLiteCode&255 != 5 {
 		t.Fatalf("reports=%d error=%v", reports, failure)
 	}
 	if time.Since(started) > time.Second {

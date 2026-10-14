@@ -37,6 +37,8 @@ import (
 const testBootstrapToken = "bootstrap-token-for-tests"
 
 type authIntegrationOptions struct {
+	// servingPool instruments requests without changing the maintenance pool.
+	servingPool                   func(*storage.Workspace) *sql.DB
 	scopedInboxReader             bool
 	bootstrapToken                string
 	enableDevActorMode            bool
@@ -73,7 +75,11 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		t.Fatalf("initialize workspace: %v", err)
 	}
 
-	registryStore := actors.NewStore(workspace.DB())
+	servingDB := workspace.DB()
+	if options.servingPool != nil {
+		servingDB = options.servingPool(workspace)
+	}
+	registryStore := actors.NewStore(servingDB)
 	if _, err := registryStore.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
 		_ = workspace.Close()
 		t.Fatalf("ensure system actor: %v", err)
@@ -93,7 +99,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	if options.accountStatusChecker != nil {
 		authOptions = append(authOptions, auth.WithAccountStatusChecker(options.accountStatusChecker))
 	}
-	authStore := auth.NewStore(workspace.DB(), authOptions...)
+	authStore := auth.NewStore(servingDB, authOptions...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 
 	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
@@ -104,7 +110,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		t.Fatalf("load schema contract: %v", err)
 	}
 
-	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir, primitives.WithScopedInboxReader(options.scopedInboxReader))
+	primitiveStore := primitives.NewStore(servingDB, blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir, primitives.WithScopedInboxReader(options.scopedInboxReader))
 	workspaceID := strings.TrimSpace(options.workspaceID)
 	if workspaceID == "" {
 		workspaceID = "ws_main"
@@ -113,8 +119,8 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		"0.2.2",
 		WithActorRegistry(registry),
 		WithAuthStore(authStore),
-		WithSeriesStore(&series.Store{DB: workspace.DB(), Auth: authStore}),
-		WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
+		WithSeriesStore(&series.Store{DB: servingDB, Auth: authStore}),
+		WithRunStore(commandcenter.NewStore(servingDB, commandcenter.SQLIdentities{DB: servingDB})),
 		WithWorkspaceHumanGrantVerifier(options.workspaceHumanGrantVerifier),
 		WithWorkspaceManagedAgentGrantVerifier(options.workspaceManagedGrantVerifier),
 		WithWorkspaceGrantRateLimits(RouteRateLimits{AuthRequestsPerMinute: 1000, AuthBurst: 1000}),

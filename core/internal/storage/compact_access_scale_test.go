@@ -92,6 +92,7 @@ func TestPerformanceCompactAccessShadow(t *testing.T) {
 		t.Fatal(err)
 	}
 	cutoverElapsed := time.Since(cutoverStarted)
+	w.RunCompactAccessRetiredMaintenance(ctx)
 	afterCutover := size()
 	// A new file is prepared during a maintenance window; no serving database is
 	// overwritten. The operator must stop writers before replacing the old file.

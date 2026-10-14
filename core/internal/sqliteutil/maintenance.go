@@ -13,6 +13,12 @@ import (
 // on contention; Run retries in a later slice. Serving connections keep their
 // normal timeout. The caller must run cleanup on every exit, including Commit.
 func BeginMaintenanceChunk(ctx context.Context, db *sql.DB) (*sql.Tx, func(), error) {
+	return BeginMaintenanceChunkWithBusyWait(ctx, db, 0)
+}
+
+// BeginMaintenanceChunkWithBusyWait catches a short writer handoff without
+// inheriting the serving busy handler. Admission wait is capped by the lease.
+func BeginMaintenanceChunkWithBusyWait(ctx context.Context, db *sql.DB, wait time.Duration) (*sql.Tx, func(), error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -37,7 +43,11 @@ func BeginMaintenanceChunk(ctx context.Context, db *sql.DB) (*sql.Tx, func(), er
 		}
 		conn.Close()
 	}
-	if _, err = conn.ExecContext(ctx, `PRAGMA busy_timeout=0`); err != nil {
+	if deadline, ok := ctx.Deadline(); ok {
+		wait = min(wait, max(0, time.Until(deadline)))
+	}
+	wait = min(wait, 50*time.Millisecond)
+	if _, err = conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", wait.Milliseconds())); err != nil {
 		cleanup()
 		return nil, nil, err
 	}

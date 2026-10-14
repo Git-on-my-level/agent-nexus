@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	"agent-nexus-core/internal/sqliteutil"
@@ -43,8 +44,15 @@ func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
 
 // InitializeCompactAccessShadow installs transactional mirrors without copying
 // history or selecting compact reads. Mirrors survive a paused worker.
-func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) error {
-	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
+func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			err = errors.Join(ctx.Err(), err)
+		}
+	}()
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(ctx, w.db, 20*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -91,7 +99,7 @@ func (w *Workspace) MaintainCompactAccessBatch(ctx context.Context) (bool, error
 }
 
 func (w *Workspace) maintainCompactAccessChunk(ctx context.Context, limit int) (bool, error) {
-	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(ctx, w.db, 20*time.Millisecond)
 	if err != nil {
 		return false, err
 	}
@@ -215,17 +223,63 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 	return result, nil
 }
 
-// RunCompactAccessMigration is server maintenance, never startup readiness
-// or request work. Verification holds a WAL read snapshot, not a writer lease.
+// RunCompactAccessMigration resumes bounded certification after startup.
+// Verification holds a WAL read snapshot, not a writer lease.
 // Reports expose one final outcome, never SQL text or resource contents.
 func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(CompactAccessVerification, error)) {
 	w.runCompactAccessMigration(ctx, compactMigrationSchedule{
 		budget:       10 * time.Minute,
-		initialDelay: time.Second + time.Duration(rand.Int64N(int64(time.Second))),
+		initialDelay: 0,
 		batchDelay:   25 * time.Millisecond,
 		retryMin:     250 * time.Millisecond,
 		retryMax:     5 * time.Second,
 	}, report)
+}
+
+// PrepareCompactAccessMigration is called before other maintenance or serving.
+// It installs mirrors and certifies if possible within ten seconds. Incomplete
+// durable progress resumes online; only the caller's final outcome is logged.
+func (w *Workspace) PrepareCompactAccessMigration(ctx context.Context) (proof CompactAccessVerification, resume bool, err error) {
+	w.runCompactAccessMigration(ctx, compactMigrationSchedule{budget: 10 * time.Second, batchDelay: 0, retryMin: 10 * time.Millisecond, retryMax: 50 * time.Millisecond}, func(p CompactAccessVerification, e error) { proof, err = p, e })
+	return proof, compactMigrationRetryable(err), err
+}
+
+// A completed installation is atomic. Validate every installed object before
+// resuming without a writer, including generation triggers used by strict proof
+// publication. Partial/older shadows still take the normal install transaction.
+func (w *Workspace) compactShadowReady(ctx context.Context) (bool, error) {
+	names := []string{"resource_access_compact_job", "access_compact_insert", "access_compact_update", "access_compact_delete", "resource_access_compact_reconstructed", "resource_access_stable_edges", "access_stable_insert", "access_stable_update", "access_stable_delete"}
+	for _, table := range []string{"resource_access_exact_edges", "resource_access_compact_edges", "resource_access_stable_edges"} {
+		for _, op := range []string{"insert", "update", "delete"} {
+			names = append(names, "compact_generation_"+table+"_"+op)
+		}
+	}
+	args := make([]any, len(names))
+	for i, name := range names {
+		args[i] = name
+	}
+	var count int
+	err := w.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name IN (`+strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")+`)`, args...).Scan(&count)
+	if err != nil || count != len(names) {
+		return false, err
+	}
+	var ready bool
+	err = w.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM resource_access_compact_job WHERE singleton=1)`).Scan(&ready)
+	return ready, err
+}
+
+type compactObserverKey struct{}
+
+// WithCompactAccessMigrationObserver observes completed attempts after their
+// connections and transactions are released. Observers receive safe diagnostics
+// and may pause between attempts; they never execute while holding a writer.
+func WithCompactAccessMigrationObserver(ctx context.Context, observe func(stage string, err error)) context.Context {
+	return context.WithValue(ctx, compactObserverKey{}, observe)
+}
+func observeCompactAttempt(ctx context.Context, stage string, err error) {
+	if observe, ok := ctx.Value(compactObserverKey{}).(func(string, error)); ok {
+		observe(stage, compactMigrationError(stage, err))
+	}
 }
 
 // Separate timing from the worker so contention and exhaustion tests need not
@@ -298,14 +352,19 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 			return
 		}
 		if lastErr == nil && !installed {
+			stage = "shadow_state"
+			installed, lastErr = w.compactShadowReady(ctx)
+		}
+		if lastErr == nil && !installed {
 			stage = "shadow_install"
-			chunkCtx, finish := context.WithTimeout(ctx, 5*time.Second)
+			chunkCtx, finish := context.WithTimeout(ctx, time.Second)
 			lastErr = w.InitializeCompactAccessShadow(chunkCtx)
 			if lastErr != nil && chunkCtx.Err() != nil {
 				lastErr = errors.Join(chunkCtx.Err(), lastErr)
 			}
 			finish()
 			installed = lastErr == nil
+			observeCompactAttempt(ctx, stage, lastErr)
 		}
 		var done bool
 		if lastErr == nil {
@@ -335,9 +394,10 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 				lastErr = errors.Join(verifyCtx.Err(), lastErr)
 			}
 			finish()
+			observeCompactAttempt(ctx, stage, lastErr)
 			if lastErr == nil {
 				stage = "cutover"
-				cutoverCtx, finish := context.WithTimeout(ctx, 5*time.Second)
+				cutoverCtx, finish := context.WithTimeout(ctx, time.Second)
 				lastErr = w.CutoverCompactAccess(cutoverCtx, result)
 				if lastErr != nil && cutoverCtx.Err() != nil {
 					lastErr = errors.Join(cutoverCtx.Err(), lastErr)
@@ -353,10 +413,15 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 			if ctx.Err() != nil || !compactMigrationRetryable(lastErr) {
 				return
 			}
-			// Equal jitter avoids synchronized retries and guarantees a yield. The
-			// nonblocking busy handler never queues maintenance ahead of user writes.
-			delay = retry/2 + time.Duration(rand.Int64N(int64(retry-retry/2)))
-			retry = min(retry*2, schedule.retryMax)
+			var code interface{ Code() int }
+			if errors.As(lastErr, &code) && (code.Code()&255 == 5 || code.Code()&255 == 6) {
+				// Long jitter is for actual writer contention, after releasing the lease.
+				delay = retry/2 + time.Duration(rand.Int64N(int64(retry-retry/2)))
+				retry = min(retry*2, schedule.retryMax)
+			} else {
+				// Expired adaptive slices and changed proofs retry in the next short slice.
+				delay, retry = schedule.batchDelay, schedule.retryMin
+			}
 		} else {
 			delay, retry = schedule.batchDelay, schedule.retryMin
 		}
