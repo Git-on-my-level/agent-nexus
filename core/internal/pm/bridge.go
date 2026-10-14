@@ -21,6 +21,25 @@ type NexusBridge struct {
 	Ready   func(context.Context, string, string) error
 }
 
+// CreateConversationThread never adopts an existing legacy thread. CreateThread
+// only writes thread metadata and allocates its handle, using a nested savepoint;
+// it has no quota mutex, blob initialization, auth reads or post-commit effects.
+func (b NexusBridge) CreateConversationThread(ctx context.Context, p Principal, id, workRef string) (string, error) {
+	if b.Store == nil {
+		return "", ErrUnavailable
+	}
+	threadID := stableID("thread", id)
+	thread := map[string]any{"id": threadID, "title": "Project manager", "pm_actor_id": p.ActorID, "pm_conversation_id": id}
+	if workRef != "" {
+		thread["subject_ref"] = workRef
+	}
+	_, err := b.Store.CreateThread(ctx, p.ActorID, thread)
+	if errors.Is(err, primitives.ErrConflict) {
+		return "", ErrConflict
+	}
+	return threadID, err
+}
+
 func (b NexusBridge) EnsureThread(ctx context.Context, p Principal, id, workRef string) (string, error) {
 	if b.Store == nil {
 		return "", ErrUnavailable

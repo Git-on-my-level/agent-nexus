@@ -251,7 +251,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			return nil
 		}
 	}
-	deps := pm.Dependencies{Authorize: authorize, EnsureThread: bridge.EnsureThread}
+	deps := pm.Dependencies{Authorize: authorize, EnsureThread: bridge.EnsureThread, CreateConversationThread: bridge.CreateConversationThread}
 	deps.AuthorizeReadBatch = func(ctx context.Context, p pm.Principal, permission string, refs []string) (map[string]bool, error) {
 		if permission != "pm.read" && permission != "pm.approve" {
 			return nil, pm.ErrForbidden

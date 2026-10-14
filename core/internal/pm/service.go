@@ -107,6 +107,9 @@ func (s *Service) authorizePermission(ctx context.Context, p Principal, permissi
 }
 func validText(text string, max int) bool { return strings.TrimSpace(text) != "" && len(text) <= max }
 func (s *Service) CreateConversation(ctx context.Context, p Principal, in CreateConversation) (Conversation, error) {
+	if in.ReplayKey != "" {
+		return s.createConversationWithReplay(ctx, p, in)
+	}
 	return s.createConversation(ctx, p, in, nil)
 }
 func (s *Service) createConversation(ctx context.Context, p Principal, in CreateConversation, origin *Origin) (Conversation, error) {

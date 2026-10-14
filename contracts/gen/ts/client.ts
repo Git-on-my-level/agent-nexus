@@ -8967,6 +8967,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cstring\u003e"
         },
         {
+          "name": "replay_key",
+          "type": "string"
+        },
+        {
           "name": "work_ref",
           "type": "string"
         }

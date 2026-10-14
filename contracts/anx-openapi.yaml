@@ -9418,6 +9418,10 @@ components:
           description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
         request_key:
           type: string
+        replay_key:
+          type: string
+          maxLength: 256
+          description: Opt in to an atomic original 201 receipt, binding the authenticated actor and complete decoded request. Requires a new conversation request_key; legacy conversations without a receipt cannot be adopted. Recovery checks current access and works after PM disconnect; new writes retain the setup gate.
         title:
           type: string
         context_refs:

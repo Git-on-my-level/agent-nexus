@@ -84,7 +84,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodPost:
 		var in CreateConversation
 		if err = decode(&in); err == nil {
-			err = s.requireChatReplayOrSetup(ctx, p, "conversation", stableID("conversation", p.WorkspaceID, p.ActorID, in.RequestKey), in.RequestKey)
+			if in.ReplayKey == "" {
+				err = s.requireChatReplayOrSetup(ctx, p, "conversation", stableID("conversation", p.WorkspaceID, p.ActorID, in.RequestKey), in.RequestKey)
+			}
 			if err == nil {
 				out, err = s.CreateConversation(ctx, p, in)
 			}
@@ -250,6 +252,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// All turn-bearing endpoints share the same public projection, including
 	// idempotent message replays. Only the runner claim returns credentials.
 	switch value := out.(type) {
+	case Conversation:
+		if len(value.ReplayJSON) > 0 {
+			out = value.ReplayJSON
+		}
 	case Decision:
 		if len(path) == 3 && path[0] == "turns" && path[2] == "decisions" {
 			// Proposal validation already established this conversation owner.

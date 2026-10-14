@@ -406,8 +406,22 @@ resource ownership revocation denies recovery/readback with a one-connection
 pool; scoped rows may become invisible before the recovery peek, retaining the
 setup refusal without exposing private existence.
 
-**Original chat HTTP receipts remain open.** Conversation creation currently
-ensures the backing thread before inserting its PM record. Message creation
+**Conversation original receipts are now an opt-in server prerequisite.**
+`POST /pm/conversations` accepts a separate `replay_key`, binding the actor,
+workspace and complete decoded creation body before reference normalization.
+Thread metadata/handle creation, the conversation and the original 201 body
+commit in one scoped writer. Thread creation has no quota mutex or blob writes;
+its nested transaction is a savepoint. Authentication and pinned-reference
+checks run before the writer. Replay rechecks scoped canonical visibility and
+returns the frozen body after later metadata changes or PM disconnect/restart.
+Legacy conversation/thread collisions without this receipt fail closed; custom
+services without an audited transactional thread callback cannot opt in.
+Eight concurrent retries and injected thread/conversation/receipt failures are
+tested against real SQLite with one connection. Revoked ownership and pinned
+access deny replay. Existing unkeyed callers and persisted UI creation bodies
+retain legacy behavior; the UI has not yet enabled this mode for new requests.
+
+**Original message receipts and atomic dispatch remain open.** Message creation
 inserts a pending turn, separately advances it to sending, and calls
 `NexusBridge.Dispatch`, which checks raw runtime readiness, appends a trigger
 event, creates a wake artifact and upserts the queue row in separate writes.
@@ -430,7 +444,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                                      | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                              |
 | Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                                   | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                                    |
 | `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests                   | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                                       |
-| PM conversation creation and messages                                             | Existing actor/workspace/request-key stable conversation and turn IDs; unique insert wins before dispatch, body changes conflict, current authorization applies to every replay                                                                  | Composite chat adapter and disconnected HTTP recovery covered; original frozen receipts and atomic dispatch intent remain open                        |
+| PM conversation creation and messages                                             | Opt-in conversation replay_key atomically commits new thread/conversation/original 201 receipt; actor/body binding, concurrent retries, rollback and revoked-access tests. Legacy turn replay still advances canonical state                     | Composite chat adapter and disconnected HTTP recovery covered; UI receipt opt-in, original message receipts and atomic dispatch intent remain open    |
 | Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                                     | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery              |
 | `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests                   | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                              |
 | `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                                              | Task creation covered; existing card edits and lifecycle remain rollout work                                                                          |

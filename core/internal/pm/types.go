@@ -141,17 +141,19 @@ type Binding struct {
 	Revision    int    `json:"revision"`
 }
 type Conversation struct {
-	ContextRefs []string  `json:"context_refs,omitempty"`
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspace_id"`
-	ActorID     string    `json:"actor_id"`
-	Title       string    `json:"title"`
-	WorkRef     string    `json:"work_ref,omitempty"`
-	ThreadID    string    `json:"thread_id"`
-	Origin      *Origin   `json:"origin,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ReplayJSON  json.RawMessage `json:"-"`
+	ContextRefs []string        `json:"context_refs,omitempty"`
+	ID          string          `json:"id"`
+	WorkspaceID string          `json:"workspace_id"`
+	ActorID     string          `json:"actor_id"`
+	Title       string          `json:"title"`
+	WorkRef     string          `json:"work_ref,omitempty"`
+	ThreadID    string          `json:"thread_id"`
+	Origin      *Origin         `json:"origin,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 type CreateConversation struct {
+	ReplayKey   string   `json:"replay_key,omitempty"`
 	ActorID     string   `json:"actor_id,omitempty"`
 	ContextRefs []string `json:"context_refs,omitempty"`
 	RequestKey  string   `json:"request_key"`
@@ -411,19 +413,23 @@ type Dependencies struct {
 	// Missing map entries mean work is no longer live. Authorization remains
 	// separate, using fresh read batches when configured or the normal per-record
 	// permission checks.
-	DecisionWorkBatch     func(context.Context, Principal, []string) (map[string]DecisionWork, error)
-	DecisionWork          func(context.Context, Principal, string) (DecisionWork, error)
-	ResolveResolution     func(context.Context, Principal, string) (ResolutionRef, error)
-	Authorize             func(context.Context, Principal, string, string) error
-	EnsureThread          func(context.Context, Principal, string, string) (string, error)
-	BindRequesterContext  func(context.Context, Principal) context.Context
-	BeginCardRead         func(context.Context, Principal) (context.Context, func(), error)
-	ReadWorkspaceOverview func(context.Context, Principal) (ContextPage, error)
-	ReadPinnedCards       func(context.Context, Principal, []string, bool) (ContextPage, error)
-	ReadContext           func(context.Context, Principal, string, string, int) (ContextPage, error)
-	ReadContextPage       func(context.Context, Principal, string, string, string, int) (ContextPage, error)
-	Dispatch              func(context.Context, DispatchRequest) error
-	CurrentRevision       func(context.Context, Principal, string) (string, error)
+	DecisionWorkBatch func(context.Context, Principal, []string) (map[string]DecisionWork, error)
+	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
+	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
+	Authorize         func(context.Context, Principal, string, string) error
+	EnsureThread      func(context.Context, Principal, string, string) (string, error)
+	// CreateConversationThread must create a new thread using the bound scoped
+	// writer, without raw authentication reads or external effects. Optional:
+	// original-receipt mode fails closed when this capability is unavailable.
+	CreateConversationThread func(context.Context, Principal, string, string) (string, error)
+	BindRequesterContext     func(context.Context, Principal) context.Context
+	BeginCardRead            func(context.Context, Principal) (context.Context, func(), error)
+	ReadWorkspaceOverview    func(context.Context, Principal) (ContextPage, error)
+	ReadPinnedCards          func(context.Context, Principal, []string, bool) (ContextPage, error)
+	ReadContext              func(context.Context, Principal, string, string, int) (ContextPage, error)
+	ReadContextPage          func(context.Context, Principal, string, string, string, int) (ContextPage, error)
+	Dispatch                 func(context.Context, DispatchRequest) error
+	CurrentRevision          func(context.Context, Principal, string) (string, error)
 	// DeliveryPath is the named preflight, using the same registry as Execute.
 	// CheckDelivery supports older integrations without a named route.
 	DeliveryPath  func(context.Context, Action) (string, error)
