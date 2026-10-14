@@ -620,6 +620,29 @@ func main() {
 	serverErr := make(chan error, 1)
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
+	// Do not allow background writers or HTTP admission to compete with install.
+	if compactAccessMigration {
+		compactCtx, compactCancel := context.WithTimeout(maintenanceCtx, 10*time.Minute)
+		defer compactCancel()
+		report := func(_ storage.CompactAccessVerification, err error) {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "compact access migration: %v\n", err)
+				return
+			}
+			fmt.Fprintln(os.Stderr, "compact access migration: certified; certified reader selected unless legacy fallback is set")
+		}
+		proof, resume, err := workspace.PrepareCompactAccessMigration(compactCtx)
+		if !resume {
+			report(proof, err)
+		} else {
+			compactDone := make(chan struct{})
+			go func() { defer close(compactDone); workspace.RunCompactAccessMigration(compactCtx, report) }()
+			defer func() { maintenanceCancel(); <-compactDone }()
+		}
+	}
+	retiredDone := make(chan struct{})
+	go func() { defer close(retiredDone); workspace.RunCompactAccessRetiredMaintenance(maintenanceCtx) }()
+	defer func() { maintenanceCancel(); <-retiredDone }()
 	go primitiveStore.RunAskWebhooks(maintenanceCtx, func(ctx context.Context, actor string) bool {
 		p, err := authStore.PrincipalForActor(ctx, actor)
 		return err == nil && !p.Revoked && p.PrincipalKind == string(auth.PrincipalKindAgent)
@@ -627,20 +650,7 @@ func main() {
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
 	go workspace.RunAskSubjectsMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask subject maintenance: retrying bounded batch") })
 	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
-	if compactAccessMigration {
-		compactDone := make(chan struct{})
-		go func() {
-			defer close(compactDone)
-			workspace.RunCompactAccessMigration(maintenanceCtx, func(result storage.CompactAccessVerification, err error) {
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "compact access migration: %v\n", err)
-					return
-				}
-				fmt.Fprintf(os.Stderr, "compact access migration: certified rows=%d epoch=%d; certified reader selected unless legacy fallback is set\n", result.Rows, result.Epoch)
-			})
-		}()
-		defer func() { maintenanceCancel(); <-compactDone }()
-	}
+
 	replayGCDone := make(chan struct{})
 	go func() {
 		defer close(replayGCDone)

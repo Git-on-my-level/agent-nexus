@@ -83,7 +83,7 @@ func TestCompactAccessCutoverStableIdentityAndRollback(t *testing.T) {
 	if err := w.db.QueryRow(`SELECT pk FROM pragma_table_info('resource_access_edges') WHERE name='edge_id'`).Scan(&pk); err != nil || pk != 1 {
 		t.Fatalf("unstable key: %d %v", pk, err)
 	}
-	if err := w.db.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name='idx_resource_access_edges_target'`).Scan(&idx); err != nil || idx != 0 {
+	if err := w.db.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name='idx_resource_access_edges_target' AND tbl_name='resource_access_edges'`).Scan(&idx); err != nil || idx != 0 {
 		t.Fatalf("redundant index retained: %d %v", idx, err)
 	}
 	for _, q := range []string{

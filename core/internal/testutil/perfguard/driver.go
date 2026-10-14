@@ -26,6 +26,15 @@ type Capture struct {
 	work          WorkStats
 	workErr       error
 	epoch         uint64
+	beforeBegin   func(driver.TxOptions)
+}
+
+// BeforeBegin installs a fixture-only admission observer. The callback runs
+// before SQLite acquires a transaction; no capture mutex is held during it.
+func (c *Capture) BeforeBegin(observe func(driver.TxOptions)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.beforeBegin = observe
 }
 
 func (c *Capture) Start() {
@@ -183,6 +192,12 @@ func (c *captureConn) PrepareContext(ctx context.Context, q string) (driver.Stmt
 	return &captureStmt{Stmt: s, q: q, capture: c.capture, work: c.work}, nil
 }
 func (c *captureConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
+	c.capture.mu.Lock()
+	observe := c.capture.beforeBegin
+	c.capture.mu.Unlock()
+	if observe != nil {
+		observe(o)
+	}
 	c.work.beginCall(ctx)
 	defer c.work.endCall()
 	return c.Conn.(driver.ConnBeginTx).BeginTx(ctx, o)

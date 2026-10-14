@@ -9,7 +9,8 @@ import (
 )
 
 func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
-	t.Parallel()
+	// The exact 64-row first-slice assertion needs an uncontended 100 ms lease,
+	// like the contention guard below; unrelated parallel fixtures can expire it.
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := InitializeWorkspace(ctx, root)
