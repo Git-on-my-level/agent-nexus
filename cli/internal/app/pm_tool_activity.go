@@ -56,7 +56,7 @@ func pmToolStep(args []string) (string, string) {
 	if !known || workspaceIndependentCommand(args) {
 		return "", ""
 	}
-	if name == "pm serve" || name == "pm turns heartbeat" || name == "pm turns claim" || name == "pm turns complete" || name == "pm turns fail" || name == "pm turns release" || strings.HasPrefix(name, "secret ") || strings.HasPrefix(name, "auth ") || strings.HasPrefix(name, "host ") || strings.HasPrefix(name, "api ") {
+	if name == "pm serve" || name == "pm curate" || name == "pm turns heartbeat" || name == "pm turns claim" || name == "pm turns complete" || name == "pm turns fail" || name == "pm turns release" || strings.HasPrefix(name, "secret ") || strings.HasPrefix(name, "auth ") || strings.HasPrefix(name, "host ") || strings.HasPrefix(name, "api ") {
 		return "", ""
 	}
 	target := ""

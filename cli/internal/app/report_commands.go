@@ -54,7 +54,7 @@ func init() {
 			Composition: "Pure local helper. Start with a template, add narrative, then preview before sharing.",
 			Examples:    []string{"anx report init --template workspace-overview > dashboard.json", "anx report init --template initiative --card card:launch > initiative.json"},
 			Flags: []localHelperFlag{
-				{Name: "--template <name>", Description: "Defaults to workspace-overview. One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health."},
+				{Name: "--template <name>", Description: "Defaults to workspace-overview. One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health, anx-health."},
 				{Name: "--topic <ref>", Description: "Scope project-based live queries to a topic."},
 				{Name: "--card <ref>", Description: "Scope a card-centered template to an initiative card."},
 			},

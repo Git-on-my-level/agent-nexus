@@ -13,6 +13,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/curation"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 const (
@@ -33,6 +34,14 @@ func curationStore(w http.ResponseWriter, opts handlerOptions) (*primitives.Stor
 	return store, true
 }
 
+// curationScoped reports a principal under an access policy. Curation reads
+// the workspace-wide formula inputs, so scoped principals see nothing and may
+// not file proposals.
+func curationScoped(r *http.Request) bool {
+	_, scoped := resourceaccess.PolicyFrom(r.Context())
+	return scoped
+}
+
 func handleCurationCandidates(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
@@ -45,7 +54,12 @@ func handleCurationCandidates(w http.ResponseWriter, r *http.Request, opts handl
 	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
 		return
 	}
+	if curationScoped(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"candidates": []any{}, "limitations": []string{"curation needs workspace-wide read access"}})
+		return
+	}
 	candidates, limitations, err := store.CurationCandidates(r.Context(), planVisibility(r, opts), time.Now().UTC())
+	log.Printf("DBGERR %v", err)
 	if err != nil {
 		workStoreError(w, r, err)
 		return
@@ -78,6 +92,10 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
 	if !ok {
+		return
+	}
+	if curationScoped(r) {
+		writeError(w, http.StatusForbidden, "forbidden", "curation needs workspace-wide read access")
 		return
 	}
 	var body struct {
@@ -149,6 +167,10 @@ func handleCurationRun(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+		return
+	}
+	if curationScoped(r) {
+		writeError(w, http.StatusForbidden, "forbidden", "curation needs workspace-wide read access")
 		return
 	}
 	proposals, skipped, err := RunCurationFormula(r.Context(), store)
@@ -281,7 +303,12 @@ func handleCurationMetrics(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 		days = n
 	}
+	if curationScoped(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"metrics": map[string]any{}, "limitations": []string{"curation needs workspace-wide read access"}})
+		return
+	}
 	metrics, err := store.CurationMetrics(r.Context(), time.Duration(days)*24*time.Hour, time.Now().UTC())
+	log.Printf("DBGERR %v", err)
 	if err != nil {
 		workStoreError(w, r, err)
 		return

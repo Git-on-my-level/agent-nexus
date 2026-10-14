@@ -387,6 +387,10 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 	switch path {
 	case "/agent-inbox/subscriptions":
 		return map[string]any{"kind": "webhook", "label": "card:" + card, "url": "https://example.com/answer"}
+	case "/curation/proposals":
+		return map[string]any{"action": "merge", "targets": []string{"card:" + card, "card:" + card}, "rationale": "attempt"}
+	case "/curation/run":
+		return map[string]any{}
 	case "/auth/access-requests":
 		return map[string]any{"grant": "auth-admin", "reason": "card:" + card}
 	case "/boards":

@@ -397,39 +397,54 @@ func curationAskRecord(id, ts, payloadJSON, resolution, resolutionTS, resolution
 // and card movement in the window. Card updates and moves reset the promise
 // clock like evidence does, per the one-clock rule.
 func (s *Store) curationNoteRecords(ctx context.Context, since string) ([]curation.NoteRecord, bool, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT e.type,COALESCE(e.thread_id,''),e.ts,e.payload_json FROM events e INDEXED BY idx_events_type_ts_id
- WHERE e.type IN ('message_posted','card_moved','card_resolved') AND e.ts>=? AND COALESCE(e.trashed_at,'')=''
- ORDER BY e.ts DESC,e.id DESC LIMIT ?`, since, curationMetricNoteLimit+1)
-	if err != nil {
-		return nil, false, err
-	}
-	defer rows.Close()
 	notes := []curation.NoteRecord{}
 	truncated := false
-	for rows.Next() {
-		var kind, thread, ts, payloadJSON string
-		if err = rows.Scan(&kind, &thread, &ts, &payloadJSON); err != nil {
-			return nil, false, err
-		}
-		if len(notes) >= curationMetricNoteLimit {
+	// One equality probe per type keeps each read on the (type, ts) index
+	// with no sort; the shared cap bounds the whole fold.
+	for _, kind := range []string{"message_posted", "card_moved", "card_resolved"} {
+		remaining := curationMetricNoteLimit - len(notes)
+		if remaining <= 0 {
 			truncated = true
 			break
 		}
-		at, _ := time.Parse(time.RFC3339Nano, ts)
-		rec := curation.NoteRecord{ThreadID: thread, At: at, Reset: kind != "message_posted"}
-		if kind == "message_posted" {
-			var wrapper map[string]any
-			_ = json.Unmarshal([]byte(payloadJSON), &wrapper)
-			payload := asMapValue(wrapper["payload"])
-			rec.NextAt = curationPromiseAt(asMapValue(payload["next"])["at"])
-			rec.Reset = len(anyStringSlice(payload["evidence_refs"])) > 0 || anyStringValue(payload["evidence"]) != "" || len(anyStringSlice(payload["evidence"])) > 0
-			if rec.NextAt.IsZero() && !rec.Reset {
-				continue
-			}
+		rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(e.thread_id,''),e.ts,e.payload_json FROM events e INDEXED BY idx_events_type_ts_id
+ WHERE e.type=? AND e.ts>=? AND COALESCE(e.trashed_at,'')=''
+ ORDER BY e.ts DESC,e.id DESC LIMIT ?`, kind, since, remaining+1)
+		if err != nil {
+			return nil, false, err
 		}
-		notes = append(notes, rec)
+		read := 0
+		for rows.Next() {
+			var thread, ts, payloadJSON string
+			if err = rows.Scan(&thread, &ts, &payloadJSON); err != nil {
+				rows.Close()
+				return nil, false, err
+			}
+			if read++; read > remaining {
+				truncated = true
+				break
+			}
+			at, _ := time.Parse(time.RFC3339Nano, ts)
+			rec := curation.NoteRecord{ThreadID: thread, At: at, Reset: kind != "message_posted"}
+			if kind == "message_posted" {
+				var wrapper map[string]any
+				_ = json.Unmarshal([]byte(payloadJSON), &wrapper)
+				payload := asMapValue(wrapper["payload"])
+				rec.NextAt = curationPromiseAt(asMapValue(payload["next"])["at"])
+				rec.Reset = len(anyStringSlice(payload["evidence_refs"])) > 0 || anyStringValue(payload["evidence"]) != "" || len(anyStringSlice(payload["evidence"])) > 0
+				if rec.NextAt.IsZero() && !rec.Reset {
+					continue
+				}
+			}
+			notes = append(notes, rec)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, false, err
+		}
 	}
-	return notes, truncated, rows.Err()
+	return notes, truncated, nil
 }
 
 func curationPromiseAt(raw any) time.Time {

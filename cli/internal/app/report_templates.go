@@ -73,6 +73,26 @@ var reportTemplates = []reportTemplate{
 		},
 	},
 	{
+		name: "anx-health", purpose: "Decision speed, ask quality and promise calibration (S17, S18, S20).",
+		title: "ANX health", summary: "Live decision and promise health folded from workspace events.",
+		build: func(_ string, _ string) []map[string]any {
+			metric := func(id, title, series string) map[string]any {
+				return seriesReportPanel(id, "metric", title, map[string]any{"series": series, "agg": "last", "range": "30d"})
+			}
+			return []map[string]any{
+				liveReportPanel("decisions", "live-asks", "Open decisions", reportAskQuery("", map[string]any{"limit": 10})),
+				liveReportPanel("answered", "live-asks", "Answered this week", reportAskQuery("", map[string]any{"answered_only": true, "answered_within_hours": 168, "limit": 10})),
+				metric("s17-median-hours", "Decision time, weighted median (hours)", "anx.health.s17_weighted_median_hours"),
+				metric("s18-answered-recommended", "Asks answered as recommended (%)", "anx.health.s18_answered_recommended_pct"),
+				metric("s18-needs-context", "Asks needing context (%)", "anx.health.s18_needs_context_pct"),
+				metric("s18-withdrawn-moot", "Asks withdrawn as moot after 24h (%)", "anx.health.s18_withdrawn_moot_pct"),
+				metric("s20-met", "Promises met (%)", "anx.health.s20_met_pct"),
+				metric("s20-median-slip", "Promise median slip (hours)", "anx.health.s20_median_slip_hours"),
+				metric("s20-moved-2plus", "Promises moved twice or more (%)", "anx.health.s20_moved_2plus_pct"),
+			}
+		},
+	},
+	{
 		name: "fleet-health", purpose: "Live fleet series, enrolled hosts, and authorized enrollment requests.",
 		title: "Fleet health", summary: "Current fleet series and native host inventory, with authorized enrollment status.",
 		build: func(_ string, _ string) []map[string]any {

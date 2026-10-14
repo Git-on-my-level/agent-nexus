@@ -274,6 +274,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `plan step add` (local-helper): Edit a linked initiative step with a card concurrency token.
 - `plan step update` (local-helper): Edit a linked initiative step with a card concurrency token.
 - `plan step rm` (local-helper): Edit a linked initiative step with a card concurrency token.
+- `pm curate` (local-helper): Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
 - `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
@@ -9646,6 +9647,38 @@ Writes read the latest plan and use its concurrency token. Conflicts require rea
 Removing a depended-on step is rejected; update dependencies first.
 ```
 
+## `pm curate`
+
+Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
+
+```text
+Local Help: pm curate
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
+- Composition: Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. The PM never performs an action itself; every accepted proposal is applied by the human's answer and leaves an undo trail in the proposal thread. With --formula no model runs: POST /curation/run applies the deterministic pass.
+- JSON body: `candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`
+- Examples:
+  - `anx pm curate --dry-run`
+  - `anx pm curate --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve' --max 5`
+  - `anx pm curate --formula --push-metrics`
+
+Flags:
+  --runner <argv>              Harness argv, resolved like `pm serve --runner` (agentctl run unless {prompt_file} is present). Required unless --formula or --dry-run.
+  --formula                    No model: POST /curation/run and print the result.
+  --dry-run                    Fetch and print candidates; post nothing and run no harness.
+  --max <n>                    Maximum proposals to post (default 5, cap 20).
+  --push-metrics               After the pass, read /curation/metrics and push each non-null value to the anx.health.* series. Needs an adapter declaring those series; otherwise a hint is printed and the pass still succeeds.
+  --work-dir <dir>             Directory for the prompt file (default .tmp/pm-runner).
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx pm curate ... ; anx --json pm curate ... ; anx pm curate ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `pm serve`
 
 Claim queued PM turns and run them through agentctl with the anx CLI as tools.
@@ -9845,7 +9878,7 @@ Local Help: report init
   - `anx report init --template initiative --card card:launch > initiative.json`
 
 Flags:
-  --template <name>            Defaults to workspace-overview. One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health.
+  --template <name>            Defaults to workspace-overview. One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health, anx-health.
   --topic <ref>                Scope project-based live queries to a topic.
   --card <ref>                 Scope a card-centered template to an initiative card.
 

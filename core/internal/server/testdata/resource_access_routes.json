@@ -1211,5 +1211,25 @@
     "path": "/pm/disconnect",
     "policy": "independent",
     "reason": "Selected authenticated PM alone can reset onboarding and terminate unfinished PM turns. Returns connection state only; unrelated principals cannot reset or observe turn data."
+  },
+  {
+    "method": "GET",
+    "path": "/curation/candidates",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/curation/metrics",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/proposals",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/run",
+    "policy": "reference-write"
   }
 ]

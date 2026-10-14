@@ -239,6 +239,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		case "serve":
 			result, err := a.runPMServe(ctx, args[2:], cfg)
 			return result, "pm serve", err
+		case "curate":
+			result, err := a.runPMCurate(ctx, args[2:], cfg)
+			return result, "pm curate", err
 		case "ask":
 			result, err := a.runPMAsk(ctx, args[2:], cfg)
 			return result, "pm ask", err
