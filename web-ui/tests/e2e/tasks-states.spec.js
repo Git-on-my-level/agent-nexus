@@ -848,7 +848,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "new task filled form", bothEnds);
 
       api.hold.createWork = deferred();
-      await page.getByRole("button", { name: "Create task" }).click();
+      await page.getByRole("button", { name: "Create initiative" }).click();
       // Assert after the outbox reaches the held HTTP request, rather than
       // catching the brief device-persistence phase before enqueue returns.
       await expect
@@ -873,7 +873,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const saved = page.locator('[data-mutation-state="retrying"]');
       await expect(saved).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Create task" }),
+        page.getByRole("button", { name: "Create initiative" }),
       ).toBeDisabled();
       await expect(saved.getByLabel("Saved message")).toHaveValue(
         `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nBoard: board:archive`,
