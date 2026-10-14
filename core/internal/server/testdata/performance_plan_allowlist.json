@@ -9467,91 +9467,9 @@
     "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
   },
   {
-    "sql_sha256": "09c5a9a107c9c0670329f64d1fb614cd1e2d66bca473e689361a1e8c6fa73765",
-    "plan_sha256": "7449175997b304011f3e7947265c299a588edc05c2d6f03ce27acab2cdc9b370",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
     "sql_sha256": "15f45361675bcff918d98afcc0e6b99fb26c6876cecab32f4354498c2f4f98a6",
     "plan_sha256": "461982637bdfc1cc68a6d4cfba3e5234f5a034331bd7572679023a16dd743726",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "3019bff8a63bc0bc43759b88bc787888b457f9afd918baf317f356cbcdec978d",
-    "plan_sha256": "4d042fd7b582dd3f7be3247207ddc43919073b0f2239856e2e7c44eb9aa66962",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "3bdd4a8edd8519b393d16615a330193c0021b2d682438c73e72f7f16ef68693e",
-    "plan_sha256": "4d042fd7b582dd3f7be3247207ddc43919073b0f2239856e2e7c44eb9aa66962",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "42b5f0f4df335741a28633165f2d1678da9f5a430f2f8f3fcbf7626d39897729",
-    "plan_sha256": "7dd991f983d867996f731a31f498a4215595540bfff3dbdb1560cbae8b350766",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "55c4a82512f736e0e633c8bda5ab6d08c9d8c0101bd7cbb5c3abafcfae2d0f6a",
-    "plan_sha256": "7449175997b304011f3e7947265c299a588edc05c2d6f03ce27acab2cdc9b370",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "5a0f4c2c4c1fabe7067692b86d03ccc02804e59104f58626409d45ca4d060160",
-    "plan_sha256": "f846018e1ae6dd666b4f65dea3ebd79f9571a4dd4d82951eac2b4a74798a6184",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "5d21d8eda2ea62fed2e7a6fa9eff59ac76392da2fa490203745995a70617682d",
-    "plan_sha256": "f846018e1ae6dd666b4f65dea3ebd79f9571a4dd4d82951eac2b4a74798a6184",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "6ea4e1b28670946487e1c529b7915ec14a0823ff8f44a77ee7362220458b4812",
-    "plan_sha256": "5b2bada2a840b113641cb82393fd1b1e8577bde53d674619f3e093d59cc12a26",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
+    "findings": ["custom SQL function in WHERE over a large relation"],
     "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
@@ -9559,69 +9477,7 @@
   {
     "sql_sha256": "806c71121a4e2b96f9999256f1d2001231a1391cef9b6e0363fcee78a3cdbf31",
     "plan_sha256": "10d73d510872a3ad64f76d5549e806fd8da3f360ee4858427381ef0013abab97",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "8e842b7e4af81212ddfb2625db9aa4b693170be586b0455e74478b0bd98233f0",
-    "plan_sha256": "960bcdbc40958d22876d3875525d30454b9e887ed0480b283601713463fef9ec",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "93f702c7fbb087c75553bcba73ef1b13b6e0a781d5b33028b71814ef4754ae52",
-    "plan_sha256": "5b2bada2a840b113641cb82393fd1b1e8577bde53d674619f3e093d59cc12a26",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "9436fbe2bf7df50b31868591a29ab1ce75c66008eec0cce8f57ca3948717235e",
-    "plan_sha256": "960bcdbc40958d22876d3875525d30454b9e887ed0480b283601713463fef9ec",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "a2660c3fc2e8f6a7ee1aaac2b327b1c6c99018579f700f9e44f1646b5a66761d",
-    "plan_sha256": "4d042fd7b582dd3f7be3247207ddc43919073b0f2239856e2e7c44eb9aa66962",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "ae49369c38647d73229ddd048a4fa22086e7ca6ca3f0247b3d4723206bac22fd",
-    "plan_sha256": "7449175997b304011f3e7947265c299a588edc05c2d6f03ce27acab2cdc9b370",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "aeed95cb0b8ba8d5b7f0af4bdfa126319bd227ade5d886825eada2e0f442cc31",
-    "plan_sha256": "6ec8d71540f4c1c556896105ce766438dda52fda7ee83e67adbec21437da44e7",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
+    "findings": ["custom SQL function in WHERE over a large relation"],
     "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
@@ -9629,29 +9485,7 @@
   {
     "sql_sha256": "c59edd0d9078dee5202b75cef0120cca7efdfc654501deecac7bb41eb72564b7",
     "plan_sha256": "461982637bdfc1cc68a6d4cfba3e5234f5a034331bd7572679023a16dd743726",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "c7d0317cb12c6f010d161db77104e543f28db27e98a145932ed998d6b49e09dd",
-    "plan_sha256": "6ec8d71540f4c1c556896105ce766438dda52fda7ee83e67adbec21437da44e7",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "c925d9bceca58ade9353071a5716a355dda43302785d83be7a3e4663480641ee",
-    "plan_sha256": "5b2bada2a840b113641cb82393fd1b1e8577bde53d674619f3e093d59cc12a26",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
+    "findings": ["custom SQL function in WHERE over a large relation"],
     "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
@@ -9659,80 +9493,192 @@
   {
     "sql_sha256": "cbd978e369659da08ce90613cc98875889b23cf8e70dec024cad120bf11c36a2",
     "plan_sha256": "10d73d510872a3ad64f76d5549e806fd8da3f360ee4858427381ef0013abab97",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
+    "findings": ["custom SQL function in WHERE over a large relation"],
     "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "cf0e9a627e20f5b46f9f91726a45f9326e5420b5cdc2e72d9e6765cc806f7842",
-    "plan_sha256": "4d042fd7b582dd3f7be3247207ddc43919073b0f2239856e2e7c44eb9aa66962",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "1005658ef553197679a18fe7f42c5f89102c1daf97e3b9f27e372035f0902c27",
+    "plan_sha256": "40bbde563d4b83149a6a67d5875a8bf93678c4c542a94ea8e8b0ad33c90b9896",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "cf4ba76b7159d649bcd9638f1b4c7b97fc48b8302a4ee594e2fa94ad2cceed12",
-    "plan_sha256": "f846018e1ae6dd666b4f65dea3ebd79f9571a4dd4d82951eac2b4a74798a6184",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "1ef3066644263e5ed97f054f82424750328a3992efeb026ffa4a42492a35b6f2",
+    "plan_sha256": "6cba9b3b1061a6c0f95b84d7c7b3c3e4d7c83e1b2b284b2a491bf74189e1f1f8",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "d44de1e5c92bbc6162e598e59a1599f02f5dfbc1ac931f8b64eb4b9c991f7fcc",
-    "plan_sha256": "7dd991f983d867996f731a31f498a4215595540bfff3dbdb1560cbae8b350766",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "27afcfe11fd0351e989e580765d7664bb4a751102a91c2b3812af03657684ec4",
+    "plan_sha256": "c279cfaa3105159a11a0857f05bf7c074412cd2d1da9b340fd6707bf50f878cc",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "e300c3e91d02b43d89df2726ae3a62a66d587e7d6242a67514048b27c49a8d08",
-    "plan_sha256": "960bcdbc40958d22876d3875525d30454b9e887ed0480b283601713463fef9ec",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "33d05a0471eb2d8b7055196b04d9ca97894cabc60f7edc72606da512b08feb7a",
+    "plan_sha256": "1e2b8283df86dda29f576d09e00aafe1a29a2097d54550e42aa6b58b8e121584",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "ea90a16bada689ae0dbd15383264867c120d626dd557b64a8f365c2fa7bea796",
-    "plan_sha256": "6ec8d71540f4c1c556896105ce766438dda52fda7ee83e67adbec21437da44e7",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "42631449a305130eb4e92cc59236cf4b11b3afeeebe0acb3bb2f67b64d5844cd",
+    "plan_sha256": "6cba9b3b1061a6c0f95b84d7c7b3c3e4d7c83e1b2b284b2a491bf74189e1f1f8",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "f57f393da56eeaf2a883a0825718c84e553d9bcd8b73c40f436f7501cb9a75e6",
-    "plan_sha256": "7dd991f983d867996f731a31f498a4215595540bfff3dbdb1560cbae8b350766",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "47ff59fc45b3b26aba8cb9a2c975ea242c5e1d94d51ec56a46764cfc1f5202d3",
+    "plan_sha256": "52be77ad65d92414e354a2786ca5c1712a414bcab4d12a894f74179f81b1dfba",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "f939a96c5896eff62fa02449053a432f5a2ab3a44a9b755d03f49204de72bed9",
-    "plan_sha256": "7449175997b304011f3e7947265c299a588edc05c2d6f03ce27acab2cdc9b370",
-    "findings": [
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique), and the only finding is the access layer's own scoped-relation wrapper: anx_point_snapshot_denied over the cards/threads/events relations, evaluated per joined row against the request's epoch-validated denial snapshot. Measured: all authorized phases inside the standard 100-statement/50000-VM-step budget with no baseline; unauthorized warm likewise. Only this exact SQL/full ordered-plan pair is permitted.",
+    "sql_sha256": "4c271102c211a66383f498d663666dac64bfa0fcfe44237c4ecf7b375ff1430b",
+    "plan_sha256": "2f0369964228b5756794c14aca16b42d3d29187b8c5a1beaf9c1a3b7613dae19",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "4f7aa2de4f2e2550f8a6c342698f106b8be141eaee863b782f7c23879a637dd7",
+    "plan_sha256": "40bbde563d4b83149a6a67d5875a8bf93678c4c542a94ea8e8b0ad33c90b9896",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "502dae5bef2e993b927076e1e06d9a4edc09537b666fb2cba5b6b0a88b032aa1",
+    "plan_sha256": "2f0369964228b5756794c14aca16b42d3d29187b8c5a1beaf9c1a3b7613dae19",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "5143a6dcf073ab9d46a79cb59db04e6a57a23be3d718f7055a14f33a8804f7dc",
+    "plan_sha256": "6cba9b3b1061a6c0f95b84d7c7b3c3e4d7c83e1b2b284b2a491bf74189e1f1f8",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "520e8ffb762ece657de6ad5efdd6f37d38c3986fc938348141aa58fbea7a08cb",
+    "plan_sha256": "511f858358f1048bfedd942f040fcb78128e183eb2b2e516e15fcb507b428be3",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "5578c2aff15b6667dd7292b2f614d1567d664d85c43392ff5924435cebf20ff9",
+    "plan_sha256": "c279cfaa3105159a11a0857f05bf7c074412cd2d1da9b340fd6707bf50f878cc",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "593137ca33b2ea53ec7dc47cfb5ef8dad9a9391bb79124ea18b02ef865cfc829",
+    "plan_sha256": "511f858358f1048bfedd942f040fcb78128e183eb2b2e516e15fcb507b428be3",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "5f30d78aba3270537d9f5aba3746a437e6826b688a3872ad7226748446a63d4c",
+    "plan_sha256": "40bbde563d4b83149a6a67d5875a8bf93678c4c542a94ea8e8b0ad33c90b9896",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "69f44a020bc0d858493b032468bb65b717c46c2e24eeda13a9275f9b089c8f0f",
+    "plan_sha256": "1e2b8283df86dda29f576d09e00aafe1a29a2097d54550e42aa6b58b8e121584",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "7392e917e8f0550bfcf2d1d989260e8cd5a147376a36743e36f966e86a2f5a93",
+    "plan_sha256": "c279cfaa3105159a11a0857f05bf7c074412cd2d1da9b340fd6707bf50f878cc",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "7d1080f1d840bd89ddd447c295db5edf009fee3a9b6a378bdd03c4199d90bf8b",
+    "plan_sha256": "52be77ad65d92414e354a2786ca5c1712a414bcab4d12a894f74179f81b1dfba",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "83131079b81f1b8c111584c783edc54050405dd22d509b3146323d70b1f0afa3",
+    "plan_sha256": "2f0369964228b5756794c14aca16b42d3d29187b8c5a1beaf9c1a3b7613dae19",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "96bef120dee2f21d23e1c9bf31fff7dd14c5df3498be2392b62498c33b1f7ffe",
+    "plan_sha256": "40bbde563d4b83149a6a67d5875a8bf93678c4c542a94ea8e8b0ad33c90b9896",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "ab1550559d7632ec90c08b517b95d4a6cd9058dea064abb75304ba5c8a586653",
+    "plan_sha256": "6cba9b3b1061a6c0f95b84d7c7b3c3e4d7c83e1b2b284b2a491bf74189e1f1f8",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "b5cde82f322601e27bf72c7205fcaddb5bee7f099b46d770dbd5735d2f9dbfe1",
+    "plan_sha256": "511f858358f1048bfedd942f040fcb78128e183eb2b2e516e15fcb507b428be3",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "cedf363c388ebeeab69891265d03e7fc241753ce159fd1d48c51b37b49f0124c",
+    "plan_sha256": "1e2b8283df86dda29f576d09e00aafe1a29a2097d54550e42aa6b58b8e121584",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-663",
+    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "ed9005739747e56a11f461b978475827e8a91c0933e5d41a47dba197772d05e6",
+    "plan_sha256": "52be77ad65d92414e354a2786ca5c1712a414bcab4d12a894f74179f81b1dfba",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   }
