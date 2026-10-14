@@ -302,6 +302,7 @@ anx ask "Accept merge at 40a2b0f?" --body-file ask.md --recommend "Accept"
 Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
 anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
 ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
+Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
 Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
@@ -5813,7 +5814,7 @@ Generated Help: series push
 - CLI path: `series push`
 - HTTP: `POST /series/{name}/points`
 - Side effect class: `remote_coordination_write`
-- Stability: `beta`
+- Stability: `stable`
 - Input mode: `flags`
 - Why: Push one declared series point.
 - Output: Returns JSON with provenance and explicit freshness.

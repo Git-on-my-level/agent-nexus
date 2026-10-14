@@ -256,7 +256,7 @@ paths:
       x-anx-concepts: [documents]
       x-anx-surface: canonical
       x-anx-agent-notes: Explicit declared push source; core never fetches external data.
-      x-anx-stability: beta
+      x-anx-stability: stable
       parameters:
       - name: name
         in: path
@@ -4450,7 +4450,7 @@ paths:
       x-anx-why: Read live initiative steps, progress and health.
       x-anx-input-mode: flags
       x-anx-concepts: [cards, read]
-      x-anx-stability: beta
+      x-anx-stability: stable
       parameters:
         - $ref: '#/components/parameters/CardID'
       responses:
@@ -4474,7 +4474,7 @@ paths:
       x-anx-why: Add linked steps rather than writing progress prose. Never select a view.
       x-anx-input-mode: json-body
       x-anx-concepts: [cards, write]
-      x-anx-stability: beta
+      x-anx-stability: stable
       parameters:
         - $ref: '#/components/parameters/CardID'
       requestBody:
@@ -5057,7 +5057,7 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: brief.get
       x-anx-agent-notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
-      x-anx-cli-path: brief
+      x-anx-cli-path: orient
       x-anx-why: One brief for the human surfaces and the agent orient loop.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
