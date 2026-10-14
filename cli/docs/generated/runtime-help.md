@@ -1747,12 +1747,17 @@ Generated Help: actors create
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Dev-only actor registration when dev_actor_mode is enabled.
+- Why: Dev-only actor registration when dev_actor_mode is enabled. Optional request_key binds the complete actor payload to an atomic original receipt; retain the actor ID and key on explicit resend. No session or credentials are issued.
 - Output: Returns `{ actor }`.
-- Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
+- Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`, `actor_exists`
 - Concepts: `actors`, `auth`
 - Adjacent commands: `debug actors list`
 
+Inputs:
+  Required:
+  - body `actor` (object)
+  Optional:
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
