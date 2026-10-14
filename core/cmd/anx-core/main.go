@@ -631,12 +631,12 @@ func main() {
 		compactDone := make(chan struct{})
 		go func() {
 			defer close(compactDone)
-			workspace.RunCompactAccessMigration(maintenanceCtx, func(result storage.CompactAccessVerification, err error) {
+			workspace.RunCompactAccessMigration(maintenanceCtx, func(_ storage.CompactAccessVerification, err error) {
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "compact access migration: %v\n", err)
 					return
 				}
-				fmt.Fprintf(os.Stderr, "compact access migration: certified rows=%d epoch=%d; certified reader selected unless legacy fallback is set\n", result.Rows, result.Epoch)
+				fmt.Fprintln(os.Stderr, "compact access migration: certified; certified reader selected unless legacy fallback is set")
 			})
 		}()
 		defer func() { maintenanceCancel(); <-compactDone }()

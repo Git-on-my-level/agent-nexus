@@ -31,6 +31,10 @@ func compactMigrationError(stage string, err error) error {
 	if err == nil {
 		return nil
 	}
+	var existing *CompactAccessMigrationError
+	if errors.As(err, &existing) {
+		return existing
+	}
 	e := &CompactAccessMigrationError{Stage: stage, Reason: "unexpected_error", cause: err}
 	var code interface{ Code() int }
 	var mismatch *compactMismatchError

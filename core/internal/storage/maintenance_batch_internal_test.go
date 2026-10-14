@@ -16,7 +16,7 @@ func TestAdaptiveMaintenanceBatchCancellationAndMinimum(t *testing.T) {
 		<-ctx.Done()
 		return false, sql.ErrTxDone // SQL drivers need not return DeadlineExceeded.
 	})
-	if !errors.Is(err, sql.ErrTxDone) || batch.limit.Load() != 1 {
+	if !errors.Is(err, sql.ErrTxDone) || !errors.Is(err, context.DeadlineExceeded) || !compactMigrationRetryable(err) || batch.limit.Load() != 1 {
 		t.Fatalf("err=%v cap=%d", err, batch.limit.Load())
 	}
 	done, err := batch.run(context.Background(), 200, func(ctx context.Context, limit int) (bool, error) {

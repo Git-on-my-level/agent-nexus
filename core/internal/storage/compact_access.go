@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"agent-nexus-core/internal/sqliteutil"
@@ -216,71 +217,137 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 
 // RunCompactAccessMigration is server maintenance, never startup readiness
 // or request work. Verification holds a WAL read snapshot, not a writer lease.
-// Reports expose only stage/reason/code, never SQL text or resource contents.
+// Reports expose one final outcome, never SQL text or resource contents.
 func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(CompactAccessVerification, error)) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	installed := false
-	var lastReport time.Time
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
+	w.runCompactAccessMigration(ctx, compactMigrationSchedule{
+		budget:       10 * time.Minute,
+		initialDelay: time.Second + time.Duration(rand.Int64N(int64(time.Second))),
+		batchDelay:   100 * time.Millisecond,
+		retryMin:     250 * time.Millisecond,
+		retryMax:     5 * time.Second,
+	}, report)
+}
+
+// Separate timing from the worker so contention and exhaustion tests need not
+// wait ten minutes. All waits happen after transaction/connection cleanup.
+type compactMigrationSchedule struct {
+	budget, initialDelay, batchDelay, retryMin, retryMax time.Duration
+}
+
+func compactMigrationWait(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return ctx.Err() == nil
+	}
+}
+
+func compactMigrationRetryable(err error) bool {
+	var code interface{ Code() int }
+	return errors.Is(err, ErrCompactAccessChanged) || errors.Is(err, context.DeadlineExceeded) ||
+		(errors.As(err, &code) && (code.Code()&255 == 5 || code.Code()&255 == 6))
+}
+
+func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule compactMigrationSchedule, report func(CompactAccessVerification, error)) {
+	ctx, cancel := context.WithTimeout(parent, schedule.budget)
+	defer cancel()
+	var result CompactAccessVerification
+	var lastErr error
+	succeeded := false
+	stage := "shadow_install"
+	// Exactly one final callback, including shutdown, budget exhaustion and an
+	// already certified workspace. Keep the last stage/cause for diagnosis.
+	defer func() {
+		if !succeeded && ctx.Err() != nil {
+			if parent.Err() != nil {
+				lastErr = compactMigrationError(stage, parent.Err())
+			} else {
+				cause := lastErr
+				if cause == nil {
+					cause = ctx.Err()
+				}
+				diagnostic := compactMigrationError(stage, cause).(*CompactAccessMigrationError)
+				diagnostic.Reason = "budget_exhausted_" + diagnostic.Reason
+				lastErr = diagnostic
+			}
+		} else {
+			lastErr = compactMigrationError(stage, lastErr)
 		}
-		var err error
-		stage := "shadow_install"
-		if !installed {
-			chunkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			err = w.InitializeCompactAccessShadow(chunkCtx)
-			cancel()
-			installed = err == nil
+		if report != nil {
+			report(result, lastErr)
+		}
+	}()
+	delay, retry := schedule.initialDelay, schedule.retryMin
+	installed := false
+	for compactMigrationWait(ctx, delay) {
+		lastErr = nil
+		// Inspect the durable mode before taking a writer: restarts must neither
+		// reinstall a certified shadow nor undo an operator rollback.
+		stage = "reader_mode"
+		var mode int
+		lastErr = w.db.QueryRowContext(ctx, `SELECT reader FROM resource_access_compact_control WHERE singleton=1`).Scan(&mode)
+		if lastErr == nil && mode != 0 {
+			succeeded = mode == 1
+			if mode == 2 {
+				lastErr = &CompactAccessMigrationError{Stage: stage, Reason: "operator_rollback", cause: errors.New("operator selected legacy reads")}
+			}
+			return
+		}
+		if lastErr == nil && !installed {
+			stage = "shadow_install"
+			chunkCtx, finish := context.WithTimeout(ctx, 5*time.Second)
+			lastErr = w.InitializeCompactAccessShadow(chunkCtx)
+			if lastErr != nil && chunkCtx.Err() != nil {
+				lastErr = errors.Join(chunkCtx.Err(), lastErr)
+			}
+			finish()
+			installed = lastErr == nil
 		}
 		var done bool
-		if err == nil {
-			stage = "reader_mode"
-			var mode int
-			if err = w.db.QueryRowContext(ctx, `SELECT reader FROM resource_access_compact_control WHERE singleton=1`).Scan(&mode); err == nil && mode != 0 {
+		if lastErr == nil {
+			stage = "compact_backfill"
+			done, lastErr = w.MaintainCompactAccessBatch(ctx)
+		}
+		if lastErr == nil {
+			stage = "stable_backfill"
+			rawDone, err := w.MaintainStableAccessBatch(ctx)
+			done, lastErr = done && rawDone, err
+		}
+		if lastErr == nil && done {
+			stage = "verification"
+			verifyCtx, finish := context.WithTimeout(ctx, 5*time.Minute)
+			result, lastErr = w.VerifyCompactAccessCutover(verifyCtx)
+			if lastErr != nil && verifyCtx.Err() != nil {
+				lastErr = errors.Join(verifyCtx.Err(), lastErr)
+			}
+			finish()
+			if lastErr == nil {
+				stage = "cutover"
+				cutoverCtx, finish := context.WithTimeout(ctx, 5*time.Second)
+				lastErr = w.CutoverCompactAccess(cutoverCtx, result)
+				if lastErr != nil && cutoverCtx.Err() != nil {
+					lastErr = errors.Join(cutoverCtx.Err(), lastErr)
+				}
+				finish()
+			}
+			if lastErr == nil {
+				succeeded = true // A committed cutover remains successful across shutdown.
 				return
 			}
 		}
-		if err == nil {
-			stage = "compact_backfill"
-			done, err = w.MaintainCompactAccessBatch(ctx)
-		}
-		if err == nil {
-			stage = "stable_backfill"
-			rawDone, rawErr := w.MaintainStableAccessBatch(ctx)
-			done, err = done && rawDone, rawErr
-		}
-		if err != nil {
-			if report != nil && ctx.Err() == nil && time.Since(lastReport) >= time.Minute {
-				report(CompactAccessVerification{}, compactMigrationError(stage, err))
-				lastReport = time.Now()
+		if lastErr != nil {
+			if ctx.Err() != nil || !compactMigrationRetryable(lastErr) {
+				return
 			}
-			continue
-		}
-		if done {
-			stage = "verification"
-			verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-			result, err := w.VerifyCompactAccessCutover(verifyCtx)
-			cancel()
-			if err == nil {
-				stage = "cutover"
-				cutoverCtx, finish := context.WithTimeout(ctx, 10*time.Second)
-				err = w.CutoverCompactAccess(cutoverCtx, result)
-				finish()
-			}
-			// Ordinary write contention is not a certification failure. Retry
-			// with a new snapshot; never publish a proof across a write gap.
-			var sqliteCode interface{ Code() int }
-			if errors.Is(err, ErrCompactAccessChanged) || (errors.As(err, &sqliteCode) && (sqliteCode.Code()&255 == 5 || sqliteCode.Code()&255 == 6)) {
-				continue
-			}
-			if report != nil && ctx.Err() == nil {
-				report(result, compactMigrationError(stage, err))
-			}
-			return // A mismatch requires operator investigation, not endless rescans.
+			// Equal jitter avoids synchronized retries and guarantees a yield. The
+			// nonblocking busy handler never queues maintenance ahead of user writes.
+			delay = retry/2 + time.Duration(rand.Int64N(int64(retry-retry/2)))
+			retry = min(retry*2, schedule.retryMax)
+		} else {
+			delay, retry = schedule.batchDelay, schedule.retryMin
 		}
 	}
 }

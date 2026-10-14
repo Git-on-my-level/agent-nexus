@@ -626,3 +626,31 @@ handler and immediate write transactions. Immediate locking queues writers at
 transaction admission instead of attempting an unsupported deferred read-to-write
 upgrade. The HTTP scale guard covers the full response, persisted replay and
 single committed claim under read load.
+
+Compact certification maintenance has a ten-minute overall startup budget. It
+starts after a randomized one-to-two-second delay, then yields 100 ms between
+successful copying batches. Contention, stale proofs and expired leases use
+exponential equal-jitter backoff (initial 125–250 ms, capped at 2.5–5 seconds).
+Every retry releases its transaction and pinned connection before waiting;
+maintenance's busy handler remains nonblocking so serving writers keep their
+normal admission behavior. Installation and cutover have five-second leases;
+copying retains adaptive 100 ms leases. Verification remains unchanged and
+rechecks every ledger field before publishing the epoch/generation-bound proof.
+The worker emits exactly one final safe outcome, including budget exhaustion,
+shutdown, an already certified reader, or a durable operator rollback.
+
+Run the held-writer, exhaustion and adaptive-deadline regressions, and the fresh
+HTTP answer contention guard (25 new answer commits, p95 budget two seconds):
+
+```sh
+go test -C core ./internal/storage -run 'TestCompactMigration|TestAdaptive' -count=1
+go test -C core ./internal/server -run '^TestCompactMigrationConcurrentAnswers$' -count=1 -timeout=2m
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core ./internal/server \
+  -run '^TestPerformanceCompactMigrationConcurrentAnswers$' -count=1 -timeout=15m -v
+```
+
+The scale variant uses the shared canonical fixture, including its real
+ownership/reference indexes, rather than padding the database. It reports file
+bytes, edge count, certification time, committed background writes and answer
+p95. A held startup writer guarantees a failed install attempt; an independent
+writer then runs until certification, alongside the fresh HTTP answer commits.
