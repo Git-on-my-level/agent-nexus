@@ -343,20 +343,26 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 }
 
 // planFacts resolves plan step refs and, since the same facts also decide the
-// possibly-moot flag, each card's related_refs linked sources. Refs are
-// round-robined per card so a large plan or a long related list cannot starve
-// every other initiative, all inside the shared maxPlanRefBudget.
+// possibly-moot flag, each card's related_refs linked sources. Cards come from
+// both the plans map and the health inputs so a planless card still contributes
+// its related refs. Step refs stay ahead of related refs so the moot sources
+// cannot starve plan progress. Refs are round-robined per card so a large plan
+// or a long related list cannot starve every other initiative, all inside the
+// shared maxPlanRefBudget.
 func (s *Store) planFacts(ctx context.Context, ps map[string]plans.Plan, inputs map[string]cardHealthInput, visible func(string, string) bool) (map[string]plans.Fact, error) {
 	refs, seen := []string{}, map[string]bool{}
-	ids := []string{}
+	ids := make([]string, 0, len(ps)+len(inputs))
 	for id := range ps {
+		ids = append(ids, id)
+	}
+	for id := range inputs {
 		ids = append(ids, id)
 	}
 	ids = uniqueSortedStrings(ids)
 	perCard := map[int][]string{}
 	width := 0
 	for i, id := range ids {
-		cardRefs := append(append([]string{}, inputs[id].Related...), planStepRefs(ps[id])...)
+		cardRefs := append(planStepRefs(ps[id]), inputs[id].Related...)
 		perCard[i] = cardRefs
 		if len(cardRefs) > width {
 			width = len(cardRefs)

@@ -43,7 +43,7 @@ func WakeTime(wake string) time.Time {
 		wake = wake[:1024]
 	}
 	for _, match := range wakeTimePattern.FindAllString(wake, -1) {
-		if at, err := time.Parse(time.RFC3339, match); err == nil {
+		if at, err := time.Parse(time.RFC3339Nano, match); err == nil {
 			return at
 		}
 		if at, err := time.Parse("2006-01-02", match); err == nil {

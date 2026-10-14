@@ -133,6 +133,64 @@ func TestAggregatedPlanRefsRespectBudgetAndBatchGuard(t *testing.T) {
 	}
 }
 
+func TestPlanFactsIncludesPlanlessRelatedRefs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	_, err = s.CreateWork(ctx, "actor", "", map[string]any{"title": "PR carrier", "source_refs": []any{map[string]any{"authority": "github", "connection_id": "c", "native_id": "123", "url": "https://github.com/example/repo/pull/123", "status": "merged", "phase": "done"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	related := "https://github.com/example/repo/pull/123"
+	facts, err := s.planFacts(ctx, map[string]plans.Plan{}, map[string]cardHealthInput{"ready-card": {Related: []string{related}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fact, ok := facts[related]; !ok || !fact.Known || fact.Status != "done" {
+		t.Fatalf("planless related ref missed the fact batch: %#v", facts[related])
+	}
+}
+
+func TestPlanFactsPrefersStepRefsOverRelated(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	ps := map[string]plans.Plan{}
+	inputs := map[string]cardHealthInput{}
+	for i := 0; i < 20; i++ {
+		id := fmt.Sprintf("card-%02d", i)
+		ps[id] = plans.Plan{Steps: []plans.Step{{ID: "s", Title: "Step", Ref: fmt.Sprintf("card:step-%02d", i)}}}
+		related := make([]string, 200)
+		for j := 0; j < 200; j++ {
+			related[j] = fmt.Sprintf("card:related-%02d-%03d", i, j)
+		}
+		inputs[id] = cardHealthInput{Related: related}
+	}
+	facts, err := s.planFacts(ctx, ps, inputs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != maxPlanRefBudget {
+		t.Fatalf("facts=%d want %d", len(facts), maxPlanRefBudget)
+	}
+	for i := 0; i < 20; i++ {
+		ref := fmt.Sprintf("card:step-%02d", i)
+		if _, ok := facts[ref]; !ok {
+			t.Fatalf("step ref %s starved by related refs", ref)
+		}
+	}
+}
+
 func TestSourceRefIndexBackfillsExistingMetadata(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

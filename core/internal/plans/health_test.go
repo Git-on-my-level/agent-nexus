@@ -79,6 +79,7 @@ func TestDarkHealth(t *testing.T) {
 		{"earliest-signal-wins", "2026-10-20", DarkInput{Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-10-20T00:00:00Z"},
 		{"wake-earlier-wins", "2026-11-20", DarkInput{Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-11-05T00:00:00Z"},
 		{"wake-near", "", DarkInput{Wake: "wake on 2026-10-08"}, "on_track", ""},
+		{"wake-near-fractional", "", DarkInput{Wake: "wake on 2026-10-08T09:00:00.000Z"}, "on_track", ""},
 		{"past-wake-not-dark", "", DarkInput{Wake: "was due 2026-09-01"}, "on_track", ""},
 		{"per-card-horizon", "2026-10-20", DarkInput{Threshold: 48 * time.Hour}, "dark", "2026-10-20T00:00:00Z"},
 		{"per-card-horizon-covers", "2026-10-20", DarkInput{Threshold: 30 * 24 * time.Hour}, "on_track", ""},
@@ -139,6 +140,8 @@ func TestWakeTime(t *testing.T) {
 		{"date 2026-11-05 then instant 2026-11-06T08:00:00Z", "2026-11-05T00:00:00Z"},
 		{"instant first 2026-11-06T08:00:00+02:00 then date", "2026-11-06T08:00:00+02:00"},
 		{"truncated 2026-13-45 is not a date", ""},
+		{"wake on 2026-10-08T09:00:00.000Z", "2026-10-08T09:00:00Z"},
+		{"2026-10-08T09:00:00.123Z", "2026-10-08T09:00:00.123Z"},
 	} {
 		got := WakeTime(tc.in)
 		if tc.want == "" {
@@ -147,7 +150,7 @@ func TestWakeTime(t *testing.T) {
 			}
 			continue
 		}
-		want, _ := time.Parse(time.RFC3339, tc.want)
+		want, _ := time.Parse(time.RFC3339Nano, tc.want)
 		if got.IsZero() || !got.Equal(want) {
 			t.Fatalf("%q: got %v want %v", tc.in, got, want)
 		}
