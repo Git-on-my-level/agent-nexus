@@ -52,8 +52,8 @@ func handleGetBriefV1(w http.ResponseWriter, r *http.Request, opts handlerOption
 }
 
 // appendBriefPMDecisions adds PM decision records awaiting this human's
-// answer as pm_proposal decisions, through the PM service's own bounded,
-// permission-checked overview read. A PM failure never fails the brief.
+// answer as pm_proposal decisions, through the PM service's bounded,
+// permission-checked awaiting-decision read. A PM failure never fails the brief.
 func appendBriefPMDecisions(r *http.Request, opts handlerOptions, brief map[string]any) {
 	if opts.pmRuntime == nil || opts.pmRuntime.Service == nil {
 		return
@@ -63,7 +63,7 @@ func appendBriefPMDecisions(r *http.Request, opts handlerOptions, brief map[stri
 		return
 	}
 	p := pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: true}
-	decisions, _, partial, err := opts.pmRuntime.Service.OverviewDecisions(r.Context(), p)
+	decisions, partial, err := opts.pmRuntime.Service.AwaitingDecisions(r.Context(), p)
 	if err != nil {
 		return
 	}

@@ -58,3 +58,31 @@ func TestDecisionPageUsesOneProjectionBatch(t *testing.T) {
 		t.Fatalf("batch: %d %+v %v", calls, page, err)
 	}
 }
+
+func TestAwaitingDecisionsReturnsOnlyAnswerableOwnDecisions(t *testing.T) {
+	s, st, p, _ := fixture(t)
+	ctx := context.Background()
+	insert := func(d Decision) {
+		t.Helper()
+		if _, err := st.insert(ctx, "decision", d.ID, "ws", d.ActorID, "", d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert(Decision{ID: "mine", ActorID: p.ActorID, WorkspaceID: "ws", WorkRef: "card:mine", Status: AwaitingAnswer, CreatedAt: time.Now()})
+	insert(Decision{ID: "hidden", ActorID: p.ActorID, WorkspaceID: "ws", WorkRef: "card:hidden", Status: AwaitingAnswer, CreatedAt: time.Now()})
+	insert(Decision{ID: "answered", ActorID: p.ActorID, WorkspaceID: "ws", WorkRef: "card:mine", Status: Answered, CreatedAt: time.Now()})
+	insert(Decision{ID: "theirs", ActorID: "someone", WorkspaceID: "ws", WorkRef: "card:mine", Status: AwaitingAnswer, CreatedAt: time.Now()})
+	calls := 0
+	s.deps.AuthorizeReadBatch = func(_ context.Context, _ Principal, permission string, refs []string) (map[string]bool, error) {
+		calls++
+		out := map[string]bool{}
+		for _, ref := range refs {
+			out[ref] = permission == "pm.approve" && ref != "card:hidden"
+		}
+		return out, nil
+	}
+	ds, partial, err := s.AwaitingDecisions(ctx, p)
+	if err != nil || partial || calls != 1 || len(ds) != 1 || ds[0].ID != "mine" || !ds[0].CanAnswer {
+		t.Fatalf("awaiting decisions: %+v partial=%v calls=%d err=%v", ds, partial, calls, err)
+	}
+}

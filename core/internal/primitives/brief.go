@@ -164,11 +164,11 @@ func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	items, ids, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
+	items, ids, filed, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}
-	items, err = b.collapseBatches(items, ids)
+	items, err = b.collapseBatches(items, ids, filed)
 	return items, truncated, err
 }
 
@@ -178,15 +178,16 @@ func (b *briefBuild) yourAsks() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	items, _, truncated, err := b.renderAsks(rows, len(rows) == briefAskCandidates)
+	items, _, _, truncated, err := b.renderAsks(rows, len(rows) == briefAskCandidates)
 	return items, truncated, err
 }
 
-// renderAsks returns the rendered items and, in the same order, their ask ids.
-func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([]map[string]any, []string, bool, error) {
+// renderAsks returns the rendered items and, in the same order, their ask ids
+// and the batch id each ask was filed under (POST /asks/batch), if any.
+func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([]map[string]any, []string, []string, bool, error) {
 	rows, err := b.readableProposals(rows)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 	asks := make([]BriefAsk, len(rows))
 	index := map[string]briefAskRow{}
@@ -196,7 +197,7 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	}
 	open, err := b.openBlocks(rows)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 	for i := range asks {
 		asks[i].Blocks = open[asks[i].AskID]
@@ -209,10 +210,11 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	}
 	subjects, err := b.cardTitles(collectSubjects(asks))
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 	out := make([]map[string]any, 0, len(asks))
 	ids := make([]string, 0, len(asks))
+	filed := make([]string, 0, len(asks))
 	for _, a := range asks {
 		r := index[a.AskID]
 		var event map[string]any
@@ -254,8 +256,9 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 		}
 		out = append(out, item)
 		ids = append(ids, a.AskID)
+		filed = append(filed, strings.TrimSpace(anyStringValue(payload["batch_id"])))
 	}
-	return out, ids, truncated, nil
+	return out, ids, filed, truncated, nil
 }
 
 func curationTargets(payload string) ([]string, bool) {
@@ -336,13 +339,20 @@ func (b *briefBuild) readableProposals(rows []briefAskRow) ([]briefAskRow, error
 	return kept, nil
 }
 
-// collapseBatches folds the open members of an accepted batch into the first
-// (most urgent) member's decision. Membership is a primary-key seek over the
-// asks already on this page, so a batch never reveals or counts a member the
-// reader cannot see.
-func (b *briefBuild) collapseBatches(items []map[string]any, ids []string) ([]map[string]any, error) {
+// collapseBatches folds the open members of a batch into the first (most
+// urgent) member's decision. A batch is either asks filed together through
+// POST /asks/batch (their pinned batch_id) or an accepted curation batch
+// proposal. Membership only ever groups asks already on this page, so a batch
+// never reveals or counts a member the reader cannot see.
+func (b *briefBuild) collapseBatches(items []map[string]any, ids, filed []string) ([]map[string]any, error) {
 	if len(ids) < 2 {
 		return items, nil
+	}
+	keys := map[string]string{}
+	for i, id := range ids {
+		if filed[i] != "" {
+			keys[id] = "filed:" + filed[i]
+		}
 	}
 	encoded, _ := json.Marshal(ids)
 	rows, err := b.s.db.QueryContext(curationInternal(b.ctx), `SELECT ask_id,batch_key FROM curation_batch_members WHERE ask_id IN (SELECT value FROM json_each(?))`, string(encoded))
@@ -350,13 +360,14 @@ func (b *briefBuild) collapseBatches(items []map[string]any, ids []string) ([]ma
 		return nil, err
 	}
 	defer rows.Close()
-	keys := map[string]string{}
 	for rows.Next() {
 		var id, key string
 		if err = rows.Scan(&id, &key); err != nil {
 			return nil, err
 		}
-		keys[id] = key
+		if keys[id] == "" {
+			keys[id] = key
+		}
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
@@ -484,8 +495,8 @@ func (b *briefBuild) cardStates(refs []string) (map[string]string, error) {
 		return out, nil
 	}
 	encoded, _ := json.Marshal(keys)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c WHERE c.id IN (SELECT value FROM json_each(?1)) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
-		UNION SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c WHERE c.handle IN (SELECT value FROM json_each(?1)) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, string(encoded))
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c WHERE c.id IN (SELECT value FROM json_each(?)) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
+		UNION SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c INDEXED BY idx_cards_handle_unique WHERE c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle IN (SELECT value FROM json_each(?)) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, string(encoded), string(encoded))
 	if err != nil {
 		return nil, err
 	}
@@ -523,8 +534,8 @@ func (b *briefBuild) cardTitles(refs []string) (map[string]string, error) {
 		return out, nil
 	}
 	encoded, _ := json.Marshal(keys)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c WHERE c.id IN (SELECT value FROM json_each(?1)) AND COALESCE(c.trashed_at,'')=''
-		UNION SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c WHERE c.handle IN (SELECT value FROM json_each(?1)) AND COALESCE(c.trashed_at,'')=''`, string(encoded))
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c WHERE c.id IN (SELECT value FROM json_each(?)) AND COALESCE(c.trashed_at,'')=''
+		UNION SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c INDEXED BY idx_cards_handle_unique WHERE c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle IN (SELECT value FROM json_each(?)) AND COALESCE(c.trashed_at,'')=''`, string(encoded), string(encoded))
 	if err != nil {
 		return nil, err
 	}
