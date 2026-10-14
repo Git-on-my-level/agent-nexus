@@ -71,7 +71,7 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 	}
 	// Reverse/direct cards contribute their board via one scoped batch.
 	directJSON, _ := json.Marshal(uniqueSortedStrings(directCards))
-	rows, err = s.db.QueryContext(ctx, `SELECT DISTINCT board_id FROM cards WHERE id IN (SELECT value FROM json_each(?)) LIMIT 11`, string(directJSON))
+	rows, err = s.db.QueryContext(ctx, `SELECT DISTINCT board_id FROM cards WHERE id IN (SELECT value FROM json_each(?)) ORDER BY board_id LIMIT 11`, string(directJSON))
 	if err != nil {
 		return out, err
 	}
@@ -159,7 +159,7 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 	// Each board arm first admits <=51 placement keys. The final sort therefore
 	// sees <=510 keys even if any one board has millions of cards.
 	rows, err = s.db.QueryContext(ctx, `SELECT DISTINCT target_id FROM json_each(?) board CROSS JOIN ref_edges placement
- WHERE placement.id IN (SELECT selected.id FROM ref_edges selected WHERE selected.source_type='board' AND selected.source_id=board.value AND selected.edge_type='board_card' AND selected.target_type='card' ORDER BY selected.target_id LIMIT 51)
+ WHERE placement.id IN (SELECT selected.id FROM ref_edges selected JOIN cards visible ON visible.id=selected.target_id AND COALESCE(visible.archived_at,'')='' AND COALESCE(visible.trashed_at,'')='' WHERE selected.source_type='board' AND selected.source_id=board.value AND selected.edge_type='board_card' AND selected.target_type='card' ORDER BY selected.target_id LIMIT 51)
  ORDER BY target_id LIMIT 51`, string(boardJSON))
 	if err != nil {
 		return out, err
@@ -179,12 +179,35 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 		return out, err
 	}
 	cardIDs = uniqueSortedStrings(cardIDs)
+	if len(cardIDs) > 0 {
+		cardJSON, _ := json.Marshal(cardIDs)
+		rows, err = s.db.QueryContext(ctx, `SELECT id FROM cards WHERE id IN (SELECT value FROM json_each(?)) AND COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')='' ORDER BY id`, string(cardJSON))
+		if err != nil {
+			return out, err
+		}
+		cardIDs = cardIDs[:0]
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				rows.Close()
+				return out, err
+			}
+			cardIDs = append(cardIDs, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return out, err
+		}
+	}
 	out.CardsTruncated = len(cardIDs) > 50
 	if out.CardsTruncated {
 		cardIDs = cardIDs[:50]
 		out.Truncated = true
 	}
 	if len(cardIDs) > 0 {
+		// Empty lifecycle scalars are active for membership; the flag only
+		// hydrates those rows, not archived or trashed cards already removed.
 		out.Cards, err = s.ListCards(ctx, CardListFilter{ids: cardIDs, includeLifecycleHidden: true})
 		if err != nil {
 			return out, err

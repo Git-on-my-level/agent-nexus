@@ -436,3 +436,56 @@ it("advances empty unread pages and merges a group repeated across pages", async
   expect(result.groups[0].unread_count).toBe(2);
   expect(result.groups[0].newest_event.id).toBe("new");
 });
+
+it("reapplies home unread importance and recency after merging pages", async () => {
+  const result = await listAllPages(async (cursor) => {
+    return cursor
+      ? {
+          groups: [
+            {
+              group_ref: "topic:later-important",
+              priority: "P0",
+              unread_count: 1,
+              newest_event: {
+                id: "attn",
+                ts: "2026-10-14T00:00:00Z",
+                type: "human_attention_requested",
+              },
+              events: [
+                {
+                  id: "attn",
+                  ts: "2026-10-14T00:00:00Z",
+                  type: "human_attention_requested",
+                },
+              ],
+            },
+          ],
+        }
+      : {
+          groups: [
+            {
+              group_ref: "topic:first-routine",
+              priority: "P2",
+              unread_count: 1,
+              newest_event: {
+                id: "note",
+                ts: "2026-10-14T12:00:00Z",
+                type: "message_posted",
+              },
+              events: [
+                {
+                  id: "note",
+                  ts: "2026-10-14T12:00:00Z",
+                  type: "message_posted",
+                },
+              ],
+            },
+          ],
+          next_cursor: "second",
+        };
+  }, "groups");
+  expect(result.groups.map((group) => group.group_ref)).toEqual([
+    "topic:later-important",
+    "topic:first-routine",
+  ]);
+});

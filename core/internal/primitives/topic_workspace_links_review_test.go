@@ -95,3 +95,98 @@ func TestTopicWorkspaceRetainsPrimaryThreadPastThreadCap(t *testing.T) {
 	}
 	t.Fatal("primary thread was omitted because its ID sorts beyond the cap")
 }
+
+func TestTopicWorkspaceBoardPreviewKeepsSortedBoardIDs(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	topic, err := s.CreateTopic(ctx, "owner", map[string]any{"title": "Board preview", "summary": "Stable board cap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{}
+	for i := 0; i < 10; i++ {
+		want[fmt.Sprintf("preview-board-%02d", i)] = true
+	}
+	for i := 11; i >= 0; i-- {
+		id := fmt.Sprintf("preview-board-%02d", i)
+		board, err := s.CreateBoard(ctx, "owner", map[string]any{"id": id, "title": id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		card, err := s.CreateWork(ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": "Card " + id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ws.DB().Exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at,metadata_json) VALUES(?,'topic',?,'card',?,'ref','now','{}')`, "edge-"+id, topic.Topic["id"], card["id"]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := s.TopicWorkspaceResources(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), anyStringValue(topic.Topic["id"]), anyStringValue(topic.Topic["thread_id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !page.Truncated || len(page.Boards) != 10 {
+		t.Fatalf("board bound/truncation lost: boards=%d truncated=%v", len(page.Boards), page.Truncated)
+	}
+	for _, board := range page.Boards {
+		id := anyStringValue(board["id"])
+		if !want[id] {
+			t.Fatalf("board preview included %q; want the first ten sorted ids, got %#v", id, page.Boards)
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 {
+		t.Fatalf("board preview omitted %#v", want)
+	}
+}
+
+func TestTopicWorkspaceOmitsArchivedAndTrashedCards(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	topic, err := s.CreateTopic(ctx, "owner", map[string]any{"title": "Hidden cards", "summary": "Lifecycle preview"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	board, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Lifecycle board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at,metadata_json) VALUES('topic-board','topic',?,'board',?,'ref','now','{}')`, topic.Topic["id"], board["id"]); err != nil {
+		t.Fatal(err)
+	}
+	active, err := s.CreateWork(ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": "Active card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archived, err := s.CreateWork(ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": "Archived card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trashed, err := s.CreateWork(ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": "Trashed card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE cards SET archived_at='2026-10-14T00:00:00Z',archived_by='owner' WHERE id=?`, archived["id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE cards SET trashed_at='2026-10-14T00:00:00Z',trashed_by='owner',trash_reason='gone' WHERE id=?`, trashed["id"]); err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.TopicWorkspaceResources(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), anyStringValue(topic.Topic["id"]), anyStringValue(topic.Topic["thread_id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Cards) != 1 || page.Cards[0]["id"] != active["id"] {
+		t.Fatalf("workspace preview included hidden cards: %#v", page.Cards)
+	}
+}

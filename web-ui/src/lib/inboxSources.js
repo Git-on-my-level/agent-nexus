@@ -289,5 +289,70 @@ export function mergeHomeUnreadGroups(groups) {
     current.unread_count = current.events.length;
     current.newest_event = current.events[0] || current.newest_event;
   }
-  return [...merged.values()];
+  return [...merged.values()].sort(compareHomeUnreadGroups);
+}
+
+function homeUnreadImportance(events) {
+  let rank = 0;
+  for (const event of events || []) {
+    const kind = event?.type;
+    const column = event?.payload?.column_key;
+    if (
+      kind === "human_attention_requested" ||
+      kind === "human_attention_responded"
+    ) {
+      return 3;
+    }
+    if (
+      kind === "card_resolved" ||
+      (kind === "card_moved" && (column === "done" || column === "blocked"))
+    ) {
+      rank = 2;
+    }
+  }
+  return rank;
+}
+
+function homeUnreadNearTied(left, right) {
+  const start = Date.parse(left);
+  const end = Date.parse(right);
+  if (Number.isNaN(start) || Number.isNaN(end)) return false;
+  return Math.abs(start - end) <= 5 * 60 * 1000;
+}
+
+function homeUnreadPriorityRank(priority) {
+  switch (
+    String(priority ?? "")
+      .trim()
+      .toUpperCase()
+  ) {
+    case "P0":
+      return 0;
+    case "P1":
+      return 1;
+    case "P2":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function compareHomeUnreadGroups(left, right) {
+  const importance =
+    homeUnreadImportance(right.events) - homeUnreadImportance(left.events);
+  if (importance) return importance;
+  const leftTS = String(left.newest_event?.ts ?? "");
+  const rightTS = String(right.newest_event?.ts ?? "");
+  if (leftTS === rightTS) {
+    return String(left.group_ref ?? "").localeCompare(
+      String(right.group_ref ?? ""),
+    );
+  }
+  if (homeUnreadNearTied(leftTS, rightTS)) {
+    const priority =
+      homeUnreadPriorityRank(left.priority) -
+      homeUnreadPriorityRank(right.priority);
+    if (priority) return priority;
+  }
+  return rightTS.localeCompare(leftTS);
 }
