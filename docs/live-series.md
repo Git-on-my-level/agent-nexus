@@ -204,3 +204,7 @@ Attention retains the bounded oldest-first sample: counts are lower bounds
 when truncated, and scoped readers always receive `attention_truncated` to
 avoid revealing private candidates. Historical related-ref links backfill in
 bounded maintenance chunks; reads never scan or repair inbox history.
+
+An incomplete sample with no visible asks shows “Waiting status unknown”,
+including a full denied prefix; it never claims there are no open asks.
+Denied metric streams are omitted from card metrics as well as ref previews.

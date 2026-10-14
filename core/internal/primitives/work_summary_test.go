@@ -334,3 +334,59 @@ func TestWorkSummaryRelatedAskWaitDeduplicatesAndCloses(t *testing.T) {
 		t.Fatal("closed asks retained", a)
 	}
 }
+
+func TestWorkSummaryDeniedAskWindowIsUnknown(t *testing.T) {
+	ctx := context.Background()
+	ws, e := initializeTestWorkspace(ctx, t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	public, e := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Public waiting"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	private, e := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Private asks"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.PatchThread(ctx, "owner", workString(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); e != nil {
+		t.Fatal(e)
+	}
+	now := time.Now().UTC()
+	ref := workString(public["ref"])
+	items := []DerivedInboxItem{}
+	for i := 0; i < 11; i++ {
+		id := fmt.Sprintf("denied-%02d", i)
+		items = append(items, DerivedInboxItem{ID: id, ThreadID: workString(private["thread_id"]), Category: "ask", TriggerAt: now.Add(-time.Duration(24+i) * time.Hour).Format(time.RFC3339Nano), GeneratedAt: now.Format(time.RFC3339Nano), SourceHash: id, Data: map[string]any{"kind": "ask", "related_refs": []string{ref}}})
+	}
+	if e = s.ReplaceDerivedInboxItems(ctx, workString(private["thread_id"]), items); e != nil {
+		t.Fatal(e)
+	}
+	visible := DerivedInboxItem{ID: "visible-newer", ThreadID: workString(public["thread_id"]), Category: "ask", TriggerAt: now.Add(-time.Hour).Format(time.RFC3339Nano), GeneratedAt: now.Format(time.RFC3339Nano), SourceHash: "visible-newer", Data: map[string]any{"kind": "ask", "related_refs": []string{ref}}}
+	if e = s.ReplaceDerivedInboxItems(ctx, workString(public["thread_id"]), []DerivedInboxItem{visible}); e != nil {
+		t.Fatal(e)
+	}
+	scoped := WithAccessScope(ctx, AccessScope{ActorID: "viewer"})
+	previews, e := s.ResolveRefs(scoped, []string{ref}, nil, now, 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	summary := previews[0].Summary
+	if summary == nil || summary.Attention != nil || !summary.AttentionTruncated {
+		t.Fatalf("zero visible sample must remain unknown: %+v", summary)
+	}
+	// Unknown must not disclose that the denied prefix exists.
+	empty, e := s.CreateWork(ctx, "owner", "", map[string]any{"title": "No asks"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	previews, e = s.ResolveRefs(scoped, []string{workString(empty["ref"])}, nil, now, 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if previews[0].Summary.Attention != nil || !previews[0].Summary.AttentionTruncated {
+		t.Fatal("empty sample differs from denied sample")
+	}
+}

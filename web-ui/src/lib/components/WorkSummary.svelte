@@ -83,6 +83,9 @@
   );
   let progress = $derived(summary?.progress ?? null);
   let attention = $derived(summary?.attention ?? null);
+  let attentionUnknown = $derived(
+    !attention && summary?.attentionTruncated === true,
+  );
   /*
    * The computed reason, as the badge's accessible name and tooltip. At header
    * density it is also on screen: a page has room for the sentence, and
@@ -405,7 +408,7 @@
       </span>
     {/if}
 
-    {#if ownerLabel || placeLabel || summary?.due || attention}
+    {#if ownerLabel || placeLabel || summary?.due || attention || attentionUnknown}
       <span class="summary__foot" data-summary-foot>
         {#if ownerLabel}<span class="summary__owner" data-summary-owner
             >{ownerLabel}</span
@@ -430,6 +433,13 @@
             aria-label={attentionTitle}
             use:tooltip={attentionTitle}
             >{attention.label} · {attentionWaitingLabel}</span
+          >
+        {:else if attentionUnknown}
+          <span
+            class="ui-badge ui-badge--neutral summary__badge"
+            data-summary-attention-unknown
+            use:tooltip={"The bounded ask sample is incomplete. Open asks may be outside the visible sample."}
+            >Waiting status unknown</span
           >
         {/if}
       </span>

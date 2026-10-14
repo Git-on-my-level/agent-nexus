@@ -701,3 +701,17 @@ one query, four result rows, at most 20,000 VM steps and indexed point seeks):
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series \
   -run '^TestPerformanceSeriesRefEndpointBudget$' -count=1 -v
 ```
+
+The canonical `series_points` privacy shadow is explicitly `NOT MATERIALIZED`
+so oldest/latest endpoint probes retain their primary-key seeks rather than
+copying the workspace's points. The scoped-reader regression uses the real
+nonempty denial graph, captures the rewritten SQL, rejects a materialized
+point shadow or point scan, and requires both endpoint index seeks. Against
+100 streams and 10,000 observations, one scoped metric must stay within eight
+queries, sixteen result rows, and 20,000 VM steps (authorization admission is
+outside the measured read phase):
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series \
+  -run '^TestPerformanceScopedSeriesRefEndpointBudget$' -count=1 -v
+```

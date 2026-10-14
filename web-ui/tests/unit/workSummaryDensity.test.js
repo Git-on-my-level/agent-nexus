@@ -328,3 +328,30 @@ it.each(["row", "card", "header"])(
     );
   },
 );
+
+it.each(["row", "card", "header"])(
+  "%s does not present an incomplete zero-visible ask sample as no wait",
+  (density) => {
+    const el = at(density, {
+      work_summary: {
+        ...row.work_summary,
+        attention: undefined,
+        attention_truncated: true,
+      },
+    });
+    expect(el.querySelector("[data-summary-attention]")).toBeNull();
+    expect(
+      el.querySelector("[data-summary-attention-unknown]").textContent,
+    ).toBe("Waiting status unknown");
+  },
+);
+it("complete zero-ask summaries omit the uncertainty marker", () => {
+  const el = at("row", {
+    work_summary: {
+      ...row.work_summary,
+      attention: undefined,
+      attention_truncated: false,
+    },
+  });
+  expect(el.querySelector("[data-summary-attention-unknown]")).toBeNull();
+});

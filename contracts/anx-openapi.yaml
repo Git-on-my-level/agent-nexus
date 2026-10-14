@@ -10301,7 +10301,7 @@ components:
             oldest_age: {type: integer, minimum: 0, description: Seconds since the oldest visible sampled ask; excluded from stream change detection.}
             oldest_at: {type: string, format: date-time, description: Canonical trigger timestamp of the oldest visible sampled ask.}
             truncated: {type: boolean, description: Count is a lower bound when the candidate window is full.}
-        attention_truncated: {type: boolean, description: Attention is sampled; scoped readers always receive this marker so private candidate counts cannot be inferred. Omitted asks may exist.}
+        attention_truncated: {type: boolean, description: Attention is sampled; scoped readers always receive this marker so private candidate counts cannot be inferred. Omitted asks may exist. When attention is absent and this is true, waiting status is unknown rather than zero.}
 
     Work:
       type: object

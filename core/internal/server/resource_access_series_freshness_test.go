@@ -43,6 +43,11 @@ func TestResourceAccessSeriesFreshnessAndReportProvenance(t *testing.T) {
 	}
 	status, out = hostHTTP(t, "POST", env.server.URL+"/series/sibling/points", token, map[string]any{"value": 9, "labels": map[string]any{"ref": card["ref"]}})
 	hostStatus(t, status, 200, out)
+	deniedRef := "series:sibling?ref=" + url.QueryEscape(anyString(card["ref"]))
+	initiative, err := s.CreateWork(ctx, "series-owner-actor", "", map[string]any{"title": "Public metric link", "related_refs": []string{deniedRef}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, reader := range []struct {
 		actor, token string
 		owner        bool
@@ -63,13 +68,38 @@ func TestResourceAccessSeriesFreshnessAndReportProvenance(t *testing.T) {
 			}
 		}
 		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: reader.actor})
-		previews, e := s.ResolveRefs(scope, []string{"series:sibling?ref=" + url.QueryEscape(anyString(card["ref"]))}, nil, time.Now().UTC(), 0)
+		previews, e := s.ResolveRefs(scope, []string{deniedRef}, nil, time.Now().UTC(), 0)
 		if e != nil {
 			t.Fatal(e)
 		}
 		b, _ := json.Marshal(previews)
 		if has := strings.Contains(string(b), `"value":9`); has != reader.owner {
 			t.Fatalf("series ref disclosure for %s: %s", reader.actor, b)
+		}
+
+		if !reader.owner {
+			var preview []map[string]any
+			if e = json.Unmarshal(b, &preview); e != nil {
+				t.Fatal(e)
+			}
+			if len(preview) != 1 || len(preview[0]) != 2 || preview[0]["ref"] != deniedRef || preview[0]["resolvable"] != false {
+				t.Fatalf("denied preview must contain only ref and false resolvable: %s", b)
+			}
+		}
+		cards := []map[string]any{map[string]any{"id": initiative["id"], "ref": initiative["ref"]}}
+		if e = s.EnrichCardPlans(scope, cards, nil, time.Now().UTC(), 0); e != nil {
+			t.Fatal(e)
+		}
+		summary := cards[0]["work_summary"].(*primitives.WorkSummary)
+		if reader.owner {
+			if len(summary.Metrics) != 1 || summary.Metrics[0].Latest == nil {
+				t.Fatal("owner lost metric", summary)
+			}
+		} else {
+			raw, _ := json.Marshal(summary.Metrics)
+			if len(summary.Metrics) != 0 {
+				t.Fatalf("denied card metrics must omit kind/unit/baseline/stale/observed_at/resolvable: %s", raw)
+			}
 		}
 
 		rr := reportReader{r: httptest.NewRequest("GET", "/report", nil).WithContext(scope), opts: handlerOptions{seriesStore: &series.Store{DB: env.workspace.DB(), Auth: env.authStore}}, now: time.Now().UTC()}

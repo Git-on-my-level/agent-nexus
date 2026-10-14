@@ -81,7 +81,7 @@ func (s *Store) enrichSummaryMetrics(ctx context.Context, inputs map[string]card
 	}
 	for id, refs := range byCard {
 		for _, ref := range refs {
-			if m, ok := metrics[ref]; ok {
+			if m, ok := metrics[ref]; ok && (m.Labels != nil || m.Status == "ambiguous") {
 				summaries[id].Metrics = append(summaries[id].Metrics, m)
 			}
 		}
