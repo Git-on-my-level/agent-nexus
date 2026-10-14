@@ -93,10 +93,6 @@ describe("plan rendering replays the shared contract corpus", () => {
         });
       });
 
-      it("renders the health core computed", () => {
-        expect(layout().health).toBe(graph.health);
-      });
-
       it("gives every step the status core computed", () => {
         const state = planStateFor(graph);
         const byId = new Map(

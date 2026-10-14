@@ -19,7 +19,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | asks | 4 |
 | auth | 22 |
 | boards | 13 |
-| brief | 1 |
 | cards | 13 |
 | derived | 1 |
 | docs | 19 |
@@ -29,6 +28,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox | 5 |
 | meta | 9 |
 | ops | 3 |
+| orient | 1 |
 | overview | 2 |
 | plan | 2 |
 | pm | 27 |
@@ -143,7 +143,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | boards.trash | boards | POST | /boards/{board_id}/trash | exposed_write | ordinary reversible board lifecycle write |
 | boards.unarchive | boards | POST | /boards/{board_id}/unarchive | exposed_write | ordinary reversible board lifecycle write |
 | boards.workspace | boards | GET | /boards/{board_id}/workspace | exposed_read | bounded board workspace projection |
-| brief.get | brief | GET | /brief | exposed_read | brief.v1: the caller's decisions, initiatives against promises, own asks and answers. |
+| brief.get | orient | GET | /brief | exposed_read | brief.v1: the caller's decisions, initiatives against promises, own asks and answers. |
 | cards.archive | cards | POST | /cards/{card_id}/archive | exposed_write | ordinary reversible card lifecycle write |
 | cards.create | cards | POST | /cards | exposed_write | ordinary card creation |
 | cards.get | cards | GET | /cards/{card_id} | exposed_read | card read |

@@ -170,7 +170,7 @@ func (s *Store) PromiseFolds(ctx context.Context, cardIDs []string) (map[string]
 
 type briefInitiativeRow struct {
 	cardID, promiseAt, what, source, sourceRef, author, lastEvidence string
-	open, moves                                                     int
+	open, moves                                                      int
 }
 
 func (r briefInitiativeRow) fold() plans.PromiseFold {
@@ -185,10 +185,10 @@ func (r briefInitiativeRow) fold() plans.PromiseFold {
 // BriefAsk is one materialized ask fact.
 type BriefAsk struct {
 	AskID, InboxItemID, Kind, Requester, Recipient, SubjectRef, Title, Priority, State string
-	CreatedAt                                                                        time.Time
-	DecideBy                                                                         *time.Time
-	Blocks                                                                           []string
-	BlocksCount                                                                      int
+	CreatedAt                                                                          time.Time
+	DecideBy                                                                           *time.Time
+	Blocks                                                                             []string
+	BlocksCount                                                                        int
 }
 
 // OpenAsksDueBefore seeks open asks whose decide_by is at or before `before`,

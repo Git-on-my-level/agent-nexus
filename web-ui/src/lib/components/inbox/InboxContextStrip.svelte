@@ -10,7 +10,7 @@
    * reader can answer without opening the task first.
    *
    * `presenceActorId` names the requester; when it is an agent with a
-   * presence note (`anx work note`), that note renders between the subject
+   * presence note (`anx note`), that note renders between the subject
    * and the last message.
    *
    * `askText` is the item's own title. `anx ask` auto-creates the card it
