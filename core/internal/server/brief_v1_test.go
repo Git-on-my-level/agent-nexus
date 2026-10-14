@@ -13,6 +13,13 @@ import (
 
 func readBriefV1(t *testing.T, store *primitives.Store) map[string]any {
 	t.Helper()
+	// The maintenance loop folds queued cards; drain it as the loop would.
+	for drained := false; !drained; {
+		var err error
+		if drained, err = store.RefreshBriefInitiatives(context.Background(), 200); err != nil {
+			t.Fatal(err)
+		}
+	}
 	out := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/brief", nil)
 	attachResourceAccessScope(req, handlerOptions{primitiveStore: store})

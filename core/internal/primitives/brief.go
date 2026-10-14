@@ -13,7 +13,7 @@ import (
 const BriefSectionLimit = 50
 
 const (
-	briefAskCandidates  = 200
+	briefAskCandidates  = 60
 	briefDoneLimit      = 10
 	briefAnsweredWindow = 7 * 24 * time.Hour
 )
@@ -156,11 +156,11 @@ func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 		addressed += ` OR a.recipient=''`
 	}
 	addressed += `) AND a.requester NOT IN (?,?)`
-	dated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NOT NULL AND `+addressed+` ORDER BY a.decide_by,a.ask_id LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
+	dated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NOT NULL AND `+addressed+` ORDER BY a.decide_by LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}
-	undated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NULL AND `+addressed+` ORDER BY a.created_at,a.ask_id LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
+	undated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NULL AND `+addressed+` ORDER BY a.created_at LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}
@@ -466,20 +466,20 @@ func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow
 // evidence first), then recently done; at most BriefSectionLimit in all.
 func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 	limit := BriefSectionLimit + 1
-	promised, err := b.queryInitiatives(`bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at,bi.card_id LIMIT ?`, limit)
+	promised, err := b.queryInitiatives(`bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at LIMIT ?`, limit)
 	if err != nil {
 		return nil, false, err
 	}
 	rows := promised
 	if len(rows) < limit {
-		none, err := b.queryInitiatives(`bi.open=1 AND bi.promise_at IS NULL ORDER BY bi.last_evidence_at,bi.card_id LIMIT ?`, limit-len(rows))
+		none, err := b.queryInitiatives(`bi.open=1 AND bi.promise_at IS NULL ORDER BY bi.last_evidence_at LIMIT ?`, limit-len(rows))
 		if err != nil {
 			return nil, false, err
 		}
 		rows = append(rows, none...)
 	}
 	if len(rows) < limit {
-		done, err := b.queryInitiatives(`bi.open=0 ORDER BY bi.last_evidence_at DESC,bi.card_id LIMIT ?`, min(briefDoneLimit, limit-len(rows)))
+		done, err := b.queryInitiatives(`bi.open=0 ORDER BY bi.last_evidence_at DESC LIMIT ?`, min(briefDoneLimit, limit-len(rows)))
 		if err != nil {
 			return nil, false, err
 		}
@@ -597,30 +597,46 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	if b.reader.human() {
 		human = 1
 	}
-	asks, err := b.queryAsks(`a.state='open' AND a.subject_ref IN (SELECT value FROM json_each(?)) LIMIT 1000`, string(encoded))
+	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT a.subject_ref,a.recipient,a.requester FROM brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id
+		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' LIMIT 1000`, string(encoded))
 	if err != nil {
 		return nil, err
 	}
-	for _, a := range asks {
-		c := out[byRef[a.SubjectRef]]
+	for rows2.Next() {
+		var subject, recipient, requester string
+		if err = rows2.Scan(&subject, &recipient, &requester); err != nil {
+			rows2.Close()
+			return nil, err
+		}
+		c := out[byRef[subject]]
 		c.blocked++
-		if (a.Recipient == id || a.Recipient == prefixed || (a.Recipient == "" && human == 1)) && stripActor(a.Requester) != id {
+		if (recipient == id || recipient == prefixed || (recipient == "" && human == 1)) && stripActor(requester) != id {
 			c.waiting++
 		}
-		out[byRef[a.SubjectRef]] = c
+		out[byRef[subject]] = c
 	}
-	blocking, err := b.queryAsks(`a.state='open' AND a.blocks_count>0 ORDER BY a.created_at DESC LIMIT 500`)
+	rows2.Close()
+	if err = rows2.Err(); err != nil {
+		return nil, err
+	}
+	rows3, err := b.s.db.QueryContext(b.ctx, `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id
+		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' GROUP BY k.ref`, string(encoded))
 	if err != nil {
 		return nil, err
 	}
-	for _, a := range blocking {
-		for _, ref := range a.Blocks {
-			if cardID, ok := byRef[ref]; ok && a.SubjectRef != ref {
-				c := out[cardID]
-				c.blocked++
-				out[cardID] = c
-			}
+	defer rows3.Close()
+	for rows3.Next() {
+		var ref string
+		var n int
+		if err = rows3.Scan(&ref, &n); err != nil {
+			return nil, err
 		}
+		c := out[byRef[ref]]
+		c.blocked += n
+		out[byRef[ref]] = c
+	}
+	if err = rows3.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

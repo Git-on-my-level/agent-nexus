@@ -1073,6 +1073,7 @@ var migrations = []migration{
 	// brief.v1 facts materialized on write events (asks, notes, plan and
 	// card changes), with a one-time backfill. See brief_facts.go.
 	{Version: 89, AfterApply: installBriefFacts},
+	{Version: 90, AfterApply: installBriefAskBlocks},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

@@ -101,7 +101,7 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
 		`CREATE INDEX IF NOT EXISTS idx_brief_initiatives_evidence ON brief_initiatives(open, last_evidence_at)`,
 		`CREATE TABLE IF NOT EXISTS brief_dirty(card_id TEXT PRIMARY KEY)`,
 		`CREATE TRIGGER IF NOT EXISTS brief_asks_insert AFTER INSERT ON events WHEN NEW.type='human_attention_requested' BEGIN
- INSERT OR IGNORE INTO brief_asks(ask_id,inbox_item_id,kind,requester,recipient,subject_ref,title,created_at,decide_by,blocks_json,blocks_count,priority)
+ INSERT INTO brief_asks(ask_id,inbox_item_id,kind,requester,recipient,subject_ref,title,created_at,decide_by,blocks_json,blocks_count,priority)
  VALUES(NEW.id,
   'inbox:'||` + kind + `||':'||COALESCE(NEW.thread_id,'')||':'||COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.request_id')),''),NEW.id)||':'||NEW.id,
   ` + kind + `,
@@ -113,28 +113,28 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
   anx_resolve_when(json_extract(NEW.payload_json,'$.payload.by'),NEW.ts),
   CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN json_extract(NEW.payload_json,'$.payload.blocks') ELSE '[]' END,
   CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN min(json_array_length(NEW.payload_json,'$.payload.blocks'),20) ELSE 0 END,
-  lower(COALESCE(trim(json_extract(NEW.payload_json,'$.payload.priority')),'')));
- INSERT OR IGNORE INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),1,5)='card:' AND (c.id=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6) OR c.handle=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6));
+  lower(COALESCE(trim(json_extract(NEW.payload_json,'$.payload.priority')),''))) ON CONFLICT DO NOTHING;
+ INSERT INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),1,5)='card:' AND (c.id=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6) OR c.handle=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6)) ON CONFLICT DO NOTHING;
  END`,
 		`CREATE TRIGGER IF NOT EXISTS brief_asks_resolve AFTER INSERT ON human_attention_request_resolutions BEGIN
  UPDATE brief_asks SET state=NEW.resolution_type, answered_at=NEW.created_at, responder=COALESCE(NEW.actor_id,''), response_event_id=COALESCE(NEW.resolution_event_id,'') WHERE ask_id=NEW.request_event_id;
  END`,
 		`CREATE TRIGGER IF NOT EXISTS brief_notes_insert AFTER INSERT ON events WHEN NEW.type='message_posted' AND COALESCE(NEW.thread_id,'')<>'' BEGIN
- INSERT OR IGNORE INTO brief_notes(event_id,card_id,author,ts,next_at,next_what,evidence,excerpt)
+ INSERT INTO brief_notes(event_id,card_id,author,ts,next_at,next_what,evidence,excerpt)
  SELECT NEW.id,c.id,COALESCE(NEW.actor_id,''),NEW.ts,
   anx_resolve_when(json_extract(NEW.payload_json,'$.payload.next.at'),NEW.ts),
   substr(COALESCE(json_extract(NEW.payload_json,'$.payload.next.what'),''),1,160),
   ` + briefEvidenceSQL + `,
   substr(COALESCE(json_extract(NEW.payload_json,'$.payload.body'),''),1,280)
- FROM cards c WHERE c.thread_id=NEW.thread_id;
- INSERT OR IGNORE INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE c.thread_id=NEW.thread_id;
+ FROM cards c WHERE c.thread_id=NEW.thread_id ON CONFLICT DO NOTHING;
+ INSERT INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE c.thread_id=NEW.thread_id ON CONFLICT DO NOTHING;
  END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_dirty_card_insert AFTER INSERT ON cards BEGIN INSERT OR IGNORE INTO brief_dirty(card_id) VALUES(NEW.id); END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_dirty_card_update AFTER UPDATE OF column_key,archived_at,trashed_at,due_at,board_id ON cards BEGIN INSERT OR IGNORE INTO brief_dirty(card_id) VALUES(NEW.id); END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_dirty_plan_insert AFTER INSERT ON card_plans BEGIN INSERT OR IGNORE INTO brief_dirty(card_id) VALUES(NEW.card_id); END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_dirty_plan_update AFTER UPDATE ON card_plans BEGIN INSERT OR IGNORE INTO brief_dirty(card_id) VALUES(NEW.card_id); END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_dirty_metadata_insert AFTER INSERT ON work_metadata BEGIN INSERT OR IGNORE INTO brief_dirty(card_id) VALUES(NEW.card_id); END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_dirty_metadata_update AFTER UPDATE OF metadata_json,latest_observation_id ON work_metadata BEGIN INSERT OR IGNORE INTO brief_dirty(card_id) VALUES(NEW.card_id); END`,
+		`CREATE TRIGGER IF NOT EXISTS brief_dirty_card_insert AFTER INSERT ON cards BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.id) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS brief_dirty_card_update AFTER UPDATE OF column_key,archived_at,trashed_at,due_at,board_id ON cards BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.id) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS brief_dirty_plan_insert AFTER INSERT ON card_plans BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.card_id) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS brief_dirty_plan_update AFTER UPDATE ON card_plans BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.card_id) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS brief_dirty_metadata_insert AFTER INSERT ON work_metadata BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.card_id) ON CONFLICT DO NOTHING; END`,
+		`CREATE TRIGGER IF NOT EXISTS brief_dirty_metadata_update AFTER UPDATE OF metadata_json,latest_observation_id ON work_metadata BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.card_id) ON CONFLICT DO NOTHING; END`,
 		// One-time backfill. Asks and notes replay through the same
 		// expressions as the triggers; every card is queued for a fold.
 		`INSERT OR IGNORE INTO brief_dirty(card_id) SELECT id FROM cards`,
@@ -166,6 +166,44 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
  FROM events NEW JOIN cards c ON c.thread_id=NEW.thread_id WHERE NEW.type='message_posted' AND COALESCE(NEW.thread_id,'')<>''`,
 	}
 	for _, q := range backfill {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// installBriefAskBlocks turns blocks lookups by ref and undated decision
+// pages into index seeks: one row per (ask, blocked ref), and composite
+// indexes that serve the brief's ORDER BY without a sort over open asks.
+func installBriefAskBlocks(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "brief_asks")
+	if err != nil || !exists {
+		return err
+	}
+	// Triggers from 89 used INSERT OR IGNORE, which an outer statement's
+	// conflict policy overrides; reinstall them with ON CONFLICT DO NOTHING.
+	for _, name := range []string{"brief_asks_insert", "brief_notes_insert", "brief_dirty_card_insert", "brief_dirty_card_update", "brief_dirty_plan_insert", "brief_dirty_plan_update", "brief_dirty_metadata_insert", "brief_dirty_metadata_update"} {
+		if _, err := tx.ExecContext(ctx, "DROP TRIGGER IF EXISTS "+name); err != nil {
+			return err
+		}
+	}
+	if err := installBriefFacts(ctx, tx); err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`CREATE TABLE IF NOT EXISTS brief_ask_blocks(ask_id TEXT NOT NULL, ref TEXT NOT NULL, PRIMARY KEY(ask_id, ref))`,
+		`CREATE INDEX IF NOT EXISTS idx_brief_ask_blocks_ref ON brief_ask_blocks(ref, ask_id)`,
+		`CREATE TRIGGER IF NOT EXISTS brief_ask_blocks_insert AFTER INSERT ON brief_asks BEGIN
+ INSERT INTO brief_ask_blocks(ask_id, ref) SELECT NEW.ask_id, trim(j.value) FROM (SELECT value FROM json_each(NEW.blocks_json) LIMIT 20) j WHERE typeof(j.value)='text' AND trim(j.value)<>'' ON CONFLICT DO NOTHING;
+ END`,
+		`INSERT OR IGNORE INTO brief_ask_blocks(ask_id, ref) SELECT a.ask_id, trim(j.value) FROM brief_asks a, json_each(a.blocks_json) j WHERE typeof(j.value)='text' AND trim(j.value)<>''`,
+		`CREATE INDEX IF NOT EXISTS idx_brief_asks_open_page ON brief_asks(state, decide_by, created_at)`,
+		`DROP INDEX IF EXISTS idx_brief_initiatives_promise`,
+		`DROP INDEX IF EXISTS idx_brief_initiatives_evidence`,
+		`CREATE INDEX IF NOT EXISTS idx_brief_initiatives_page ON brief_initiatives(open, promise_at, last_evidence_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_brief_initiatives_done ON brief_initiatives(open, last_evidence_at)`,
+	} {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
 			return err
 		}
