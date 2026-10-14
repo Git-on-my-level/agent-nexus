@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/curation"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -443,9 +445,145 @@ func TestCurationMetricsAndWindowValidation(t *testing.T) {
 	if _, ok := s18["needs_context_pct"].(float64); !ok {
 		t.Fatalf("needs_context_pct not a number: %#v", s18)
 	}
+	// S20 reads the materialized promise fold: one open miss and one promise
+	// later cleared by evidence (a late miss). Both fell due inside the window.
+	dueAt := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
+	note := func(card map[string]any, payload map[string]any) {
+		payload["text"] = "progress"
+		if _, err := f.store.AppendEvent(f.ctx, f.agent.ActorID, map[string]any{"type": "message_posted", "thread_id": card["thread_id"], "refs": []string{anyString(card["ref"]), "thread:" + anyString(card["thread_id"])}, "payload": payload}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	work := func(title string) map[string]any {
+		w, err := f.store.CreateWork(f.ctx, f.agent.ActorID, f.boardID, map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w
+	}
+	open, cleared := work("Open miss"), work("Late evidence")
+	note(open, map[string]any{"next": map[string]any{"at": dueAt, "what": "ship"}})
+	note(cleared, map[string]any{"next": map[string]any{"at": dueAt, "what": "ship"}})
+	note(cleared, map[string]any{"evidence_refs": []string{"https://example.test/pr/1"}})
+	for drained := false; !drained; {
+		var err error
+		if drained, err = f.store.RefreshBriefInitiatives(f.ctx, 200); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out = f.call(http.MethodGet, "/curation/metrics?window_days=7", f.human.AccessToken, nil, http.StatusOK)
+	s20 := out["metrics"].(map[string]any)["s20"].(map[string]any)
+	if s20["promises"].(float64) != 2 || s20["due"].(float64) != 2 || s20["met_pct"].(float64) != 0 {
+		t.Fatalf("s20: %#v", s20)
+	}
+	if slip, ok := s20["median_slip_hours"].(float64); !ok || slip < 1.9 {
+		t.Fatalf("median_slip_hours: %#v", s20)
+	}
 	f.call(http.MethodGet, "/curation/metrics", f.human.AccessToken, nil, http.StatusOK)
 	f.call(http.MethodGet, "/curation/metrics?window_days=0", f.human.AccessToken, nil, http.StatusBadRequest)
 	f.call(http.MethodGet, "/curation/metrics?window_days=91", f.human.AccessToken, nil, http.StatusBadRequest)
 }
 
 func jsonUnmarshalString(raw string, v any) error { return json.Unmarshal([]byte(raw), v) }
+
+func (f *curationFixture) briefDecisions(token string) []map[string]any {
+	f.t.Helper()
+	out := f.call(http.MethodGet, "/brief", token, nil, http.StatusOK)
+	list := []map[string]any{}
+	for _, raw := range out["decisions"].([]any) {
+		list = append(list, raw.(map[string]any))
+	}
+	return list
+}
+
+func TestCurationBatchAcceptCollapsesBriefDecisions(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	f := newCurationFixture(t, "batchbrief")
+	subject, _ := f.trackerCard("Shared subject", "open-1")
+	a := f.fileAsk(f.thread, "First question", subject, nil, []string{"Yes", "No"})
+	b := f.fileAsk(f.thread, "Second question", subject, nil, []string{"Yes", "No"})
+	if got := len(f.briefDecisions(f.human.AccessToken)); got != 2 {
+		t.Fatalf("before batching want 2 decisions, got %d", got)
+	}
+	batches := candidatesByAction(f.candidates(f.human.AccessToken), "batch")
+	if len(batches) != 1 {
+		t.Fatalf("want one batch candidate: %#v", batches)
+	}
+	created := f.call(http.MethodPost, "/curation/proposals", f.agent.AccessToken, map[string]any{"action": "batch", "targets": batches[0]["targets"], "rationale": "Same subject; decide together."}, http.StatusCreated)
+	p := created["proposal"].(map[string]any)
+	decisions := f.briefDecisions(f.human.AccessToken)
+	if len(decisions) != 3 {
+		t.Fatalf("open proposal plus two asks: %#v", decisions)
+	}
+	var proposal map[string]any
+	for _, d := range decisions {
+		if d["kind"] == "pm_proposal" {
+			proposal = d
+		}
+	}
+	if proposal == nil || proposal["curation"].(map[string]any)["action"] != "batch" {
+		t.Fatalf("pm_proposal missing from brief: %#v", decisions)
+	}
+	f.respond(f.thread, anyString(p["event_id"]), "Batch", "answered")
+	decisions = f.briefDecisions(f.human.AccessToken)
+	if len(decisions) != 1 {
+		t.Fatalf("accepted batch must collapse into one decision: %#v", decisions)
+	}
+	batch, _ := decisions[0]["batch"].(map[string]any)
+	if batch == nil || batch["count"] != float64(2) || batch["key"] != p["key"] {
+		t.Fatalf("batch field: %#v", decisions[0])
+	}
+	members := fmt.Sprint(batch["members"])
+	if !strings.Contains(members, "First question") || !strings.Contains(members, "Second question") {
+		t.Fatalf("members: %s (asks %s %s)", members, a, b)
+	}
+	trail := f.trail(f.thread)
+	if len(trail) != 1 || trail[0]["result"] != "applied" || trail[0]["undo"].(map[string]any)["ungroup"] != p["key"] {
+		t.Fatalf("batch trail: %#v", trail)
+	}
+	f.call(http.MethodPost, "/curation/ungroup", f.agent.AccessToken, map[string]any{"key": p["key"]}, http.StatusForbidden)
+	if out := f.call(http.MethodPost, "/curation/ungroup", f.human.AccessToken, map[string]any{"key": p["key"]}, http.StatusOK); out["ungrouped"] != true {
+		t.Fatalf("ungroup: %#v", out)
+	}
+	if got := len(f.briefDecisions(f.human.AccessToken)); got != 2 {
+		t.Fatalf("undo must restore separate decisions, got %d", got)
+	}
+}
+
+func TestCurationProposalHiddenFromReaderOfUnreadableTarget(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	f := newCurationFixture(t, "proposalprivacy")
+	owner := seedHumanPrincipalForLockoutTest(t, f.ctx, f.env.workspace.DB(), "pp-owner", "pp-owner-actor", "pp-owner", "pp-owner-token")
+	secret := f.openCard("Secret BLE launch plan")
+	public := f.openCard("Secret BLE launch plan, public copy")
+	secretThread, err := f.store.CurationCardThread(f.ctx, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.PatchThread(f.ctx, owner.ActorID, secretThread, map[string]any{"pm_actor_id": owner.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// File directly, as a PM that can read both cards would: the read side
+	// must still withhold the proposal from a reader of only one of them.
+	c := curation.Candidate{Action: curation.ActionMerge, Targets: []string{secret, public}, Title: "Merge the BLE cards?", Body: "Duplicate initiative.", Rationale: "Duplicate initiative.", SubjectRef: public, ResponseProposals: []string{"Merge", "Keep both"}}
+	c.Key = curation.Key(c.Action, c.Targets)
+	if _, created, err := fileCurationProposal(f.ctx, f.store, actors.SystemActorID, c, curationSourcePM); err != nil || !created {
+		t.Fatalf("file: %v %v", created, err)
+	}
+	for _, d := range f.briefDecisions(f.human.AccessToken) {
+		if d["kind"] == "pm_proposal" || strings.Contains(fmt.Sprint(d), secret) {
+			t.Fatalf("proposal naming an unreadable card reached the reader: %#v", d)
+		}
+	}
+	found := false
+	for _, d := range f.briefDecisions(owner.AccessToken) {
+		if d["kind"] == "pm_proposal" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("control: the owner can read both cards and must see the proposal")
+	}
+}

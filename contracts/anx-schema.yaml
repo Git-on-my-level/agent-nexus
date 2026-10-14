@@ -1362,8 +1362,9 @@ curation:
     - Withdraw as moot reuses possibly_moot. Only sources observed as terminal count; one unknown or unresolved source means no proposal; sources are counted, never named.
     - Withdrawing another principal's ask is only ever proposed (I4). A requester withdraws its own ask directly.
     - Restricted asks and initiatives are never formula candidates, so a proposal never names a private ref or title.
-    - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Accepting cancels the duplicate with a related ref to the kept initiative; undo restores its phase.
-    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. Accepting records the grouping in the trail.
+    - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Accepting archives the duplicate; undo restores the card.
+    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. Accepting records the grouping server side (curation_batch_members); brief.v1 decisions then collapse the open members into one decision with a batch field, and undo removes the grouping.
+    - A reader sees a proposal only when it can read every target; brief.v1 drops pm_proposal decisions naming a card or ask the reader cannot read.
     - Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.
   applied_trail:
     payload_must_include: ["curation_applied"]

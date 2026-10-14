@@ -143,6 +143,7 @@ export declare class AnxClient {
     curationMetrics(options?: RequestOptions): Promise<InvokeResult>;
     curationPropose(options?: RequestOptions): Promise<InvokeResult>;
     curationRun(options?: RequestOptions): Promise<InvokeResult>;
+    curationUngroup(options?: RequestOptions): Promise<InvokeResult>;
     deliveriesClaim(options?: RequestOptions): Promise<InvokeResult>;
     deliveriesList(options?: RequestOptions): Promise<InvokeResult>;
     deliveriesReceipt(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

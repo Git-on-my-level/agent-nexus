@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `234`
+- Command operations: `235`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `211`
+- Missing recommended examples: `212`
 
 ## Baseline gap counts
 
@@ -228,6 +228,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `curation.metrics` `GET /curation/metrics`
 - `curation.propose` `POST /curation/proposals`
 - `curation.run` `POST /curation/run`
+- `curation.ungroup` `POST /curation/ungroup`
 - `deliveries.list` `GET /deliveries`
 - `derived.rebuild` `POST /derived/rebuild`
 - `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`

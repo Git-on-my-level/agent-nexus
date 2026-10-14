@@ -210,3 +210,13 @@ func installBriefAskBlocks(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
+// installBriefNotesNextAtIndex serves S20's seek over notes by promised time.
+func installBriefNotesNextAtIndex(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "brief_notes")
+	if err != nil || !exists {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_brief_notes_next_at ON brief_notes(next_at, ts) WHERE next_at IS NOT NULL`)
+	return err
+}

@@ -32,12 +32,13 @@ type AskWithdrawal struct {
 	Reason string
 }
 
-// NoteRecord is a note, plan-step change or source observation on a card thread.
-type NoteRecord struct {
-	ThreadID string // promises fold per thread, so moves on one card never affect another
-	At       time.Time
-	NextAt   time.Time // zero when the note carries no promise (payload.next.at)
-	Reset    bool      // evidence ref, plan-step state change or source observation: all reset the clock
+// PromiseRecord is one promise that came due in the window, read from core's
+// materialized promise fold (plans.FoldPromise), never from raw notes.
+type PromiseRecord struct {
+	At         time.Time // the promised time (promise_at)
+	Met        bool      // the fold's evidence landed at or before At
+	ResolvedAt time.Time // evidence that landed after At; zero while the miss is open
+	Moves      int       // promise_moves: next.at changes since the last reset
 }
 
 // S17 is median human time-to-decision weighted by blocked refs.
@@ -75,7 +76,7 @@ type Metrics struct {
 }
 
 // ComputeMetrics derives S17, S18 and S20 for [windowStart, now].
-func ComputeMetrics(asks []AskRecord, notes []NoteRecord, windowStart, now time.Time) Metrics {
+func ComputeMetrics(asks []AskRecord, promises []PromiseRecord, windowStart, now time.Time) Metrics {
 	m := Metrics{WindowStart: windowStart, WindowEnd: now}
 	inWindow := func(t time.Time) bool { return !t.Before(windowStart) && !t.After(now) }
 
@@ -119,78 +120,32 @@ func ComputeMetrics(asks []AskRecord, notes []NoteRecord, windowStart, now time.
 	m.S18.NeedsContextPct = pct(needsCtx, m.S18.Answered)
 	m.S18.WithdrawnMootAfter24hPct = pct(moot, m.S18.Asks)
 
-	m.S20 = computeS20(notes, windowStart, now)
+	m.S20 = computeS20(promises, now)
 	return m
 }
 
-type promise struct {
-	openedAt, origAt, curAt time.Time
-	moves                   int
-	closed                  bool
-	closedAt                time.Time
-}
-
-func computeS20(notes []NoteRecord, windowStart, now time.Time) S20 {
-	sorted := make([]NoteRecord, 0, len(notes))
-	for _, n := range notes {
-		if n.At.After(now) {
-			continue
-		}
-		sorted = append(sorted, n)
-	}
-	sort.SliceStable(sorted, func(i, j int) bool {
-		if sorted[i].ThreadID != sorted[j].ThreadID {
-			return sorted[i].ThreadID < sorted[j].ThreadID
-		}
-		return sorted[i].At.Before(sorted[j].At)
-	})
-
-	var all []*promise
-	var open *promise
-	thread := ""
-	for i, n := range sorted {
-		if i == 0 || n.ThreadID != thread {
-			thread, open = n.ThreadID, nil
-		}
-		if open != nil {
-			if n.Reset {
-				open.closed, open.closedAt = true, n.At
-				open = nil
-			} else if !n.NextAt.IsZero() && !n.NextAt.Equal(open.curAt) {
-				open.moves++
-				open.curAt = n.NextAt
-				continue
-			}
-		}
-		if open == nil && !n.NextAt.IsZero() {
-			open = &promise{openedAt: n.At, origAt: n.NextAt, curAt: n.NextAt}
-			all = append(all, open)
-		}
-	}
-
+// computeS20 scores promises that came due in the window. Every record is
+// due, so Promises equals Due. Met is the fold's own verdict; a missed
+// promise slips until its late evidence landed, or until now while open.
+func computeS20(promises []PromiseRecord, now time.Time) S20 {
 	var out S20
 	var met, moved int
 	var slips []float64
-	for _, p := range all {
-		if p.openedAt.Before(windowStart) {
-			continue
-		}
+	for _, p := range promises {
 		out.Promises++
-		if p.moves >= 2 {
+		out.Due++
+		if p.Moves >= 2 {
 			moved++
 		}
-		if p.origAt.After(now) {
+		if p.Met {
+			met++
 			continue
 		}
-		out.Due++
-		switch {
-		case p.closed && !p.closedAt.After(p.origAt):
-			met++
-		case p.closed:
-			slips = append(slips, p.closedAt.Sub(p.origAt).Hours())
-		default:
-			slips = append(slips, now.Sub(p.origAt).Hours())
+		end := now
+		if !p.ResolvedAt.IsZero() && p.ResolvedAt.After(p.At) && !p.ResolvedAt.After(now) {
+			end = p.ResolvedAt
 		}
+		slips = append(slips, end.Sub(p.At).Hours())
 	}
 	out.MetPct = pct(met, out.Due)
 	out.Moved2PlusPct = pct(moved, out.Promises)

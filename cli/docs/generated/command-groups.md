@@ -164,12 +164,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `curation`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `curation.candidates` (`curation candidates`)
   - `curation.metrics` (`curation metrics`)
   - `curation.propose` (`curation propose`)
   - `curation.run` (`curation run`)
+  - `curation.ungroup` (`curation ungroup`)
 
 ## `deliveries`
 

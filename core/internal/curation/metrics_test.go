@@ -123,76 +123,39 @@ func TestMetricS20(t *testing.T) {
 	now := h(100)
 	cases := []struct {
 		name             string
-		notes            []NoteRecord
-		promises, due    int
+		promises         []PromiseRecord
+		n                int
 		met, slip, moved *float64
 	}{
-		{"none", nil, 0, 0, nil, nil, nil},
-		{"met before at",
-			[]NoteRecord{{ThreadID: "a", At: h(0), NextAt: h(10)}, {ThreadID: "a", At: h(5), Reset: true}},
-			1, 1, f(100), nil, f(0)},
-		{"slip after at",
-			[]NoteRecord{{ThreadID: "a", At: h(0), NextAt: h(10)}, {ThreadID: "a", At: h(14), Reset: true}},
-			1, 1, f(0), f(4), f(0)},
-		{"moved twice measured from original",
-			[]NoteRecord{
-				{ThreadID: "a", At: h(0), NextAt: h(10)},
-				{ThreadID: "a", At: h(8), NextAt: h(20)},
-				{ThreadID: "a", At: h(18), NextAt: h(30)},
-				{ThreadID: "a", At: h(25), Reset: true},
-			},
-			1, 1, f(0), f(15), f(100)},
-		{"same NextAt is not a move",
-			[]NoteRecord{
-				{ThreadID: "a", At: h(0), NextAt: h(10)},
-				{ThreadID: "a", At: h(1), NextAt: h(10)},
-				{ThreadID: "a", At: h(2), Reset: true},
-			},
-			1, 1, f(100), nil, f(0)},
-		{"open past due counts to now",
-			[]NoteRecord{{ThreadID: "a", At: h(0), NextAt: h(40)}},
-			1, 1, f(0), f(60), f(0)},
-		{"open not yet due",
-			[]NoteRecord{{ThreadID: "a", At: h(0), NextAt: h(500)}},
-			1, 0, nil, nil, f(0)},
-		{"reset with new NextAt opens fresh promise",
-			[]NoteRecord{
-				{ThreadID: "a", At: h(0), NextAt: h(10)},
-				{ThreadID: "a", At: h(12), NextAt: h(20), Reset: true}, // slip 2, new promise
-				{ThreadID: "a", At: h(15), Reset: true},                // met
-			},
-			2, 2, f(50), f(2), f(0)},
-		{"threads independent, unsorted input",
-			[]NoteRecord{
-				{ThreadID: "b", At: h(5), Reset: true},
-				{ThreadID: "a", At: h(1), NextAt: h(10)},
-				{ThreadID: "b", At: h(0), NextAt: h(10)},
-				{ThreadID: "a", At: h(3), NextAt: h(20)},
-				{ThreadID: "a", At: h(4), NextAt: h(30)},
-			},
-			2, 2, f(50), f(90), f(50)},
-		{"reset without promise ignored",
-			[]NoteRecord{{ThreadID: "a", At: h(1), Reset: true}},
-			0, 0, nil, nil, nil},
+		{"none", nil, 0, nil, nil, nil},
+		{"met on time",
+			[]PromiseRecord{{At: h(10), Met: true}},
+			1, f(100), nil, f(0)},
+		{"late evidence slips until it landed",
+			[]PromiseRecord{{At: h(10), ResolvedAt: h(14)}},
+			1, f(0), f(4), f(0)},
+		{"open miss slips to now",
+			[]PromiseRecord{{At: h(40)}},
+			1, f(0), f(60), f(0)},
+		{"evidence before the promise does not shorten the slip",
+			[]PromiseRecord{{At: h(40), ResolvedAt: h(30)}},
+			1, f(0), f(60), f(0)},
+		{"moved twice",
+			[]PromiseRecord{{At: h(10), ResolvedAt: h(25), Moves: 2}, {At: h(10), Met: true, Moves: 1}},
+			2, f(50), f(15), f(50)},
+		{"mixed met and misses",
+			[]PromiseRecord{{At: h(10), Met: true}, {At: h(10), ResolvedAt: h(12)}, {At: h(10), ResolvedAt: h(16)}, {At: h(90)}},
+			4, f(25), f(6), f(0)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s := ComputeMetrics(nil, c.notes, h(0), now).S20
-			if s.Promises != c.promises || s.Due != c.due {
-				t.Fatalf("promises=%d due=%d, want %d/%d", s.Promises, s.Due, c.promises, c.due)
+			s := ComputeMetrics(nil, c.promises, h(0), now).S20
+			if s.Promises != c.n || s.Due != c.n {
+				t.Fatalf("promises=%d due=%d, want %d", s.Promises, s.Due, c.n)
 			}
 			wantPtr(t, "met", s.MetPct, c.met)
 			wantPtr(t, "slip", s.MedianSlipHours, c.slip)
 			wantPtr(t, "moved", s.Moved2PlusPct, c.moved)
 		})
 	}
-}
-
-func TestMetricS20MedianSlipEven(t *testing.T) {
-	notes := []NoteRecord{
-		{ThreadID: "a", At: h(0), NextAt: h(10)}, {ThreadID: "a", At: h(12), Reset: true}, // 2
-		{ThreadID: "b", At: h(0), NextAt: h(10)}, {ThreadID: "b", At: h(16), Reset: true}, // 6
-	}
-	s := ComputeMetrics(nil, notes, h(0), h(100)).S20
-	wantPtr(t, "slip", s.MedianSlipHours, f(4))
 }

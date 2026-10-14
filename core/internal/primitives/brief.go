@@ -164,7 +164,12 @@ func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
+	items, ids, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
+	if err != nil {
+		return nil, false, err
+	}
+	items, err = b.collapseBatches(items, ids)
+	return items, truncated, err
 }
 
 func (b *briefBuild) yourAsks() ([]map[string]any, bool, error) {
@@ -173,10 +178,16 @@ func (b *briefBuild) yourAsks() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return b.renderAsks(rows, len(rows) == briefAskCandidates)
+	items, _, truncated, err := b.renderAsks(rows, len(rows) == briefAskCandidates)
+	return items, truncated, err
 }
 
-func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([]map[string]any, bool, error) {
+// renderAsks returns the rendered items and, in the same order, their ask ids.
+func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([]map[string]any, []string, bool, error) {
+	rows, err := b.readableProposals(rows)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	asks := make([]BriefAsk, len(rows))
 	index := map[string]briefAskRow{}
 	for i, r := range rows {
@@ -185,7 +196,7 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	}
 	open, err := b.openBlocks(rows)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	for i := range asks {
 		asks[i].Blocks = open[asks[i].AskID]
@@ -198,9 +209,10 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	}
 	subjects, err := b.cardTitles(collectSubjects(asks))
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	out := make([]map[string]any, 0, len(asks))
+	ids := make([]string, 0, len(asks))
 	for _, a := range asks {
 		r := index[a.AskID]
 		var event map[string]any
@@ -241,8 +253,142 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			item["curation"] = curation
 		}
 		out = append(out, item)
+		ids = append(ids, a.AskID)
 	}
-	return out, truncated, nil
+	return out, ids, truncated, nil
+}
+
+func curationTargets(payload string) ([]string, bool) {
+	var event struct {
+		Payload struct {
+			Curation *struct {
+				Targets []string `json:"targets"`
+			} `json:"curation"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal([]byte(payload), &event) != nil || event.Payload.Curation == nil {
+		return nil, false
+	}
+	return event.Payload.Curation.Targets, true
+}
+
+// readableProposals drops curation proposals naming any target the reader
+// cannot read: cards resolve through the scoped cards relation and asks
+// through the scoped events relation, both under the PM-private thread rule.
+// A target of any other shape, or beyond the lookup bound, fails closed.
+func (b *briefBuild) readableProposals(rows []briefAskRow) ([]briefAskRow, error) {
+	cards, events := []string{}, []string{}
+	for _, r := range rows {
+		targets, ok := curationTargets(r.payload)
+		if !ok {
+			continue
+		}
+		for _, t := range targets {
+			switch {
+			case strings.HasPrefix(t, "card:"):
+				cards = append(cards, t)
+			case strings.HasPrefix(t, "event:") && len(events) < 1000:
+				events = append(events, strings.TrimPrefix(t, "event:"))
+			}
+		}
+	}
+	if len(cards) == 0 && len(events) == 0 {
+		return rows, nil
+	}
+	readable, err := b.cardTitles(cards)
+	if err != nil {
+		return nil, err
+	}
+	if len(events) > 0 {
+		encoded, _ := json.Marshal(events)
+		q, err := b.s.db.QueryContext(b.ctx, `SELECT e.id,COALESCE(e.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=e.thread_id),'') FROM events e WHERE e.id IN (SELECT value FROM json_each(?)) AND COALESCE(e.trashed_at,'')=''`, string(encoded))
+		if err != nil {
+			return nil, err
+		}
+		defer q.Close()
+		for q.Next() {
+			var id, thread, owner string
+			if err = q.Scan(&id, &thread, &owner); err != nil {
+				return nil, err
+			}
+			if b.reader.Visible == nil || b.reader.Visible(thread, owner) {
+				readable["event:"+id] = id
+			}
+		}
+		if err = q.Err(); err != nil {
+			return nil, err
+		}
+	}
+	kept := rows[:0:0]
+	for _, r := range rows {
+		targets, ok := curationTargets(r.payload)
+		visible := true
+		for _, t := range targets {
+			if _, seen := readable[t]; !seen {
+				visible = false
+				break
+			}
+		}
+		if !ok || visible {
+			kept = append(kept, r)
+		}
+	}
+	return kept, nil
+}
+
+// collapseBatches folds the open members of an accepted batch into the first
+// (most urgent) member's decision. Membership is a primary-key seek over the
+// asks already on this page, so a batch never reveals or counts a member the
+// reader cannot see.
+func (b *briefBuild) collapseBatches(items []map[string]any, ids []string) ([]map[string]any, error) {
+	if len(ids) < 2 {
+		return items, nil
+	}
+	encoded, _ := json.Marshal(ids)
+	rows, err := b.s.db.QueryContext(curationInternal(b.ctx), `SELECT ask_id,batch_key FROM curation_batch_members WHERE ask_id IN (SELECT value FROM json_each(?))`, string(encoded))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	keys := map[string]string{}
+	for rows.Next() {
+		var id, key string
+		if err = rows.Scan(&id, &key); err != nil {
+			return nil, err
+		}
+		keys[id] = key
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return items, nil
+	}
+	members := map[string][]map[string]any{}
+	for i, id := range ids {
+		if key := keys[id]; key != "" {
+			members[key] = append(members[key], items[i])
+		}
+	}
+	out := make([]map[string]any, 0, len(items))
+	for i, id := range ids {
+		key := keys[id]
+		group := members[key]
+		if key == "" || len(group) < 2 {
+			out = append(out, items[i])
+			continue
+		}
+		if group[0]["ref"] != items[i]["ref"] {
+			continue
+		}
+		list := make([]map[string]any, 0, len(group))
+		for _, m := range group {
+			list = append(list, map[string]any{"ref": m["ref"], "inbox_item_id": m["inbox_item_id"], "title": m["title"]})
+		}
+		items[i]["batch"] = map[string]any{"key": key, "count": len(group), "members": list}
+		out = append(out, items[i])
+	}
+	return out, nil
 }
 
 func (a BriefAsk) blocksJSON(titles map[string]string) []map[string]any {

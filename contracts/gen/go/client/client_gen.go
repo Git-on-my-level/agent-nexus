@@ -1011,7 +1011,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"curation.metrics", "curation.propose", "curation.run"},
+		Adjacent:  []string{"curation.metrics", "curation.propose", "curation.run", "curation.ungroup"},
 	},
 	{
 		CommandID: "curation.metrics",
@@ -1022,7 +1022,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"curation.candidates", "curation.propose", "curation.run"},
+		Adjacent:  []string{"curation.candidates", "curation.propose", "curation.run", "curation.ungroup"},
 	},
 	{
 		CommandID: "curation.propose",
@@ -1033,7 +1033,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.run"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.run", "curation.ungroup"},
 	},
 	{
 		CommandID: "curation.run",
@@ -1044,7 +1044,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.propose"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.propose", "curation.ungroup"},
+	},
+	{
+		CommandID: "curation.ungroup",
+		CLIPath:   "curation ungroup",
+		Group:     "curation",
+		Method:    "POST",
+		Path:      "/curation/ungroup",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.propose", "curation.run"},
 	},
 	{
 		CommandID: "deliveries.claim",
@@ -3337,6 +3348,10 @@ func (c *Client) CurationPropose(ctx context.Context, opts RequestOptions) (*htt
 
 func (c *Client) CurationRun(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "curation.run", nil, opts)
+}
+
+func (c *Client) CurationUngroup(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.ungroup", nil, opts)
 }
 
 func (c *Client) DeliveriesClaim(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

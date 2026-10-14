@@ -1266,5 +1266,10 @@
     "method": "POST",
     "path": "/curation/run",
     "policy": "maintenance"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/ungroup",
+    "policy": "reference-write"
   }
 ]

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,8 +23,11 @@ const (
 	curationCardLimit = curation.MaxCards
 	curationRefLimit  = 200
 	// Metrics folds read at most this many asks and notes per window.
-	curationMetricAskLimit  = 2000
-	curationMetricNoteLimit = 5000
+	curationMetricAskLimit = 2000
+	// Promise reads: rows per indexed seek, and distinct cards whose notes
+	// are folded (one seek of plans.MaxPromiseNotes rows each).
+	curationMetricPromiseLimit = 2000
+	curationMetricPromiseCards = 200
 )
 
 // Curation proposal states in curation_proposals. A key is proposed at most
@@ -380,12 +384,12 @@ func (s *Store) CurationMetrics(ctx context.Context, window time.Duration, now t
 	if err = rows.Err(); err != nil {
 		return curation.Metrics{}, err
 	}
-	notes, notesTruncated, err := s.curationNoteRecords(ctx, since)
+	promises, promisesTruncated, err := s.curationPromiseRecords(ctx, start, now)
 	if err != nil {
 		return curation.Metrics{}, err
 	}
-	m := curation.ComputeMetrics(asks, notes, start, now)
-	m.Truncated = truncated || notesTruncated
+	m := curation.ComputeMetrics(asks, promises, start, now)
+	m.Truncated = truncated || promisesTruncated
 	return m, nil
 }
 
@@ -410,72 +414,166 @@ func curationAskRecord(id, ts, payloadJSON, resolution, resolutionTS, resolution
 	return rec
 }
 
-// curationNoteRecords reads notes (messages carrying a promise or evidence)
-// and card movement in the window. Card updates and moves reset the promise
-// clock like evidence does, per the one-clock rule.
-func (s *Store) curationNoteRecords(ctx context.Context, since string) ([]curation.NoteRecord, bool, error) {
-	notes := []curation.NoteRecord{}
+// curationPromiseRecords reads the promises that came due in [start, now]
+// from core's materialized promise fold (brief_initiatives, brief_notes), never
+// from raw events. Two bounded, indexed reads feed it:
+//
+//   - Misses: open initiatives whose counted promise (the fold's earliest
+//     unmet at, any source: note, plan step, due_at, wake) is due in the
+//     window, via idx_brief_initiatives_page (open, promise_at). Late evidence
+//     ends the slip when the fold recorded it after the promise.
+//   - Cleared note promises: notes whose next_at is due in the window, via
+//     idx_brief_notes_next_at, for at most briefRefreshBatch distinct cards.
+//     Each card's newest plans.MaxPromiseNotes notes (one seek per card) give
+//     the author's latest promise; plans.PromiseNote.Evidence and the fold's
+//     last_evidence_at say when a reset landed after it. A reset at or before
+//     the promised time means met; a later one is a late miss.
+//
+// Fixed (step, due_at, wake) promises that were met leave no trace in the
+// fold, so they are not counted; the metric covers every unmet promise and
+// every cleared note promise.
+func (s *Store) curationPromiseRecords(ctx context.Context, start, now time.Time) ([]curation.PromiseRecord, bool, error) {
+	lo, hi := start.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339)
+	out := []curation.PromiseRecord{}
 	truncated := false
-	// One equality probe per type keeps each read on the (type, ts) index
-	// with no sort; the shared cap bounds the whole fold.
-	for _, kind := range []string{"message_posted", "card_moved", "card_resolved"} {
-		remaining := curationMetricNoteLimit - len(notes)
-		if remaining <= 0 {
+
+	rows, err := s.db.QueryContext(ctx, `SELECT promise_at,promise_moves,COALESCE(last_evidence_at,'') FROM brief_initiatives INDEXED BY idx_brief_initiatives_page
+ WHERE open=1 AND promise_at>=? AND promise_at<=? ORDER BY promise_at DESC LIMIT ?`, lo, hi, curationMetricPromiseLimit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	for rows.Next() {
+		var at, evidence string
+		var moves int
+		if err = rows.Scan(&at, &moves, &evidence); err != nil {
+			rows.Close()
+			return nil, false, err
+		}
+		if len(out) >= curationMetricPromiseLimit {
 			truncated = true
 			break
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(e.thread_id,''),e.ts,e.payload_json FROM events e
- WHERE e.type=? AND e.ts>=? AND COALESCE(e.trashed_at,'')=''
- ORDER BY e.ts DESC,e.id DESC LIMIT ?`, kind, since, remaining+1)
-		if err != nil {
-			return nil, false, err
-		}
-		read := 0
-		for rows.Next() {
-			var thread, ts, payloadJSON string
-			if err = rows.Scan(&thread, &ts, &payloadJSON); err != nil {
-				rows.Close()
-				return nil, false, err
-			}
-			if read++; read > remaining {
-				truncated = true
-				break
-			}
-			at, _ := time.Parse(time.RFC3339Nano, ts)
-			rec := curation.NoteRecord{ThreadID: thread, At: at, Reset: kind != "message_posted"}
-			if kind == "message_posted" {
-				var wrapper map[string]any
-				_ = json.Unmarshal([]byte(payloadJSON), &wrapper)
-				payload := asMapValue(wrapper["payload"])
-				rec.NextAt = curationPromiseAt(asMapValue(payload["next"])["at"])
-				rec.Reset = len(anyStringSlice(payload["evidence_refs"])) > 0
-				if rec.NextAt.IsZero() && !rec.Reset {
-					continue
-				}
-			}
-			notes = append(notes, rec)
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, false, err
-		}
+		rec := curation.PromiseRecord{Moves: moves}
+		rec.At, _ = time.Parse(time.RFC3339Nano, at)
+		rec.ResolvedAt, _ = time.Parse(time.RFC3339Nano, evidence)
+		out = append(out, rec)
 	}
-	return notes, truncated, nil
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	rows, err = s.db.QueryContext(ctx, `SELECT card_id FROM brief_notes INDEXED BY idx_brief_notes_next_at
+ WHERE next_at>=? AND next_at<=? ORDER BY next_at DESC,ts DESC LIMIT ?`, lo, hi, curationMetricPromiseLimit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	cardIDs, seen, read := []string{}, map[string]bool{}, 0
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, false, err
+		}
+		if read++; read > curationMetricPromiseLimit {
+			truncated = true
+			break
+		}
+		if seen[id] {
+			continue
+		}
+		if len(cardIDs) >= curationMetricPromiseCards {
+			truncated = true
+			break
+		}
+		seen[id] = true
+		cardIDs = append(cardIDs, id)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(cardIDs) == 0 {
+		return out, truncated, nil
+	}
+	notes, err := s.PromiseNotesFor(ctx, cardIDs)
+	if err != nil {
+		return nil, false, err
+	}
+	folds, err := s.PromiseFolds(ctx, cardIDs)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, id := range cardIDs {
+		out = append(out, clearedNotePromises(notes[id], folds[id].LastEvidenceAt, start, now)...)
+	}
+	return out, truncated, nil
 }
 
-func curationPromiseAt(raw any) time.Time {
-	value := strings.TrimSpace(anyStringValue(raw))
-	if value == "" {
-		return time.Time{}
+// clearedNotePromises applies the fold's note-promise rule to one card: an
+// author's latest note carrying next.at is that author's promise, and it is
+// cleared when any reset lands after the note. Open ones are the fold's
+// misses, already read from brief_initiatives, so they are skipped here.
+func clearedNotePromises(notes []plans.PromiseNote, lastEvidence, start, now time.Time) []curation.PromiseRecord {
+	sort.SliceStable(notes, func(i, j int) bool { return notes[i].At.Before(notes[j].At) })
+	latest := map[string]int{}
+	for i, n := range notes {
+		if !n.NextAt.IsZero() {
+			latest[n.Author] = i
+		}
 	}
-	if at, err := time.Parse(time.RFC3339Nano, value); err == nil {
-		return at
+	authors := make([]string, 0, len(latest))
+	for a := range latest {
+		authors = append(authors, a)
 	}
-	if at, err := time.Parse("2006-01-02", value); err == nil {
-		return at
+	sort.Strings(authors)
+	var out []curation.PromiseRecord
+	for _, author := range authors {
+		n := notes[latest[author]]
+		if n.NextAt.Before(start) || n.NextAt.After(now) {
+			continue
+		}
+		// Earliest known reset after the note: an evidence note, or the
+		// fold's newest reset of any kind.
+		var resolved time.Time
+		for _, e := range notes {
+			if e.Evidence && e.At.After(n.At) && (resolved.IsZero() || e.At.Before(resolved)) {
+				resolved = e.At
+			}
+		}
+		if lastEvidence.After(n.At) && (resolved.IsZero() || lastEvidence.Before(resolved)) {
+			resolved = lastEvidence
+		}
+		if resolved.IsZero() {
+			continue
+		}
+		// Moves: this author's next.at changes since the last reset before
+		// the promise, as the fold counts them.
+		moves, prev, resetAt := 0, time.Time{}, time.Time{}
+		for _, e := range notes {
+			if e.At.After(n.At) {
+				break
+			}
+			if e.Evidence {
+				resetAt = e.At
+			}
+			if e.Author != author || e.NextAt.IsZero() {
+				continue
+			}
+			if !prev.IsZero() && !prev.Equal(e.NextAt) && !e.Evidence && e.At.After(resetAt) {
+				moves++
+			}
+			prev = e.NextAt
+		}
+		rec := curation.PromiseRecord{At: n.NextAt, Moves: moves}
+		if resolved.After(n.NextAt) {
+			rec.ResolvedAt = resolved
+		} else {
+			rec.Met = true
+		}
+		out = append(out, rec)
 	}
-	return time.Time{}
+	return out
 }
 
 // CurationCardThread returns the backing thread of a card ref, for filing a
@@ -524,9 +622,60 @@ func (s *Store) ApplyCurationAction(ctx context.Context, humanActorID, proposalE
 		undo := map[string]any{"restore_card": rec.Targets[0], "card_id": resolved.ID, "board_id": workString(result.Card["board_id"])}
 		return undo, "Archived " + rec.Targets[0] + " as a duplicate of " + rec.Targets[1] + ". Restore the card to undo.", nil
 	case curation.ActionBatch:
-		// Filed asks keep their own ids; the grouping lives in the trail so
-		// Decide can show the members together. Undo is ignoring the trail.
-		return map[string]any{"ungroup": rec.Targets}, fmt.Sprintf("Grouped %d asks as one decision.", len(rec.Targets)), nil
+		// Filed asks keep their own ids; the grouping is stored so brief.v1
+		// collapses the open members into one decision.
+		if err := s.GroupCurationBatch(ctx, rec); err != nil {
+			return nil, "", err
+		}
+		return map[string]any{"ungroup": rec.Key}, fmt.Sprintf("Grouped %d asks as one decision. Ungroup the batch to undo.", len(rec.Targets)), nil
 	}
 	return nil, "", ErrCurationTargetGone
+}
+
+// GroupCurationBatch records an accepted batch. A member already in another
+// batch moves to this one: the newest human decision wins.
+func (s *Store) GroupCurationBatch(ctx context.Context, rec CurationProposalRecord) error {
+	if len(rec.Targets) < 2 || len(rec.Targets) > curation.MaxBatchMembers {
+		return ErrCurationTargetGone
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, target := range rec.Targets {
+		id := strings.TrimPrefix(target, "event:")
+		if id == target || id == "" {
+			return ErrCurationTargetGone
+		}
+		if _, err := s.db.ExecContext(curationInternal(ctx), `INSERT INTO curation_batch_members(ask_id,batch_key,proposal_event_id,created_at) VALUES(?,?,?,?)
+ ON CONFLICT(ask_id) DO UPDATE SET batch_key=excluded.batch_key,proposal_event_id=excluded.proposal_event_id,created_at=excluded.created_at`, id, rec.Key, rec.ProposalEventID, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ReadableCurationProposal returns the proposal for key only when the
+// caller's scoped events relation and the PM-private thread rule admit its
+// ask; otherwise ErrNotFound, so an unreadable key is indistinguishable from
+// an unknown one.
+func (s *Store) ReadableCurationProposal(ctx context.Context, key string, visible func(string, string) bool) (CurationProposalRecord, error) {
+	rec, err := s.CurationProposal(ctx, key)
+	if err != nil {
+		return rec, err
+	}
+	var thread, owner string
+	err = s.db.QueryRowContext(ctx, `SELECT COALESCE(e.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=e.thread_id),'') FROM events e WHERE e.id=? AND COALESCE(e.trashed_at,'')=''`, rec.ProposalEventID).Scan(&thread, &owner)
+	if err == sql.ErrNoRows || (err == nil && visible != nil && !visible(thread, owner)) {
+		return CurationProposalRecord{}, ErrNotFound
+	}
+	return rec, err
+}
+
+// UngroupCurationBatch undoes an accepted batch: its members become separate
+// decisions again. It reports whether any grouping was removed.
+func (s *Store) UngroupCurationBatch(ctx context.Context, key string) (bool, error) {
+	res, err := s.db.ExecContext(curationInternal(ctx), `DELETE FROM curation_batch_members WHERE batch_key=?`, key)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }

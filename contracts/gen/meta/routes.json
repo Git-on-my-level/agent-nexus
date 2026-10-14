@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 240,
+  "route_count": 241,
   "routes": [
     {
       "method": "GET",
@@ -500,6 +500,11 @@
     {
       "method": "POST",
       "path": "/curation/run",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/curation/ungroup",
       "access_class": "workspace_business_surface"
     },
     {
