@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 )
@@ -21,6 +22,9 @@ func (b *adaptiveMaintenanceBatch) run(ctx context.Context, requested int, chunk
 	// error. Inspect the chunk deadline; parent cancellation and lock contention
 	// must not reduce the cap.
 	if err != nil && chunkCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+		// Preserve the driver cause while exposing the actual lease deadline
+		// to workers that distinguish retryable pressure from permanent failures.
+		err = errors.Join(context.DeadlineExceeded, err)
 		reduced := int64(max(1, limit/2))
 		for current := b.limit.Load(); current > reduced; current = b.limit.Load() {
 			if b.limit.CompareAndSwap(current, reduced) {

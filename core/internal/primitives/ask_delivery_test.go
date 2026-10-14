@@ -491,7 +491,8 @@ func TestAskCompatibilityCardRollsBackWithEvent(t *testing.T) {
 }
 
 func TestAskSourceClosureBackfillAndNullOwner(t *testing.T) {
-	t.Parallel()
+	// This fixture expects each real 100 ms maintenance lease to complete.
+	// Isolate it from unrelated parallel fixtures, preserving the strict checks.
 	s, ws, card, _ := askDeliveryFixture(t)
 	work, ask := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
 	sourceAskObservation(t, s, work, "owner-clear", "reported", map[string]any{"owner": nil})

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"agent-nexus-core/internal/sqliteutil"
 )
@@ -50,7 +51,7 @@ func installStableAccessEdges(ctx context.Context, tx *sql.Tx) error {
 
 func (w *Workspace) MaintainStableAccessBatch(ctx context.Context) (bool, error) {
 	return w.compactAccessBatch.run(ctx, 200, func(ctx context.Context, limit int) (bool, error) {
-		tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
+		tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(ctx, w.db, 20*time.Millisecond)
 		if err != nil {
 			return false, err
 		}
@@ -143,7 +144,14 @@ var ErrCompactAccessChanged = errors.New("access ledgers changed after verificat
 // CutoverCompactAccess requires a fresh verification snapshot. Its write lease
 // checks epoch AND ledger generation before publishing the new format and mode.
 // A successful publication also invalidates all existing authorization caches.
-func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAccessVerification) error {
+func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAccessVerification) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			err = errors.Join(ctx.Err(), err)
+		}
+	}()
 	if !proof.stableVerified || proof.database != w.db {
 		return errors.New("cutover requires this workspace's complete certification")
 	}
@@ -161,7 +169,7 @@ func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAcces
 	// Discard this maintenance connection on exit: never leak its nonblocking
 	// busy handler or legacy rename setting into serving requests.
 	defer conn.Raw(func(any) error { return driver.ErrBadConn })
-	if _, err = conn.ExecContext(ctx, `PRAGMA busy_timeout=0`); err != nil {
+	if _, err = conn.ExecContext(ctx, `PRAGMA busy_timeout=20`); err != nil {
 		return err
 	}
 	// The rename must leave cross-table trigger bodies and views pointing at the
@@ -223,7 +231,6 @@ func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAcces
 		for _, q := range []string{
 			`ALTER TABLE resource_access_edges RENAME TO resource_access_unstable_edges`,
 			`ALTER TABLE resource_access_stable_edges RENAME TO resource_access_edges`,
-			`DROP TABLE resource_access_unstable_edges`,
 		} {
 			if _, err = tx.ExecContext(ctx, q); err != nil {
 				return fmt.Errorf("stabilize access identities: %w", err)

@@ -626,3 +626,50 @@ handler and immediate write transactions. Immediate locking queues writers at
 transaction admission instead of attempting an unsupported deferred read-to-write
 upgrade. The HTTP scale guard covers the full response, persisted replay and
 single committed claim under read load.
+
+Compact certification gets a synchronous preparation phase before the HTTP
+listener and other maintenance loops start. That phase has a ten-second budget:
+it installs transactional mirrors, copies without inter-batch pauses, and
+certifies if the full verification fits. Incomplete durable progress resumes
+online within the remaining ten-minute overall startup budget. A complete
+shadow is recognized from its job and every mirror/generation trigger, so the
+online worker need not win the writer again just to reinstall it.
+
+Compact maintenance uses a 20 ms busy wait to catch a writer handoff. Actual
+SQLite BUSY/LOCKED failures use exponential equal-jitter backoff (initial
+125–250 ms, capped at 2.5–5 seconds). Expired adaptive slices and changed proofs
+retry in the next short slice. Successful copying batches yield 25 ms;
+committed progress resets contention backoff. Transactions and pinned
+connections are released before any wait or attempt observer runs. Serving
+connections retain their normal busy handlers.
+
+Install and cutover have one-second deadlines; copying retains adaptive 100 ms
+leases. Cutover atomically verifies epoch/generation, renames the certified raw
+ledger, recreates its triggers and publishes the reader. It does not drop the
+populated retired table. Separate cleanup drains at most 200 retired rowids per
+adaptive 100 ms lease, then drops the empty table. Cleanup resumes after restart,
+never changes certification/authorization, and the retired ledger is excluded
+from serving reads. Its three internal authorization columns are classified in
+the storage inventory. Full byte-for-byte certification verification is unchanged.
+One final safe outcome is logged for the combined preparation/online run.
+
+Run the held-writer, exhaustion, adaptive-deadline, preparation and retired
+cleanup regressions, plus the deterministic answer guard:
+
+```sh
+go test -C core ./internal/storage -run 'TestCompact|TestAdaptive' -count=1
+go test -C core ./internal/server -run '^TestCompactMigrationConcurrentAnswers$' -count=1 -timeout=2m
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core ./internal/storage \
+  -run '^TestPerformanceCompactAccessPreServeStartup$' -count=1 -timeout=15m -v
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core ./internal/server \
+  -run '^TestPerformanceCompactMigrationConcurrentAnswers$' -count=1 -timeout=15m -v
+```
+
+The HTTP guard observes the first BUSY installation attempt before releasing a
+held writer. SQLite gates then hold install and cutover until a fresh answer
+reaches its serving BEGIN IMMEDIATE admission. It sends 25 fresh answer POSTs
+and enforces a two-second **maximum** sample budget, so a single slow writer
+lease cannot hide outside p95. Overlap uses those gates rather than fixed sleeps
+or a random backoff window. The scale tests use the shared canonical synthetic
+corpus with real ownership/reference indexes and report physical file bytes,
+pre-serving duration, certification time, background writes and answer maximum.
