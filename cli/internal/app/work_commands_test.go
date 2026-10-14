@@ -177,7 +177,7 @@ func TestWorkContextReadOnlyAndFreshnessHonest(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "work", "context", "card:launch", "--limit", "1", "--cursor", "page"}))
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "context", "card:launch", "--limit", "1", "--cursor", "page"}))
 	body := asMap(payload["result"])
 	if got := asMap(body["observations"])["next_cursor"]; got != "older" {
 		t.Errorf("pagination lost: %v", body)
