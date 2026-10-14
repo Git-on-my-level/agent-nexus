@@ -93,6 +93,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	matched := 0
 	workByPhase := map[string]any{}
 	stale := []any{}
+	darkCount, mootCount := 0, 0
 	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour)
 	notes := asSlice(detail["recent_notes"])
 	for _, raw := range asSlice(workBody["work"]) {
@@ -108,6 +109,14 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 			continue
 		}
 		matched++
+		// Dark and possibly-moot counts keep the digest honest about work that
+		// will go quiet or is already overtaken, without duplicating the rows.
+		if anyString(asMap(row["plan_health"])["state"]) == "dark" {
+			darkCount++
+		}
+		if asMap(row["possibly_moot"])["flagged"] == true {
+			mootCount++
+		}
 		if matched > orientReturnLimit {
 			continue
 		}
@@ -204,7 +213,9 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 		"open_asks": returnedOpenAsks, "open_asks_matched": len(allOpenAsks), "open_asks_returned": len(returnedOpenAsks),
 		"delivery_health":        deliveryHealth,
 		"mentions_notifications": map[string]any{"items": returnedNotifications, "matched": len(allNotifications), "returned": len(returnedNotifications)},
-		"stale_items":            stale, "stale_hours": hours, "next": next,
+		"stale_items":            stale, "stale_hours": hours,
+		"health_tally": map[string]int{"dark": darkCount, "possibly_moot": mootCount},
+		"next":         next,
 	}
 	orientResult := &commandResult{Data: result}
 	orientResult.Warnings = append(orientResult.Warnings, deliveryWarnings...)

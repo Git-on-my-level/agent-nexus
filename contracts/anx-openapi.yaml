@@ -704,7 +704,7 @@ paths:
                 $ref: '#/components/schemas/PMDecisionListResponse'
     post:
       operationId: pmDecisionsCreate
-      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
+      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, dark_after. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
       summary: Propose a scoped PM decision
       tags:
       - pm
@@ -1534,7 +1534,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
-      description: For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
+      description: For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, dark_after. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -10255,6 +10255,7 @@ components:
         plan_health: { $ref: '#/components/schemas/PlanHealth' }
         next_step: { $ref: '#/components/schemas/NextPlanStep' }
         status_mismatch: {type: boolean, description: True when phase is backlog and at least one plan step is done. No automatic phase changes.}
+        possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
         decision_revision:
           type: string
           readOnly: true
@@ -10269,6 +10270,9 @@ components:
           type: string
         wake_condition: &id006
           type: string
+        dark_after:
+          type: string
+          description: Duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty clears; default 168h.
         start_at: &id007
           type: string
         due_at: &id008
@@ -10480,6 +10484,10 @@ components:
         next_actor: *id004
         next_action: *id005
         wake_condition: *id006
+        dark_after:
+          type: string
+          nullable: true
+          description: Duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty clears; default 168h.
         start_at: *id007
         due_at: *id008
         blockers: *id009
@@ -10519,6 +10527,10 @@ components:
             next_actor: *id004
             next_action: *id005
             wake_condition: *id006
+            dark_after:
+              type: string
+              nullable: true
+              description: Duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty clears; default 168h.
             start_at: *id007
             due_at: *id008
             blockers: *id009
@@ -11013,16 +11025,24 @@ components:
         next_steps: {type: array, items: {type: string}}
         shape: {type: string, enum: [chain, dag, lanes]}
         health: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done, cancelled], description: Legacy projection; richer states are in plan_health.state.}
-        health_state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]}
+        health_state: {type: string, enum: [no_plan, stale, blocked, at_risk, dark, on_track, done, cancelled]}
         last_movement_at: {type: string, format: date-time}
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "Computed on read. Precedence is no_plan (recent absent or empty plan; stale once inactive for the threshold), done (all steps done), blocked (any unfinished blocked step), at_risk (card or unfinished step due within 24h or overdue), stale (no card/plan/step activity for 72h), on_track. ANX_PLAN_STALLED_AFTER overrides the workspace service threshold. since is the condition's reproducible anchor, not a stored transition timestamp: activity for done/blocked/on_track, due minus 24h for at_risk, last activity plus threshold for stale, creation for no_plan; null if unavailable."
+      description: "Computed on read. Precedence is no_plan (recent absent or empty plan; stale once inactive for the threshold), done (all steps done), blocked (any unfinished blocked step), at_risk (card or unfinished step due within 24h or overdue), stale (no card/plan/step activity for 72h), dark (otherwise on_track, and the next dated signal — earliest of open step dues, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition — lies strictly beyond the dark horizon or does not exist), on_track. The horizon defaults to 168h, overridden by ANX_PLAN_DARK_AFTER and per card by the dark_after annotation. ANX_PLAN_STALLED_AFTER overrides the workspace service threshold. since is the condition's reproducible anchor, not a stored transition timestamp: activity for done/blocked/on_track, due minus 24h for at_risk, last activity plus threshold for stale, the next dated signal for dark (when the card stops being dark; null when it has no dated signal at all), creation for no_plan; null if unavailable."
       properties:
-        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]}
+        state: {type: string, enum: [no_plan, stale, blocked, at_risk, dark, on_track, done, cancelled]}
         reason: {type: string}
         since: {type: string, format: date-time, nullable: true}
+    PossiblyMoot:
+      type: object
+      required: [flagged, sources]
+      description: "Overtaken by events. A backlog or ready card, or an open ask, is flagged when at least one linked source is known and every known linked source has reached a terminal state (done, cancelled, closed, merged, published, resolved). Linked sources are plan step refs and related_refs, resolved through the batched evidence-backed ref resolution; PR URLs read merged from ingested observations, never a read-time fetch. Context-only refs (documents, topics) and refs resolving to nothing visible are excluded rather than blocking. Never closes anything: the flag only carries evidence so a human or agent can close the card or ask."
+      properties:
+        flagged: {type: boolean}
+        reason: {type: string, description: Evidence sentence, for example "all 2 linked sources are merged".}
+        sources: {type: integer, description: Number of linked sources evaluated; zero never flags.}
     PlanStepDigestList:
       type: object
       required: [items, more]
@@ -11086,6 +11106,7 @@ components:
         plan_health: { $ref: '#/components/schemas/PlanHealth' }
         next_step: { $ref: '#/components/schemas/NextPlanStep' }
         status_mismatch: {type: boolean}
+        possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
         if_updated_at: {type: string, format: date-time}
     ResolvedRef:
       type: object
@@ -11105,6 +11126,7 @@ components:
         plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
         plan_health: { $ref: '#/components/schemas/PlanHealth' }
         status_mismatch: {type: boolean}
+        possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
         phase: {type: string}
         owner: {type: string}
         owner_display: {type: string}
@@ -11279,6 +11301,7 @@ components:
       type: object
       properties:
         related_cards: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ResolvedRef'}}
+        possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
         related_cards_truncated: {type: boolean}
         id: { type: string }
         kind:
@@ -13083,6 +13106,7 @@ components:
         next_step: { $ref: '#/components/schemas/NextPlanStep' }
         plan_step_digest: { $ref: '#/components/schemas/PlanStepDigest' }
         status_mismatch: {type: boolean}
+        possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
         health: { $ref: '#/components/schemas/InitiativeHealth' }
         geometry: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativeGeometry' }]}
         ref: { type: string }

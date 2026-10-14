@@ -205,10 +205,13 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	}
 	item["last_moved_at"] = "2026-10-04T12:00:00Z"
 	health := item["plan_health"].(map[string]any)
-	if _, err = time.Parse(time.RFC3339Nano, health["since"].(string)); err != nil {
-		t.Fatal(err)
+	// A dark card with no dated signal at all carries a null anchor.
+	if since, ok := health["since"]; ok && since != nil {
+		if _, err = time.Parse(time.RFC3339Nano, since.(string)); err != nil {
+			t.Fatal(err)
+		}
+		health["since"] = "2026-10-04T12:00:00Z"
 	}
-	health["since"] = "2026-10-04T12:00:00Z"
 	summary := item["summary"].(map[string]any)
 	if _, err = time.Parse(time.RFC3339Nano, summary["created_at"].(string)); err != nil {
 		t.Fatal(err)
@@ -216,7 +219,9 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	summary["created_at"] = "2026-10-04T12:00:00Z"
 	summary["last_movement_at"] = "2026-10-04T12:00:00Z"
 	summary["age"] = float64(0)
-	summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
+	if status := summary["status"].(map[string]any); status["since"] != nil {
+		status["since"] = "2026-10-04T12:00:00Z"
+	}
 	fixture, err := os.ReadFile("../../../contracts/fixtures/initiative-overview/refs.json")
 	if err != nil {
 		t.Fatal(err)

@@ -361,7 +361,7 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			}
 			// Keep the authored plan and ownership fields from the same bounded card
 			// projection. Plan refs are carried by plan.steps[].ref; no N+1 reads.
-			for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "status_mismatch", "plan_resolution_truncated", "source_refs", "assignee_refs"} {
+			for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "status_mismatch", "possibly_moot", "plan_resolution_truncated", "source_refs", "assignee_refs"} {
 				if value, ok := row[key]; ok && value != nil {
 					item[key] = value
 				}

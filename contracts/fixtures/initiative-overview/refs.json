@@ -5,53 +5,7 @@
       "kind": "card",
       "title": "Initiative",
       "status": "backlog",
-      "phase": "backlog",
-      "owner": "actor:actor-1",
-      "owner_display": "Actor 1",
-      "board": {
-        "ref": "board:portfolio",
-        "title": "Portfolio"
-      },
-      "priority": "p1",
-      "last_moved_at": "2026-10-04T12:00:00Z",
-      "next_step": {
-        "id": "build",
-        "title": "Build",
-        "ref": ""
-      },
-      "progress": {
-        "done": 0,
-        "total": 1
-      },
-      "url": "/tasks/initiative",
-      "resolvable": true,
-      "plan_health": {
-        "state": "on_track",
-        "reason": "Open steps are progressing.",
-        "since": "2026-10-04T12:00:00Z"
-      },
       "summary": {
-        "status": {
-          "state": "on_track",
-          "label": "In progress",
-          "reason": "Open steps are progressing.",
-          "since": "2026-10-04T12:00:00Z"
-        },
-        "progress": {
-          "done": 0,
-          "total": 1,
-          "unit": "steps"
-        },
-        "next": {
-          "id": "build",
-          "title": "Build",
-          "ref": "",
-          "more": 0
-        },
-        "owner": "actor:actor-1",
-        "age": 0,
-        "last_movement_at": "2026-10-04T12:00:00Z",
-        "attention_truncated": true,
         "steps": {
           "window_hours": 168,
           "completed": {
@@ -73,8 +27,57 @@
             "more": 0
           }
         },
-        "created_at": "2026-10-04T12:00:00Z"
-      }
+        "status": {
+          "state": "dark",
+          "label": "Dark",
+          "reason": "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card."
+        },
+        "progress": {
+          "done": 0,
+          "total": 1,
+          "unit": "steps"
+        },
+        "next": {
+          "id": "build",
+          "title": "Build",
+          "ref": "",
+          "more": 0
+        },
+        "owner": "actor:actor-1",
+        "age": 0,
+        "created_at": "2026-10-04T12:00:00Z",
+        "last_movement_at": "2026-10-04T12:00:00Z",
+        "attention_truncated": true
+      },
+      "plan_health": {
+        "state": "dark",
+        "reason": "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card.",
+        "since": null
+      },
+      "possibly_moot": {
+        "flagged": false,
+        "sources": 0
+      },
+      "phase": "backlog",
+      "owner": "actor:actor-1",
+      "owner_display": "Actor 1",
+      "board": {
+        "ref": "board:portfolio",
+        "title": "Portfolio"
+      },
+      "priority": "p1",
+      "last_moved_at": "2026-10-04T12:00:00Z",
+      "next_step": {
+        "id": "build",
+        "title": "Build",
+        "ref": ""
+      },
+      "progress": {
+        "done": 0,
+        "total": 1
+      },
+      "url": "/tasks/initiative",
+      "resolvable": true
     },
     {
       "ref": "card:unknown",

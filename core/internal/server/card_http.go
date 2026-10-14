@@ -100,7 +100,7 @@ func canonicalCardView(card map[string]any) map[string]any {
 			out["plan_step_digest"] = v
 		}
 	}
-	for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "plan_resolution_truncated", "status_mismatch", "source_refs"} {
+	for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "plan_resolution_truncated", "status_mismatch", "possibly_moot", "source_refs"} {
 		if v, ok := card[key]; ok {
 			out[key] = v
 		}

@@ -69,10 +69,13 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		state := item["plan_state"].(map[string]any)
 		state["last_movement_at"] = "2026-10-04T12:00:00Z"
 		health := item["plan_health"].(map[string]any)
-		if _, err = time.Parse(time.RFC3339Nano, health["since"].(string)); err != nil {
-			t.Fatal(err)
+		// A dark card with no dated signal carries a null anchor.
+		if since, ok := health["since"]; ok && since != nil {
+			if _, err = time.Parse(time.RFC3339Nano, since.(string)); err != nil {
+				t.Fatal(err)
+			}
+			health["since"] = "2026-10-04T12:00:00Z"
 		}
-		health["since"] = "2026-10-04T12:00:00Z"
 		if !reflect.DeepEqual(item["summary"], item["work_summary"]) {
 			t.Fatal("computed summary alias differs from work_summary")
 		}
@@ -84,7 +87,9 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 			summary["created_at"] = "2026-10-04T12:00:00Z"
 			summary["age"] = float64(0)
 			summary["last_movement_at"] = "2026-10-04T12:00:00Z"
-			summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
+			if status := summary["status"].(map[string]any); status["since"] != nil {
+				status["since"] = "2026-10-04T12:00:00Z"
+			}
 		}
 		item["ref"] = "card:initiative"
 		item["title"] = "Initiative"
@@ -97,6 +102,13 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		var want map[string]any
 		if err = json.Unmarshal(raw, &want); err != nil {
 			t.Fatal(err)
+		}
+		if os.Getenv("ANX_TEST_DUMP_FIXTURE") != "" {
+			out, _ := json.MarshalIndent(got, "", "  ")
+			if werr := os.WriteFile(os.Getenv("ANX_TEST_DUMP_FIXTURE"), out, 0o644); werr != nil {
+				t.Fatal(werr)
+			}
+			return
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("wire fixture differs: got=%v want=%v", got, want)

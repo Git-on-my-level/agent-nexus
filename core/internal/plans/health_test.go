@@ -1,6 +1,7 @@
 package plans
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -32,7 +33,7 @@ func TestInitiativeHealthRules(t *testing.T) {
 			if tc.p != nil {
 				state = Compute(*tc.p, nil, tc.movement, now, 0)
 			}
-			got := HealthFor(tc.p, state, tc.movement, old, now, 0, tc.due)
+			got := HealthFor(tc.p, state, tc.movement, old, now, 0, tc.due, DarkInput{})
 			if got.State != tc.want || got.Reason == "" || got.Since == nil {
 				t.Fatalf("got=%+v want=%s", got, tc.want)
 			}
@@ -41,10 +42,122 @@ func TestInitiativeHealthRules(t *testing.T) {
 			}
 		})
 	}
+	// A longer stale threshold keeps the card out of stale, but with no dated
+	// signal anywhere it now reads dark rather than on_track.
 	p := Plan{Steps: []Step{{ID: "a", Title: "A"}}}
 	state := Compute(p, nil, old, now, 0)
-	if got := HealthFor(&p, state, old, old, now, 96*time.Hour, ""); got.State != "on_track" {
+	got := HealthFor(&p, state, old, old, now, 96*time.Hour, "", DarkInput{})
+	if got.State != "dark" || got.Since != nil {
 		t.Fatal(got)
+	}
+	// The same card with a signal inside the horizon stays on_track.
+	near := Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-09"}}}
+	state = Compute(near, nil, old, now, 0)
+	if got := HealthFor(&near, state, old, old, now, 96*time.Hour, "", DarkInput{}); got.State != "on_track" {
+		t.Fatal(got)
+	}
+}
+
+func TestDarkHealth(t *testing.T) {
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	movement := now.Add(-time.Hour)
+	plan := func(due string) *Plan {
+		return &Plan{Steps: []Step{{ID: "a", Title: "A", Due: due}}}
+	}
+	for _, tc := range []struct {
+		name      string
+		due       string
+		dark      DarkInput
+		want      string
+		wantSince string
+	}{
+		{"no-signal", "", DarkInput{}, "dark", ""},
+		{"far-step-due", "2026-11-05", DarkInput{}, "dark", "2026-11-05T00:00:00Z"},
+		{"near-step-due", "2026-10-09", DarkInput{}, "on_track", ""},
+		{"horizon-boundary", "2026-10-12T12:00:00Z", DarkInput{}, "on_track", ""},
+		{"just-past-horizon", "2026-10-12T12:00:01Z", DarkInput{}, "dark", "2026-10-12T12:00:01Z"},
+		{"earliest-signal-wins", "2026-10-20", DarkInput{Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-10-20T00:00:00Z"},
+		{"wake-earlier-wins", "2026-11-20", DarkInput{Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-11-05T00:00:00Z"},
+		{"wake-near", "", DarkInput{Wake: "wake on 2026-10-08"}, "on_track", ""},
+		{"past-wake-not-dark", "", DarkInput{Wake: "was due 2026-09-01"}, "on_track", ""},
+		{"per-card-horizon", "2026-10-20", DarkInput{Threshold: 48 * time.Hour}, "dark", "2026-10-20T00:00:00Z"},
+		{"per-card-horizon-covers", "2026-10-20", DarkInput{Threshold: 30 * 24 * time.Hour}, "on_track", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := plan(tc.due)
+			state := Compute(*p, nil, movement, now, 0)
+			got := HealthFor(p, state, movement, now.Add(-48*time.Hour), now, 0, "", tc.dark)
+			if got.State != tc.want {
+				t.Fatalf("got=%+v want=%s", got, tc.want)
+			}
+			if tc.want != "dark" {
+				return
+			}
+			if tc.wantSince == "" {
+				if got.Since != nil {
+					t.Fatalf("want nil since, got %s", *got.Since)
+				}
+				return
+			}
+			if got.Since == nil || *got.Since != tc.wantSince {
+				t.Fatalf("got since %v want %s", got.Since, tc.wantSince)
+			}
+		})
+	}
+}
+
+func TestDarkLosesToAlarms(t *testing.T) {
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	movement := now.Add(-time.Hour)
+	for _, tc := range []struct {
+		name string
+		p    *Plan
+		due  string
+		want string
+	}{
+		{"blocked", &Plan{Steps: []Step{{ID: "a", Title: "A", Status: "blocked"}}}, "", "blocked"},
+		{"overdue-step", &Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-01"}}}, "", "at_risk"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := Compute(*tc.p, nil, movement, now, 0)
+			if got := HealthFor(tc.p, state, movement, now.Add(-48*time.Hour), now, 0, tc.due, DarkInput{}); got.State != tc.want {
+				t.Fatalf("got=%+v want=%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWakeTime(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"no dates here", ""},
+		{"2026-11-05", "2026-11-05T00:00:00Z"},
+		{"wake when 1.0.559 ships, check 2026-11-05T09:00:00Z", "2026-11-05T09:00:00Z"},
+		{"date 2026-11-05 then instant 2026-11-06T08:00:00Z", "2026-11-05T00:00:00Z"},
+		{"instant first 2026-11-06T08:00:00+02:00 then date", "2026-11-06T08:00:00+02:00"},
+		{"truncated 2026-13-45 is not a date", ""},
+	} {
+		got := WakeTime(tc.in)
+		if tc.want == "" {
+			if !got.IsZero() {
+				t.Fatalf("%q: got %v want none", tc.in, got)
+			}
+			continue
+		}
+		want, _ := time.Parse(time.RFC3339, tc.want)
+		if got.IsZero() || !got.Equal(want) {
+			t.Fatalf("%q: got %v want %v", tc.in, got, want)
+		}
+	}
+	// The scan is bounded: a date buried past the first 1024 bytes is not read.
+	if got := WakeTime(strings.Repeat("x", 1100) + " 2026-11-05"); !got.IsZero() {
+		t.Fatalf("date past the scan bound leaked: %v", got)
+	}
+	if got := WakeTime(strings.Repeat("x", 1000) + " 2026-11-05"); got.IsZero() {
+		t.Fatal("date inside the scan bound was missed")
 	}
 }
 
@@ -73,7 +186,7 @@ func TestPlanlessCardHealthUsesPhaseAndDue(t *testing.T) {
 		{"ready", "2020-01-01", now, "at_risk"},
 		{"in_progress", "", now.Add(-100 * time.Hour), "stale"},
 	} {
-		got := HealthFor(nil, State{}, tc.movement, now.Add(-200*time.Hour), now, 0, tc.due, tc.phase)
+		got := HealthFor(nil, State{}, tc.movement, now.Add(-200*time.Hour), now, 0, tc.due, DarkInput{}, tc.phase)
 		if got.State != tc.want {
 			t.Fatalf("phase %q: got %+v want %s", tc.phase, got, tc.want)
 		}

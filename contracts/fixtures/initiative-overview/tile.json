@@ -16,12 +16,16 @@
       "done": 1,
       "total": 2
     },
-    "critical_path": ["build"],
-    "next_steps": ["build"],
+    "critical_path": [
+      "build"
+    ],
+    "next_steps": [
+      "build"
+    ],
     "shape": "chain",
     "health": "on_track",
     "last_movement_at": "2026-10-04T12:00:00Z",
-    "health_state": "on_track"
+    "health_state": "dark"
   },
   "progress": {
     "done": 1,
@@ -29,8 +33,8 @@
   },
   "health": {
     "status": "on_track",
-    "reason": "Open steps are progressing.",
-    "state": "on_track"
+    "reason": "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card.",
+    "state": "dark"
   },
   "geometry": {
     "shape": "chain",
@@ -45,7 +49,9 @@
         "id": "build",
         "status": "not_started",
         "layer": 1,
-        "after": ["design"]
+        "after": [
+          "design"
+        ]
       }
     ],
     "total_nodes": 2,
@@ -55,10 +61,9 @@
   "title": "Initiative",
   "summary": {
     "status": {
-      "state": "on_track",
-      "label": "In progress",
-      "reason": "Open steps are progressing.",
-      "since": "2026-10-04T12:00:00Z"
+      "state": "dark",
+      "label": "Dark",
+      "reason": "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card."
     },
     "set_status": {
       "state": "backlog",
@@ -107,9 +112,9 @@
   "board_ref": "board:portfolio",
   "updated_at": "2026-10-04T12:00:00Z",
   "plan_health": {
-    "state": "on_track",
-    "reason": "Open steps are progressing.",
-    "since": "2026-10-04T12:00:00Z"
+    "state": "dark",
+    "reason": "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card.",
+    "since": null
   },
   "next_step": {
     "id": "build",
@@ -117,6 +122,10 @@
     "ref": ""
   },
   "status_mismatch": true,
+  "possibly_moot": {
+    "flagged": false,
+    "sources": 0
+  },
   "plan_resolution_truncated": false,
   "plan_step_digest": {
     "window_hours": 168,
@@ -142,10 +151,9 @@
   "summary_text": "",
   "work_summary": {
     "status": {
-      "state": "on_track",
-      "label": "In progress",
-      "reason": "Open steps are progressing.",
-      "since": "2026-10-04T12:00:00Z"
+      "state": "dark",
+      "label": "Dark",
+      "reason": "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card."
     },
     "set_status": {
       "state": "backlog",

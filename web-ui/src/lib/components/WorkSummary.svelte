@@ -153,6 +153,21 @@
         <span class="summary__glyph" aria-hidden="true">{status.glyph}</span>
         <span class="summary__label">{status.label}</span>
       </span>
+      {#if summary?.moot?.flagged}
+        <!-- Core's overtaken-by-events evidence: every known linked source is
+             terminal while this card or ask still waits. It never closes
+             anything on its own — the badge carries the evidence so a reader
+             can. -->
+        <span
+          class="ui-badge ui-badge--neutral summary__badge"
+          data-moot
+          aria-label={summary.moot.reason || "Possibly moot"}
+          use:tooltip={summary.moot.reason || "Possibly moot"}
+        >
+          <span class="summary__glyph" aria-hidden="true">∅</span>
+          <span class="summary__label">Possibly moot</span>
+        </span>
+      {/if}
       {#if setStatus}
         <!-- Core sends the stored phase only when it disagrees with what it
              computed. Saying both is the point: "Blocked · marked in

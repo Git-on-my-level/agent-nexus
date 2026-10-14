@@ -239,7 +239,7 @@ func Compute(p Plan, facts map[string]Fact, movement, now time.Time, threshold t
 			out.CriticalPath = append(out.CriticalPath, id)
 		}
 	}
-	out.HealthState = HealthFor(&p, out, movement, movement, now, threshold, "").State
+	out.HealthState = HealthFor(&p, out, movement, movement, now, threshold, "", DarkInput{}).State
 	out.Health = LegacyHealth(out.HealthState)
 	out.LastMovementAt = movement.UTC().Format(time.RFC3339Nano)
 	return out

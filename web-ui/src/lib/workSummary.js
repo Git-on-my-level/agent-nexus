@@ -73,6 +73,7 @@ const STATUS_PRESENTATION = Object.freeze({
   overdue: { tone: "warn", glyph: "▲" },
   stale: { tone: "warn", glyph: "◷" },
   stalled: { tone: "warn", glyph: "◷" },
+  dark: { tone: "warn", glyph: "☾" },
   on_track: { tone: "ok", glyph: "●" },
   in_progress: { tone: "ok", glyph: "●" },
   done: { tone: "ok", glyph: "✓" },
@@ -94,6 +95,7 @@ export const ATTENTION_ORDER = Object.freeze([
   "overdue",
   "stale",
   "stalled",
+  "dark",
   "on_track",
   "in_progress",
   "review",
@@ -216,6 +218,7 @@ const FALLBACK_LABELS = Object.freeze({
   overdue: "Overdue",
   stale: "Stale",
   stalled: "Stale",
+  dark: "Dark",
   on_track: "In progress",
   in_progress: "In progress",
   review: "In review",
@@ -389,6 +392,23 @@ function nextPart(raw) {
     title: title || id,
     ref: asText(raw?.ref),
     more: Math.max(0, Number(raw?.more) || 0),
+  };
+}
+
+/**
+ * The possibly-moot flag, a top-level row field beside `status_mismatch`.
+ *
+ * Core flags a parked card or an open ask whose every known linked source has
+ * reached a terminal state — the PRs merged under a still-open decision, the
+ * work a backlog card still asks for already done. It never closes anything:
+ * the flag carries evidence, and the reader closes the card.
+ */
+function mootPart(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    flagged: raw.flagged === true,
+    reason: asText(raw.reason),
+    sources: Number(raw.sources) || 0,
   };
 }
 
@@ -633,6 +653,7 @@ function finish(model, row, { now }) {
    * one that decided its colour.
    */
   const expectationHours = expectationHoursFor(freshnessKind, { row });
+  const moot = mootPart(row?.possibly_moot);
   const geometry = row?.geometry ?? null;
   const planState = row?.plan_state ?? null;
   const bars =
@@ -661,6 +682,7 @@ function finish(model, row, { now }) {
     ...bars,
     shape,
     shapeLabel: SHAPE_LABELS[shape] ?? "",
+    moot,
   };
 }
 

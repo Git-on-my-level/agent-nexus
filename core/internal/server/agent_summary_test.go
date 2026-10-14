@@ -92,7 +92,8 @@ func TestAgentSummaryOptInBoundsParityAndPrivacy(t *testing.T) {
 			t.Fatal("private card leaked")
 		}
 		summary := card["work_summary"].(map[string]any)
-		if summary["status"].(map[string]any)["state"] != "in_progress" || summary["set_status"] != nil || !reflect.DeepEqual(summary["hints"], []any{"no_plan"}) {
+		// Planless in-progress cards with no dated signal read dark.
+		if summary["status"].(map[string]any)["state"] != "dark" || summary["set_status"] != nil || !reflect.DeepEqual(summary["hints"], []any{"no_plan"}) {
 			t.Fatal(summary)
 		}
 		if card["ref"] == w["ref"] {

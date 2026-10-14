@@ -169,7 +169,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 }
 
 func cardPlanResponse(card map[string]any) map[string]any {
-	return map[string]any{"summary": card["work_summary"], "card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]}
+	return map[string]any{"summary": card["work_summary"], "card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"], "possibly_moot": card["possibly_moot"]}
 }
 
 func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

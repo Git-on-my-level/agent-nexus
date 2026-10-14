@@ -137,12 +137,15 @@ func validateWorkLocal(m map[string]any) error {
 			return err
 		}
 	}
-	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "start_at", "due_at", "risk"} {
+	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "dark_after", "start_at", "due_at", "risk"} {
 		if v, ok := m[k]; ok && v != nil {
 			if _, ok := v.(string); !ok {
 				return workLocalInvalid(k, "must be a string or null")
 			}
 		}
+	}
+	if raw := workString(m["dark_after"]); raw != "" && parseDarkAfter(raw) == 0 {
+		return workLocalInvalid("dark_after", "invalid duration; accepted: a positive Go duration (168h, 30m) or a positive day count (7d), an empty string, or null")
 	}
 	if p := workString(m["priority"]); p != "" && p != "p0" && p != "p1" && p != "p2" && p != "p3" {
 		return workLocalInvalid("priority", "invalid priority")
@@ -450,7 +453,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
+	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "dark_after", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -959,7 +962,7 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
+	return []string{"labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "dark_after", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.

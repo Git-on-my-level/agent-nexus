@@ -14,13 +14,15 @@ describe("attentionRank", () => {
       "blocked",
       "at_risk",
       "stale",
+      "dark",
       "on_track",
       "done",
       "no_plan",
     ]);
     expect(attentionRank("blocked")).toBeLessThan(attentionRank("at_risk"));
     expect(attentionRank("at_risk")).toBeLessThan(attentionRank("stale"));
-    expect(attentionRank("stale")).toBeLessThan(attentionRank("on_track"));
+    expect(attentionRank("stale")).toBeLessThan(attentionRank("dark"));
+    expect(attentionRank("dark")).toBeLessThan(attentionRank("on_track"));
     expect(attentionRank("on_track")).toBeLessThan(attentionRank("done"));
     expect(attentionRank("done")).toBeLessThan(attentionRank("no_plan"));
   });
@@ -47,6 +49,21 @@ describe("planHealthModel", () => {
     expect(health.tone).toBe("warn");
     expect(health.reason).toBe("two steps slipped their due date");
     expect(health.since).toBe("2026-10-01T00:00:00Z");
+    expect(health.known).toBe(true);
+  });
+
+  it("reads the dark state with its own chip", () => {
+    const health = planHealthModel({
+      plan_health: {
+        state: "dark",
+        reason: "Next dated signal is 2026-11-05, 22 days out.",
+        since: "2026-11-05T00:00:00Z",
+      },
+    });
+    expect(health.state).toBe("dark");
+    expect(health.label).toBe("Dark");
+    expect(health.tone).toBe("warn");
+    expect(health.rank).toBeLessThan(attentionRank("on_track"));
     expect(health.known).toBe(true);
   });
 

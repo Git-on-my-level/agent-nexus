@@ -147,7 +147,7 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
   - Coordination noise does not count as activity: agent notification read/dismissal, topic-creation bookkeeping, and derived projection maintenance.
 - Topic, board, and card backing-thread linkage is exposed through `thread_id` on the canonical resource shape; keeping those backing links synchronized no longer emits an operator-visible timeline event or bumps the topic’s visible update clock.
 
-- `work.annotate` proposal `instruction` must be a nonempty JSON object. Allowed keys are `project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`, `start_at`, `due_at`, `relations`, and `executions`. Priority accepts `p0`, `p1`, `p2`, `p3`; dates accept an RFC 3339 timestamp (priority and dates also accept an empty string or null to clear). Blockers must be an array of strings; relations must be an array of objects with `kind` (`parent`, `child`, `depends_on`, `related`, `artifact`) and a nonempty string `ref` such as `card:<handle-or-id>`; executions must be an array of objects with nonempty string `authority` and `run_id`. Both proposal endpoints validate keys and canonical local value shapes before insertion; invalid input returns `400 invalid_request` with the key allowlist for unknown keys and accepted values or shapes for value errors.
+- `work.annotate` proposal `instruction` must be a nonempty JSON object. Allowed keys are `project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`, `dark_after`, `start_at`, `due_at`, `relations`, and `executions`. Priority accepts `p0`, `p1`, `p2`, `p3`; dates accept an RFC 3339 timestamp (priority and dates also accept an empty string or null to clear). `dark_after` accepts a Go duration (`168h`) or a day count (`7d`), or an empty string or null to clear; it sets how far out the next dated signal must lie before the card reads dark. Blockers must be an array of strings; relations must be an array of objects with `kind` (`parent`, `child`, `depends_on`, `related`, `artifact`) and a nonempty string `ref` such as `card:<handle-or-id>`; executions must be an array of objects with nonempty string `authority` and `run_id`. Both proposal endpoints validate keys and canonical local value shapes before insertion; invalid input returns `400 invalid_request` with the key allowlist for unknown keys and accepted values or shapes for value errors.
 - `POST /pm/turns/{turn_id}/heartbeat` accepts `{"lease_token":"..."}` from the selected PM actor and returns `200 PMHeartbeatTurn` without the token. It renews `lease_expires_at` to `min(now + ANX_PM_LEASE_TTL, deadline)` under the claim write lock. Missing token returns `409 lease_required`; expired, released, or foreign token returns `409 lease_mismatch`; closed turn returns `409 turn_closed`. TTL defaults to `60s` (range `1s` to `10m`). Runners must renew at a cadence strictly less than TTL/2. Expiry makes the same open turn unclaimed/pending and reclaimable with a new token, preserving history; it does not fail the turn. Only reaching the turn deadline does that.
 
 ## Generic sessions and nonlocking task participation
@@ -433,17 +433,38 @@ time uses its containing card timestamp.
 
 Card reads/lists, work reads/lists, ref previews, initiative overview and live
 reports add `plan_health: {state, reason, since}`, `next_step: {id, title, ref}`
-(or null), and `status_mismatch` alongside existing progress and `plan_state`.
+(or null), `status_mismatch`, and `possibly_moot` alongside existing progress and `plan_state`.
 Health precedence: no steps → `no_plan` if recent, `stale` after the inactivity threshold; all complete → `done`; any unfinished
 blocked step/dependency → `blocked`; card or unfinished step due within 24 hours
 or overdue → `at_risk`; no card/plan/step activity for 72 hours → `stale`;
-otherwise `on_track`. Workspace service env `ANX_PLAN_STALLED_AFTER` overrides
+an otherwise `on_track` card whose next dated signal lies further out than the
+dark horizon or does not exist → `dark`; otherwise `on_track`. The next dated
+signal is the earliest of open (unfinished) step due dates, the effective card
+`due_at`, and the first RFC3339 instant or YYYY-MM-DD date inside the
+`wake_condition` annotation (first 1024 bytes scanned; a past signal still
+counts, so an already-due wake is never dark). The horizon defaults to 168
+hours (7 days); workspace service env `ANX_PLAN_DARK_AFTER` overrides it and
+the per-card `dark_after` annotation (duration such as `72h` or `7d`; empty
+clears) overrides it per card. A signal exactly at the horizon is not dark.
+Workspace service env `ANX_PLAN_STALLED_AFTER` overrides
 the stale threshold. Card and linked card messages count as activity; repeated
 source polls do not. `since` is the reproducible condition anchor documented in
-OpenAPI, not a persisted historical transition timestamp. Ready steps prefer the
+OpenAPI, not a persisted historical transition timestamp; for `dark` it is the
+next dated signal (null when the card has no dated signal at all). Ready steps prefer the
 critical path, then lexicographic id, skipping unreadable linked resources.
 `status_mismatch` is true for backlog cards with completed steps; computation
-never changes phase. `plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, other detailed states to on_track. New clients read `plan_health.state`.
+never changes phase.
+`possibly_moot` is `{flagged, reason, sources}`: a backlog or ready card — or an
+open inbox ask over its `subject_ref` and `related_refs` — is flagged when at
+least one linked source is known and every known linked source has reached a
+terminal state (done, cancelled, closed, merged, published, resolved), with PR
+URLs resolved through the ingested observation evidence, never a read-time
+fetch. Context-only refs (documents, topics, boards) and refs that resolve to
+nothing visible are excluded rather than blocking; `sources` counts the
+evaluated set and zero never flags. The flag only carries evidence ("all 2
+linked sources are merged"); it never auto-closes anything, and computation
+never changes phase.
+`plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, `dark` (unnamed there) to on_track, other detailed states to on_track. New clients read `plan_health.state`.
 
 ### Computed card summaries
 

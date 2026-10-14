@@ -121,7 +121,7 @@ func TestAggregatedPlanRefsRespectBudgetAndBatchGuard(t *testing.T) {
 		}
 		ps[fmt.Sprintf("plan-%02d", i)] = p
 	}
-	facts, err := s.planFacts(ctx, ps, nil)
+	facts, err := s.planFacts(ctx, ps, map[string]cardHealthInput{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -59,7 +59,9 @@ func TestHealthInputsAgreeAcrossWorkCardAndRefReads(t *testing.T) {
 	if _, err = s.PatchWork(ctx, "actor-1", id, work["version"].(int64), map[string]any{"due_at": nil}); err != nil {
 		t.Fatal(err)
 	}
-	assertHealth(id, ref, "on_track")
+	// Clearing the due leaves no dated signal at all: the card reads dark on
+	// every read shape, which is the point of the dark state.
+	assertHealth(id, ref, "dark")
 	old := now.Add(-72 * time.Hour).Format(time.RFC3339Nano)
 	source, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Source activity", "source": map[string]any{"authority": "generic-provider", "connection_id": "source", "native_id": "opaque"}})
 	if err != nil {
