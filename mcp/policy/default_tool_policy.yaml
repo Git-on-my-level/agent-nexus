@@ -86,6 +86,9 @@ commands:
   "agent.wakeups.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "asks.batch.create":
+    classification: unsupported_other
+    reason: "Ask batch filing is available through the CLI and HTTP API; MCP exposure requires separate qualification"
   "asks.delivery":
     classification: unsupported_other
     reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"

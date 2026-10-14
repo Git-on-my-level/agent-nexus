@@ -663,6 +663,16 @@ tabs, definitive conflicts, storage denial and delivery-state screenshots.
 The browser mock checks exact body/key replay; the real core concurrency test
 checks that duplicate retries produce one canonical response event.
 
+Filed ask batches (`POST /asks/batch`, `inbox-batch.spec.js`) answer through
+the same queue: one batch item renders one decision section per ask with the
+section's own `inbox:<item-id>:reply:<ask-ref>` durable draft, the single
+submit sends one `{answers: [...]}` body through `POST /inbox/{id}/respond`,
+and Undo hands each section's text back to its own draft key. Core records
+every member answer atomically and replays the whole batch through one
+idempotency key.
+
+![An ask-batch inbox item: three decision sections with suggested replies and a single submit](images/inbox-batch-item.png)
+
 `durable-discussion.spec.js` covers reply metadata restoration, timeout/524,
 offline tab closure, lost confirmation with reload and duplicate replay, storage
 failure, copy/edit states and state screenshots. The document layout spec also

@@ -139,10 +139,23 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 	decidedIDs := decidedInboxItemIDs(events)
 	items := make([]derivedInboxItem, 0)
 
+	// Batch members collapse into one item per filed batch; the batch id is
+	// pinned server-side at filing, so membership never changes underneath it.
+	askBatchMembers := map[string][]map[string]any{}
+	var batchOrder []string
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
 		case humanAttentionRequestedEventType:
+			if payload, ok := event["payload"].(map[string]any); ok {
+				if batchID := strings.TrimSpace(anyString(payload["batch_id"])); batchID != "" {
+					if _, seen := askBatchMembers[batchID]; !seen {
+						batchOrder = append(batchOrder, batchID)
+					}
+					askBatchMembers[batchID] = append(askBatchMembers[batchID], event)
+					continue
+				}
+			}
 			item, ok := deriveHumanAttentionInboxItem(event)
 			if !ok {
 				continue
@@ -154,6 +167,36 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 			}
 			items = append(items, item)
 		}
+	}
+
+	for _, batchID := range batchOrder {
+		members := askBatchMembers[batchID]
+		if len(members) < 2 {
+			// A lone member cannot form a batch item; fall back to its own item.
+			for _, event := range members {
+				item, ok := deriveHumanAttentionInboxItem(event)
+				if !ok {
+					continue
+				}
+				_, withdrawn := decidedIDs["event:"+strings.TrimSpace(anyString(event["id"]))]
+				if withdrawn {
+					continue
+				}
+				items = append(items, item)
+			}
+			continue
+		}
+		// One derive pass filters withdrawn/answered members, rebuilds the
+		// access-bearing fields from the still-open ones and drops the item
+		// entirely when nothing stays open.
+		item, ok := deriveHumanAttentionBatchInboxItem(members, decidedIDs)
+		if !ok {
+			continue
+		}
+		if _, decided := decidedIDs[item.ID]; decided {
+			continue
+		}
+		items = append(items, item)
 	}
 
 	sortInboxItems(items)

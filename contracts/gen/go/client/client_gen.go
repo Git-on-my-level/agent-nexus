@@ -379,6 +379,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
 	},
 	{
+		CommandID: "asks.batch.create",
+		CLIPath:   "ask batch",
+		Group:     "ask",
+		Method:    "POST",
+		Path:      "/asks/batch",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+	},
+	{
 		CommandID:  "asks.delivery",
 		CLIPath:    "asks delivery",
 		Group:      "asks",
@@ -2967,6 +2977,10 @@ func (c *Client) ArtifactsTrash(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) ArtifactsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.unarchive", pathParams, opts)
+}
+
+func (c *Client) AsksBatchCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.batch.create", nil, opts)
 }
 
 func (c *Client) AsksDelivery(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

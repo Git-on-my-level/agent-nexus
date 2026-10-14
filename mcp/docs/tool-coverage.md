@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 223
+- Command count: 224
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -15,6 +15,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agent | 8 |
 | agents | 4 |
 | artifacts | 10 |
+| ask | 1 |
 | asks | 4 |
 | auth | 22 |
 | boards | 13 |
@@ -53,7 +54,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 9 |
-| unsupported_other | 6 |
+| unsupported_other | 7 |
 | unsupported_shell_shaped | 2 |
 | unsupported_streaming | 6 |
 
@@ -65,7 +66,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 66 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 34 | not represented as direct MCP tools in v1 |
+| unsupported | 35 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -101,6 +102,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | artifacts.restore | artifacts | POST | /artifacts/{artifact_id}/restore | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.trash | artifacts | POST | /artifacts/{artifact_id}/trash | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.unarchive | artifacts | POST | /artifacts/{artifact_id}/unarchive | exposed_write | ordinary reversible artifact lifecycle write |
+| asks.batch.create | ask | POST | /asks/batch | unsupported_other | Ask batch filing is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | asks.delivery | asks | POST | /asks/{ask_id}/delivery | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | asks.get | asks | GET | /asks/{ask_id} | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | asks.stream | asks | GET | /stream/asks/{ask_id} | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |

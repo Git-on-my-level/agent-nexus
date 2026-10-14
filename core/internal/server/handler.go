@@ -2592,6 +2592,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	registerRoute("/asks/", func(r *http.Request) routeAccessRequirement {
 		rest := strings.TrimPrefix(r.URL.Path, "/asks/")
 		parts := strings.Split(rest, "/")
+		if len(parts) == 1 && parts[0] == "batch" && r.Method == http.MethodPost {
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
 		if len(parts) == 1 && parts[0] != "" && r.Method == http.MethodGet {
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		}
@@ -2602,6 +2605,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}, func(w http.ResponseWriter, r *http.Request) {
 		rest := strings.TrimPrefix(r.URL.Path, "/asks/")
 		parts := strings.Split(rest, "/")
+		if len(parts) == 1 && parts[0] == "batch" && r.Method == http.MethodPost {
+			handleCreateAskBatch(w, r, opts)
+			return
+		}
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			switch parts[1] {
 			case "subscriptions":

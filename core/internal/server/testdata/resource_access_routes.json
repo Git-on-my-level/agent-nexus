@@ -157,6 +157,11 @@
     "policy": "record"
   },
   {
+    "method": "POST",
+    "path": "/asks/batch",
+    "policy": "reference-write"
+  },
+  {
     "method": "GET",
     "path": "/asks/{ask_id}",
     "policy": "record"

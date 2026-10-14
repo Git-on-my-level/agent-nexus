@@ -828,6 +828,16 @@ derived:
       requester_agent_id: { type: string, required: false }
       requester_label: { type: string, required: false }
       severity: { type: string, required: false }
+      batch:
+        type: object
+        required: false
+        description: >
+          Present on one ask-batch inbox item derived from 2-10 human_attention_requested events
+          filed through POST /asks/batch. Holds `id` (shared batch id) and `asks`: the still-open
+          members with their own request_event_ref, title, body, subject_ref and
+          response_proposals. One response answers every member atomically; the item disappears
+          when the last member is answered or withdrawn. Top-level response_proposals then carry
+          the first member's proposals for compatibility; decision UIs use batch.asks entries.
 
   agent_notification:
     fields:

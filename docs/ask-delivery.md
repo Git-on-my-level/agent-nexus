@@ -49,6 +49,30 @@ Every ask result prints:
   `anx await --answers` for `batch`, `anx orient` (delivery state) for
   `resume`, and `anx inbox list --status answered` for `none`.
 
+## Filing related asks as one batch
+
+```bash
+anx ask batch --from-file asks.json   # 2-10 related asks, one human decision pass
+```
+
+A batch files N related asks (2–10, hard cap 10) as **one atomic request**:
+every ask passes the same authoring lint as `anx ask`, all asks share one
+backing thread, and the server assigns the shared batch id. The file holds
+`{"asks":[...]}` where each entry accepts `title`, `body`, `subject_ref`,
+`thread_id`, `refs`, `recommend`, `alts`, `request_id`, `coverage_hint`,
+`evidence`, `supersedes`, and an optional per-ask `delivery` override (a
+top-level `delivery` or `--delivery` is the default mode). `--dry-run`
+validates and prints every member without sending; `-` reads the JSON from
+stdin.
+
+The human side sees **one** inbox item with one decision section per ask and
+a single submit (the web UI keeps each section's text in its own durable
+draft, so a reload returns the reader to what they had written). Answering
+records all N answers atomically and releases them together to each ask's own
+delivery mode — an ask filed with `--delivery none` is recorded without
+waking its agent, the rest queue into the requester's debounced answer wake.
+The result prints the batch id plus each ask's id and delivery follow-up.
+
 ## The bridge
 
 `anx bridge run` is a long-lived process on the asking agent's host. It

@@ -122,6 +122,18 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("ask_subjects", denied("event", "_row.ask_id")+" AND "+denied("card", "_row.card_id"))
 	add("access_requests", denied("event", "_row.request_event_id")+" AND "+cleanJSON("_row.reason"))
 	add("human_attention_response_claims", denied("event", "_row.request_event_id")+" AND "+denied("event", "_row.response_event_id")+" AND "+cleanJSON("_row.response_json"))
+	// Batch claims carry their member ask ids inside response_json
+	// ($.answers[*].ask_ref, "event:<id>"), so the member probe walks the JSON
+	// array: a batch answered behind a private thread must look absent, not
+	// merely redacted, to a principal who cannot see its members.
+	add("human_attention_batch_response_claims", denied("inbox", "_row.inbox_item_id")+" AND "+cleanJSON("_row.response_json")+` AND NOT EXISTS (
+		SELECT 1 FROM json_each(_row.response_json,'$.answers') AS ans
+		WHERE EXISTS (
+			SELECT 1 FROM _anx_denied d
+			WHERE d.kind='event'
+			  AND d.id=substr(COALESCE(json_extract(ans.value,'$.ask_ref'),''), 7)
+		)
+	)`)
 	for _, table := range []string{"derived_topic_dirty_queue"} {
 		add(table, denied("thread", "_row.thread_id"))
 	}

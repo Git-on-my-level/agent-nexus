@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `223`
+- Commands: `224`
 
 ## `actors.create`
 
@@ -381,6 +381,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
+
+## `asks.batch.create`
+
+- CLI path: `ask batch`
+- HTTP: `POST /asks/batch`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Let an agent file N related asks that a human answers in one pass.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `quota_exceeded`
+- Output: Returns `{ batch_id, events }`.
+- Agent notes: Cost is bounded by the batch size (hard cap 10). Each ask passes the same validation as POST /events for human_attention_requested, including requester identity, title rules, markdown hygiene and reference conventions.
 
 ## `asks.delivery`
 

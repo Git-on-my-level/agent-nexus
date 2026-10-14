@@ -1382,6 +1382,29 @@ export function createAnxCoreClient(options = {}) {
       if (!id) {
         throw new Error("respondInboxItem requires inboxItemId.");
       }
+      if (Array.isArray(payload?.answers)) {
+        // A batch item answers every member in one atomic request; core
+        // validates per-answer outcomes, not the flat single fields.
+        if (!payload.answers.length) {
+          throw new Error(
+            "respondInboxItem requires a non-empty answers array.",
+          );
+        }
+        for (const answer of payload.answers) {
+          if (!String(answer?.ask_ref ?? "").trim()) {
+            throw new Error("respondInboxItem requires an ask_ref per answer.");
+          }
+          if (!isInboxResponseOutcome(answer?.outcome)) {
+            throw new Error(
+              "respondInboxItem requires a valid outcome per answer.",
+            );
+          }
+        }
+        return invokeCommand("inbox.respond", {
+          pathParams: pathParams({ inbox_id: id }),
+          options: { body: withActorId({ ...payload }) },
+        });
+      }
       const responseText = String(payload?.response_text ?? "").trim();
       if (!responseText) {
         throw new Error("respondInboxItem requires a non-empty response_text.");

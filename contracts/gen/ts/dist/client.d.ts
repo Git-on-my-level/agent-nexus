@@ -85,6 +85,7 @@ export declare class AnxClient {
     artifactsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    asksBatchCreate(options?: RequestOptions): Promise<InvokeResult>;
     asksDelivery(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksStream(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

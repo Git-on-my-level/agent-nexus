@@ -1378,6 +1378,56 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "artifactsUnarchive"
   },
   {
+    "command_id": "asks.batch.create",
+    "cli_path": "ask batch",
+    "group": "ask",
+    "method": "POST",
+    "path": "/asks/batch",
+    "operation_id": "createAskBatch",
+    "summary": "File related asks as one batch",
+    "description": "Files 2 to 10 human_attention_requested events as one atomic batch. Every ask must be addressed to the same backing thread; the server assigns the shared batch id and rejects client-supplied batch ids. Either every ask commits or none does. The human inbox derives one batch item for the group, and one response answers all of its members atomically.",
+    "why": "Let an agent file N related asks that a human answers in one pass.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ batch_id, events }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "conflict",
+      "quota_exceeded"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Cost is bounded by the batch size (hard cap 10). Each ask passes the same validation as POST /events for human_attention_requested, including requester identity, title rules, markdown hygiene and reference conventions.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "asks",
+          "type": "list\u003cany\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
+    "go_method": "AsksBatchCreate",
+    "ts_method": "asksBatchCreate"
+  },
+  {
     "command_id": "asks.delivery",
     "cli_path": "asks delivery",
     "group": "asks",
@@ -7643,28 +7693,14 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "projection",
     "body_schema": {
-      "required": [
-        {
-          "name": "outcome",
-          "type": "string",
-          "enum_values": [
-            "acknowledged",
-            "answered",
-            "approved",
-            "needs_context",
-            "rejected",
-            "resolved"
-          ]
-        },
-        {
-          "name": "response_text",
-          "type": "string"
-        }
-      ],
       "optional": [
         {
           "name": "actor_id",
           "type": "string"
+        },
+        {
+          "name": "answers",
+          "type": "list\u003cany\u003e"
         },
         {
           "name": "idempotency_key",
@@ -7692,8 +7728,24 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "outcome",
+          "type": "string",
+          "enum_values": [
+            "acknowledged",
+            "answered",
+            "approved",
+            "needs_context",
+            "rejected",
+            "resolved"
+          ]
+        },
+        {
           "name": "related_refs",
           "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "response_text",
+          "type": "string"
         }
       ]
     },
@@ -13432,6 +13484,10 @@ export class AnxClient {
 
   artifactsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("artifacts.unarchive", pathParams, options);
+  }
+
+  asksBatchCreate(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("asks.batch.create", {}, options);
   }
 
   asksDelivery(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
