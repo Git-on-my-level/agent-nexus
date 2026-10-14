@@ -107,7 +107,7 @@
 </script>
 
 <div
-  class="flex gap-3 overflow-x-auto pb-3"
+  class="relative flex gap-3 overflow-x-auto pb-3"
   data-watch-board
   onclickcapture={swallowClick}
   role="presentation"

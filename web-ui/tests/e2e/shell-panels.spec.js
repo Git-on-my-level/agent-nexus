@@ -54,7 +54,7 @@ test("the left nav collapses to an icon rail and stays navigable", async ({
 
   const nav = page.locator("[data-shell-nav]");
   await expect(nav).toHaveAttribute("data-shell-nav", "expanded");
-  const inboxLink = nav.getByRole("link", { name: "Inbox", exact: true });
+  const inboxLink = nav.getByRole("link", { name: "Decide", exact: true });
   await expect(inboxLink).toBeVisible();
   // Expanded: the words are there.
   await expect(inboxLink.locator(".shell-nav-copy")).toBeVisible();
@@ -66,7 +66,7 @@ test("the left nav collapses to an icon rail and stays navigable", async ({
   // still clickable, it just has no words.
   await expect(inboxLink).toBeVisible();
   await expect(inboxLink.locator(".shell-nav-copy")).toBeHidden();
-  await expect(inboxLink).toHaveAttribute("title", "Inbox");
+  await expect(inboxLink).toHaveAttribute("title", "Decide");
   // And it is narrower than it was.
   const collapsedWidth = await nav.evaluate((node) => node.clientWidth);
   expect(collapsedWidth).toBeLessThan(120);

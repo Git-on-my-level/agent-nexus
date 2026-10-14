@@ -53,30 +53,24 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await page.goto(appPath("/"));
 
   await expect(page).toHaveURL(
-    new RegExp(`${APP_BASE_PATH}/o/local/w/local/overview/?$`),
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/decide/?$`),
   );
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
 
-  await expect(
-    page
-      .locator(`a[href="${appPath("/o/local/w/local/initiatives")}"]`)
-      .first(),
-  ).toBeVisible();
-  await expect(
-    page.locator(`a[href="${appPath("/o/local/w/local/docs")}"]`).first(),
-  ).toBeVisible();
-
-  await page
-    .locator(`a[href="${appPath("/o/local/w/local/docs")}"]`)
-    .first()
-    .click();
+  // Docs and Initiatives are one hop down now (settings, ⌘K); the primary
+  // nav links Decide and Watch, and they carry the mount prefix.
+  const watchLink = page
+    .locator(`a[href="${appPath("/o/local/w/local/watch")}"]`)
+    .first();
+  await expect(watchLink).toBeVisible();
+  await watchLink.click();
   await expect(page).toHaveURL(
-    new RegExp(`${APP_BASE_PATH}/o/local/w/local/docs/?$`),
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/watch/?$`),
   );
   await expect(
-    page.getByRole("heading", { name: "Docs", exact: true }),
+    page.getByRole("heading", { name: "Watch", exact: true }),
   ).toBeVisible();
 });
 
@@ -92,10 +86,10 @@ test("workspace root preserves query and fragment under a mount prefix without r
     appPath("/o/local/w/local?dashboard=weekly#overview-reports"),
   );
   await expect(page).toHaveURL(
-    `${baseURL}${appPath("/o/local/w/local/overview?dashboard=weekly#overview-reports")}`,
+    `${baseURL}${appPath("/o/local/w/local/decide?dashboard=weekly#overview-reports")}`,
   );
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
   expect(documents).toHaveLength(1);
 });
