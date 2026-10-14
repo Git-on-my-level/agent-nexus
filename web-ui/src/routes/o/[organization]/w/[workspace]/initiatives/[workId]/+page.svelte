@@ -1293,7 +1293,9 @@
                       onpreview={(model, anchor) =>
                         refPreview?.open(model, anchor)}
                       onpreviewclose={() => refPreview?.requestClose()}
-                    />{:else}<span class="text-fg">{relation.ref}</span>{/if}
+                    />{:else}<span class="min-w-0 break-all text-fg"
+                      >{relation.ref}</span
+                    >{/if}
                 </li>{/each}
             </ul>
           </section>

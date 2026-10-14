@@ -186,7 +186,11 @@
         /></label
       >
       {#if chooseBoard}<label class="block text-micro font-medium text-fg-muted"
-          >Group<select class="ui-input mt-1" bind:value={board} required
+          >Group<select
+            aria-label="Group"
+            class="ui-input mt-1"
+            bind:value={board}
+            required
             ><option value="" disabled>Choose a group</option
             >{#each boards as item}<option
                 value={item.ref || item.handle || item.id}

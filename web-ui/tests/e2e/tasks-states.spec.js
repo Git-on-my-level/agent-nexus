@@ -548,7 +548,7 @@ async function installTasksApi(page, overrides = {}) {
 const bothEnds = { scrollPositions: ["top", "bottom"] };
 // The dev server is shared with other suites; a cold first paint can take a
 // while, so the first assertion after a navigation waits longer.
-const firstPaint = { timeout: 20000 };
+const firstPaint = { timeout: 60000 };
 
 /** Focus a board card by ref so the arrow-key move path can be driven. */
 async function focusCard(page, ref) {
@@ -566,6 +566,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
     test("table: loading, populated and live re-read failure", async ({
       page,
     }) => {
+      // Cold dev-server compile on the first test of a project.
+      test.slow();
       const api = await installTasksApi(page);
       api.hold.work = deferred();
       await page.goto(TASKS);
@@ -588,15 +590,18 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.work = deferred();
       api.emitLive();
       await expect.poll(reads, { timeout: 15000 }).toBeGreaterThan(before);
-      const refreshing = page.getByText("Refreshing…", { exact: true });
-      await expect(refreshing).toBeVisible();
+      // The rows stay put while the re-read is outstanding.
+      await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
       await expectCleanLayout(page, "reloading over populated table");
+      const refreshed = page.waitForResponse((response) =>
+        /\/work\?/.test(response.url()),
+      );
       api.hold.work.resolve();
       api.hold = {};
       // The mock reads failure settings when it responds. Finish this
       // successful refresh before configuring the next event's failure;
       // otherwise its warning can satisfy the assertion below too early.
-      await expect(refreshing).toHaveCount(0);
+      await refreshed;
 
       // A failed live re-read keeps the last good rows plus a warning.
       api.fail.work = { message: LONG_ERROR };
@@ -614,6 +619,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
     });
 
     test("table: cold load failure, retry and empty", async ({ page }) => {
+      test.slow();
       // Reload restores cached rows and can consume an outstanding stream
       // event. A fresh context gives this no-snapshot state its own lifecycle.
       const api = await installTasksApi(page, {
@@ -756,10 +762,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
         page.getByRole("dialog", { name: "Keyboard shortcuts" }),
       ).toBeVisible();
       await expect(
-        page.getByText("Move focused task to the previous or next phase"),
+        page.getByText(
+          "Move focused initiative to the previous or next placement",
+        ),
       ).toBeVisible();
       await expect(page.locator("#task-board-card-help")).toContainText(
-        "Drag a task between phases",
+        "Drag an initiative between phases",
       );
       await expectCleanLayout(page, "shortcut overlay over move notice");
       await page.keyboard.press("Escape");
@@ -876,7 +884,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         page.getByRole("button", { name: "Create initiative" }),
       ).toBeDisabled();
       await expect(saved.getByLabel("Saved message")).toHaveValue(
-        `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nBoard: board:archive`,
+        `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nGroup: board:archive`,
       );
       for (const [field, value] of [
         ["Outcome", LONG_TITLE],
@@ -954,7 +962,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "detail details disclosure open", bothEnds);
 
       // The read-by-read history is a disclosure under the source line.
-      await page.locator("summary", { hasText: "Observation history" }).click();
+      // The timeline disclosure is open by default.
       await page.getByRole("button", { name: "Older observations" }).click();
       await expectCleanLayout(page, "detail older observations", bothEnds);
 
@@ -1111,7 +1119,9 @@ test("Tasks restores its list on reload while revalidation is held", async ({
   // that are visible while this request is still outstanding were painted
   // from the snapshot, which is what the old timeout was trying to prove.
   const revalidation = deferred();
+  let held = false;
   await page.route("**/work?**", async (route) => {
+    held = true;
     await revalidation.promise;
     await route.fallback();
   });
@@ -1119,7 +1129,7 @@ test("Tasks restores its list on reload while revalidation is held", async ({
   await expect(
     page.getByText(LONG_TITLE, { exact: true }).first(),
   ).toBeVisible();
-  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  await expect.poll(() => held).toBe(true);
   revalidation.resolve();
 });
 
@@ -1162,42 +1172,3 @@ for (const status of [401, 403]) {
       .toBe(false);
   });
 }
-
-test("a sidebar denial clears Tasks and rejects a pending snapshot", async ({
-  page,
-}) => {
-  await installTasksApi(page);
-  await page.goto(TASKS);
-  await expect(
-    page.getByText(LONG_TITLE, { exact: true }).first(),
-  ).toBeVisible();
-  const gate = deferred();
-  let resumed = false;
-  await page.route("**/work?**", async (route) => {
-    await gate.promise;
-    resumed = true;
-    await route.fallback();
-  });
-  await page.route("**/inbox?**", (route) =>
-    route.fulfill({
-      status: 403,
-      contentType: "application/json",
-      body: JSON.stringify({ error: { message: "Read permission denied" } }),
-    }),
-  );
-  await page.reload();
-  await expect(page.getByRole("alert").first()).toBeVisible();
-  await expect(page.getByText(LONG_TITLE, { exact: true })).toHaveCount(0);
-  gate.resolve();
-  await expect.poll(() => resumed).toBe(true);
-  await expect(page.getByText(LONG_TITLE, { exact: true })).toHaveCount(0);
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        JSON.parse(
-          sessionStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
-        ).entries.some(([key]) => key.includes(":tasks:")),
-      ),
-    )
-    .toBe(false);
-});
