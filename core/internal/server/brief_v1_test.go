@@ -60,7 +60,12 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 			"by": "2026-01-01", "blocks": []any{report["ref"], done["ref"]}, "priority": "p1"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.MoveBoardCard(ctx, "actor-1", anyString(board["id"]), anyString(done["id"]), primitives.MoveBoardCardInput{ColumnKey: "done"}); err != nil {
+	proof, err := store.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": done["thread_id"], "refs": []string{anyString(done["ref"]), "thread:" + anyString(done["thread_id"])}, "payload": map[string]any{"text": "shipped"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution, resolutionRefs := "done", []string{"event:" + anyString(proof["id"])}
+	if _, err = store.MoveBoardCard(ctx, "actor-1", anyString(board["id"]), anyString(done["id"]), primitives.MoveBoardCardInput{ColumnKey: "done", Resolution: &resolution, ResolutionRefs: &resolutionRefs}); err != nil {
 		t.Fatalf("move done card: %v", err)
 	}
 	body := readBriefV1(t, store)
@@ -98,6 +103,7 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 		t.Fatalf("terminal blocks ref should clear: %v", d)
 	}
 	// Bounded: query count does not grow with the workspace.
+	readBriefV1(t, store)
 	counter.Reset()
 	readBriefV1(t, store)
 	small := counter.Count()
@@ -105,10 +111,14 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 		w := work(fmt.Sprintf("Extra %d", i))
 		note(w, map[string]any{"next": map[string]any{"at": "3d", "what": "x"}})
 	}
-	readBriefV1(t, store) // drains the fold queue
+	for drained := false; !drained; {
+		if drained, err = store.RefreshBriefInitiatives(ctx, 200); err != nil {
+			t.Fatal(err)
+		}
+	}
 	counter.Reset()
 	readBriefV1(t, store)
-	if large := counter.Count(); large > small+2*primitives.BriefSectionLimit+4 {
+	if large := counter.Count(); large > small+2 {
 		t.Fatalf("brief queries grew with the workspace: %d -> %d", small, large)
 	}
 }
