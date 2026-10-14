@@ -2,6 +2,7 @@
 import { cleanup, render } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { ageTitle } from "../../src/lib/ageBadge.js";
 import WorkSummary from "../../src/lib/components/WorkSummary.svelte";
 import { workSummaryModel } from "../../src/lib/workSummary.js";
 
@@ -298,10 +299,32 @@ it.each(["row", "card", "header"])(
     expect(el.querySelector("[data-summary-attention]").textContent).toContain(
       "waiting on you 47d",
     );
-    const metric = el.querySelector("[data-summary-metric]").textContent;
-    expect(metric).toContain("80 USD");
-    expect(metric).toContain("vs 100");
-    expect(metric).toContain("(-20)");
-    expect(metric).toContain("stale");
+    const metric = el.querySelector("[data-summary-metric]");
+    expect(metric.textContent).toContain("80 USD");
+    expect(metric.textContent).toContain("vs 100");
+    expect(metric.textContent).toContain("(-20)");
+    expect(metric.textContent).toContain("stale");
+    expect(metric.getAttribute("title")).toBe(
+      ageTitle(ago(3600000), "observed", NOW),
+    );
+  },
+);
+
+it.each(["row", "card", "header"])(
+  "%s shows compact wait duration for a recent ask",
+  (density) => {
+    const el = at(density, {
+      work_summary: {
+        ...row.work_summary,
+        attention: {
+          count: 1,
+          oldest_age: 15 * 60,
+          oldest_at: ago(15 * 60_000),
+        },
+      },
+    });
+    expect(el.querySelector("[data-summary-attention]").textContent).toContain(
+      "waiting on you 15m",
+    );
   },
 );

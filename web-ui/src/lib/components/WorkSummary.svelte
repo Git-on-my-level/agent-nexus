@@ -37,7 +37,8 @@
    */
   import { tooltip } from "$lib/actions/tooltip.js";
   import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
-  import { formatAge } from "$lib/ageBadge.js";
+  import { ageTitle, formatAge } from "$lib/ageBadge.js";
+  import { formatElapsed } from "$lib/time/format.js";
   import Time from "$lib/time/Time.svelte";
 
   let {
@@ -122,12 +123,8 @@
         ? ""
         : new Date(now - attention.oldestAge * 1000).toISOString());
     const elapsed = at ? now - Date.parse(at) : NaN;
-    const age =
-      elapsed >= 86400000
-        ? `${Math.floor(elapsed / 86400000)}d`
-        : at
-          ? formatAge(at, now)
-          : "";
+    // Duration of the wait ("15m", "47d"), not a relative instant ("15 min ago").
+    const age = formatElapsed(elapsed);
     return `waiting on you${age ? ` ${age}` : ""}`;
   });
 
@@ -385,7 +382,9 @@
         {#each summary.metrics as metric (metric.ref)}
           <span
             data-summary-metric={metric.ref}
-            title={metric.observed_at ? `Observed ${metric.observed_at}` : ""}
+            title={metric.observed_at
+              ? ageTitle(metric.observed_at, "observed", now)
+              : ""}
           >
             {metric.name}: {metric.latest?.state ??
               metric.latest?.value ??
