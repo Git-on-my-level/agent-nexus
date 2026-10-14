@@ -3,12 +3,23 @@
   import { mutationOutbox } from "$lib/mutationOutbox.js";
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import InboxSendStatus from "./InboxSendStatus.svelte";
-  import { appPath } from "$lib/workspacePaths.js";
+  import { workspacePath } from "$lib/workspacePaths.js";
 
   let open = $state(false);
   $effect(() => {
     if (!$inboxUnsentResponses.length && !$mutationOutbox.length) open = false;
   });
+
+  /** A saved response belongs to the workspace it was written in. */
+  function decideHref(entry) {
+    const path = `/decide/${encodeURIComponent(entry.itemId)}`;
+    try {
+      const [organization, workspace] = JSON.parse(entry.identity);
+      return workspacePath(organization, workspace, path);
+    } catch {
+      return path;
+    }
+  }
 </script>
 
 {#if $inboxUnsentResponses.length + $mutationOutbox.length}
@@ -26,7 +37,7 @@
           <div>
             <a
               class="text-meta text-accent-text hover:underline"
-              href={appPath(`/decide/${encodeURIComponent(entry.itemId)}`)}
+              href={decideHref(entry)}
               >{entry.item?.title || "Open saved response"}</a
             >
             <InboxSendStatus itemId={entry.itemId} />
