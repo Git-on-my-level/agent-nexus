@@ -20,7 +20,7 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const WORKSPACE = "/o/local/w/local";
 const OVERVIEW = `${WORKSPACE}/overview`;
-const TASKS = `${WORKSPACE}/tasks`;
+const TASKS = `${WORKSPACE}/initiatives`;
 const CARD_REF = "card:release-b";
 const NOW = "2026-10-04T12:00:00.000Z";
 /** Two hours before NOW, so the age badge is a stable "2h". */
@@ -277,7 +277,7 @@ async function install(page) {
             count: 3,
             items: [card, planlessCard, darkCard].map((row) => ({
               ...asCore(row, optedIn),
-              href: `/tasks/${row.handle}`,
+              href: `/initiatives/${row.handle}`,
             })),
           },
           needs_you: { status: "ok", count: 0, rows: [], href: "/inbox" },

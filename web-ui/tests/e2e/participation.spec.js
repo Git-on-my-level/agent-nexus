@@ -131,7 +131,7 @@ for (const viewport of [
     test.setTimeout(60_000);
     await page.setViewportSize(viewport);
     const state = await setup(page);
-    await page.goto(`${ROOT}/tasks/card%3Arelease`);
+    await page.goto(`${ROOT}/initiatives/card%3Arelease`);
     const panel = page.getByRole("region", {
       name: "Participation",
       exact: true,

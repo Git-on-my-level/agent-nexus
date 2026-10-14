@@ -493,7 +493,7 @@
       {/if}
       {#if baseRevisionId}
         <span class="text-fg-subtle" aria-hidden="true">·</span>
-        <span class="truncate" title={`Base revision ${baseRevisionId}`}>
+        <span class="truncate" title={`Base version ${baseRevisionId}`}>
           Base <span class="font-mono">{baseRevisionId}</span>
         </span>
       {/if}
@@ -516,9 +516,9 @@
         onclick={onsave}
         saveShortcut
         aria-keyshortcuts="Meta+S Control+S"
-        title={`Save revision (${formatShortcut("S")}, ${formatShortcut("Enter")})`}
+        title={`Save version (${formatShortcut("S")}, ${formatShortcut("Enter")})`}
       >
-        {saving ? "Saving…" : "Save revision"}
+        {saving ? "Saving…" : "Save version"}
       </Button>
     </div>
   </div>

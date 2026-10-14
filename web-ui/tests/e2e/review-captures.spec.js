@@ -1058,7 +1058,7 @@ for (const { label, width, height } of WIDTHS) {
     test.setTimeout(120_000);
     await installFixture(page);
     await page.setViewportSize({ width, height });
-    await page.goto(`${WORKSPACE}/tasks/${encodeURIComponent(CARD_REF)}`);
+    await page.goto(`${WORKSPACE}/initiatives/${encodeURIComponent(CARD_REF)}`);
     await expect(page.getByRole("heading", { name: "Release B" })).toBeVisible({
       timeout: 60_000,
     });

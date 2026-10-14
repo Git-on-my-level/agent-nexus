@@ -7,7 +7,7 @@ const root = "/o/local/w/local";
 const stamp = (hours = 0) =>
   new Date(Date.now() - hours * 3600000).toISOString();
 
-test("a reply that proposes decisions shows answerable rows linked to Inbox", async ({
+test("a reply that proposes decisions shows answerable rows linked to Decide", async ({
   page,
 }) => {
   const { conversations, turns } = await setup(page);
@@ -35,10 +35,10 @@ test("a reply that proposes decisions shows answerable rows linked to Inbox", as
   // The row names the task it concerns and links to it, not the raw ref.
   await expect(
     row.getByRole("link", { name: "Release the sample workspace" }),
-  ).toHaveAttribute("href", "/o/local/w/local/tasks/card%3Arelease");
+  ).toHaveAttribute("href", "/o/local/w/local/initiatives/card%3Arelease");
   await expect(row.getByRole("link", { name: "Answer" })).toHaveAttribute(
     "href",
-    "/o/local/w/local/inbox?item=decision:decision-sample",
+    "/o/local/w/local/decide?item=decision:decision-sample",
   );
 });
 
@@ -46,7 +46,7 @@ test("board and table preserve source states and show the same commitments", asy
   page,
 }) => {
   const { calls } = await setup(page);
-  await page.goto(`${root}/tasks`);
+  await page.goto(`${root}/initiatives`);
   await expect(
     page.getByRole("link", {
       name: "Release the sample workspace",
@@ -60,9 +60,9 @@ test("board and table preserve source states and show the same commitments", asy
   await expect(
     page.getByRole("cell").getByText("Custom waiting state", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await page.getByRole("link", { name: "By placement", exact: true }).click();
   await expect(
-    page.getByRole("region", { name: "Task board grouped by phase" }),
+    page.getByRole("region", { name: "Initiatives grouped by phase" }),
   ).toBeVisible();
   expect(
     await page
@@ -85,9 +85,9 @@ test("board pointer drag lifts the card, then moves it to another phase", async 
 }) => {
   const { calls } = await setup(page);
   page.on("dialog", (dialog) => dialog.accept());
-  await page.goto(`${root}/tasks?view=board`);
+  await page.goto(`${root}/initiatives?view=board`);
   const board = page.getByRole("region", {
-    name: "Task board grouped by phase",
+    name: "Initiatives grouped by phase",
   });
   await expect(board).toBeVisible();
   const card = page.locator('[data-work-ref="card:release"]');
@@ -117,19 +117,19 @@ test("board card click still opens the task after pointer-drag handlers are wire
   page,
 }) => {
   await setup(page);
-  await page.goto(`${root}/tasks?view=board`);
+  await page.goto(`${root}/initiatives?view=board`);
   await page
     // The card link's name also carries its meta line.
     .getByRole("link", { name: /^Document the sample outcome/ })
     .click();
-  await expect(page).toHaveURL(/\/tasks\/card%3Adocs/);
+  await expect(page).toHaveURL(/\/initiatives\/card%3Adocs/);
 });
 
 test("failed refresh retains last-good evidence and never promotes a claim to verified", async ({
   page,
 }) => {
   const { calls } = await setup(page);
-  await page.goto(`${root}/tasks/card%3Arelease`);
+  await page.goto(`${root}/initiatives/card%3Arelease`);
   await expect(
     page.getByRole("heading", { name: "Release the sample workspace" }),
   ).toBeVisible();
@@ -241,7 +241,7 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
       })
       .catch(() => {});
   });
-  await page.goto(`${root}/tasks`);
+  await page.goto(`${root}/initiatives`);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
   await streamReady;
@@ -297,114 +297,6 @@ test("PM retains failed draft and retries the same message intent without claimi
   ).toHaveLength(1);
 });
 
-test("answer and failed delivery remain separately inspectable", async ({
-  page,
-}, testInfo) => {
-  const { calls } = await setup(page, {
-    handle: async ({ path, reply, actions }) => {
-      if (path.endsWith("/dispatch")) {
-        actions[0] = {
-          ...actions[0],
-          status: "failed",
-          revision: 2,
-          receipt: { detail: "Source delivery failed" },
-        };
-        await reply({ error: { message: "Source delivery failed" } }, 503);
-        return true;
-      }
-    },
-  });
-  await page.goto(`${root}/inbox?item=decision:decision-sample`);
-  await page
-    .getByLabel("Your note (recorded with the decision)")
-    .fill("Approved for the sample note only");
-  await page.getByRole("button", { name: "Approve" }).click();
-  await expect(
-    page.getByText("Pending delivery", { exact: true }),
-  ).toBeVisible();
-  expect(calls.filter((call) => call.path.endsWith("/dispatch"))).toHaveLength(
-    0,
-  );
-  await page
-    .getByRole("button", { name: "Deliver approved instruction" })
-    .click();
-  await expect
-    .poll(() => calls.filter((call) => call.path.endsWith("/dispatch")).length)
-    .toBeGreaterThan(0);
-  await expect(
-    page.getByRole("button", { name: "Retry confirmation", exact: true }),
-  ).toBeVisible();
-  // The receipt shows on the row badge and in the pane; assert the pane.
-  await expect(
-    page.getByLabel("Selected inbox item").getByText("Failed", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Approved for the sample note only", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Outcome verified", { exact: true })).toHaveCount(
-    0,
-  );
-  await page.screenshot({
-    path: testInfo.outputPath("failed-delivery.png"),
-    fullPage: true,
-  });
-});
-
-test("replaying an older delivery admission keeps the newer failed receipt visible", async ({
-  page,
-}) => {
-  let sends = 0;
-  const { calls } = await setup(page, {
-    handle: async ({ path, reply, actions }) => {
-      if (!path.endsWith("/dispatch")) return;
-      if (++sends === 1) {
-        actions[0] = {
-          ...actions[0],
-          status: "failed",
-          revision: 3,
-          receipt: { detail: "Source delivery failed" },
-        };
-        await reply({ error: { message: "Confirmation unavailable" } }, 503);
-      } else
-        await reply({
-          ...actions[0],
-          status: "sending",
-          revision: 2,
-          receipt: {},
-        });
-      return true;
-    },
-  });
-  await page.goto(`${root}/inbox?item=decision:decision-sample`);
-  await page
-    .getByLabel("Your note (recorded with the decision)")
-    .fill("Keep my approved note");
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Deliver approved instruction" })
-    .click();
-  const pane = page.getByLabel("Selected inbox item");
-  await expect(pane.getByText("Failed", { exact: true })).toBeVisible();
-  const first = calls.find((call) => call.path.endsWith("/dispatch"));
-  await page
-    .getByRole("button", { name: "Retry confirmation", exact: true })
-    .click();
-  await expect(
-    page.locator('[data-inbox-control-work] [data-mutation-state="sent"]'),
-  ).toBeVisible();
-  const attempts = calls.filter((call) => call.path.endsWith("/dispatch"));
-  expect(attempts.length).toBeGreaterThanOrEqual(2);
-  expect(
-    attempts.every(
-      (call) => JSON.stringify(call.body) === JSON.stringify(first.body),
-    ),
-  ).toBe(true);
-  await expect(pane.getByText("Failed", { exact: true })).toBeVisible();
-  await expect(
-    pane.getByText("Keep my approved note", { exact: true }),
-  ).toBeVisible();
-});
-
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 1440, height: 1000 },
@@ -416,11 +308,8 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await setup(page);
     for (const route of [
-      { path: "/tasks", name: "tasks" },
-      {
-        path: "/inbox?item=decision:decision-sample",
-        name: "inbox",
-      },
+      { path: "/initiatives", name: "tasks" },
+      { path: "/decide", name: "decide" },
       { path: "/pm", name: "pm" },
       { path: "/docs", name: "docs" },
       { path: "/docs/release-runbook", name: "docs-detail" },
@@ -430,7 +319,7 @@ for (const viewport of [
       // Six cold routes under a loaded dev server. The check is that the
       // heading paints, not that it paints inside the default 10s.
       await expect(page.locator("h1").first()).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByText("Loading tasks…")).toHaveCount(0);
+      await expect(page.getByText("Loading initiatives…")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /Loading health|Loading decisions/ }),
       ).toHaveCount(0);
@@ -488,7 +377,7 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
       }),
     });
   });
-  await page.goto(`${root}/tasks/card%3Adocs`);
+  await page.goto(`${root}/initiatives/card%3Adocs`);
   await expect(
     page.getByRole("heading", { name: "Document the sample outcome" }),
   ).toBeVisible();
@@ -520,17 +409,17 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
   // ⌘K lists actions on this task, then destinations with their shortcuts.
   await page.keyboard.press("ControlOrMeta+k");
   await expect(palette.getByRole("option", { name: /Move to…/ })).toBeVisible();
-  await expect(palette.getByRole("option", { name: /^Inbox/ })).toContainText(
-    "GI",
+  await expect(palette.getByRole("option", { name: /^Decide/ })).toContainText(
+    "GD",
   );
   await page.keyboard.type("audit");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/events$/);
 
-  // G then D goes to Docs from anywhere outside a text field.
+  // G then D goes to Decide from anywhere outside a text field.
   await page.keyboard.press("g");
   await page.keyboard.press("d");
-  await expect(page).toHaveURL(/\/docs$/);
+  await expect(page).toHaveURL(/\/decide$/);
 });
 
 test("PM pins multiple refs in history and resolves answer chips with streamed activity", async ({
@@ -604,14 +493,12 @@ test("PM pins multiple refs in history and resolves answer chips with streamed a
 
 /*
  * A PM agent runs on the reader's own computer, so a workspace can have none.
- * Core reports that, and the UI then offers setup in the slot Ask PM
- * occupies rather than a conversation nothing can answer. The full state
+ * Core reports that, and the UI then hides Ask rather than offering a
+ * conversation nothing can answer; PM setup is one hop down. The full state
  * matrix lives in `pm-onboarding.spec.js`; these two keep the real work
  * surfaces honest.
  */
-test("a workspace with no PM offers setup instead of Ask PM", async ({
-  page,
-}) => {
+test("a workspace with no PM hides Ask", async ({ page }) => {
   await setup(page);
   await page.route("**/pm/presence", (route) =>
     route.fulfill({
@@ -620,12 +507,16 @@ test("a workspace with no PM offers setup instead of Ask PM", async ({
     }),
   );
 
-  await page.goto(`${root}/tasks`);
-  await expect(page.locator('[data-pm-nav="setup"]').first()).toBeVisible();
+  await page.goto(`${root}/initiatives`);
+  await expect(
+    page.getByRole("link", { name: "Ask", exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
 
-  await page.goto(`${root}/inbox?mailbox=needs-you`);
-  await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+  await page.goto(`${root}/decide`);
+  await expect(
+    page.getByRole("link", { name: "Ask", exact: true }),
+  ).toHaveCount(0);
 
   // The conversation itself is not reachable; setup is what it leads to. The
   // redirect can abort the navigation before it commits, which rejects `goto`
@@ -664,7 +555,7 @@ test("a source-owned move is not offered with no PM, and writes nothing", async 
   });
 
   // `card:release` is owned by GitHub in this fixture.
-  await page.goto(`${root}/tasks/card%3Arelease`);
+  await page.goto(`${root}/initiatives/card%3Arelease`);
   await expect(
     page.getByRole("heading", { name: "Release the sample workspace" }),
   ).toBeVisible();
@@ -673,7 +564,7 @@ test("a source-owned move is not offered with no PM, and writes nothing", async 
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect(palette).toBeVisible();
   await expect(palette.getByRole("option", { name: /Move to/ })).toHaveCount(0);
-  await expect(palette.getByRole("option", { name: /Ask PM/ })).toHaveCount(0);
+  await expect(palette.getByRole("option", { name: /^Ask/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   expect(writes).toEqual([]);
@@ -713,7 +604,7 @@ test("a move attempted before the PM state loads self-corrects", async ({
   });
 
   // `card:release` is GitHub-owned in this fixture.
-  await page.goto(`${root}/tasks/card%3Arelease`);
+  await page.goto(`${root}/initiatives/card%3Arelease`);
   await expect(
     page.getByRole("heading", { name: "Release the sample workspace" }),
   ).toBeVisible();
@@ -737,8 +628,10 @@ test("a move attempted before the PM state loads self-corrects", async ({
   await expect(
     page.getByRole("link", { name: "Set up your PM" }).first(),
   ).toBeVisible();
-  // And recorded, so the shell stops waiting and commits to setup.
-  await expect(page.locator('[data-pm-nav="setup"]').first()).toBeVisible();
+  // And recorded, so the shell commits to hiding Ask.
+  await expect(
+    page.getByRole("link", { name: "Ask", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("a connected PM keeps Ask PM and says nothing about setup", async ({
@@ -762,6 +655,8 @@ test("a connected PM keeps Ask PM and says nothing about setup", async ({
   await page.goto(`${root}/pm`);
   await presence;
   await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
-  await expect(page.locator('[data-pm-nav="setup"]')).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Ask", exact: true }).first(),
+  ).toBeVisible();
   await expect(page.locator("[data-pm-offline-note]")).toHaveCount(0);
 });

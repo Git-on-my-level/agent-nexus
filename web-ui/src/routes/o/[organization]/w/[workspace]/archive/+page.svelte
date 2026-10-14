@@ -39,7 +39,7 @@
       ]);
       groups = [
         {
-          title: "Boards",
+          title: "Groups",
           items: (boards.boards || []).map((item) => item.board || item),
           kind: "board",
           route: "/threads/",
@@ -48,10 +48,10 @@
           title: "Cards",
           items: cards.cards || [],
           kind: "card",
-          route: "/tasks/",
+          route: "/initiatives/",
         },
         {
-          title: "Topics",
+          title: "Projects",
           items: topics.topics || [],
           kind: "topic",
           route: "/threads/",

@@ -680,13 +680,13 @@
       return {
         ...resolved,
         label: workTitle(ref) || resolved.label,
-        href: workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
+        href: workspaceHref(`/initiatives/${encodeURIComponent(ref)}`),
         isExternal: false,
       };
     return resolved;
   }
   function decisionInboxHref(id) {
-    return workspaceHref(`/inbox?item=decision:${encodeURIComponent(id)}`);
+    return workspaceHref(`/decide?item=decision:${encodeURIComponent(id)}`);
   }
   // The PM names its proposals as bare ids mid-sentence. Every id that resolved
   // to a decision becomes a short link to the Inbox item that answers it; an id
@@ -800,8 +800,8 @@
           {now}
           manageHref={workspaceHref("/pm/setup")}
         />{/snippet}
-      {#snippet subtitle()}{#if isNewConversation}Ask about your tasks. If the
-          PM proposes a change, you approve it in Inbox.{/if}{/snippet}
+      {#snippet subtitle()}{#if isNewConversation}Ask about your initiatives. If
+          the PM proposes a change, you approve it in Decide.{/if}{/snippet}
       {#snippet actions()}
         <details
           class="pm-history"
@@ -1130,7 +1130,7 @@
                               ? ''
                               : 'font-mono'}"
                             href={workspaceHref(
-                              `/tasks/${encodeURIComponent(record.work_ref)}`,
+                              `/initiatives/${encodeURIComponent(record.work_ref)}`,
                             )}
                             title={record.work_ref}
                             >{workTitle(record.work_ref) || record.work_ref}</a

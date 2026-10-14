@@ -342,6 +342,7 @@ const adapterCommandTable = [
     (filters = {}) => ({ options: q(filters) }),
   ],
   ["getOverview", "overview.get", (filters = {}) => ({ options: q(filters) })],
+  ["getBrief", "brief.get", () => ({ options: {} })],
   [
     "setWorkspaceDashboard",
     "workspace.dashboard.set",

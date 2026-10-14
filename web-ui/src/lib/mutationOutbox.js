@@ -241,7 +241,7 @@ async function send(entry) {
       entry.request.body,
     );
     if (result.topic?.id !== entry.request.id || !result.topic?.updated_at)
-      throw new Error("Topic receipt is incomplete.");
+      throw new Error("Project receipt is incomplete.");
     return result;
   }
   if (entry.operation === "cards.move") {
@@ -271,7 +271,7 @@ async function send(entry) {
   if (entry.operation === "work.create") {
     const result = await client.createWork(entry.request.body);
     if (!result.work?.ref && !result.work?.id)
-      throw new Error("Task receipt is incomplete.");
+      throw new Error("Initiative receipt is incomplete.");
     return result;
   }
   if (
@@ -448,7 +448,7 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
           ["Next actor", draft.nextActor],
           ["Next action", draft.nextAction],
           ["Due date", draft.due],
-          ["Board", draft.board],
+          ["Group", draft.board],
         ]
           .filter(([, value]) => value)
           .map(([label, value]) => `${label}: ${value}`)
@@ -478,7 +478,7 @@ export function inboxControlLabel(action) {
   return (
     {
       read: "Mark read",
-      archive: "Archive task",
+      archive: "Archive initiative",
       dispatch: "Deliver approved instruction",
       reconcile: "Check source receipt",
       acknowledge: "Acknowledge delivery",

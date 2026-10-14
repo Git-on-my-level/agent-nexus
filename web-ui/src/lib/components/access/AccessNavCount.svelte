@@ -47,7 +47,7 @@
       : { count: null, forbidden: false },
   );
   let count = $derived(snapshot.forbidden ? 0 : (snapshot.count ?? 0));
-  let text = $derived(count > 0 ? (count > 99 ? "99+" : String(count)) : "");
+  let text = $derived(count > 0 ? String(count) : "");
   let label = $derived(pendingAccessLabel(count));
 </script>
 

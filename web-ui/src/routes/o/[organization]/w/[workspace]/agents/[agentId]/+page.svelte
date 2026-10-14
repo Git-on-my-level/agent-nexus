@@ -458,7 +458,7 @@
                     {/if}
                     <a
                       class="text-micro font-medium text-accent-text hover:underline"
-                      href={workspaceHref(entry.href)}>Answer in Inbox</a
+                      href={workspaceHref(entry.href)}>Answer in Decide</a
                     >
                   </div>
                 </li>
@@ -482,7 +482,7 @@
                 >
               </p>
             {:else}
-              <p class="text-fg-muted">No current task.</p>
+              <p class="text-fg-muted">No current initiative.</p>
             {/if}
             {#if agent.last_progress_note}
               <p class="text-fg-muted [overflow-wrap:anywhere]" data-agent-note>
@@ -542,7 +542,7 @@
                     <th class="px-2 py-2 font-medium">Runtime</th>
                     <th class="px-2 py-2 text-right font-medium">Duration</th>
                     <th class="px-2 py-2 font-medium">Result</th>
-                    <th class="px-4 py-2 font-medium">Task</th>
+                    <th class="px-4 py-2 font-medium">Initiative</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -691,7 +691,7 @@
         </section>
 
         <section aria-labelledby="agent-tasks">
-          <h2 id="agent-tasks" class="ui-label">Recent tasks</h2>
+          <h2 id="agent-tasks" class="ui-label">Recent initiatives</h2>
           {#if recentCards.length}
             <ul
               class="overflow-hidden rounded-md border border-line bg-bg-soft"
@@ -740,16 +740,16 @@
               <!-- Say what was left out rather than implying this is all of
                    it: core returns every card the agent is assigned. -->
               <p class="mt-1 text-micro text-fg-subtle" data-agent-tasks-capped>
-                Showing the {recentCards.length} most recently updated of {recentCardTotal}{recentCardsTruncated
-                  ? "+"
-                  : ""}.
+                Showing the {recentCards.length} most recently updated of {recentCardsTruncated
+                  ? `at least ${recentCardTotal}`
+                  : recentCardTotal}.
               </p>
             {/if}
           {:else}
             <p
               class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg-muted"
             >
-              No recent tasks.
+              No recent initiatives.
             </p>
           {/if}
         </section>

@@ -58,7 +58,9 @@
     ]),
   );
   let summary = $derived(participationSummary(groups, now));
-  let scope = $derived(agentId ? "Recent task participation" : "Participation");
+  let scope = $derived(
+    agentId ? "Recent initiative participation" : "Participation",
+  );
   /**
    * Nothing reported and nothing unavailable. Loading is not content: a
    * surface that asked to hide when empty must stay gone while a read is in
@@ -123,8 +125,8 @@
    */
   let participationTip = $derived(
     agentId
-      ? "Shared activity on up to 8 recent tasks, counted per task; private sessions are not included. Working on a task is not the same as owning or finishing it."
-      : "An agent working on a task is not the same as owning it or finishing it. Silence does not mean the agent is offline.",
+      ? "Shared activity on up to 8 recent initiatives, counted per initiative; private sessions are not included. Working on an initiative is not the same as owning or finishing it."
+      : "An agent working on an initiative is not the same as owning it or finishing it. Silence does not mean the agent is offline.",
   );
 </script>
 
@@ -166,7 +168,7 @@
       </p>
     {:else if !selected.length}
       <p class="text-meta text-fg-muted">
-        No recent task context available. Session activity is unknown.
+        No recent initiative context available. Session activity is unknown.
       </p>
     {:else}
       {#if groups.some((group) => !group.unavailable)}
@@ -174,8 +176,8 @@
           {summary.participating}
           {agentId
             ? summary.participating === 1
-              ? "task participation"
-              : "task participations"
+              ? "initiative participation"
+              : "initiative participations"
             : summary.participating === 1
               ? "session participating"
               : "sessions participating"} · {summary.active}
@@ -190,8 +192,9 @@
             {#if agentId && !group.unavailable}
               <a
                 class="mb-2 block break-words text-meta text-accent-text hover:text-accent-hover"
-                href={workspaceHref(`/tasks/${encodeURIComponent(group.ref)}`)}
-                >{group.title || "Open task"}</a
+                href={workspaceHref(
+                  `/initiatives/${encodeURIComponent(group.ref)}`,
+                )}>{group.title || "Open initiative"}</a
               >
             {/if}
             {#if group.unavailable}
@@ -202,7 +205,7 @@
             {:else if !group.participants.length}
               <p class="text-meta text-fg-muted">
                 No shared participation reported{agentId
-                  ? " for this agent on this task"
+                  ? " for this agent on this initiative"
                   : ""}.
               </p>
             {:else}

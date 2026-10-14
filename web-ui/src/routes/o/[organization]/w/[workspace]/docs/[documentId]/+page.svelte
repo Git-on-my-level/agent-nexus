@@ -603,7 +603,7 @@
       };
     } catch {
       saveError =
-        "The latest revision could not be loaded. Your content is still here.";
+        "The latest version could not be loaded. Your content is still here.";
     }
   }
   async function handleSave() {
@@ -614,7 +614,7 @@
     }
 
     if (!editDraft.baseRevision) {
-      saveError = "Cannot determine base revision. Please reload.";
+      saveError = "Cannot determine base version. Please reload.";
       return;
     }
 
@@ -641,11 +641,11 @@
         target: revisionTarget,
         draft: revisionSnapshot(),
         href: $page.url.pathname,
-        title: "Saved document revision",
+        title: "Saved document version",
       });
     } catch {
       saveError =
-        "Your revision is still here. Review the saved work above, or copy it before closing this tab.";
+        "Your version is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       saving = false;
     }
@@ -703,7 +703,7 @@
       return;
     }
     if (!titleBase?.revision) {
-      titleError = "Cannot rename: missing base revision. Please reload.";
+      titleError = "Cannot rename: missing base version. Please reload.";
       return;
     }
     titleSaving = true;
@@ -1834,7 +1834,7 @@
               class="mt-3 flex items-center gap-2 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
             >
               <span
-                >Viewing revision {selectedRevision.revision_number} from <Time
+                >Viewing version {selectedRevision.revision_number} from <Time
                   value={selectedRevision.created_at}
                 /></span
               >
@@ -1958,7 +1958,7 @@
               <div
                 class="flex items-center justify-between border-b border-line px-4 py-2.5 max-lg:px-3"
               >
-                <h2 class="text-meta font-medium text-fg">Revision history</h2>
+                <h2 class="text-meta font-medium text-fg">Version history</h2>
                 <button
                   class="cursor-pointer text-fg-muted hover:text-fg"
                   onclick={() => (historyOpen = false)}

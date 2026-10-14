@@ -26,7 +26,7 @@
           <div>
             <a
               class="text-meta text-accent-text hover:underline"
-              href={appPath(`/inbox/${encodeURIComponent(entry.itemId)}`)}
+              href={appPath(`/decide/${encodeURIComponent(entry.itemId)}`)}
               >{entry.item?.title || "Open saved response"}</a
             >
             <InboxSendStatus itemId={entry.itemId} />

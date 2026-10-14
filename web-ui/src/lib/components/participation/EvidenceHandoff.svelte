@@ -31,7 +31,7 @@
   );
   let quietTip = $derived(
     [
-      "Nobody has shared a report on this task yet. A run finishing is not evidence that the work is done.",
+      "Nobody has shared a report on this initiative yet. A run finishing is not evidence that the work is done.",
       String(note ?? "").trim(),
     ]
       .filter(Boolean)

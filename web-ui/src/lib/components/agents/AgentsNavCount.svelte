@@ -29,7 +29,7 @@
       ? workingAgentCount($agentRoster.agents)
       : 0,
   );
-  let text = $derived(count > 0 ? (count > 99 ? "99+" : String(count)) : "");
+  let text = $derived(count > 0 ? String(count) : "");
 </script>
 
 {#if text}

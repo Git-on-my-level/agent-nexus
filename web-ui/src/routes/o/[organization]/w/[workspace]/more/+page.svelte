@@ -233,7 +233,7 @@
   <!-- Workspace switcher (multi-workspace only) -->
   {#if hasMultipleWorkspaces}
     <section>
-      <p class="ui-label mb-1.5 sm:mb-2">Workspace</p>
+      <p class="ui-label mb-1.5 sm:mb-2">Switch workspace</p>
       <div class="overflow-hidden rounded-md border border-line bg-panel">
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}

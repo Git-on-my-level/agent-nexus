@@ -72,10 +72,10 @@ describe("AccessNavCount", () => {
     expect(badge.getAttribute("title")).toBe("1 access request waiting");
   });
 
-  it("caps the number so the badge cannot widen the sidebar", () => {
+  it("shows the exact number even when large", () => {
     show({ count: 250, forbidden: false });
     const badge = document.querySelector("[data-access-nav-count]");
-    expect(badge.textContent.trim()).toBe("99+");
+    expect(badge.textContent.trim()).toBe("250");
     expect(badge.getAttribute("aria-label")).toBe(
       "250 access requests waiting",
     );

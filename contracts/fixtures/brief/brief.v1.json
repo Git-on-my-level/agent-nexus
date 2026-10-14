@@ -64,6 +64,13 @@
         "Withdraw",
         "Keep"
       ],
+      "curation": {
+        "action": "withdraw",
+        "targets": [
+          "card:labels"
+        ],
+        "source": "pm"
+      },
       "blocks_count": 0,
       "age_seconds": 120
     },

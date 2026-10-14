@@ -129,9 +129,10 @@ export function settleHumanDirectory(actorsResult, principalsResult) {
   };
 }
 
-/** A capped read is "12+", matching the Tasks list. */
+/** A capped read says "at least 12"; an exact one is just the number. */
 export function formatPartialCount(count, truncated) {
-  return `${Number(count) || 0}${truncated ? "+" : ""}`;
+  const n = Number(count) || 0;
+  return truncated ? `at least ${n}` : String(n);
 }
 
 export function tasksQuery(filters = {}) {
@@ -141,7 +142,7 @@ export function tasksQuery(filters = {}) {
     if (text) params.set(key, text);
   }
   const query = params.toString();
-  return query ? `/tasks?${query}` : "/tasks";
+  return query ? `/initiatives?${query}` : "/initiatives";
 }
 
 function sourceKey(work) {
@@ -279,7 +280,7 @@ export async function listWorkPages(
 function previewWork(work) {
   return {
     key: workKey(work),
-    title: String(work?.title || "Untitled task"),
+    title: String(work?.title || "Untitled initiative"),
     href: taskDetailPath(work),
   };
 }
@@ -298,7 +299,7 @@ function needsYouPreview(row, now) {
     requester: String(row.requesterLabel || ""),
     wait: Number.isFinite(waitMs) ? formatWait(waitMs) : "",
     badge: badge ? { label: badge.label, tone: badge.tone } : null,
-    href: `/inbox?${params.toString()}`,
+    href: `/decide?${params.toString()}`,
   };
 }
 
@@ -331,7 +332,7 @@ export function needsYouFromSources(
     count: rows.length,
     truncated: Boolean(truncated),
     rows: rows.slice(0, PREVIEW_LIMIT).map((row) => needsYouPreview(row, now)),
-    href: "/inbox?mailbox=needs-you",
+    href: "/decide?mailbox=needs-you",
   };
 }
 

@@ -25,9 +25,9 @@
 
   const EVENT_GROUP_LABELS = {
     messages: "Messages",
-    topics: "Topics",
+    topics: "Projects",
     documents: "Documents",
-    boards: "Boards",
+    boards: "Groups",
     cards: "Cards",
     attention: "Attention",
     notifications: "Notifications",
@@ -290,7 +290,7 @@
               <input
                 bind:value={filters.topic_id}
                 class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
-                placeholder="Topic ref"
+                placeholder="Project ref"
               />
             </label>
             <label class="text-micro font-medium text-fg-muted">

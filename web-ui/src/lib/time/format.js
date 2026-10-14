@@ -229,6 +229,23 @@ export function formatAgeSeconds(seconds, now = Date.now()) {
   return formatTime(now - age * 1000, { now, style: "relative" });
 }
 
+/**
+ * Compact age for a computed line: "just now", "12m ago", "3h ago", "12d ago".
+ * Unlike relative style it never turns into a date, so "last evidence 12d
+ * ago" keeps counting. Empty for a missing or unparseable instant.
+ *
+ * @param {string|number|Date|null|undefined} value
+ * @param {number} [now]
+ */
+export function formatAgo(value, now = Date.now()) {
+  if (value == null || value === "") return "";
+  const then = instantMs(value);
+  if (then == null) return "";
+  const elapsed = Math.max(0, Number(now) - then);
+  if (elapsed < MINUTE_MS) return "just now";
+  return `${formatElapsed(elapsed).split(" ")[0]} ago`;
+}
+
 const pad = (n) => String(n).padStart(2, "0");
 
 /**

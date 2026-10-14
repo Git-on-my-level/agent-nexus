@@ -12,7 +12,7 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
  */
 
 const WORKSPACE = "/o/local/w/local";
-const TASKS = `${WORKSPACE}/tasks`;
+const TASKS = `${WORKSPACE}/initiatives`;
 
 const WIDE = { width: 1600, height: 900 };
 /**
@@ -185,7 +185,9 @@ test("the task page's right rail collapses and is remembered", async ({
     }
     return route.fallback();
   });
-  await page.goto(`${WORKSPACE}/tasks/${encodeURIComponent("card:rail")}`);
+  await page.goto(
+    `${WORKSPACE}/initiatives/${encodeURIComponent("card:rail")}`,
+  );
 
   const grid = page.locator("[data-task-rail]");
   await expect(grid).toHaveAttribute("data-task-rail", "expanded", {
@@ -217,7 +219,7 @@ test("at 1024 the sidebar has room, and the page does not scroll sideways", asyn
   // David's audit names. It is shown, not auto-collapsed — 232px of nav
   // leaves a comfortable column — and the toggle is the viewer's to use.
   await page.setViewportSize({ width: 1024, height: 900 });
-  await page.goto(`${WORKSPACE}/tasks`);
+  await page.goto(`${WORKSPACE}/initiatives`);
   await expectShellReady(page);
   const nav = page.locator("[data-shell-nav]");
   await expect(nav).toHaveAttribute("data-shell-nav", "expanded");

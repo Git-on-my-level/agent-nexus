@@ -151,7 +151,7 @@ describe("participation panel", () => {
     const client = clientFor([]);
     render(TaskParticipation, { tasks, client, agentId: "agent-one" });
     await screen.findByText(
-      "No shared participation reported for this agent on this task.",
+      "No shared participation reported for this agent on this initiative.",
     );
     // The coverage bound is a tooltip on the heading now, not a paragraph
     // under it: a reader meets it on every visit and needs it on almost none.
@@ -162,7 +162,7 @@ describe("participation panel", () => {
     ).toMatch(/private sessions are not included/);
     expect(
       screen.getByRole("link", { name: "One task" }).getAttribute("href"),
-    ).toBe("/tasks/card%3Aone");
+    ).toBe("/initiatives/card%3Aone");
   });
   it("clears an old task during navigation and ignores its late response", async () => {
     let resolveOld;
@@ -277,12 +277,12 @@ describe("participation panel", () => {
       client,
       agentId: "agent-one",
     });
-    await screen.findByText("2 task participations · 2 currently active");
+    await screen.findByText("2 initiative participations · 2 currently active");
     expect(
       screen
         .getByRole("button", { name: /What participation means/ })
         .getAttribute("data-tooltip"),
-    ).toMatch(/counted per task/);
+    ).toMatch(/counted per initiative/);
   });
   it("coalesces repeated refresh clicks and recovers after an unavailable read", async () => {
     const client = {

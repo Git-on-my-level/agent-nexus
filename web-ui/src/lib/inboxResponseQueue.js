@@ -455,6 +455,10 @@ export function queueInboxResponse({
   message,
   restore,
   binding,
+  // An account-level page answers rows from many workspaces with a binding
+  // per workspace. Those answers keep the undo window instead of sending at
+  // once like an answer left behind by a workspace switch.
+  crossWorkspace = false,
 }) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
@@ -535,7 +539,7 @@ export function queueInboxResponse({
    * a workspace that cannot even see the item. Send it now, with the sender
    * it was written with.
    */
-  if (entry.scope !== responseScope()) {
+  if (!crossWorkspace && entry.scope !== responseScope()) {
     pending = entry;
     void commit(entry);
     return entry.id;

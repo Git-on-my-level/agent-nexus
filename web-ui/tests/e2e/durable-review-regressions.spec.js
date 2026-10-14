@@ -1,11 +1,19 @@
 import { expect, test } from "@playwright/test";
 import { setup as discussionSetup } from "./helpers/durable-discussion.js";
-import { ITEM, setup as inboxSetup } from "./helpers/durable-inbox.js";
+import {
+  ITEM,
+  ROW,
+  URL,
+  setup as inboxSetup,
+} from "./helpers/durable-decide.js";
 import { setup as pmSetup } from "./helpers/pm-work.js";
 
 const discussionURL =
   "/o/local/w/local/threads/thread-durable-comment?tab=messages";
-const inboxURL = `/o/local/w/local/inbox/${ITEM.id}`;
+const inboxURL = URL;
+const replyBox = (page) => page.locator(`${ROW} [data-decision-reply]`);
+const sendReply = (page) =>
+  page.locator(ROW).getByRole("button", { name: "Send reply" }).click();
 const text = "One submission shared by two tabs.";
 const json = (route, body, status = 201) =>
   route.fulfill({
@@ -188,7 +196,7 @@ test("storage denial during an expired new-key retry keeps the request and preve
   expect(attempts).toBe(0);
 });
 
-test("confirmation preserves a newer Inbox draft differing only by whitespace", async ({
+test("confirmation preserves a newer Decide draft differing only by whitespace", async ({
   page,
   context,
 }) => {
@@ -201,12 +209,8 @@ test("confirmation preserves a newer Inbox draft differing only by whitespace", 
     return json(route, { event: { id: "confirmed" } });
   });
   await page.goto(inboxURL);
-  await page
-    .getByRole("textbox", { name: "Your response", exact: true })
-    .fill(text);
-  await page
-    .getByRole("button", { name: "Send response", exact: true })
-    .click();
+  await replyBox(page).fill(text);
+  await sendReply(page);
   const flight = page.evaluate(async () => {
     const queue = await import("/src/lib/inboxResponseQueue.js");
     await queue.flushInboxResponse();
@@ -214,9 +218,7 @@ test("confirmation preserves a newer Inbox draft differing only by whitespace", 
   await expect.poll(() => attempts).toBe(1);
   const other = await context.newPage();
   await other.goto(inboxURL);
-  await expect(
-    other.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toBeVisible();
+  await expect(replyBox(other)).toBeAttached();
   const newer = ` ${text}\n`;
   await other.evaluate(
     async ({ id, newer }) => {
@@ -235,9 +237,7 @@ test("confirmation preserves a newer Inbox draft differing only by whitespace", 
   await flight;
   expect(await saved(other, "draft", `inbox:${ITEM.id}:reply`)).toBe(newer);
   await other.reload();
-  await expect(
-    other.getByRole("textbox", { name: "Your response", exact: true }),
-  ).toHaveValue(newer);
+  await expect(replyBox(other)).toHaveValue(newer);
 });
 
 for (const surface of ["discussion", "inbox", "inbox-unknown-age"])
@@ -265,19 +265,13 @@ for (const surface of ["discussion", "inbox", "inbox-unknown-age"])
     if (kind === "inbox") await inboxSetup(context, handle);
     else await discussionSetup(context, handle);
     await page.goto(kind === "inbox" ? inboxURL : discussionURL);
-    await page
-      .locator(
-        kind === "inbox"
-          ? 'textarea[placeholder="Write the response the agent should rely on."]'
-          : "#message-text",
-      )
-      .fill(text);
-    await page
-      .getByRole("button", {
-        name: kind === "inbox" ? "Send response" : "Send",
-        exact: true,
-      })
-      .click();
+    if (kind === "inbox") {
+      await replyBox(page).fill(text);
+      await sendReply(page);
+    } else {
+      await page.locator("#message-text").fill(text);
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+    }
     const storeKind = kind === "inbox" ? "inbox-send" : "mutation";
     await expect
       .poll(async () => (await saved(page, storeKind)).length)
@@ -305,6 +299,9 @@ for (const surface of ["discussion", "inbox", "inbox-unknown-age"])
       { storeKind, surface },
     );
     await page.reload();
+    // Decide's row offers Retry; the recovery panel offers "Retry as new".
+    if (kind === "inbox")
+      await page.locator("[data-unsent-indicator] summary").click();
     await expect(
       page.getByRole("button", { name: "Retry as new", exact: true }),
     ).toBeVisible();

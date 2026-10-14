@@ -101,7 +101,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       ...base,
       key: "card_created",
       verb: "created",
-      plural: "created {n} tasks",
+      plural: "created {n} initiatives",
       objectRef: cardRef,
       objectTitle: cardTitle,
     };
@@ -113,7 +113,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       ...base,
       key: `card_moved:${column}`,
       verb: to ? `moved {object} to ${to}` : "moved",
-      plural: to ? `moved {n} tasks to ${to}` : "moved {n} tasks",
+      plural: to ? `moved {n} initiatives to ${to}` : "moved {n} initiatives",
       objectRef: cardRef,
       objectTitle: cardTitle,
     };
@@ -123,7 +123,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       ...base,
       key: "card_resolved",
       verb: "resolved",
-      plural: "resolved {n} tasks",
+      plural: "resolved {n} initiatives",
       objectRef: cardRef,
       objectTitle: cardTitle,
     };
@@ -142,7 +142,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       ...base,
       key: `card:${verb}`,
       verb,
-      plural: `${verb} {n} tasks`,
+      plural: `${verb} {n} initiatives`,
       objectRef: cardRef,
       objectTitle: cardTitle,
     };
@@ -247,7 +247,7 @@ export function eventPhrase(described) {
   const verb = String(described?.verb ?? "");
   const title = text(described?.objectTitle);
   if (verb.includes("{object}")) {
-    return verb.replace("{object}", title || "a task");
+    return verb.replace("{object}", title || "an initiative");
   }
   return title ? `${verb} ${title}` : verb;
 }

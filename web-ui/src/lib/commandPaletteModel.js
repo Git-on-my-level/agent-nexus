@@ -21,7 +21,7 @@ export function fuzzyScore(query, text) {
   const t = String(text ?? "").toLowerCase();
   if (!q) return 0;
   if (!t) return null;
-  // Two walks: one that jumps to word starts when it can ("tl" → "Task
+  // Two walks: one that jumps to word starts when it can ("il" → "Initiative
   // List"), one plain greedy walk that always finds a match if one exists.
   const scores = [walk(q, t, true), walk(q, t, false)].filter(
     (value) => value !== null,
@@ -111,11 +111,10 @@ export function rankCommands(commands, query) {
 
 /** "Go to" destinations. Shortcuts listed here are the ones the palette binds. */
 export const GO_TO_SHORTCUTS = {
-  o: "/overview",
-  i: "/inbox",
+  d: "/decide",
+  w: "/watch",
+  i: "/initiatives",
   a: "/agents",
-  t: "/tasks",
-  d: "/docs",
 };
 
 /**
@@ -124,87 +123,49 @@ export const GO_TO_SHORTCUTS = {
  *   go: (href: string) => void,
  *   mod?: string,
  *   pmVisible?: boolean,
- *   pmNeedsSetup?: boolean,
- * }} options `pmVisible` false means no PM agent is onboarded: the palette
- * offers setup instead of a conversation nothing can answer.
+ * }} options `pmVisible` false means no PM agent is connected: Ask is left
+ * out, and PM setup (a Settings item) is the way in.
  */
 export function goToCommands({
   settingsGroups = [],
   go,
   mod = "⌘",
   pmVisible = true,
-  pmNeedsSetup = false,
 }) {
   const commands = [
     {
-      id: "go:overview",
+      id: "go:decide",
       group: "Go to",
-      label: "Overview",
-      keywords: ["home", "dashboard", "fleet"],
-      shortcut: ["G", "O"],
-      icon: "overview",
-      run: () => go("/overview"),
-    },
-    {
-      id: "go:inbox",
-      group: "Go to",
-      label: "Inbox",
-      keywords: ["needs you", "attention"],
-      shortcut: ["G", "I"],
-      icon: "inbox",
-      run: () => go("/inbox"),
-    },
-    {
-      id: "go:agents",
-      group: "Go to",
-      label: "Agents",
-      keywords: ["hosts", "working", "waiting", "stale", "presence"],
-      shortcut: ["G", "A"],
-      icon: "agents",
-      run: () => go("/agents"),
-    },
-    {
-      id: "go:tasks",
-      group: "Go to",
-      label: "Tasks",
-      keywords: ["work", "board", "table"],
-      shortcut: ["G", "T"],
-      icon: "tasks",
-      run: () => go("/tasks"),
-    },
-    {
-      id: "go:docs",
-      group: "Go to",
-      label: "Docs",
-      keywords: ["documents"],
+      label: "Decide",
+      keywords: ["inbox", "needs you", "attention", "waiting", "approve"],
       shortcut: ["G", "D"],
-      icon: "docs",
-      run: () => go("/docs"),
+      icon: "inbox",
+      run: () => go("/decide"),
+    },
+    {
+      id: "go:watch",
+      group: "Go to",
+      label: "Watch",
+      keywords: ["outcomes", "home", "overview", "dashboard"],
+      shortcut: ["G", "W"],
+      icon: "overview",
+      run: () => go("/watch"),
     },
   ];
   if (pmVisible) {
     commands.push({
       id: "go:pm",
       group: "Go to",
-      label: "Ask PM",
-      keywords: ["pm", "chat"],
+      label: "Ask",
+      keywords: ["pm", "chat", "ask pm"],
       shortcut: [mod, "J"],
       icon: "askPm",
       run: () => go("/pm"),
     });
-  } else if (pmNeedsSetup) {
-    commands.push({
-      id: "go:pm-setup",
-      group: "Go to",
-      label: "Set up your PM",
-      keywords: ["pm", "install", "connect"],
-      icon: "askPm",
-      run: () => go("/pm/setup"),
-    });
   }
   for (const group of settingsGroups) {
     for (const item of group.items ?? []) {
-      commands.push({
+      const entry = {
         id: `go:${item.href}`,
         group: "Go to",
         label: item.label,
@@ -212,7 +173,17 @@ export function goToCommands({
         keywords: [group.label, item.hint].filter(Boolean),
         icon: item.icon,
         run: () => go(item.href),
-      });
+      };
+      if (item.href === "/initiatives") {
+        entry.shortcut = ["G", "I"];
+        entry.keywords.push("work", "table");
+      } else if (item.href === "/agents") {
+        entry.shortcut = ["G", "A"];
+        entry.keywords.push("hosts", "working", "waiting", "stale");
+      } else if (item.href === "/docs") {
+        entry.keywords.push("documents");
+      }
+      commands.push(entry);
     }
   }
   return commands;

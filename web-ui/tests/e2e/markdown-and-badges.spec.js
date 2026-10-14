@@ -15,7 +15,7 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const WORKSPACE = "/o/local/w/local";
 const CARD_REF = "card:renderer";
-const CARD_PATH = `${WORKSPACE}/tasks/${encodeURIComponent(CARD_REF)}`;
+const CARD_PATH = `${WORKSPACE}/initiatives/${encodeURIComponent(CARD_REF)}`;
 const PR_URL = "https://github.com/Git-on-my-level/agent-nexus/pull/246";
 const NOW = "2026-10-04T12:00:00Z";
 

@@ -1179,7 +1179,7 @@ for (const viewport of [
     const initiativePlan = initiative.locator("[data-initiative-plan]");
     await expect(
       initiativePlan.getByRole("link", { name: "Finish review" }),
-    ).toHaveAttribute("href", /tasks\/card%3Areview$/i);
+    ).toHaveAttribute("href", /initiatives\/card%3Areview$/i);
     // One plan list, on the page rather than behind a fold: a panel used to
     // open the same steps a second time under "View plan steps".
     await expect(initiativePlan.locator(".plan-track > li")).not.toHaveCount(0);

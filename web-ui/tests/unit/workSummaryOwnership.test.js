@@ -250,7 +250,6 @@ describe("the computed summary is read in one module", () => {
     "src/lib/workSummary.js",
     "src/lib/planHealth.js",
     "src/lib/inboxMailbox.js",
-    "src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte",
   ]);
 
   it.each(COMPUTED_FIELDS)("only one module reads %s", (field) => {
@@ -297,6 +296,10 @@ describe("the vocabulary lives in one place", () => {
     [
       "src/lib/planHealth.js",
       "normalizes the legacy spellings into that vocabulary",
+    ],
+    [
+      "src/lib/brief.js",
+      "names the four brief states (backlog, ready, in_progress, done) the server computes",
     ],
     ["src/lib/pm/presentation.js", "owns the stored phase's names"],
     [
@@ -395,7 +398,7 @@ describe("card status is rendered in one component", () => {
       "names the target of a move command: a button, not a claim about state",
     ],
     [
-      "src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte",
+      "src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte",
       "lists phases as filter options and labels the move confirmations",
     ],
     [
@@ -405,10 +408,6 @@ describe("card status is rendered in one component", () => {
     [
       "src/lib/components/pm/DecisionPanel.svelte",
       "names the phase a proposal would write, and the read-back of that write",
-    ],
-    [
-      "src/routes/o/[organization]/w/[workspace]/overview/+page.svelte",
-      "labels the columns of a counts-by-phase matrix, not any one card",
     ],
     [
       "src/lib/components/WorkSummaryCard.svelte",
