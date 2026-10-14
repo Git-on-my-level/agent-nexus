@@ -122,6 +122,16 @@ func (s *Store) insert(ctx context.Context, kind, id, ws, actor, parent string, 
 	return n == 1, err
 }
 func (s *Store) cas(ctx context.Context, kind, id string, revision int, value any) error {
+	if c, ok := ctx.Value(controlKey{}).(*controlReplay); ok && c.receipt == nil && kind == "action" && id == c.action.ID {
+		out, ok := value.(Action)
+		if !ok {
+			return ErrInvalid
+		}
+		return s.commitControl(ctx, c, func(ctx context.Context) error {
+			return s.cas(context.WithValue(ctx, controlKey{}, nil), kind, id, revision, value)
+		}, out)
+	}
+
 	b, err := json.Marshal(value)
 	if err != nil {
 		return err

@@ -20,6 +20,15 @@ export function mutationFailure(error, subject = "response") {
     409: "This item changed or has already been answered. Review your response.",
     422: "This response needs a correction before it can be sent.",
   };
+  if (subject === "inbox action") {
+    Object.assign(messages, {
+      400: "Review the saved inbox request before sending it.",
+      401: "Sign in again to send this inbox request.",
+      403: "You do not have permission to make this inbox change.",
+      409: "This inbox item changed. Your request is saved. Use latest version to review it.",
+      422: "Review the saved inbox request before sending it.",
+    });
+  }
   if (subject === "file") {
     Object.assign(messages, {
       400: "This file needs a correction before it can be uploaded.",
@@ -77,17 +86,19 @@ export function mutationFailure(error, subject = "response") {
   return {
     state: retryable ? "retrying" : "attention",
     message: retryable
-      ? subject === "file"
-        ? "The service could not confirm the upload. Your file is kept on this device."
-        : subject === "move"
-          ? "The service could not confirm the move. Your destination and evidence are kept on this device."
-          : subject === "assignment"
-            ? "The service could not confirm the assignment. Your selection is kept on this device."
-            : subject === "document action"
-              ? "The service could not confirm the document request. Its original actions and versions are kept on this device."
-              : subject === "topic edit"
-                ? "The service could not confirm the topic edits. Your title and summary are kept on this device."
-                : "The service could not confirm your response. Your text is kept on this device."
+      ? subject === "inbox action"
+        ? "The service could not confirm the inbox request. Its original action and versions are saved on this device."
+        : subject === "file"
+          ? "The service could not confirm the upload. Your file is kept on this device."
+          : subject === "move"
+            ? "The service could not confirm the move. Your destination and evidence are kept on this device."
+            : subject === "assignment"
+              ? "The service could not confirm the assignment. Your selection is kept on this device."
+              : subject === "document action"
+                ? "The service could not confirm the document request. Its original actions and versions are kept on this device."
+                : subject === "topic edit"
+                  ? "The service could not confirm the topic edits. Your title and summary are kept on this device."
+                  : "The service could not confirm your response. Your text is kept on this device."
       : messages[status] ||
         "This response needs your attention. Your text is kept on this device.",
     // A bounded diagnostic, rendered only behind a disclosure as plain text.

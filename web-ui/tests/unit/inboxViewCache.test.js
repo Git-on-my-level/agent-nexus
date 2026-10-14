@@ -53,7 +53,9 @@ it("persists approved and dismissed decisions and archives their work and receip
   commitInboxView("reader", { decision });
   expect(readWorkspaceView("reader:inbox")[0].value.items).toEqual([decision]);
   commitInboxView("reader", { archivedRef: "card:one" });
+  commitInboxView("reader", { archivedRef: "card:one" });
   const stored = readWorkspaceView("reader:inbox");
+  expect(stored[2].value.archived_refs).toEqual(["card:one"]);
   expect(stored[0].value.items).toEqual([]);
   expect(stored[1].value.items).toEqual([]);
   expect(stored[2].value.work).toEqual([]);

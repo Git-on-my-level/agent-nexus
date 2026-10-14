@@ -3722,8 +3722,20 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "if_lifecycle.archived_at",
+          "type": "string"
+        },
+        {
+          "name": "if_lifecycle.trashed_at",
+          "type": "string"
+        },
+        {
           "name": "if_version",
           "type": "integer"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -6706,11 +6718,13 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ ok, unread_count, group_count }`.",
+    "output_envelope": "Keyed requests return the original `{ ok: true }` receipt; legacy requests return `{ ok, unread_count, group_count }`.",
     "error_codes": [
       "auth_required",
       "invalid_request",
-      "invalid_token"
+      "invalid_token",
+      "not_found",
+      "conflict"
     ],
     "concepts": [
       "home",
@@ -6747,6 +6761,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "reader_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -8497,6 +8515,22 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "if_action_revision",
+          "type": "integer"
+        },
+        {
+          "name": "if_revision",
+          "type": "integer"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
     "path_params": [
       "action_id"
     ],
@@ -8697,6 +8731,22 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "if_action_revision",
+          "type": "integer"
+        },
+        {
+          "name": "if_revision",
+          "type": "integer"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
     "path_params": [
       "action_id"
     ],
@@ -9599,6 +9649,22 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "if_action_revision",
+          "type": "integer"
+        },
+        {
+          "name": "if_revision",
+          "type": "integer"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
     "path_params": [
       "decision_id"
     ],

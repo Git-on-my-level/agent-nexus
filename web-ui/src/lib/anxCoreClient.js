@@ -434,19 +434,19 @@ const adapterCommandTable = [
   [
     "dispatchPmDecision",
     "pm.decisions.dispatch",
-    (id) => pb(pathParams({ decision_id: id }), {}),
+    (id, payload = {}) => pb(pathParams({ decision_id: id }), payload),
   ],
   ["listPmActions", "pm.actions.list", (filters) => ({ options: q(filters) })],
   ["getPmAction", "pm.actions.get", (id) => p(pathParams({ action_id: id }))],
   [
     "reconcilePmAction",
     "pm.actions.reconcile",
-    (id) => pb(pathParams({ action_id: id }), {}),
+    (id, payload = {}) => pb(pathParams({ action_id: id }), payload),
   ],
   [
     "acknowledgePmAction",
     "pm.actions.acknowledge",
-    (id) => pb(pathParams({ action_id: id }), {}),
+    (id, payload = {}) => pb(pathParams({ action_id: id }), payload),
   ],
   ["getVersion", "meta.version"],
   ["getHandshake", "meta.handshake"],

@@ -1419,8 +1419,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Advance durable per-group Home read cursors for the authenticated operator.
 - Concepts: `home`, `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ ok, unread_count, group_count }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Keyed requests return the original `{ ok: true }` receipt; legacy requests return `{ ok, unread_count, group_count }`.
 
 ## `home.unread`
 

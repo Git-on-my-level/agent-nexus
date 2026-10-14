@@ -1,4 +1,6 @@
 <script>
+  import InboxControlWork from "$lib/components/inbox/InboxControlWork.svelte";
+  let controlWork = $state(null);
   import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
@@ -138,7 +140,6 @@
     handleReadAccessDenied,
     isReadAccessDenied,
   } from "$lib/reliableRead.js";
-  import { commitInboxView } from "$lib/inboxViewCache.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let reconnecting = $state(false);
@@ -397,6 +398,8 @@
   $effect(() => {
     const id = selectedId;
     void contextEpoch;
+    const scope = readerScopeKey();
+    let cancelled = false;
     const row = untrack(() => selected);
     if (!row || row.kind !== "inbox") {
       context = null;
@@ -411,14 +414,19 @@
     contextLoading = true;
     void loadInboxContext(row.item, row.subject).then(
       (value) => {
-        if (contextFor !== id) return;
+        if (cancelled || scope !== readerScopeKey() || contextFor !== id)
+          return;
         context = value;
         contextLoading = false;
       },
       () => {
-        if (contextFor === id) contextLoading = false;
+        if (!cancelled && scope === readerScopeKey() && contextFor === id)
+          contextLoading = false;
       },
     );
+    return () => {
+      cancelled = true;
+    };
   });
   /*
    * The ask behind the selected item: its durable outcome (status, staleness,
@@ -444,6 +452,8 @@
     const askRef = selectedAskRef;
     const id = selectedId;
     void contextEpoch;
+    const scope = readerScopeKey();
+    let cancelled = false;
     if (!askRef) {
       askDetail = null;
       askDetailFor = "";
@@ -458,14 +468,19 @@
     askDetailLoading = true;
     void loadAskDetail(item).then(
       (value) => {
-        if (askDetailFor !== id) return;
+        if (cancelled || scope !== readerScopeKey() || askDetailFor !== id)
+          return;
         askDetail = value;
         askDetailLoading = false;
       },
       () => {
-        if (askDetailFor === id) askDetailLoading = false;
+        if (!cancelled && scope === readerScopeKey() && askDetailFor === id)
+          askDetailLoading = false;
       },
     );
+    return () => {
+      cancelled = true;
+    };
   });
   let askEvidence = $derived(
     selected?.kind === "inbox"
@@ -638,10 +653,7 @@
         );
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
-        actions = [
-          ...actions.filter((entry) => entry.id !== receipt.id),
-          receipt,
-        ];
+        applyAction(receipt);
       }
     } catch (err) {
       if (ticket === selectionRequest) actionError = errorMessage(err);
@@ -713,11 +725,7 @@
                 Boolean(result.value?.next_cursor))),
         );
         if (results[1].status === "fulfilled") {
-          actions = mergeInboxSnapshot(
-            actions,
-            results[1].value.items || [],
-            results[1].complete,
-          );
+          mergeActions(results[1].value.items || [], results[1].complete);
           receiptsUnavailable = !results[1].complete;
         } else if (results[1].status === "pending") {
           receiptsUnavailable = true;
@@ -934,6 +942,57 @@
     const confirmed = async (event) => {
       const entry = event.detail;
       if (
+        entry?.operation === "inbox.controls" &&
+        entry.scope === readerScopeKey()
+      ) {
+        const controls =
+          entry.result?.controls || entry.receipt?.controls || [];
+        const archivedRefs = controls
+          .filter((done) => done.action === "archive")
+          .map(
+            (done) =>
+              entry.request.items.find(
+                (item) => item.body.request_key === done.key,
+              )?.ref,
+          )
+          .filter(Boolean);
+        confirmArchivedSelection(archivedRefs);
+        for (const done of controls) {
+          if (done.action === "archive") {
+            const item = entry.request.items.find(
+              (item) => item.body.request_key === done.key,
+            );
+            if (item?.ref) {
+              archivedWorkRefs.add(item.ref);
+            }
+          } else if (done.action === "read")
+            updates = updates.filter((group) => group.group_ref !== done.id);
+          else applyAction(done.result);
+        }
+        // Cancel both list and selected-detail reads begun before confirmation.
+        // The respond queue independently invalidates these same read tickets.
+        requestId++;
+        loadController?.abort();
+        selectionRequest++;
+        selectedController?.abort();
+        loading = false;
+        refreshPending = false;
+        invalidateInboxContext();
+        invalidateAskDetail();
+        contextEpoch += 1;
+        notice = archivedRefs.length
+          ? archiveNotice
+          : "Inbox request confirmed.";
+        await load({ quiet: true });
+        if (
+          entry.scope === readerScopeKey() &&
+          explicitId.startsWith("decision:") &&
+          decisionResolvedFor !== explicitId
+        )
+          void loadSelected(explicitId.slice("decision:".length));
+        return;
+      }
+      if (
         entry?.operation !== "pm.decision.answer" ||
         entry.scope !== readerScopeKey()
       )
@@ -969,11 +1028,7 @@
             ? "Approved. Applying it needs your attention."
             : "Approved."
         : "Declined.";
-      if (applied)
-        actions = [
-          ...actions.filter((item) => item.id !== applied.id),
-          applied,
-        ];
+      if (applied) applyAction(applied);
       try {
         if (wasUnpinned) {
           const moved = rows.find((row) => row.id === pinId);
@@ -987,10 +1042,7 @@
         if (result.action_id && !applied) {
           const receipt = await coreClient.getPmAction(result.action_id);
           if (entry.scope !== readerScopeKey()) return;
-          actions = [
-            ...actions.filter((item) => item.id !== receipt.id),
-            receipt,
-          ];
+          applyAction(receipt);
         }
       } catch {
         /* A receipt read failure does not reverse a confirmed answer. */
@@ -1001,33 +1053,6 @@
       window.removeEventListener("anx:mutation-confirmed", confirmed);
   });
 
-  /**
-   * A 409 on an answer or delivery can mean the PM replaced this proposal;
-   * core names the replacement in the error details.
-   */
-  function supersededMessage(err) {
-    const details =
-      err?.body?.error?.details ?? err?.details?.details ?? err?.details ?? {};
-    const replacement = String(details?.superseded_by ?? "").trim();
-    if (!replacement) return "";
-    notice = "";
-    supersededHref = href({ item: `decision:${replacement}` });
-    // The replacement can be the reader's own board move; say who.
-    const by = String(details?.superseded_by_proposed_by ?? "").trim();
-    const origin = String(details?.superseded_by_origin_kind ?? "").trim();
-    const who =
-      by && by === ($selectedActorId || "")
-        ? "You replaced this proposal (by moving the task)"
-        : origin === "human" && by
-          ? `${actorDisplayLabel(by, $actorRegistry, $principalRegistry) || "Someone"} replaced this proposal`
-          : "The PM replaced this proposal";
-    return `${who} before it was answered. Open the replacement to decide on it.`;
-  }
-  function errorCode(err) {
-    return String(
-      err?.body?.error?.code ?? err?.details?.error?.code ?? err?.code ?? "",
-    );
-  }
   let supersededHref = $state("");
   let sessionExpired = $state(false);
   function signInAgain() {
@@ -1041,110 +1066,142 @@
     });
   }
 
-  async function deliver() {
-    if (!selectedDecision || busy) return;
+  async function queueControl(item) {
+    if (!controlWork) return;
     busy = true;
-    busyWith = "deliver";
     error = "";
     notice = "";
     try {
-      const result = await coreClient.dispatchPmDecision(selectedDecision.id);
-      actions = [...actions.filter((item) => item.id !== result.id), result];
-      // The dispatch call succeeds even when the delivery it records did not.
-      const status = String(result?.status ?? "");
-      notice =
-        status === "failed"
-          ? "Delivery failed; the receipt below says why."
-          : status === "verified"
-            ? "Delivered and read back."
-            : status === "delivered"
-              ? "Delivered; waiting for the source to read it back."
-              : "Delivery request recorded.";
+      await controlWork.queue([item]);
     } catch (err) {
-      const raw = errorMessage(err);
-      if (errorCode(err) === "source_revision_changed") {
-        // Terminal, and the receipt below says so; a Retry would contradict it.
-        const reason = String(
-          err?.body?.error?.details?.reason ?? err?.details?.reason ?? "",
-        );
-        notice =
-          reason === "work_missing"
-            ? "Not delivered: the task this approval refers to no longer exists. Nothing was sent; acknowledge it to file it under Handled."
-            : reason === "work_read_failed"
-              ? "Not delivered: the task could not be read just now. Nothing was sent; try again shortly."
-              : "Not delivered: the task changed after this was approved. A fresh proposal and approval are needed.";
-        await refreshReceipt();
-        return;
-      }
-      // Core has no executor for this source yet: the approval is intact and
-      // the action stays pending. That is not an outage.
-      error =
-        supersededMessage(err) ||
-        (/not configured|unavailable/i.test(raw)
-          ? "No delivery path is configured for this source yet. The approved request stays pending until one is."
-          : raw);
-      await refreshReceipt();
+      error = errorMessage(err);
     } finally {
       busy = false;
       busyWith = "";
     }
   }
+  async function deliver() {
+    if (!selectedDecision || !action || busy) return;
+    await queueControl({
+      action: "dispatch",
+      id: selectedDecision.id,
+      title: selectedDecision.instruction || "Delivery",
+      body: {
+        if_revision: selectedDecision.revision,
+        if_action_revision: action.revision,
+      },
+    });
+  }
 
+  function mergeActions(incoming, complete = false) {
+    const current = new Map(actions.map((item) => [item.id, item]));
+    actions = mergeInboxSnapshot(actions, incoming, complete).map((item) => {
+      const known = current.get(item.id);
+      // Lists and original admission receipts can predate a delivery outcome.
+      return Number.isInteger(known?.revision) &&
+        Number.isInteger(item.revision) &&
+        known.revision > item.revision
+        ? known
+        : item;
+    });
+  }
+  function applyAction(result) {
+    mergeActions([result]);
+  }
+  const receiptReads = { ticket: 0 };
   async function refreshReceipt() {
-    if (!selectedDecision?.action_id) return;
+    const id = selectedDecision?.action_id;
+    if (!id) return;
+    const scope = readerScopeKey(),
+      selection = selectionRequest,
+      ticket = ++receiptReads.ticket;
     try {
-      const result = await coreClient.getPmAction(selectedDecision.action_id);
-      actions = [...actions.filter((item) => item.id !== result.id), result];
+      const result = await coreClient.getPmAction(id);
+      if (
+        scope !== readerScopeKey() ||
+        selection !== selectionRequest ||
+        ticket !== receiptReads.ticket ||
+        result.id !== id
+      )
+        return;
+      applyAction(result);
     } catch (err) {
-      actionError = errorMessage(err);
+      if (
+        scope === readerScopeKey() &&
+        selection === selectionRequest &&
+        ticket === receiptReads.ticket
+      )
+        actionError = errorMessage(err);
     }
   }
+  let failedReceiptRefresh = $state("");
+  $effect(() => {
+    const scope = readerScopeKey(),
+      decisionId = selectedDecision?.id,
+      actionId = selectedDecision?.action_id;
+    if (!actionId) return;
+    const failed = $mutationOutbox.find(
+      (entry) =>
+        entry.scope === scope &&
+        entry.operation === "inbox.controls" &&
+        entry.attempts > 0 &&
+        ["retrying", "attention"].includes(entry.state) &&
+        entry.request.items.some((item) =>
+          item.action === "dispatch"
+            ? item.id === decisionId
+            : ["reconcile", "acknowledge"].includes(item.action) &&
+              item.id === actionId,
+        ),
+    );
+    if (!failed) return;
+    const token = `${scope}:${failed.key}:${failed.attempts}:${actionId}`;
+    if (token === failedReceiptRefresh) return;
+    failedReceiptRefresh = token;
+    // A failed HTTP confirmation says nothing about the server's recorded
+    // action. Read only the selected receipt once per failed attempt, retaining
+    // the saved request and its original key. Keep unrelated feeds loading;
+    // revision checks prevent their older action snapshots from replacing it.
+    selectionRequest++;
+    selectedController?.abort();
+    decisionResolvedFor = `decision:${decisionId}`;
+    void refreshReceipt();
+  });
 
   async function acknowledge() {
     if (!action || busy) return;
-    busy = true;
-    busyWith = "acknowledge";
-    actionError = "";
-    try {
-      const result = await coreClient.acknowledgePmAction(action.id);
-      actions = actions.map((item) => (item.id === result.id ? result : item));
-      notice = "Acknowledged. It now sits under Handled.";
-    } catch (err) {
-      actionError = errorMessage(err);
-    } finally {
-      busy = false;
-      busyWith = "";
-    }
+    await queueControl({
+      action: "acknowledge",
+      id: action.id,
+      title: "Acknowledge delivery",
+      body: { if_revision: action.revision },
+    });
   }
 
   async function reconcile() {
     if (!action || busy) return;
-    busy = true;
-    busyWith = "reconcile";
-    actionError = "";
-    try {
-      const result = await coreClient.reconcilePmAction(action.id);
-      actions = actions.map((item) => (item.id === result.id ? result : item));
-      notice = "Read-back finished.";
-    } catch (err) {
-      actionError = errorMessage(err);
-    } finally {
-      busy = false;
-      busyWith = "";
-    }
+    await queueControl({
+      action: "reconcile",
+      id: action.id,
+      title: "Read back delivery",
+      body: { if_revision: action.revision },
+    });
   }
 
   async function markUpdateRead(group) {
-    const ref = String(group?.group_ref ?? "").trim();
-    if (!ref) return;
-    const next = neighbourId(`update:${ref}`);
-    try {
-      await coreClient.markHomeRead({ group_ref: ref });
-      updates = updates.filter((entry) => entry.group_ref !== ref);
-      if (explicitId === `update:${ref}`) await select(next);
-    } catch (err) {
-      error = errorMessage(err);
-    }
+    const ref = String(group?.group_ref || "").trim();
+    if (!ref || busy) return;
+    await queueControl({
+      action: "read",
+      id: ref,
+      title: group.display_name || ref,
+      body: {
+        group_ref: ref,
+        expected_newest_event_cursor: {
+          id: group.newest_event?.id,
+          ts: group.newest_event?.ts,
+        },
+      },
+    });
   }
 
   /** The row to land on once `id` leaves the list: the next, else the previous. */
@@ -1159,7 +1216,45 @@
     );
   }
 
+  const archiveNotice = "Task archived. You can restore it from Archive.";
+  const archiveSelection = { intent: 0, pending: "" };
+
+  function confirmArchivedSelection(refs) {
+    const excluded = new Set(refs);
+    if (
+      !selected ||
+      !excluded.has(selected.ref) ||
+      archiveSelection.pending === selectedId
+    )
+      return;
+    const id = selectedId;
+    const scope = readerScopeKey();
+    const index = visible.findIndex((row) => row.id === id);
+    const survives = (row) => !excluded.has(row.ref);
+    const next =
+      visible.slice(index + 1).find(survives)?.id ||
+      visible.slice(0, index).reverse().find(survives)?.id ||
+      "";
+    archiveSelection.pending = id;
+    heldItem = "";
+    const intent = archiveSelection.intent + 1;
+    void select(next)
+      .then(async () => {
+        await tick();
+        if (
+          scope === readerScopeKey() &&
+          archiveSelection.intent === intent &&
+          selectedId === next
+        )
+          notice = archiveNotice;
+      })
+      .finally(() => {
+        if (archiveSelection.pending === id) archiveSelection.pending = "";
+      });
+  }
+
   async function select(id, { scroll = false } = {}) {
+    archiveSelection.intent++;
     await goto(href({ item: id || "" }), {
       replaceState: true,
       keepFocus: true,
@@ -1420,43 +1515,20 @@
     if (busy || !row.stale || !isNexusOwned(row.item)) return;
     const { prefix, id } = splitTypedRef(row.ref);
     if (prefix !== "card" || !id) return;
-    busy = true;
-    const scope = readerScopeKey();
-    actionError = "";
-    try {
-      await coreClient.archiveCard(id, {
-        ...(Number.isInteger(row.item.version)
-          ? { if_version: row.item.version }
-          : {}),
-      });
-      commitInboxView(scope, { archivedRef: row.ref });
-      if (scope !== readerScopeKey()) return;
-      // Invalidate feed reads and prevent pending single-item reads from
-      // restoring this task's decisions, without cancelling unrelated reads.
-      requestId++;
-      loadController?.abort();
-      loading = false;
-      refreshPending = false;
-      archivedWorkRefs.add(row.ref);
-      // Navigate while the old row still exists. Related decisions also leave
-      // after archive, so select only a row that will survive the removal.
-      if (selectedId === row.id || selected?.ref === row.ref) {
-        selectionRequest++;
-        heldItem = "";
-        await select(neighbourId(selectedId, row.ref));
-      }
-      work = work.filter((item) => workKey(item) !== row.ref);
-      decisions = decisions.filter((item) => item.work_ref !== row.ref);
-      actions = actions.filter((item) => item.work_ref !== row.ref);
-      // Flush selection effects before setting the outcome they normally clear.
-      await tick();
-      notice = "Task archived. You can restore it from Archive.";
-      scheduleLiveRefresh();
-    } catch (err) {
-      error = errorMessage(err);
-    } finally {
-      busy = false;
-    }
+    await queueControl({
+      action: "archive",
+      id,
+      title: row.item.title || row.ref,
+      ref: row.ref,
+      body: {
+        if_version: row.item.version,
+        if_lifecycle: {
+          archived_at: row.item.archived_at ?? null,
+          trashed_at: row.item.trashed_at ?? null,
+        },
+        if_latest_observation_id: row.item.latest_observation?.id || "",
+      },
+    });
   }
 
   function inboxKindLabel(row) {
@@ -1580,6 +1652,7 @@
         // A denial or sign-out may have purged it since the notification.
         const latest = readWorkspaceView(key);
         if (!latest) return;
+        confirmArchivedSelection(latest[2].value?.archived_refs || []);
         requestId++;
         loadController?.abort();
         selectionRequest++;
@@ -1587,7 +1660,7 @@
         loading = false;
         refreshPending = false;
         decisions = latest[0].value?.items || [];
-        actions = latest[1].value?.items || [];
+        mergeActions(latest[1].value?.items || [], latest[1].complete);
         work = latest[2].value?.work || [];
         openInboxItems = latest[3].value?.items || [];
         completedInboxItems = latest[4].value?.items || [];
@@ -1754,6 +1827,7 @@
       {reconnecting ? "Reconnecting…" : loading && ready ? "Refreshing…" : ""}
     </span>
   </nav>
+  <InboxControlWork bind:this={controlWork} href={href({})} />
   {#if error}
     <StateError
       message={error}

@@ -55,6 +55,12 @@
             ? "Retrying"
             : "Pending"}
     </p>
+    {#if entry.operation === "inbox.controls"}
+      <p class="mt-1 text-fg-muted">
+        {entry.receipt?.controls?.length || 0} of {entry.request.items.length} actions
+        confirmed.
+      </p>
+    {/if}
     {#if entry.operation === "events.lifecycle"}
       <p class="mt-1 text-fg-muted">
         {entry.receipt?.events?.length || 0} of {entry.request.items.length} events
@@ -108,21 +114,29 @@
                   ? "Edit move"
                   : entry.operation === "cards.patch"
                     ? "Edit assignment"
-                    : ["docs.lifecycle", "events.lifecycle"].includes(
-                          entry.operation,
-                        )
+                    : [
+                          "docs.lifecycle",
+                          "events.lifecycle",
+                          "inbox.controls",
+                        ].includes(entry.operation)
                       ? "Edit request"
                       : entry.operation === "topics.patch"
                         ? "Edit topic"
                         : "Edit message"}</button
             >
           {/if}
+        {/if}
+        {#if entry.state === "attention" || (entry.operation === "inbox.controls" && entry.state === "retrying")}
           <button
             type="button"
             class="rounded border border-line px-2 py-1 text-fg"
             onclick={() =>
               retryMutation(entry.key, { asNew: !!entry.failure?.expired })}
-            >{entry.failure?.expired ? "Retry as new" : "Retry send"}</button
+            >{entry.failure?.expired
+              ? "Retry as new"
+              : entry.state === "retrying"
+                ? "Retry confirmation"
+                : "Retry send"}</button
           >
         {/if}
       </div>

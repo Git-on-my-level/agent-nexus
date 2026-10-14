@@ -57,6 +57,73 @@ async function send(entry) {
     throw new Error("The submitting identity is no longer active.");
   if (replayExpired(entry.createdAt)) throw expiredReplayError();
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "inbox.controls") {
+    for (const item of entry.request.items) {
+      if (
+        entry.receipt?.controls?.some(
+          (done) => done.key === item.body.request_key,
+        )
+      )
+        continue;
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      let result;
+      switch (item.action) {
+        case "read":
+          result = await client.markHomeRead(item.body);
+          break;
+        case "archive":
+          result = await client.archiveCard(item.id, item.body);
+          break;
+        case "dispatch":
+          result = await client.dispatchPmDecision(item.id, item.body);
+          break;
+        case "reconcile":
+          result = await client.reconcilePmAction(item.id, item.body);
+          break;
+        case "acknowledge":
+          result = await client.acknowledgePmAction(item.id, item.body);
+          break;
+        default:
+          throw Object.assign(new Error("Unknown inbox control"), {
+            status: 400,
+          });
+      }
+      if (
+        item.action === "read"
+          ? !result.ok
+          : item.action === "archive"
+            ? !result.card?.id
+            : result.id !== item.id && item.action !== "dispatch"
+      )
+        throw new Error("Inbox control receipt is incomplete.");
+      if (item.action === "dispatch" && !result.id)
+        throw new Error("Delivery admission receipt is incomplete.");
+      if (entry.epoch !== localWorkEpoch(entry.scope))
+        throw new Error("The submitting identity is no longer active.");
+      if (item.action === "archive" && item.ref)
+        commitInboxView(entry.scope, { archivedRef: item.ref });
+      entry.receipt = {
+        controls: [
+          ...(entry.receipt?.controls || []),
+          {
+            key: item.body.request_key,
+            id: item.id,
+            action: item.action,
+            result,
+          },
+        ],
+      };
+      await persist(entry);
+      mutationOutbox.update((rows) =>
+        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
+      );
+      window.dispatchEvent(
+        new CustomEvent("anx:mutation-progress", { detail: snapshot(entry) }),
+      );
+    }
+    return entry.receipt;
+  }
   if (entry.operation === "events.lifecycle") {
     const methods = {
       archive: "archiveEvent",
@@ -261,12 +328,62 @@ async function send(entry) {
     if (!entry.request.autoApply) return { decision };
     if (!active(entry))
       throw new Error("The submitting identity is no longer active.");
-    let action = await client.dispatchPmDecision(decision.id);
-    if (!action.id) throw new Error("Action receipt is incomplete.");
+    // Persist each stage's original key and base before sending. A replayed
+    // dispatch receipt describes admission, so read the current action once to
+    // capture the separate read-back base; never refresh an already saved base.
+    if (!entry.request.autoDispatch) {
+      const base = await client.getPmAction(decision.action_id);
+      if (
+        base.id !== decision.action_id ||
+        !Number.isInteger(base.revision) ||
+        !Number.isInteger(decision.revision)
+      )
+        throw new Error("Delivery base is incomplete.");
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      entry.request.autoDispatch = {
+        request_key: crypto.randomUUID(),
+        if_revision: decision.revision,
+        if_action_revision: base.revision,
+      };
+      await persist(entry);
+    }
+    let action = entry.receipt.dispatchedAction;
+    if (!action) {
+      action = await client.dispatchPmDecision(
+        decision.id,
+        entry.request.autoDispatch,
+      );
+      if (action.id !== decision.action_id)
+        throw new Error("Action receipt is incomplete.");
+      entry.receipt = { ...entry.receipt, dispatchedAction: action };
+      await persist(entry);
+    }
     if (action.status !== "failed") {
       if (!active(entry))
         throw new Error("The submitting identity is no longer active.");
-      action = await client.reconcilePmAction(action.id);
+      if (!entry.request.autoReconcile) {
+        const base = await client.getPmAction(action.id);
+        if (base.id !== action.id || !Number.isInteger(base.revision))
+          throw new Error("Read-back base is incomplete.");
+        if (!active(entry))
+          throw new Error("The submitting identity is no longer active.");
+        entry.request.autoReconcile = {
+          request_key: crypto.randomUUID(),
+          if_revision: base.revision,
+        };
+        await persist(entry);
+      }
+      action =
+        entry.receipt.reconciledAction ||
+        (await client.reconcilePmAction(
+          action.id,
+          entry.request.autoReconcile,
+        ));
+      if (action.id !== decision.action_id)
+        throw new Error("Read-back receipt is incomplete.");
+      entry.receipt = { ...entry.receipt, reconciledAction: action };
+      await persist(entry);
     }
     return { decision, action };
   }
@@ -348,6 +465,64 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
         actor_id: JSON.parse(get(localWorkScope))[3],
       },
     },
+  });
+}
+
+export function inboxControlLabel(action) {
+  return (
+    {
+      read: "Mark read",
+      archive: "Archive task",
+      dispatch: "Deliver approved instruction",
+      reconcile: "Check source receipt",
+      acknowledge: "Acknowledge delivery",
+    }[action] || "Inbox action"
+  );
+}
+
+export function enqueueInboxControls({ draft, ...options }) {
+  if (!draft?.items?.length || draft.items.length > 100)
+    throw new Error("Select at most 100 inbox controls.");
+  const items = draft.items.map((item) => {
+    if (
+      !item.id ||
+      !["read", "archive", "dispatch", "reconcile", "acknowledge"].includes(
+        item.action,
+      )
+    )
+      throw new Error("Review the saved inbox control.");
+    const body = { ...item.body, request_key: crypto.randomUUID() };
+    if (
+      item.action === "read"
+        ? body.group_ref !== item.id ||
+          !body.expected_newest_event_cursor?.id ||
+          !body.expected_newest_event_cursor?.ts
+        : item.action === "archive"
+          ? !Number.isInteger(body.if_version) ||
+            body.if_version < 0 ||
+            !body.if_lifecycle ||
+            !("archived_at" in body.if_lifecycle) ||
+            !("trashed_at" in body.if_lifecycle) ||
+            typeof body.if_latest_observation_id !== "string"
+          : !Number.isInteger(body.if_revision) ||
+            body.if_revision < 1 ||
+            (item.action === "dispatch" &&
+              (!Number.isInteger(body.if_action_revision) ||
+                body.if_action_revision < 1))
+    )
+      throw new Error("Load the current inbox item before saving this action.");
+    return { ...item, body };
+  });
+  return enqueueLocalMutation({
+    ...options,
+    key: crypto.randomUUID(),
+    operation: "inbox.controls",
+    request: { items },
+    draft,
+    title: "Inbox request",
+    preview: items
+      .map((item) => `${inboxControlLabel(item.action)}: ${item.title}`)
+      .join("\n"),
   });
 }
 
@@ -733,13 +908,15 @@ async function attempt(entry) {
           ? "move"
           : entry.operation === "cards.patch"
             ? "assignment"
-            : entry.operation === "events.lifecycle"
-              ? "event action"
-              : entry.operation === "docs.lifecycle"
-                ? "document action"
-                : entry.operation === "topics.patch"
-                  ? "topic edit"
-                  : "response",
+            : entry.operation === "inbox.controls"
+              ? "inbox action"
+              : entry.operation === "events.lifecycle"
+                ? "event action"
+                : entry.operation === "docs.lifecycle"
+                  ? "document action"
+                  : entry.operation === "topics.patch"
+                    ? "topic edit"
+                    : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =
@@ -896,7 +1073,7 @@ export async function retryMutation(key, { asNew = false } = {}) {
     const replacement = {
       ...snapshot(entry),
       key: crypto.randomUUID(),
-      request: freshRequest(entry.request, entry.operation),
+      request: freshRequest(entry.request, entry.operation, entry.receipt),
       createdAt: Date.now(),
       state: "pending",
       failure: null,
@@ -977,35 +1154,52 @@ export async function editMutation(key) {
       ? currentDraft
       : entry.draft;
   const draft =
-    entry.operation === "events.lifecycle"
+    entry.operation === "inbox.controls"
       ? {
-          ...eventDraft,
-          events: eventDraft.events.filter(
-            (event) =>
-              !entry.receipt?.events?.some((done) => done.id === event.id),
+          ...entry.draft,
+          items: entry.draft.items.filter(
+            (_, index) =>
+              !entry.receipt?.controls?.some(
+                (done) =>
+                  done.key === entry.request.items[index].body.request_key,
+              ),
           ),
           confirmed: [
             ...(entry.draft.confirmed || []),
-            ...(entry.receipt?.events || []),
+            ...(entry.receipt?.controls || []),
           ],
         }
-      : entry.operation === "topics.patch"
-        ? currentDraft || entry.draft
-        : entry.operation === "docs.lifecycle"
-          ? {
-              ...lifecycleDraft,
-              documents: lifecycleDraft.documents.filter(
-                (doc) =>
-                  !entry.receipt?.documents?.some((done) => done.id === doc.id),
-              ),
-              confirmed: [
-                ...(entry.draft.confirmed || []),
-                ...(entry.receipt?.documents || []),
-              ],
-            }
-          : entry.receipt?.conversationId
-            ? { ...entry.draft, conversationId: entry.receipt.conversationId }
-            : entry.draft;
+      : entry.operation === "events.lifecycle"
+        ? {
+            ...eventDraft,
+            events: eventDraft.events.filter(
+              (event) =>
+                !entry.receipt?.events?.some((done) => done.id === event.id),
+            ),
+            confirmed: [
+              ...(entry.draft.confirmed || []),
+              ...(entry.receipt?.events || []),
+            ],
+          }
+        : entry.operation === "topics.patch"
+          ? currentDraft || entry.draft
+          : entry.operation === "docs.lifecycle"
+            ? {
+                ...lifecycleDraft,
+                documents: lifecycleDraft.documents.filter(
+                  (doc) =>
+                    !entry.receipt?.documents?.some(
+                      (done) => done.id === doc.id,
+                    ),
+                ),
+                confirmed: [
+                  ...(entry.draft.confirmed || []),
+                  ...(entry.receipt?.documents || []),
+                ],
+              }
+            : entry.receipt?.conversationId
+              ? { ...entry.draft, conversationId: entry.receipt.conversationId }
+              : entry.draft;
   // Start the synchronous draft journal, then restore the visible composer
   // before yielding. A late restore after persistence could replace text the
   // reader typed while the transfer was in flight. Supersede only after both

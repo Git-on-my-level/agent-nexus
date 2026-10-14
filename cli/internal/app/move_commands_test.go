@@ -617,6 +617,9 @@ func (f *moveFakeWorkspace) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			conflict()
 			return
 		}
+		if moveState(work) != "archived" {
+			work["version"] = moveTestInt(work["version"]) + 1
+		}
 		work["state"] = "archived"
 		respond(http.StatusOK, map[string]any{"card": work})
 		return
@@ -876,5 +879,46 @@ func moveTestInt(value any) int {
 		return int(typed)
 	default:
 		return 0
+	}
+}
+
+func TestMoveCardJournalAllowsOnlyItsArchiveRevision(t *testing.T) {
+	for _, tc := range []struct {
+		name, state, status    string
+		version                int64
+		changedContent, reject bool
+	}{
+		{"active pre-archive", "active", "complete", 7, false, false},
+		{"legacy archive", "archived", "complete", 7, false, false},
+		{"own archive", "archived", "complete", 8, false, false},
+		{"projected archive", "", "complete", 8, false, false},
+		{"projected trash", "", "complete", 8, false, true},
+		{"active foreign edit", "active", "complete", 8, false, true},
+		{"restore", "active", "complete", 9, false, true},
+		{"archive restore archive", "archived", "complete", 10, false, true},
+		{"archived foreign edit", "archived", "complete", 9, false, true},
+		{"pending archive", "archived", "pending", 8, false, true},
+		{"changed archived content", "archived", "complete", 8, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			object := map[string]any{"id": "journal-card", "ref": "card:journal-card", "title": "Verified content", "version": int64(6)}
+			marker := moveMarker("move", "card", "card:journal-card", "source", "destination", "card:copy", tc.status)
+			moveAttachSnapshot(marker, "source", "card", "card:journal-card", object)
+			marker["source_archive_version"] = int64(7)
+			object["version"], object["state"] = tc.version, tc.state
+			if strings.HasPrefix(tc.name, "projected") {
+				object["archived_at"] = "2026-10-14T00:00:00Z"
+			}
+			if tc.name == "projected trash" {
+				object["trashed_at"] = "2026-10-14T00:01:00Z"
+			}
+			if tc.changedContent {
+				object["title"] = "Foreign edit"
+			}
+			err := moveValidateSnapshot(marker, "source", "card", "card:journal-card", object, true)
+			if (err != nil) != tc.reject {
+				t.Fatalf("reject=%v, err=%v", tc.reject, err)
+			}
+		})
 	}
 }
