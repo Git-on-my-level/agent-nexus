@@ -853,10 +853,32 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.fail.createWork = { message: LONG_ERROR };
       api.hold.createWork.resolve();
       api.hold = {};
-      await expect(page.getByRole("alert")).toContainText(
-        "Read permission expired",
+      const saved = page.locator('[data-mutation-state="retrying"]');
+      await expect(saved).toBeVisible();
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nBoard: board:archive`,
       );
+      for (const [field, value] of [
+        ["Outcome", LONG_TITLE],
+        ["Context", `${LONG_ERROR}\n${LONG_ID}`],
+        ["Acceptance criteria", LONG_ACTION],
+        ["Accountable owner", LONG_OWNER],
+        ["Next actor", LONG_OWNER],
+        ["Next action", LONG_ACTION],
+      ])
+        await expect(page.getByLabel(field, { exact: true })).toHaveValue(
+          value,
+        );
+      await expect(page.getByLabel("Board")).toHaveValue("board:archive");
+      await expect(
+        saved.getByRole("button", { name: "Copy text" }),
+      ).toBeVisible();
+      const diagnostics = saved.locator("details");
+      await expect(diagnostics).not.toHaveAttribute("open", "");
       await expectCleanLayout(page, "new task save failed", bothEnds);
+      await diagnostics.getByText("Technical details", { exact: true }).click();
+      await expect(diagnostics).toContainText("Read permission expired");
+      await expectCleanLayout(page, "new task failure details", bothEnds);
 
       // Zero boards is not a dead end: the form stays, and Board is hidden
       // because the operator is not choosing among boards.

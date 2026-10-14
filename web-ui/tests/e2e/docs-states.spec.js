@@ -692,23 +692,35 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "create form filled", bothEnds);
 
       api.fail.createDocument = {
+        status: 422,
         message:
           `document quota exceeded for this workspace (${LONG_TOKEN}) `.repeat(
             3,
           ),
       };
       await page.getByRole("button", { name: "Create doc" }).click();
-      await expect(page.getByText(/document quota exceeded/)).toBeVisible();
+      const saved = page.locator('[data-mutation-state="attention"]');
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `${LONG_TITLE}\n\n${DOC_BODY}`,
+      );
+      await expect(
+        page.getByPlaceholder("Document title", { exact: true }),
+      ).toHaveValue(LONG_TITLE);
+      await expect(
+        page.getByRole("textbox", { name: "Head content (Markdown) *" }),
+      ).toHaveValue(DOC_BODY);
+      await expect(saved.locator("details")).not.toHaveAttribute("open", "");
+      await saved.getByText("Technical details", { exact: true }).click();
+      await expect(saved.locator("details")).toContainText(
+        "document quota exceeded",
+      );
       await expectCleanLayout(page, "create failed", bothEnds);
 
       api.fail = {};
       api.hold.createDocument = deferred();
-      await page
-        .getByRole("button", { name: "Creating…" })
-        .or(page.getByRole("button", { name: "Create doc" }))
-        .click();
+      await saved.getByRole("button", { name: "Retry send" }).click();
       await expect(
-        page.getByRole("button", { name: "Creating…" }),
+        page.locator('[data-mutation-state="sending"]'),
       ).toBeVisible();
       await expectCleanLayout(page, "creating");
       api.hold.createDocument.resolve();
@@ -813,16 +825,26 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "editor dirty", bothEnds);
 
       api.fail.updateDocument = {
+        status: 409,
         message: `revision conflict: base ${LONG_HASH} is stale `.repeat(3),
       };
       await page.getByRole("button", { name: "Save revision" }).click();
-      await expect(page.getByText(/revision conflict/)).toBeVisible();
+      const saved = page.locator('[data-mutation-state="attention"]');
+      await expect(saved.getByLabel("Saved message")).toHaveValue(DOC_BODY);
+      await expect(
+        page.getByRole("textbox", { name: "Content (Markdown)" }),
+      ).toHaveValue(DOC_BODY);
+      await expect(saved.locator("details")).not.toHaveAttribute("open", "");
+      await saved.getByText("Technical details", { exact: true }).click();
+      await expect(saved.locator("details")).toContainText("revision conflict");
       await expectCleanLayout(page, "editor save failed", bothEnds);
 
       api.fail = {};
       api.hold.updateDocument = deferred();
-      await page.getByRole("button", { name: "Save revision" }).click();
-      await expect(page.getByRole("button", { name: "Saving…" })).toBeVisible();
+      await saved.getByRole("button", { name: "Retry send" }).click();
+      await expect(
+        page.locator('[data-mutation-state="sending"]'),
+      ).toBeVisible();
       await expectCleanLayout(page, "editor saving", bothEnds);
       api.hold.updateDocument.resolve();
       api.hold = {};
@@ -951,7 +973,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
           `rename rejected: ${LONG_HASH} is not the head revision `.repeat(2),
       };
       await titleInput.press("Enter");
-      await expect(page.getByText(/rename rejected/)).toBeVisible();
+      const saved = page.locator('[data-mutation-state="retrying"]');
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `${LONG_TITLE} ${LONG_TOKEN}`,
+      );
+      await expect(titleInput).toHaveValue(`${LONG_TITLE} ${LONG_TOKEN}`);
+      await expect(saved.locator("details")).not.toHaveAttribute("open", "");
+      await saved.getByText("Technical details", { exact: true }).click();
+      await expect(saved.locator("details")).toContainText("rename rejected");
       await expectCleanLayout(page, "rename failed", bothEnds);
       api.fail = {};
 
@@ -1028,14 +1057,31 @@ for (const viewport of AUDIT_VIEWPORTS) {
         message: "conflict",
       };
       await page.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText(/updated elsewhere/)).toBeVisible();
+      const saved = page.locator('[data-mutation-state="attention"]');
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `${LONG_SUMMARY} ${LONG_TOKEN}`,
+      );
+      await expect(summary).toHaveValue(`${LONG_SUMMARY} ${LONG_TOKEN}`);
+      await expect(
+        saved.getByRole("button", { name: "Edit message" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Use latest version" }),
+      ).toBeEnabled();
       await expectCleanLayout(page, "settings conflict", bothEnds);
 
       api.fail.patchDocument = {
         message: `patch rejected for ${LONG_TOKEN} `.repeat(4),
       };
-      await page.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText(/patch rejected/)).toBeVisible();
+      await saved.getByRole("button", { name: "Retry send" }).click();
+      const retrying = page.locator('[data-mutation-state="retrying"]');
+      await expect(retrying.getByLabel("Saved message")).toHaveValue(
+        `${LONG_SUMMARY} ${LONG_TOKEN}`,
+      );
+      await expect(summary).toHaveValue(`${LONG_SUMMARY} ${LONG_TOKEN}`);
+      await expect(retrying.locator("details")).not.toHaveAttribute("open", "");
+      await retrying.getByText("Technical details", { exact: true }).click();
+      await expect(retrying.locator("details")).toContainText("patch rejected");
       await expectCleanLayout(page, "settings save failed", bothEnds);
       api.fail = {};
 

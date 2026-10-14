@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { setup } from "./helpers/pm-work.js";
+import { nextPaint } from "../helpers/pageReady.js";
 
 const root = "/o/local/w/local";
 const stamp = (hours = 0) =>
@@ -391,15 +392,17 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
 }) => {
   const { work } = await setup(page);
   const task = work.find((item) => item.ref === "card:docs");
+  const boardBase = stamp(1);
   task.board_ref = "board:sample";
-  task.updated_at = stamp(1);
+  task.updated_at = boardBase;
+  task.version = 1;
   const writes = [];
   await page.route("**/boards/**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        board: { ref: "board:sample", updated_at: stamp(1) },
+        board: { ref: "board:sample", updated_at: boardBase },
       }),
     }),
   );
@@ -413,7 +416,10 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ card: { ref: "card:docs" } }),
+      body: JSON.stringify({
+        card: { id: "docs", ref: "card:docs" },
+        board: { ref: "board:sample", updated_at: stamp() },
+      }),
     });
   });
   await page.goto(`${root}/tasks/card%3Adocs`);
@@ -422,7 +428,12 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
   ).toBeVisible();
 
   // M opens the palette on "Move to"; typing narrows, Enter moves.
+  const boardLoaded = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.startsWith("/boards/"),
+  );
   await page.keyboard.press("m");
+  await (await boardLoaded).finished();
+  await nextPaint(page);
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect(palette.getByRole("button", { name: "Move to" })).toBeVisible();
   await expect(
@@ -432,10 +443,13 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
   await page.keyboard.press("Enter");
   await expect(palette).toHaveCount(0);
   await expect(
-    page.getByText("Moved “Document the sample outcome” to In review."),
+    page.getByText("Saved move to In review. Waiting for confirmation."),
   ).toBeVisible();
+  await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
   const move = writes.find((write) => write.path.endsWith("/move"));
-  expect(move?.body).toMatchObject({ column_key: "review" });
+  expect(move?.body).toMatchObject({ column_key: "review", if_version: 1 });
+  expect(move.body.if_board_updated_at).toBe(boardBase);
+  expect(move.body.request_key).toBeTruthy();
 
   // ⌘K lists actions on this task, then destinations with their shortcuts.
   await page.keyboard.press("ControlOrMeta+k");
@@ -610,6 +624,7 @@ test("a move attempted before the PM state loads self-corrects", async ({
   page,
 }) => {
   await setup(page);
+  page.on("dialog", (dialog) => dialog.accept());
   // Presence never answers: the request is left pending on purpose.
   await page.route("**/pm/presence", () => {});
   await page.route("**/pm/decisions", async (route) => {
@@ -648,7 +663,11 @@ test("a move attempted before the PM state loads self-corrects", async ({
   await request.click();
 
   // Core's answer, in the UI's words, with the way forward.
-  await expect(page.getByText(/this workspace has none/i)).toBeVisible();
+  const saved = page.locator('[data-mutation-state="attention"]');
+  await expect(saved).toContainText("This workspace has no PM");
+  await expect(saved.getByLabel("Saved message")).toHaveValue(
+    "Release the sample workspace\nDestination: Backlog",
+  );
   await expect(
     page.getByRole("link", { name: "Set up your PM" }).first(),
   ).toBeVisible();

@@ -444,6 +444,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "sending");
       api.hold.sendMessage.resolve();
       api.hold = {};
+      await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
 
       // Core refuses: the workspace PM queue is full.
       api.fail.sendMessage = {
@@ -456,16 +457,38 @@ for (const viewport of AUDIT_VIEWPORTS) {
           },
         },
       };
+      const attempts = [];
+      page.on("request", (request) => {
+        if (
+          request.method() === "POST" &&
+          /\/pm\/conversations\/[^/]+\/messages$/.test(
+            new URL(request.url()).pathname,
+          )
+        )
+          attempts.push(request.postDataJSON());
+      });
       await composer.fill(`Ask again ${LONG_TOKEN}`);
       await page.getByRole("button", { name: "Send message" }).click();
-      await expect(page.getByRole("alert")).toContainText("PM queue");
-      await expectCleanLayout(page, "send refused", bothEnds);
-
+      const saved = page.locator('[data-mutation-state="retrying"]');
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `Ask again ${LONG_TOKEN}`,
+      );
       await expect(
-        page.getByRole("button", { name: "Send again" }),
+        saved.getByRole("button", { name: "Copy text" }),
       ).toBeVisible();
-      await page.getByRole("button", { name: "Send again" }).click();
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(saved.locator("details")).not.toHaveAttribute("open", "");
+      await expectCleanLayout(page, "send refused", bothEnds);
+      // A 429 is uncertain and retries the saved request, without another post intent.
+      await expect.poll(() => attempts.length).toBeGreaterThanOrEqual(2);
+      expect(attempts[1]).toEqual(attempts[0]);
+      expect(attempts[0].text).toBe(`Ask again ${LONG_TOKEN}`);
+      expect(attempts[0].request_key).toBeTruthy();
+      expect(attempts[0].replay_key).toBeTruthy();
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `Ask again ${LONG_TOKEN}`,
+      );
+      await saved.getByText("Technical details", { exact: true }).click();
+      await expect(saved.locator("details")).toContainText("capacity reached");
       await expectCleanLayout(page, "send refused twice");
 
       // History can be open over the refusal banner.
@@ -671,8 +694,20 @@ for (const viewport of AUDIT_VIEWPORTS) {
         await baseExpect(send).toBeEnabled({ timeout: 2_000 });
       }).toPass({ timeout: 30_000 });
       await send.click();
-      await expect(page.getByText(/message rejected by core/)).toBeVisible();
+      const saved = page.locator('[data-mutation-state="retrying"]');
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `${LONG_TOKEN} ${LONG_SENTENCE}`,
+      );
+      await expect(
+        saved.getByRole("button", { name: "Copy text" }),
+      ).toBeVisible();
+      await expect(saved.locator("details")).not.toHaveAttribute("open", "");
       await expectCleanLayout(page, "post message failed", bothEnds);
+      await saved.getByText("Technical details", { exact: true }).click();
+      await expect(saved.locator("details")).toContainText(
+        "message rejected by core",
+      );
+      await expectCleanLayout(page, "post message failure details", bothEnds);
     });
 
     test("thread detail: about, docs and timeline tabs", async ({ page }) => {

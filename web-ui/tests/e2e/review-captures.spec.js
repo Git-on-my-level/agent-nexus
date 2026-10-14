@@ -939,7 +939,9 @@ for (const { label, width, height } of WIDTHS) {
     await installFixture(page);
     await page.setViewportSize({ width, height });
     await page.goto(`${WORKSPACE}/inbox`);
-    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: "Inbox", exact: true }),
+    ).toBeVisible({
       timeout: 60_000,
     });
     await waitForAppReady(page);
