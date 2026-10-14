@@ -117,7 +117,7 @@ in the sidebar on desktop and in the bottom bar on a phone (with **More**).
 Ask is the PM conversation and is hidden entirely when no PM is connected;
 global search (⌘K) is not a PM feature. Everything else is one hop down:
 **Initiatives** (the table), Docs, Agents and Archive under **Workspace**;
-Access, Secrets, Integrations and PM setup under **Settings**; Audit and
+Access, Secrets, Integrations, Notifications and PM setup under **Settings**; Audit and
 Threads under **Diagnostics**. They live in the account menu, the `/more`
 hub, the ⌘K palette, ref chips and the initiative page, never in primary nav.
 Adding a primary destination needs a DECISIONS entry (end-state §4).
