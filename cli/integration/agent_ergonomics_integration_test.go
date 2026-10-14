@@ -114,7 +114,7 @@ func TestAgentErgonomicsAgainstCore(t *testing.T) {
 	ok(false, nil, "plan", "step", "add", ref, "--title", "Verify", "--step-id", "verify", "--status", "active")
 	ok(false, nil, "plan", "step", "update", ref, "verify", "--status", "done")
 	ok(false, nil, "plan", "show", ref)
-	ok(false, nil, "work", "done", ref, "--evidence", "https://example.test/verification")
+	ok(false, nil, "done", ref, "--evidence", "https://example.test/verification")
 	topic := createReportTopic(t, h, "ergonomics")
 	file := filepath.Join(t.TempDir(), "report.json")
 	writeReportFixture(t, file, reportFixture(t, "Ergonomics report", "Scenario verified against an isolated core."))
