@@ -104,17 +104,13 @@ describe("agent roster model", () => {
     expect(model.ask.title).toBe("Confirm 20-minute quest path");
     expect(model.ask.severity).toBe("high");
     expect(model.ask.subjectTitle).toBe("Lock hub quest path");
-    expect(model.ask.href).toBe(
-      "/decide?mailbox=needs-you&item=inbox%3Aask%3At%3Ae1",
-    );
+    expect(model.ask.href).toBe("/decide/inbox%3Aask%3At%3Ae1");
     expect(model.duration).toBe("3h 12m");
     expect(model.moreAsks).toBe(1);
   });
 
-  it("links to Needs you while the inbox projection catches up", () => {
-    expect(inboxAskPath({ id: "e1", inbox_item_id: null })).toBe(
-      "/decide?mailbox=needs-you",
-    );
+  it("links to Decide while the inbox projection catches up", () => {
+    expect(inboxAskPath({ id: "e1", inbox_item_id: null })).toBe("/decide");
   });
 
   it("describes a working agent by task, quoted note and run time", () => {

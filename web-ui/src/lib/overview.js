@@ -332,7 +332,7 @@ export function needsYouFromSources(
     count: rows.length,
     truncated: Boolean(truncated),
     rows: rows.slice(0, PREVIEW_LIMIT).map((row) => needsYouPreview(row, now)),
-    href: "/decide?mailbox=needs-you",
+    href: "/decide",
   };
 }
 
