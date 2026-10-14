@@ -371,6 +371,7 @@ export function enqueuePmMessage({
         ? {
             creation: {
               request_key: crypto.randomUUID(),
+              replay_key: crypto.randomUUID(),
               actor_id,
               title: text.slice(0, 100),
               ...(workRef ? { work_ref: workRef } : {}),
@@ -378,7 +379,14 @@ export function enqueuePmMessage({
             },
           }
         : {}),
-      message: { request_key: key, actor_id, text },
+      // Opt in only when building a new intent. Recovery sends saved request
+      // bodies verbatim, including legacy entries without receipt keys.
+      message: {
+        request_key: key,
+        replay_key: crypto.randomUUID(),
+        actor_id,
+        text,
+      },
     },
   });
 }
@@ -702,7 +710,11 @@ export async function editMutation(key) {
       : entry.receipt?.conversationId
         ? { ...entry.draft, conversationId: entry.receipt.conversationId }
         : entry.draft;
-  await saveLocalWork(
+  // Start the synchronous draft journal, then restore the visible composer
+  // before yielding. A late restore after persistence could replace text the
+  // reader typed while the transfer was in flight. Supersede only after both
+  // durable writes succeed; a storage failure retains the old request too.
+  const savingDraft = saveLocalWork(
     entry.scope,
     "draft",
     entry.draftTarget || entry.target,
@@ -711,19 +723,22 @@ export async function editMutation(key) {
       epoch: entry.epoch,
     },
   );
+  const unhandled =
+    active(entry) &&
+    window.dispatchEvent(
+      new CustomEvent("anx:edit-form", {
+        cancelable: true,
+        detail: {
+          scope: entry.scope,
+          target: entry.draftTarget || entry.target,
+          value: draft,
+        },
+      }),
+    );
+  await savingDraft;
   await persist({ ...entry, state: "superseded" });
   volatile.delete(key);
   if (!active(entry)) return;
-  const unhandled = window.dispatchEvent(
-    new CustomEvent("anx:edit-form", {
-      cancelable: true,
-      detail: {
-        scope: entry.scope,
-        target: entry.draftTarget || entry.target,
-        value: draft,
-      },
-    }),
-  );
   if (unhandled && entry.href) await goto(entry.href);
 
   requestRecovery();

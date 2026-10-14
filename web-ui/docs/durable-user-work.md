@@ -419,7 +419,7 @@ services without an audited transactional thread callback cannot opt in.
 Eight concurrent retries and injected thread/conversation/receipt failures are
 tested against real SQLite with one connection. Revoked ownership and pinned
 access deny replay. Existing unkeyed callers and persisted UI creation bodies
-retain legacy behavior; the UI has not yet enabled this mode for new requests.
+retain legacy behavior. Newly queued UI requests now opt in to this mode.
 
 **Message original receipts are now an opt-in server prerequisite too.**
 `POST /pm/conversations/{id}/messages` accepts `replay_key`, binding the actor,
@@ -443,9 +443,24 @@ original public response without future lease credentials. Current scoped turn
 and conversation visibility and pinned authorization remain mandatory. Legacy
 callers retain advancing canonical turn replay and existing dispatch behavior;
 custom callbacks without an audited writer/preflight/persistence split fail closed.
-The UI has not yet enabled conversation/message receipt keys for new requests;
-old persisted request bodies must remain unchanged when it does. Remaining live
-forms, general replay gaps and whole-UI enforcement stay open.
+Newly queued Ask PM requests now use separate creation/message request and
+receipt keys. Recovery passes the complete saved bodies verbatim; it never
+upgrades legacy pending bodies. The creation receipt is checkpointed separately,
+so editing a rejected first message reuses its confirmed conversation while
+creating fresh message keys. Rejected creation edits use fresh creation keys too.
+An explicit retry of an already failed turn creates a new intent; uncertain
+delivery retries retain their existing saved keys. Confirmation refreshes current
+conversation/turn state rather than displaying the frozen receipt as live status.
+
+The shared Edit action now restores the composer before waiting on draft
+persistence; otherwise a late restore could replace text typed during the
+transfer. The original request is superseded only after durable transfer succeeds.
+Browser checks cover timeout/524, offline/tab closure, reload/duplicate recovery,
+legacy bodies before/after the conversation checkpoint, conflict/editing, current
+state refresh, newer drafts, total storage denial and cross-tab principal changes
+with late creation success/message failure. The guard enforces exact saved-body
+sends and rejects statically named computed direct SDK calls in migrated surfaces.
+Remaining live forms, general replay gaps and whole-UI enforcement stay open.
 
 ## Replay audit
 
@@ -460,7 +475,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /events` (`message_posted`, including comments)                             | `AppendEventWithReplay` atomically writes the event and actor/key/body-bound replay; concurrent retries and injected replay-insert failure prove one event or full rollback                                                                           | Covered by the discussion adapter; legacy ID collisions without replay fail closed instead of adopting an existing event                              |
 | Document/card comments                                                            | Same shared `message_posted` write; document comments are projected from backing-thread events                                                                                                                                                        | Covered by MessagesTab, including selected-text metadata; lifecycle operations remain rollout work                                                    |
 | `POST /pm/decisions/{id}/answer`                                                  | Actor/key/body-bound original HTTP result commits atomically with the revision-checked decision and optional action; concurrent retries, changed-body conflict, injected receipt-write failure and revoked authorization tests                        | Covered by the PM answer adapter; unkeyed clients retain legacy revision replay                                                                       |
-| PM conversation creation and messages                                             | Opt-in replay_key atomically commits new thread/conversation/original 201 receipt, or turn/event/artifact/ledger/wake/original public 202 receipt; concurrency, rollback, legacy-collision and revoked-access tests. Legacy replay remains compatible | Composite chat adapter and disconnected HTTP recovery covered; UI receipt opt-in for new requests remains open                                        |
+| PM conversation creation and messages                                             | Opt-in replay_key atomically commits new thread/conversation/original 201 receipt, or turn/event/artifact/ledger/wake/original public 202 receipt; concurrency, rollback, legacy-collision and revoked-access tests. Legacy replay remains compatible | Composite chat adapter and original receipt opt-in covered for new requests; old pending bodies retain legacy recovery                                |
 | Explicit PM delivery, reconciliation, acknowledgement and other lifecycle buttons | Existing action identity and revision guards; not all authored lifecycle requests have frozen keyed receipts                                                                                                                                          | Remaining rollout work; native answer auto-apply preserves the existing canonical action identity and does not resend uncertain delivery              |
 | `POST /artifacts/attachments`                                                     | Actor/key-bound hash includes metadata, original filename, chosen MIME and content hash/size; artifact, ownership refs, blob ledger and replay receipt commit together. Concurrent retry, rollback and revoked-ownership tests                        | Covered by the attachment adapter; content-addressed staging precedes the transaction and retries revalidate permissions                              |
 | `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                                                   | Task creation covered; existing card edits and lifecycle remain rollout work                                                                          |

@@ -612,7 +612,9 @@
   async function retryTurn(turn) {
     if (sending || savedMessage || !ready || !turn?.text) return;
     draft = turn.text;
-    await send(null, `pm-retry:${turn.id}`);
+    // Retrying an already failed turn is a new intent. Uncertain delivery
+    // retries stay in the outbox and retain their original request/receipt keys.
+    await send();
   }
   onMount(() => {
     const confirmed = async (event) => {
