@@ -34,6 +34,10 @@
   let saved = $derived(
     $mutationOutbox.find((entry) => entry.target === target),
   );
+  // Enqueuing finishes after device persistence, before the HTTP send does.
+  let creating = $derived(
+    saving || saved?.state === "pending" || saved?.state === "sending",
+  );
   function snapshot() {
     return {
       title,
@@ -245,7 +249,8 @@
             !title.trim() ||
             !criteria.trim() ||
             (chooseBoard && !board)}
-          data-anx-save-shortcut>{saving ? "Creating…" : "Create task"}</button
+          data-anx-save-shortcut
+          >{creating ? "Creating…" : "Create task"}</button
         ><a
           class="text-meta text-fg-muted hover:text-fg"
           href={workspaceHref("/tasks")}>Cancel</a
