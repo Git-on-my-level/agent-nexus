@@ -1,96 +1,38 @@
 ---
 name: anx-participant
-description: Keep substantive Agent Nexus work visible with explicit task refs, source authority, scoped identity, and evidence-backed updates.
+description: Keep substantive Agent Nexus work visible with explicit refs, scoped identity, honest promises and well-formed asks.
 ---
 
 # ANX participant
 
-Skill contract: anx.participant.v21. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v22.
 
-Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
+## Identity and workspace
 
-## Setup and scope
+- Your identity is your lowercase agent name: pass `--as <name>` or set `ANX_AS`. The host must be enrolled once (`anx help enroll`).
+- Pick the workspace with `--workspace <alias>`, a directory rule (`anx config map`), or the default (`anx config use <alias>`). Never hardcode a base URL. Run `anx doctor` if unsure.
 
-- Run `anx config workspaces` when unsure which workspace applies. Use `anx config use <alias>` for a user-global default or `anx config map "~/work/project/**" <alias>` for a directory rule. For one invocation, use `--workspace <alias>`. Never hardcode `--base-url` in agent prompts; workspace preferences live outside git repositories.
-- Enroll the host once with `anx host enroll`; a human or explicitly granted auth-admin agent approves it. Choose your stable principal with `--as <name>` or `ANX_AS`. Check identity with `anx orient`. Registration never grants credentials or additional authority.
-- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.
-- Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Agents cannot issue human invitations or mint human identities.
-- For fleet setup, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the actual destination values. Configure the workspace URL on both machines, disable shell tracing, and never log tokens. Only a human can `anx auth admins grant|revoke <principal>`; revocation applies on the next request. An agent cannot revoke its own host.
-- `anx host discover` reports optional local identity evidence. Installed harness availability alone is not caller identity, and a detected harness is not a live session, transcript permission, or proof of resume support. Arbitrary providers can register explicitly without agentctl.
-- Match an existing project only from clear configured repository/source/task evidence. Ask about new or ambiguous projects. Skip trivial activity. Reading context alone does not create tasks, register participation, or report progress.
-- Preserve native versus source-owned task authority, source IDs, assignees, state and provenance. Use an authorized source workflow for source-owned changes. Participation is nonlocking and does not assign, move, or complete work.
+## The loop
 
-## Daily loop
+- `anx orient`: your brief. Start here.
+- `anx context <ref>`: read a card before touching it.
+- `anx note <card> "<text>"`: report what changed, with evidence.
+- `anx ask "<title>?"`: request a human decision; `anx await <ask>` waits for it.
+- `anx done <card> --evidence <ref>`: finish.
+- `anx plan`: steps for an initiative; `anx series push`: live numbers.
 
-1. Run `anx orient`, then `anx work context card:<slug>` for the explicit task. Keep stable principal, provider/host-scoped conversation, and run attempt separate. Use `anx sessions register --from-file session.json` and `anx work participants register card:<slug> --from-file participation.json` when doing substantive work; inspect exact fields with `anx help`.
-2. Preserve sequence and identical payload on retries. Increment only for a new observation. Sessions can participate in several tasks. Always report against the explicit task ref; participation does not update legacy current-card selection.
-3. Post meaningful progress with `anx cards message card:<slug> --body "What changed, evidence, uncertainty, and next step"`. Report facts with provenance, distinguish claims from verification, and avoid unchanged updates or raw chat copies.
-4. Report blockers on that same task. If one answer gates work, use `anx ask "One-line decision?" --body-file ask.md --subject-ref card:<slug> --recommend "Preferred answer"`, then `anx await <ask-id>`. After `anx auth access-requests request`, run the returned `anx await access-request:<id>` and do not poll the gated write. Exit 0 means the grant was approved; exit 9 means it was denied. The decision arrives through the same durable answer notification and wake as an ask. To wait for a debounced answer batch, use `anx await --answers`; inspect replies with `anx inbox list --status answered` or `anx orient`. Withdraw a superseded open ask with `anx ask withdraw <event:ask-id> --reason "<short reason>"`.
-5. Agent wakeups use the same durable workspace-local notification across supported harnesses. On wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. Answer read state is per response and works before wake delivery; use `anx notifications read --wakeup-id <id>` to mark the wake notification separately. Exit 8 is timeout; exit 9 is rejected; 10 needs context; 11 withdrawn; 12 expired. A needs-context response returns the next action to the owner/requester; publish a clarified ask with `--supersedes event:<prior-ask-id>`. Preserve human approval gates.
-6. Verify acceptance criteria before reporting completion. Only for an authorized Nexus-native task, `anx work start card:<slug>` assigns and moves work, and `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` completes it. Source-owned completion needs its authorized source workflow. A finished run or closed session never completes a task.
+Warnings on a write name the corrected command. Follow them.
 
-## Keep the workspace executive-readable
+## Asking well
 
-- A card is a human-level initiative or outcome that can span executor tasks and outlive them. Keep issues, PRs and run detail in their source; link them as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card. Never mirror an issue tracker 1:1.
-- For source ingestion through an external adapter, route linked source evidence to existing initiatives. Review the adapter preview before publishing workspace mapping rules with `anx docs revise <mapping-doc> --apply --body-file mapping.json`. Keep unmatched items visible for deliberate triage. Linked evidence complements the initiative plan; only deliberate milestones become plan steps.
-- Keep one plan per initiative card. Add steps rather than writing progress prose, and link steps to real `card:`, `doc:` / `document:`, `topic:` refs or source issue/PR URLs. Never pick a view: the graph determines chain, DAG or lanes. Keep about 15 or fewer open cards and very few open asks.
-- For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; add narrative without pasting live numbers. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`. It validates the report, writes a text document, and verifies the saved revision.
-- Ask only for a human decision (direction, money, risk or an irreversible choice). Recommend one answer, offer at most 2–3 alternatives, and batch related questions. Do not also block the card or set `next_actor` to the human for the same ask. Keep `next_actor` on the agent and advance after the answer using its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
-- Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 tracker issues for one project → 1 card with a linked plan, not 16 cards.
+Ask only for a decision a human must make. One-line title, Markdown body, two or three proposals with your recommendation first, `--by <when>` for when you need the answer, and `--blocks <ref>` for every card waiting on it. Prefer withdrawing an ask over leaving it stale.
 
-## Privacy and handoff
+## Promises
 
-- Share task-scoped facts and references only. Do not upload secrets, raw transcripts, unrelated histories, or local paths as public links. A session reference grants no history access. Preview and obtain appropriate permission before expanding discovery or sharing scope.
-- Prefer fresh context from durable evidence. Prior sessions are provenance/recovery clues for unfinished or unreflected work; resume/history support must be observed, never assumed.
-- When using agentctl, label work `anx.card.<card-slug>` to link run evidence. Native execution remains with the user's harness. Use compact text output for reading, `--json` for scripts, and returned next actions rather than guessed refs.
-- PM designation requires the richer anx-pm skill and an explicit user designation. It grants no new source-write, private-history, approval, or execution authority.
+Say when you will next have news: `anx note <card> "<text>" --next <when> "<what>" --evidence <ref>`. Evidence resets the clock. Moving a promise without evidence is counted and visible. Keep promises within about 2 days, and renew them by noting.
 
-## Initiative plans
+## Everything else
 
-Plan text readbacks are compact; use `--verbose` for every field or `--json` for scripts. Step `--status` accepts `done`, `active`, `blocked`, or `not_started`.
-
-Read `anx plan show card:<slug>` before editing. Use `anx plan set card:<slug> --from-file plan.json` with `{ "steps": [] }` to replace the plan, or add a step with `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>`. Stable step ids are agent-chosen slugs; omitting `--step-id` derives one from the title. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Use `step update <card> <step-id>` for fields and `step rm <card> <step-id>` to remove an unreferenced step. Update dependent `--after` lists before removal.
-
-Use `--status` for unlinked steps or as a fallback for a ref ANX cannot yet resolve. Known card/source workflow state takes precedence. Context refs (docs/topics) have lifecycle state only, so use fallback status for those steps. Unknown external URLs are not fetched. Due dates accept YYYY-MM-DD or RFC3339. The server validates cycles, ids and caps; writes use a concurrency token and preserve event history. A conflict means read again and reconcile the plan. Read `progress`, `health`, `critical_path` and `next_steps` from computed state; never overwrite them with a prose claim. Resolve up to 200 chips in one read using `anx refs resolve <ref>...`.
-
-## Contributing to Agent Nexus
-
-When contributing to this repository, read the root `AGENTS.md` and follow its "Before you open a PR" checklist.
-
-## Live dashboard data
-
-Prefer ANX live queries for workspace facts. For external data, use a declared
-host-local adapter and pushed series; core must never fetch external URLs or
-hold source credentials. Ask a human or explicitly granted auth-admin to declare
-name, description, owning enrolled agent, expected interval and allowed series
-with `anx adapters declare --body-file adapter.json` before any push. As the owner,
-use `anx series push <name> <value> [--label k=v]` or
-`anx series push <name> --from-command -- <cmd>`. The CLI exchanges your host-agent
-token for a short-lived series-write token, restricted to the declared series.
-Bind panels through `source: {series, labels?, range?, agg?}` and put any static
-fallback in `{as_of, data}`. Expose adapter, host, last push, stale state and the
-fallback's original as-of time. Source scripts and schedules live in
-`adapters/series/`; the full guide is `docs/live-series.md`.
-
-## Live-first reports
-
-Start dashboards with `anx report init`: the default contains only live asks,
-initiatives and activity. Use `live-cards` for filtered work and `live-timeline`
-for adapter-fed series observations. Prefer computed panels and source syncing;
-never hand-maintain milestone timelines, state tables or status callouts. If an
-important fact cannot be shown live, file the missing sync work.
-
-Hand-write only unavoidable narrative. Every authored panel must identify its
-`author` principal and carry `authored_at` plus `review_by` (UTC date, zoned
-timestamp, or duration such as `7d` relative to `authored_at`). Validate before
-publishing. Status-like authored panels warn with a live alternative; expired
-explicit deadlines are rejected on writes. Legacy panels default to seven days,
-and pinned dashboard review reminders remain scoped to the author.
-
-## Decision asks and answer delivery
-
-New asks, reviews, and escalations belong to a card. Prefer an explicit `--subject-ref card:<slug>`; otherwise the CLI uses the current card or creates a ready card on the configured default board. Answering records the decision and next actor atomically. Only a matching sole ask blocker moves a blocked task to ready. Only an explicit resolved outcome can complete a native card; source-owned state keeps its source authority.
-
-Use a one-line title (aim for ≤100 characters; hard limit 160) and a Markdown `--body-file ask.md` by default. Start with `anx ask --template decision > ask.md`: Decision, two to five sentences of self-contained context, two or three Options with consequences, Recommendation, and Evidence. Name internal artifacts with typed refs and external evidence with a label plus URL. A named PR, document, or code file needs its matching resolvable reference; code evidence uses a commit-pinned line URL. Do not paste code or send a pointer-only request. `--force --reason` records a deliberate lint override.
-
-`anx await <ask-id>` subscribes to a single indexed ask stream and reports its terminal outcome. `anx await access-request:<id>` uses that same stream for the requesting agent's own grant request: exit 0 is approved and exit 9 is denied. Listing other principals' requests stays human-only. For unattended local continuation, register `--on-answer '<local command>'` (or `ANX_RESUME_CMD`) and run `anx bridge run` on that enrolled host and agent. The command remains in a mode-0600 local registry; the bridge accepts only that local command and sends the outcome through stdin. Native agentctl runs with a real `AGENTCTL_EXECUTION_ID` register their continuation automatically. Resume callbacks are at-least-once across a host crash: make them idempotent. Inspect `anx help bridge run` and the ask-delivery documentation before configuring a service.
+- Setup (enroll, tokens, secrets, adapters, pm, bridge): `anx help <job>`.
+- Any other operation: `anx api <operation>`.
+- Share task-scoped facts and refs only. Never upload secrets or raw transcripts.
