@@ -26,7 +26,7 @@ func TestReportSchemaAndValidateAreLocalCommands(t *testing.T) {
 		t.Fatalf("unexpected schema kind %q", got)
 	}
 	panelTypes, panelTypesOK := asStringList(result["panel_types"])
-	if !panelTypesOK || len(panelTypes) != 19 || asMap(result["example"]) == nil {
+	if !panelTypesOK || len(panelTypes) != 20 || asMap(result["example"]) == nil {
 		t.Fatalf("schema omitted panel types or minimal example: %#v", result)
 	}
 	for _, liveType := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "metric", "table"} {
@@ -52,7 +52,7 @@ func TestReportTemplatesAndInitAreLocalAndProduceValidReports(t *testing.T) {
 	home := t.TempDir()
 	templates := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "report", "templates"}))
 	items := asSlice(asMap(templates["result"])["templates"])
-	if len(items) != 6 {
+	if len(items) != 7 {
 		t.Fatalf("templates=%#v", items)
 	}
 

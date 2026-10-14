@@ -11,8 +11,8 @@ import (
 )
 
 func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
-	if len(reportTemplates) != 6 {
-		t.Fatalf("got %d templates, want 6", len(reportTemplates))
+	if len(reportTemplates) != 7 {
+		t.Fatalf("got %d templates, want 7", len(reportTemplates))
 	}
 	for _, template := range reportTemplates {
 		t.Run(template.name, func(t *testing.T) {
@@ -42,18 +42,39 @@ func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
 				panel := raw
 				if source := panel["source"]; source != nil {
 					seriesCount++
-					if template.name != "workspace-overview" || panel["type"] != "chart" {
-						t.Fatalf("unexpected series panel in %s: %#v", template.name, panel)
+					liveCount++
+					if template.name == "workspace-overview" {
+						if panel["type"] != "chart" {
+							t.Fatalf("unexpected series panel in %s: %#v", template.name, panel)
+						}
+						encodedSource, _ := json.Marshal(source)
+						var binding map[string]any
+						if err := json.Unmarshal(encodedSource, &binding); err != nil {
+							t.Fatal(err)
+						}
+						labels := binding["labels"].(map[string]any)
+						if binding["series"] != "github-prs" || labels["status"] != "merged" || binding["range"] != "84d" || binding["agg"] != "sum" {
+							t.Fatalf("throughput does not match the github-prs contract: %#v", binding)
+						}
+						continue
 					}
-					encodedSource, _ := json.Marshal(source)
-					var binding map[string]any
-					if err := json.Unmarshal(encodedSource, &binding); err != nil {
-						t.Fatal(err)
+					if template.name == "loops" {
+						if panel["type"] != "live-table" {
+							t.Fatalf("loops template must pivot through live-table: %#v", panel)
+						}
+						encodedSource, _ := json.Marshal(source)
+						var binding map[string]any
+						if err := json.Unmarshal(encodedSource, &binding); err != nil {
+							t.Fatal(err)
+						}
+						columns := binding["columns"].([]any)
+						rowKeys := binding["row_keys"].([]any)
+						if len(columns) != 3 || len(rowKeys) != 2 || binding["range"] != "7d" {
+							t.Fatalf("loops pivot binding: %#v", binding)
+						}
+						continue
 					}
-					labels := binding["labels"].(map[string]any)
-					if binding["series"] != "github-prs" || labels["status"] != "merged" || binding["range"] != "84d" || binding["agg"] != "sum" {
-						t.Fatalf("throughput does not match the github-prs contract: %#v", binding)
-					}
+					t.Fatalf("unexpected series panel in %s: %#v", template.name, panel)
 					continue
 				}
 				kind := reportStringValue(panel["type"])
@@ -76,11 +97,14 @@ func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
 			if liveCount == 0 {
 				t.Fatal("template has no live query")
 			}
-			if seriesCount != 0 {
-				t.Fatalf("%s has %d declared series panels, want throughput only on workspace-overview", template.name, seriesCount)
+			if seriesCount != 0 && template.name != "workspace-overview" && template.name != "loops" {
+				t.Fatalf("%s has %d declared series panels, want throughput only on workspace-overview and the pivot on loops", template.name, seriesCount)
 			}
 			if template.name == "fleet-health" && (len(panels) != 1 || panels[0]["type"] != "live-fleet-health") {
 				t.Fatalf("fleet health is not wired to its live fleet source: %#v", panels)
+			}
+			if template.name == "loops" && (len(panels) != 1 || panels[0]["type"] != "live-table") {
+				t.Fatalf("loops is not wired to its pivoted series table: %#v", panels)
 			}
 		})
 	}

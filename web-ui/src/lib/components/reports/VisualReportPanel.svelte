@@ -50,6 +50,7 @@
     // heading rather than a blank eyebrow above the rows.
     "live-cards": "Work",
     "live-timeline": "Timeline",
+    "live-table": "Live table",
     chart: "Visualization",
     "metric-strip": "Measures",
     metric: "Measure",

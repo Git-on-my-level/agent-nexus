@@ -20,6 +20,7 @@ const templateNames = [
   "release-readiness",
   "incident-review",
   "fleet-health",
+  "loops",
 ];
 const fixtureText = {
   "workspace-overview": ["Launch", "Launch checklist updated"],
@@ -34,9 +35,10 @@ const fixtureText = {
   "release-readiness": ["Launch", "Choose the release date"],
   "incident-review": ["Launch checklist updated", "Choose the release date"],
   "fleet-health": ["Collector"],
+  loops: ["errfix", "running", "2 more rows not shown"],
 };
 
-test("browser renders all six report templates against live fixtures", async ({
+test("browser renders all seven report templates against live fixtures", async ({
   request,
 }, testInfo) => {
   void request;

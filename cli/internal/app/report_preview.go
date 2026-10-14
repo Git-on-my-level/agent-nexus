@@ -202,8 +202,21 @@ func summarizeReportPanels(report map[string]any, observations []any) []any {
 
 func reportPanelSummary(kind string, panel, data, observation map[string]any) (string, string, string) {
 	if source := asMap(panel["source"]); len(source) > 0 {
-		name := reportStringValue(source["series"])
 		fresh := reportObservationFreshness(observation, "Series data was not materialized.")
+		if kind == "live-table" {
+			series := []string{}
+			for _, raw := range asSlice(source["columns"]) {
+				if name := reportStringValue(asMap(raw)["series"]); name != "" {
+					series = append(series, name)
+				}
+			}
+			what := "One row per label set, one column per series"
+			if more, ok := data["more"].(float64); ok && more > 0 {
+				what = fmt.Sprintf("%s, %d more rows capped", what, int(more))
+			}
+			return what, "series:" + strings.Join(series, ","), fresh
+		}
+		name := reportStringValue(source["series"])
 		return "Live series values", "series:" + name, fresh
 	}
 	if visualreport.IsLive(kind) {

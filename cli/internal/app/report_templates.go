@@ -81,6 +81,26 @@ var reportTemplates = []reportTemplate{
 			}
 		},
 	},
+	{
+		name: "loops", purpose: "One row per automation loop label set, with state, effect counts and staleness per column.",
+		title: "Loop operations", summary: "A pivoted live table over loop series: one row per label set, one column per series, with per-cell freshness.",
+		build: func(_ string, _ string) []map[string]any {
+			return []map[string]any{
+				seriesReportPanel("loops", "live-table", "Loop status", map[string]any{
+					"columns": []any{
+						map[string]any{"series": "loops.state", "label": "State"},
+						map[string]any{"series": "loops.runs_7d", "label": "Runs (7d)", "agg": "sum"},
+						map[string]any{"series": "loops.fail_streak", "label": "Fail streak", "agg": "max"},
+					},
+					"row_keys": []any{
+						map[string]any{"key": "loop"},
+						map[string]any{"key": "host", "label": "Host"},
+					},
+					"range": "7d",
+				}),
+			}
+		},
+	},
 }
 
 func reportTemplateList() *commandResult {

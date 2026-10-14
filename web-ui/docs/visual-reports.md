@@ -778,6 +778,19 @@ panels, with `data: {}`. It returns the newest individual observations as
 Timeline range is limited to the existing 90-day raw retention. Core fetches no
 external URLs; adapters publish the underlying release or deployment events.
 
+A `live-table` pivots one or more series (up to eight `columns`, each with its
+own optional `agg`) into one row per distinct combination of up to four
+`row_keys` label values. Key cells render the row's label values; series cells
+render the value each column's aggregation last observed in range, with that
+cell's own observation time and staleness, so a quiet publisher marks its own
+cells stale instead of turning the whole panel unreadable. Rows sort by their
+row keys, stay capped at 50 with the remainder counted in an explicit "N more"
+marker, and a column a reader cannot see leaves its cell empty — never zero.
+Column headers come from the author (`label`, defaulting to the series or
+label-key name), and the renderer can re-sort any column. The panel reads
+stale only when every served series cell is stale. `anx report init --template
+loops` generates a working example.
+
 Hand-write only unavoidable narrative. Set `author` to the owning principal's
 actor ID, `authored_at` to a zoned timestamp and `review_by` to a UTC date,
 zoned timestamp or positive duration such as `7d`. Dates mean midnight UTC;

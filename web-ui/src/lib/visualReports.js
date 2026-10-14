@@ -1,4 +1,9 @@
-import { seriesRangeSeconds, validateSeriesBinding } from "./seriesReports.js";
+import {
+  AGGREGATIONS,
+  seriesNamePattern as SERIES_NAME,
+  seriesRangeSeconds,
+  validateSeriesBinding,
+} from "./seriesReports.js";
 import { validateReportLayout } from "./visualReportLayout.js";
 import { validateReportChart } from "./visualReportCharts.js";
 import {
@@ -46,6 +51,8 @@ export const VISUAL_REPORT_LIMITS = Object.freeze({
   errors: 20,
 });
 export const VISUAL_REPORT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+/** Served pivot rows are capped with the remainder counted in `more`. */
+const PIVOT_ROW_LIMIT = 50;
 
 /** Serialize structured document content before applying the text parser. */
 export function visualReportContentText(content) {
@@ -549,10 +556,13 @@ function validateReport(report) {
         add(dataPath, error);
       return;
     }
-    if (panel.type === "live-timeline") {
+    if (
+      (panel.type === "live-timeline" || panel.type === "live-table") &&
+      panel.source === undefined
+    ) {
       // Reached only when the panel has no `source`; a bound one is validated
       // as a series binding above.
-      add(`${path}.source`, "live-timeline requires a series source");
+      add(`${path}.source`, `${panel.type} requires a series source`);
       return;
     }
     switch (panel.type) {
@@ -712,6 +722,90 @@ function validateReport(report) {
             references(row.source_ids, `${rowPath}.source_ids`, panelSources);
           },
         );
+        break;
+      }
+      case "live-table": {
+        // Reached for bound panels' fallback snapshots; a source-less
+        // live-table returns above with its own error.
+        if (!record(data, dataPath, ["columns", "rows"], ["more"])) break;
+        const columns = array(
+          data.columns,
+          `${dataPath}.columns`,
+          VISUAL_REPORT_LIMITS.columns,
+          1,
+        );
+        columns.forEach((column, columnIndex) => {
+          const columnPath = `${dataPath}.columns[${columnIndex}]`;
+          if (
+            !record(
+              column,
+              columnPath,
+              ["label", "kind"],
+              ["series", "agg", "unit"],
+            )
+          )
+            return;
+          string(column.label, `${columnPath}.label`);
+          if (column.kind === "key") {
+            if (column.series !== undefined)
+              add(`${columnPath}.series`, "key columns do not carry a series");
+            if (column.agg !== undefined)
+              add(
+                `${columnPath}.agg`,
+                "key columns do not carry an aggregation",
+              );
+          } else if (column.kind === "series") {
+            if (
+              typeof column.series !== "string" ||
+              !SERIES_NAME.test(column.series)
+            )
+              add(`${columnPath}.series`, "must be a series name");
+            if (column.agg !== undefined)
+              enumeration(column.agg, `${columnPath}.agg`, AGGREGATIONS);
+          } else add(`${columnPath}.kind`, "must be one of key, series");
+          if (column.unit !== undefined)
+            string(column.unit, `${columnPath}.unit`, 80, true);
+        });
+        array(data.rows, `${dataPath}.rows`, PIVOT_ROW_LIMIT).forEach(
+          (row, rowIndex) => {
+            const rowPath = `${dataPath}.rows[${rowIndex}]`;
+            if (!record(row, rowPath, ["cells", "source_ids"])) return;
+            const cells = array(
+              row.cells,
+              `${rowPath}.cells`,
+              VISUAL_REPORT_LIMITS.columns,
+            );
+            if (cells.length !== columns.length)
+              add(`${rowPath}.cells`, "must match the column count");
+            cells.forEach((cell, cellIndex) => {
+              const cellPath = `${rowPath}.cells[${cellIndex}]`;
+              const seriesCell =
+                cellIndex < columns.length &&
+                columns[cellIndex]?.kind === "series";
+              if (!record(cell, cellPath, ["text"], ["observed_at", "stale"]))
+                return;
+              string(
+                cell.text,
+                `${cellPath}.text`,
+                VISUAL_REPORT_LIMITS.cell,
+                true,
+              );
+              if (Object.hasOwn(cell, "observed_at") || seriesCell)
+                timestamp(cell.observed_at, `${cellPath}.observed_at`, true);
+              if (Object.hasOwn(cell, "stale")) {
+                if (typeof cell.stale !== "boolean")
+                  add(`${cellPath}.stale`, "must be a boolean");
+              } else if (seriesCell)
+                add(cellPath, "series cells carry their staleness");
+            });
+            references(row.source_ids, `${rowPath}.source_ids`, panelSources);
+          },
+        );
+        if (
+          data.more !== undefined &&
+          (!Number.isInteger(data.more) || data.more < 0 || data.more > 100000)
+        )
+          add(`${dataPath}.more`, "must be a non-negative integer count");
         break;
       }
       case "milestone-timeline":

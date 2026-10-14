@@ -11,11 +11,14 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   // Bound to a series rather than a query: its data comes from `source`, so it
   // is here for the panel-type list and never reaches `validateLiveQuery`.
   "live-timeline",
+  "live-table",
 ]);
 
-/** The live types that carry a query. `live-timeline` binds a series instead. */
+/** The live types that carry a query. `live-timeline` and `live-table` bind a series instead. */
 export const LIVE_QUERY_TYPES = Object.freeze(
-  LIVE_REPORT_TYPES.filter((type) => type !== "live-timeline"),
+  LIVE_REPORT_TYPES.filter(
+    (type) => type !== "live-timeline" && type !== "live-table",
+  ),
 );
 /**
  * Whether this panel is computed at read time.

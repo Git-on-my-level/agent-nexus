@@ -1,15 +1,25 @@
 package server
 
 import (
-	"agent-nexus-core/internal/series"
-	reports "agent-nexus-visualreport"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
+
+	"agent-nexus-core/internal/series"
+	reports "agent-nexus-visualreport"
 )
 
+// pivotMaxRows caps the served rows; the remainder is counted in data.more.
+// Mirrors the fallback row bound in the shared contract.
+const pivotMaxRows = 50
+
 func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]any {
+	if panel.Type == "live-table" {
+		return reader.materializeLiveTable(panel)
+	}
 	out := map[string]any{"id": panel.ID, "type": panel.Type, "status": "unavailable", "data": map[string]any{}, "observed_at": nil, "truncated": false}
 	if reader.opts.seriesStore == nil {
 		return out
@@ -225,4 +235,243 @@ func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]an
 		out["data"] = map[string]any{"option": map[string]any{"xAxis": map[string]any{"type": "time"}, "yAxis": map[string]any{"type": "value", "name": r.Unit}, "series": charts}}
 	}
 	return out
+}
+
+// materializeLiveTable pivots series bindings into one row per distinct
+// combination of the row-key label values, with one column per bound series.
+// A series cell holds the value its column's aggregation last observed in the
+// requested range, when that value was observed, and whether the label set has
+// missed its adapter's expected interval.
+//
+// Per-request cost is bounded by the binding, never by workspace size: one
+// bounded store query per column (at most eight, each capped at 100 label sets
+// and the shared 4,096-raw-point or 20,000-summary-row budget, backed by the
+// (series, labels, ts) indexes), and cells materialize only for the capped
+// rows actually served.
+func (reader *reportReader) materializeLiveTable(panel reports.Panel) map[string]any {
+	out := map[string]any{"id": panel.ID, "type": panel.Type, "status": "unavailable", "data": map[string]any{}, "observed_at": nil, "truncated": false}
+	if reader.opts.seriesStore == nil || panel.Source == nil {
+		return out
+	}
+	source := panel.Source
+	if len(source.Columns) == 0 || len(source.Columns) > reports.MaxPivotColumns || len(source.RowKeys) == 0 || len(source.RowKeys) > reports.MaxPivotRowKeys {
+		return out
+	}
+	window := 24 * time.Hour
+	var err error
+	if source.Range != "" {
+		if window, err = reports.SeriesRange(source.Range); err != nil {
+			return out
+		}
+	}
+	// One bucket covering the requested window, as metric panels do; ranges
+	// beyond raw retention aggregate on whole days.
+	step := window
+	if window > series.Retention {
+		step = ((window + 24*time.Hour - 1) / (24 * time.Hour)) * 24 * time.Hour
+	}
+	results := make([]series.Result, 0, len(source.Columns))
+	byLabels := make([]map[string]series.Stream, 0, len(source.Columns))
+	for _, column := range source.Columns {
+		agg := column.Agg
+		if agg == "" {
+			agg = "last"
+		}
+		result, err := reader.opts.seriesStore.Query(reader.r.Context(), column.Series, source.Labels, window, step, agg, reader.now)
+		if err != nil {
+			switch {
+			case errors.Is(err, series.ErrCapacity):
+				out["message"] = "Select fewer labels or a shorter range to show this panel."
+			case errors.Is(err, series.ErrNotFound):
+				out["message"] = fmt.Sprintf("Series %s is not declared.", column.Series)
+			case errors.Is(err, series.ErrInvalid):
+				out["message"] = fmt.Sprintf("Series %s does not support the %s aggregation.", column.Series, agg)
+			}
+			return out
+		}
+		results = append(results, result)
+		streams := map[string]series.Stream{}
+		for _, stream := range result.Streams {
+			if len(stream.Points) == 0 {
+				continue
+			}
+			streams[labelsKey(stream.Labels)] = stream
+		}
+		byLabels = append(byLabels, streams)
+	}
+	type pivotRow struct {
+		values  []string
+		encoded string
+		streams []series.Stream
+		present []bool
+	}
+	rows := map[string]*pivotRow{}
+	order := []string{}
+	for ci, streams := range byLabels {
+		for encoded, stream := range streams {
+			row := rows[encoded]
+			if row == nil {
+				values := make([]string, len(source.RowKeys))
+				for ki, rowKey := range source.RowKeys {
+					values[ki] = stream.Labels[rowKey.Key]
+				}
+				row = &pivotRow{values: values, encoded: encoded, streams: make([]series.Stream, len(source.Columns)), present: make([]bool, len(source.Columns))}
+				rows[encoded] = row
+				order = append(order, encoded)
+			}
+			row.streams[ci] = stream
+			row.present[ci] = true
+		}
+	}
+	// The comparator is total: row-key values first, then the full encoded
+	// label set, so the served order never depends on map iteration.
+	sort.Slice(order, func(a, b int) bool {
+		left, right := rows[order[a]], rows[order[b]]
+		for i := range left.values {
+			if left.values[i] != right.values[i] {
+				return left.values[i] < right.values[i]
+			}
+		}
+		return left.encoded < right.encoded
+	})
+	columns := make([]map[string]any, 0, len(source.RowKeys)+len(source.Columns))
+	for _, rowKey := range source.RowKeys {
+		label := rowKey.Label
+		if label == "" {
+			label = rowKey.Key
+		}
+		columns = append(columns, map[string]any{"label": label, "kind": "key"})
+	}
+	for ci, column := range source.Columns {
+		label := column.Label
+		if label == "" {
+			label = column.Series
+		}
+		agg := column.Agg
+		if agg == "" {
+			agg = "last"
+		}
+		columns = append(columns, map[string]any{"label": label, "kind": "series", "series": column.Series, "agg": agg, "unit": results[ci].Unit})
+	}
+	latest := time.Time{}
+	staleSince := time.Time{}
+	freshUntil := time.Time{}
+	anyStale := false
+	fresh, stale := 0, 0
+	tableRows := make([]map[string]any, 0, min(len(order), pivotMaxRows))
+	more := 0
+	for _, encoded := range order {
+		row := rows[encoded]
+		if len(tableRows) >= pivotMaxRows {
+			more++
+			continue
+		}
+		cells := make([]map[string]any, 0, len(row.values)+len(source.Columns))
+		for _, value := range row.values {
+			cells = append(cells, map[string]any{"text": value})
+		}
+		for ci := range source.Columns {
+			if !row.present[ci] {
+				cells = append(cells, map[string]any{"text": "", "observed_at": nil, "stale": false})
+				continue
+			}
+			stream := row.streams[ci]
+			if stream.Stale {
+				anyStale = true
+			}
+			observed, _ := time.Parse(time.RFC3339Nano, stream.LastPoint)
+			if observed.After(latest) {
+				latest = observed
+			}
+			if stream.Stale {
+				stale++
+				if since, err := time.Parse(time.RFC3339Nano, stream.StaleSince); err == nil && (staleSince.IsZero() || since.Before(staleSince)) {
+					staleSince = since
+				}
+			} else {
+				fresh++
+				if !observed.IsZero() {
+					until := observed.Add(time.Duration(results[ci].ExpectedInterval) * 2 * time.Second)
+					if freshUntil.IsZero() || until.Before(freshUntil) {
+						freshUntil = until
+					}
+				}
+			}
+			cells = append(cells, map[string]any{"text": clipText(streamValue(stream)), "observed_at": stream.LastPoint, "stale": stream.Stale})
+		}
+		tableRows = append(tableRows, map[string]any{"cells": cells, "source_ids": []string{}})
+	}
+	provenance := make([]map[string]any, 0, len(results))
+	for ci, result := range results {
+		labels := source.Labels
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		provenance = append(provenance, map[string]any{"adapter": result.Adapter, "host": result.Host, "host_id": result.HostID, "agent_id": result.AgentID, "last_push": result.LastPush, "expected_interval_seconds": result.ExpectedInterval, "resolution": result.Resolution, "series": source.Columns[ci].Series, "labels": labels})
+	}
+	status := "unavailable"
+	if fresh > 0 {
+		status = "ok"
+	} else if stale > 0 || anyStale {
+		// A stale publisher is a definite answer even when nothing was observed
+		// in the requested range: name when it went quiet, as other panels do.
+		status = "stale"
+	}
+	if status == "unavailable" {
+		out["message"] = "No observations in the selected range."
+	}
+	if !latest.IsZero() {
+		out["observed_at"] = latest.UTC().Format(time.RFC3339Nano)
+	}
+	if staleSince.IsZero() {
+		out["stale_since"] = ""
+	} else {
+		out["stale_since"] = staleSince.UTC().Format(time.RFC3339Nano)
+	}
+	if !freshUntil.IsZero() {
+		out["fresh_until"] = freshUntil.UTC().Format(time.RFC3339Nano)
+	}
+	out["status"] = status
+	out["truncated"] = more > 0
+	out["provenance"] = provenance
+	out["data"] = map[string]any{"columns": columns, "rows": tableRows, "more": more}
+	return out
+}
+
+// streamValue renders the last observation of a queried stream as cell text.
+func streamValue(stream series.Stream) string {
+	point := stream.Points[len(stream.Points)-1]
+	if point.State != nil {
+		return *point.State
+	}
+	if point.Value != nil {
+		return fmt.Sprint(*point.Value)
+	}
+	return ""
+}
+
+func clipText(text string) string {
+	if runes := []rune(text); len(runes) > 200 {
+		return string(runes[:199]) + "…"
+	}
+	return text
+}
+
+// labelsKey identifies a label set across column queries. json.Marshal sorts
+// map keys, so the same label set encodes identically from every query.
+func labelsKey(labels map[string]string) string {
+	encoded, err := json.Marshal(labels)
+	if err != nil {
+		keys := make([]string, 0, len(labels))
+		for key := range labels {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			parts = append(parts, key+"="+labels[key])
+		}
+		return strings.Join(parts, "\x1f")
+	}
+	return string(encoded)
 }

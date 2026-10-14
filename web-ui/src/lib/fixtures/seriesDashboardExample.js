@@ -51,6 +51,16 @@ export const seriesDashboardExample = {
       series: "builds",
       range: "1h",
     }),
+    // One row per initiative label set, one column per series: the readable
+    // answer when a dashboard tracks many label sets at once.
+    panel("loops", "live-table", "Builds by initiative", {
+      columns: [
+        { series: "builds.health", label: "Health" },
+        { series: "builds", label: "Builds (24h)", agg: "sum" },
+      ],
+      row_keys: [{ key: "initiative" }],
+      range: "24h",
+    }),
     // Events as published, newest first: the live answer to a hand-written
     // release or deploy log. No aggregation, and no authored fallback — a
     // typed list of past releases is exactly what it replaces.

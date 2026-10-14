@@ -1,0 +1,160 @@
+{
+  "observations": [
+    {
+      "data": {
+        "columns": [
+          { "kind": "key", "label": "loop" },
+          { "kind": "key", "label": "Host" },
+          {
+            "agg": "last",
+            "kind": "series",
+            "label": "State",
+            "series": "loops.state",
+            "unit": "status"
+          },
+          {
+            "agg": "sum",
+            "kind": "series",
+            "label": "Runs (7d)",
+            "series": "loops.runs_7d",
+            "unit": "runs"
+          },
+          {
+            "agg": "max",
+            "kind": "series",
+            "label": "Fail streak",
+            "series": "loops.fail_streak",
+            "unit": "fails"
+          }
+        ],
+        "more": 2,
+        "rows": [
+          {
+            "cells": [
+              { "text": "errfix" },
+              { "text": "collector-01" },
+              {
+                "observed_at": "2026-10-05T00:00:00Z",
+                "stale": false,
+                "text": "running"
+              },
+              {
+                "observed_at": "2026-10-05T00:00:00Z",
+                "stale": false,
+                "text": "14"
+              },
+              {
+                "observed_at": "2026-10-04T12:00:00Z",
+                "stale": true,
+                "text": "2"
+              }
+            ],
+            "source_ids": []
+          },
+          {
+            "cells": [
+              { "text": "nightly" },
+              { "text": "collector-01" },
+              {
+                "observed_at": "2026-10-05T00:00:00Z",
+                "stale": false,
+                "text": "idle"
+              },
+              { "observed_at": null, "stale": false, "text": "" },
+              {
+                "observed_at": "2026-10-05T00:00:00Z",
+                "stale": false,
+                "text": "0"
+              }
+            ],
+            "source_ids": []
+          }
+        ]
+      },
+      "id": "loops",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "provenance": [
+        {
+          "adapter": "loop-collector",
+          "agent_id": "agent-collector",
+          "expected_interval_seconds": 60,
+          "host": "collector-01",
+          "host_id": "host-collector",
+          "labels": {},
+          "last_push": "2026-10-05T00:00:00Z",
+          "resolution": "raw",
+          "series": "loops.state"
+        },
+        {
+          "adapter": "loop-collector",
+          "agent_id": "agent-collector",
+          "expected_interval_seconds": 60,
+          "host": "collector-01",
+          "host_id": "host-collector",
+          "labels": {},
+          "last_push": "2026-10-05T00:00:00Z",
+          "resolution": "raw",
+          "series": "loops.runs_7d"
+        },
+        {
+          "adapter": "loop-collector",
+          "agent_id": "agent-collector",
+          "expected_interval_seconds": 60,
+          "host": "collector-01",
+          "host_id": "host-collector",
+          "labels": {},
+          "last_push": "2026-10-04T12:00:00Z",
+          "resolution": "raw",
+          "series": "loops.fail_streak"
+        }
+      ],
+      "status": "ok",
+      "stale_since": "",
+      "truncated": true,
+      "type": "live-table"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "loops",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "columns": [
+            { "label": "State", "series": "loops.state" },
+            { "agg": "sum", "label": "Runs (7d)", "series": "loops.runs_7d" },
+            {
+              "agg": "max",
+              "label": "Fail streak",
+              "series": "loops.fail_streak"
+            }
+          ],
+          "range": "7d",
+          "row_keys": [{ "key": "loop" }, { "key": "host", "label": "Host" }]
+        },
+        "source_ids": [],
+        "title": "Loop status",
+        "type": "live-table"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "A pivoted live table over loop series: one row per label set, one column per series, with per-cell freshness.",
+    "title": "Loop operations"
+  }
+}

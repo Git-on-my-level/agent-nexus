@@ -26,7 +26,7 @@ const (
 var panelTypes = []string{
 	"explanation", "evidence-table", "milestone-timeline", "dependency-diagram",
 	"metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison",
-	"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "metric", "table",
+	"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "live-table", "metric", "table",
 }
 
 // PanelTypes returns the panel types accepted by the shared visual-report contract.
@@ -448,7 +448,11 @@ func (v *validator) report(r map[string]any) {
 			if _, exists := item["fallback"]; exists {
 				v.add(p+".fallback", "requires a series source")
 			}
-			v.panelData(item, p, panelSources, reference)
+			if kind, _ := item["type"].(string); kind == "live-timeline" || kind == "live-table" {
+				v.add(p+".source", kind+" requires a series source")
+			} else {
+				v.panelData(item, p, panelSources, reference)
+			}
 		}
 	}
 }
@@ -461,8 +465,10 @@ func (v *validator) panelData(panel map[string]any, path string, panelSources ma
 		if _, err := ParseQuery(panel["type"].(string), raw); err != nil {
 			v.add(dp, err.Error())
 		}
-	case "live-timeline":
-		v.add(path+".source", "live-timeline requires a series source")
+	case "live-table":
+		// Reached for bound panels' fallback snapshots and for authored data;
+		// a source-less live-table is rejected before this switch.
+		v.pivotData(data, dp, panelSources, reference)
 	case "metric":
 		v.metric(data, dp)
 	case "chart":
@@ -620,6 +626,88 @@ func (v *validator) panelData(panel map[string]any, path string, panelSources ma
 		if x, ok := m["url"]; ok {
 			v.url(x, dp+".url")
 		}
+	}
+}
+
+// pivotData validates the pivoted one-row-per-label-set shape: first the
+// row-key columns, then one column per bound series, with each row's cells in
+// the same order. Key cells carry only text; series cells add the observation
+// time and staleness of the value they hold.
+func (v *validator) pivotData(data any, path string, panelSources map[string]bool, reference func(any, string, map[string]bool)) {
+	m, ok := object(data, path, []string{"columns", "rows"}, []string{"more"}, v.add)
+	if !ok {
+		return
+	}
+	columns := v.arr(m["columns"], path+".columns", 12, 1)
+	for i, raw := range columns {
+		p := fmt.Sprintf("%s.columns[%d]", path, i)
+		column, ok := object(raw, p, []string{"label", "kind"}, []string{"series", "agg", "unit"}, v.add)
+		if !ok {
+			continue
+		}
+		v.text(column["label"], p+".label", 200, false)
+		kind, _ := column["kind"].(string)
+		switch kind {
+		case "key":
+			if _, exists := column["series"]; exists {
+				v.add(p+".series", "key columns do not carry a series")
+			}
+			if _, exists := column["agg"]; exists {
+				v.add(p+".agg", "key columns do not carry an aggregation")
+			}
+		case "series":
+			if name, ok := column["series"].(string); !ok || !seriesName.MatchString(name) {
+				v.add(p+".series", "must be a series name")
+			}
+			if raw, exists := column["agg"]; exists {
+				v.enum(raw, p+".agg", "last", "avg", "sum", "min", "max", "count")
+			}
+		default:
+			v.add(p+".kind", "must be one of key, series")
+		}
+		if unit, exists := column["unit"]; exists {
+			v.text(unit, p+".unit", 80, true)
+		}
+	}
+	for i, raw := range v.arr(m["rows"], path+".rows", 50, 0) {
+		p := fmt.Sprintf("%s.rows[%d]", path, i)
+		row, ok := object(raw, p, []string{"cells", "source_ids"}, nil, v.add)
+		if !ok {
+			continue
+		}
+		cells := v.arr(row["cells"], p+".cells", 12, 0)
+		if len(cells) != len(columns) {
+			v.add(p+".cells", "must match the column count")
+		}
+		for j, cell := range cells {
+			v.pivotCell(cell, fmt.Sprintf("%s.cells[%d]", p, j), j < len(columns) && fmt.Sprint(asObject(columns[j])["kind"]) == "series")
+		}
+		reference(row["source_ids"], p+".source_ids", panelSources)
+	}
+	if raw, exists := m["more"]; exists {
+		if n, ok := numeric(raw); !ok || n < 0 || n != math.Trunc(n) || n > 100000 {
+			v.add(path+".more", "must be a non-negative integer count")
+		}
+	}
+}
+
+func asObject(value any) map[string]any { m, _ := value.(map[string]any); return m }
+
+func (v *validator) pivotCell(cell any, path string, series bool) {
+	m, ok := object(cell, path, []string{"text"}, []string{"observed_at", "stale"}, v.add)
+	if !ok {
+		return
+	}
+	v.text(m["text"], path+".text", 2000, true)
+	if _, exists := m["observed_at"]; exists || series {
+		v.timestamp(m["observed_at"], path+".observed_at", true)
+	}
+	if raw, exists := m["stale"]; exists {
+		if _, ok := raw.(bool); !ok {
+			v.add(path+".stale", "must be a boolean")
+		}
+	} else if series {
+		v.add(path+".stale", "series cells carry their staleness")
 	}
 }
 

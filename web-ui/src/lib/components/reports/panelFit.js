@@ -48,6 +48,7 @@ const WIDE_TYPES = new Set([
   "metric-chart",
   "table",
   "evidence-table",
+  "live-table",
   "dependency-diagram",
   "live-initiatives",
   "live-timeline",
@@ -77,6 +78,7 @@ function contentCount(type, data) {
       return text(data.excerpt).length;
     case "table":
     case "evidence-table":
+    case "live-table":
       return list(data.rows).length;
     case "milestone-timeline":
     case "metric-strip":
@@ -108,6 +110,7 @@ function narrowEnough(type, data, count) {
   switch (type) {
     case "table":
     case "evidence-table":
+    case "live-table":
       return list(data.columns).length <= 3 && count <= 6;
     case "metric-chart":
       return count <= 12;

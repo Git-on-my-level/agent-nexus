@@ -7423,31 +7423,31 @@
     "name": "provenance label 70 umlauts (140 bytes)",
     "recognized": true,
     "valid": false,
-    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\"}}]}"
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü\"}}]}"
   },
   {
     "name": "provenance label 64 umlauts (128 bytes)",
     "recognized": true,
     "valid": true,
-    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\"}}]}"
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü\"}}]}"
   },
   {
     "name": "provenance label 40 emoji (160 bytes)",
     "recognized": true,
     "valid": false,
-    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\"}}]}"
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"}}]}"
   },
   {
     "name": "provenance label U+FEFF only",
     "recognized": true,
     "valid": true,
-    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\ufeff\"}}]}"
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"﻿\"}}]}"
   },
   {
     "name": "provenance label U+0085 only",
     "recognized": true,
     "valid": false,
-    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\u0085\"}}]}"
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\"}}]}"
   },
   {
     "name": "provenance label space only",
@@ -7459,7 +7459,7 @@
     "name": "provenance label nbsp only",
     "recognized": true,
     "valid": false,
-    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\"\u00a0\"}}]}"
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-cards\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"label\":\" \"}}]}"
   },
   {
     "name": "provenance role number",
@@ -7742,6 +7742,84 @@
     "recognized": true,
     "valid": false,
     "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"3651d\"}}]}"
+  },
+  {
+    "name": "live-table pivot binding valid",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\"}}]}"
+  },
+  {
+    "name": "live-table pivot binding with fallback snapshot",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\"},\"fallback\":{\"as_of\":\"2026-10-01T00:00:00Z\",\"data\":{\"columns\":[{\"label\":\"loop\",\"kind\":\"key\"},{\"label\":\"Host\",\"kind\":\"key\"},{\"label\":\"State\",\"kind\":\"series\",\"series\":\"loop.state\",\"agg\":\"last\",\"unit\":\"\"},{\"label\":\"Effects 7d\",\"kind\":\"series\",\"series\":\"loop.effects_7d\",\"agg\":\"sum\"}],\"rows\":[{\"cells\":[{\"text\":\"omi-errfix\"},{\"text\":\"m5-mbp\"},{\"text\":\"running\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"stale\":false},{\"text\":\"12\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"stale\":true}],\"source_ids\":[]},{\"cells\":[{\"text\":\"omi-errfix\"},{\"text\":\"m4-air\"},{\"text\":\"\",\"observed_at\":null,\"stale\":false},{\"text\":\"3\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"stale\":false}],\"source_ids\":[]}],\"more\":2}}}]}"
+  },
+  {
+    "name": "live-table pivot binding with series instead of columns",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"loop.state\",\"row_keys\":[{\"key\":\"loop\"}]}}]}"
+  },
+  {
+    "name": "live-table pivot binding without row keys",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\"}]}}]}"
+  },
+  {
+    "name": "live-table pivot binding with duplicate row keys",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"loop\"}]}}]}"
+  },
+  {
+    "name": "live-table pivot binding with top-level agg",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\",\"agg\":\"sum\"}}]}"
+  },
+  {
+    "name": "live-table pivot binding with too many columns",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.m0\"},{\"series\":\"loop.m1\"},{\"series\":\"loop.m2\"},{\"series\":\"loop.m3\"},{\"series\":\"loop.m4\"},{\"series\":\"loop.m5\"},{\"series\":\"loop.m6\"},{\"series\":\"loop.m7\"},{\"series\":\"loop.m8\"}],\"row_keys\":[{\"key\":\"loop\"}]}}]}"
+  },
+  {
+    "name": "live-table pivot binding with bound data",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"columns\":[{\"label\":\"loop\",\"kind\":\"key\"},{\"label\":\"Host\",\"kind\":\"key\"},{\"label\":\"State\",\"kind\":\"series\",\"series\":\"loop.state\",\"agg\":\"last\",\"unit\":\"\"},{\"label\":\"Effects 7d\",\"kind\":\"series\",\"series\":\"loop.effects_7d\",\"agg\":\"sum\"}],\"rows\":[{\"cells\":[{\"text\":\"omi-errfix\"},{\"text\":\"m5-mbp\"},{\"text\":\"running\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"stale\":false},{\"text\":\"12\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"stale\":true}],\"source_ids\":[]},{\"cells\":[{\"text\":\"omi-errfix\"},{\"text\":\"m4-air\"},{\"text\":\"\",\"observed_at\":null,\"stale\":false},{\"text\":\"3\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"stale\":false}],\"source_ids\":[]}],\"more\":2},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\"}}]}"
+  },
+  {
+    "name": "live-table requires a source",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{}}]}"
+  },
+  {
+    "name": "live-table fallback with mismatched cells",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\"},\"fallback\":{\"as_of\":\"2026-10-01T00:00:00Z\",\"data\":{\"columns\":[{\"label\":\"State\",\"kind\":\"series\",\"series\":\"loop.state\"}],\"rows\":[{\"cells\":[{\"text\":\"a\"},{\"text\":\"b\"}],\"source_ids\":[]}]}}}]}"
+  },
+  {
+    "name": "live-table fallback with missing series-cell staleness",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\"},\"fallback\":{\"as_of\":\"2026-10-01T00:00:00Z\",\"data\":{\"columns\":[{\"label\":\"State\",\"kind\":\"series\",\"series\":\"loop.state\"}],\"rows\":[{\"cells\":[{\"text\":\"running\"}],\"source_ids\":[]}]}}}]}"
+  },
+  {
+    "name": "live-table fallback with key column carrying a series",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"columns\":[{\"series\":\"loop.state\",\"label\":\"State\"},{\"series\":\"loop.effects_7d\",\"label\":\"Effects 7d\",\"agg\":\"sum\"}],\"row_keys\":[{\"key\":\"loop\"},{\"key\":\"host\",\"label\":\"Host\"}],\"range\":\"7d\"},\"fallback\":{\"as_of\":\"2026-10-01T00:00:00Z\",\"data\":{\"columns\":[{\"label\":\"loop\",\"kind\":\"key\",\"series\":\"loop.state\"}],\"rows\":[{\"cells\":[{\"text\":\"a\"}],\"source_ids\":[]}]}}}]}"
+  },
+  {
+    "name": "point table rejects pivot source fields",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"table\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"loop.state\",\"row_keys\":[{\"key\":\"loop\"}]}}]}"
   },
   {
     "name": "layout grid without columns",

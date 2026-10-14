@@ -208,3 +208,73 @@ bounded maintenance chunks; reads never scan or repair inbox history.
 An incomplete sample with no visible asks shows “Waiting status unknown”,
 including a full denied prefix; it never claims there are no open asks.
 Denied metric streams are omitted from card metrics as well as ref previews.
+### Pivoted tables: one row per label set
+
+A `live-table` panel pivots several series into one readable row per label set:
+the author picks the label keys that name a row (`row_keys`, up to four) and one
+column per series (`columns`, up to eight, each with its own optional `agg`,
+defaulting to `last`). Each series cell holds the value its aggregation last
+observed in the requested range, when it was observed, and whether that label
+set has missed its adapter's expected interval — so one quiet publisher is a
+stale mark on its own cell instead of an unreadable panel. Rows beyond the
+50-row cap are counted in the panel's explicit "N more" marker. A label set a
+column cannot see (no data in range, or the reader lacks access) leaves that
+cell empty rather than inventing zero. Panel freshness reads `stale` only when
+every served series cell is stale; otherwise each cell carries its own marker.
+
+```json
+{
+  "id": "loops",
+  "project_id": "workspace",
+  "type": "live-table",
+  "title": "Loop status",
+  "author": "collector",
+  "provenance": "reported",
+  "observed_at": null,
+  "freshness": "unknown",
+  "source_ids": [],
+  "data": {},
+  "source": {
+    "row_keys": [{ "key": "loop" }, { "key": "host", "label": "Host" }],
+    "columns": [
+      { "series": "loops.state", "label": "State" },
+      { "series": "loops.runs_7d", "label": "Runs (7d)", "agg": "sum" },
+      { "series": "loops.fail_streak", "label": "Fail streak", "agg": "max" }
+    ],
+    "labels": { "host": "m5-mbp" },
+    "range": "7d"
+  },
+  "fallback": {
+    "as_of": "2026-10-05T00:00:00Z",
+    "data": {
+      "columns": [
+        { "label": "loop", "kind": "key" },
+        { "label": "Host", "kind": "key" },
+        {
+          "label": "State",
+          "kind": "series",
+          "series": "loops.state",
+          "agg": "last"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            { "text": "omi-errfix" },
+            { "text": "m5-mbp" },
+            {
+              "text": "running",
+              "observed_at": "2026-10-05T00:00:00Z",
+              "stale": false
+            }
+          ],
+          "source_ids": []
+        }
+      ],
+      "more": 0
+    }
+  }
+}
+```
+
+`anx report init --template loops` generates this binding as a starting point.

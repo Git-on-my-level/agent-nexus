@@ -56,7 +56,7 @@ var cardRef = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func IsLive(kind string) bool {
 	switch kind {
-	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline":
+	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "live-table":
 		return true
 	}
 	return false
