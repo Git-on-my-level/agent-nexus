@@ -237,8 +237,13 @@ async function installSlowCore(page) {
       if (/^\/work\/[^/]+$/.test(path)) return { work: CARD };
       if (/^\/cards\/[^/]+\/plan$/.test(path)) return { plan: null };
       if (path === "/refs/resolve") return { refs: {} };
-      if (path === "/pm/decisions") return { items: [], has_more: false };
-      if (path === "/pm/actions") return { items: [], has_more: false };
+      if (path === "/brief")
+        return {
+          schema: "brief.v1",
+          generated_at: stamp(0),
+          decisions: [],
+          initiatives: [],
+        };
       if (path === "/artifacts") return { artifacts: [] };
       if (path === "/docs") return { documents: [] };
       if (path === "/topics") return { topics: [] };
@@ -346,8 +351,9 @@ test("opening a task card costs one round trip, not four", async ({
           plan: sent.some((path) => /^\/cards\/[^/]+\/plan$/.test(path)),
           observations: sent.some((path) => /\/observations$/.test(path)),
           participants: sent.some((path) => /\/participants$/.test(path)),
-          decisions: sent.includes("/pm/decisions"),
-          actions: sent.includes("/pm/actions"),
+          // Open decisions come from the shared brief the shell already
+          // holds, not from per-card PM list reads.
+          pmLists: sent.some((path) => path.startsWith("/pm/")),
         };
       },
       { timeout: 15_000 },
@@ -357,8 +363,7 @@ test("opening a task card costs one round trip, not four", async ({
       plan: true,
       observations: true,
       participants: true,
-      decisions: true,
-      actions: true,
+      pmLists: false,
     });
   const concurrent = await page.evaluate(
     (start) => window.__taskOpenGate.sent.slice(start),
