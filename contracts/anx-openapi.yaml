@@ -5311,7 +5311,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '200':
           description: Event archived
@@ -5350,7 +5350,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '200':
           description: Event unarchived
@@ -5389,7 +5389,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTrashRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '409':
           $ref: '#/components/responses/ErrorResponse'
@@ -5428,7 +5428,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '200':
           description: Event restored
@@ -12060,6 +12060,25 @@ components:
         reason: { type: string, minLength: 1 }
       required: [request_event_id, request_event_ref, withdrawn_by_actor_id, reason]
 
+    EventLifecycleMutationRequest:
+      type: object
+      description: |
+        Optional original-result replay. Keyed calls require if_lifecycle, the
+        original parent visibility state. Mutations and reply cascades commit
+        atomically. A cascade admits at most 2000 descendants and each expanded
+        event admits at most 2001 inbound raw reference edges of any kind,
+        including unrelated sources. Saturated targets or larger trees return conflict without changes. Legacy unkeyed calls remain supported.
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
+        reason: { type: string }
+        if_lifecycle:
+          type: object
+          required: [archived_at, trashed_at]
+          properties:
+            archived_at: { type: string, nullable: true }
+            trashed_at: { type: string, nullable: true }
+
     TopicLifecycleMutationRequest:
       type: object
       properties:
@@ -12681,6 +12700,11 @@ components:
     EventResponse:
       type: object
       properties:
+        affected_event_ids:
+          type: array
+          maxItems: 2001
+          items: { type: string }
+          description: Lifecycle receipt only; scoped event IDs actually changed atomically, including replies. No-op calls may omit it.
         event: { $ref: '#/components/schemas/Event' }
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [event]

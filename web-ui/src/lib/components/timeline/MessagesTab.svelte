@@ -1,4 +1,5 @@
 <script>
+  import EventLifecycleWork from "$lib/components/EventLifecycleWork.svelte";
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
   import { onMount, tick, untrack } from "svelte";
@@ -171,6 +172,7 @@
   let showArchived = $state(false);
   let confirmModal = $state(emptyMessageEventConfirmModal());
   let lifecycleBusy = $state(false);
+  let lifecycleWork = $state(null);
   let lifecycleError = $state("");
 
   let refScopedTimeline = $derived(
@@ -836,47 +838,21 @@
     else if (action === "trash") doTrash(eventId);
   }
 
-  async function doArchive(eventId) {
-    if (!eventId || lifecycleBusy) return;
-    lifecycleBusy = true;
+  async function queueEventAction(id, action) {
     lifecycleError = "";
     try {
-      await coreClient.archiveEvent(eventId, {});
-      await refreshTimeline();
-    } catch (e) {
-      lifecycleError = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
+      await lifecycleWork.queue(
+        [timeline.find((event) => event.id === id)],
+        action,
+      );
+    } catch {
+      lifecycleError =
+        "Your event request is retained. Review the saved work below.";
     }
   }
-
-  async function doUnarchive(eventId) {
-    if (!eventId || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      await coreClient.unarchiveEvent(eventId, {});
-      await refreshTimeline();
-    } catch (e) {
-      lifecycleError = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
-
-  async function doTrash(eventId) {
-    if (!eventId || lifecycleBusy) return;
-    lifecycleBusy = true;
-    lifecycleError = "";
-    try {
-      await coreClient.trashEvent(eventId, {});
-      await refreshTimeline();
-    } catch (e) {
-      lifecycleError = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      lifecycleBusy = false;
-    }
-  }
+  const doArchive = (id) => queueEventAction(id, "archive");
+  const doUnarchive = (id) => queueEventAction(id, "unarchive");
+  const doTrash = (id) => queueEventAction(id, "trash");
 
   async function handlePostMessage() {
     if (postingMessage || savedPost) return;
@@ -1022,6 +998,13 @@
     }
   }
 </script>
+
+<EventLifecycleWork
+  bind:this={lifecycleWork}
+  target={`event-lifecycle:thread:${threadId}`}
+  href={$page.url.pathname + "?tab=messages"}
+  onconfirmed={refreshTimeline}
+/>
 
 <div
   class="msgtab-wrap"

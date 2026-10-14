@@ -8,6 +8,8 @@ import (
 	"errors"
 
 	"agent-nexus-core/internal/resourceaccess"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // ExecuteWithReplay atomically commits an audited mutation and its public result.
@@ -46,6 +48,13 @@ func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash s
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES(?,?,?,?,?,?)`, scope, actor, key, hash, status, string(encoded)); err != nil {
+			// A current scoped read can hide an occupied key whose original
+			// receipt now references inaccessible resources. Never replace it or
+			// report an uncertain server failure; the transaction must roll back.
+			var constraint *sqlite.Error
+			if errors.As(err, &constraint) && (constraint.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE || constraint.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
+				return ErrConflict
+			}
 			return err
 		}
 		out = IdempotencyReplay{RequestHash: hash, Status: status}

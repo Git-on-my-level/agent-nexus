@@ -54,26 +54,6 @@
       "revokeHostEnrollmentToken": 2
     }
   },
-  "lib/components/timeline/MessagesTab.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: event archive/unarchive/trash intent snapshots and atomic original receipts; message posting itself is migrated.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "archiveEvent": 1,
-      "trashEvent": 1,
-      "unarchiveEvent": 1
-    }
-  },
-  "lib/components/timeline/TimelineTab.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: event single/bulk lifecycle snapshots, per-item receipts and partial confirmations.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "archiveEvent": 3,
-      "trashEvent": 3,
-      "unarchiveEvent": 3
-    }
-  },
   "lib/coreClient.js": {
     "classification": "transport",
     "reason": "Scoped sender construction, frozen Inbox sender binding and fetch plumbing.",
@@ -98,7 +78,7 @@
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "answerPmDecision": 1,
-      "computed-dispatch": 1,
+      "computed-dispatch": 2,
       "createArtifactAttachment": 1,
       "createDocument": 1,
       "createEvent": 1,

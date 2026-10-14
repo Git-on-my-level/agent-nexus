@@ -57,6 +57,54 @@ async function send(entry) {
     throw new Error("The submitting identity is no longer active.");
   if (replayExpired(entry.createdAt)) throw expiredReplayError();
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "events.lifecycle") {
+    const methods = {
+      archive: "archiveEvent",
+      unarchive: "unarchiveEvent",
+      trash: "trashEvent",
+      restore: "restoreEvent",
+    };
+    for (const item of entry.request.items) {
+      if (entry.receipt?.events?.some((done) => done.id === item.id)) continue;
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      const method = methods[item.action];
+      if (!method)
+        throw Object.assign(new Error("Unknown event action"), { status: 400 });
+      const result = await client[method](item.id, item.body);
+      if (result.event?.id !== item.id)
+        throw new Error("Event lifecycle receipt is incomplete.");
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      const covered = entry.request.items.filter(
+        (candidate) =>
+          candidate.action === item.action &&
+          (candidate.id === item.id ||
+            result.affected_event_ids?.includes(candidate.id)),
+      );
+      entry.receipt = {
+        events: [
+          ...(entry.receipt?.events || []),
+          ...covered
+            .filter(
+              (candidate) =>
+                !entry.receipt?.events?.some(
+                  (done) => done.id === candidate.id,
+                ),
+            )
+            .map((candidate) => ({ id: candidate.id, result })),
+        ],
+      };
+      await persist(entry);
+      mutationOutbox.update((rows) =>
+        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
+      );
+      window.dispatchEvent(
+        new CustomEvent("anx:mutation-progress", { detail: snapshot(entry) }),
+      );
+    }
+    return entry.receipt;
+  }
   if (entry.operation === "docs.lifecycle") {
     const methods = {
       archive: "archiveDocument",
@@ -284,6 +332,50 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
         request_key: key,
         actor_id: JSON.parse(get(localWorkScope))[3],
       },
+    },
+  });
+}
+
+export function enqueueEventLifecycle({ draft, ...options }) {
+  const actor_id = JSON.parse(get(localWorkScope))[3];
+  const events = snapshot(draft.events);
+  if (
+    !events.length ||
+    events.some((event) => !event.id || !event.if_lifecycle)
+  )
+    throw new Error(
+      "The original event versions are unavailable. Your request is retained.",
+    );
+  if (
+    get(mutationOutbox).some(
+      (entry) =>
+        entry.operation === "events.lifecycle" &&
+        entry.request.items.some((item) =>
+          events.some((event) => event.id === item.id),
+        ),
+    )
+  )
+    throw new Error(
+      "A saved request already includes this event. Confirm or edit it first.",
+    );
+  return enqueueLocalMutation({
+    ...options,
+    draft,
+    key: crypto.randomUUID(),
+    operation: "events.lifecycle",
+    title: "Saved event action",
+    preview: `${draft.action}: ${events.map((event) => event.title).join(", ")}\n${draft.reason || ""}`,
+    request: {
+      items: events.map((event) => ({
+        id: event.id,
+        action: draft.action,
+        body: {
+          actor_id,
+          request_key: crypto.randomUUID(),
+          if_lifecycle: event.if_lifecycle,
+          ...(draft.action === "trash" ? { reason: draft.reason || "" } : {}),
+        },
+      })),
     },
   });
 }
@@ -623,11 +715,13 @@ async function attempt(entry) {
           ? "move"
           : entry.operation === "cards.patch"
             ? "assignment"
-            : entry.operation === "docs.lifecycle"
-              ? "document action"
-              : entry.operation === "topics.patch"
-                ? "topic edit"
-                : "response",
+            : entry.operation === "events.lifecycle"
+              ? "event action"
+              : entry.operation === "docs.lifecycle"
+                ? "document action"
+                : entry.operation === "topics.patch"
+                  ? "topic edit"
+                  : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =
@@ -839,9 +933,11 @@ export async function editMutation(key) {
   }
   // Transfer to a durable composer before superseding; retain the old exact
   // request for recovery history rather than silently discarding it.
-  const currentDraft = ["docs.lifecycle", "topics.patch"].includes(
-    entry.operation,
-  )
+  const currentDraft = [
+    "docs.lifecycle",
+    "topics.patch",
+    "events.lifecycle",
+  ].includes(entry.operation)
     ? await loadLocalWork(
         entry.scope,
         "draft",
@@ -855,24 +951,43 @@ export async function editMutation(key) {
       JSON.stringify(entry.draft.documents?.map((doc) => doc.id))
       ? currentDraft
       : entry.draft;
+  const eventDraft =
+    currentDraft &&
+    currentDraft.action === entry.draft?.action &&
+    JSON.stringify(currentDraft.events?.map((event) => event.id)) ===
+      JSON.stringify(entry.draft.events?.map((event) => event.id))
+      ? currentDraft
+      : entry.draft;
   const draft =
-    entry.operation === "topics.patch"
-      ? currentDraft || entry.draft
-      : entry.operation === "docs.lifecycle"
-        ? {
-            ...lifecycleDraft,
-            documents: lifecycleDraft.documents.filter(
-              (doc) =>
-                !entry.receipt?.documents?.some((done) => done.id === doc.id),
-            ),
-            confirmed: [
-              ...(entry.draft.confirmed || []),
-              ...(entry.receipt?.documents || []),
-            ],
-          }
-        : entry.receipt?.conversationId
-          ? { ...entry.draft, conversationId: entry.receipt.conversationId }
-          : entry.draft;
+    entry.operation === "events.lifecycle"
+      ? {
+          ...eventDraft,
+          events: eventDraft.events.filter(
+            (event) =>
+              !entry.receipt?.events?.some((done) => done.id === event.id),
+          ),
+          confirmed: [
+            ...(entry.draft.confirmed || []),
+            ...(entry.receipt?.events || []),
+          ],
+        }
+      : entry.operation === "topics.patch"
+        ? currentDraft || entry.draft
+        : entry.operation === "docs.lifecycle"
+          ? {
+              ...lifecycleDraft,
+              documents: lifecycleDraft.documents.filter(
+                (doc) =>
+                  !entry.receipt?.documents?.some((done) => done.id === doc.id),
+              ),
+              confirmed: [
+                ...(entry.draft.confirmed || []),
+                ...(entry.receipt?.documents || []),
+              ],
+            }
+          : entry.receipt?.conversationId
+            ? { ...entry.draft, conversationId: entry.receipt.conversationId }
+            : entry.draft;
   // Start the synchronous draft journal, then restore the visible composer
   // before yielding. A late restore after persistence could replace text the
   // reader typed while the transfer was in flight. Supersede only after both

@@ -55,6 +55,12 @@
             ? "Retrying"
             : "Pending"}
     </p>
+    {#if entry.operation === "events.lifecycle"}
+      <p class="mt-1 text-fg-muted">
+        {entry.receipt?.events?.length || 0} of {entry.request.items.length} events
+        confirmed.
+      </p>
+    {/if}
     {#if entry.operation === "docs.lifecycle"}
       <p class="mt-1 text-fg-muted">
         {entry.receipt?.documents?.length || 0} of {entry.request.items.length} documents
@@ -89,7 +95,7 @@
           onclick={copy}>Copy text</button
         >
         {#if entry.state === "attention"}
-          {#if entry.operation !== "docs.lifecycle" || entry.receipt?.documents?.length !== entry.request.items.length}
+          {#if (entry.operation !== "docs.lifecycle" || entry.receipt?.documents?.length !== entry.request.items.length) && (entry.operation !== "events.lifecycle" || entry.receipt?.events?.length !== entry.request.items.length)}
             <button
               type="button"
               class="rounded border border-line px-2 py-1 text-fg"
@@ -102,7 +108,9 @@
                   ? "Edit move"
                   : entry.operation === "cards.patch"
                     ? "Edit assignment"
-                    : entry.operation === "docs.lifecycle"
+                    : ["docs.lifecycle", "events.lifecycle"].includes(
+                          entry.operation,
+                        )
                       ? "Edit request"
                       : entry.operation === "topics.patch"
                         ? "Edit topic"

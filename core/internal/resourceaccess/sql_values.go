@@ -30,6 +30,23 @@ func AnonymousSQLParameters(q string) bool {
 	return true
 }
 
+// UsesShadowedSQLIdentifier conservatively finds identifiers that are not an
+// explicitly main-qualified canonical relation. Trusted canonical probes must
+// not cause an unused relation shadow to expand the authorization graph.
+func UsesShadowedSQLIdentifier(q, name string) bool {
+	tokens := sqlValueTokens(q)
+	for i, token := range tokens {
+		if token.text != strings.ToLower(name) {
+			continue
+		}
+		if i >= 2 && tokens[i-1].text == "." && tokens[i-2].text == "main" {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func sqlValueTokens(q string) []sqlValueToken {
 	var tokens []sqlValueToken
 	arg := 0
