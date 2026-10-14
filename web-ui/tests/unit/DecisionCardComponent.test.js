@@ -25,7 +25,13 @@ vi.mock("$lib/inboxResponseQueue.js", () => ({
 const outbox = vi.hoisted(() => ({
   enqueuePmDecisionAnswer: vi.fn(async () => ({})),
 }));
-vi.mock("$lib/mutationOutbox.js", () => outbox);
+vi.mock("$lib/mutationOutbox.js", () => ({
+  ...outbox,
+  mutationOutbox: writable([]),
+  mutationConfirmations: writable({}),
+  editMutation: vi.fn(),
+  retryMutation: vi.fn(),
+}));
 vi.mock("$lib/actions/durableDraft.js", () => ({
   durableDraft: () => ({ update() {}, destroy() {} }),
 }));
@@ -209,7 +215,7 @@ describe("DecisionCard", () => {
       }),
     );
     expect(queue.queueInboxResponse).not.toHaveBeenCalled();
-    await findByText(/Sending to your PM/);
+    await findByText(/sent to your PM/);
   });
 
   it("keeps the answer and says so when it cannot be saved", async () => {

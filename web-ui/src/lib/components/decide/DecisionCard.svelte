@@ -17,7 +17,11 @@
     queueInboxResponse,
     retryInboxResponse,
   } from "$lib/inboxResponseQueue.js";
-  import { enqueuePmDecisionAnswer } from "$lib/mutationOutbox.js";
+  import {
+    enqueuePmDecisionAnswer,
+    mutationOutbox,
+  } from "$lib/mutationOutbox.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -90,6 +94,14 @@
   let pmAnswer = $derived(
     decision.kind === "pm_proposal" && Boolean(decision.pmDecision),
   );
+  let pmTarget = $derived(
+    decision.pmDecision ? `pm-decision:${decision.pmDecision.id}` : "",
+  );
+  /** An unconfirmed PM answer stays in the outbox across reloads. */
+  let pmQueued = $derived(
+    Boolean(pmTarget) &&
+      ($mutationOutbox ?? []).some((entry) => entry.target === pmTarget),
+  );
   let elsewhere = $derived(decision.kind === "host");
   let elsewhereHref = $derived(href("/access"));
   /** Approving access hands over authority, so it asks once more. */
@@ -131,7 +143,7 @@
           revision: decision.pmDecision.revision,
           approve: index === 0,
           text: proposal,
-          target: `pm-decision:${decision.pmDecision.id}`,
+          target: pmTarget,
           href: href(`/decide/${encodeURIComponent(itemId)}`),
           title: decision.title,
           preview: proposal,
@@ -326,10 +338,14 @@
   {/if}
 
   <div class="mt-3 flex flex-wrap items-center gap-2">
-    {#if pmSent}
-      <span class="text-meta text-fg-muted" data-decision-answered
-        >Answer saved. Sending to your PM…</span
-      >
+    {#if pmAnswer && (pmSent || pmQueued)}
+      {#if pmQueued}
+        <MutationSendStatus target={pmTarget} />
+      {:else}
+        <span class="text-meta text-fg-muted" data-decision-answered
+          >Answer sent to your PM.</span
+        >
+      {/if}
     {:else if elsewhere}
       <a
         class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg hover:bg-panel-hover sm:min-h-0"
