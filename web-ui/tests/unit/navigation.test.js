@@ -35,7 +35,10 @@ describe("navigation model", () => {
       ]),
     ).toEqual([
       ["Workspace", ["Initiatives", "Docs", "Agents", "Archive"]],
-      ["Settings", ["Access", "Secrets", "Integrations", "PM setup"]],
+      [
+        "Settings",
+        ["Access", "Secrets", "Integrations", "Notifications", "PM setup"],
+      ],
       // Infrastructure surfaces, explicitly labelled rather than reachable
       // only by URL.
       ["Diagnostics", ["Audit", "Threads"]],
@@ -48,6 +51,7 @@ describe("navigation model", () => {
       "Access",
       "Secrets",
       "Integrations",
+      "Notifications",
       "PM setup",
       "Audit",
       "Threads",

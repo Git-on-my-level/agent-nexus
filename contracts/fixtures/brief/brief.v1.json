@@ -35,10 +35,7 @@
         "ref": "card:battery-measurement",
         "title": "Battery measurement"
       },
-      "proposals": [
-        "Merge",
-        "Hold a week"
-      ],
+      "proposals": ["Merge", "Hold a week"],
       "blocks_count": 2,
       "age_seconds": 172800
     },
@@ -60,10 +57,12 @@
         "ref": "card:labels",
         "title": "Label scheme"
       },
-      "proposals": [
-        "Withdraw",
-        "Keep"
-      ],
+      "proposals": ["Withdraw", "Keep"],
+      "curation": {
+        "action": "withdraw",
+        "targets": ["card:labels"],
+        "source": "pm"
+      },
       "blocks_count": 0,
       "age_seconds": 120
     },
@@ -90,10 +89,7 @@
         "ref": "card:fleet-onboarding",
         "title": "Fleet onboarding"
       },
-      "proposals": [
-        "Approve",
-        "Request changes"
-      ],
+      "proposals": ["Approve", "Request changes"],
       "blocks_count": 1,
       "age_seconds": 432000
     },
@@ -112,10 +108,7 @@
       "overdue_for_seconds": null,
       "blocks": [],
       "subject": null,
-      "proposals": [
-        "Approve",
-        "Deny"
-      ],
+      "proposals": ["Approve", "Deny"],
       "blocks_count": 0,
       "age_seconds": 10800
     },
@@ -138,10 +131,7 @@
       "subject": {
         "ref": "card:ble-reliability"
       },
-      "proposals": [
-        "Approve",
-        "Reject"
-      ],
+      "proposals": ["Approve", "Reject"],
       "pm_decision": {
         "id": "pm_7",
         "revision": 3

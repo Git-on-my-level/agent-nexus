@@ -136,11 +136,45 @@ function normalizeDecision(raw) {
       : null,
     // A host enrollment answers on the Access page's own routes.
     accessRequestId: text(raw.access_request_id),
+    curation: normalizeCuration(raw.curation, refTitle(raw.subject)),
     // Core orders proposals with the recommendation first; keep that order.
-    proposals: (Array.isArray(raw.proposals) ? raw.proposals : [])
-      .map(text)
-      .filter(Boolean),
+    proposals: decisionProposals(raw),
   };
+}
+
+/** A curation proposal: what the PM wants to do, to which refs, and why. */
+function normalizeCuration(raw, subject) {
+  if (!raw || typeof raw !== "object") return null;
+  // Targets may be bare refs; the subject's title is the only one core has
+  // already cleared for this reader, so only it fills a missing title.
+  const targets = (Array.isArray(raw.targets) ? raw.targets : [])
+    .map(refTitle)
+    .filter(Boolean)
+    .map((target) =>
+      !target.title && subject?.ref === target.ref && subject.title
+        ? { ...target, title: subject.title }
+        : target,
+    );
+  return {
+    action: text(raw.action).replace(/[-_]+/g, " "),
+    targets,
+    source: text(raw.source),
+  };
+}
+
+/**
+ * The asker's proposals, recommended first. A curation proposal always
+ * answers in one tap: proposals[0] accepts, and Dismiss is offered when the
+ * asker gave no alternative.
+ */
+function decisionProposals(raw) {
+  const proposals = (Array.isArray(raw.proposals) ? raw.proposals : [])
+    .map(text)
+    .filter(Boolean);
+  if (!raw.curation || typeof raw.curation !== "object") return proposals;
+  if (proposals.length === 0) proposals.push("Accept");
+  if (proposals.length === 1) proposals.push("Dismiss");
+  return proposals;
 }
 
 function normalizeInitiative(raw) {

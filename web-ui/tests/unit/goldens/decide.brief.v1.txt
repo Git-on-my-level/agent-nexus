@@ -6,4 +6,4 @@ Give fleet-agent access to this workspace Access 3h from fleet-agent Requested b
 ---
 Move "BLE reliability" to In progress? PM proposal 2h from PM Requested from the initiative page; the source is outside this workspace. Approve(recommended)Reject Copy ref Reply Send reply
 ---
-Withdraw "pick label scheme"? PM proposal 2m from PM Overtaken: PR #212 and #214 merged since the initiative last moved. Withdraw(recommended)Keep Reply… Copy ref Reply Send reply
+Withdraw "pick label scheme"? PM proposal 2m from PM Overtaken: PR #212 and #214 merged since the initiative last moved. Proposes: withdraw Label scheme Withdraw(recommended)Keep Reply… Copy ref Reply Send reply

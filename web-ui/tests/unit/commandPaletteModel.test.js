@@ -111,6 +111,7 @@ describe("command palette model", () => {
       "Access",
       "Secrets",
       "Integrations",
+      "Notifications",
       "PM setup",
       "Audit",
       "Threads",

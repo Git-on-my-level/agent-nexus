@@ -20,6 +20,7 @@
   import { enqueuePmDecisionAnswer } from "$lib/mutationOutbox.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
 
   /**
    * The one rendering of a decision: Decide's list, its permalink and the
@@ -271,6 +272,28 @@
         <MarkdownRenderer content={decision.body} />
       {:else}
         {decision.body}
+      {/if}
+    </div>
+  {/if}
+
+  {#if decision.curation}
+    <div class="mt-2 text-meta text-fg-muted" data-decision-curation>
+      {#if decision.curation.action}<span class="font-medium text-fg"
+          >Proposes: {decision.curation.action}</span
+        >{/if}
+      {#if decision.curation.targets.length}
+        <ul class="mt-1 flex flex-wrap gap-1" data-decision-curation-targets>
+          {#each decision.curation.targets as target (target.ref)}
+            <li>
+              <RefLink
+                refValue={target.ref}
+                labelHints={target.title ? { [target.ref]: target.title } : {}}
+                humanize
+                showRaw={false}
+              />
+            </li>
+          {/each}
+        </ul>
       {/if}
     </div>
   {/if}

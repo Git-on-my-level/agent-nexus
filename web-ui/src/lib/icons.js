@@ -116,6 +116,7 @@ export const NAV_ICONS = {
   secrets:
     "M13 10.5a5.5 5.5 0 11-7.78 7.78A5.5 5.5 0 0113 10.5zM21 2l-9.6 9.6M15.5 7.5l3 3L22 7l-3-3",
   integrations: "M9 3v4M15 3v4M6 7h12v4a6 6 0 01-12 0V7zM12 17v4",
+  bell: "M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 01-6 0m6 0H9",
   audit: "M3 3v5h5M3.05 13A9 9 0 106 5.3L3 8M12 7.5V12l3 2",
   threads: "M6 4v16M6 7h12M6 12h9M6 17h11",
   more: "M5 12h.01M12 12h.01M19 12h.01",

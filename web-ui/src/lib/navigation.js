@@ -89,6 +89,12 @@ export const settingsNavGroups = [
         hint: "Source freshness and coverage",
       },
       {
+        label: "Notifications",
+        href: "/notifications",
+        icon: "bell",
+        hint: "Where pushes and digests go",
+      },
+      {
         label: "PM setup",
         href: "/pm/setup",
         icon: "askPm",

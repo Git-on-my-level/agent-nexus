@@ -128,6 +128,39 @@ describe("DecisionCard", () => {
     });
   });
 
+  it("shows what a curation proposal does and to which refs", () => {
+    const proposal = brief.decisions.find((d) => d.kind === "pm_proposal");
+    const { container } = render(DecisionCard, {
+      decision: proposal,
+      now: NOW,
+    });
+    const curation = container.querySelector("[data-decision-curation]");
+    expect(curation.textContent).toContain("Proposes: withdraw");
+    expect(
+      curation.querySelectorAll("[data-decision-curation-targets] li"),
+    ).toHaveLength(1);
+  });
+
+  it("offers one-tap Accept and Dismiss when a curation proposal names none", async () => {
+    const raw = structuredClone(
+      fixture.decisions.find((d) => d.kind === "pm_proposal"),
+    );
+    raw.proposals = [];
+    const decision = normalizeBrief({ ...fixture, decisions: [raw] })
+      .decisions[0];
+    const { container } = render(DecisionCard, { decision, now: NOW });
+    const buttons = [
+      ...container.querySelectorAll("[data-decision-proposal]"),
+    ].map((b) => b.textContent.trim());
+    expect(buttons).toEqual(["Accept(recommended)", "Dismiss"]);
+    await fireEvent.click(
+      container.querySelector('[data-decision-proposal="2"]'),
+    );
+    expect(queue.queueInboxResponse.mock.calls.at(-1)[0].request).toMatchObject(
+      { response_text: "Dismiss", outcome: "answered" },
+    );
+  });
+
   it("copies the ref from the button and from the c key", async () => {
     const { container } = render(DecisionCard, { decision: merge, now: NOW });
     await fireEvent.click(container.querySelector("[data-decision-copy-ref]"));
