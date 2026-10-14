@@ -380,7 +380,15 @@ codes. Event payloads, refs and timestamps remain append-only.
 
 A keyed receipt optionally includes `affected_event_ids`, containing only scoped
 rows actually changed in that transaction. Selected ancestors send first; their
-receipts cover selected replies without stale extra requests. Every partial
+receipts cover selected replies without stale extra requests. The outbox freezes
+one shared `selected_bases` map alongside the per-item requests and sends it
+unchanged with each ancestor. Inside the same writer transaction, every scoped
+selected member of that cascade must still match its captured lifecycle pair,
+including members the action would otherwise skip. A mismatch conflicts the
+whole cascade and receipt. Legacy single-event request hashes remain compatible;
+older saved bulk requests without this map require explicit copy/edit recovery
+before sending. The shared map avoids duplicating snapshots in device storage.
+Every partial
 receipt is persisted before the next item. Confirmed items are skipped after
 reload; editing unfinished work retains the earlier confirmation history.
 
@@ -408,7 +416,7 @@ rejects new direct event lifecycle sends in Svelte.
 
 The consuming cascade query is bounded after epoch admission; its private-fanout
 fixture uses 78,403 VM steps and zero full scans at both sizes. The standard
-4,096-row corpus measures 18 read calls, 12 returned rows and 3,985 VM steps for
+4,096-row corpus measures 18 read calls, 12 returned rows and 3,979 VM steps for
 the primitive action. These are distinct from inherited cold/stale authorization
 closure admission and canonical business-write validation, whose cost can grow
 with denied resources. The existing mutation exclusions in

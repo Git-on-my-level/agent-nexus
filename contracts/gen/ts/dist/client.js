@@ -6126,6 +6126,10 @@ export const commandRegistry = [
                 {
                     "name": "request_key",
                     "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
@@ -6389,6 +6393,10 @@ export const commandRegistry = [
                 {
                     "name": "request_key",
                     "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
@@ -6492,6 +6500,10 @@ export const commandRegistry = [
                 {
                     "name": "request_key",
                     "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },
@@ -6559,6 +6571,10 @@ export const commandRegistry = [
                 {
                     "name": "request_key",
                     "type": "string"
+                },
+                {
+                    "name": "selected_bases",
+                    "type": "object"
                 }
             ]
         },

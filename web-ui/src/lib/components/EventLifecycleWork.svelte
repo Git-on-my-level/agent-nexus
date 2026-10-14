@@ -1,6 +1,6 @@
 <script>
   import { get } from "svelte/store";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { durableForm } from "$lib/actions/durableForm.js";
   import { localWorkScope } from "$lib/localWorkScope.js";
   import { saveLocalWork, localWorkEpoch } from "$lib/localWorkStore.js";
@@ -15,7 +15,9 @@
   let error = $state("");
   let preparing = $state(false);
   let ready = $state(false);
-  let readyWaiters = [];
+  // Promise callbacks are lifetime bookkeeping, not rendered reactive state.
+  const readyWaiters = new Set();
+  let alive = $state(true);
   let pending = $derived(
     $mutationOutbox.find((entry) => entry.target === target),
   );
@@ -26,16 +28,40 @@
   function markReady(value) {
     ready = value;
     if (!ready) return;
-    const waiters = readyWaiters;
-    readyWaiters = [];
+    const waiters = [...readyWaiters];
+    readyWaiters.clear();
     waiters.forEach((resolve) => resolve());
   }
   function whenReady() {
     if (ready) return Promise.resolve();
-    return new Promise((resolve) => readyWaiters.push(resolve));
+    return new Promise((resolve) => readyWaiters.add(resolve));
   }
+  onDestroy(() => {
+    alive = false;
+    const waiters = [...readyWaiters];
+    readyWaiters.clear();
+    waiters.forEach((resolve) => resolve());
+  });
   export async function queue(events, action) {
-    while (!ready) await whenReady();
+    const scope = get(localWorkScope);
+    const epoch = localWorkEpoch(scope);
+    const originalTarget = target;
+    const checkContext = () => {
+      if (
+        !alive ||
+        scope !== get(localWorkScope) ||
+        epoch !== localWorkEpoch(scope) ||
+        originalTarget !== target
+      )
+        throw new Error(
+          "The event selection is no longer active. Select it again.",
+        );
+    };
+    while (!ready) {
+      await whenReady();
+      checkContext();
+    }
+    checkContext();
     if (pending || preparing) {
       error =
         "An event request is already saved. Confirm or edit it before starting another.";

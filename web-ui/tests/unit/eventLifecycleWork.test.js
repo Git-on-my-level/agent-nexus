@@ -92,3 +92,48 @@ it("still refuses to replace a restored draft after waiting", async () => {
   );
   expect(enqueue).not.toHaveBeenCalled();
 });
+
+it("cancels a waiting selection when its component is destroyed", async () => {
+  const enqueue = vi
+    .spyOn(mutationOutbox, "enqueueEventLifecycle")
+    .mockResolvedValue();
+  const release = delayLoad(null);
+  const { component, unmount } = render(EventLifecycleWork, {
+    props: {
+      target: "event-lifecycle:thread:t1",
+      href: "/threads/t1?tab=timeline",
+    },
+  });
+  await tick();
+  const queued = component.queue([event], "unarchive");
+  const rejected = expect(queued).rejects.toThrow(
+    "selection is no longer active",
+  );
+  unmount();
+  await rejected;
+  release();
+  expect(enqueue).not.toHaveBeenCalled();
+});
+
+it("rejects an old principal's selection after delayed restore", async () => {
+  const enqueue = vi
+    .spyOn(mutationOutbox, "enqueueEventLifecycle")
+    .mockResolvedValue();
+  const release = delayLoad(null);
+  const { component } = render(EventLifecycleWork, {
+    props: {
+      target: "event-lifecycle:thread:t1",
+      href: "/threads/t1?tab=timeline",
+    },
+  });
+  await tick();
+  const queued = component.queue([event], "unarchive");
+  const rejected = expect(queued).rejects.toThrow(
+    "selection is no longer active",
+  );
+  authenticatedAgent.set({ agent_id: "other", actor_id: "other" });
+  await tick();
+  release();
+  await rejected;
+  expect(enqueue).not.toHaveBeenCalled();
+});

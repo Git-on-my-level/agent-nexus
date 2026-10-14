@@ -3019,6 +3019,7 @@ Inputs:
   - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
   - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3054,6 +3055,7 @@ Inputs:
   - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
   - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3089,6 +3091,7 @@ Inputs:
   - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
   - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3124,6 +3127,7 @@ Inputs:
   - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
   - body `request_key` (string)
+  - body `selected_bases` (object)
 
 Global flags:
   Global flags can appear before or after the command path.

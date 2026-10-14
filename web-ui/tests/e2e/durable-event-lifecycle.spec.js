@@ -107,6 +107,10 @@ test("lost acknowledgement preserves the exact request through reload and Messag
     trashed_at: null,
   });
   expect(writes[0].body.actor_id).toBe("actor-comment");
+  expect(writes[0].body.selected_bases.parent).toEqual({
+    archived_at: null,
+    trashed_at: null,
+  });
 });
 
 test("bulk progress survives reload and never resends the confirmed first item", async ({
@@ -160,6 +164,10 @@ test("a parent receipt confirms its selected reply without a stale second send",
   await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
   expect(writes).toHaveLength(1);
   expect(writes[0].id).toBe("parent");
+  expect(writes[0].body.selected_bases.second).toEqual({
+    archived_at: null,
+    trashed_at: null,
+  });
 });
 
 test("conflict keeps the original base until explicit edit and latest version", async ({
@@ -339,4 +347,55 @@ test("principal replacement clears saved event requests in both tabs and fences 
   finish();
   await expect(other.locator("[data-unsent-indicator]")).toHaveCount(0);
   expect(writes).toHaveLength(1);
+});
+
+test("legacy bulk work keeps its frozen requests and requires explicit edit before replay", async ({
+  page,
+  context,
+}) => {
+  const { writes } = await prepare(context, (route, { event, id }) =>
+    json(route, {
+      event: { ...event, archived_at: stamp },
+      affected_event_ids: [id],
+    }),
+  );
+  await page.goto(href);
+  await expect(
+    page.getByRole("button", { name: "Select", exact: true }),
+  ).toBeVisible();
+  await context.setOffline(true);
+  await archive(page, ["parent", "second"]);
+  await expect(page.locator('[data-mutation-state="pending"]')).toBeVisible();
+  const original = await page.evaluate(async () => {
+    const { listLocalWork, saveLocalWork, localWorkEpoch } =
+      await import("/src/lib/localWorkStore.js");
+    const scope = '["local","local","reader-comment","actor-comment"]';
+    const record = (await listLocalWork(scope, "mutation"))[0];
+    delete record.value.request.selected_bases;
+    await saveLocalWork(scope, "mutation", record.target, record.value, {
+      epoch: localWorkEpoch(scope),
+    });
+    return record.value.request.items;
+  });
+  await page.close();
+  await context.setOffline(false);
+  const recovered = await context.newPage();
+  await recovered.goto(href);
+  await expect(
+    recovered.locator('[data-mutation-state="attention"]'),
+  ).toContainText("selected reply versions");
+  expect(writes).toHaveLength(0);
+  await recovered
+    .getByRole("button", { name: "Edit request", exact: true })
+    .click();
+  await recovered
+    .getByRole("button", { name: "Send saved request", exact: true })
+    .click();
+  await expect(recovered.locator('[data-mutation-state="sent"]')).toBeVisible();
+  expect(writes).toHaveLength(2);
+  expect(writes[0].body.request_key).not.toBe(original[0].body.request_key);
+  expect(writes[0].body.selected_bases.parent).toEqual({
+    archived_at: null,
+    trashed_at: null,
+  });
 });

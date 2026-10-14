@@ -1168,6 +1168,12 @@ type EventLifecycleBase struct {
 }
 
 func (s *Store) ApplyEventLifecycle(ctx context.Context, actorID, eventID, action, reason string, base *EventLifecycleBase) (map[string]any, []string, error) {
+	return s.ApplyEventLifecycleSelection(ctx, actorID, eventID, action, reason, base, nil)
+}
+
+// Selected bases protect explicitly selected replies that an ancestor may cover.
+// The shared snapshot is checked only for scoped members of this cascade.
+func (s *Store) ApplyEventLifecycleSelection(ctx context.Context, actorID, eventID, action, reason string, base *EventLifecycleBase, selectedBases map[string]EventLifecycleBase) (map[string]any, []string, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1248,18 +1254,28 @@ func (s *Store) ApplyEventLifecycle(ctx context.Context, actorID, eventID, actio
 			marks[i] = "?"
 			args = append(args, id)
 		}
-		selector := " WHERE id IN (" + strings.Join(marks, ",") + ")" + guard
-		selected, err := tx.QueryContext(ctx, "SELECT id FROM events"+selector, args[len(args)-len(ids):]...)
+		selector := " WHERE id IN (" + strings.Join(marks, ",") + ")"
+		// Include unchanged rows too: a selected reply's base must match even
+		// when the action guard would omit that reply from the write.
+		selected, err := tx.QueryContext(ctx, "SELECT id,archived_at,trashed_at FROM events"+selector, args[len(args)-len(ids):]...)
 		if err != nil {
 			return err
 		}
 		for selected.Next() {
 			var id string
-			if err = selected.Scan(&id); err != nil {
+			var archived, trashed sql.NullString
+			if err = selected.Scan(&id, &archived, &trashed); err != nil {
 				selected.Close()
 				return err
 			}
-			affected = append(affected, id)
+			if selectedBase, ok := selectedBases[id]; ok && (archived.String != expected(selectedBase.ArchivedAt) || trashed.String != expected(selectedBase.TrashedAt)) {
+				selected.Close()
+				return ErrConflict
+			}
+			changes := (action == "archive" && archived.String == "" && trashed.String == "") || (action == "unarchive" && archived.String != "") || (action == "trash" && trashed.String == "") || (action == "restore" && trashed.String != "")
+			if changes {
+				affected = append(affected, id)
+			}
 		}
 		err = selected.Err()
 		selected.Close()

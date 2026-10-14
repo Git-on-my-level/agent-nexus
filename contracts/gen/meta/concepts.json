@@ -12509,6 +12509,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -12772,6 +12776,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -12875,6 +12883,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -12942,6 +12954,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -24651,6 +24667,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -24839,6 +24859,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -24905,6 +24929,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },
@@ -24972,6 +25000,10 @@
               {
                 "name": "request_key",
                 "type": "string"
+              },
+              {
+                "name": "selected_bases",
+                "type": "object"
               }
             ]
           },

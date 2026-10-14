@@ -64,6 +64,16 @@ async function send(entry) {
       trash: "trashEvent",
       restore: "restoreEvent",
     };
+    if (!entry.request.selected_bases && entry.request.items.length > 1)
+      throw Object.assign(
+        new Error(
+          "This saved bulk request predates reply version checking. Edit the saved request before sending it.",
+        ),
+        {
+          publicMessage:
+            "Review and edit this saved bulk request before sending it; its selected reply versions need to be protected.",
+        },
+      );
     for (const item of entry.request.items) {
       if (entry.receipt?.events?.some((done) => done.id === item.id)) continue;
       if (!active(entry))
@@ -71,7 +81,12 @@ async function send(entry) {
       const method = methods[item.action];
       if (!method)
         throw Object.assign(new Error("Unknown event action"), { status: 400 });
-      const result = await client[method](item.id, item.body);
+      const result = await client[method](
+        item.id,
+        entry.request.selected_bases
+          ? { ...item.body, selected_bases: entry.request.selected_bases }
+          : item.body,
+      );
       if (result.event?.id !== item.id)
         throw new Error("Event lifecycle receipt is incomplete.");
       if (!active(entry))
@@ -366,6 +381,9 @@ export function enqueueEventLifecycle({ draft, ...options }) {
     title: "Saved event action",
     preview: `${draft.action}: ${events.map((event) => event.title).join(", ")}\n${draft.reason || ""}`,
     request: {
+      selected_bases: Object.fromEntries(
+        events.map((event) => [event.id, event.if_lifecycle]),
+      ),
       items: events.map((event) => ({
         id: event.id,
         action: draft.action,

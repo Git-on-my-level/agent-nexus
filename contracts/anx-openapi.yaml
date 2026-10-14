@@ -12072,6 +12072,16 @@ components:
         actor_id: { type: string }
         request_key: { type: string, maxLength: 256 }
         reason: { type: string }
+        selected_bases:
+          type: object
+          maxProperties: 2000
+          description: Frozen lifecycle bases for explicitly selected events. Every scoped member of the ancestor cascade is compared in the writer transaction before any changes; a mismatch conflicts the entire request.
+          additionalProperties:
+            type: object
+            required: [archived_at, trashed_at]
+            properties:
+              archived_at: { type: string, nullable: true }
+              trashed_at: { type: string, nullable: true }
         if_lifecycle:
           type: object
           required: [archived_at, trashed_at]

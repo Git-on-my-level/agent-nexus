@@ -349,10 +349,11 @@ func handleEventLifecycle(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 	var req struct {
-		ActorID     string             `json:"actor_id"`
-		RequestKey  string             `json:"request_key"`
-		Reason      string             `json:"reason"`
-		IfLifecycle map[string]*string `json:"if_lifecycle"`
+		ActorID       string                        `json:"actor_id"`
+		RequestKey    string                        `json:"request_key"`
+		Reason        string                        `json:"reason"`
+		IfLifecycle   map[string]*string            `json:"if_lifecycle"`
+		SelectedBases map[string]map[string]*string `json:"selected_bases,omitempty"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -369,6 +370,20 @@ func handleEventLifecycle(w http.ResponseWriter, r *http.Request, opts handlerOp
 	} else if strings.TrimSpace(req.RequestKey) != "" {
 		writeError(w, 400, "invalid_request", "if_lifecycle is required for keyed event requests")
 		return
+	}
+	if len(req.SelectedBases) > 2000 {
+		writeError(w, 400, "invalid_request", "too many selected event bases")
+		return
+	}
+	selectedBases := make(map[string]primitives.EventLifecycleBase, len(req.SelectedBases))
+	for id, pair := range req.SelectedBases {
+		archived, a := pair["archived_at"]
+		trashed, t := pair["trashed_at"]
+		if id == "" || !a || !t {
+			writeError(w, 400, "invalid_request", "selected_bases requires event IDs and both lifecycle fields")
+			return
+		}
+		selectedBases[id] = primitives.EventLifecycleBase{ArchivedAt: archived, TrashedAt: trashed}
 	}
 	actor, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
@@ -395,11 +410,11 @@ func handleEventLifecycle(w http.ResponseWriter, r *http.Request, opts handlerOp
 		var affected []string
 		var err error
 		if store, ok := opts.primitiveStore.(interface {
-			ApplyEventLifecycle(context.Context, string, string, string, string, *primitives.EventLifecycleBase) (map[string]any, []string, error)
+			ApplyEventLifecycleSelection(context.Context, string, string, string, string, *primitives.EventLifecycleBase, map[string]primitives.EventLifecycleBase) (map[string]any, []string, error)
 		}); ok {
-			result, affected, err = store.ApplyEventLifecycle(ctx, actor, eventID, action, req.Reason, base)
+			result, affected, err = store.ApplyEventLifecycleSelection(ctx, actor, eventID, action, req.Reason, base, selectedBases)
 		} else {
-			if base != nil {
+			if base != nil || len(selectedBases) > 0 {
 				return nil, errors.New("atomic lifecycle base checking is unavailable")
 			}
 			switch action {

@@ -127,6 +127,25 @@ func TestEventLifecycleAtomicReceiptAndCascade(t *testing.T) {
 			if err = json.Unmarshal([]byte(original), &receipt); err != nil || len(receipt.Affected) != 2 {
 				t.Fatal("missing cascade coverage", original, err)
 			}
+			// Requests without selected_bases retain the pre-upgrade typed-body
+			// hash, so pending single-event keys can replay existing receipts.
+			legacyBody := struct {
+				ActorID     string         `json:"actor_id"`
+				RequestKey  string         `json:"request_key"`
+				Reason      string         `json:"reason"`
+				IfLifecycle map[string]any `json:"if_lifecycle"`
+			}{owner.ActorID, "original-event-action", "Original reason", body["if_lifecycle"].(map[string]any)}
+			legacyHash, err := hashJSONPayload(struct {
+				ID   string
+				Body any
+			}{"lifecycle-parent", legacyBody})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var storedHash string
+			if err = env.workspace.DB().QueryRow(`SELECT request_hash FROM idempotency_replays WHERE scope=? AND actor_id=? AND request_key=?`, "events."+action, owner.ActorID, "original-event-action").Scan(&storedHash); err != nil || storedHash != legacyHash {
+				t.Fatal("legacy request hash changed", err)
+			}
 			changed := map[string]any{}
 			for k, v := range body {
 				changed[k] = v
@@ -226,5 +245,107 @@ func TestEventLifecycleLegacyConflictCodes(t *testing.T) {
 		if out.Code != 409 || !strings.Contains(out.Body.String(), `"code":"`+tc.code+`"`) {
 			t.Fatal(tc, out.Code, out.Body.String())
 		}
+	}
+}
+
+func TestEventLifecycleSelectedReplyBaseConflictsWholeCascade(t *testing.T) {
+	requireIntegrationTest(t)
+	for _, action := range []string{"archive", "unarchive", "trash", "restore"} {
+		t.Run(action, func(t *testing.T) {
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			owner := seedNotificationTestAgent(t, env, "owner.selected-reply")
+			store := env.primitiveStore.(*primitives.Store)
+			ctx := context.Background()
+			topic, err := store.CreateTopic(ctx, owner.ActorID, map[string]any{"title": "Selected reply", "summary": "Synthetic"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			thread := anyString(topic.Topic["thread_id"])
+			for _, id := range []string{"selected-parent", "selected-child", "independent"} {
+				refs := []string{"thread:" + thread}
+				if id == "selected-child" {
+					refs = append(refs, "event:selected-parent")
+				}
+				if _, err = store.AppendEvent(ctx, owner.ActorID, map[string]any{"id": id, "type": "message_posted", "thread_id": thread, "refs": refs, "payload": map[string]any{"text": id}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if action == "unarchive" {
+				_, err = store.ArchiveEvent(ctx, owner.ActorID, "selected-parent")
+			}
+			if action == "restore" {
+				_, err = store.TrashEvent(ctx, owner.ActorID, "selected-parent", "")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			pair := func(id string) map[string]any {
+				e, err := store.GetEvent(ctx, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return map[string]any{"archived_at": e["archived_at"], "trashed_at": e["trashed_at"]}
+			}
+			parentBase, childBase := pair("selected-parent"), pair("selected-child")
+			switch action {
+			case "archive":
+				_, err = store.ArchiveEvent(ctx, owner.ActorID, "selected-child")
+			case "unarchive":
+				_, err = store.UnarchiveEvent(ctx, owner.ActorID, "selected-child")
+				if err == nil {
+					_, err = store.ArchiveEvent(ctx, owner.ActorID, "selected-child")
+				}
+			case "trash":
+				_, err = store.TrashEvent(ctx, owner.ActorID, "selected-child", "Concurrent reason")
+			case "restore":
+				_, err = store.RestoreEvent(ctx, owner.ActorID, "selected-child")
+				if err == nil {
+					_, err = store.TrashEvent(ctx, owner.ActorID, "selected-child", "Concurrent reason")
+				}
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot := func() string {
+				p, _ := store.GetEvent(ctx, "selected-parent")
+				c, _ := store.GetEvent(ctx, "selected-child")
+				var n int
+				if err := env.workspace.DB().QueryRow(`SELECT count(*) FROM idempotency_replays`).Scan(&n); err != nil {
+					t.Fatal(err)
+				}
+				raw, _ := json.Marshal([]any{p, c, n})
+				return string(raw)
+			}
+			body := map[string]any{"actor_id": owner.ActorID, "request_key": "selected-cascade", "if_lifecycle": parentBase, "selected_bases": map[string]any{"selected-child": childBase, "independent": map[string]any{"archived_at": "unrelated stale base", "trashed_at": nil}}}
+			call := func() *httptest.ResponseRecorder {
+				raw, _ := json.Marshal(body)
+				scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: owner.ActorID})
+				r := httptest.NewRequest(http.MethodPost, "/events/selected-parent/"+action, strings.NewReader(string(raw))).WithContext(scope)
+				cacheAuthenticatedPrincipal(r, &auth.Principal{ActorID: owner.ActorID})
+				out := httptest.NewRecorder()
+				handleEventLifecycle(out, r, handlerOptions{primitiveStore: store, authStore: env.authStore, actorRegistry: env.registry}, "selected-parent", action)
+				return out
+			}
+			before := snapshot()
+			if out := call(); out.Code != 409 || snapshot() != before {
+				t.Fatal("selected reply conflict partially committed", out.Code, out.Body.String())
+			}
+			// A fresh explicit snapshot permits the same cascade. Unrelated selected
+			// bases never cause extra lookups or conflicts on this root.
+			body["selected_bases"].(map[string]any)["selected-child"] = pair("selected-child")
+			body["request_key"] = "fresh-selected-cascade"
+			out := call()
+			if out.Code != 200 {
+				t.Fatal(out.Code, out.Body.String())
+			}
+			// Original receipts still replay after later changes to the covered child.
+			if _, err = store.TrashEvent(ctx, owner.ActorID, "selected-child", "Later"); err != nil {
+				t.Fatal(err)
+			}
+			before = snapshot()
+			if retry := call(); retry.Code != 200 || retry.Body.String() != out.Body.String() || snapshot() != before {
+				t.Fatal("selected cascade receipt did not replay", retry.Code, retry.Body.String())
+			}
+		})
 	}
 }
