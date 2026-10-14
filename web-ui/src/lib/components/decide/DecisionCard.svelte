@@ -359,7 +359,7 @@
         >
         {#if ungroupQueued}
           <MutationSendStatus target={batchTarget} />
-        {:else}
+        {:else if decision.batch.ungroupable !== false}
           <button
             type="button"
             class="min-h-11 rounded-md border border-line px-2 py-1 text-meta text-fg hover:bg-panel-hover sm:min-h-0"

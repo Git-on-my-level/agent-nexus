@@ -66,6 +66,15 @@ describe("DecisionCard batch", () => {
     expect(decide({ ...raw, batch: undefined }).batch).toBeNull();
   });
 
+  it("offers no Ungroup for asks filed together as one batch", () => {
+    const filed = { ...raw, batch: { ...raw.batch, key: "filed:b-1" } };
+    const { container } = render(DecisionCard, { decision: decide(filed) });
+    expect(
+      container.querySelector("[data-decision-batch]").textContent,
+    ).toContain("3 grouped asks");
+    expect(container.querySelector("[data-decision-ungroup]")).toBeNull();
+  });
+
   it("shows the exact count, members and an Ungroup button", () => {
     const { container } = render(DecisionCard, { decision: decide(raw) });
     const batch = container.querySelector("[data-decision-batch]");

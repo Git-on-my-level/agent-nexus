@@ -143,7 +143,11 @@ function normalizeDecision(raw) {
   };
 }
 
-/** An accepted curation batch: several open asks shown as one decision. */
+/**
+ * A batch: several open asks shown as one decision. Asks filed together
+ * through POST /asks/batch carry a `filed:` key and cannot be ungrouped; an
+ * accepted curation batch can.
+ */
 function normalizeBatch(raw) {
   if (!raw || typeof raw !== "object") return null;
   const key = text(raw.key);
@@ -158,6 +162,7 @@ function normalizeBatch(raw) {
     .filter((member) => member.ref || member.title);
   return {
     key,
+    ungroupable: !key.startsWith("filed:"),
     count: Math.max(Number(raw.count) || 0, members.length),
     members,
   };
