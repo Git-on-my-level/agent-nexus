@@ -191,3 +191,77 @@ func TestConcurrentControlDispatchAdmitsOnce(t *testing.T) {
 		t.Fatalf("source calls: %d", count.Load())
 	}
 }
+func TestControlDispatchFailsMissingWork(t *testing.T) {
+	s, st, p, d, a := controlFixture(t)
+	ctx := context.Background()
+	s.deps.Authorize = func(_ context.Context, _ Principal, permission, ref string) error {
+		if permission == "pm.action.assignment" && ref != "" {
+			return ErrNotFound
+		}
+		return nil
+	}
+	s.deps.Execute = func(context.Context, Action) (Receipt, error) {
+		t.Fatal("source called")
+		return Receipt{}, nil
+	}
+	in := ControlInput{RequestKey: "missing-work", IfRevision: &d.Revision, IfActionRevision: &a.Revision}
+	out, err := s.control(ctx, p, "dispatch", d.ID, in)
+	if err != nil || out.Status != Failed || out.Receipt.Detail != missingActionWorkDetail {
+		t.Fatalf("keyed missing work: %+v %v", out, err)
+	}
+	var stored Action
+	if err = st.get(ctx, "action", a.ID, &stored); err != nil || stored.Status != Failed || stored.Receipt.Detail != missingActionWorkDetail || len(stored.Attempts) != 1 || stored.Attempts[0].SentAt != nil {
+		t.Fatalf("pending action not closed: %+v %v", stored, err)
+	}
+	again, err := s.control(ctx, p, "dispatch", d.ID, in)
+	if err != nil || !reflect.DeepEqual(out, again) {
+		t.Fatalf("replay: %+v %v", again, err)
+	}
+}
+func TestConcurrentControlNoopReceipt(t *testing.T) {
+	s, st, p, d, a := controlFixture(t)
+	ctx := context.Background()
+	a.Status = Sending
+	old := a.Revision
+	a.Revision++
+	if err := st.cas(ctx, "action", a.ID, old, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.get(ctx, "action", a.ID, &a); err != nil {
+		t.Fatal(err)
+	}
+	var ready atomic.Int32
+	release := make(chan struct{})
+	s.deps.DecisionWork = func(context.Context, Principal, string) (DecisionWork, error) {
+		if ready.Add(1) == 8 {
+			close(release)
+		}
+		<-release
+		return DecisionWork{Revision: "r1", Phase: "backlog"}, nil
+	}
+	s.deps.Execute = func(context.Context, Action) (Receipt, error) {
+		t.Fatal("source called")
+		return Receipt{}, nil
+	}
+	in := ControlInput{RequestKey: "noop", IfRevision: &d.Revision, IfActionRevision: &a.Revision}
+	type result struct {
+		a   Action
+		err error
+	}
+	results := make(chan result, 8)
+	start := make(chan struct{})
+	for i := 0; i < 8; i++ {
+		go func() { <-start; out, err := s.control(ctx, p, "dispatch", d.ID, in); results <- result{out, err} }()
+	}
+	close(start)
+	first := <-results
+	if first.err != nil {
+		t.Fatal(first.err)
+	}
+	for i := 1; i < 8; i++ {
+		next := <-results
+		if next.err != nil || !reflect.DeepEqual(first.a, next.a) {
+			t.Fatalf("concurrent no-op receipts differ: %+v %v", next.a, next.err)
+		}
+	}
+}

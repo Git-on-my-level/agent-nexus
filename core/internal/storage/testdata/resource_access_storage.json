@@ -1487,7 +1487,7 @@
     "../pm/channels.go:*Service:ReconcileDelivery": "aa30c01afea405c2fb5ce6602a8efdf44694959c9e97c85ce9d2f4cac45021cc",
     "../pm/channels.go:*Service:ResolveBinding": "d3a426cc50105bc06bcd66ee27819cb9f9d9700ced274f8c7c6a7bd5cee1d67f",
     "../pm/channels.go:*Service:SendDelivery": "8f882a49ecaf19051238942bfd623164c788fa71b206d5c926fc71e93a9be7eb",
-    "../pm/control_replay.go:*Service:control": "8854cab8211961e26b7a8d383a6093f367d738418efca72eadc74373d57b864f",
+    "../pm/control_replay.go:*Service:control": "b5a9e3d6f5d8f5cb6c2e8e35193214ede520e1a0a9253718aee4043521e6c79b",
     "../pm/control_replay.go:*Store:commitControl": "35a6990f53686d8c5639b055d77595b70113d3f29be7fd367097264bac597193",
     "../pm/control_replay.go:*Store:readControl": "49810d31c13bde5f67f186babd0d409fbe1cc121c03db72885299567a1fe7710",
     "../pm/control_replay.go:type:ControlInput": "9b9641649cd267fcb4a85e18526dbb3cb626a2c2ffc40ad3f0661e9d9baba22e",

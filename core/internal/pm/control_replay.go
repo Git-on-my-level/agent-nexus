@@ -75,7 +75,9 @@ func (s *Service) control(ctx context.Context, p Principal, operation, id string
 			d, err = s.decision(ctx, p, a.DecisionID, "pm.approve")
 		}
 	}
-	if err != nil {
+	// DispatchDecision terminalizes a still-pending unsent action when the
+	// approved work is gone. Keep that closure on the keyed path too.
+	if err != nil && (operation != "dispatch" || a.ID == "") {
 		return Action{}, err
 	}
 	if a.ActorID != p.ActorID || d.ActorID != p.ActorID || d.ActionID != a.ID {
@@ -113,7 +115,15 @@ func (s *Service) control(ctx context.Context, p Principal, operation, id string
 	// the same frozen versions, so a later retry cannot act on a different state.
 	err = s.store.commitControl(ctx, c, func(context.Context) error { return nil }, out)
 	if err != nil {
+		// Identical no-op keys can both observe the current action and then race
+		// on journaling. The loser must return the stored receipt, not conflict.
+		if prior, found, e := s.store.readControl(ctx, c); e != nil || found {
+			return prior, e
+		}
 		return Action{}, err
+	}
+	if c.receipt != nil {
+		return *c.receipt, nil
 	}
 	return out, nil
 }
