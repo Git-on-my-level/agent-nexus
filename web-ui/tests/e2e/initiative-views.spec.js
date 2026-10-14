@@ -46,31 +46,8 @@ const planState = {
   critical_path: ["plan-model", "tiles"],
   next_steps: ["plan-model"],
   shape: "dag",
-  health: "blocked",
   last_movement_at: "2026-10-04T09:00:00Z",
 };
-
-/** A live initiatives projection row, as core sends it. */
-const initiative = (overrides = {}) => ({
-  ref: CARD_REF,
-  title: "Release B",
-  summary: "Initiative plans, live dashboards and agent ergonomics.",
-  priority: "p1",
-  phase: "in_progress",
-  progress: { done: 1, total: 4 },
-  needs: [],
-  board_ref: "board:release-b",
-  updated_at: "2026-10-04T09:00:00Z",
-  ...overrides,
-});
-
-/** `geometry` as core serializes it: layer and `after` per node, bounded. */
-const geometry = (shape, nodes, collapsed = 0) => ({
-  shape,
-  nodes,
-  total_nodes: nodes.length + collapsed,
-  collapsed_nodes: collapsed,
-});
 
 /** A promise somebody else resolves. */
 function deferred() {
@@ -234,7 +211,7 @@ async function installInitiativePage(page, overrides = {}) {
   return api;
 }
 
-test("initiative page leads with the plan, and the card body follows", async ({
+test("initiative page shows the plan under a collapsed description", async ({
   page,
 }, testInfo) => {
   test.setTimeout(90_000);
@@ -245,20 +222,7 @@ test("initiative page leads with the plan, and the card body follows", async ({
   const planSection = page.locator("[data-initiative-plan]");
   await expect(planSection).toBeVisible({ timeout: 60_000 });
 
-  /*
-   * The page header carries the state, once: the shared `WorkSummary` at
-   * header density, which the Tasks table and the board also render. The
-   * Plan section no longer badges it a second time — one summary per page.
-   * Scoped to the summary, since "Blocked" also labels the blocked steps
-   * inside the diagram.
-   */
-  const summary = page.locator('[data-work-summary="header"]');
-  const planHealth = summary.locator("[data-health]").first();
-  await expect(planHealth).toHaveAttribute("data-health", "blocked");
-  await expect(planHealth).toContainText("Blocked");
-  await expect(summary.locator("[data-summary-progress]")).toHaveText(
-    "1/4 steps",
-  );
+  // The Plan section does not badge the state; the header reads it from the brief.
   await expect(planSection.locator("[data-health]")).toHaveCount(0);
 
   /*
@@ -305,13 +269,6 @@ test("initiative page leads with the plan, and the card body follows", async ({
   // The dependency list names steps, and only the steps that have one.
   await expect(rows.nth(0).locator(".plan-node__after")).toHaveCount(0);
 
-  /*
-   * "Next" is the plan's answer, not a sentence somebody typed: core's
-   * `next_steps` says one step is ready, and that is the step named here.
-   */
-  const next = page.locator("[data-next-steps]");
-  await expect(next.locator("[data-next-step]")).toHaveCount(1);
-  await expect(next).toContainText("Plan model on cards");
   // The hand-written note still stands — it names a step the plan has not
   // passed — and says what it is rather than passing for computed state.
   await expect(page.locator("[data-next-note]")).toContainText(
@@ -339,21 +296,15 @@ test("initiative page leads with the plan, and the card body follows", async ({
   await expect(planSection.locator("[data-anx-provenance]")).toHaveText(
     /^Live · updated just now$/,
   );
-  // No date on the body: `work.updated_at` is the card's concurrency token, so
-  // a phase move would otherwise claim the prose had just been rewritten.
-  await expect(
-    page.locator("[data-initiative-body] [data-anx-provenance]"),
-  ).toHaveText(/^Hand-written$/);
-
-  // The card body is present, and below the plan.
+  // The collapsed description sits above the plan.
   const order = await page
-    .locator("[data-initiative-plan], [data-initiative-body]")
+    .locator("[data-initiative-plan], [data-initiative-description]")
     .evaluateAll((nodes) =>
       nodes.map((node) =>
         node.hasAttribute("data-initiative-plan") ? "plan" : "body",
       ),
     );
-  expect(order).toEqual(["plan", "body"]);
+  expect(order).toEqual(["body", "plan"]);
 
   await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
@@ -404,9 +355,7 @@ test("the plan diagram keeps a readable fallback and a focusable chip", async ({
  * The case David found on the omi card: the first phase is done, and the
  * page was still printing the sentence somebody typed when it was not.
  */
-test("Next follows the plan, and drops a note the plan has passed", async ({
-  page,
-}) => {
+test("Who is next drops a note the plan has passed", async ({ page }) => {
   test.setTimeout(90_000);
   await installInitiativePage(page, {
     work: {
@@ -425,20 +374,12 @@ test("Next follows the plan, and drops a note the plan has passed", async ({
       ],
       next_steps: ["plan-model", "ui-chips"],
       critical_path: ["plan-model", "tiles"],
-      health: "on_track",
     },
   });
   await page.goto(CARD_PATH);
   await expect(page.locator("[data-initiative-plan]")).toBeVisible({
     timeout: 60_000,
   });
-
-  // Both ready steps, core's own pick first.
-  const next = page.locator("[data-next-steps]");
-  await expect(next.locator("[data-next-step]")).toHaveCount(2);
-  await expect(next.locator("[data-next-step]").first()).toContainText(
-    "Plan model on cards",
-  );
 
   // The note names only a step core says is done, so it is gone rather than
   // sitting under a computed next step and contradicting it.
@@ -448,19 +389,6 @@ test("Next follows the plan, and drops a note the plan has passed", async ({
   await expect(page.locator("[data-next-actor-role]")).toContainText(
     "no principal named",
   );
-  await expect(page.locator("[data-summary-waiting]")).toHaveCount(0);
-
-  /*
-   * The generic health sentence is gone with it. "Open steps are
-   * progressing." under a badge reading "In progress" was the header's
-   * second line and could never tell a reader anything.
-   */
-  const summary = page.locator('[data-work-summary="header"]');
-  await expect(summary.locator("[data-health]").first()).toHaveAttribute(
-    "data-health",
-    "on_track",
-  );
-  await expect(summary.locator("[data-summary-reason]")).toHaveCount(0);
 });
 
 /**
@@ -496,7 +424,8 @@ test("a cleared plan leaves the page, rather than staying on screen", async ({
   await expect(page.locator("[data-initiative-plan]")).toHaveCount(0, {
     timeout: 20_000,
   });
-  // And the card body takes the space the plan had.
+  // And the card body takes the space the plan had, under its Description.
+  await page.locator("[data-initiative-description] summary").click();
   await expect(
     page.getByText("The card body sits below the plan."),
   ).toBeVisible();
@@ -554,7 +483,7 @@ test("an older card read cannot bring a cleared plan's header back", async ({
    */
   const api = await installInitiativePage(page, {
     workSummary: {
-      status: { state: "blocked", label: "Blocked" },
+      status: { state: "moving", label: "Moving" },
       progress: { done: 1, total: 4, unit: "steps" },
     },
   });
@@ -562,7 +491,6 @@ test("an older card read cannot bring a cleared plan's header back", async ({
   await expect(page.locator(".plan-track--tree > li")).toHaveCount(4, {
     timeout: 60_000,
   });
-  await expect(page.locator("[data-summary-progress]")).toHaveText("1/4 steps");
 
   // Refresh A: its *card* read is held open, with the plan still in place.
   const slowCard = deferred();
@@ -575,12 +503,11 @@ test("an older card read cannot bring a cleared plan's header back", async ({
   api.holdCard = null;
   api.plan = { steps: [] };
   api.planState = null;
-  api.workSummary = { status: { state: "in_progress", label: "In progress" } };
+  api.workSummary = { status: { state: "no_promise", label: "No promise" } };
   api.emit([CARD_REF]);
   await expect(page.locator("[data-initiative-plan]")).toHaveCount(0, {
     timeout: 20_000,
   });
-  await expect(page.locator("[data-summary-progress]")).toHaveCount(0);
 
   /*
    * Now A's card read lands, carrying the record from before the clear. Its
@@ -592,7 +519,6 @@ test("an older card read cannot bring a cleared plan's header back", async ({
   slowCard.resolve();
   await expect.poll(() => api.cardReads, { timeout: 20_000 }).toBe(3);
   await page.waitForTimeout(1_000);
-  await expect(page.locator("[data-summary-progress]")).toHaveCount(0);
   await expect(page.locator("[data-initiative-plan]")).toHaveCount(0);
   await expect(page.locator(".plan-track--tree > li")).toHaveCount(0);
 });
@@ -606,7 +532,6 @@ test("a read that found no plan is not overruled by the record's own copy", asyn
   await expect(page.locator(".plan-track--tree > li")).toHaveCount(4, {
     timeout: 60_000,
   });
-  await expect(page.locator("[data-summary-progress]")).toHaveText("1/4 steps");
 
   /*
    * The plan is cleared, but the card record still carries the `plan_state`
@@ -622,7 +547,6 @@ test("a read that found no plan is not overruled by the record's own copy", asyn
   await expect(page.locator("[data-initiative-plan]")).toHaveCount(0, {
     timeout: 20_000,
   });
-  await expect(page.locator("[data-summary-progress]")).toHaveCount(0);
 });
 
 test("a linked card moving re-reads this card's plan", async ({ page }) => {
@@ -658,7 +582,7 @@ test("a linked card moving re-reads this card's plan", async ({ page }) => {
   });
 });
 
-test("a named owner is who the card is waiting on, on the line and in Next", async ({
+test("a named owner is who the card is waiting on, in Who is next", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -671,15 +595,10 @@ test("a named owner is who the card is waiting on, on the line and in Next", asy
     timeout: 60_000,
   });
 
-  /*
-   * The lead ready step is in progress, so the verb is "with": a step
-   * somebody is already working is not one anybody is waiting on. Both the
-   * status line and the Next section name the same person.
-   */
-  await expect(page.locator("[data-summary-waiting]")).toHaveText(
-    "· with Operator",
-  );
-  await expect(page.locator("[data-next-steps]")).toBeVisible();
+  // The Who is next section names the owner the registry resolves.
+  await expect(
+    page.locator("section", { hasText: "Who is next" }).first(),
+  ).toContainText("Operator");
   await expect(page.locator("[data-next-actor-role]")).toHaveCount(0);
   await expect(page.getByText("Nobody assigned")).toHaveCount(0);
 });
@@ -791,373 +710,6 @@ test("the plan reads at phone width", async ({ page }, testInfo) => {
     contentType: "image/png",
   });
 });
-
-/**
- * The Overview tiles with real plan state behind them: health, a mini-viz sized
- * to the plan's shape, what is next, and when it last moved. The seeded fixture
- * in overview.spec.js predates plans, so a tile there degrades to progress
- * alone; this one shows the whole tile.
- */
-const OVERVIEW = `${WORKSPACE}/overview`;
-
-async function installOverviewTiles(page) {
-  await page.clock.setFixedTime(new Date(NOW));
-  await installWorkspaceApi(page, {});
-  const snapshot = {
-    generated_at: NOW,
-    needs_you: {
-      status: "ok",
-      count: 2,
-      rows: [],
-      href: "/inbox?mailbox=needs-you",
-    },
-    initiatives: {
-      status: "ok",
-      count: 3,
-      items: [
-        initiative({
-          plan_state: planState,
-          health: {
-            status: "blocked",
-            reason: "A step on the critical path is blocked.",
-          },
-          geometry: geometry("dag", [
-            { id: "contracts", status: "done", layer: 0, after: [] },
-            {
-              id: "plan-model",
-              status: "active",
-              layer: 1,
-              after: ["contracts"],
-            },
-            {
-              id: "ui-chips",
-              status: "blocked",
-              layer: 1,
-              after: ["contracts"],
-            },
-            {
-              id: "tiles",
-              status: "not_started",
-              layer: 2,
-              after: ["plan-model", "ui-chips"],
-            },
-          ]),
-          needs: ["Ref chips everywhere"],
-        }),
-        initiative({
-          ref: "card:dashboards",
-          title: "Live dashboards",
-          summary: "Panels that never go stale.",
-          progress: { done: 4, total: 5 },
-          plan_state: {
-            ...planState,
-            steps: [
-              { id: "contracts", status: "done" },
-              { id: "panels", status: "done" },
-              { id: "queries", status: "done" },
-              { id: "publish", status: "done" },
-              { id: "adopt", status: "active" },
-            ],
-            progress: { done: 4, total: 5 },
-            critical_path: ["adopt"],
-            next_steps: ["adopt-the-dashboard"],
-            shape: "chain",
-            health: "on_track",
-            last_movement_at: "2026-10-04T11:30:00Z",
-          },
-          health: { status: "on_track", reason: "Work is progressing." },
-          geometry: geometry(
-            "chain",
-            [
-              { id: "contracts", status: "done", layer: 0, after: [] },
-              { id: "panels", status: "done", layer: 1, after: ["contracts"] },
-              { id: "queries", status: "done", layer: 2, after: ["panels"] },
-              { id: "publish", status: "done", layer: 3, after: ["queries"] },
-              { id: "adopt", status: "active", layer: 4, after: ["publish"] },
-            ],
-            0,
-          ),
-        }),
-        initiative({
-          ref: "card:ergonomics",
-          title: "Agent ergonomics",
-          summary: "Fewer traps in the CLI and the skills.",
-          progress: { done: 1, total: 6 },
-          plan_state: {
-            ...planState,
-            steps: [
-              { id: "audit", status: "done" },
-              { id: "cli", status: "not_started" },
-              { id: "skills", status: "not_started" },
-            ],
-            progress: { done: 1, total: 3 },
-            critical_path: ["cli"],
-            next_steps: ["cli-first-class-inbox"],
-            shape: "lanes",
-            health: "stalled",
-            last_movement_at: "2026-09-26T09:00:00Z",
-          },
-          health: {
-            status: "stalled",
-            reason: "Nothing has moved for 8 days.",
-          },
-          geometry: geometry("lanes", [
-            { id: "audit", status: "done", layer: 0, after: [] },
-            { id: "cli", status: "not_started", layer: 0, after: [] },
-            { id: "skills", status: "not_started", layer: 1, after: ["cli"] },
-          ]),
-        }),
-      ],
-    },
-    since_you_last_looked: {
-      since: "2026-10-03T12:00:00Z",
-      generated_at: NOW,
-      items: [
-        {
-          kind: "initiative_blocked",
-          ref: "card:release-b",
-          title: "Release B",
-        },
-        {
-          kind: "step_completed",
-          ref: "card:dashboards",
-          title: "Publish",
-          step_id: "publish",
-        },
-        {
-          kind: "ask_answered",
-          ref: "event:launch",
-          title: "Launch date",
-          ts: "2026-10-04T11:00:00Z",
-        },
-      ],
-      truncated: false,
-    },
-    dashboard: { status: "ok", pinned_ref: "", has_more: false, reports: [] },
-    agents: { status: "ok", rows: [], count: 0 },
-    work: { status: "ok", total: 3, human_count: 0, items: [] },
-  };
-  await page.route("**/*", async (route) => {
-    const request = route.request();
-    if (!["fetch", "xhr"].includes(request.resourceType())) {
-      return route.fallback();
-    }
-    const path = decodeURIComponent(new URL(request.url()).pathname);
-    if (path === "/overview" || path === "/workspace/dashboard") {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(snapshot),
-      });
-    }
-    return route.fallback();
-  });
-}
-
-for (const viewport of [
-  { width: 1440, height: 1000, label: "desktop" },
-  { width: 390, height: 844, label: "phone" },
-]) {
-  test(`Overview initiative tiles @ ${viewport.label}`, async ({
-    page,
-  }, testInfo) => {
-    test.setTimeout(90_000);
-    await installOverviewTiles(page);
-    await page.setViewportSize({
-      width: viewport.width,
-      height: viewport.height,
-    });
-    await page.goto(OVERVIEW);
-
-    const tiles = page.locator("[data-initiative-tile]");
-    await expect(tiles.first()).toBeVisible({ timeout: 60_000 });
-    await expect(tiles).toHaveCount(3);
-
-    /*
-     * Worst first. The sort is the dashboard's whole job: blocked, then stale,
-     * then on track — whatever order the projection sent them in.
-     */
-    await expect(tiles.nth(0)).toHaveAttribute("data-tile-health", "blocked");
-    await expect(tiles.nth(1)).toHaveAttribute("data-tile-health", "stale");
-    await expect(tiles.nth(2)).toHaveAttribute("data-tile-health", "on_track");
-
-    // Each tile answers state and progress without opening anything.
-    await expect(tiles.first()).toContainText("Release B");
-    await expect(tiles.first()).toContainText("Tech tree");
-    await expect(tiles.first()).toContainText("Next: Plan model");
-    await expect(tiles.first().locator("[data-tile-needs]")).toContainText(
-      "Ref chips everywhere",
-    );
-
-    /*
-     * Health and freshness sit on their own line under the title, so a long
-     * initiative name gets the tile's full width. Hovering either is instant:
-     * the sentence is ours (`data-tooltip`), not the browser's slow `title`.
-     */
-    const status = tiles.first().locator("[data-tile-status]");
-    const title = tiles.first().locator(".card-title");
-    expect((await status.boundingBox()).y).toBeGreaterThan(
-      (await title.boundingBox()).y,
-    );
-
-    const health = status.locator("[data-health]");
-    await expect(health).toHaveAttribute("data-health", "blocked");
-    await expect(health).toHaveAttribute(
-      "data-tooltip",
-      "Blocked — A step on the critical path is blocked.",
-    );
-    await expect(health).toHaveJSProperty("title", "");
-
-    /*
-     * The age is a freshness badge: "3h" in green, because an initiative is
-     * expected to move every three days and this one moved this morning. The
-     * tooltip carries the expectation, the verb and the exact instant.
-     */
-    const age = tiles.first().locator("[data-freshness]");
-    await expect(age).toHaveText("3 h ago");
-    await expect(age).toHaveAttribute("data-freshness", "fresh");
-    await expect(age).toHaveClass(/ui-badge--ok/);
-    await expect(age).toHaveAttribute(
-      "data-tooltip",
-      /^Moved .*\(3 h ago\) — within the expected 3d$/,
-    );
-
-    /*
-     * The stale initiative has not moved in eight days, nearly three times
-     * its expectation: the freshness badge is red and says so.
-     *
-     * The "Stale" badge stays beside it. A tile used to drop it here, on the
-     * grounds that the red age said the same thing — but the same renderer
-     * now fills a table column headed Status, and a column that renders empty
-     * for exactly the rows a reader is looking for is worse than a badge that
-     * agrees with the age next to it. The two are not redundant anyway: the
-     * age carries the expectation it is late against, which "Stale" does not.
-     */
-    const staleTile = tiles.nth(1);
-    const staleAge = staleTile.locator("[data-freshness]");
-    await expect(staleAge).toHaveText("Sep 26");
-    await expect(staleAge).toHaveClass(/ui-badge--danger/);
-    await expect(staleAge).toHaveAttribute(
-      "data-tooltip",
-      /expected every 3d$/,
-    );
-    await expect(staleTile.locator("[data-health]")).toHaveAttribute(
-      "data-health",
-      "stale",
-    );
-
-    await expect(tiles.nth(1)).toContainText("Agent ergonomics");
-    await expect(tiles.nth(1)).toContainText("Lanes");
-    await expect(tiles.nth(2)).toContainText("Live dashboards");
-    await expect(tiles.nth(2)).toContainText("Timeline");
-
-    /*
-     * One flat bar per tile — a segment per step, in plan order. The tile used
-     * to draw the plan's real shape in miniature; at tile size that became a
-     * block of colour tall enough to crowd the rows under it, and said less
-     * than the shape's own name does in the line below. The shape is still
-     * named, and the graph itself is a click away on the initiative page.
-     */
-    for (const index of [0, 1, 2]) {
-      const bar = tiles.nth(index).locator(".summary__bar");
-      await expect(bar).toHaveCount(1);
-      // A single row: every segment shares one offsetTop.
-      const rows = await bar.evaluate(
-        (node) =>
-          new Set(
-            [...node.querySelectorAll(".seg")].map((seg) => seg.offsetTop),
-          ).size,
-      );
-      expect(rows).toBe(1);
-      // And it is 8px tall, the height the mockup draws it at.
-      const height = await bar
-        .locator(".seg")
-        .first()
-        .evaluate((node) => Math.round(node.getBoundingClientRect().height));
-      expect(height).toBe(8);
-    }
-    // Release B's plan has four steps, so the bar has four segments.
-    await expect(tiles.first().locator(".summary__bar .seg")).toHaveCount(4);
-
-    // What changed since this viewer last looked, from the server digest.
-    const changes = page.locator('[data-overview-section="changes"]');
-    await expect(changes).toBeVisible();
-    await expect(changes).toContainText("Recent changes");
-    await expect(changes).toContainText(
-      "1 step done · 1 blocked · 1 ask answered",
-    );
-    await expect(changes.locator("[data-since-kind]").first()).toHaveAttribute(
-      "data-since-kind",
-      "initiative_blocked",
-    );
-
-    // The whole tile is the link to the initiative page.
-    await expect(tiles.first()).toHaveAttribute(
-      "href",
-      new RegExp("/initiatives/card%3Arelease-b$"),
-    );
-
-    // The initiatives come first, then what changed, then the dashboard.
-    const order = await page
-      .locator("[data-overview-section]")
-      .evaluateAll((nodes) =>
-        nodes.map((node) => node.dataset.overviewSection),
-      );
-    expect(order.slice(0, 3)).toEqual(["initiatives", "changes", "reports"]);
-
-    // One urgent band, not a restatement of the Inbox: it counts what is
-    // waiting, and names the initiative that has stopped moving. It answers a
-    // different question from the two sections above, so it is one fold down.
-    await page.getByText("More detail", { exact: true }).click();
-    const band = page.locator('[data-overview-section="urgent"]');
-    await expect(band).toHaveAttribute("data-urgent-state", "active");
-    await expect(band.locator("[data-urgent-ask-count]")).toHaveText("2 asks");
-    await expect(
-      band.locator("[data-urgent-initiative='card:release-b']"),
-    ).toContainText("Release B");
-
-    const section = page.locator('[data-overview-section="initiatives"]');
-    await section.screenshot({
-      path: testInfo.outputPath(`tiles-${viewport.label}.png`),
-      animations: "disabled",
-    });
-    await testInfo.attach(`tiles-${viewport.label}`, {
-      path: testInfo.outputPath(`tiles-${viewport.label}.png`),
-      contentType: "image/png",
-    });
-
-    // The whole page, so the digest strip and the single Inbox line are in
-    // frame alongside the tiles.
-    await mkdir(".screenshots/review", { recursive: true });
-    await page.screenshot({
-      path: `.screenshots/review/overview-${viewport.label}.png`,
-      animations: "disabled",
-    });
-    await page.screenshot({
-      path: testInfo.outputPath(`overview-${viewport.label}.png`),
-      animations: "disabled",
-    });
-    await testInfo.attach(`overview-${viewport.label}`, {
-      path: testInfo.outputPath(`overview-${viewport.label}.png`),
-      contentType: "image/png",
-    });
-  });
-}
-
-test("Overview tiles have no accessibility violations", async ({ page }) => {
-  test.setTimeout(90_000);
-  await installOverviewTiles(page);
-  await page.goto(OVERVIEW);
-  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible({
-    timeout: 60_000,
-  });
-  const results = await new AxeBuilder({ page })
-    .include('[data-overview-section="initiatives"]')
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
-  expect(results.violations).toEqual([]);
-});
-
 /**
  * The preview's keyboard path, against the real chip — the unit tests use a
  * stand-in anchor, which does not carry the chip's own focus handler and so

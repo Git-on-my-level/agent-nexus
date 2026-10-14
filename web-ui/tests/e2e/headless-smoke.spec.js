@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
 
-test("mocked core smoke flow: inbox -> threads -> thread detail -> post message + unknown event rendering", async ({
+test("mocked core smoke flow: decide -> threads -> thread detail -> post message + unknown event rendering", async ({
   page,
 }) => {
   const actorId = "actor-headless-smoke-e2e";
@@ -269,18 +269,9 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     });
   });
 
-  await page.goto("/o/local/w/local/inbox");
+  await page.goto("/o/local/w/local/decide");
   await expect(
-    page.getByRole("heading", { name: "Inbox", exact: true }),
-  ).toBeVisible();
-  // The only row is listed and, selected by default, open in the pane.
-  await expect(page.getByTestId("inbox-row-inbox-100")).toContainText(
-    "Approve onboarding exception handling",
-  );
-  await expect(
-    page.getByRole("heading", {
-      name: "Approve onboarding exception handling",
-    }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
 
   // Threads are inspection, not primary navigation: open the list directly.
