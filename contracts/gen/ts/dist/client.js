@@ -3628,6 +3628,36 @@ export const commandRegistry = [
         "ts_method": "boardsWorkspace"
     },
     {
+        "command_id": "brief.get",
+        "cli_path": "brief",
+        "group": "brief",
+        "method": "GET",
+        "path": "/brief",
+        "operation_id": "getBrief",
+        "summary": "Read the caller's brief.v1 for this workspace",
+        "description": "Decisions waiting on the caller, initiatives against their promises, the caller's own open asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.",
+        "why": "One brief for the human surfaces and the agent orient loop.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the bare brief.v1 object.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "home",
+            "inbox",
+            "cards"
+        ],
+        "stability": "stable",
+        "surface": "projection",
+        "agent_notes": "Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.",
+        "go_method": "BriefGet",
+        "ts_method": "briefGet"
+    },
+    {
         "command_id": "cards.archive",
         "cli_path": "cards archive",
         "group": "cards",
@@ -13652,6 +13682,9 @@ export class AnxClient {
     }
     boardsWorkspace(pathParams, options = {}) {
         return this.invoke("boards.workspace", pathParams, options);
+    }
+    briefGet(options = {}) {
+        return this.invoke("brief.get", {}, options);
     }
     cardsArchive(pathParams, options = {}) {
         return this.invoke("cards.archive", pathParams, options);

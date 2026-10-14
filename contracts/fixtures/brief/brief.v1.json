@@ -1,0 +1,83 @@
+{
+  "schema": "brief.v1",
+  "generated_at": "2026-10-15T09:00:00Z",
+  "principal": {"id": "human:operator", "display": "Operator", "kind": "human"},
+  "decisions": [
+    {
+      "ref": "inbox:ask-91", "inbox_item_id": "ask-91", "kind": "ask",
+      "title": "Merge battery-v2 calibration?",
+      "body": "Calibration matches the bench within 2%.\n\n**Recommend:** merge.",
+      "requested_by": {"id": "agent:codex", "display": "codex", "kind": "agent"},
+      "subject": {"ref": "card:battery-measurement", "title": "Battery measurement"},
+      "created_at": "2026-10-13T09:00:00Z", "age_seconds": 172800,
+      "decide_by": "2026-10-16T17:00:00Z", "overdue_for_seconds": 0,
+      "blocks": [{"ref": "card:battery-report", "title": "Battery report"}, {"ref": "card:battery-dashboard", "title": "Battery dashboard"}],
+      "blocks_count": 2, "priority": "p1",
+      "proposals": ["Merge", "Hold a week"]
+    },
+    {
+      "ref": "inbox:ask-93", "inbox_item_id": "ask-93", "kind": "ask",
+      "title": "Pick label scheme?",
+      "requested_by": {"id": "agent:pm", "display": "pm", "kind": "agent"},
+      "subject": {"ref": "card:labels", "title": "Labels"},
+      "created_at": "2026-10-15T08:00:00Z", "age_seconds": 3600,
+      "decide_by": null, "overdue_for_seconds": null,
+      "blocks": [], "blocks_count": 0,
+      "proposals": ["Short names", "Full names"]
+    }
+  ],
+  "initiatives": [
+    {
+      "ref": "card:battery-measurement", "title": "Battery measurement",
+      "state": "past_promise", "placement": "in_progress",
+      "promise": {"at": "2026-10-06T00:00:00Z", "what": "checkpoint with bench data", "source": "note", "source_ref": "event:evt-12", "author": {"id": "agent:codex", "display": "codex", "kind": "agent"}},
+      "past_promise_for_seconds": 777600, "promise_moves": 2,
+      "last_evidence_at": "2026-10-03T12:00:00Z",
+      "progress": {"done": 6, "total": 9},
+      "blocked_count": 1, "waiting_on_you_count": 1,
+      "note": {"text": "Bench rig back; rerunning sweeps.", "author": {"id": "agent:codex", "display": "codex", "kind": "agent"}, "at": "2026-10-05T10:00:00Z"},
+      "possibly_moot": {"flagged": false}
+    },
+    {
+      "ref": "card:fleet-onboarding", "title": "Fleet onboarding",
+      "state": "moving", "placement": "in_progress",
+      "promise": {"at": "2026-10-16T12:00:00Z", "what": "enroll m6", "source": "plan_step", "source_ref": "card:fleet-onboarding#enroll-m6"},
+      "past_promise_for_seconds": null, "promise_moves": 0,
+      "last_evidence_at": "2026-10-15T06:00:00Z",
+      "progress": {"done": 4, "total": 7},
+      "blocked_count": 0, "waiting_on_you_count": 0,
+      "note": null,
+      "possibly_moot": {"flagged": false}
+    },
+    {
+      "ref": "card:labels", "title": "Labels",
+      "state": "no_promise", "placement": "ready",
+      "promise": null, "past_promise_for_seconds": null, "promise_moves": 0,
+      "last_evidence_at": "2026-10-01T00:00:00Z",
+      "progress": null,
+      "blocked_count": 0, "waiting_on_you_count": 1,
+      "note": null,
+      "possibly_moot": {"flagged": true, "reason": "all 2 linked sources are merged"}
+    },
+    {
+      "ref": "card:observability", "title": "Observability",
+      "state": "done", "placement": "done",
+      "promise": null, "past_promise_for_seconds": null, "promise_moves": 0,
+      "last_evidence_at": "2026-10-14T00:00:00Z",
+      "progress": {"done": 4, "total": 4},
+      "blocked_count": 0, "waiting_on_you_count": 0,
+      "note": null,
+      "possibly_moot": {"flagged": false}
+    }
+  ],
+  "your_asks": [],
+  "answered_for_you": [
+    {
+      "ref": "inbox:ask-88", "inbox_item_id": "ask-88", "title": "Ship nightly digest?",
+      "answer": "Hold a week", "outcome": "answered",
+      "answered_at": "2026-10-14T18:00:00Z",
+      "answered_by": {"id": "human:operator", "display": "Operator", "kind": "human"},
+      "followed_recommendation": false
+    }
+  ]
+}

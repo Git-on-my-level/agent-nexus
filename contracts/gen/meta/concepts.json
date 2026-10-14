@@ -4860,13 +4860,14 @@
     },
     {
       "name": "cards",
-      "command_count": 64,
+      "command_count": 65,
       "command_ids": [
         "agents.get",
         "agents.me.presence",
         "boards.cards.batch_add",
         "boards.cards.get",
         "boards.cards.list",
+        "brief.get",
         "cards.archive",
         "cards.create",
         "cards.get",
@@ -5188,6 +5189,36 @@
           ],
           "go_method": "BoardsCardsList",
           "ts_method": "boardsCardsList"
+        },
+        {
+          "command_id": "brief.get",
+          "cli_path": "brief",
+          "group": "brief",
+          "method": "GET",
+          "path": "/brief",
+          "operation_id": "getBrief",
+          "summary": "Read the caller's brief.v1 for this workspace",
+          "description": "Decisions waiting on the caller, initiatives against their promises, the caller's own open asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.",
+          "why": "One brief for the human surfaces and the agent orient loop.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns the bare brief.v1 object.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "home",
+            "inbox",
+            "cards"
+          ],
+          "stability": "stable",
+          "surface": "projection",
+          "agent_notes": "Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.",
+          "go_method": "BriefGet",
+          "ts_method": "briefGet"
         },
         {
           "command_id": "cards.archive",
@@ -16433,8 +16464,9 @@
     },
     {
       "name": "home",
-      "command_count": 6,
+      "command_count": 7,
       "command_ids": [
+        "brief.get",
         "home.read",
         "home.unread",
         "overview.changes",
@@ -16443,6 +16475,36 @@
         "workspace.dashboard.set"
       ],
       "commands": [
+        {
+          "command_id": "brief.get",
+          "cli_path": "brief",
+          "group": "brief",
+          "method": "GET",
+          "path": "/brief",
+          "operation_id": "getBrief",
+          "summary": "Read the caller's brief.v1 for this workspace",
+          "description": "Decisions waiting on the caller, initiatives against their promises, the caller's own open asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.",
+          "why": "One brief for the human surfaces and the agent orient loop.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns the bare brief.v1 object.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "home",
+            "inbox",
+            "cards"
+          ],
+          "stability": "stable",
+          "surface": "projection",
+          "agent_notes": "Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.",
+          "go_method": "BriefGet",
+          "ts_method": "briefGet"
+        },
         {
           "command_id": "home.read",
           "cli_path": "",
@@ -17584,7 +17646,7 @@
     },
     {
       "name": "inbox",
-      "command_count": 15,
+      "command_count": 16,
       "command_ids": [
         "agent.inbox.answers.read",
         "agent.inbox.asks.list",
@@ -17597,6 +17659,7 @@
         "asks.get",
         "asks.stream",
         "asks.subscribe",
+        "brief.get",
         "inbox.get",
         "inbox.respond",
         "inbox.stream",
@@ -18103,6 +18166,36 @@
           ],
           "go_method": "AsksSubscribe",
           "ts_method": "asksSubscribe"
+        },
+        {
+          "command_id": "brief.get",
+          "cli_path": "brief",
+          "group": "brief",
+          "method": "GET",
+          "path": "/brief",
+          "operation_id": "getBrief",
+          "summary": "Read the caller's brief.v1 for this workspace",
+          "description": "Decisions waiting on the caller, initiatives against their promises, the caller's own open asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.",
+          "why": "One brief for the human surfaces and the agent orient loop.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns the bare brief.v1 object.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "home",
+            "inbox",
+            "cards"
+          ],
+          "stability": "stable",
+          "surface": "projection",
+          "agent_notes": "Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.",
+          "go_method": "BriefGet",
+          "ts_method": "briefGet"
         },
         {
           "command_id": "inbox.get",
