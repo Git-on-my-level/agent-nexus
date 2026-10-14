@@ -17,7 +17,7 @@ machine-readable source for that check.
 | work_near_duplicate | work create | `matches an open initiative` | Add a step to the matching initiative: `anx plan step add <card> --title <title> --ref <url>`. |
 | work_over_target | work create | `open initiatives (target 15)` | Prefer a plan step on an existing initiative over a new one. |
 | note_no_next | note | `no --next` | Renew the card's promise: `anx note <card> --next <when> "<what>"`. |
-| note_moved_without_evidence | note | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url|ref> --next <when>`. |
+| note_moved_without_evidence | note | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`. |
 | note_beyond_horizon | note | `beyond the 2-day horizon` | Promise a nearer checkpoint, for example `--next 2d "<checkpoint>"`. |
 
 `<when>` everywhere is the `review_by` grammar: a UTC date (`YYYY-MM-DD`), an
