@@ -23,23 +23,16 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	if err != nil {
 		return nil, err
 	}
-	quotaCheck := func() error {
-		return s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 4096)}, blobLedgerWritePlan{})
-	}
 	if s.quota.enabled() {
 		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {
 			if err := s.ensureBlobUsageLedgerInitialized(ctx); err != nil {
-				s.quotaMu.Unlock()
 				return nil, err
 			}
 		}
-		err = quotaCheck()
-		s.quotaMu.Unlock()
-	} else {
-		err = quotaCheck()
 	}
-	if err != nil {
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 4096)}, blobLedgerWritePlan{}); err != nil {
 		return nil, err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -51,6 +44,11 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if staged != nil {
+			_ = staged.Cleanup()
+		}
+	}()
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -64,7 +62,8 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 
 // appendTaskAttentionEventTx validates and inserts one task-addressed ask
 // inside an open transaction. Batch filing reuses it so N asks commit or roll
-// back together; the caller owns commit and staged-write promotion.
+// back together. On success the caller owns commit and the returned staged
+// write (promote after commit, or cleanup); on error this helper discards it.
 func (s *Store) appendTaskAttentionEventTx(ctx context.Context, tx *accessTx, actor string, body map[string]any) (map[string]any, blob.StagedWrite, []string, error) {
 	payload := cloneMap(asMapValue(body["payload"]))
 	body["payload"] = payload
@@ -172,5 +171,7 @@ func (s *Store) appendTaskAttentionEventTx(ctx context.Context, tx *accessTx, ac
 	if err = markTopicProjectionsDirtyTx(ctx, tx, projectionThreads, time.Now().UTC()); err != nil {
 		return nil, nil, nil, err
 	}
-	return prepared.Body, staged, projectionThreads, nil
+	out := staged
+	staged = nil
+	return prepared.Body, out, projectionThreads, nil
 }

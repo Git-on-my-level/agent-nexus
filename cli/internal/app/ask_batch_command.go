@@ -285,6 +285,9 @@ func (a *App) prepareAskBatchEntry(
 		}
 	}
 	warnings, lintErr := lintAskAuthoring(entry.Body, entry.Refs, entry.Evidence, forges)
+	if titleErr := lintAskTitle(entry.Title); titleErr != nil {
+		lintErr = titleErr
+	}
 	if lintErr != nil && !forceFlag.value {
 		return errnorm.Usage("ask_authoring", fmt.Sprintf("asks[%d]: %s; or use --force --reason <explanation>", index, lintErr.Error()))
 	}

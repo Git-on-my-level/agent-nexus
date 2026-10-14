@@ -203,3 +203,38 @@ func TestAskBatchAppliesAuthoringLintToEveryAsk(t *testing.T) {
 		t.Fatalf("forced batch must file exactly once, got %d", requests.Load())
 	}
 }
+
+func TestAskBatchAppliesTitleLint(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int64
+	server := askBatchServer(t, &atomic.Pointer[map[string]any]{}, &requests)
+	defer server.Close()
+
+	home := t.TempDir()
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	path := askBatchFixture(t, `{"asks":[
+		{"title":"`+strings.Repeat("界", 101)+`","subject_ref":"card:x","thread_id":"thr1","recommend":"Yes"},
+		{"title":"Short?","subject_ref":"card:x","thread_id":"thr1","recommend":"No"}
+	]}`)
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--as", "agent-a",
+		"ask", "batch", "--from-file", path,
+	})
+	if !strings.Contains(raw, "ask_authoring") {
+		t.Fatalf("titles over 100 characters must surface as ask_authoring: %s", raw)
+	}
+	if requests.Load() != 0 {
+		t.Fatal("title lint failures must not reach the server")
+	}
+
+	rawForced := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--as", "agent-a",
+		"ask", "batch", "--from-file", path, "--force", "--reason", "Deliberate exception",
+	})
+	assertEnvelopeOK(t, rawForced)
+	if requests.Load() != 1 {
+		t.Fatalf("forced title lint must file exactly once, got %d", requests.Load())
+	}
+}

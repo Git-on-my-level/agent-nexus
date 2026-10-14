@@ -801,8 +801,13 @@ func respondInboxBatchIfNeeded(w http.ResponseWriter, r *http.Request, opts hand
 	// A no-key retry of an answered batch has nothing to replay through; the
 	// stored batch claim (by item id) must still report the conflict instead
 	// of falling into the single-ask path, which would 400 on the empty flat
-	// fields before it ever saw the claim.
+	// fields before it ever saw the claim. Authorization still runs first so
+	// an inaccessible answered batch looks absent, matching the single-ask path.
 	if claimed, claimErr := batchStore.HumanAttentionBatchResponseRequest(r.Context(), effectiveItemID); claimErr == nil && claimed != nil {
+		if !inboxBatchResponseAccessible(r, opts, claimed) {
+			denyPMNotFound(w, "inbox item")
+			return true
+		}
 		writeError(w, http.StatusConflict, "conflict", "this ask batch has already been answered")
 		return true
 	} else if !errors.Is(claimErr, primitives.ErrNotFound) {
@@ -1153,20 +1158,29 @@ func batchStoreSave(opts handlerOptions, batchID string, response map[string]any
 // current authorization: the answered batch item is gone from the open
 // projection, so the stored answer events carry the original subject/refs.
 func writeAuthorizedInboxBatchReplay(w http.ResponseWriter, r *http.Request, opts handlerOptions, replay map[string]any) {
+	if !inboxBatchResponseAccessible(r, opts, replay) {
+		denyPMNotFound(w, "inbox item")
+		return
+	}
+	writeJSON(w, http.StatusCreated, replay)
+}
+
+func inboxBatchResponseAccessible(r *http.Request, opts handlerOptions, replay map[string]any) bool {
 	answers, _ := replay["answers"].([]any)
+	if len(answers) == 0 {
+		return false
+	}
 	for _, raw := range answers {
 		answer, _ := raw.(map[string]any)
 		event, _ := answer["event"].(map[string]any)
 		if event == nil {
-			denyPMNotFound(w, "inbox item")
-			return
+			return false
 		}
 		if !inboxItemAccessible(r, opts, eventThreadID(event), event) {
-			denyPMNotFound(w, "inbox item")
-			return
+			return false
 		}
 	}
-	writeJSON(w, http.StatusCreated, replay)
+	return true
 }
 
 func batchSectionsFromPayload(raw any) []map[string]any {

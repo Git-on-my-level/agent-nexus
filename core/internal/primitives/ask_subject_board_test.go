@@ -131,7 +131,7 @@ func TestAskSubjectBoardAllocationRollsBackAndSerializes(t *testing.T) {
 }
 
 func TestAskCardTitleDerivationAndLegacyRead(t *testing.T) {
-	s, _, card, _ := askDeliveryFixture(t)
+	s, ws, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	detail := strings.Repeat("Context and consequences. ", 30)
 	event := map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "summary": detail, "refs": []string{"thread:" + anyStringValue(card["thread_id"])}, "payload": map[string]any{"subject_ref": "thread:" + anyStringValue(card["thread_id"]), "title": "Accept the change?", "body": detail, "requester_actor_id": "requester"}}
@@ -143,6 +143,13 @@ func TestAskCardTitleDerivationAndLegacyRead(t *testing.T) {
 	if err != nil || work["title"] != "Accept the change?" {
 		t.Fatalf("card title: %#v %v", work, err)
 	}
+	var revisionID string
+	if err = ws.DB().QueryRow(`SELECT head_revision_id FROM cards WHERE id=?`, work["id"]).Scan(&revisionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = s.GetArtifactContent(ctx, revisionID); err != nil {
+		t.Fatalf("compatibility card blob: %v", err)
+	}
 	// Historical import remains permissive; new-write HTTP validation never rewrites it.
 	event["payload"].(map[string]any)["title"] = detail
 	legacy, err := s.AppendEvent(ctx, "requester", event)
@@ -152,5 +159,31 @@ func TestAskCardTitleDerivationAndLegacyRead(t *testing.T) {
 	saved, err := s.GetEvent(ctx, anyStringValue(legacy["id"]))
 	if err != nil || asMapValue(saved["payload"])["title"] != detail {
 		t.Fatalf("legacy title: %#v %v", saved, err)
+	}
+}
+
+func TestAskBatchCompatibilityCardBlobSurvivesCommit(t *testing.T) {
+	s, ws, card, _ := askDeliveryFixture(t)
+	ctx := context.Background()
+	threadRef := "thread:" + anyStringValue(card["thread_id"])
+	member := func(title string) map[string]any {
+		return map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{threadRef}, "payload": map[string]any{"subject_ref": threadRef, "title": title, "requester_actor_id": "requester"}}
+	}
+	_, stored, err := s.AppendTaskAttentionEventBatch(ctx, "requester", []map[string]any{member("Batch card A?"), member("Batch card B?")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range stored {
+		work, err := s.GetWork(ctx, anyStringValue(asMapValue(event["payload"])["subject_ref"]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var revisionID string
+		if err = ws.DB().QueryRow(`SELECT head_revision_id FROM cards WHERE id=?`, work["id"]).Scan(&revisionID); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err = s.GetArtifactContent(ctx, revisionID); err != nil {
+			t.Fatalf("batch compatibility card blob: %v", err)
+		}
 	}
 }

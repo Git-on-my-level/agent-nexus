@@ -608,3 +608,78 @@ func TestAskBatchShrinksWhenMemberWithdrawn(t *testing.T) {
 		t.Fatalf("answered batch must 409 without a replay key, got %d %#v", status, result)
 	}
 }
+
+// An answered batch item is gone from the open projection. A no-key retry must
+// still authorize against the stored answers so an inaccessible id looks absent.
+func TestAskBatchAnsweredRetryAuthorizes(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	agent := seedNotificationTestAgent(t, env, "ask.agent")
+	ctx := context.Background()
+	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "retry-human", "retry-human-actor", "retry-human", "retry-human-token")
+	stranger := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "retry-stranger", "retry-stranger-actor", "retry-stranger", "retry-stranger-token")
+	store := env.primitiveStore.(*primitives.Store)
+
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, agent.ActorID, map[string]any{
+		"title": "Private batch thread", "type": "incident", "status": "active", "priority": "p2",
+		"tags": []any{"asks"}, "cadence": "daily", "next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary": "summary", "next_actions": []any{"check"}, "key_artifacts": []any{},
+		"provenance": map[string]any{"sources": []any{"inferred"}},
+	})
+	member := func(title string) map[string]any {
+		return map[string]any{
+			"type":      "human_attention_requested",
+			"thread_id": threadID,
+			"summary":   title,
+			"refs":      []string{"thread:" + threadID},
+			"payload": map[string]any{
+				"kind": "ask", "title": title,
+				"subject_ref":        "thread:" + threadID,
+				"requester_actor_id": agent.ActorID,
+				"requester_label":    agent.Username,
+				"response_proposals": []any{"Yes", "No"},
+				"delivery":           "batch",
+			},
+			"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+		}
+	}
+	status, filed := hostHTTP(t, http.MethodPost, env.server.URL+"/asks/batch", agent.AccessToken, map[string]any{
+		"asks": []map[string]any{member("Private member A"), member("Private member B")},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("file batch: %d %#v", status, filed)
+	}
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: env.primitiveStore}, threadID, time.Now().UTC(), agent.ActorID); err != nil {
+		t.Fatalf("refresh projection: %v", err)
+	}
+	items, err := env.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("expected one batch item, got %d (%v)", len(items), err)
+	}
+	batchItem := items[0]
+	if _, err := store.PatchThread(ctx, agent.ActorID, threadID, map[string]any{"pm_actor_id": human.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	sections, _ := batchItem.Data["batch"].(map[string]any)["asks"].([]any)
+	answers := []map[string]any{}
+	for _, raw := range sections {
+		section, _ := raw.(map[string]any)
+		answers = append(answers, map[string]any{
+			"ask_ref":       section["request_event_ref"],
+			"response_text": "Authorized answer",
+			"outcome":       "answered",
+		})
+	}
+	status, result := hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItem.ID)+"/respond", human.AccessToken, map[string]any{"answers": answers})
+	if status != http.StatusCreated {
+		t.Fatalf("owner batch respond: %d %#v", status, result)
+	}
+	status, result = hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItem.ID)+"/respond", stranger.AccessToken, map[string]any{"answers": answers})
+	if status != http.StatusNotFound {
+		t.Fatalf("unauthorized answered-batch retry must look absent, got %d %#v", status, result)
+	}
+	status, result = hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItem.ID)+"/respond", human.AccessToken, map[string]any{"answers": answers})
+	if status != http.StatusConflict {
+		t.Fatalf("authorized no-key retry must 409, got %d %#v", status, result)
+	}
+}

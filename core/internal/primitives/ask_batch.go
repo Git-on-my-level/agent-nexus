@@ -52,23 +52,16 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor string,
 		payload["batch_id"] = batchID
 		body["payload"] = payload
 	}
-	quotaErr := func() error {
-		return s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(dbBytes)}, blobLedgerWritePlan{})
-	}
 	if s.quota.enabled() {
 		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {
 			if err := s.ensureBlobUsageLedgerInitialized(ctx); err != nil {
-				s.quotaMu.Unlock()
 				return "", nil, err
 			}
 		}
-		err := quotaErr()
-		s.quotaMu.Unlock()
-		if err != nil {
-			return "", nil, err
-		}
-	} else if err := quotaErr(); err != nil {
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(dbBytes)}, blobLedgerWritePlan{}); err != nil {
 		return "", nil, err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
