@@ -280,9 +280,16 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 		}
 		token := newID("dct_")
 		expires := now.Add(lease)
-		if _, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='claimed', attempts=attempts+1, claimed_by=?, claim_token=?, lease_expires_at=?, updated_at=? WHERE delivery_id=?`,
-			strings.TrimSpace(claimer), token, stamp(expires), stamp(now), id); err != nil {
+		// Re-check claimability in the write so a concurrent claimer can never
+		// hold the same live lease.
+		result, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='claimed', attempts=attempts+1, claimed_by=?, claim_token=?, lease_expires_at=?, updated_at=?
+			WHERE delivery_id=? AND ((status='pending' AND next_attempt_at<=?) OR (status='claimed' AND lease_expires_at<=?))`,
+			strings.TrimSpace(claimer), token, stamp(expires), stamp(now), id, stamp(now), stamp(now))
+		if err != nil {
 			return nil, err
+		}
+		if n, _ := result.RowsAffected(); n == 0 {
+			continue
 		}
 		d.Status = StatusClaimed
 		d.Attempt++
