@@ -264,14 +264,14 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,COALESCE(c.archived_at,'') FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, darkAfter, relatedRaw, archivedAt string
-		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &darkAfter, &relatedRaw, &archivedAt); err != nil {
+		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw); err != nil {
 			return nil, nil, nil, err
 		}
 		var entries []any
@@ -286,7 +286,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 			}
 			out[id] = p
 		}
-		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake, DarkAfter: parseDarkAfter(darkAfter), Archived: strings.TrimSpace(archivedAt) != ""}
+		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake}
 		var related []string
 		if strings.TrimSpace(relatedRaw) != "" {
 			if err = json.Unmarshal([]byte(relatedRaw), &related); err != nil {
@@ -303,6 +303,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 		}
 		input.Source = workClone(workMap(m["source"]))
 		if authority := workString(input.Source["authority"]); authority != "" && authority != "nexus" {
+			input.Observed, _ = time.Parse(time.RFC3339Nano, at)
 			input.Phase = workString(m["phase"])
 			input.Owner = workString(m["owner"])
 			if value, ok := workMap(o["facts"])["phase"]; ok {
@@ -337,9 +338,24 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 		input.Children = uniqueSortedStrings(input.Children)
 		input.Created, _ = time.Parse(time.RFC3339Nano, created)
 		input.Activity = latestCardActivity(at, planAt, messageAt)
+		input.PlanAt, _ = time.Parse(time.RFC3339Nano, planAt)
 		movement[id] = input
 	}
-	return out, movement, sourceRefs, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	// Note promises: one bounded statement per batch (ids <= summaryBatchSize).
+	notes, err := s.promiseNotesBatch(ctx, ids)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for id, list := range notes {
+		if input, ok := movement[id]; ok {
+			input.Notes = list
+			movement[id] = input
+		}
+	}
+	return out, movement, sourceRefs, nil
 }
 
 // planFacts resolves plan step refs and, since the same facts also decide the
@@ -409,7 +425,7 @@ func planStepRefs(p plans.Plan) []string {
 	return refs
 }
 
-func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(string, string) bool, now time.Time, threshold time.Duration) ([]RefPreview, error) {
+func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(string, string) bool, now time.Time) ([]RefPreview, error) {
 	if refs == nil || len(refs) > 200 {
 		return nil, invalidBoardRequest("refs must be an array of at most 200 strings")
 	}
@@ -455,7 +471,7 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 		var state plans.State
 		if value, ok := ps[row.ID]; ok {
 			p = &value
-			state = plans.Compute(value, facts, at, now, threshold)
+			state = plans.Compute(value, facts, at)
 			at, _ = time.Parse(time.RFC3339Nano, state.LastMovementAt)
 			out[i].PlanResolutionTruncated = planRefsTruncated(value, facts)
 			out[i].Progress = &state.Progress
@@ -464,10 +480,10 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 		}
 		moot := cardPossiblyMoot(input, p, facts)
 		out[i].PossiblyMoot = &moot
-		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.darkInput(), input.Phase)
+		health := input.health("", p, state, facts, now)
 		out[i].PlanHealth = &health
 		if summaries[row.ID] == nil {
-			summaries[row.ID] = buildWorkSummary(input, p, state, facts, now, threshold)
+			summaries[row.ID] = buildWorkSummary(input, p, state, facts, now)
 		}
 		out[i].Summary = summaries[row.ID]
 	}
@@ -481,7 +497,7 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			if value, ok := ps[out[i].ID]; ok {
 				p = &value
 			}
-			out[i].SummaryChangeKey = summaryChangeKey(movement[out[i].ID], p, facts, out[i].Summary, threshold)
+			out[i].SummaryChangeKey = summaryChangeKey(movement[out[i].ID], p, facts, out[i].Summary)
 		}
 	}
 	return out, nil
@@ -496,7 +512,7 @@ func WithLegacyCardPlans(ctx context.Context) context.Context {
 	return context.WithValue(ctx, legacyCardPlansKey{}, true)
 }
 
-func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time, threshold time.Duration) error {
+func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time) error {
 	if len(cards) == 0 {
 		return nil
 	}
@@ -544,7 +560,7 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 		card["plan_step_digest"] = nil
 		if value, ok := ps[id]; ok {
 			p = &value
-			state = plans.Compute(value, facts, at, now, threshold)
+			state = plans.Compute(value, facts, at)
 			at, _ = time.Parse(time.RFC3339Nano, state.LastMovementAt)
 			card["plan_resolution_truncated"] = planRefsTruncated(value, facts)
 			card["plan"], card["plan_state"] = value, state
@@ -555,20 +571,10 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 			card["status_mismatch"] = firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])) == "backlog" && state.Progress.Done > 0
 		}
 		card["possibly_moot"] = cardPossiblyMoot(input, p, facts)
-		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.darkInput(), input.Phase)
-		card["plan_health"] = health
-		if legacy {
-			health = plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.darkInput())
-			card["plan_health"] = health
-		}
+		card["plan_health"] = input.health("", p, state, facts, now)
 		if !legacy {
-			summaries[id] = buildWorkSummary(input, p, state, facts, now, threshold)
+			summaries[id] = buildWorkSummary(input, p, state, facts, now)
 			card["work_summary"] = summaries[id]
-		}
-		if p != nil {
-			state.HealthState = health.State
-			state.Health = plans.LegacyHealth(health.State)
-			card["plan_state"] = state
 		}
 	}
 

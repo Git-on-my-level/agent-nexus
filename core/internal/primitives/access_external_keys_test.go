@@ -62,7 +62,7 @@ func TestPublishedEvidenceKeysInheritOwnershipBeforeSelection(t *testing.T) {
 				if !s.CanAccessResource(scoped, "card", id) {
 					t.Fatal("plan ownership incorrectly hides its public parent")
 				}
-				preview, err := s.ResolveRefs(scoped, []string{anyStringValue(parent["ref"]), key}, nil, time.Now(), 0)
+				preview, err := s.ResolveRefs(scoped, []string{anyStringValue(parent["ref"]), key}, nil, time.Now())
 				if err != nil || (preview[0].NextStep != nil) != allowed || preview[1].Resolvable != allowed {
 					t.Fatalf("%s preview: %+v %v", actor, preview, err)
 				}

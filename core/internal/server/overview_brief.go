@@ -50,16 +50,15 @@ const (
 	briefBlockPlace    = 1_000_000_000
 )
 
-// Severity order for the at-risk section, worst first.
-var briefRiskOrder = map[string]int{"blocked": 0, "at_risk": 1, "stale": 2}
+// Initiative order: past promise first, then the no_promise gap, then moving
+// and done (contracts overview_brief).
+var briefInitiativeOrder = []string{plans.PromisePast, plans.PromiseNone, plans.PromiseMoving, plans.PromiseDone}
 
-/*
-Initiative order, worst first, matching the client's ATTENTION_ORDER so a
-tile, a brief row and a list row cannot disagree about which initiative is
-more urgent. no_plan sorts last because it is a gap to fill rather than a fire
-to put out — the section's state counts are what make it visible.
-*/
-var briefInitiativeOrder = []string{"blocked", "at_risk", "stale", "on_track", "done", "no_plan"}
+// briefHealth reads a row's enriched promise state.
+func briefHealth(row map[string]any) (plans.Health, bool) {
+	health, ok := row["plan_health"].(plans.Health)
+	return health, ok
+}
 
 // briefSignal is the computed ranking input for one needs_you row. It is built
 // where the row is built, from that row's own source, and keyed by row id.
@@ -450,8 +449,8 @@ func briefSinceLastLook(in briefInputs) map[string]any {
 		case "decision_created":
 			add("decisions", item)
 		default:
-			// initiative_stalled / initiative_blocked and anything a newer
-			// core adds: an initiative that stopped being fine.
+			// initiative_past_promise and anything a newer core adds: an
+			// initiative that stopped being fine.
 			add("initiatives", item)
 		}
 	}
@@ -494,70 +493,41 @@ func briefAtRisk(in briefInputs) map[string]any {
 		return map[string]any{"status": "unavailable", "message": "Risk could not be computed for this reader.", "items": []map[string]any{}, "count": 0, "more": 0}
 	}
 	type risk struct {
-		item  map[string]any
-		order int
-		at    time.Time
-		ref   string
+		item map[string]any
+		at   time.Time
+		ref  string
 	}
 	seen := map[string]bool{}
 	risks := []risk{}
-	consider := func(ref, title, state, reason string, progress any, at string) {
-		order, tracked := briefRiskOrder[state]
-		if !tracked || ref == "" || seen[ref] || reason == "" {
+	consider := func(row map[string]any, progress any) {
+		ref := anyString(row["ref"])
+		health, ok := briefHealth(row)
+		if !ok || health.State != plans.PromisePast || ref == "" || seen[ref] || health.Reason == "" {
 			return
 		}
 		seen[ref] = true
-		item := map[string]any{"ref": ref, "title": title, "href": briefTaskHref(ref), "state": state, "reason": reason}
+		item := map[string]any{"ref": ref, "title": anyString(row["title"]), "href": briefTaskHref(ref), "state": health.State, "reason": health.Reason}
 		if progress != nil {
 			item["progress"] = progress
 		}
-		anchor, _ := briefParseTime(at)
+		var anchor time.Time
+		if health.Since != nil {
+			anchor, _ = briefParseTime(*health.Since)
+		}
 		if !anchor.IsZero() {
 			item["since"] = anchor.Format(time.RFC3339Nano)
 		}
-		risks = append(risks, risk{item: item, order: order, at: anchor, ref: ref})
-	}
-	blockedReasons := map[string]string{}
-	for _, w := range in.work {
-		if anyString(w["phase"]) == "blocked" {
-			if reason := briefBlockedReason(w); reason != "Task is in the blocked column." {
-				blockedReasons[anyString(w["ref"])] = reason
-			}
-		}
+		risks = append(risks, risk{item: item, at: anchor, ref: ref})
 	}
 	for _, initiative := range in.initiatives {
-		health, _ := initiative["health"].(map[string]any)
-		state, reason := anyString(health["state"]), anyString(health["reason"])
-		if state == "blocked" && blockedReasons[anyString(initiative["ref"])] != "" {
-			reason = blockedReasons[anyString(initiative["ref"])]
-		}
-		since := ""
-		if detailed, ok := initiative["plan_health"].(plans.Health); ok && detailed.Since != nil {
-			since = *detailed.Since
-		}
-		consider(anyString(initiative["ref"]), anyString(initiative["title"]), state, reason, initiative["progress"], firstNonEmptyString(since, initiative["updated_at"]))
+		consider(initiative, initiative["progress"])
 	}
-	/*
-	 * Work that is off track without being an initiative. A card sitting in the
-	 * blocked column is off track whether or not anyone wrote a plan for it, and
-	 * recorded blockers are the reason, in the words whoever recorded them used.
-	 */
+	// Work past its promise without being an initiative.
 	for _, w := range in.work {
-		phase := anyString(w["phase"])
-		if phase != "blocked" {
-			continue
-		}
-		if summary, ok := w["work_summary"].(*primitives.WorkSummary); ok && summary.Status.State != "blocked" {
-			continue
-		}
-		reason := briefBlockedReason(w)
-		consider(anyString(w["ref"]), anyString(w["title"]), "blocked", reason, nil, anyString(w["updated_at"]))
+		consider(w, nil)
 	}
 	sort.SliceStable(risks, func(i, j int) bool {
-		if risks[i].order != risks[j].order {
-			return risks[i].order < risks[j].order
-		}
-		// Longest-standing risk first; an unknown anchor sorts after a known one.
+		// Longest past first; an unknown anchor sorts after a known one.
 		if !risks[i].at.Equal(risks[j].at) {
 			if risks[i].at.IsZero() || risks[j].at.IsZero() {
 				return risks[j].at.IsZero()
@@ -701,10 +671,10 @@ func briefInitiatives(in briefInputs) map[string]any {
 	byState := map[string]int{}
 	rows := []entry{}
 	for _, initiative := range in.initiatives {
-		health, _ := initiative["health"].(map[string]any)
-		state := anyString(health["state"])
+		health, _ := briefHealth(initiative)
+		state := health.State
 		if state == "" {
-			state = "no_plan"
+			state = plans.PromiseNone
 		}
 		byState[state]++
 		order, known := rank[state]
@@ -717,7 +687,7 @@ func briefInitiatives(in briefInputs) map[string]any {
 			"title":    anyString(initiative["title"]),
 			"href":     briefTaskHref(ref),
 			"state":    state,
-			"reason":   anyString(health["reason"]),
+			"reason":   health.Reason,
 			"progress": initiative["progress"],
 			"phase":    anyString(initiative["phase"]),
 		}
@@ -754,23 +724,4 @@ func buildOverviewBrief(in briefInputs) map[string]any {
 		"section_limit":    briefSectionLimit,
 		"throughput_hours": int(briefThroughputWindow.Hours()),
 	}
-}
-
-func briefBlockedReason(w map[string]any) string {
-	reason := "Task is in the blocked column."
-	if blockers, _ := w["blockers"].([]any); len(blockers) > 0 {
-		named := []string{}
-		for _, raw := range blockers {
-			if text := strings.TrimSpace(anyString(raw)); text != "" {
-				named = append(named, text)
-			}
-		}
-		if len(named) > 0 {
-			reason = "Blocked on " + named[0]
-			if len(named) > 1 {
-				reason += " (+" + strconv.Itoa(len(named)-1) + " more)"
-			}
-		}
-	}
-	return reason
 }

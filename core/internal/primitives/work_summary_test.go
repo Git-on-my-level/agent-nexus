@@ -11,69 +11,46 @@ import (
 	"agent-nexus-core/internal/testsql"
 )
 
-func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
+func TestWorkSummaryPromiseStates(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
-	counts := map[string]int{}
 	for _, tc := range []struct {
-		name, phase, due, want string
-		old, planned, mismatch bool
+		name, phase, due, wake, want string
+		planned                      bool
 	}{
-		{name: "backlog", phase: "backlog", want: "backlog"},
-		{name: "ready", phase: "ready", want: "ready"},
-		{name: "in-progress", phase: "in_progress", want: "dark"},
-		{name: "empty-plan", phase: "in_progress", want: "dark", planned: true},
-		// Review is active: a planless review card with nothing dated reads
-		// dark, like in-progress does.
-		{name: "review", phase: "review", want: "dark"},
-		{name: "review-alias", phase: "in_review", want: "dark"},
-		{name: "review-due-soon", phase: "review", due: "2026-10-08T13:00:00Z", want: "review"},
-		{name: "done", phase: "done", due: "2020-01-01", old: true, want: "done"},
-		{name: "cancelled", phase: "cancelled", old: true, want: "cancelled"},
-		{name: "blocked", phase: "blocked", due: "2020-01-01", old: true, want: "blocked"},
-		{name: "overdue", phase: "in_progress", due: "2026-10-08T11:00:00Z", want: "at_risk", mismatch: true},
-		{name: "stalled", phase: "in_progress", old: true, want: "stale", mismatch: true},
-		{name: "due-soon", phase: "in_progress", due: "2026-10-08T13:00:00Z", want: "in_progress"},
-		{name: "quiet-due-soon", phase: "in_progress", due: "2026-10-08T13:00:00Z", old: true, want: "stale", mismatch: true},
-		{name: "custom-phase", phase: "vendor_waiting", want: "vendor_waiting"},
+		{name: "backlog", phase: "backlog", want: "no_promise"},
+		{name: "in-progress", phase: "in_progress", want: "no_promise"},
+		{name: "empty-plan", phase: "in_progress", want: "no_promise", planned: true},
+		{name: "due-soon", phase: "review", due: "2026-10-08T13:00:00Z", want: "moving"},
+		{name: "overdue", phase: "in_progress", due: "2026-10-08T11:00:00Z", want: "past_promise"},
+		{name: "wake", phase: "ready", wake: "look again 2026-10-09", want: "moving"},
+		{name: "blocked-is-placement", phase: "blocked", due: "2020-01-01", want: "past_promise"},
+		{name: "done", phase: "done", due: "2020-01-01", want: "done"},
+		{name: "cancelled", phase: "cancelled", want: "done"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			input := cardHealthInput{Phase: tc.phase, Due: tc.due, Created: now.Add(-200 * time.Hour), Activity: now}
-			if tc.old {
-				input.Activity = now.Add(-100 * time.Hour)
-			}
+			input := cardHealthInput{Phase: tc.phase, Due: tc.due, Wake: tc.wake, Created: now.Add(-200 * time.Hour), Activity: now}
 			var p *plans.Plan
 			if tc.planned {
 				p = &plans.Plan{Steps: []plans.Step{}}
 			}
-			got := buildWorkSummary(input, p, plans.State{}, nil, now, 0)
-			if got.Status.State != tc.want || (got.SetStatus != nil) != tc.mismatch || !reflect.DeepEqual(got.Hints, []string{"no_plan"}) {
-				t.Fatalf("summary=%+v want=%s mismatch=%v", got, tc.want, tc.mismatch)
+			got := buildWorkSummary(input, p, plans.State{}, nil, now)
+			if got.Status.State != tc.want || got.Status.Label == "" || got.Status.Reason == "" || !reflect.DeepEqual(got.Hints, []string{"no_plan"}) {
+				t.Fatalf("summary=%+v want=%s", got, tc.want)
 			}
-			counts[got.Status.State]++
 		})
 	}
-	p := plans.Plan{Steps: []plans.Step{{ID: "a", Title: "Work", Status: "active"}}}
-	state := plans.Compute(p, nil, now, now, 0)
-	got := buildWorkSummary(cardHealthInput{Phase: "in_progress", Activity: now}, &p, state, nil, now, 0)
-	// An active plan with no dated signal anywhere reads dark, and the stored
-	// in-progress phase agrees with it rather than growing a set_status note.
-	if got.Status.State != "dark" || got.SetStatus != nil || len(got.Hints) != 0 {
-		t.Fatalf("planned summary changed: %+v", got)
-	}
-	counts[got.Status.State]++
-	t.Logf("15-row status fixture distribution: %v", counts)
 }
 
-func TestWorkSummaryPartsAndMismatch(t *testing.T) {
+func TestWorkSummaryParts(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	input := cardHealthInput{Phase: "in_progress", Owner: "actor:lead", Due: "2026-10-09T12:00:00Z", Created: now.Add(-48 * time.Hour), Activity: now}
 	p := plans.Plan{Steps: []plans.Step{{ID: "finished", Title: "Finished", Status: "done"}, {ID: "blocked", Title: "Blocked", Status: "blocked"}, {ID: "next", Title: "Next"}, {ID: "other", Title: "Other"}}}
-	state := plans.Compute(p, nil, now, now, 0)
-	summary := buildWorkSummary(input, &p, state, nil, now, 0)
-	if summary.Status.State != "blocked" || summary.Status.Label != "Blocked" || summary.Status.Reason == "" || summary.SetStatus == nil || summary.SetStatus.State != "in_progress" {
-		t.Fatalf("status mismatch: %+v", summary)
+	state := plans.Compute(p, nil, now)
+	summary := buildWorkSummary(input, &p, state, nil, now)
+	if summary.Status.State != "moving" || summary.Status.Label != "Moving" || summary.Status.Reason == "" {
+		t.Fatalf("status: %+v", summary)
 	}
 	if summary.Progress == nil || summary.Progress.Done != 1 || summary.Progress.Total != 4 || summary.Progress.Unit != "steps" {
 		t.Fatal(summary.Progress)
@@ -84,19 +61,8 @@ func TestWorkSummaryPartsAndMismatch(t *testing.T) {
 	if summary.Owner != input.Owner || summary.Due != input.Due || summary.Age == nil || *summary.Age != 172800 || summary.Source != nil {
 		t.Fatal(summary)
 	}
-	input.Phase = "blocked"
-	if got := buildWorkSummary(input, &p, state, nil, now, 0); got.SetStatus != nil {
-		t.Fatal("matching status should be omitted", got.SetStatus)
-	}
-	for _, tc := range []struct{ phase, due, want string }{{"blocked", "", "blocked"}, {"done", "2026-10-01T00:00:00Z", "done"}, {"ready", "2026-10-01T00:00:00Z", "at_risk"}, {"ready", "", "ready"}} {
-		input.Phase, input.Due = tc.phase, tc.due
-		got := buildWorkSummary(input, nil, plans.State{}, nil, now, 0)
-		if got.Status.State != tc.want || got.Progress != nil || got.Next != nil || got.Steps != nil {
-			t.Fatalf("planless %+v: %+v", tc, got)
-		}
-	}
 	input = cardHealthInput{Children: []string{"card:a", "card:b"}}
-	got := buildWorkSummary(input, nil, plans.State{}, map[string]plans.Fact{"card:a": {Known: true, Status: "done"}}, now, 0)
+	got := buildWorkSummary(input, nil, plans.State{}, map[string]plans.Fact{"card:a": {Known: true, Status: "done"}}, now)
 	if got.Progress == nil || got.Progress.Unit != "cards" || got.Progress.Done != 1 || got.Progress.Total != 2 || !got.Progress.Truncated || got.Age != nil {
 		t.Fatal(got)
 	}
@@ -106,8 +72,8 @@ func TestWorkSummaryDigestDoesNotCountUnreadableSteps(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 	p := plans.Plan{Steps: []plans.Step{{ID: "a", Title: "Private", Ref: "card:private"}, {ID: "b", Title: "Private", Ref: "card:private"}, {ID: "c", Title: "Private", Ref: "card:private"}, {ID: "d", Title: "Public"}}}
-	state := plans.Compute(p, nil, now, now, 0)
-	summary := buildWorkSummary(cardHealthInput{}, &p, state, map[string]plans.Fact{}, now, 0)
+	state := plans.Compute(p, nil, now)
+	summary := buildWorkSummary(cardHealthInput{}, &p, state, map[string]plans.Fact{}, now)
 	if len(summary.Steps.Next.Items) != 1 || summary.Steps.Next.Items[0].Title != "Public" || summary.Steps.Next.More != 0 || summary.Next == nil || summary.Next.Title != "Public" || summary.Next.More != 0 {
 		t.Fatalf("unreadable digest: %+v", summary.Steps)
 	}
@@ -153,15 +119,15 @@ func TestWorkSummaryUsesPrimaryPhaseAcrossBoardMemberships(t *testing.T) {
 		if cards[0]["column_key"] != wantColumn {
 			t.Fatal("membership placement lost", cards[0])
 		}
-		if err = s.EnrichCardPlans(ctx, cards, nil, time.Now(), 0); err != nil {
+		if err = s.EnrichCardPlans(ctx, cards, nil, time.Now()); err != nil {
 			t.Fatal(err)
 		}
-		if got := cards[0]["work_summary"].(*WorkSummary); got.Status.State != "blocked" || got.SetStatus != nil {
+		if got := cards[0]["work_summary"].(*WorkSummary); got.Status.State != "no_promise" {
 			t.Fatal(got)
 		}
 	}
-	refs, err := s.ResolveRefs(ctx, []string{workString(w["ref"])}, nil, time.Now(), 0)
-	if err != nil || len(refs) != 1 || refs[0].Phase != "blocked" || refs[0].Summary.Status.State != "blocked" {
+	refs, err := s.ResolveRefs(ctx, []string{workString(w["ref"])}, nil, time.Now())
+	if err != nil || len(refs) != 1 || refs[0].Phase != "blocked" || refs[0].Summary.Status.State != "no_promise" {
 		t.Fatalf("refs=%+v err=%v", refs, err)
 	}
 }
@@ -209,7 +175,7 @@ func TestWorkSummaryAttentionAudienceBoundsAndPrivacy(t *testing.T) {
 		}
 		card := workClone(w)
 		counter.Reset()
-		if err = s.EnrichCardPlans(cctx, []map[string]any{card}, nil, now, 0); err != nil {
+		if err = s.EnrichCardPlans(cctx, []map[string]any{card}, nil, now); err != nil {
 			t.Fatal(err)
 		}
 		summary := card["work_summary"].(*WorkSummary)
@@ -228,7 +194,7 @@ func TestWorkSummaryAttentionAudienceBoundsAndPrivacy(t *testing.T) {
 	if err = s.ReplaceDerivedInboxItems(ctx, thread, items[:1]); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.EnrichCardPlans(ctx, []map[string]any{w}, nil, now, 0); err != nil {
+	if err = s.EnrichCardPlans(ctx, []map[string]any{w}, nil, now); err != nil {
 		t.Fatal(err)
 	}
 	if got := w["work_summary"].(*WorkSummary).Attention; got == nil || got.Count != 1 {
@@ -260,14 +226,14 @@ func TestWorkSummaryAliasesShareAttentionAndSourceClearing(t *testing.T) {
 	if err = s.ReplaceDerivedInboxItems(ctx, workString(w["thread_id"]), items); err != nil {
 		t.Fatal(err)
 	}
-	previews, err := s.ResolveRefs(ctx, refs, nil, now, 0)
+	previews, err := s.ResolveRefs(ctx, refs, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(previews) != 2 || previews[0].Summary != previews[1].Summary || previews[0].Summary.Attention == nil || previews[0].Summary.Attention.Count != 1 {
 		t.Fatalf("aliases disagree: %+v", previews)
 	}
-	if previews[0].Summary.Owner != "" || previews[0].Summary.SetStatus != nil || previews[0].Summary.Source["native_status"] != nil {
+	if previews[0].Summary.Owner != "" || previews[0].Summary.Source["native_status"] != nil {
 		t.Fatalf("cleared source fields resurrected: %+v", previews[0].Summary)
 	}
 }

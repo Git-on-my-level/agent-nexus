@@ -6,158 +6,59 @@ import (
 	"time"
 )
 
-func TestInitiativeHealthRules(t *testing.T) {
-	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
-	old := now.Add(-72 * time.Hour)
-	for _, tc := range []struct {
-		name     string
-		p        *Plan
-		movement time.Time
-		due      string
-		want     string
-	}{
-		{"absent", nil, now, "", "no_plan"},
-		{"old-planless", nil, old, "", "stale"},
-		{"empty", &Plan{Steps: []Step{}}, now, "", "no_plan"},
-		{"old-empty", &Plan{Steps: []Step{}}, old, "", "stale"},
-		{"complete", &Plan{Steps: []Step{{ID: "a", Title: "A", Status: "done", Due: "2026-10-01"}}}, old, "2026-10-01", "done"},
-		{"noncritical-block", &Plan{Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B", After: []string{"a"}}, {ID: "c", Title: "C", Status: "blocked"}}}, now, "", "blocked"},
-		{"blocked-dependency", &Plan{Steps: []Step{{ID: "a", Title: "A", Status: "blocked"}, {ID: "b", Title: "B", After: []string{"a"}}}}, old, "2026-10-01", "blocked"},
-		{"overdue", &Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-01"}}}, old, "", "at_risk"},
-		{"near-card-due", &Plan{Steps: []Step{{ID: "a", Title: "A"}}}, now, now.Add(24 * time.Hour).Format(time.RFC3339), "at_risk"},
-		{"stale-boundary", &Plan{Steps: []Step{{ID: "a", Title: "A"}}}, old, "", "stale"},
-		{"recent", &Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-10"}}}, old.Add(time.Second), "", "on_track"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			state := State{}
-			if tc.p != nil {
-				state = Compute(*tc.p, nil, tc.movement, now, 0)
-			}
-			got := HealthFor(tc.p, state, tc.movement, old, now, 0, tc.due, DarkInput{})
-			if got.State != tc.want || got.Reason == "" || got.Since == nil {
-				t.Fatalf("got=%+v want=%s", got, tc.want)
-			}
-			if tc.want == "stale" && *got.Since != now.Format(time.RFC3339Nano) {
-				t.Fatal(got)
-			}
-		})
+func TestHealthForPromiseStates(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	p := Plan{Steps: []Step{{ID: "a", Title: "Ship a", Due: "2026-10-12"}, {ID: "b", Title: "Ship b", Due: "2026-10-20", After: []string{"a"}}}}
+	state := Compute(p, nil, now)
+	h := HealthFor(HealthInput{Ref: "card:x", Plan: &p, State: state, Phase: "in_progress"}, now)
+	if h.State != PromisePast || h.Promise == nil || h.Promise.SourceRef != "card:x#a" || h.PastPromiseForSeconds == nil || *h.PastPromiseForSeconds != int64(3*24*3600+12*3600) || h.Since == nil || *h.Since != "2026-10-12T00:00:00Z" {
+		t.Fatalf("past step due: %+v", h)
 	}
-	// A longer stale threshold keeps the card out of stale. With no phase
-	// known the card never darkens, so it reads on_track as before.
-	p := Plan{Steps: []Step{{ID: "a", Title: "A"}}}
-	state := Compute(p, nil, old, now, 0)
-	if got := HealthFor(&p, state, old, old, now, 96*time.Hour, "", DarkInput{}); got.State != "on_track" {
-		t.Fatal(got)
+	// A plan edit within the horizon before the due meets it; the next open due counts.
+	h = HealthFor(HealthInput{Ref: "card:x", Plan: &p, State: state, Phase: "in_progress", PlanEditedAt: time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)}, now)
+	if h.State != PromiseMoving || h.Promise.Source != "plan_step" || h.Promise.At != "2026-10-20T00:00:00Z" || h.LastEvidenceAt == nil {
+		t.Fatalf("met step due: %+v", h)
 	}
-	// Rule (a): an ACTIVE card with no dated checkpoint at all reads dark,
-	// never on_track.
-	if got := HealthFor(&p, state, old, old, now, 96*time.Hour, "", DarkInput{Phase: "in_progress"}); got.State != "dark" || got.Since != nil {
-		t.Fatal(got)
+	// Nothing dated: no_promise, never a threshold state.
+	planless := HealthFor(HealthInput{Ref: "card:y", Phase: "in_progress"}, now)
+	if planless.State != PromiseNone || planless.Promise != nil || planless.Since != nil {
+		t.Fatalf("planless: %+v", planless)
 	}
-	// The same card with a signal inside the horizon stays on_track.
-	near := Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-09"}}}
-	state = Compute(near, nil, old, now, 0)
-	if got := HealthFor(&near, state, old, old, now, 96*time.Hour, "", DarkInput{Phase: "in_progress"}); got.State != "on_track" {
-		t.Fatal(got)
+	// Card due and wake are promises.
+	if h := HealthFor(HealthInput{Phase: "ready", CardDue: "2026-10-18"}, now); h.State != PromiseMoving || h.Promise.Source != "due_at" {
+		t.Fatalf("due: %+v", h)
+	}
+	if h := HealthFor(HealthInput{Phase: "ready", Wake: "check again 2026-10-14"}, now); h.State != PromisePast || h.Promise.Source != "wake_condition" {
+		t.Fatalf("wake: %+v", h)
+	}
+	// Done is done: a done or cancelled phase wins over a past promise.
+	for _, phase := range []string{"done", "cancelled"} {
+		if h := HealthFor(HealthInput{Plan: &p, State: state, Phase: phase}, now); h.State != PromiseDone || h.Promise != nil || h.Since != nil {
+			t.Fatalf("%s: %+v", phase, h)
+		}
+	}
+	// A note promise counts until evidence lands after it.
+	notes := []PromiseNote{{EventID: "e1", At: now.Add(-48 * time.Hour), Author: "actor:a", NextAt: now.Add(-time.Hour), NextWhat: "land it"}}
+	if h := HealthFor(HealthInput{Phase: "in_progress", Notes: notes}, now); h.State != PromisePast || h.Promise.Author == nil || h.Promise.Author.ID != "actor:a" {
+		t.Fatalf("note: %+v", h)
+	}
+	notes = append(notes, PromiseNote{EventID: "e2", At: now.Add(-30 * time.Minute), Author: "actor:a", Evidence: true})
+	if h := HealthFor(HealthInput{Phase: "in_progress", Notes: notes}, now); h.State != PromiseNone {
+		t.Fatalf("evidence clears note promise: %+v", h)
 	}
 }
 
-func TestDarkOnlyForActiveCards(t *testing.T) {
-	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
-	movement := now.Add(-time.Hour)
-	p := Plan{Steps: []Step{{ID: "a", Title: "A"}}}
-	state := Compute(p, nil, movement, now, 0)
-	for _, tc := range []struct {
-		name string
-		dark DarkInput
-		want string
-	}{
-		{"in-progress-darkens", DarkInput{Phase: "in_progress"}, "dark"},
-		{"review-darkens", DarkInput{Phase: "review"}, "dark"},
-		{"done-stays", DarkInput{Phase: "done"}, "on_track"},
-		{"cancelled-stays", DarkInput{Phase: "cancelled"}, "on_track"},
-		{"backlog-stays", DarkInput{Phase: "backlog"}, "on_track"},
-		{"ready-stays", DarkInput{Phase: "ready"}, "on_track"},
-		{"blocked-stays", DarkInput{Phase: "blocked"}, "on_track"},
-		{"archived-stays", DarkInput{Phase: "in_progress", Archived: true}, "on_track"},
-		{"unknown-phase-stays", DarkInput{Phase: "unknown"}, "on_track"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := HealthFor(&p, state, movement, now.Add(-48*time.Hour), now, 0, "", tc.dark)
-			if got.State != tc.want {
-				t.Fatalf("got=%+v want=%s", got, tc.want)
-			}
-		})
+func TestHealthForStepMovementResets(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	p := Plan{Steps: []Step{{ID: "a", Title: "a", Ref: "card:a", Due: "2026-10-14"}}}
+	facts := map[string]Fact{"card:a": {Known: true, Status: "in_progress", MovementAt: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)}}
+	state := Compute(p, facts, now)
+	if h := HealthFor(HealthInput{Plan: &p, State: state, Facts: facts, Phase: "in_progress"}, now); h.State != PromiseNone {
+		t.Fatalf("linked step moved inside the horizon: %+v", h)
 	}
-}
-
-func TestDarkHealth(t *testing.T) {
-	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
-	movement := now.Add(-time.Hour)
-	plan := func(due string) *Plan {
-		return &Plan{Steps: []Step{{ID: "a", Title: "A", Due: due}}}
-	}
-	for _, tc := range []struct {
-		name      string
-		due       string
-		dark      DarkInput
-		want      string
-		wantSince string
-	}{
-		{"no-signal", "", DarkInput{Phase: "in_progress"}, "dark", ""},
-		{"far-step-due", "2026-11-05", DarkInput{Phase: "in_progress"}, "dark", "2026-11-05T00:00:00Z"},
-		{"near-step-due", "2026-10-09", DarkInput{Phase: "in_progress"}, "on_track", ""},
-		{"horizon-boundary", "2026-10-12T12:00:00Z", DarkInput{Phase: "in_progress"}, "on_track", ""},
-		{"just-past-horizon", "2026-10-12T12:00:01Z", DarkInput{Phase: "in_progress"}, "dark", "2026-10-12T12:00:01Z"},
-		{"earliest-signal-wins", "2026-10-20", DarkInput{Phase: "in_progress", Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-10-20T00:00:00Z"},
-		{"wake-earlier-wins", "2026-11-20", DarkInput{Phase: "in_progress", Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-11-05T00:00:00Z"},
-		{"wake-near", "", DarkInput{Phase: "in_progress", Wake: "wake on 2026-10-08"}, "on_track", ""},
-		{"wake-near-fractional", "", DarkInput{Phase: "in_progress", Wake: "wake on 2026-10-08T09:00:00.000Z"}, "on_track", ""},
-		{"past-wake-not-dark", "", DarkInput{Phase: "in_progress", Wake: "was due 2026-09-01"}, "on_track", ""},
-		{"per-card-horizon", "2026-10-20", DarkInput{Phase: "in_progress", Threshold: 48 * time.Hour}, "dark", "2026-10-20T00:00:00Z"},
-		{"per-card-horizon-covers", "2026-10-20", DarkInput{Phase: "in_progress", Threshold: 30 * 24 * time.Hour}, "on_track", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			p := plan(tc.due)
-			state := Compute(*p, nil, movement, now, 0)
-			got := HealthFor(p, state, movement, now.Add(-48*time.Hour), now, 0, "", tc.dark)
-			if got.State != tc.want {
-				t.Fatalf("got=%+v want=%s", got, tc.want)
-			}
-			if tc.want != "dark" {
-				return
-			}
-			if tc.wantSince == "" {
-				if got.Since != nil {
-					t.Fatalf("want nil since, got %s", *got.Since)
-				}
-				return
-			}
-			if got.Since == nil || *got.Since != tc.wantSince {
-				t.Fatalf("got since %v want %s", got.Since, tc.wantSince)
-			}
-		})
-	}
-}
-
-func TestDarkLosesToAlarms(t *testing.T) {
-	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
-	movement := now.Add(-time.Hour)
-	for _, tc := range []struct {
-		name string
-		p    *Plan
-		due  string
-		want string
-	}{
-		{"blocked", &Plan{Steps: []Step{{ID: "a", Title: "A", Status: "blocked"}}}, "", "blocked"},
-		{"overdue-step", &Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-01"}}}, "", "at_risk"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			state := Compute(*tc.p, nil, movement, now, 0)
-			if got := HealthFor(tc.p, state, movement, now.Add(-48*time.Hour), now, 0, tc.due, DarkInput{Phase: "in_progress"}); got.State != tc.want {
-				t.Fatalf("got=%+v want=%s", got, tc.want)
-			}
-		})
+	facts["card:a"] = Fact{Known: true, Status: "in_progress", MovementAt: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)}
+	if h := HealthFor(HealthInput{Plan: &p, State: state, Facts: facts, Phase: "in_progress"}, now); h.State != PromisePast {
+		t.Fatalf("old movement must not meet the due: %+v", h)
 	}
 }
 
@@ -200,46 +101,11 @@ func TestWakeTime(t *testing.T) {
 func TestNextStepPrefersReadyCriticalPath(t *testing.T) {
 	p := Plan{Steps: []Step{{ID: "a", Title: "Short"}, {ID: "b", Title: "Long", Ref: "github:org/repo#1"}, {ID: "c", Title: "After long", After: []string{"b"}}}}
 	now := time.Now()
-	state := Compute(p, nil, now, now, 0)
+	state := Compute(p, nil, now)
 	if got := ReadyStep(p, state, nil); got == nil || got.ID != "b" || got.Ref != p.Steps[1].Ref {
 		t.Fatal(got)
 	}
 	if got := ReadyStep(p, state, func(s Step) bool { return s.ID != "b" }); got == nil || got.ID != "a" {
-		t.Fatal(got)
-	}
-}
-
-func TestPlanlessCardHealthUsesPhaseAndDue(t *testing.T) {
-	now := time.Now().UTC()
-	for _, tc := range []struct {
-		phase, due string
-		movement   time.Time
-		want       string
-	}{
-		{"blocked", "", now, "blocked"},
-		{"done", "2020-01-01", now.Add(-100 * time.Hour), "done"},
-		{"cancelled", "2020-01-01", now.Add(-100 * time.Hour), "cancelled"},
-		{"ready", "2020-01-01", now, "at_risk"},
-		{"in_progress", "", now.Add(-100 * time.Hour), "stale"},
-		// Rule (a): an active planless card with no dated checkpoint reads
-		// dark on plan_health, never no_plan or on_track.
-		{"in_progress", "", now, "dark"},
-		{"review", "", now, "dark"},
-		{"in_progress", now.Add(30 * 24 * time.Hour).Format("2006-01-02"), now, "dark"},
-		// Parked planless cards keep their phase; a near due outranks dark.
-		{"backlog", "", now, "no_plan"},
-		{"ready", "", now, "no_plan"},
-		{"in_progress", now.Add(2 * time.Hour).Format(time.RFC3339), now, "at_risk"},
-		{"in_progress", now.Add(3 * 24 * time.Hour).Format("2006-01-02"), now, "no_plan"},
-	} {
-		got := HealthFor(nil, State{}, tc.movement, now.Add(-200*time.Hour), now, 0, tc.due, DarkInput{Phase: tc.phase}, tc.phase)
-		if got.State != tc.want {
-			t.Fatalf("phase %q due %q: got %+v want %s", tc.phase, tc.due, got, tc.want)
-		}
-	}
-	// Archived planless work never darkens.
-	got := HealthFor(nil, State{}, now, now.Add(-200*time.Hour), now, 0, "", DarkInput{Phase: "in_progress", Archived: true}, "in_progress")
-	if got.State != "no_plan" {
 		t.Fatal(got)
 	}
 }

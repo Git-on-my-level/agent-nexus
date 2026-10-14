@@ -304,7 +304,7 @@ func TestAskExpiryPersistsDeliveries(t *testing.T) {
 	}
 }
 
-func TestAskLegacyAliasLifecycleAndStaleness(t *testing.T) {
+func TestAskLegacyAliasLifecycle(t *testing.T) {
 	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
@@ -319,12 +319,9 @@ func TestAskLegacyAliasLifecycleAndStaleness(t *testing.T) {
 	if err = ws.DB().QueryRow(`SELECT card_id FROM ask_subjects WHERE ask_id=?`, ask["id"]).Scan(&mapped); err != nil || mapped != card["id"] {
 		t.Fatalf("alias map %s %v", mapped, err)
 	}
-	if _, err = ws.DB().Exec(`UPDATE cards SET updated_at=? WHERE id=?`, time.Now().Add(-8*24*time.Hour).Format(time.RFC3339Nano), card["id"]); err != nil {
-		t.Fatal(err)
-	}
 	out, err := s.AskOutcome(ctx, anyStringValue(ask["ref"]))
-	if err != nil || out["is_stale"] != true {
-		t.Fatalf("alias stale %#v %v", out, err)
+	if err != nil || out["status"] != "open" {
+		t.Fatalf("alias open %#v %v", out, err)
 	}
 	if _, err = ws.DB().Exec(`UPDATE cards SET archived_at='now' WHERE id=?`, card["id"]); err != nil {
 		t.Fatal(err)

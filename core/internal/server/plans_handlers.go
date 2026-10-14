@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -15,15 +14,8 @@ import (
 
 type planStore interface {
 	SetCardPlan(context.Context, string, string, string, plans.Plan) error
-	EnrichCardPlans(context.Context, []map[string]any, func(string, string) bool, time.Time, time.Duration) error
-	ResolveRefs(context.Context, []string, func(string, string) bool, time.Time, time.Duration) ([]primitives.RefPreview, error)
-}
-
-func planStalledAfter() time.Duration {
-	if d, err := time.ParseDuration(os.Getenv("ANX_PLAN_STALLED_AFTER")); err == nil && d > 0 {
-		return d
-	}
-	return plans.DefaultStalledAfter
+	EnrichCardPlans(context.Context, []map[string]any, func(string, string) bool, time.Time) error
+	ResolveRefs(context.Context, []string, func(string, string) bool, time.Time) ([]primitives.RefPreview, error)
 }
 
 func planVisibility(r *http.Request, opts handlerOptions) func(string, string) bool {
@@ -68,7 +60,7 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 	if r.URL.Query().Get("summary") != "1" && !strings.HasSuffix(r.URL.Path, "/plan") {
 		ctx = primitives.WithLegacyCardPlans(ctx)
 	}
-	if err := store.EnrichCardPlans(ctx, cards, planVisibility(r, opts), time.Now().UTC(), planStalledAfter()); err != nil {
+	if err := store.EnrichCardPlans(ctx, cards, planVisibility(r, opts), time.Now().UTC()); err != nil {
 		workStoreError(w, r, err)
 		return false
 	}
@@ -148,7 +140,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 			if err != nil {
 				return nil, err
 			}
-			if err := store.EnrichCardPlans(ctx, []map[string]any{updated}, planVisibility(r.WithContext(ctx), opts), time.Now().UTC(), planStalledAfter()); err != nil {
+			if err := store.EnrichCardPlans(ctx, []map[string]any{updated}, planVisibility(r.WithContext(ctx), opts), time.Now().UTC()); err != nil {
 				return nil, err
 			}
 			return cardPlanResponse(updated), nil
@@ -190,7 +182,7 @@ func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 	}
-	items, err := store.ResolveRefs(r.Context(), req.Refs, planVisibility(r, opts), time.Now().UTC(), planStalledAfter())
+	items, err := store.ResolveRefs(r.Context(), req.Refs, planVisibility(r, opts), time.Now().UTC())
 	if err != nil {
 		workStoreError(w, r, err)
 		return

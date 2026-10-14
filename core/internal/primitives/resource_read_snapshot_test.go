@@ -192,7 +192,7 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 			}
 			overview := func(c context.Context) string {
 				t.Helper()
-				page, err := s.OverviewVisible(c, nil, nil, nil, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), 0)
+				page, err := s.OverviewVisible(c, nil, nil, nil, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 				if err != nil {
 					t.Fatal(err)
 				}

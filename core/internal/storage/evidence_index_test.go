@@ -44,7 +44,7 @@ func TestEvidenceIndexMigrationBackfillsAndObservationUpdates(t *testing.T) {
 	defer ws.Close()
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
 	refs := []string{"LEGACY-42", "RELATED-42", "OBSERVED-42"}
-	got, err := s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
+	got, err := s.ResolveRefs(ctx, refs, nil, time.Now())
 	if err != nil || !got[0].Resolvable || !got[1].Resolvable || got[2].Resolvable {
 		t.Fatalf("backfill=%+v %v", got, err)
 	}
@@ -52,7 +52,7 @@ func TestEvidenceIndexMigrationBackfillsAndObservationUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err = s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
+	got, err = s.ResolveRefs(ctx, refs, nil, time.Now())
 	if err != nil || !got[2].Resolvable || got[2].Status != "done" || got[2].Title != "Observed" {
 		t.Fatalf("observation=%+v %v", got, err)
 	}
@@ -104,7 +104,7 @@ func TestEvidenceIndex65BoundsLegacyAliasBackfill(t *testing.T) {
 			t.Fatalf("legacy amplification: records=%d keys=%d bytes=%d", records, keys, total)
 		}
 		s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-		got, err := s.ResolveRefs(ctx, []string{"legacy-0", "legacy-59"}, nil, time.Now(), 0)
+		got, err := s.ResolveRefs(ctx, []string{"legacy-0", "legacy-59"}, nil, time.Now())
 		if err != nil || !got[0].Resolvable || got[1].Resolvable {
 			t.Fatalf("legacy bounds: %+v %v", got, err)
 		}

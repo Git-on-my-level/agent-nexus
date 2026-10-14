@@ -12,12 +12,7 @@ import (
 
 type briefStore interface {
 	Brief(ctx context.Context, reader primitives.BriefReader, now time.Time) (map[string]any, error)
-	RefreshBriefInitiatives(ctx context.Context, limit int) (bool, error)
 }
-
-// briefFreshnessBatch folds a few queued cards before the read so a write is
-// visible on the next brief without waiting for the maintenance tick.
-const briefFreshnessBatch = 10
 
 // handleGetBriefV1 serves brief.v1: the caller's decisions, initiatives
 // against their promises, own asks and answers, for this workspace only.
@@ -35,7 +30,6 @@ func handleGetBriefV1(w http.ResponseWriter, r *http.Request, opts handlerOption
 			reader.Kind = p.PrincipalKind
 		}
 	}
-	_, _ = store.RefreshBriefInitiatives(r.Context(), briefFreshnessBatch)
 	ctx := r.Context()
 	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
 		readCtx, closeRead, err := canonical.BeginResourceRead(ctx)

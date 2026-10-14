@@ -37,9 +37,9 @@ type countedSummaryStore struct {
 	candidates int
 }
 
-func (s *countedSummaryStore) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time, threshold time.Duration) error {
+func (s *countedSummaryStore) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time) error {
 	s.candidates += len(cards)
-	return s.Store.EnrichCardPlans(ctx, cards, visible, now, threshold)
+	return s.Store.EnrichCardPlans(ctx, cards, visible, now)
 }
 
 func TestSummaryBundlesBoundCandidatesAndLegacyArchiveIsComplete(t *testing.T) {
