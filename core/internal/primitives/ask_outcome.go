@@ -6,19 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 )
 
-// WithAskDeliveryPolicy configures generic routing and staleness. Empty order
-// uses owner, requester, board role. Unknown entries are ignored.
-func WithAskDeliveryPolicy(order []string, staleAfter time.Duration) Option {
+// WithAskDeliveryPolicy configures generic routing. Empty order uses owner,
+// requester, board role. Unknown entries are ignored.
+func WithAskDeliveryPolicy(order []string) Option {
 	return func(s *Store) {
 		for _, entry := range order {
 			if entry = strings.TrimSpace(entry); entry == "owner" || entry == "requester" || entry == "board_role" {
 				s.askNextActorOrder = append(s.askNextActorOrder, entry)
 			}
 		}
-		s.askStaleAfter = staleAfter
 	}
 }
 
@@ -42,7 +40,7 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		return nil, err
 	}
 	ask := asMapValue(wrapper["payload"])
-	out := map[string]any{"ask_id": "event:" + id, "subject_ref": ask["subject_ref"], "status": "open", "response": nil, "delivery": []any{}, "is_stale": false}
+	out := map[string]any{"ask_id": "event:" + id, "subject_ref": ask["subject_ref"], "status": "open", "response": nil, "delivery": []any{}}
 	var resolutionID, resolutionType string
 	err = s.db.QueryRowContext(ctx, `SELECT resolution_event_id,resolution_type FROM human_attention_request_resolutions WHERE request_event_id=?`, id).Scan(&resolutionID, &resolutionType)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -81,23 +79,6 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 			}
 		} else if !errors.Is(e, sql.ErrNoRows) {
 			return nil, e
-		}
-	}
-	if out["status"] == "open" {
-		// Terminal expiry comes from the durable withdrawal, so subscribers
-		// can acknowledge an existing delivery before leaving their stream.
-		subject := anyStringValue(ask["subject_ref"])
-		if strings.HasPrefix(subject, "card:") {
-			card, resolveErr := resolveResourceRef(ctx, s.db, ResourceRefInput{Type: "card", Ref: subject})
-			if resolveErr != nil && !errors.Is(resolveErr, ErrNotFound) {
-				return nil, resolveErr
-			}
-			var at string
-			err = s.db.QueryRowContext(ctx, `SELECT updated_at FROM cards WHERE id=?`, card.ID).Scan(&at)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return nil, err
-			}
-			s.applyAskStaleness(out, at, time.Now().UTC())
 		}
 	}
 	deliveries, err := s.askDeliveries(ctx, id)
