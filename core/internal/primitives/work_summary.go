@@ -89,7 +89,7 @@ func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]pla
 }
 
 func summaryLabel(state string) string {
-	if label := map[string]string{"on_track": "In progress", "no_plan": "No plan", "stale": "Stale", "blocked": "Blocked", "at_risk": "At risk", "done": "Done", "cancelled": "Cancelled", "backlog": "Backlog", "ready": "Ready", "in_progress": "In progress", "review": "In review", "in_review": "In review", "unknown": "Unknown"}[state]; label != "" {
+	if label := map[string]string{"on_track": "In progress", "no_plan": "No plan", "stale": "Stale", "blocked": "Blocked", "at_risk": "At risk", "dark": "Dark", "done": "Done", "cancelled": "Cancelled", "backlog": "Backlog", "ready": "Ready", "in_progress": "In progress", "review": "In review", "in_review": "In review", "unknown": "Unknown"}[state]; label != "" {
 		return label
 	}
 	return strings.ReplaceAll(state, "_", " ")
@@ -116,7 +116,7 @@ func summaryWorkflowPhase(phase string) string {
 }
 
 func summaryHealth(input cardHealthInput, p *plans.Plan, state plans.State, at, now time.Time, threshold time.Duration) plans.Health {
-	health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.Phase)
+	health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.darkInput(), input.Phase)
 	if p != nil && len(p.Steps) > 0 {
 		return health
 	}
@@ -133,11 +133,29 @@ func summaryHealth(input cardHealthInput, p *plans.Plan, state plans.State, at, 
 			health.Since = &anchor
 			return health
 		}
-		health = plans.HealthFor(nil, state, at, input.Created, now, threshold, "", input.Phase)
+		// The recompute answers one question — is the card also stale — so it
+		// drops the near due and, with it, the dark gate: a due-soon card
+		// stays at_risk here and returns to its phase, never dark.
+		recompute := input.darkInput()
+		recompute.Phase = ""
+		health = plans.HealthFor(nil, state, at, input.Created, now, threshold, "", recompute)
 	}
 	if health.State == "no_plan" {
 		health.State = summaryWorkflowPhase(input.Phase)
 		health.Reason = "The card is marked " + summaryLabel(health.State) + "."
+		// An active planless card with no dated signal inside the horizon is
+		// dark: it reads as moving but nothing will surface it again. The gate
+		// is the same one plan_health uses, so the chip and the field agree.
+		if plans.DarkApplies(input.darkInput()) {
+			if reason, anchor, ok := plans.DarkOutcome(nil, plans.State{}, input.Due, input.darkInput(), now); ok {
+				health.State, health.Reason = "dark", reason
+				health.Since = nil
+				if !anchor.IsZero() {
+					formatted := anchor.UTC().Format(time.RFC3339Nano)
+					health.Since = &formatted
+				}
+			}
+		}
 	}
 	return health
 }
@@ -166,6 +184,10 @@ func summaryPhaseAgrees(phase string, health plans.Health, state plans.State) bo
 			}
 			return true
 		}
+	// Dark is about the future, not a contradiction of the stored phase: the
+	// same phases that agree with on_track keep agreeing when the card is dark.
+	case "dark":
+		return summaryPhaseAgrees(phase, plans.Health{State: "on_track"}, state)
 	}
 	return false
 }
@@ -233,7 +255,7 @@ func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, f
 // BasicWorkSummary supports mutation echoes and lightweight test stores. Current
 // reads replace it with the same presentation built from batched canonical facts.
 func BasicWorkSummary(card map[string]any, now time.Time, threshold time.Duration) *WorkSummary {
-	input := cardHealthInput{Phase: firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])), Due: workString(card["due_at"]), Owner: workString(card["owner"]), Source: workMap(card["source"])}
+	input := cardHealthInput{Phase: firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])), Due: workString(card["due_at"]), Owner: workString(card["owner"]), Source: workMap(card["source"]), Wake: workString(card["wake_condition"]), DarkAfter: parseDarkAfter(workString(card["dark_after"])), Archived: strings.TrimSpace(workString(card["archived_at"])) != ""}
 	input.Created, _ = time.Parse(time.RFC3339Nano, workString(card["created_at"]))
 	input.Activity = latestCardActivity(workString(card["updated_at"]))
 	if input.Owner == "" {

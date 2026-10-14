@@ -187,3 +187,192 @@ func TestPlanThresholdAndRefLimits(t *testing.T) {
 		planRequest(t, "POST", h.baseURL+"/refs/resolve", req, 400)
 	}
 }
+
+func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
+
+	// The overtaken-by-events setup: a decision card parked in Ready asks a
+	// human to authorize a merge, but both linked sources already finished —
+	// one workspace card done, one PR merged through its ingested observation
+	// evidence. Nothing auto-closes; the flag carries the evidence.
+	store := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{"title": "Health"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A linked card whose tracker observation reports done: the terminal
+	// state arrives through the stored observation cache, never a read-time
+	// fetch.
+	landed, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Landed work", "source": map[string]any{"authority": "tracker", "connection_id": "c", "native_id": "done-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := map[string]any{"idempotency_key": "landed", "reader_id": "adapter", "reader_revision": "1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported", "facts": map[string]any{"phase": "done"}, "evidence": []any{map[string]any{"kind": "issue", "url": "https://tracker.test/done-1", "knowledge": "reported"}}}
+	if _, err = store.SubmitWorkObservation(ctx, "actor-1", anyString(landed["id"]), observation); err != nil {
+		t.Fatal(err)
+	}
+	workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"PR carrier","source_refs":[{"authority":"github","connection_id":"c","native_id":"123","url":"https://github.com/example/repo/pull/123","status":"merged","phase":"done"}]}`, 201)
+	decision := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Ship the candidates?","phase":"ready"}`, 201)["work"].(map[string]any)
+	endpoint := h.baseURL + "/cards/" + anyString(decision["ref"]) + "/plan"
+	before := workGetJSON(t, endpoint, 200)
+	// The human question itself stays open — an unlinked step — so the plan
+	// is not done even though everything around it is.
+	put := planRequest(t, "PUT", endpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": before["if_updated_at"], "plan": map[string]any{"steps": []any{
+		map[string]any{"id": "pr", "title": "Watch PR", "ref": "https://github.com/example/repo/pull/123"},
+		map[string]any{"id": "landed", "title": "Landed", "ref": anyString(landed["ref"])},
+		map[string]any{"id": "decide", "title": "Decide whether to ship"},
+	}}}, 200)
+	moot := put["possibly_moot"].(map[string]any)
+	if moot["flagged"] != true || moot["sources"] != float64(2) || anyString(moot["reason"]) == "" {
+		t.Fatal("plan response lost the moot flag", put)
+	}
+	// The decision card is parked in Ready: dark is for active work, so the
+	// card stays on_track even with nothing dated — the moot flag is what
+	// speaks up here.
+	if put["plan_health"].(map[string]any)["state"] != "on_track" {
+		t.Fatal("a ready decision card must not read dark", put)
+	}
+	read := workGetJSON(t, h.baseURL+"/work/"+anyString(decision["ref"]), 200)["work"].(map[string]any)
+	if read["possibly_moot"].(map[string]any)["flagged"] != true {
+		t.Fatal("work read lost the moot flag", read)
+	}
+	previews := planRequest(t, "POST", h.baseURL+"/refs/resolve", map[string]any{"refs": []string{anyString(decision["ref"])}}, 200)["items"].([]any)
+	if previews[0].(map[string]any)["possibly_moot"].(map[string]any)["flagged"] != true {
+		t.Fatal("ref preview lost the moot flag", previews)
+	}
+	// An active card with one open source is not moot even with a done sibling.
+	open := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Still open","phase":"ready"}`, 201)["work"].(map[string]any)
+	openEndpoint := h.baseURL + "/cards/" + anyString(open["ref"]) + "/plan"
+	openBefore := workGetJSON(t, openEndpoint, 200)
+	planRequest(t, "PUT", openEndpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": openBefore["if_updated_at"], "plan": map[string]any{"steps": []any{
+		map[string]any{"id": "pr", "title": "Watch PR", "ref": "https://github.com/example/repo/pull/123"},
+		map[string]any{"id": "open", "title": "Open work", "ref": anyString(decision["ref"])},
+	}}}, 200)
+	openRead := workGetJSON(t, h.baseURL+"/work/"+anyString(open["ref"]), 200)["work"].(map[string]any)
+	openMoot := openRead["possibly_moot"].(map[string]any)
+	if openMoot["flagged"] != false || openMoot["sources"] != float64(2) {
+		t.Fatal("an open linked source must block the flag", openMoot)
+	}
+	// Rule (b): one observed-merged PR and one URL ANX has never observed —
+	// the merged observation cannot speak for the unobserved source, so the
+	// card is not flagged and the evidence names nothing.
+	half := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Half observed","phase":"ready"}`, 201)["work"].(map[string]any)
+	halfEndpoint := h.baseURL + "/cards/" + anyString(half["ref"]) + "/plan"
+	halfBefore := workGetJSON(t, halfEndpoint, 200)
+	halfPut := planRequest(t, "PUT", halfEndpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": halfBefore["if_updated_at"], "plan": map[string]any{"steps": []any{
+		map[string]any{"id": "seen", "title": "Observed PR", "ref": "https://github.com/example/repo/pull/123"},
+		map[string]any{"id": "unseen", "title": "Unobserved PR", "ref": "https://github.com/example/repo/other/pull/999"},
+	}}}, 200)
+	halfMoot := halfPut["possibly_moot"].(map[string]any)
+	if halfMoot["flagged"] != false || halfMoot["sources"] != float64(0) || anyString(halfMoot["reason"]) != "" {
+		t.Fatal("an unobserved source must withhold the flag entirely", halfMoot)
+	}
+
+	// Dark sequencing on a fresh active card: nothing dated reads dark with no
+	// anchor, a far wake date supplies the anchor, a near due leaves the dark
+	// state, and a per-card horizon re-darkens it.
+	quiet := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Quiet initiative","phase":"in_progress"}`, 201)["work"].(map[string]any)
+	quietEndpoint := h.baseURL + "/cards/" + anyString(quiet["ref"]) + "/plan"
+	quietBefore := workGetJSON(t, quietEndpoint, 200)
+	planRequest(t, "PUT", quietEndpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": quietBefore["if_updated_at"], "plan": map[string]any{"steps": []any{
+		map[string]any{"id": "only", "title": "Only step"},
+	}}}, 200)
+	quietRead := workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
+	health := quietRead["plan_health"].(map[string]any)
+	if health["state"] != "dark" || health["since"] != nil {
+		t.Fatal("no dated signal must read dark with a null anchor", health)
+	}
+	// Patch with the version fence each read carries; the patch echo is the
+	// lightweight projection, so the re-read supplies the health. A rejected
+	// patch must leave the fence untouched. Signal dates derive from the
+	// clock: a wake well past the horizon, then a due date inside it.
+	wakeDate := time.Now().UTC().Add(30 * 24 * time.Hour).Format("2006-01-02")
+	dueDate := time.Now().UTC().Add(3 * 24 * time.Hour).Format(time.RFC3339)
+	version := int64(quietRead["version"].(float64))
+	patchAndRead := func(patch map[string]any, status int) map[string]any {
+		body, err := json.Marshal(map[string]any{"actor_id": "actor-1", "if_version": version, "patch": patch})
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload := workPostJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), string(body), status)
+		if out, ok := payload["work"].(map[string]any); ok && status == 200 {
+			version = int64(out["version"].(float64))
+		}
+		return workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
+	}
+	patchAndRead(map[string]any{"wake_condition": "check the metric " + wakeDate}, 200)
+	quietRead = workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
+	health = quietRead["plan_health"].(map[string]any)
+	if health["state"] != "dark" || health["since"] != wakeDate+"T00:00:00Z" {
+		t.Fatal("wake_condition must anchor the dark state", health)
+	}
+	quietRead = patchAndRead(map[string]any{"due_at": dueDate}, 200)
+	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "on_track" {
+		t.Fatal("a due date inside the horizon leaves dark", state)
+	}
+	quietRead = patchAndRead(map[string]any{"dark_after": "1h"}, 200)
+	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "dark" {
+		t.Fatal("a per-card horizon must re-darken the card", state)
+	}
+	patchAndRead(map[string]any{"dark_after": "soon"}, 400)
+	quietRead = patchAndRead(map[string]any{"dark_after": ""}, 200)
+	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "on_track" {
+		t.Fatal("clearing dark_after restores the default horizon", state)
+	}
+}
+
+func TestInboxOpenAskCarriesPossiblyMoot(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	s := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	doneSubject, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Finished subject", "source": map[string]any{"authority": "tracker", "connection_id": "c", "native_id": "done-2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := map[string]any{"idempotency_key": "landed-2", "reader_id": "adapter", "reader_revision": "1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported", "facts": map[string]any{"phase": "done"}, "evidence": []any{map[string]any{"kind": "issue", "url": "https://tracker.test/done-2", "knowledge": "reported"}}}
+	if _, err = s.SubmitWorkObservation(ctx, "actor-1", anyString(doneSubject["id"]), observation); err != nil {
+		t.Fatal(err)
+	}
+	openSubject, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Open subject"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "PR carrier", "source_refs": []any{map[string]any{"authority": "github", "connection_id": "c", "native_id": "123", "url": "https://github.com/example/repo/pull/123", "status": "merged", "phase": "done"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// The page has already been authorized; the moot evaluation must use the
+	// same scoped resolver and read only cached evidence.
+	req := httptest.NewRequest("GET", "/inbox", nil).WithContext(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}))
+	items := []map[string]any{
+		{"kind": "ask", "status": "open", "subject_ref": anyString(doneSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/pull/123"}},
+		{"kind": "ask", "status": "open", "subject_ref": anyString(openSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/pull/123"}},
+		{"kind": "ask", "status": "answered", "subject_ref": anyString(doneSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/pull/123"}},
+		// Rule (b): the observed-merged PR cannot speak for a URL this
+		// workspace never observed, so the ask gets no flag at all.
+		{"kind": "ask", "status": "open", "subject_ref": anyString(doneSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/other/pull/999"}},
+	}
+	if err = enrichInboxCardSummaries(req, handlerOptions{primitiveStore: s}, items); err != nil {
+		t.Fatal(err)
+	}
+	moot := items[0]["possibly_moot"].(primitives.PossiblyMoot)
+	if !moot.Flagged || moot.Sources != 2 || moot.Reason == "" {
+		t.Fatalf("open ask over finished work must be moot: %+v", items[0])
+	}
+	moot = items[1]["possibly_moot"].(primitives.PossiblyMoot)
+	if moot.Flagged || moot.Sources != 2 {
+		t.Fatalf("open subject must block the flag: %+v", items[1])
+	}
+	// Answered asks are not evaluated, so they carry no flag at all.
+	if _, evaluated := items[2]["possibly_moot"]; evaluated {
+		t.Fatalf("answered asks must not carry the flag: %+v", items[2])
+	}
+	if _, evaluated := items[3]["possibly_moot"]; evaluated {
+		t.Fatalf("an unobserved source must withhold the flag entirely: %+v", items[3])
+	}
+}

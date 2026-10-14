@@ -4897,6 +4897,7 @@ Inputs:
   - body `actor_id` (string)
   - body `blockers` (list<string>)
   - body `board_ref` (string)
+  - body `dark_after` (string)
   - body `definition_of_done` (list<string>)
   - body `document_ref` (string)
   - body `due_at` (string)
@@ -5046,6 +5047,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `patch.blockers` (list<string>)
+  - body `patch.dark_after` (string)
   - body `patch.due_at` (string)
   - body `patch.executions` (list<object>)
   - body `patch.labels` (list<string>)

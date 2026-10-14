@@ -599,10 +599,20 @@ func formatWorkCommandText(name string, body any) string {
 	if name == "work get" || name == "work create" || name == "work patch" {
 		work := asMap(root["work"])
 		lines := []string{renderWorkLine(work)}
-		for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition"} {
+		if health := asMap(work["plan_health"]); anyString(health["state"]) != "" {
+			line := "plan_health: " + anyString(health["state"])
+			if reason := anyString(health["reason"]); reason != "" {
+				line += " — " + reason
+			}
+			lines = append(lines, line)
+		}
+		for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition", "dark_after"} {
 			if value := anyString(work[key]); value != "" {
 				lines = append(lines, key+": "+value)
 			}
+		}
+		if moot := asMap(work["possibly_moot"]); moot["flagged"] == true {
+			lines = append(lines, "possibly_moot: "+anyString(moot["reason"]))
 		}
 		// Keep evidence and acceptance visible; a phase is not a verification claim.
 		for _, key := range []string{"source", "freshness", "definition_of_done", "blockers", "relations", "executions", "latest_observation", "refresh"} {
@@ -892,6 +902,16 @@ func pmDispatchSendNote(root map[string]any, started time.Time, previousStatus s
 
 func renderWorkLine(work map[string]any) string {
 	line := fmt.Sprintf("%s  %s  phase=%s source=%s freshness=%s", firstNonEmpty(anyString(work["ref"]), anyString(work["handle"]), anyString(work["id"])), anyString(work["title"]), firstNonEmpty(anyString(work["phase"]), "unknown"), firstNonEmpty(anyString(asMap(work["source"])["authority"]), "unknown"), firstNonEmpty(anyString(asMap(work["freshness"])["status"]), "unknown"))
+	// Dark and the possibly-moot flag ride the same health computation the
+	// server attaches to every work read; a quiet card must not read as one
+	// that is simply fine.
+	if state := anyString(asMap(work["plan_health"])["state"]); state != "" {
+		line += " health=" + state
+	}
+	moot := asMap(work["possibly_moot"])
+	if moot["flagged"] == true {
+		line += "  possibly_moot: " + anyString(moot["reason"])
+	}
 	if errText := renderWorkLastError(work); errText != "" {
 		line += "  " + errText
 	}

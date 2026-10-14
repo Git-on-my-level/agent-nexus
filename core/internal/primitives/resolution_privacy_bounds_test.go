@@ -100,6 +100,7 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, nil, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
+	// The parked card reads on_track and is unaffected by the hidden candidates.
 	if current["plan_health"].(plans.Health).State != "on_track" {
 		t.Fatalf("hidden candidates changed native public health: %+v", current)
 	}

@@ -1161,3 +1161,65 @@ describe("statusChip", () => {
     });
   });
 });
+
+describe("the dark state", () => {
+  /*
+   * Dark means nothing will surface this card soon: no open step due, no card
+   * due, no wake date inside the horizon — or none at all. It is a warning
+   * about the future, one step quieter than stale, and never an alarm-band
+   * state.
+   */
+  it("renders as a warn chip below stale", () => {
+    const model = workSummaryModel(
+      { ref: "card:x", work_summary: { status: { state: "dark" } } },
+      { now: NOW },
+    );
+    expect(model.status.state).toBe("dark");
+    expect(model.status.label).toBe("Dark");
+    expect(model.status.tone).toBe("warn");
+    expect(model.status.rank).toBeLessThan(statusRank("on_track"));
+    expect(model.status.rank).toBeGreaterThan(statusRank("stale"));
+    expect(needsAttention(model)).toBe(false);
+  });
+});
+
+describe("the possibly-moot flag", () => {
+  it("rides the row into the model with its evidence", () => {
+    const model = workSummaryModel(
+      {
+        ref: "card:decision",
+        possibly_moot: {
+          flagged: true,
+          reason: "all 2 linked sources are merged",
+          sources: 2,
+        },
+        work_summary: { status: { state: "on_track" } },
+      },
+      { now: NOW },
+    );
+    expect(model.moot).toEqual({
+      flagged: true,
+      reason: "all 2 linked sources are merged",
+      sources: 2,
+    });
+  });
+
+  it("is absent when the row carries none", () => {
+    expect(
+      workSummaryModel(
+        { ref: "card:x", work_summary: { status: { state: "on_track" } } },
+        { now: NOW },
+      ).moot,
+    ).toBeNull();
+    expect(
+      workSummaryModel(
+        {
+          ref: "card:x",
+          possibly_moot: { flagged: false, sources: 0 },
+          work_summary: { status: { state: "on_track" } },
+        },
+        { now: NOW },
+      ).moot,
+    ).toMatchObject({ flagged: false });
+  });
+});

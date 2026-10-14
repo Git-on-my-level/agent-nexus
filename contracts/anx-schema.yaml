@@ -921,7 +921,8 @@ work_tracking:
   observation_status: [reported, verified, uncertain, error]
   refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
-  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
+  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs, dark_after]
+  dark_after: {type: string, description: 'Optional duration (for example 72h or 7d); the card reads dark when its next dated signal lies further out than this. Empty string or null clears; default 168h (7 days).'}
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
@@ -1123,7 +1124,7 @@ initiative_plan:
     semantics:
       - A chain is a connected path (including an empty plan); lanes are multiple disconnected paths; all other graphs are dag.
       - Critical path maximizes unfinished steps through sink nodes; done steps have zero weight. Ties use lexicographic step ids.
-      - Detailed health uses one vocabulary across plan_state.health_state, plan_health.state and Overview health.state. Legacy health fields report every state they can name and rename only stale to stalled; an unrecognized state falls back to on_track. No steps is no_plan until the stale threshold; completed plans are done; any unfinished blocked step is blocked; open due dates within 24 hours are at_risk; inactivity beyond the threshold is stale; otherwise on_track.
+      - Detailed health uses one vocabulary across plan_state.health_state, plan_health.state and Overview health.state. Legacy health fields report every state they can name and rename only stale to stalled; an unrecognized state falls back to on_track. No steps is no_plan until the stale threshold; completed plans are done; any unfinished blocked step is blocked; open due dates within 24 hours are at_risk; inactivity beyond the threshold is stale; an active (in progress or in review) otherwise-on-track initiative whose next dated signal lies beyond the dark horizon or does not exist is dark; otherwise on_track.
       - Next steps are unfinished, unblocked steps whose dependencies are all done.
       - Known card/source workflow states override fallback status; context refs (docs/topics) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/in_review/active/review/open to active; other states map to not_started.
       - Source activity and meaningful progress reset recency; unchanged observation timestamps do not. Plan edits reset recency.
@@ -1137,7 +1138,7 @@ batch_ref_resolve:
   evidence_candidates_per_key: 33
   input: {refs: 'list<string>'}
   output: {items: 'list<object>'}
-  fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable, authority, native_id, connection_id, observed_at, source, plan_health, plan_resolution_truncated, status_mismatch]
+  fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable, authority, native_id, connection_id, observed_at, source, plan_health, plan_resolution_truncated, status_mismatch, possibly_moot]
   semantics:
     - Preserve input order and duplicates. Unknown, ambiguous or inaccessible refs remain resolvable false without metadata.
     - Read-side batches authorize candidates, not the request's ref strings. A key shared with an inaccessible publisher still returns its visible evidence; hidden and unknown entries do not reject the batch. Ownership checks remain mandatory when writing refs.
@@ -1177,7 +1178,7 @@ live_series:
 initiative_overview:
   max_initiatives: 2000
   geometry_max_nodes: 24
-  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, plan_step_digest, status_mismatch, health, geometry]
+  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, plan_step_digest, status_mismatch, possibly_moot, health, geometry]
   semantics:
     - If any board has role initiatives, only its cards appear as initiatives. Other active cards remain in work. Without a designated board, Overview keeps the existing selection and returns initiatives.hint suggesting the role.
     - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.
@@ -1200,7 +1201,7 @@ overview_brief:
     - decisions ranks needs_you by blocking open work (1000 per visible dependent), then overdue (600) or due within 48 hours (300), then priority (critical/p0 320, high/p1 200, medium/p2 80, low/p3 20), then a blocked phase (150), then age at a third of a point per hour capped at 30 days (240); ties break oldest first then by id. Work priorities p0-p3 and the word spellings fold to one scale. Age tops out below critical so a stale question cannot outrank a fresh p0. reason carries at most three computed clauses.
     - since_last_look groups changes against the previous visit baseline; first_visit distinguishes no baseline from no change. Groups are ordered and empty groups omitted. A completed-step row carries step_id, because two steps of one initiative share its ref.
     - newly_blocked counts transitions, not current state: the visit snapshot records each card's phase, and a card already blocked at the previous visit, or one whose previous phase is unknown, is reported as updated. Editing a blocked card is not a new blocker.
-    - at_risk reports only blocked, at_risk and stale rows with a computed reason, worst first then longest standing; a row without a computed reason is omitted.
+    - at_risk reports only blocked, at_risk and stale rows with a computed reason, worst first then longest standing; a row without a computed reason is omitted. Dark is information about the future, not an alarm, and stays out of this section; the initiative's own card carries it.
     - machine reuses the roster's derived states and the three-way silence split: stuck requires an open run or a held card, so offline and never-enrolled identities are not alarms. finished_24h and agents_finished_24h come from visible cards closed inside throughput_hours and survive a roster read failure.
     - initiatives orders by the shared health order and reports by_state counts for all of them, so no_plan is visible as a gap rather than reported as on track.
 overview_changes:
@@ -1219,14 +1220,27 @@ overview_changes:
 
 initiative_plan_health:
   fields: [state, reason, since]
-  states: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]
+  states: [no_plan, stale, blocked, at_risk, dark, on_track, done, cancelled]
   semantics:
     - Added on card reads, lists, refs resolve, reports and initiative overview alongside existing plan_state and progress.
-    - Precedence is no_plan for recent absent/empty plans (stale after the inactivity threshold), done for all completed steps, blocked for any unfinished blocked step (including dependencies), at_risk for card/unfinished step due within 24 hours or overdue, stale after 72 hours without card/plan/step activity, then on_track.
+    - Precedence is no_plan for recent absent/empty plans (stale after the inactivity threshold), done for all completed steps, blocked for any unfinished blocked step (including dependencies), at_risk for card/unfinished step due within 24 hours or overdue, stale after 72 hours without card/plan/step activity, dark for an active card — stored phase in progress or in review, and not archived — whose next dated signal lies further out than the dark horizon or does not exist (planless active cards read dark here too, replacing no_plan, so agents reading this field see the same thing the summary chip says), then on_track. Done, cancelled, blocked, backlog, ready and archived cards keep the states they already read and never darken.
+    - The next dated signal is the earliest of open (unfinished) plan step due dates, the effective card due_at, and the first RFC3339 instant or YYYY-MM-DD date contained in the wake_condition annotation (date-only resolves to midnight UTC; the first 1024 bytes are scanned). A past signal still counts, so an already-due wake is never dark.
+    - The dark horizon defaults to 168 hours (7 days), is overridden workspace-wide by ANX_PLAN_DARK_AFTER, and per card by the dark_after annotation (duration string; empty clears). A signal exactly at the horizon is not dark; only strictly beyond it is.
     - ANX_PLAN_STALLED_AFTER overrides the workspace service stale threshold. Observing unchanged source state does not count as activity.
-    - since is a reproducible condition anchor, not a historical transition record. Uses last activity for done/blocked/on_track, earliest relevant due minus 24 hours for at_risk, last activity plus threshold for stale, creation for no_plan; null when unknown.
+    - since is a reproducible condition anchor, not a historical transition record. Uses last activity for done/blocked/on_track, earliest relevant due minus 24 hours for at_risk, last activity plus threshold for stale, the next dated signal for dark (the moment the card stops being dark), creation for no_plan; null when unknown, including for dark cards with no dated signal at all.
     - next_step contains id/title/ref of a ready unblocked unfinished step, preferring critical path then lexicographic id; unreadable linked resources are skipped. Null when none is ready.
     - status_mismatch is true only for backlog cards with completed plan steps. Computation never changes phase.
+
+possibly_moot:
+  fields: [flagged, reason, sources]
+  shape: {flagged: boolean, reason: string, sources: integer}
+  semantics:
+    - Emitted beside status_mismatch on card reads, lists, refs resolve, the plan response and the initiative overview, always present there as flagged false when not flagged. On inbox items the field appears only on an open ask-shaped item whose linked sources the page's resolver actually evaluated; anything else omits the key, so the scoped readmodel hydration mirrors the HTTP payload byte for byte.
+    - Only sources ANX has actually observed count as terminal: a done card, or a PR observed merged or closed through the observation cache. A card stored in backlog or ready is flagged possibly moot when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published or resolved). An open ask is flagged on the same rule over its subject_ref and related_refs.
+    - Linked sources are the card's plan step refs and its related_refs annotation, resolved through the same batched evidence-backed resolution as plan facts; a PR URL resolves merged through the ingested observation that published it, never through a network fetch at read time.
+    - Context-only refs (document, topic, board, thread) neither contribute to nor block the set. Every other linked source must be observed: a ref with no fact, an unresolved one (including a card invisible to the reader, or a ref dropped by the shared ref budget), or one whose workflow state is unknown withholds the flag entirely — an unobserved or unknown source never counts as terminal, and the evidence never names it. sources counts the known sources, and zero sources never flags.
+    - reason is evidence, not advice; "all 2 linked sources are merged" uses the common source status when uniform, otherwise "all N linked sources are done".
+    - Computation never mutates phase or closes anything. The flag only surfaces evidence so a human or agent can close the card or ask itself; it may be stale the moment it is computed and never suppresses asks or notifications on its own.
 
 inbox_summary:
   route: GET /inbox/summary
@@ -1248,7 +1262,7 @@ source_refs:
 
 health_compatibility:
   semantics:
-    - plan_health.state is the detailed vocabulary. Legacy plan_state.health and initiative health.status rename stale to stalled and otherwise emit the detailed state unchanged; only a state this core does not recognize falls back to on_track. A missing plan is never reported as on_track, because an unplanned initiative rendered green is how planless work stayed invisible. Old enum values remain readable and the legacy enum already admitted every emitted value.
+    - plan_health.state is the detailed vocabulary. Legacy plan_state.health and initiative health.status rename stale to stalled and otherwise emit the detailed state unchanged; only a state this core does not recognize falls back to on_track. Dark is unnamed in the legacy fields and reads on_track there, matching pre-dark behavior; the detailed fields are authoritative. A missing plan is never reported as on_track, because an unplanned initiative rendered green is how planless work stayed invisible. Old enum values remain readable and the legacy enum already admitted every pre-dark emitted value.
     - Digest kind emits initiative_stalled for stale transitions; additive kind_v2 emits initiative_stale on the same item, avoiding duplicate notifications. Consumers accept both kinds.
     - Effective due_at uses an explicitly present work annotation (including clearing) before cards.due_at. Activity uses the same maximum of meaningful source activity/progress, plan edits and discussion for every health read; unchanged polls are excluded.
     - Aggregated plan refs resolve in batches of at most 200; source evidence uses an indexed, transactionally maintained projection and candidate pages of at most 200.
@@ -1293,7 +1307,7 @@ work_summary:
   semantics:
     - Supported card-bearing reads opt in with summary=1 to computed work_summary.status with state, label and reason. Default card collections preserve legacy shapes and complete results. Board roles select cards only.
     - Card and work write inputs retain their string summary. Card revision content remains prose. Default responses add no summary fields or pagination; summary=1 adds work_summary, aliases it at summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
-    - Planned cards use shared plan health. Planless cards use workflow phase (backlog, ready, in_progress, review, done or cancelled), overridden only by blocked, overdue (at_risk) or inactivity beyond the threshold (stale). no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context. set_status is included only when stored phase genuinely disagrees with the computed state.
+    - Planned cards use shared plan health. Planless cards use workflow phase (backlog, ready, in_progress, review, done or cancelled), overridden only by blocked, overdue (at_risk), inactivity beyond the threshold (stale), or an active card (in progress or in review) whose next dated signal lies beyond the dark horizon or does not exist (dark) — the same cards plan_health reads dark, so the chip and the field agree. no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context. set_status is included only when stored phase genuinely disagrees with the computed state.
     - Agent detail opts in with summary=1 to at most 50 recent-card candidates, selected through indexed assignment and current/recent-run refs before hydration and batch enrichment; cards_truncated marks the bounded preview and is always true for scoped readers so hidden candidate counts cannot be inferred.
     - Progress appears for a nonempty plan or explicit child relations; next and steps appear only for a plan. Owner, due, age, last_movement_at and external source appear only when known.
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.

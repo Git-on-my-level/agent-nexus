@@ -30,6 +30,10 @@
         "reason": "Open steps are progressing.",
         "since": "2026-10-04T12:00:00Z"
       },
+      "possibly_moot": {
+        "flagged": false,
+        "sources": 0
+      },
       "summary": {
         "status": {
           "state": "on_track",

@@ -21,10 +21,13 @@ func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
 	}{
 		{name: "backlog", phase: "backlog", want: "backlog"},
 		{name: "ready", phase: "ready", want: "ready"},
-		{name: "in-progress", phase: "in_progress", want: "in_progress"},
-		{name: "empty-plan", phase: "in_progress", want: "in_progress", planned: true},
-		{name: "review", phase: "review", want: "review"},
-		{name: "review-alias", phase: "in_review", want: "review"},
+		{name: "in-progress", phase: "in_progress", want: "dark"},
+		{name: "empty-plan", phase: "in_progress", want: "dark", planned: true},
+		// Review is active: a planless review card with nothing dated reads
+		// dark, like in-progress does.
+		{name: "review", phase: "review", want: "dark"},
+		{name: "review-alias", phase: "in_review", want: "dark"},
+		{name: "review-due-soon", phase: "review", due: "2026-10-08T13:00:00Z", want: "review"},
 		{name: "done", phase: "done", due: "2020-01-01", old: true, want: "done"},
 		{name: "cancelled", phase: "cancelled", old: true, want: "cancelled"},
 		{name: "blocked", phase: "blocked", due: "2020-01-01", old: true, want: "blocked"},
@@ -53,7 +56,9 @@ func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
 	p := plans.Plan{Steps: []plans.Step{{ID: "a", Title: "Work", Status: "active"}}}
 	state := plans.Compute(p, nil, now, now, 0)
 	got := buildWorkSummary(cardHealthInput{Phase: "in_progress", Activity: now}, &p, state, nil, now, 0)
-	if got.Status.State != "on_track" || got.SetStatus != nil || len(got.Hints) != 0 {
+	// An active plan with no dated signal anywhere reads dark, and the stored
+	// in-progress phase agrees with it rather than growing a set_status note.
+	if got.Status.State != "dark" || got.SetStatus != nil || len(got.Hints) != 0 {
 		t.Fatalf("planned summary changed: %+v", got)
 	}
 	counts[got.Status.State]++

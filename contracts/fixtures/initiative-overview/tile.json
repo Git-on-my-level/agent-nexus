@@ -16,8 +16,12 @@
       "done": 1,
       "total": 2
     },
-    "critical_path": ["build"],
-    "next_steps": ["build"],
+    "critical_path": [
+      "build"
+    ],
+    "next_steps": [
+      "build"
+    ],
     "shape": "chain",
     "health": "on_track",
     "last_movement_at": "2026-10-04T12:00:00Z",
@@ -45,7 +49,9 @@
         "id": "build",
         "status": "not_started",
         "layer": 1,
-        "after": ["design"]
+        "after": [
+          "design"
+        ]
       }
     ],
     "total_nodes": 2,
@@ -117,6 +123,10 @@
     "ref": ""
   },
   "status_mismatch": true,
+  "possibly_moot": {
+    "flagged": false,
+    "sources": 0
+  },
   "plan_resolution_truncated": false,
   "plan_step_digest": {
     "window_hours": 168,

@@ -81,6 +81,9 @@ func projectPlan(lines *[]string, result any) {
 		*lines = append(*lines, row)
 	}
 	project(lines, "result.status_mismatch", root["status_mismatch"])
+	if moot, ok := root["possibly_moot"].(map[string]any); ok && moot["flagged"] == true {
+		project(lines, "result.possibly_moot.reason", moot["reason"])
+	}
 	// A warning on the executive summary is material even though its repeated
 	// status, owner and step digest are omitted from this plan-specific readback.
 	if summary, ok := root["summary"].(map[string]any); ok {

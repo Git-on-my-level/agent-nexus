@@ -29,6 +29,7 @@ export const ATTENTION_ORDER = Object.freeze([
   "blocked",
   "at_risk",
   "stale",
+  "dark",
   "on_track",
   "done",
   "no_plan",
@@ -63,6 +64,13 @@ export const PLAN_HEALTH = Object.freeze({
     glyph: "◷",
     tone: "warn",
   },
+  dark: {
+    state: "dark",
+    label: "Dark",
+    short: "Dark",
+    glyph: "☾",
+    tone: "warn",
+  },
   on_track: {
     state: "on_track",
     label: "On track",
@@ -93,6 +101,7 @@ const LEGACY_STATUS = Object.freeze({
   stale: "stale",
   blocked: "blocked",
   at_risk: "at_risk",
+  dark: "dark",
   done: "done",
   no_plan: "no_plan",
 });

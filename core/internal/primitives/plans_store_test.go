@@ -268,6 +268,8 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
 				t.Fatal(err)
 			}
+			// Activity resets recency: stale resolves to on_track (the parked
+			// card has no dated signal, but dark is for active work).
 			if card["plan_health"].(plans.Health).State != "on_track" {
 				t.Fatal(card["plan_health"])
 			}
@@ -342,5 +344,36 @@ func TestPlanStepDigestOverRealCards(t *testing.T) {
 	}
 	if planless["plan_step_digest"] != nil {
 		t.Fatalf("planless digest=%#v", planless["plan_step_digest"])
+	}
+}
+
+func TestPlanlessCardPossiblyMootFromRelatedRefs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, board := newWorkTestStore(t)
+	if _, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "PR carrier", "source_refs": []any{map[string]any{"authority": "github", "connection_id": "c", "native_id": "123", "url": "https://github.com/example/repo/pull/123", "status": "merged", "phase": "done"}}}); err != nil {
+		t.Fatal(err)
+	}
+	decision, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Ship the candidates?", "phase": "ready", "related_refs": []string{"https://github.com/example/repo/pull/123"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := store.GetBoardCard(ctx, "", decision["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+		t.Fatal(err)
+	}
+	moot, ok := card["possibly_moot"].(primitives.PossiblyMoot)
+	if !ok || !moot.Flagged || moot.Sources != 1 {
+		t.Fatalf("planless related refs must flag possibly_moot: %#v", card["possibly_moot"])
+	}
+	previews, err := store.ResolveRefs(ctx, []string{decision["ref"].(string)}, nil, time.Now(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previews[0].PossiblyMoot == nil || !previews[0].PossiblyMoot.Flagged || previews[0].PossiblyMoot.Sources != 1 {
+		t.Fatalf("ref preview missed planless related refs: %+v", previews[0].PossiblyMoot)
 	}
 }

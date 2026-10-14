@@ -102,6 +102,40 @@ const planlessCard = {
 };
 
 /**
+ * An active dark card whose every linked source has already finished: core
+ * reads the state dark (nothing dated will surface it) and flags it possibly
+ * moot (the PRs merged under it). The flag is a top-level row field beside
+ * the summary, and every surface that renders the card carries the evidence.
+ */
+const darkCard = {
+  ref: "card:quiet-decision",
+  handle: "quiet-decision",
+  title: "Quiet decision",
+  summary: "Active work nothing will surface for weeks.",
+  summary_text: "Active work nothing will surface for weeks.",
+  phase: "in_progress",
+  column_key: "in_progress",
+  board_ref: "board:initiatives",
+  updated_at: MOVED_AT,
+  source: { authority: "nexus" },
+  freshness: { status: "unknown" },
+  possibly_moot: {
+    flagged: true,
+    reason: "all 2 linked sources are merged",
+    sources: 2,
+  },
+  work_summary: {
+    status: {
+      state: "dark",
+      label: "Dark",
+      reason: "Next dated signal is 2026-11-05, 22 days out.",
+      since: "2026-11-05T00:00:00.000Z",
+    },
+    last_movement_at: MOVED_AT,
+  },
+};
+
+/**
  * A card from a core that computes no summary at all, carrying only the
  * legacy fields — plus a source status Nexus has no phase for. Every surface
  * has to keep saying something about it.
@@ -172,7 +206,7 @@ async function install(page) {
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
     principals: [{ actor_id: "operator", principal_kind: "human" }],
-    work: [card, sideCard, legacyCard, planlessCard],
+    work: [card, sideCard, legacyCard, planlessCard, darkCard],
   });
   await page.route("**/*", async (route) => {
     // Decoded: a card ref carries a colon, so the path arrives percent-encoded.
@@ -183,8 +217,8 @@ async function install(page) {
     if (path === "/work")
       return route.fulfill({
         json: {
-          work: [card, sideCard, legacyCard, planlessCard].map((row) =>
-            asCore(row, optedIn),
+          work: [card, sideCard, legacyCard, planlessCard, darkCard].map(
+            (row) => asCore(row, optedIn),
           ),
         },
       });
@@ -221,8 +255,8 @@ async function install(page) {
           },
           initiatives: {
             status: "ok",
-            count: 2,
-            items: [card, planlessCard].map((row) => ({
+            count: 3,
+            items: [card, planlessCard, darkCard].map((row) => ({
               ...asCore(row, optedIn),
               href: `/tasks/${row.handle}`,
             })),
@@ -494,7 +528,7 @@ test("the Initiatives filter reuses the board role Overview selects by", async (
   await page.setViewportSize({ width: 1440, height: 1100 });
 
   await page.goto(`${TASKS}?view=table`);
-  await expect(page.locator("[data-work-ref]")).toHaveCount(4, {
+  await expect(page.locator("[data-work-ref]")).toHaveCount(5, {
     timeout: 60_000,
   });
 
@@ -503,10 +537,43 @@ test("the Initiatives filter reuses the board role Overview selects by", async (
   await expect(page.locator("[data-task-initiatives-filter]")).toContainText(
     "initiatives board",
   );
-  await expect(page.locator("[data-work-ref]")).toHaveCount(2);
+  await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(page.locator(`[data-work-ref="${CARD_REF}"]`)).toBeVisible();
   const filtered = await readSummary(
     page.locator(`[data-work-ref="${CARD_REF}"]`),
   );
   expect(filtered.state).toBe("blocked");
+});
+
+test("a dark card shows the state and the possibly-moot evidence everywhere", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await install(page);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+
+  // The Tasks row: dark chip, and the moot flag beside it with its evidence.
+  await page.goto(`${TASKS}?view=table`);
+  const row = page.locator(`[data-work-ref="${darkCard.ref}"]`);
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  const summary = row.locator("[data-work-summary]:visible").first();
+  await expect(summary.locator("[data-health]").first()).toHaveAttribute(
+    "data-health",
+    "dark",
+  );
+  await expect(summary.locator("[data-moot]")).toContainText("Possibly moot");
+
+  // The Overview card agrees, badge for badge. Dark is not done and carries
+  // no no-plan hint, so the tile sits in the open attention grid.
+  await page.goto(OVERVIEW);
+  const tile = page.locator(`[data-initiative-tile="${darkCard.ref}"]`);
+  await expect(tile).toBeVisible({ timeout: 60_000 });
+  const tileSummary = tile.locator("[data-work-summary]:visible").first();
+  await expect(tileSummary.locator("[data-health]").first()).toHaveAttribute(
+    "data-health",
+    "dark",
+  );
+  await expect(tileSummary.locator("[data-moot]")).toContainText(
+    "Possibly moot",
+  );
 });
