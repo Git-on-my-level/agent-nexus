@@ -21,6 +21,25 @@ type NexusBridge struct {
 	Ready   func(context.Context, string, string) error
 }
 
+// CreateConversationThread never adopts an existing legacy thread. CreateThread
+// only writes thread metadata and allocates its handle, using a nested savepoint;
+// it has no quota mutex, blob initialization, auth reads or post-commit effects.
+func (b NexusBridge) CreateConversationThread(ctx context.Context, p Principal, id, workRef string) (string, error) {
+	if b.Store == nil {
+		return "", ErrUnavailable
+	}
+	threadID := stableID("thread", id)
+	thread := map[string]any{"id": threadID, "title": "Project manager", "pm_actor_id": p.ActorID, "pm_conversation_id": id}
+	if workRef != "" {
+		thread["subject_ref"] = workRef
+	}
+	_, err := b.Store.CreateThread(ctx, p.ActorID, thread)
+	if errors.Is(err, primitives.ErrConflict) {
+		return "", ErrConflict
+	}
+	return threadID, err
+}
+
 func (b NexusBridge) EnsureThread(ctx context.Context, p Principal, id, workRef string) (string, error) {
 	if b.Store == nil {
 		return "", ErrUnavailable
@@ -47,6 +66,13 @@ func (b NexusBridge) EnsureThread(ctx context.Context, p Principal, id, workRef 
 	return threadID, nil
 }
 func (b NexusBridge) Dispatch(ctx context.Context, req DispatchRequest) error {
+	if err := b.PreflightDispatch(ctx, req); err != nil {
+		return err
+	}
+	return b.persistDispatch(ctx, req, false)
+}
+
+func (b NexusBridge) PreflightDispatch(ctx context.Context, req DispatchRequest) error {
 	if b.Store == nil || b.ActorID == "" || b.Ready == nil {
 		return ErrUnavailable
 	}
@@ -54,16 +80,37 @@ func (b NexusBridge) Dispatch(ctx context.Context, req DispatchRequest) error {
 	if err := b.Ready(ctx, p.ActorID, p.WorkspaceID); err != nil {
 		return ErrUnavailable
 	}
+	return nil
+}
+
+// PersistDispatch joins the outer writer without raw runtime/auth reads. Unlike
+// legacy Dispatch it cannot adopt unrelated events, artifacts or queue rows.
+func (b NexusBridge) PersistDispatch(ctx context.Context, req DispatchRequest) error {
+	return b.persistDispatch(ctx, req, true)
+}
+
+func (b NexusBridge) persistDispatch(ctx context.Context, req DispatchRequest, strict bool) error {
+	if b.Store == nil || b.ActorID == "" {
+		return ErrUnavailable
+	}
+	p := req.Packet
+	if strict {
+		if _, err := b.Store.GetAgentWakeup(ctx, p.WakeupID); err == nil {
+			return ErrConflict
+		} else if !errors.Is(err, primitives.ErrNotFound) {
+			return err
+		}
+	}
 	// Persist a real trigger event so context_fetch and reply refs resolve.
 	_, err := b.Store.AppendEvent(ctx, req.Turn.ActorID, map[string]any{"id": p.TriggerEventID, "type": "message_posted", "thread_id": p.ThreadID, "summary": "PM discussion", "refs": []string{"thread:" + p.ThreadID}, "payload": map[string]any{"text": req.Turn.Text, "pm_turn_id": req.Turn.ID}})
-	if err != nil && !errors.Is(err, primitives.ErrConflict) {
+	if err != nil && (strict || !errors.Is(err, primitives.ErrConflict)) {
 		return err
 	}
 	content := p.ToContent()
 	content["pm_execution"] = map[string]any{"turn_id": req.Turn.ID, "deadline": req.Turn.Deadline, "max_output_bytes": req.MaxOutputBytes, "timeout_seconds": int(req.Timeout.Seconds()), "requesting_actor_id": req.Turn.ActorID, "context_url": p.AnxBaseURL + "/pm/turns/" + req.Turn.ID + "/context"}
 	artifact := map[string]any{"id": p.WakeupID, "kind": router.WakeArtifactKind, "summary": "Contextual PM turn", "refs": router.WakeArtifactRefs(p.ThreadID, p.TriggerEventID, p.SubjectRef), "target_handle": p.Handle, "target_actor_id": p.ActorID, "workspace_id": p.WorkspaceID, "thread_id": p.ThreadID}
 	_, err = b.Store.CreateArtifact(ctx, b.ActorID, artifact, content, "structured")
-	if err != nil && !errors.Is(err, primitives.ErrConflict) {
+	if err != nil && (strict || !errors.Is(err, primitives.ErrConflict)) {
 		return err
 	}
 	_, err = b.Store.UpsertAgentWakeup(ctx, primitives.AgentWakeup{WakeupID: p.WakeupID, Status: primitives.AgentWakeupStatusRequested, TargetHandle: p.Handle, TargetActorID: p.ActorID, WorkspaceID: p.WorkspaceID, WorkspaceName: p.WorkspaceName, ThreadID: p.ThreadID, ThreadTitle: p.ThreadTitle, TriggerEventID: p.TriggerEventID, TriggerCreatedAt: p.TriggerCreatedAt, TriggerText: p.TriggerText, Refs: append(router.WakeArtifactRefs(p.ThreadID, p.TriggerEventID, p.SubjectRef), "artifact:"+p.WakeupID)})

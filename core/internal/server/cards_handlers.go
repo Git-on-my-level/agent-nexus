@@ -415,6 +415,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 	}
 	var req struct {
 		ActorID          string   `json:"actor_id"`
+		RequestKey       string   `json:"request_key"`
 		Title            *string  `json:"title"`
 		Summary          *string  `json:"summary"`
 		DefinitionOfDone []string `json:"definition_of_done"`
@@ -436,6 +437,25 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		writeError(w, http.StatusBadRequest, "invalid_request", "revision is required")
 		return
 	}
+	// Bind the decoded original body before flattening/normalizing its fields.
+	originalRequest := req
+	if strings.TrimSpace(req.RequestKey) != "" {
+		if req.IfBaseRevision == nil || strings.TrimSpace(*req.IfBaseRevision) == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "if_base_revision is required for a keyed card revision")
+			return
+		}
+		if _, err := opts.primitiveStore.GetBoardCard(r.Context(), "", cardID); err != nil {
+			if !writeStoreContentionError(w, r, err) {
+				if errors.Is(err, primitives.ErrNotFound) {
+					writeError(w, http.StatusNotFound, "not_found", "card not found")
+				} else {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card")
+				}
+			}
+			return
+		}
+	}
+
 	var dod *[]string
 	if req.Revision.Title != nil {
 		req.Title = req.Revision.Title
@@ -455,16 +475,26 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		summary = strings.TrimSpace(summary)
 		req.Summary = &summary
 	}
-	result, revision, err := opts.primitiveStore.CreateCardRevision(r.Context(), actorID, cardID, primitives.CreateCardRevisionInput{
-		Title:            req.Title,
-		Summary:          req.Summary,
-		DefinitionOfDone: dod,
-		IfBaseRevision:   req.IfBaseRevision,
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.revisions.create", actorID, req.RequestKey, struct {
+		CardID  string
+		Request any
+	}{cardID, originalRequest}, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
+		result, revision, err := opts.primitiveStore.CreateCardRevision(ctx, actorID, cardID, primitives.CreateCardRevisionInput{
+			Title:            req.Title,
+			Summary:          req.Summary,
+			DefinitionOfDone: dod,
+			IfBaseRevision:   req.IfBaseRevision,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision}), nil
 	})
 	if err != nil {
 		switch {
+		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
@@ -475,7 +505,8 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		}
 		return
 	}
-	writeJSON(w, http.StatusCreated, hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision}))
+	writeJSON(w, status, response)
+	notifyProjectionMaintainer(opts)
 }
 
 func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
@@ -491,6 +522,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 
 	var req struct {
 		ActorID     string         `json:"actor_id"`
+		RequestKey  string         `json:"request_key"`
 		IfUpdatedAt *string        `json:"if_updated_at"`
 		Patch       map[string]any `json:"patch"`
 	}
@@ -540,7 +572,38 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return
 	}
 
-	result, err := opts.primitiveStore.UpdateBoardCard(r.Context(), actorID, "", cardID, patchInput)
+	keyed := strings.TrimSpace(req.RequestKey) != ""
+	var target *cardAssigneeWakeTarget
+	if keyed && patchInput.Assignee != nil {
+		target, err = prepareCardAssigneeWakeTarget(r.Context(), opts, map[string]any{"assignee_refs": []string{normalizeAssigneeTypedRef(*patchInput.Assignee)}})
+		if err != nil {
+			workStoreError(w, r, err)
+			return
+		}
+	}
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.patch", actorID, req.RequestKey, struct {
+		ID   string
+		Body any
+	}{cardID, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		result, err := opts.primitiveStore.UpdateBoardCard(ctx, actorID, "", cardID, patchInput)
+		if err != nil {
+			return nil, err
+		}
+		if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
+			stored, emitErr := opts.primitiveStore.AppendEvent(ctx, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
+			if keyed {
+				if emitErr != nil {
+					return nil, emitErr
+				}
+				if err := storeCardAssigneeWake(ctx, opts, actorID, beforeCard, result.Card, result.Board, stored, target, true); err != nil {
+					return nil, err
+				}
+			} else if emitErr == nil && stored != nil {
+				enqueueCardAssigneeWakeBestEffort(ctx, opts, actorID, beforeCard, result.Card, result.Board, stored)
+			}
+		}
+		return hygiene.attach(map[string]any{"card": publicCardView(result.Card)}), nil
+	})
 	if err != nil {
 		if writeStoreContentionError(w, r, err) {
 			return
@@ -549,7 +612,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 			return
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
@@ -561,14 +624,8 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return
 	}
 
-	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
-		storedLifecycle, emitErr := emitCardLifecycleEvent(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
-		if emitErr == nil && storedLifecycle != nil {
-			enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, beforeCard, result.Card, result.Board, storedLifecycle)
-		}
-	}
-
-	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"card": publicCardView(result.Card)}))
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, status, response)
 }
 
 func handleMoveCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

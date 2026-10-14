@@ -1,8 +1,15 @@
 <script>
-  import { browser } from "$app/environment";
+  import AttachmentUploads from "$lib/components/AttachmentUploads.svelte";
+  import {
+    uploadedAttachments,
+    removeUploadedAttachment,
+  } from "$lib/attachmentWork.js";
+  import { mutationOutbox, enqueueAttachment } from "$lib/mutationOutbox.js";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy } from "svelte";
 
   import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
   import {
@@ -48,13 +55,10 @@
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
     captureInboxResponseBinding,
-    defaultNotifyMode,
-    dismissInboxResponseFailure,
-    flushInboxResponse,
     hasPendingInboxResponse,
-    inboxResponseFailures,
+    inboxUnsentResponses,
+    defaultNotifyMode,
     queueInboxResponse,
-    retryInboxResponse,
     takeInboxRestore,
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
@@ -82,13 +86,6 @@
   let loading = $state(false);
   let loadError = $state("");
   let item = $state(null);
-  /*
-   * The last send for this item, if it failed. The item stays on screen
-   * unanswered and says why; nothing is filed as handled until core says so.
-   */
-  let responseError = $derived(
-    item?.id ? ($inboxResponseFailures[item.id]?.error ?? "") : "",
-  );
   let responseDraft = $state("");
   let notifyMode = $state("original");
   let notifyTargetActorID = $state("");
@@ -102,15 +99,56 @@
   let responseComposerArtifactsByRef = $state(
     /** @type {Record<string, Record<string, unknown>>} */ ({}),
   );
-  let autosaveInterval = null;
   let notifyTargetQuery = $state("");
   let notifyTargetResults = $state([]);
   let notifyTargetSelected = $state(null);
+  let uploadTarget = $derived(item ? `inbox:${item.id}:options` : "");
+  let uploaded = $derived(
+    $uploadedAttachments.filter((row) => row.target === uploadTarget),
+  );
+  let uploadPending = $derived(
+    attachingResponseFile ||
+      $mutationOutbox.some(
+        (entry) =>
+          entry.operation === "artifacts.attachments.create" &&
+          entry.request.composerTarget === uploadTarget,
+      ),
+  );
+  let attachedRefs = $derived([
+    ...new Set([
+      ...responseAttachmentRefs,
+      ...uploaded.map((row) => `artifact:${row.artifact.id}`),
+    ]),
+  ]);
+  let attachedArtifacts = $derived({
+    ...responseComposerArtifactsByRef,
+    ...Object.fromEntries(
+      uploaded.map((row) => [`artifact:${row.artifact.id}`, row.artifact]),
+    ),
+  });
+  function responseOptionsSnapshot() {
+    return {
+      notifyMode,
+      notifyTargetActorID,
+      notifyTargetAgentID,
+      notifyTargetSelected,
+      responseAttachmentRefs: attachedRefs,
+      responseComposerArtifactsByRef: attachedArtifacts,
+    };
+  }
+  function restoreResponseOptions(value) {
+    notifyMode = value?.notifyMode ?? "original";
+    notifyTargetActorID = value?.notifyTargetActorID ?? "";
+    notifyTargetAgentID = value?.notifyTargetAgentID ?? "";
+    notifyTargetSelected = value?.notifyTargetSelected ?? null;
+    responseAttachmentRefs = value?.responseAttachmentRefs ?? [];
+    responseComposerArtifactsByRef =
+      value?.responseComposerArtifactsByRef ?? {};
+  }
   let notifyTargetSearchTimer = null;
   let notifyTargetSearchSeq = 0;
   let notifyTargetMenuOpen = $state(false);
   let inboxLoadSeq = 0;
-  let loadedInboxRouteKey = $state("");
   let chosen = $state("");
   /* The respond panel owns which suggestion is highlighted; see the pane. */
   let respondPanel = $state(null);
@@ -146,7 +184,7 @@
       : [],
   );
   let inboxComposerArtifactRoutes = $derived.by(() => {
-    const artifacts = Object.values(responseComposerArtifactsByRef).filter(
+    const artifacts = Object.values(attachedArtifacts).filter(
       (row) => row && typeof row === "object",
     );
     if (!artifacts.length) return {};
@@ -225,10 +263,6 @@
 
   function inboxRouteKey(workspace = workspaceSlug, id = inboxItemID) {
     return `${String(workspace ?? "").trim()}:${String(id ?? "").trim()}`;
-  }
-
-  function draftStorageKey(workspace = workspaceSlug, id = inboxItemID) {
-    return `anx.human-response.draft:${workspace}:${id}`;
   }
 
   // A request from an agent for a grant. The panel then offers only the two
@@ -385,7 +419,6 @@
     loading = true;
     resetRouteLocalState();
     item = null;
-    loadedInboxRouteKey = "";
 
     try {
       const response = await coreClient.getInboxItem(id);
@@ -396,12 +429,7 @@
         return;
       }
       item = loaded;
-      loadedInboxRouteKey = routeKey;
       notifyMode = defaultNotifyMode(loaded);
-      if (browser) {
-        const cached = localStorage.getItem(draftStorageKey(workspace, id));
-        if (cached != null) responseDraft = cached;
-      }
       applyRestore(takeInboxRestore(loaded.id));
       void loadContext(loaded, routeKey);
       void loadAsk(loaded, routeKey);
@@ -583,8 +611,8 @@
       href: $page.url.pathname,
       draft: responseDraft,
       proposals: proposalStrings,
-      attachmentRefs: responseAttachmentRefs,
-      artifactsByRef: responseComposerArtifactsByRef,
+      attachmentRefs: attachedRefs,
+      artifactsByRef: attachedArtifacts,
       notifyMode,
       notifyTargetSelected,
       notifyTargetActorID,
@@ -599,7 +627,7 @@
   }
 
   /**
-   * Queues the response behind the undo toast and returns to the Inbox. The
+   * Queues the response behind the undo toast and keeps its state visible. The
    * committed request is this page's `inbox.respond` call, unchanged.
    */
   function submitResponseWithText(
@@ -608,6 +636,15 @@
   ) {
     const sending = context ?? responseContext();
     if (!sending.itemId) return;
+    if (
+      $inboxUnsentResponses.some(
+        (entry) =>
+          entry.itemId === sending.itemId &&
+          entry.state !== "attention" &&
+          entry.identity === sending.binding?.identity,
+      )
+    )
+      return;
     const text = String(responseText ?? "").trim();
     if (!text) {
       submitError = "Response text is required.";
@@ -681,13 +718,13 @@
     // When the reader has already moved on, this page is showing something
     // else and must be left exactly as they left it.
     if (sending.itemId !== String(item?.id ?? "")) return;
-    if (browser) localStorage.removeItem(draftStorageKey());
     responseDraft = "";
     chosen = "";
     responseAttachmentRefs = [];
     responseComposerArtifactsByRef = {};
     responseAttachmentError = "";
-    void goto(workspaceHref("/inbox"));
+    // Keep the saved response and its delivery state visible on this item.
+    // The reader can navigate away at any point while the outbox sends it.
   }
 
   function undoLastResponse() {
@@ -780,46 +817,21 @@
         responseAttachmentError = "No valid refs are available for this item.";
         return;
       }
-      const payload = await coreClient.createArtifactAttachment({ refs, file });
-      const id = String(payload?.artifact?.id ?? "").trim();
-      if (!id) {
-        responseAttachmentError = "Upload succeeded but artifact id missing.";
-        return;
-      }
-      const ref = `artifact:${id}`;
-      responseAttachmentRefs = [...new Set([...responseAttachmentRefs, ref])];
-      const row =
-        payload?.artifact && typeof payload.artifact === "object"
-          ? payload.artifact
-          : null;
-      if (row) {
-        responseComposerArtifactsByRef = {
-          ...responseComposerArtifactsByRef,
-          [ref]: /** @type {Record<string, unknown>} */ (row),
-        };
-      }
-    } catch (error) {
-      responseAttachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
+      await enqueueAttachment({
+        refs,
+        file,
+        target: uploadTarget,
+        href: $page.url.pathname,
+      });
+    } catch {
+      responseAttachmentError =
+        "This file could not be saved locally. Keep this tab open and save a copy before leaving.";
     } finally {
       attachingResponseFile = false;
       pendingResponseAttachmentUpload = null;
       if (input) input.value = "";
     }
   }
-
-  onMount(() => {
-    autosaveInterval = setInterval(() => {
-      if (
-        !browser ||
-        !item ||
-        isCompleted ||
-        loadedInboxRouteKey !== inboxRouteKey()
-      ) {
-        return;
-      }
-      localStorage.setItem(draftStorageKey(), String(responseDraft ?? ""));
-    }, 2000);
-  });
 
   $effect(() => {
     const workspace = workspaceSlug;
@@ -828,21 +840,11 @@
   });
 
   onDestroy(() => {
-    if (autosaveInterval != null) clearInterval(autosaveInterval);
     clearNotifyTargetSearchTimer();
   });
 </script>
 
-<svelte:window
-  onkeydown={handleKeydown}
-  onbeforeunload={(event) => {
-    if (hasPendingInboxResponse()) {
-      void flushInboxResponse();
-      event.preventDefault();
-      event.returnValue = "";
-    }
-  }}
-/>
+<svelte:window onkeydown={handleKeydown} />
 
 <div
   class="mx-auto max-w-3xl space-y-3 px-4 py-4 max-md:px-3 max-md:py-3"
@@ -1056,35 +1058,9 @@
           {/if}
         </div>
       {:else}
-        {#if responseError}
-          <div
-            class="mb-3 rounded-md border border-danger bg-danger-soft px-3 py-2"
-            role="alert"
-            data-inbox-response-error
-          >
-            <p class="text-meta text-fg">
-              <span class="font-medium text-danger-text"
-                >Your response was not sent.</span
-              >
-              {responseError}
-            </p>
-            <p class="mt-1.5 flex flex-wrap items-center gap-3">
-              <button
-                class="ui-btn-secondary"
-                type="button"
-                onclick={() => void retryInboxResponse(item.id)}
-                >Retry send</button
-              >
-              <button
-                class="text-micro text-fg-muted hover:text-fg"
-                type="button"
-                onclick={() => dismissInboxResponseFailure(item.id)}
-                >Answer it again instead</button
-              >
-            </p>
-          </div>
-        {/if}
+        <InboxSendStatus itemId={item.id} />
         <InboxRespondPanel
+          busy={uploadPending}
           bind:this={respondPanel}
           kind={itemKind(item)}
           access={accessRequest}
@@ -1118,12 +1094,21 @@
             >
           {/snippet}
           {#snippet extras()}
-            <div class="space-y-2">
+            <AttachmentUploads target={uploadTarget} />
+            <div
+              class="space-y-2"
+              use:durableForm={{
+                target: item ? `inbox:${item.id}:options` : "",
+                value: responseOptionsSnapshot(),
+                read: responseOptionsSnapshot,
+                onRestore: restoreResponseOptions,
+              }}
+            >
               <div class="flex flex-wrap items-center gap-2">
                 <label
                   class="inline-flex cursor-pointer items-center rounded border border-line bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
                 >
-                  {attachingResponseFile ? "Uploading…" : "Attach file"}
+                  {attachingResponseFile ? "Saving file…" : "Attach file"}
                   <input
                     class="sr-only"
                     accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
@@ -1152,7 +1137,7 @@
                     size="compact"
                   />
                 {/if}
-                {#each responseAttachmentRefs as ref (ref)}
+                {#each attachedRefs as ref (ref)}
                   {@const composerResolved = resolveRefLink(ref, {
                     threadId: String(item?.thread_id ?? "").trim(),
                     boardId: "",
@@ -1172,6 +1157,7 @@
                       type="button"
                       aria-label={`Remove ${ref}`}
                       onclick={() => {
+                        void removeUploadedAttachment(ref);
                         responseAttachmentRefs = responseAttachmentRefs.filter(
                           (candidate) => candidate !== ref,
                         );

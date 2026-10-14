@@ -17,12 +17,17 @@
  */
 
 import { get, writable } from "svelte/store";
+import {
+  clearPrincipalLocalWork,
+  lastLocalWorkOwner,
+  rememberLocalWorkOwner,
+} from "./localWorkStore.js";
 
 import { clearWorkCache } from "./workCache.js";
 import { clearWorkspaceViews } from "./workspaceViewCache.js";
 
 import { AuthErrorCode } from "./authErrorCodes.js";
-import { clearSelectedActor } from "./actorSession.js";
+import { clearSelectedActor, getSelectedActorId } from "./actorSession.js";
 import { buildCoreRequestContextHeaders } from "./coreClientRequestHeaders.js";
 import { normalizeBaseUrl } from "./config.js";
 import {
@@ -262,6 +267,15 @@ export function completeAuthSession(
   }
   state.authenticatedAgent = agent ?? null;
   state.ready = true;
+  if (agent)
+    rememberLocalWorkOwner(
+      JSON.stringify([
+        organizationSlug,
+        workspaceSlug,
+        agent.agent_id || "",
+        agent.actor_id || "",
+      ]),
+    );
   syncCurrentAuthStores(workspaceSlug, organizationSlug);
   return {
     agent: agent ?? null,
@@ -393,6 +407,15 @@ async function runInitializeAuthSession({
       }
       state.authenticatedAgent = nextAgent;
       state.ready = true;
+      if (nextAgent)
+        rememberLocalWorkOwner(
+          JSON.stringify([
+            organizationSlug,
+            workspaceSlug,
+            nextAgent.agent_id || "",
+            nextAgent.actor_id || "",
+          ]),
+        );
       if (isInitialHydration || agentChanged) {
         syncCurrentAuthStores(workspaceSlug, organizationSlug);
       }
@@ -450,8 +473,26 @@ export async function logoutAuthSession({
   clearActor = false,
 } = {}) {
   const organizationSlug = getCurrentOrganizationSlug();
+  const agent = ensureAuthState(
+    workspaceSlug,
+    organizationSlug,
+  ).authenticatedAgent;
+  const logoutScope = JSON.stringify([
+    organizationSlug,
+    workspaceSlug,
+    agent?.agent_id || "",
+    agent?.actor_id || getSelectedActorId(workspaceSlug) || "",
+  ]);
+  const previousOwner = lastLocalWorkOwner(logoutScope);
+  const clearingLocalWork = Promise.all([
+    clearPrincipalLocalWork(logoutScope),
+    previousOwner && previousOwner !== logoutScope
+      ? clearPrincipalLocalWork(previousOwner)
+      : Promise.resolve(),
+  ]);
   const pending = ensureAuthState(workspaceSlug, organizationSlug).initInflight;
   clearAuthSession(workspaceSlug, { clearActor, organizationSlug });
+  await clearingLocalWork;
   // Let earlier Set-Cookie responses settle before the DELETE clears cookies.
   if (pending) await pending.catch(() => {});
   if (browser || typeof fetchFn === "function") {

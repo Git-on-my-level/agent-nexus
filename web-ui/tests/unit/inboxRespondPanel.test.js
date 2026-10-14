@@ -1,9 +1,21 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import InboxRespondPanel from "../../src/lib/components/inbox/InboxRespondPanel.svelte";
 import { PROPOSAL_FLASH_MS } from "../../src/lib/inboxProposalChoice.js";
+import { inboxUnsentResponses } from "../../src/lib/inboxResponseQueue.js";
+import { authenticatedAgent } from "../../src/lib/authSession.js";
+import {
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+} from "../../src/lib/workspaceContext.js";
+import { localWorkScopeKey } from "../../src/lib/localWorkScope.js";
+import {
+  listLocalWork,
+  loadLocalWork,
+  saveLocalWork,
+} from "../../src/lib/localWorkStore.js";
 
 /**
  * Choosing a suggested response, at the panel's own level.
@@ -43,10 +55,48 @@ const settle = () =>
 
 afterEach(() => {
   cleanup();
+  inboxUnsentResponses.set([]);
   vi.clearAllMocks();
 });
 
 describe("answering while a suggestion is on its way out", () => {
+  it("sends the captured choice when the next item already has a pending response", async () => {
+    const result = panel();
+    await fireEvent.click(document.querySelector('[data-inbox-proposal="1"]'));
+    inboxUnsentResponses.set([{ itemId: "inbox-b", state: "pending" }]);
+    await result.rerender({ itemKey: "inbox-b" });
+    expect(result.onSend).toHaveBeenCalledWith(
+      "Ship it",
+      "answered",
+      "inbox-a",
+    );
+  });
+
+  it("sends a pane-shaped snapshot even when the next row is already waiting", async () => {
+    let current = {
+      id: "row-a",
+      draft: "",
+      mailbox: "needs_you",
+      binding: { identity: "reader-a" },
+    };
+    const result = panel({ sendContext: () => current });
+    await fireEvent.click(document.querySelector('[data-inbox-proposal="1"]'));
+    inboxUnsentResponses.set([
+      { itemId: "inbox-b", state: "pending", identity: "reader-a" },
+    ]);
+    current = {
+      id: "row-b",
+      draft: "",
+      mailbox: "needs_you",
+      binding: { identity: "reader-a" },
+    };
+    await result.rerender({ itemKey: "inbox-b" });
+    expect(result.onSend).toHaveBeenCalledWith(
+      "Ship it",
+      "answered",
+      expect.objectContaining({ id: "row-a", itemId: "inbox-a" }),
+    );
+  });
   it("holds Approve and Reject until the chosen response has gone", async () => {
     const { onSend } = panel();
 
@@ -99,5 +149,55 @@ describe("answering while a suggestion is on its way out", () => {
     const { onSend } = panel({ proposals: [] });
     await fireEvent.click(button("Approve"));
     expect(onSend).toHaveBeenCalledWith("Approved.", "approved", "inbox-a");
+  });
+});
+
+describe("context note across items", () => {
+  beforeEach(async () => {
+    currentOrganizationSlug.set("org-panel");
+    currentWorkspaceSlug.set("workspace-panel");
+    authenticatedAgent.set({
+      agent_id: "human-panel",
+      actor_id: "actor-panel",
+    });
+    await listLocalWork(localWorkScopeKey(), "draft");
+    localStorage.clear();
+  });
+
+  it("does not overwrite a recovered note when the reader moves on", async () => {
+    const scope = localWorkScopeKey();
+    await saveLocalWork(
+      scope,
+      "draft",
+      "inbox:item-a:context",
+      "Need the logs",
+    );
+    await saveLocalWork(
+      scope,
+      "draft",
+      "inbox:item-b:context",
+      "Need the spec",
+    );
+    const result = panel({
+      itemKey: "item-a",
+      needsContext: true,
+      proposals: [],
+    });
+    await fireEvent.click(button("I need more context"));
+    const note = document.querySelector("[data-inbox-needs-context-note]");
+    await vi.waitFor(() => expect(note.value).toBe("Need the logs"));
+    await result.rerender({
+      itemKey: "item-b",
+      needsContext: true,
+      proposals: [],
+    });
+    await vi.waitFor(async () => {
+      expect(await loadLocalWork(scope, "draft", "inbox:item-a:context")).toBe(
+        "Need the logs",
+      );
+      expect(await loadLocalWork(scope, "draft", "inbox:item-b:context")).toBe(
+        "Need the spec",
+      );
+    });
   });
 });

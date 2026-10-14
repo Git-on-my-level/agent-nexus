@@ -434,6 +434,7 @@ test("ask evidence links its refs and opens a document beside the question", asy
     "https://example.org/repo/pull/123",
   );
 
+  await expect(page).toHaveURL(/item=inbox%3Ainbox-evidence/);
   const before = page.url();
   await evidence
     .locator("[data-inbox-evidence-doc='document:rulings']")

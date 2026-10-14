@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -157,18 +158,6 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if !normalizeAnyMarkdownContent(w, &hygiene, "content", req.ContentType, &req.Content) {
 		return
 	}
-	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req)
-	if writeIdempotencyError(w, err) {
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
-		return
-	}
-	if replayed {
-		writeJSON(w, replayStatus, replayPayload)
-		return
-	}
 	refs, err := optionalRefs(req.Refs)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -190,7 +179,13 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 	}
 
-	document, revision, err := opts.primitiveStore.CreateDocument(r.Context(), actorID, req.Document, req.Content, req.ContentType, refs)
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
+		document, revision, err := opts.primitiveStore.CreateDocument(ctx, actorID, req.Document, req.Content, req.ContentType, refs)
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"document": document, "revision": revision}), nil
+	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "resource not found")
@@ -198,26 +193,6 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
-		}
-		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
-			documentID := firstNonEmptyString(req.Document["document_id"], req.Document["id"])
-			existingDocument, existingRevision, loadErr := opts.primitiveStore.GetDocument(r.Context(), documentID)
-			if loadErr == nil {
-				response := hygiene.attach(map[string]any{
-					"document": existingDocument,
-					"revision": existingRevision,
-				})
-				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, response)
-				if writeIdempotencyError(w, replayErr) {
-					return
-				}
-				if replayErr != nil {
-					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
-					return
-				}
-				writeJSON(w, status, payload)
-				return
-			}
 		}
 		if errors.Is(err, primitives.ErrConflict) {
 			writeError(w, http.StatusConflict, "conflict", "document already exists")
@@ -232,18 +207,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	notifyProjectionMaintainer(opts)
 
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{
-		"document": document,
-		"revision": revision,
-	}))
-	if writeIdempotencyError(w, err) {
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
-		return
-	}
-	writeJSON(w, status, payload)
+	writeJSON(w, status, response)
 }
 
 func handleGetDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
@@ -284,6 +248,7 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	var req struct {
+		RequestKey  string         `json:"request_key"`
 		ActorID     string         `json:"actor_id"`
 		Patch       map[string]any `json:"patch"`
 		IfUpdatedAt *string        `json:"if_updated_at"`
@@ -310,7 +275,16 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if !hygiene.normalizeMapString(w, "patch.summary", req.Patch, "summary") {
 		return
 	}
-	document, revision, err := opts.primitiveStore.PatchDocument(r.Context(), actorID, documentID, req.Patch, req.IfUpdatedAt)
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "docs.patch", actorID, req.RequestKey, struct {
+		ID   string
+		Body any
+	}{documentID, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		document, revision, err := opts.primitiveStore.PatchDocument(ctx, actorID, documentID, req.Patch, req.IfUpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"document": document, "revision": revision}), nil
+	})
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -327,13 +301,8 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		}
 		return
 	}
-	if threadID := documentBackingThreadID(document); threadID != "" {
-		notifyProjectionMaintainer(opts)
-	}
-	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{
-		"document": document,
-		"revision": revision,
-	}))
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, status, response)
 }
 
 // handleCreateDocumentRevision serves POST /docs/{document_id}/revisions.
@@ -423,6 +392,7 @@ func handleCreateDocumentRevision(w http.ResponseWriter, r *http.Request, opts h
 
 		synthetic := map[string]any{
 			"actor_id":         probe["actor_id"],
+			"request_key":      probe["request_key"],
 			"if_base_revision": baseRevision,
 			"content":          bodyMD,
 			"content_type":     "text",
@@ -467,6 +437,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	var req struct {
+		RequestKey     string         `json:"request_key"`
 		ActorID        string         `json:"actor_id"`
 		Document       map[string]any `json:"document"`
 		IfBaseRevision string         `json:"if_base_revision"`
@@ -543,17 +514,16 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	document, revision, err := opts.primitiveStore.UpdateDocument(
-		r.Context(),
-		actorID,
-		documentID,
-		req.Document,
-		req.IfBaseRevision,
-		req.Content,
-		req.ContentType,
-		refs,
-		req.Provenance,
-	)
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "docs.revise", actorID, req.RequestKey, struct {
+		ID   string
+		Body any
+	}{documentID, req}, successStatus, func(ctx context.Context) (map[string]any, error) {
+		document, revision, err := opts.primitiveStore.UpdateDocument(ctx, actorID, documentID, req.Document, req.IfBaseRevision, req.Content, req.ContentType, refs, req.Provenance)
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"document": document, "revision": revision}), nil
+	})
 	if err != nil {
 		switch {
 		case writePrimitiveQuotaViolationError(w, err):
@@ -571,10 +541,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	notifyProjectionMaintainer(opts)
 
-	writeJSON(w, successStatus, hygiene.attach(map[string]any{
-		"document": document,
-		"revision": revision,
-	}))
+	writeJSON(w, status, response)
 }
 
 func handleListDocumentHistory(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
@@ -719,213 +686,120 @@ func documentBackingThreadID(document map[string]any) string {
 }
 
 func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	handleDocumentLifecycle(w, r, opts, documentID, "trash")
+}
+func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	handleDocumentLifecycle(w, r, opts, documentID, "archive")
+}
+func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	handleDocumentLifecycle(w, r, opts, documentID, "unarchive")
+}
+func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	handleDocumentLifecycle(w, r, opts, documentID, "restore")
+}
+
+func handleDocumentLifecycle(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID, action string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	var resolvedDocOK bool
-	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
-	if !resolvedDocOK {
-		return
-	}
-
-	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
 	if !ok {
 		return
 	}
-
-	document, revision, err := opts.primitiveStore.TrashDocument(r.Context(), actorID, documentID, req.Reason)
-	if err != nil {
-		if writePrimitiveQuotaViolationError(w, err) {
-			return
-		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "document not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash document")
-		return
-	}
-	notifyProjectionMaintainer(opts)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"document": document,
-		"revision": revision,
-	})
-}
-
-func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var resolvedDocOK bool
-	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
-	if !resolvedDocOK {
-		return
-	}
-
 	var req struct {
 		ActorID     string  `json:"actor_id"`
+		RequestKey  string  `json:"request_key"`
 		IfUpdatedAt *string `json:"if_updated_at"`
+		Reason      string  `json:"reason"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
+	// Bind the submitted body, including its original timestamp representation.
+	original := req
 	if req.IfUpdatedAt != nil {
-		normalized, ok := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
-		if !ok {
+		normalized, valid := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
+		if !valid {
 			return
 		}
 		req.IfUpdatedAt = &normalized
+	} else if strings.TrimSpace(req.RequestKey) != "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "if_updated_at is required for keyed lifecycle requests")
+		return
 	}
-
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
-
-	document, revision, err := opts.primitiveStore.ArchiveDocumentIfUpdatedAt(r.Context(), actorID, documentID, req.IfUpdatedAt)
+	// Recheck current access before returning a receipt containing private content.
+	if _, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID); err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load document")
+		}
+		return
+	}
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "docs."+action, actorID, req.RequestKey, struct {
+		ID   string
+		Body any
+	}{documentID, original}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		var document, revision map[string]any
+		var err error
+		if store, ok := opts.primitiveStore.(interface {
+			ApplyDocumentLifecycle(context.Context, string, string, string, string, *string) (map[string]any, map[string]any, error)
+		}); ok {
+			document, revision, err = store.ApplyDocumentLifecycle(ctx, actorID, documentID, action, req.Reason, req.IfUpdatedAt)
+		} else {
+			// Legacy stores retain existing calls. New token-aware lifecycle
+			// requests fail closed unless the store can check under its writer.
+			if req.IfUpdatedAt != nil && action != "archive" {
+				return nil, errors.New("atomic lifecycle base checking is unavailable")
+			}
+			switch action {
+			case "trash":
+				document, revision, err = opts.primitiveStore.TrashDocument(ctx, actorID, documentID, req.Reason)
+			case "archive":
+				document, revision, err = opts.primitiveStore.ArchiveDocumentIfUpdatedAt(ctx, actorID, documentID, req.IfUpdatedAt)
+			case "unarchive":
+				document, revision, err = opts.primitiveStore.UnarchiveDocument(ctx, actorID, documentID)
+			case "restore":
+				document, revision, err = opts.primitiveStore.RestoreDocument(ctx, actorID, documentID, req.Reason)
+			default:
+				return nil, primitives.ErrInvalidDocumentRequest
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"document": document, "revision": revision}, nil
+	})
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
-		if errors.Is(err, primitives.ErrNotFound) {
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrAlreadyTrashed) {
+		case errors.Is(err, primitives.ErrConflict):
+			writeError(w, http.StatusConflict, "conflict", "document has been updated; refresh and retry")
+		case errors.Is(err, primitives.ErrAlreadyTrashed):
 			writeError(w, http.StatusConflict, "already_trashed", "document is trashed")
-			return
-		}
-		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive document")
-		return
-	}
-	notifyProjectionMaintainer(opts)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"document": document,
-		"revision": revision,
-	})
-}
-
-func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var resolvedDocOK bool
-	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
-	if !resolvedDocOK {
-		return
-	}
-
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-
-	document, revision, err := opts.primitiveStore.UnarchiveDocument(r.Context(), actorID, documentID)
-	if err != nil {
-		if writePrimitiveQuotaViolationError(w, err) {
-			return
-		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "document not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrNotArchived) {
+		case errors.Is(err, primitives.ErrNotArchived):
 			writeError(w, http.StatusConflict, "not_archived", "document is not archived")
-			return
-		}
-		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive document")
-		return
-	}
-	notifyProjectionMaintainer(opts)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"document": document,
-		"revision": revision,
-	})
-}
-
-func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var resolvedDocOK bool
-	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
-	if !resolvedDocOK {
-		return
-	}
-
-	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-
-	document, revision, err := opts.primitiveStore.RestoreDocument(r.Context(), actorID, documentID, req.Reason)
-	if err != nil {
-		if writePrimitiveQuotaViolationError(w, err) {
-			return
-		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "document not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrNotTrashed) {
+		case errors.Is(err, primitives.ErrNotTrashed):
 			writeError(w, http.StatusConflict, "not_trashed", "document is not currently trashed")
-			return
-		}
-		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+		case errors.Is(err, primitives.ErrInvalidDocumentRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to "+action+" document")
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore document")
 		return
 	}
 	notifyProjectionMaintainer(opts)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"document": document,
-		"revision": revision,
-	})
+	writeJSON(w, status, response)
 }
 
 func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {

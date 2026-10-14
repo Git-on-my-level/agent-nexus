@@ -10,8 +10,7 @@ import (
 	"agent-nexus-core/internal/schema"
 )
 
-// enqueueCardAssigneeWakeBestEffort queues an agent wakeup when a card assignee changes to a
-// taggable agent, keyed to the emitted card_created/card_updated lifecycle event.
+// Legacy unkeyed handlers retain best-effort assignment wake scheduling.
 func enqueueCardAssigneeWakeBestEffort(
 	ctx context.Context,
 	opts handlerOptions,
@@ -21,8 +20,79 @@ func enqueueCardAssigneeWakeBestEffort(
 	board map[string]any,
 	storedLifecycleEvent map[string]any,
 ) {
-	if opts.primitiveStore == nil || newCard == nil || storedLifecycleEvent == nil {
+	if prevCard != nil && canonicalAssigneeStorageString(prevCard) == canonicalAssigneeStorageString(newCard) {
 		return
+	}
+	target, err := prepareCardAssigneeWakeTarget(ctx, opts, newCard)
+	if err != nil {
+		return
+	}
+	_ = storeCardAssigneeWake(ctx, opts, actingActorID, prevCard, newCard, board, storedLifecycleEvent, target, false)
+}
+
+type cardAssigneeWakeTarget struct{ actorID, handle string }
+
+// Authentication reads use their own store. Resolve the bounded indexed target
+// before taking the primitive transaction; canonical refs are rechecked on writes.
+func prepareCardAssigneeWakeTarget(ctx context.Context, opts handlerOptions, newCard map[string]any) (*cardAssigneeWakeTarget, error) {
+	refs := cardAssigneeRefs(newCard)
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	ref := strings.TrimSpace(refs[0])
+	if ref == "" {
+		return nil, nil
+	}
+	prefix, id, err := schema.SplitTypedRef(ref)
+	if err != nil {
+		return nil, nil
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, nil
+	}
+
+	var targetActorID string
+	var targetHandle string
+	switch prefix {
+	case "agent":
+		if opts.authStore == nil {
+			return nil, nil
+		}
+		p, found, err := findAgentPrincipalByAgentID(ctx, opts.authStore, id)
+		if err != nil || !found {
+			return nil, err
+		}
+		targetActorID = p.ActorID
+		targetHandle = strings.TrimSpace(p.Username)
+	case "actor":
+		if opts.authStore == nil {
+			return nil, nil
+		}
+		p, found, err := findAgentPrincipalByActorID(ctx, opts.authStore, id)
+		if err != nil || !found {
+			return nil, err
+		}
+		targetActorID = p.ActorID
+		targetHandle = strings.TrimSpace(p.Username)
+	case "human":
+		return nil, nil
+	default:
+		return nil, nil
+	}
+
+	return &cardAssigneeWakeTarget{targetActorID, targetHandle}, nil
+}
+
+func storeCardAssigneeWake(ctx context.Context, opts handlerOptions, actingActorID string, prevCard, newCard, board, storedLifecycleEvent map[string]any, target *cardAssigneeWakeTarget, strict bool) error {
+	if target == nil {
+		return nil
+	}
+	if opts.primitiveStore == nil || newCard == nil || storedLifecycleEvent == nil {
+		if strict {
+			return errors.New("assignment wake context incomplete")
+		}
+		return nil
 	}
 
 	prevCanonical := ""
@@ -31,64 +101,25 @@ func enqueueCardAssigneeWakeBestEffort(
 	}
 	nextCanonical := canonicalAssigneeStorageString(newCard)
 	if nextCanonical == "" || nextCanonical == prevCanonical {
-		return
+		return nil
 	}
 
-	refs := cardAssigneeRefs(newCard)
-	if len(refs) == 0 {
-		return
-	}
-	ref := strings.TrimSpace(refs[0])
-	if ref == "" {
-		return
-	}
-	prefix, id, err := schema.SplitTypedRef(ref)
-	if err != nil {
-		return
-	}
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return
-	}
-
-	var targetActorID string
-	var targetHandle string
-	switch prefix {
-	case "agent":
-		if opts.authStore == nil {
-			return
-		}
-		p, found, err := findAgentPrincipalByAgentID(ctx, opts.authStore, id)
-		if err != nil || !found {
-			return
-		}
-		targetActorID = p.ActorID
-		targetHandle = strings.TrimSpace(p.Username)
-	case "actor":
-		if opts.authStore == nil {
-			return
-		}
-		p, found, err := findAgentPrincipalByActorID(ctx, opts.authStore, id)
-		if err != nil || !found {
-			return
-		}
-		targetActorID = p.ActorID
-		targetHandle = strings.TrimSpace(p.Username)
-	case "human":
-		return
-	default:
-		return
-	}
-
+	targetActorID, targetHandle := target.actorID, target.handle
 	threadID := strings.TrimSpace(anyString(newCard["thread_id"]))
 	if threadID == "" {
-		return
+		if strict {
+			return errors.New("assignment wake thread missing")
+		}
+		return nil
 	}
 
 	triggerEventID := strings.TrimSpace(anyString(storedLifecycleEvent["id"]))
 	triggerCreatedAt := strings.TrimSpace(anyString(storedLifecycleEvent["ts"]))
 	if triggerEventID == "" {
-		return
+		if strict {
+			return errors.New("assignment wake event missing")
+		}
+		return nil
 	}
 
 	workspaceID := strings.TrimSpace(opts.workspaceID)
@@ -141,11 +172,14 @@ func enqueueCardAssigneeWakeBestEffort(
 		"trigger_text":       triggerText,
 		"subject_ref":        subjectRef,
 	}, "structured")
+	if strict && artifactErr != nil {
+		return artifactErr
+	}
 	if artifactErr != nil && !errors.Is(artifactErr, primitives.ErrConflict) {
 		// Best-effort: wakeup queue metadata remains usable without artifact.
 	}
 
-	_, _ = opts.primitiveStore.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
+	_, wakeErr := opts.primitiveStore.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
 		WakeupID:         wakeupID,
 		Status:           primitives.AgentWakeupStatusRequested,
 		TargetHandle:     targetHandle,
@@ -157,4 +191,8 @@ func enqueueCardAssigneeWakeBestEffort(
 		TriggerText:      triggerText,
 		Refs:             wakeRefs,
 	})
+	if strict {
+		return wakeErr
+	}
+	return nil
 }

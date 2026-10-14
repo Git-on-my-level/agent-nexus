@@ -1685,7 +1685,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {
@@ -3129,15 +3129,25 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	if s.blob == nil {
 		return BoardCardMutationResult{}, nil, fmt.Errorf("blob backend is not configured")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
-		if s.quota.MaxBlobBytes > 0 {
-			if err := s.ensureBlobUsageLedgerInitialized(ctx); err != nil {
-				return BoardCardMutationResult{}, nil, err
-			}
-		}
+		ctx = context.WithValue(ctx, replayQuotaKey{}, s)
+
 	}
+	// Bind quota/ledger and projection reads to the writer, even without an
+	// HTTP replay wrapper. Nested callers borrow it through scoped savepoints.
+	var result BoardCardMutationResult
+	var revision map[string]any
+	err := s.db.WriteTransaction(ctx, func(ctx context.Context, _ *resourceaccess.Tx) error {
+		var err error
+		result, revision, err = s.createCardRevision(ctx, actorID, cardID, input)
+		return err
+	})
+	return result, revision, err
+}
+
+func (s *Store) createCardRevision(ctx context.Context, actorID, cardID string, input CreateCardRevisionInput) (BoardCardMutationResult, map[string]any, error) {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return BoardCardMutationResult{}, nil, invalidBoardRequest("actorID is required")
@@ -3267,7 +3277,11 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 		_ = stagedContent.Cleanup()
 		return BoardCardMutationResult{}, nil, fmt.Errorf("commit card revision transaction: %w", err)
 	}
+	// With replay, this savepoint has released but the outer transaction is
+	// still open. Promotion must succeed before the HTTP receipt can commit.
+	// A later outer failure may leave an unreferenced content-addressed blob.
 	if err := stagedContent.Promote(); err != nil {
+		_ = stagedContent.Cleanup()
 		return BoardCardMutationResult{}, nil, fmt.Errorf("finalize card content: %w", err)
 	}
 	boardMap, err := boardRowToAPI(ctx, s.db, boardRow)

@@ -233,7 +233,7 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}
@@ -392,7 +392,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	if s.blob == nil {
 		return nil, fmt.Errorf("blob backend is not configured")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

@@ -13,9 +13,19 @@ import (
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Decision{}, ErrForbidden
+	}
+	if in.ReplayKey != "" {
+		return s.proposeDecisionWithReplay(ctx, p, in)
+	}
 	return s.proposeDecision(ctx, p, in, "", p.ActorID, "")
 }
 func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID, proposedBy, leaseToken string) (Decision, error) {
+	// The original-receipt mode belongs to human proposals, not leased turns.
+	if in.ReplayKey != "" || (in.ActorID != "" && in.ActorID != p.ActorID) {
+		return Decision{}, ErrInvalid
+	}
 	if err := s.authorize(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err
 	}
@@ -93,12 +103,25 @@ func (s *Service) ListDecisions(ctx context.Context, p Principal) ([]Decision, e
 	return out, nil
 }
 func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in AnswerInput) (Decision, error) {
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Decision{}, ErrForbidden
+	}
 	if !p.Human {
 		return Decision{}, ErrForbidden
 	}
 	d, err := s.decision(ctx, p, id, "pm.approve")
 	if err != nil {
 		return d, err
+	}
+	if in.RequestKey != "" {
+		if in.Approve {
+			if err := s.authorize(ctx, p, "pm.action."+d.Scope, d.WorkRef); err != nil {
+				return Decision{}, err
+			}
+		}
+		if prior, found, err := s.store.readAnswerReplay(ctx, p, d.ID, in); err != nil || found {
+			return prior, err
+		}
 	}
 	if d.Status == Superseded && d.SupersededBy != "" {
 		return Decision{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
@@ -114,7 +137,21 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 				return Decision{}, err
 			}
 		}
-		return s.decisionForReader(ctx, p, d), nil
+		result := s.decisionForReader(ctx, p, d)
+		replay, err := s.snapshotAnswerReplay(ctx, p, d.ID, in, result)
+		if err != nil {
+			return Decision{}, err
+		}
+		if err = s.store.bindAnswerReplay(ctx, d, replay); err != nil {
+			if prior, found, replayErr := s.store.readAnswerReplay(ctx, p, d.ID, in); found || replayErr != nil {
+				return prior, replayErr
+			}
+			return Decision{}, err
+		}
+		if replay != nil {
+			return replay.Response, nil
+		}
+		return result, nil
 	}
 	if d.Revision != in.Revision || d.Status != AwaitingAnswer {
 		if d.Status == Superseded {
@@ -145,8 +182,19 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 		a = &Action{SourceAuthority: d.SourceAuthority, CreatedAt: &now, ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Payload: d.Payload, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
 	}
 	d.CanAnswer = false
-	if err = s.store.answer(ctx, d, a, in.Revision); err != nil {
+	result := s.decisionForReader(ctx, p, d)
+	replay, err := s.snapshotAnswerReplay(ctx, p, d.ID, in, result)
+	if err != nil {
 		return Decision{}, err
+	}
+	if err = s.store.answer(ctx, d, a, in.Revision, replay); err != nil {
+		if prior, found, replayErr := s.store.readAnswerReplay(ctx, p, d.ID, in); found || replayErr != nil {
+			return prior, replayErr
+		}
+		return Decision{}, err
+	}
+	if replay != nil {
+		return replay.Response, nil
 	}
 	return s.decisionForReader(ctx, p, d), nil
 }

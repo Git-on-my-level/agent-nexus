@@ -32,6 +32,7 @@ vi.mock("$lib/workspacePaths.js", async (importOriginal) => {
 import {
   getBrowserCoreClientOptions,
   captureInboxResponseSender,
+  createLocalMutationClient,
 } from "../../src/lib/coreClient.js";
 import {
   getAuthenticatedActorId,
@@ -128,6 +129,39 @@ it("aborts every outstanding Inbox feed request through the browser transport", 
     );
   } finally {
     controller.abort();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("reconstructs a durable mutation's original routing and locked actor", async () => {
+  const fetch = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ event: { id: "comment" } }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const client = createLocalMutationClient(
+      '["original-org","original-workspace","original-reader","original-actor"]',
+    );
+    vi.mocked(getAuthenticatedActorId).mockReturnValue("different-actor");
+    await client.createEvent({
+      request_key: "same-key",
+      event: { type: "message_posted", payload: { text: "Original text" } },
+      actor_id: "spoofed",
+    });
+    const [, request] = fetch.mock.calls[0];
+    const headers = new Headers(request.headers);
+    expect(headers.get("x-anx-workspace-slug")).toBe("original-workspace");
+    expect(headers.get("x-anx-organization-slug")).toBe("original-org");
+    expect(JSON.parse(request.body)).toMatchObject({
+      actor_id: "original-actor",
+      request_key: "same-key",
+      event: { payload: { text: "Original text" } },
+    });
+  } finally {
     vi.unstubAllGlobals();
   }
 });

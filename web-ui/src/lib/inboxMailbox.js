@@ -227,12 +227,24 @@ export function classifyInboxRow(row, now = Date.now()) {
  * "Handled" inside Handled are not information.
  */
 export function inboxRowBadge(row, now = Date.now()) {
+  if (row.item?.response_delivery_state === "pending")
+    return { label: "Pending", tone: "neutral" };
   /*
    * A send that failed outranks everything else a row could say. The item is
    * still unanswered and still here; without this the row came back from an
    * optimistic removal looking exactly like one nobody had touched.
    */
-  if (row.responseError) return { label: "Not sent", tone: "danger" };
+  if (row.responseError)
+    return {
+      label:
+        row.item?.response_delivery_state === "retrying"
+          ? "Retrying"
+          : row.item?.response_delivery_state === "attention"
+            ? "Needs attention"
+            : "Not sent",
+      tone:
+        row.item?.response_delivery_state === "retrying" ? "warn" : "danger",
+    };
   if (row.kind === "task") {
     const status = row.item?.work_summary?.status;
     if (

@@ -1,9 +1,11 @@
 # AGENTS
 
 ## Scope
+
 Guide for work inside `web-ui/`.
 
 ## User-facing copy
+
 - Do not put internal codenames or engineer jargon in UI strings users see.
 - Avoid long em-dash explainers; prefer short, direct sentences.
 - Avoid generic progress labels like `Working...`; name the action (`Signing in…`, `Confirming passkey…`).
@@ -12,11 +14,13 @@ Guide for work inside `web-ui/`.
 Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable operator-facing purpose, UI boundaries, and the invariants that protect safe interaction with `anx-core`.
 
 ## Module Purpose
+
 `web-ui` is the operator control surface for Agent Nexus.
 
 It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention: Inbox triage, the Agents presence roster, Tasks (work projection), Docs, Ask PM, and settings (including host enrollment in Access). Boards and cards remain the store behind Tasks; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
+
 - Treat `anx-core` as the single source of truth for all durable state.
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
 - Provide the main operator workflow surfaces: Inbox, Tasks (table/board), Docs, Ask PM, and settings. Thread inspection stays available for backing conversations; it is not a fourth primitive.
@@ -26,6 +30,13 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Gate writes safely through actor-aware and workspace-aware flows while preserving core contract semantics.
 
 ## High-Value Invariants
+
+- Never lose user-authored input. Use explicit workspace/principal/target draft
+  keys, checkpoint typing without a debounce, persist the original mutation
+  before sending, and retry only through a replay-safe outbox adapter. Keep
+  uncertain sends pending until confirmed and preserve definitive failures for
+  copy/edit. See the root hard rule and `docs/durable-user-work.md` for current
+  migrated coverage and the staged rollout. Canonical data still belongs to core.
 - Persistent writes go through `anx-core`; the UI must not invent its own source of truth.
 - Unknown or newer data must degrade gracefully and remain inspectable.
 - Resource patches use merge/patch semantics and must not overwrite fields the UI does not understand.
@@ -33,11 +44,13 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - The UI should favor glanceable inspection and targeted intervention over exhaustive agent-facing control surfaces.
 
 ## What Web UI Does Not Own
+
 - Canonical storage or schema authority.
 - Agent orchestration or automation workflows.
 - Real-world side effects outside the Agent Nexus workspace.
 
 ## Canonical References
+
 - Workspace auth (modes, cookies, errors, limitations): `docs/auth.md` (includes refresh-token **replay window** limitation — do not paper over with retries)
 - Out-of-workspace provider contract and invariants: `docs/out-of-workspace-provider.md`
 - Product and UX spec: `docs/anx-ui-spec.md`
@@ -48,6 +61,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Visual style guidance: `docs/style-guide.md`
 
 ## Edit Routing
+
 - **Hosted workspace API (two-hop BFF):** the browser talks same-origin to `web-ui`; the server proxies to core under `/ws/{org}/{workspace}/...` (or direct core base in dev). CLI or API clients pointed at a hosted deployment should use a **base URL that includes that prefix** so resolved paths stay workspace-scoped.
 - Shared API or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).
 - Changes to `scripts/seed-core-from-mock.mjs` (or env it relies on) can affect **CLI-local artifacts** under `../cli/dogfood-resources/`; coordinate with [../cli/AGENTS.md](../cli/AGENTS.md) and `../cli/docs/runbook.md`.
@@ -80,6 +94,7 @@ Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts:
 - When contracts change, run `make contract-gen` and `make contract-check` from repo root.
 
 ## Maintenance Guidance
+
 - Keep this file centered on operator-facing purpose and durable UI boundaries.
 - Put route-by-route details and implementation specifics in specs, runbooks, or code-local docs.
 - Update this guide when the operator surface or its boundaries materially change.

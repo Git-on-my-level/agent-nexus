@@ -28,6 +28,7 @@ export function normalizeResourceIds(ids) {
  * @property {(item: unknown) => boolean} isArchived
  * @property {(item: unknown) => boolean} isTrashed
  * @property {{ archive?: (id: string) => Promise<unknown>, unarchive?: (id: string) => Promise<unknown>, trash?: (id: string) => Promise<unknown> }} actions
+ * @property {(action: WorkspaceLifecycleAction, ids: string[]) => Promise<unknown>} [queue]
  * @property {() => Promise<unknown>} reload
  * @property {() => void} clearSelection
  * @property {(message: string) => void} setError
@@ -111,12 +112,23 @@ export function createWorkspaceResourceLifecycleController(options) {
   async function runSingle(action, id) {
     const runner = actionRunner(action);
     const normalized = normalizeId(id);
-    if (!runner || !normalized || archiveBusyId || trashBusyId || bulkBusy) {
+    if (
+      (!runner && !options.queue) ||
+      !normalized ||
+      archiveBusyId ||
+      trashBusyId ||
+      bulkBusy
+    ) {
       return;
     }
     setSingleBusy(action, normalized);
     options.setError("");
     try {
+      if (options.queue) {
+        await options.queue(action, [normalized]);
+        confirmModal = emptyConfirmModal();
+        return;
+      }
       await runner(normalized);
       confirmModal = emptyConfirmModal();
       await options.reload();
@@ -136,9 +148,23 @@ export function createWorkspaceResourceLifecycleController(options) {
   async function runBulk(action, ids) {
     const runner = actionRunner(action);
     const list = normalizeResourceIds(ids);
-    if (!runner || !list.length || bulkBusy) return;
+    if ((!runner && !options.queue) || !list.length || bulkBusy) return;
     bulkBusy = true;
     options.setError("");
+    if (options.queue) {
+      try {
+        await options.queue(action, list);
+        options.clearSelection();
+        confirmModal = emptyConfirmModal();
+      } catch {
+        options.setError(
+          "Your document request is retained. Check its saved status before closing this page.",
+        );
+      } finally {
+        bulkBusy = false;
+      }
+      return;
+    }
     /*
      * A bulk run is not atomic: it stops at the first failure with everything
      * before it already applied. Reporting only "Archive failed" and leaving
@@ -295,99 +321,4 @@ export function createWorkspaceResourceLifecycleController(options) {
     confirmMessage,
     confirmBusy,
   };
-}
-
-/**
- * @typedef {object} WorkspaceBulkActionOptions
- * @property {() => Promise<unknown>} reload
- * @property {() => void} clearSelection
- * @property {(message: string) => void} setError
- */
-
-/** @param {WorkspaceBulkActionOptions} options */
-export function createWorkspaceBulkActionController(options) {
-  let busy = $state(false);
-
-  /**
-   * @param {Iterable<unknown>} ids
-   * @param {(id: string) => Promise<unknown>} action
-   * @param {{ errorPrefix: string, afterSuccess?: () => void }} config
-   */
-  async function run(ids, action, config) {
-    const list = normalizeResourceIds(ids);
-    if (!list.length || busy) return;
-    busy = true;
-    options.setError("");
-    try {
-      for (const id of list) {
-        await action(id);
-      }
-      config.afterSuccess?.();
-      options.clearSelection();
-      await options.reload();
-    } catch (e) {
-      options.setError(
-        `${config.errorPrefix}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    } finally {
-      busy = false;
-    }
-  }
-
-  return {
-    get busy() {
-      return busy;
-    },
-    run,
-  };
-}
-
-/**
- * @typedef {"artifacts"|"documents"|"topics"|"boards"|"cards"} TrashResourceType
- *
- * @typedef {object} WorkspaceTrashResourceActionsOptions
- * @property {*} coreClient
- * @property {() => Record<string, unknown>} [actorBody]
- */
-
-/** @param {WorkspaceTrashResourceActionsOptions} options */
-export function createWorkspaceTrashResourceActions(options) {
-  const actorBody = options.actorBody ?? (() => ({}));
-
-  /** @param {TrashResourceType} type */
-  function restore(type, id) {
-    switch (type) {
-      case "artifacts":
-        return options.coreClient.restoreArtifact(id, {});
-      case "documents":
-        return options.coreClient.restoreDocument(id, {});
-      case "topics":
-        return options.coreClient.restoreTopic(id, {});
-      case "boards":
-        return options.coreClient.restoreBoard(id, {});
-      case "cards":
-        return options.coreClient.restoreCard(id, {});
-      default:
-        throw new Error("Unsupported restore type");
-    }
-  }
-
-  /** @param {TrashResourceType} type */
-  function purge(type, id) {
-    const body = actorBody();
-    switch (type) {
-      case "artifacts":
-        return options.coreClient.purgeArtifact(id, body);
-      case "documents":
-        return options.coreClient.purgeDocument(id, body);
-      case "boards":
-        return options.coreClient.purgeBoard(id, body);
-      case "cards":
-        return options.coreClient.purgeCard(id, body);
-      default:
-        throw new Error("Unsupported purge type");
-    }
-  }
-
-  return { restore, purge };
 }

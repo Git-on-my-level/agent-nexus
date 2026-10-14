@@ -4,6 +4,7 @@
     dismissInboxResponseToast,
     inboxResponseToast,
     retryInboxResponse,
+    editInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
 
@@ -28,13 +29,17 @@
     >
       {#if toast.state === "failed"}
         <span class="min-w-0 [overflow-wrap:anywhere]"
-          ><span class="text-danger-text">Not sent.</span>
+          ><span class="text-danger-text">Awaiting confirmation.</span>
           {toast.error || "The response could not be recorded."}</span
         >
         <button
           class="shrink-0 text-micro font-medium text-accent-text hover:underline"
           type="button"
-          onclick={() => void retryInboxResponse(toast.itemId)}>Retry</button
+          onclick={() =>
+            toast.expired
+              ? editInboxResponse(toast.itemId)
+              : void retryInboxResponse(toast.itemId)}
+          >{toast.expired ? "Edit response" : "Retry"}</button
         >
         <button
           class="shrink-0 text-micro text-fg-muted hover:text-fg"
@@ -43,7 +48,11 @@
         >
       {:else}
         <span class="min-w-0 truncate"
-          >{toast.state === "sent" ? `${toast.message}.` : toast.message}</span
+          >{toast.state === "sent"
+            ? `${toast.message}.`
+            : toast.state === "pending"
+              ? "Response saved. Waiting to send."
+              : "Sending your saved response…"}</span
         >
         {#if toast.state === "pending"}
           <button

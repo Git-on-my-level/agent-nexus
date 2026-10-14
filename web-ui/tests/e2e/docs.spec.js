@@ -504,10 +504,10 @@ test("update document conflict — 409 response shows error", async ({
     .fill("Some conflicting changes.");
   await page.getByRole("button", { name: "Save revision" }).click();
 
-  await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText(
-    "Failed to save revision",
-  );
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Saved message", exact: true }),
+  ).toHaveValue("Some conflicting changes.");
 });
 
 test("documents list redirects through the default workspace and loads revision history", async ({

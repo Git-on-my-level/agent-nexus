@@ -1,4 +1,10 @@
 <script>
+  import { get } from "svelte/store";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { enqueueAuthoring, mutationOutbox } from "$lib/mutationOutbox.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import DocumentLifecycleWork from "$lib/components/DocumentLifecycleWork.svelte";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
@@ -98,6 +104,7 @@
   let retrying = $state(false);
   let activeDocumentListLoadToken = 0;
   let lifecycle = $state();
+  let lifecycleWork = $state();
 
   const docSel = createWorkspaceListSelection({
     bulkBusy: () => lifecycle?.bulkBusy ?? false,
@@ -110,6 +117,36 @@
   );
   let createOpen = $state(false);
   let creating = $state(false);
+  const createTarget = "document:new";
+  let savedCreate = $derived(
+    $mutationOutbox.find((entry) => entry.target === createTarget),
+  );
+  function restoreCreate(value) {
+    draft = {
+      title: value?.title ?? "",
+      summary: value?.summary ?? "",
+      content: value?.content ?? "",
+    };
+  }
+  onMount(() => {
+    const confirmed = async (event) => {
+      const entry = event.detail;
+      if (entry.scope !== get(localWorkScope) || entry.target !== createTarget)
+        return;
+      const id = resourceRouteSegment(entry.result?.document, "document");
+      if (
+        !Object.values(draft).some(Boolean) ||
+        JSON.stringify({ ...draft }) === JSON.stringify(entry.draft)
+      ) {
+        createOpen = false;
+        if (id) await goto(workspaceHref(`/docs/${id}`));
+        else await loadDocuments();
+      }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
   let createError = $state("");
   // The search lives in the URL (?q=) so a result page can be shared and
   // the back button restores it; the input holds the draft until submit.
@@ -159,7 +196,7 @@
     if (scopedThreadId && createOpen) {
       createOpen = false;
       createError = "";
-      resetDraft();
+      restoreCreate(null);
     }
     if (workspaceSlug) {
       void loadDocuments();
@@ -188,11 +225,12 @@
     idFor: (doc) => doc?.id,
     isArchived: isDocArchived,
     isTrashed: isDocTrashed,
-    actions: {
-      archive: (id) => coreClient.archiveDocument(id, {}),
-      unarchive: (id) => coreClient.unarchiveDocument(id, {}),
-      trash: (id) => coreClient.trashDocument(id, {}),
-    },
+    actions: {},
+    queue: (action, ids) =>
+      lifecycleWork.queue(
+        ids.map((id) => documents.find((doc) => doc.id === id)),
+        action,
+      ),
     reload: () => loadDocuments(),
     clearSelection: () => clearDocSelection(),
     setError: (message) => {
@@ -321,14 +359,6 @@
     }
   }
 
-  function resetDraft() {
-    draft = {
-      title: "",
-      summary: "",
-      content: "",
-    };
-  }
-
   function toggleCreate() {
     if (scopedThreadId) {
       return;
@@ -336,11 +366,11 @@
     createOpen = !createOpen;
     if (!createOpen) {
       createError = "";
-      resetDraft();
     }
   }
 
   async function handleCreate() {
+    if (creating || savedCreate) return;
     if (!draft.title.trim()) {
       createError = "Title is required.";
       return;
@@ -360,23 +390,21 @@
       if (draft.summary.trim()) {
         docIn.summary = draft.summary.trim();
       }
-      const result = await coreClient.createDocument({
-        document: docIn,
-        content: draft.content.trim(),
-        content_type: "text",
+      await enqueueAuthoring({
+        operation: "docs.create",
+        body: {
+          document: docIn,
+          content: draft.content.trim(),
+          content_type: "text",
+        },
+        target: createTarget,
+        draft: { ...draft },
+        href: $page.url.pathname,
+        title: "Saved document",
       });
-
-      const newDocId = resourceRouteSegment(result.document, "document");
-      createOpen = false;
-      resetDraft();
-
-      if (newDocId) {
-        await goto(workspaceHref(`/docs/${newDocId}`));
-      } else {
-        await loadDocuments();
-      }
-    } catch (e) {
-      createError = `Failed to create document: ${e instanceof Error ? e.message : String(e)}`;
+    } catch {
+      createError =
+        "Your document is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       creating = false;
     }
@@ -463,6 +491,13 @@
 </script>
 
 <WorkspacePageShell data-tour="docs">
+  <DocumentLifecycleWork
+    bind:this={lifecycleWork}
+    target="documents:lifecycle"
+    href={$page.url.pathname + $page.url.search}
+    onconfirmed={() => void loadDocuments()}
+  />
+
   <WorkspacePageHeader title="Docs">
     {#snippet actions()}
       <!-- Every list header carries workspace search, because ⌘K is not
@@ -603,7 +638,14 @@
   {/if}
 
   {#if createOpen}
+    <MutationSendStatus target={createTarget} />
     <form
+      use:durableForm={{
+        target: createTarget,
+        value: { ...draft },
+        read: () => ({ ...draft }),
+        onRestore: restoreCreate,
+      }}
       class="mb-4 rounded-md border border-line bg-bg-soft p-4"
       data-anx-save-scope
       onsubmit={(e) => {
@@ -662,7 +704,7 @@
       <div class="mt-3 flex items-center gap-2">
         <button
           class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
-          disabled={creating}
+          disabled={creating || Boolean(savedCreate)}
           type="submit"
           data-anx-save-shortcut
           aria-keyshortcuts="Meta+S Control+S"

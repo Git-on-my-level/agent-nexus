@@ -1,4 +1,6 @@
 <script>
+  import UnsentIndicator from "$lib/components/inbox/UnsentIndicator.svelte";
+  import LocalSaveWarning from "$lib/components/LocalSaveWarning.svelte";
   import {
     recoverStaleChunk,
     isStaleChunkError,
@@ -1590,6 +1592,9 @@
       </aside>
 
       <div class="shell-main">
+        {#if identityReady && !renderLoginOnly && !gateVisible}
+          <UnsentIndicator />
+        {/if}
         <main class="shell-main-scroll">
           <div
             class={`shell-content shell-content--${shellContentConfig.mode}`}
@@ -1779,6 +1784,8 @@
       workspaceLabel={$page.data?.workspace?.label ?? ""}
     />
   {/if}
+
+  <LocalSaveWarning />
 
   <!-- The one tooltip layer every `use:tooltip` reports into. -->
   <TooltipHost />

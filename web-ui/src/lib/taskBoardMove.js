@@ -1,6 +1,5 @@
 import { proposalVoidReason } from "./inboxMailbox.js";
 import {
-  cardIdFromWork,
   isNexusOwned,
   label,
   sourceLabel,
@@ -100,67 +99,4 @@ export function requestedDecisionMap(
     map[key] = decision.id;
   }
   return map;
-}
-
-/**
- * Apply a board drop. Nexus-owned tasks move via cards.move.
- * Source-owned tasks never mutate the source: propose a PM decision instead.
- *
- * `pmOnboarded` false means this workspace has no PM agent (they run on the
- * reader's own computer, so a workspace can have none). A proposal filed then
- * has nobody to carry it out at the source and nowhere to be answered, so the
- * request is refused before it is written rather than left on the board.
- *
- * @returns {Promise<{ kind: "moved" | "requested" | "noop" | "needs_evidence" | "needs_pm", work: object, decision?: object }>}
- */
-export async function applyTaskPhaseMove(coreClient, work, phase, opts = {}) {
-  const { resolutionRefs = [], beforeCardId, pmOnboarded = true } = opts;
-  const samePhase = (work?.phase || "unknown") === phase;
-  if (!work || !phase) {
-    return { kind: "noop", work };
-  }
-  if (samePhase && !isNexusOwned(work)) {
-    return { kind: "noop", work };
-  }
-  if (samePhase && !("beforeCardId" in opts)) {
-    return { kind: "noop", work };
-  }
-  // Done is a completion, and core refuses a completion without evidence,
-  // whether it applies the move itself or requests it at the source.
-  if (phase === "done" && !resolutionRefs.length) {
-    return { kind: "needs_evidence", work };
-  }
-  if (isNexusOwned(work)) {
-    const cardId = cardIdFromWork(work);
-    const boardId = String(work.board_ref || work.board_id || "").trim();
-    if (!boardId) {
-      throw new Error(
-        "This task is not on a board yet, so it has no phase column to move to.",
-      );
-    }
-    // cards.move requires the board's optimistic concurrency token, so the
-    // move is fenced on the board revision the reader was looking at.
-    const response = await coreClient.getBoard(boardId);
-    const board = response?.board || response;
-    const token = String(board?.updated_at || "").trim();
-    if (!token) {
-      throw new Error("The board did not report a revision; reload and retry.");
-    }
-    await coreClient.moveBoardCard(boardId, cardId, {
-      column_key: phase,
-      if_board_updated_at: token,
-      ...("beforeCardId" in opts ? { before_card_id: beforeCardId } : {}),
-      ...(phase === "done"
-        ? { resolution: "done", resolution_refs: resolutionRefs }
-        : {}),
-    });
-    return { kind: "moved", work: { ...work, phase } };
-  }
-  if (!pmOnboarded) {
-    return { kind: "needs_pm", work };
-  }
-  const decision = await coreClient.createPmDecision(
-    createStatusChangeDecisionPayload(work, phase, { resolutionRefs }),
-  );
-  return { kind: "requested", work, decision };
 }

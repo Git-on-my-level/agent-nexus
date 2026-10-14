@@ -4,6 +4,7 @@ package pm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -140,55 +141,61 @@ type Binding struct {
 	Revision    int    `json:"revision"`
 }
 type Conversation struct {
-	ContextRefs []string  `json:"context_refs,omitempty"`
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspace_id"`
-	ActorID     string    `json:"actor_id"`
-	Title       string    `json:"title"`
-	WorkRef     string    `json:"work_ref,omitempty"`
-	ThreadID    string    `json:"thread_id"`
-	Origin      *Origin   `json:"origin,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ReplayJSON  json.RawMessage `json:"-"`
+	ContextRefs []string        `json:"context_refs,omitempty"`
+	ID          string          `json:"id"`
+	WorkspaceID string          `json:"workspace_id"`
+	ActorID     string          `json:"actor_id"`
+	Title       string          `json:"title"`
+	WorkRef     string          `json:"work_ref,omitempty"`
+	ThreadID    string          `json:"thread_id"`
+	Origin      *Origin         `json:"origin,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 type CreateConversation struct {
+	ReplayKey   string   `json:"replay_key,omitempty"`
+	ActorID     string   `json:"actor_id,omitempty"`
 	ContextRefs []string `json:"context_refs,omitempty"`
 	RequestKey  string   `json:"request_key"`
 	Title       string   `json:"title"`
 	WorkRef     string   `json:"work_ref,omitempty"`
 }
 type MessageInput struct {
+	ReplayKey  string `json:"replay_key,omitempty"`
+	ActorID    string `json:"actor_id,omitempty"`
 	RequestKey string `json:"request_key"`
 	Text       string `json:"text"`
 }
 
 // Turn is the durable record; HTTP responses use turnResponse to hide lease credentials.
 type Turn struct {
-	ContextRefs     []string       `json:"context_refs,omitempty"`
-	Activity        []TurnActivity `json:"activity,omitempty"`
-	PartialSequence int            `json:"partial_sequence,omitempty"`
-	PartialResponse string         `json:"partial_response,omitempty"`
-	DecisionIDs     []string       `json:"decision_ids,omitempty"`
-	ID              string         `json:"id"`
-	ConversationID  string         `json:"conversation_id"`
-	WorkspaceID     string         `json:"workspace_id"`
-	ActorID         string         `json:"actor_id"`
-	Text            string         `json:"text"`
-	Response        string         `json:"response,omitempty"`
-	Status          Status         `json:"status"`
-	WakeupID        string         `json:"wakeup_id"`
-	AgentActorID    string         `json:"agent_actor_id"`
-	EvidenceRefs    []string       `json:"evidence_refs,omitempty"`
-	Failure         string         `json:"failure,omitempty"`
-	FailureKind     string         `json:"failure_kind,omitempty"`
-	ClaimedAt       *time.Time     `json:"claimed_at,omitempty"`
-	LeaseToken      string         `json:"lease_token,omitempty"`
-	LeaseOwner      string         `json:"lease_owner,omitempty"`
-	LeaseExpiresAt  time.Time      `json:"lease_expires_at,omitempty"`
-	MaxOutputBytes  int            `json:"max_output_bytes,omitempty"`
-	Origin          *Origin        `json:"origin,omitempty"`
-	CreatedAt       time.Time      `json:"created_at"`
-	Deadline        time.Time      `json:"deadline"`
-	Revision        int            `json:"revision"`
+	ReplayJSON      json.RawMessage `json:"-"`
+	ContextRefs     []string        `json:"context_refs,omitempty"`
+	Activity        []TurnActivity  `json:"activity,omitempty"`
+	PartialSequence int             `json:"partial_sequence,omitempty"`
+	PartialResponse string          `json:"partial_response,omitempty"`
+	DecisionIDs     []string        `json:"decision_ids,omitempty"`
+	ID              string          `json:"id"`
+	ConversationID  string          `json:"conversation_id"`
+	WorkspaceID     string          `json:"workspace_id"`
+	ActorID         string          `json:"actor_id"`
+	Text            string          `json:"text"`
+	Response        string          `json:"response,omitempty"`
+	Status          Status          `json:"status"`
+	WakeupID        string          `json:"wakeup_id"`
+	AgentActorID    string          `json:"agent_actor_id"`
+	EvidenceRefs    []string        `json:"evidence_refs,omitempty"`
+	Failure         string          `json:"failure,omitempty"`
+	FailureKind     string          `json:"failure_kind,omitempty"`
+	ClaimedAt       *time.Time      `json:"claimed_at,omitempty"`
+	LeaseToken      string          `json:"lease_token,omitempty"`
+	LeaseOwner      string          `json:"lease_owner,omitempty"`
+	LeaseExpiresAt  time.Time       `json:"lease_expires_at,omitempty"`
+	MaxOutputBytes  int             `json:"max_output_bytes,omitempty"`
+	Origin          *Origin         `json:"origin,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	Deadline        time.Time       `json:"deadline"`
+	Revision        int             `json:"revision"`
 
 	// Private durable replay credential; stripped by turnResponse.
 	TerminalLeaseHash string `json:"terminal_lease_hash,omitempty"`
@@ -258,6 +265,8 @@ type TurnContextInput struct {
 }
 
 type DecisionInput struct {
+	ActorID        string         `json:"actor_id,omitempty"`
+	ReplayKey      string         `json:"replay_key,omitempty"`
 	Payload        *ActionPayload `json:"payload,omitempty"`
 	RequestKey     string         `json:"request_key"`
 	WorkRef        string         `json:"work_ref"`
@@ -267,42 +276,47 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
-	SourceAuthority        string         `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
-	WorkMissing            bool           `json:"-"`                          // Current work projection; never persisted.
-	TargetCurrent          *bool          `json:"-"`
-	AlreadyAtTarget        *bool          `json:"-"`
-	Replayed               bool           `json:"-"` // Response-only proposal reuse; never persisted.
-	ProposedBy             string         `json:"proposed_by,omitempty"`
-	OriginKind             string         `json:"origin_kind,omitempty"`
-	TurnID                 string         `json:"turn_id,omitempty"`
-	SupersededByProposedBy string         `json:"superseded_by_proposed_by,omitempty"`
-	SupersededByOriginKind string         `json:"superseded_by_origin_kind,omitempty"`
-	SupersededBy           string         `json:"superseded_by,omitempty"`
-	SupersededReason       string         `json:"superseded_reason,omitempty"`
-	Supersedes             string         `json:"supersedes,omitempty"`
-	SupersedesProposedBy   string         `json:"supersedes_proposed_by,omitempty"`
-	SupersedesOriginKind   string         `json:"supersedes_origin_kind,omitempty"`
-	CanAnswer              bool           `json:"can_answer"`
-	Payload                *ActionPayload `json:"payload,omitempty"`
-	ID                     string         `json:"id"`
-	WorkspaceID            string         `json:"workspace_id"`
-	ActorID                string         `json:"actor_id"`
-	WorkRef                string         `json:"work_ref"`
-	Instruction            string         `json:"instruction"`
-	Scope                  string         `json:"scope"`
-	TargetRevision         string         `json:"target_revision"`
-	Status                 Status         `json:"status"`
-	Revision               int            `json:"revision"`
-	Answer                 string         `json:"answer,omitempty"`
-	AnsweredBy             string         `json:"answered_by,omitempty"`
-	ActionID               string         `json:"action_id,omitempty"`
-	Origin                 *Origin        `json:"origin,omitempty"`
-	CreatedAt              time.Time      `json:"created_at"`
+	ProposalReplayJSON     json.RawMessage `json:"-"` // Original opt-in proposal HTTP receipt; never canonical decision state.
+	ProposalReplayStatus   int             `json:"-"`
+	AnswerReplayJSON       json.RawMessage `json:"-"`                          // Original keyed HTTP receipt; never part of the canonical decision body.
+	SourceAuthority        string          `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
+	WorkMissing            bool            `json:"-"`                          // Current work projection; never persisted.
+	TargetCurrent          *bool           `json:"-"`
+	AlreadyAtTarget        *bool           `json:"-"`
+	Replayed               bool            `json:"-"` // Response-only proposal reuse; never persisted.
+	ProposedBy             string          `json:"proposed_by,omitempty"`
+	OriginKind             string          `json:"origin_kind,omitempty"`
+	TurnID                 string          `json:"turn_id,omitempty"`
+	SupersededByProposedBy string          `json:"superseded_by_proposed_by,omitempty"`
+	SupersededByOriginKind string          `json:"superseded_by_origin_kind,omitempty"`
+	SupersededBy           string          `json:"superseded_by,omitempty"`
+	SupersededReason       string          `json:"superseded_reason,omitempty"`
+	Supersedes             string          `json:"supersedes,omitempty"`
+	SupersedesProposedBy   string          `json:"supersedes_proposed_by,omitempty"`
+	SupersedesOriginKind   string          `json:"supersedes_origin_kind,omitempty"`
+	CanAnswer              bool            `json:"can_answer"`
+	Payload                *ActionPayload  `json:"payload,omitempty"`
+	ID                     string          `json:"id"`
+	WorkspaceID            string          `json:"workspace_id"`
+	ActorID                string          `json:"actor_id"`
+	WorkRef                string          `json:"work_ref"`
+	Instruction            string          `json:"instruction"`
+	Scope                  string          `json:"scope"`
+	TargetRevision         string          `json:"target_revision"`
+	Status                 Status          `json:"status"`
+	Revision               int             `json:"revision"`
+	Answer                 string          `json:"answer,omitempty"`
+	AnsweredBy             string          `json:"answered_by,omitempty"`
+	ActionID               string          `json:"action_id,omitempty"`
+	Origin                 *Origin         `json:"origin,omitempty"`
+	CreatedAt              time.Time       `json:"created_at"`
 }
 type AnswerInput struct {
-	Revision int    `json:"revision"`
-	Approve  bool   `json:"approve"`
-	Text     string `json:"text"`
+	ActorID    string `json:"actor_id,omitempty"`
+	RequestKey string `json:"request_key,omitempty"`
+	Revision   int    `json:"revision"`
+	Approve    bool   `json:"approve"`
+	Text       string `json:"text"`
 }
 type Action struct {
 	DeliveryPath           string         `json:"delivery_path"`
@@ -401,19 +415,29 @@ type Dependencies struct {
 	// Missing map entries mean work is no longer live. Authorization remains
 	// separate, using fresh read batches when configured or the normal per-record
 	// permission checks.
-	DecisionWorkBatch     func(context.Context, Principal, []string) (map[string]DecisionWork, error)
-	DecisionWork          func(context.Context, Principal, string) (DecisionWork, error)
-	ResolveResolution     func(context.Context, Principal, string) (ResolutionRef, error)
-	Authorize             func(context.Context, Principal, string, string) error
-	EnsureThread          func(context.Context, Principal, string, string) (string, error)
-	BindRequesterContext  func(context.Context, Principal) context.Context
-	BeginCardRead         func(context.Context, Principal) (context.Context, func(), error)
-	ReadWorkspaceOverview func(context.Context, Principal) (ContextPage, error)
-	ReadPinnedCards       func(context.Context, Principal, []string, bool) (ContextPage, error)
-	ReadContext           func(context.Context, Principal, string, string, int) (ContextPage, error)
-	ReadContextPage       func(context.Context, Principal, string, string, string, int) (ContextPage, error)
-	Dispatch              func(context.Context, DispatchRequest) error
-	CurrentRevision       func(context.Context, Principal, string) (string, error)
+	DecisionWorkBatch func(context.Context, Principal, []string) (map[string]DecisionWork, error)
+	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
+	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
+	Authorize         func(context.Context, Principal, string, string) error
+	EnsureThread      func(context.Context, Principal, string, string) (string, error)
+	// CreateConversationThread must create a new thread using the bound scoped
+	// writer, without raw authentication reads or external effects. Optional:
+	// original-receipt mode fails closed when this capability is unavailable.
+	CreateConversationThread func(context.Context, Principal, string, string) (string, error)
+	BindRequesterContext     func(context.Context, Principal) context.Context
+	BeginCardRead            func(context.Context, Principal) (context.Context, func(), error)
+	ReadWorkspaceOverview    func(context.Context, Principal) (ContextPage, error)
+	ReadPinnedCards          func(context.Context, Principal, []string, bool) (ContextPage, error)
+	ReadContext              func(context.Context, Principal, string, string, int) (ContextPage, error)
+	ReadContextPage          func(context.Context, Principal, string, string, string, int) (ContextPage, error)
+	Dispatch                 func(context.Context, DispatchRequest) error
+	// Receipt mode requires an audited quota-owning scoped writer. Dispatch
+	// authentication/readiness runs before it; persistence has only local
+	// transactional effects and rejects legacy ID collisions.
+	ReplayMessage     func(context.Context, string, string, string, string, func(context.Context) (Turn, error)) (Turn, error)
+	PreflightDispatch func(context.Context, DispatchRequest) error
+	PersistDispatch   func(context.Context, DispatchRequest) error
+	CurrentRevision   func(context.Context, Principal, string) (string, error)
 	// DeliveryPath is the named preflight, using the same registry as Execute.
 	// CheckDelivery supports older integrations without a named route.
 	DeliveryPath  func(context.Context, Action) (string, error)

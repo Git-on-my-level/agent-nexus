@@ -1,0 +1,403 @@
+import { expect, test } from "@playwright/test";
+import { setup as discussionSetup } from "./helpers/durable-discussion.js";
+import { ITEM, setup as inboxSetup } from "./helpers/durable-inbox.js";
+import { setup as pmSetup } from "./helpers/pm-work.js";
+
+const discussionURL =
+  "/o/local/w/local/threads/thread-durable-comment?tab=messages";
+const inboxURL = `/o/local/w/local/inbox/${ITEM.id}`;
+const text = "One submission shared by two tabs.";
+const json = (route, body, status = 201) =>
+  route.fulfill({
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  });
+
+async function saved(page, kind, target) {
+  return page.evaluate(
+    async ({ kind, target }) => {
+      const store = await import("/src/lib/localWorkStore.js");
+      const scope = await import("/src/lib/readerScope.js");
+      return target
+        ? store.loadLocalWork(scope.readerScopeKey(), kind, target)
+        : store.listLocalWork(scope.readerScopeKey(), kind);
+    },
+    { kind, target },
+  );
+}
+
+test("simultaneous identical composer submissions create one entity even with cross-tab notifications delayed", async ({
+  page,
+  context,
+}) => {
+  // Notification loss/delay is permitted. Correctness must come from reading
+  // persisted records under the scope lock, not a BroadcastChannel race.
+  await context.addInitScript(() => {
+    window.BroadcastChannel = class {
+      postMessage() {}
+      close() {}
+    };
+    const add = window.addEventListener.bind(window);
+    window.addEventListener = (type, ...args) => {
+      if (type !== "storage") add(type, ...args);
+    };
+  });
+  const bodies = [];
+  await discussionSetup(context, (route, events) => {
+    const body = route.request().postDataJSON();
+    bodies.push(body);
+    const event = {
+      ...body.event,
+      id: `posted-${bodies.length}`,
+      ts: new Date().toISOString(),
+    };
+    events.push(event);
+    return json(route, { event });
+  });
+  const other = await context.newPage();
+  await Promise.all([page.goto(discussionURL), other.goto(discussionURL)]);
+  await Promise.all([
+    page.locator("#message-text").fill(text),
+    other.locator("#message-text").fill(text),
+  ]);
+  await page.evaluate(async () => {
+    const { readerScopeKey } = await import("/src/lib/readerScope.js");
+    let acquired;
+    const ready = new Promise((resolve) => (acquired = resolve));
+    window.heldDrain = navigator.locks.request(
+      `anx:mutation-send:${readerScopeKey()}`,
+      async () => {
+        acquired();
+        await new Promise((resolve) => (window.releaseDrain = resolve));
+      },
+    );
+    await ready;
+  });
+  await Promise.all([
+    page.getByRole("button", { name: "Send", exact: true }).click(),
+    other.getByRole("button", { name: "Send", exact: true }).click(),
+  ]);
+  await expect.poll(async () => (await saved(page, "mutation")).length).toBe(2);
+  await page.evaluate(() => window.releaseDrain());
+  await expect.poll(() => bodies.length).toBe(1);
+  await expect
+    .poll(
+      async () =>
+        (await saved(page, "mutation")).filter(
+          (row) => row.value.state !== "superseded",
+        ).length,
+    )
+    .toBe(0);
+  await page.reload();
+  await other.reload();
+  await expect(page.locator("[data-unsent-indicator]")).toHaveCount(0);
+  expect(bodies).toHaveLength(1);
+});
+
+test("distinct persisted bodies for the same composer remain separate intents", async ({
+  page,
+  context,
+}) => {
+  const bodies = [];
+  await discussionSetup(context, (route) => {
+    bodies.push(route.request().postDataJSON());
+    return json(route, { event: { id: `posted-${bodies.length}` } });
+  });
+  await page.goto(discussionURL);
+  await expect(page.locator("#message-text")).toBeVisible();
+  await page.evaluate(async () => {
+    const { enqueueDiscussionMessage } =
+      await import("/src/lib/mutationOutbox.js");
+    await Promise.all(
+      ["First distinct message", "Second distinct message"].map((text) =>
+        enqueueDiscussionMessage({
+          target: "test:distinct",
+          draft: { text },
+          event: {
+            type: "message_posted",
+            thread_id: "thread-durable-comment",
+            refs: ["thread:thread-durable-comment"],
+            summary: text,
+            payload: { text },
+          },
+        }),
+      ),
+    );
+  });
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[0].event.payload.text).not.toBe(bodies[1].event.payload.text);
+});
+
+test("storage denial during an expired new-key retry keeps the request and prevents a send", async ({
+  page,
+  context,
+}) => {
+  await context.addInitScript(() =>
+    Object.defineProperty(navigator, "onLine", {
+      configurable: true,
+      get: () => false,
+    }),
+  );
+  let attempts = 0;
+  await discussionSetup(context, (route) => {
+    attempts++;
+    return json(route, { event: { id: "unexpected" } });
+  });
+  await page.goto(discussionURL);
+  await page.locator("#message-text").fill(text);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(async () => (await saved(page, "mutation")).length).toBe(1);
+  await page.evaluate(async () => {
+    const store = await import("/src/lib/localWorkStore.js");
+    const { readerScopeKey } = await import("/src/lib/readerScope.js");
+    const { autoRetryMaxAgeMs } = await import("/src/lib/replayPolicy.js");
+    const [record] = await store.listLocalWork(readerScopeKey(), "mutation");
+    await store.saveLocalWork(readerScopeKey(), "mutation", record.target, {
+      ...record.value,
+      createdAt: Date.now() - autoRetryMaxAgeMs - 1,
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Retry as new", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "onLine", {
+      configurable: true,
+      get: () => true,
+    });
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith("anx:local-work:v1:"))
+        throw new DOMException("Full", "QuotaExceededError");
+      return set.call(this, key, value);
+    };
+    const transaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args) {
+      if (args[1] === "readwrite")
+        throw new DOMException("Full", "QuotaExceededError");
+      return transaction.apply(this, args);
+    };
+  });
+  await page.getByRole("button", { name: "Retry as new", exact: true }).click();
+  await expect(
+    page.locator('.msg-composer [data-mutation-state="attention"]').first(),
+  ).toContainText("Local saving is unavailable");
+  await expect(page.getByLabel("Saved message").first()).toHaveValue(text);
+  expect(attempts).toBe(0);
+});
+
+test("confirmation preserves a newer Inbox draft differing only by whitespace", async ({
+  page,
+  context,
+}) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let attempts = 0;
+  await inboxSetup(context, async (route) => {
+    attempts++;
+    await gate;
+    return json(route, { event: { id: "confirmed" } });
+  });
+  await page.goto(inboxURL);
+  await page
+    .getByRole("textbox", { name: "Your response", exact: true })
+    .fill(text);
+  await page
+    .getByRole("button", { name: "Send response", exact: true })
+    .click();
+  const flight = page.evaluate(async () => {
+    const queue = await import("/src/lib/inboxResponseQueue.js");
+    await queue.flushInboxResponse();
+  });
+  await expect.poll(() => attempts).toBe(1);
+  const other = await context.newPage();
+  await other.goto(inboxURL);
+  await expect(
+    other.getByRole("textbox", { name: "Your response", exact: true }),
+  ).toBeVisible();
+  const newer = ` ${text}\n`;
+  await other.evaluate(
+    async ({ id, newer }) => {
+      const { saveLocalWork } = await import("/src/lib/localWorkStore.js");
+      const { readerScopeKey } = await import("/src/lib/readerScope.js");
+      await saveLocalWork(
+        readerScopeKey(),
+        "draft",
+        `inbox:${id}:reply`,
+        newer,
+      );
+    },
+    { id: ITEM.id, newer },
+  );
+  release();
+  await flight;
+  expect(await saved(other, "draft", `inbox:${ITEM.id}:reply`)).toBe(newer);
+  await other.reload();
+  await expect(
+    other.getByRole("textbox", { name: "Your response", exact: true }),
+  ).toHaveValue(newer);
+});
+
+for (const surface of ["discussion", "inbox", "inbox-unknown-age"])
+  test(`${surface} recovery stops at the shared age cutoff and only an explicit new-key retry sends`, async ({
+    page,
+    context,
+  }, testInfo) => {
+    const kind = surface.startsWith("inbox") ? "inbox" : "discussion";
+    await context.addInitScript(() =>
+      Object.defineProperty(navigator, "onLine", {
+        configurable: true,
+        get: () => false,
+      }),
+    );
+    const bodies = [];
+    const handle = (route) => {
+      bodies.push(route.request().postDataJSON());
+      return json(
+        route,
+        kind === "inbox"
+          ? { event: { id: "new-inbox" } }
+          : { event: { id: "new-discussion" } },
+      );
+    };
+    if (kind === "inbox") await inboxSetup(context, handle);
+    else await discussionSetup(context, handle);
+    await page.goto(kind === "inbox" ? inboxURL : discussionURL);
+    await page
+      .locator(
+        kind === "inbox"
+          ? 'textarea[placeholder="Write the response the agent should rely on."]'
+          : "#message-text",
+      )
+      .fill(text);
+    await page
+      .getByRole("button", {
+        name: kind === "inbox" ? "Send response" : "Send",
+        exact: true,
+      })
+      .click();
+    const storeKind = kind === "inbox" ? "inbox-send" : "mutation";
+    await expect
+      .poll(async () => (await saved(page, storeKind)).length)
+      .toBe(1);
+    const original = await page.evaluate(
+      async ({ storeKind, surface }) => {
+        const store = await import("/src/lib/localWorkStore.js");
+        const { readerScopeKey } = await import("/src/lib/readerScope.js");
+        const { autoRetryMaxAgeMs } = await import("/src/lib/replayPolicy.js");
+        const [record] = await store.listLocalWork(readerScopeKey(), storeKind);
+        const value = {
+          ...record.value,
+          createdAt: Date.now() - autoRetryMaxAgeMs - 1,
+          nextAt: 0,
+        };
+        if (surface === "inbox-unknown-age") delete value.createdAt;
+        await store.saveLocalWork(
+          readerScopeKey(),
+          storeKind,
+          record.target,
+          value,
+        );
+        return value.request;
+      },
+      { storeKind, surface },
+    );
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "Retry as new", exact: true }),
+    ).toBeVisible();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", {
+        configurable: true,
+        get: () => true,
+      });
+      window.dispatchEvent(new Event("online"));
+    });
+    expect(bodies).toHaveLength(0);
+    await page.evaluate(async (kind) => {
+      if (kind === "inbox") {
+        const queue = await import("/src/lib/inboxResponseQueue.js");
+        await queue.retryInboxResponse("inbox-durable");
+      } else {
+        const queue = await import("/src/lib/mutationOutbox.js");
+        let entry;
+        const off = queue.mutationOutbox.subscribe((rows) => (entry = rows[0]));
+        off();
+        await queue.retryMutation(entry.key);
+      }
+    }, kind);
+    expect(bodies).toHaveLength(0);
+    await page.screenshot({
+      path: testInfo.outputPath(`${surface}-expired-attention.png`),
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Retry as new", exact: true })
+      .click();
+    if (kind === "inbox")
+      await page.evaluate(async () => {
+        const queue = await import("/src/lib/inboxResponseQueue.js");
+        await queue.flushInboxResponse();
+      });
+    await expect.poll(() => bodies.length).toBe(1);
+    const key = kind === "inbox" ? "idempotency_key" : "request_key";
+    expect(bodies[0][key]).not.toBe(original[key]);
+    const oldBody = {
+      ...original,
+      actor_id: kind === "inbox" ? "actor-durable-e2e" : "actor-comment",
+    };
+    const newBody = { ...bodies[0] };
+    delete oldBody[key];
+    delete newBody[key];
+    expect(newBody).toEqual(oldBody);
+  });
+
+test("an expired first PM message retries with fresh message keys in its confirmed conversation", async ({
+  page,
+}) => {
+  let reject = true;
+  const { calls, conversations } = await pmSetup(page, {
+    handle: async ({ path, reply }) => {
+      if (path.endsWith("/messages") && reject) {
+        await reply({ error: { code: "conflict" } }, 409);
+        return true;
+      }
+    },
+  });
+  await page.goto("/o/local/w/local/pm?work_ref=card%3Arelease");
+  await page.getByLabel("Message PM", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  const original = calls.find((call) => call.path.endsWith("/messages")).body;
+  await page.evaluate(async () => {
+    const store = await import("/src/lib/localWorkStore.js");
+    const { readerScopeKey } = await import("/src/lib/readerScope.js");
+    const { autoRetryMaxAgeMs } = await import("/src/lib/replayPolicy.js");
+    const [record] = await store.listLocalWork(readerScopeKey(), "mutation");
+    // A deliberate new retry upgrades a legacy message to receipt mode;
+    // automatic recovery must continue to leave such old bodies untouched.
+    delete record.value.request.message.replay_key;
+    delete record.value.request.creation.replay_key;
+    await store.saveLocalWork(readerScopeKey(), "mutation", record.target, {
+      ...record.value,
+      createdAt: Date.now() - autoRetryMaxAgeMs - 1,
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Retry as new", exact: true }),
+  ).toBeVisible();
+  reject = false;
+  await page.getByRole("button", { name: "Retry as new", exact: true }).click();
+  await expect(page.getByText(/^Working/)).toBeVisible();
+  const messages = calls.filter((call) => call.path.endsWith("/messages"));
+  expect(messages).toHaveLength(2);
+  expect(messages[1].path).toBe(messages[0].path);
+  expect(messages[1].body.request_key).not.toBe(original.request_key);
+  expect(messages[1].body.replay_key).not.toBe(original.replay_key);
+  expect(messages[1].body.replay_key).toEqual(expect.any(String));
+  expect(messages[1].body.text).toBe(original.text);
+  expect(conversations).toHaveLength(1);
+});

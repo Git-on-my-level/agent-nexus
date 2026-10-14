@@ -1,4 +1,14 @@
 <script>
+  import { onMount } from "svelte";
+  import { get } from "svelte/store";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import {
+    enqueueAuthoring,
+    mutationOutbox,
+    editMutation,
+  } from "$lib/mutationOutbox.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
   import { resourceRouteSegment } from "$lib/resourceIdentity.js";
@@ -11,6 +21,42 @@
   let loadError = $state("");
   let summaryDraft = $state("");
   let saving = $state(false);
+  let baseUpdatedAt = $state("");
+  let target = $derived(`document:${document?.id || documentId}:metadata`);
+  let saved = $derived(
+    $mutationOutbox.find((entry) => entry.target === target),
+  );
+  function snapshot() {
+    return { summary: summaryDraft, baseUpdatedAt };
+  }
+  function restore(value, reason = "", entry = null) {
+    if (reason === "confirmed" && entry?.result?.document) {
+      summaryDraft = String(entry.result.document.summary ?? "");
+      baseUpdatedAt = String(entry.result.document.updated_at ?? "");
+      return;
+    }
+    summaryDraft = value?.summary ?? "";
+    baseUpdatedAt = value?.baseUpdatedAt ?? "";
+  }
+  onMount(() => {
+    const confirmed = (event) => {
+      const entry = event.detail;
+      if (entry.scope !== get(localWorkScope) || entry.target !== target)
+        return;
+      const unchanged =
+        JSON.stringify(snapshot()) === JSON.stringify(entry.draft) ||
+        (!summaryDraft && !baseUpdatedAt);
+      document = entry.result.document;
+      headRevision = entry.result.revision ?? headRevision;
+      if (unchanged) {
+        summaryDraft = String(document.summary ?? "");
+        baseUpdatedAt = document.updated_at;
+      }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
   let saveError = $state("");
 
   let organizationSlug = $derived($page.params.organization);
@@ -32,13 +78,23 @@
     return workspacePath(organizationSlug, workspaceSlug, "/docs");
   }
 
+  let loadTicket = 0;
   $effect(() => {
+    const ticket = ++loadTicket;
+    const scope = get(localWorkScope);
+    const id = documentId;
     if (!documentId) return;
     loading = true;
     loadError = "";
     void (async () => {
       try {
-        const r = await coreClient.getDocument(documentId);
+        const r = await coreClient.getDocument(id);
+        if (
+          ticket !== loadTicket ||
+          scope !== get(localWorkScope) ||
+          id !== documentId
+        )
+          return;
         const d = r?.document ?? r;
         document = d && typeof d === "object" ? d : null;
         headRevision = r?.revision ?? null;
@@ -47,47 +103,54 @@
           return;
         }
         summaryDraft = String(document.summary ?? "");
+        baseUpdatedAt = String(document.updated_at ?? "");
       } catch (e) {
+        if (ticket !== loadTicket || scope !== get(localWorkScope)) return;
         loadError = `Failed to load document: ${e instanceof Error ? e.message : String(e)}`;
         document = null;
         headRevision = null;
       } finally {
-        loading = false;
+        if (ticket === loadTicket) loading = false;
       }
     })();
   });
 
+  async function useLatestVersion() {
+    const scope = get(localWorkScope);
+    const id = document.id;
+    if (saved && saved.state !== "attention") return;
+    try {
+      if (saved) await editMutation(saved.key);
+      const result = await coreClient.getDocument(id);
+      if (scope !== get(localWorkScope) || id !== document?.id) return;
+      document = result.document ?? document;
+      headRevision = result.revision ?? headRevision;
+      baseUpdatedAt = document.updated_at;
+    } catch {
+      saveError =
+        "The latest version could not be loaded. Your description is still here.";
+    }
+  }
   async function submit() {
-    if (!document?.id || !document?.updated_at) return;
+    if (!document?.id || !baseUpdatedAt || saved || saving) return;
     saving = true;
     saveError = "";
     try {
-      const result = await coreClient.patchDocument(documentId, {
-        patch: { summary: summaryDraft.trim() },
-        if_updated_at: document.updated_at,
+      await enqueueAuthoring({
+        operation: "docs.patch",
+        id: document.id,
+        body: {
+          patch: { summary: summaryDraft.trim() },
+          if_updated_at: baseUpdatedAt,
+        },
+        target,
+        draft: snapshot(),
+        href: $page.url.pathname,
+        title: "Saved document settings",
       });
-      document = result.document ?? document;
-      headRevision = result.revision ?? headRevision;
-      summaryDraft = String(document?.summary ?? "");
-    } catch (e) {
-      const status = /** @type {{ status?: number }} */ (e)?.status;
-      if (status === 409) {
-        try {
-          const r = await coreClient.getDocument(documentId);
-          const d = r?.document ?? r;
-          document = d && typeof d === "object" ? d : document;
-          headRevision = r?.revision ?? headRevision;
-          if (document) {
-            summaryDraft = String(document.summary ?? "");
-          }
-        } catch {
-          /* ignore */
-        }
-        saveError =
-          "Document was updated elsewhere. Reloaded the latest values — review and save again.";
-      } else {
-        saveError = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
-      }
+    } catch {
+      saveError =
+        "Your description is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       saving = false;
     }
@@ -148,7 +211,14 @@
       <div
         class="rounded-md border border-line bg-panel p-5"
         data-anx-save-scope
+        use:durableForm={{
+          target,
+          value: snapshot(),
+          read: snapshot,
+          onRestore: restore,
+        }}
       >
+        <MutationSendStatus {target} />
         <label class="block text-meta font-medium text-fg">
           Short description
           <textarea
@@ -161,8 +231,14 @@
 
         <div class="mt-4 flex flex-wrap gap-2">
           <button
+            type="button"
+            class="ui-btn-secondary"
+            disabled={saving || Boolean(saved && saved.state !== "attention")}
+            onclick={useLatestVersion}>Use latest version</button
+          >
+          <button
             class="rounded-md bg-accent-solid px-4 py-2 text-meta font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={saving}
+            disabled={saving || Boolean(saved)}
             onclick={submit}
             type="button"
             data-anx-save-shortcut

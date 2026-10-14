@@ -1319,6 +1319,8 @@ export function createAnxCoreClient(options = {}) {
         throw new Error("createArtifactAttachment: file Blob is required");
       }
       const form = new FormData();
+      if (opts.request_key)
+        form.append("request_key", String(opts.request_key));
       form.append("refs", JSON.stringify(refs));
       const fname =
         file instanceof File && file.name ? file.name : "attachment.bin";

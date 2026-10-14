@@ -1,7 +1,12 @@
 <script>
+  import { get } from "svelte/store";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { enqueueAuthoring, mutationOutbox } from "$lib/mutationOutbox.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { beforeNavigate, goto } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -24,24 +29,36 @@
     nextActor = $state(""),
     nextAction = $state(""),
     due = $state("");
-  let created = $state(false);
   let chooseBoard = $derived(boards.length > 1);
-  let dirty = $derived(
-    !created &&
-      Boolean(
-        title || summary || criteria || owner || nextActor || nextAction || due,
-      ),
+  const target = "work:new";
+  let saved = $derived(
+    $mutationOutbox.find((entry) => entry.target === target),
   );
+  function snapshot() {
+    return {
+      title,
+      summary,
+      board,
+      criteria,
+      owner,
+      nextActor,
+      nextAction,
+      due,
+    };
+  }
+  function restore(value) {
+    title = value?.title ?? "";
+    summary = value?.summary ?? "";
+    board = value?.board ?? "";
+    criteria = value?.criteria ?? "";
+    owner = value?.owner ?? "";
+    nextActor = value?.nextActor ?? "";
+    nextAction = value?.nextAction ?? "";
+    due = value?.due ?? "";
+  }
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
-  beforeNavigate(({ cancel }) => {
-    if (saving && !created) {
-      cancel();
-      return;
-    }
-    if (dirty && !window.confirm("Leave without saving this task?")) cancel();
-  });
   async function load() {
     loading = true;
     error = "";
@@ -73,7 +90,7 @@
   }
   async function save(event) {
     event.preventDefault();
-    if (saving || !title.trim() || !criteria.trim()) return;
+    if (saving || saved || !title.trim() || !criteria.trim()) return;
     if (chooseBoard && !board) return;
     saving = true;
     error = "";
@@ -93,35 +110,44 @@
         phase: "backlog",
       };
       if (chooseBoard) payload.board_ref = board;
-      const result = await coreClient.createWork(payload);
-      const key = workKey(result.work || {});
-      if (!key)
-        throw new Error(
-          "The save response did not identify the task. Check Tasks before retrying to avoid a duplicate.",
-        );
-      created = true;
-      await goto(workspaceHref(`/tasks/${encodeURIComponent(key)}`));
-    } catch (err) {
-      error = errorMessage(err);
+      await enqueueAuthoring({
+        operation: "work.create",
+        body: payload,
+        target,
+        draft: snapshot(),
+        href: $page.url.pathname,
+        title: "Saved task",
+      });
+    } catch {
+      error =
+        "Your task is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       saving = false;
     }
   }
   onMount(() => {
     void load();
+    const confirmed = (event) => {
+      const entry = event.detail;
+      if (entry.scope !== get(localWorkScope) || entry.target !== target)
+        return;
+      const key = workKey(entry.result?.work || {});
+      if (
+        key &&
+        (!Object.values(snapshot()).some(Boolean) ||
+          JSON.stringify(snapshot()) === JSON.stringify(entry.draft))
+      ) {
+        void goto(workspaceHref(`/tasks/${encodeURIComponent(key)}`));
+      }
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
   });
 
   usePageTitle(() => "New task · Agent Nexus");
 </script>
 
-<svelte:window
-  onbeforeunload={(event) => {
-    if (dirty) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-  }}
-/>
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-accent-text hover:underline"
@@ -131,10 +157,17 @@
   {#if error}<StateError message={error} />{/if}
   {#if loading}<p role="status" class="text-fg-muted">Loading…</p>{:else}
     <form
+      use:durableForm={{
+        target,
+        value: snapshot(),
+        read: snapshot,
+        onRestore: restore,
+      }}
       class="max-w-3xl space-y-4 rounded-md border border-line bg-panel p-4 sm:p-5"
       onsubmit={save}
       data-anx-save-scope
     >
+      <MutationSendStatus {target} />
       <p class="text-micro text-fg-subtle">
         Nexus will own this record. Work that lives in GitHub or Multica shows
         up through its integration instead.
@@ -208,6 +241,7 @@
           class="ui-btn-primary"
           type="submit"
           disabled={saving ||
+            Boolean(saved) ||
             !title.trim() ||
             !criteria.trim() ||
             (chooseBoard && !board)}

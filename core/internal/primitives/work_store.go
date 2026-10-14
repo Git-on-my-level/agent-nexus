@@ -263,6 +263,7 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	boardID = strings.TrimSpace(boardID)
 	m := workClone(input)
 	delete(m, "actor_id")
+	delete(m, "request_key")
 	delete(m, "board_ref")
 	if err := validateWorkLocal(m); err != nil {
 		return nil, err

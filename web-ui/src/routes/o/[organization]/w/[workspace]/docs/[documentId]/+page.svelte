@@ -1,4 +1,14 @@
 <script>
+  import { get } from "svelte/store";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import {
+    enqueueAuthoring,
+    mutationOutbox,
+    editMutation,
+  } from "$lib/mutationOutbox.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import DocumentLifecycleWork from "$lib/components/DocumentLifecycleWork.svelte";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
@@ -20,7 +30,7 @@
   import { coreClient } from "$lib/coreClient";
   import Time from "$lib/time/Time.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
-  import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
     actorRegistry,
@@ -43,7 +53,7 @@
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
-  import { tick } from "svelte";
+  import { tick, onMount } from "svelte";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   function isHttpUrl(value) {
@@ -86,6 +96,64 @@
   let parentTopicLoadedFor = $state("");
 
   let editOpen = $state(false);
+  let revisionTarget = $derived(
+    `document:${document?.id || documentId}:revision`,
+  );
+  let titleTarget = $derived(`document:${document?.id || documentId}:title`);
+  let savedRevision = $derived(
+    $mutationOutbox.find((entry) => entry.target === revisionTarget),
+  );
+  let savedTitle = $derived(
+    $mutationOutbox.find((entry) => entry.target === titleTarget),
+  );
+  function revisionSnapshot() {
+    return { ...editDraft };
+  }
+  function restoreRevision(value) {
+    editDraft = {
+      title: value?.title ?? "",
+      originalTitle: value?.originalTitle ?? value?.title ?? "",
+      content: value?.content ?? "",
+      baseRevision: value?.baseRevision ?? "",
+      contentType: value?.contentType ?? "text",
+    };
+  }
+  let titleBase = $state(null);
+  function titleSnapshot() {
+    return { text: titleDraft, base: titleBase };
+  }
+  function restoreTitle(value) {
+    titleDraft = value?.text ?? "";
+    titleBase = value?.base ?? null;
+  }
+  onMount(() => {
+    const confirmed = async (event) => {
+      const entry = event.detail;
+      if (
+        entry.scope !== get(localWorkScope) ||
+        ![revisionTarget, titleTarget].includes(entry.target)
+      )
+        return;
+      if (!entry.result?.document) return;
+      const revisionUnchanged =
+        (!editDraft.content && !editDraft.baseRevision) ||
+        JSON.stringify(revisionSnapshot()) === JSON.stringify(entry.draft);
+      const titleUnchanged =
+        (!titleDraft && !titleBase) ||
+        JSON.stringify(titleSnapshot()) === JSON.stringify(entry.draft);
+      document = entry.result.document;
+      headRevision = entry.result.revision ?? headRevision;
+      selectedRevision = null;
+      revisions = [];
+      if (entry.target === revisionTarget && revisionUnchanged)
+        editOpen = false;
+      if (entry.target === titleTarget && titleUnchanged) titleEditing = false;
+      if (requestedRevisionId) await setRequestedRevision("");
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
+  });
   let editDraft = $state({
     content: "",
     title: "",
@@ -103,6 +171,7 @@
   let loadingSelectedRevisionKey = $state("");
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
+  let lifecycleWork = $state();
   /**
    * Per polish §P8: Archive and Trash collapse into a single "More actions"
    * kebab so "Edit" (new revision) is the only competing primary in the doc header.
@@ -501,7 +570,10 @@
   function openEdit() {
     editDraft = {
       content: headRevision?.content ?? "",
+      baseRevision: headRevision?.revision_id ?? "",
+      contentType: headContentType || "text",
       title: document?.title ?? "",
+      originalTitle: document?.title ?? "",
     };
     saveError = "";
     editOpen = true;
@@ -514,13 +586,34 @@
     saveError = "";
   }
 
+  async function useLatestRevision() {
+    const scope = get(localWorkScope),
+      id = document.id;
+    if (savedRevision && savedRevision.state !== "attention") return;
+    try {
+      if (savedRevision) await editMutation(savedRevision.key);
+      const result = await coreClient.getDocument(id);
+      if (scope !== get(localWorkScope) || id !== document?.id) return;
+      document = result.document ?? document;
+      headRevision = result.revision ?? headRevision;
+      editDraft = {
+        ...editDraft,
+        baseRevision: headRevision.revision_id,
+        contentType: headRevision.content_type || "text",
+      };
+    } catch {
+      saveError =
+        "The latest revision could not be loaded. Your content is still here.";
+    }
+  }
   async function handleSave() {
+    if (saving || savedRevision) return;
     if (!editDraft.content.trim()) {
       saveError = "Content is required.";
       return;
     }
 
-    if (!headRevision?.revision_id) {
+    if (!editDraft.baseRevision) {
       saveError = "Cannot determine base revision. Please reload.";
       return;
     }
@@ -532,37 +625,42 @@
       const docPatch = {};
       if (
         editDraft.title.trim() &&
-        editDraft.title.trim() !== document?.title
+        editDraft.title.trim() !== editDraft.originalTitle
       ) {
         docPatch.title = editDraft.title.trim();
       }
-      const result = await coreClient.updateDocument(documentId, {
-        content: editDraft.content.trim(),
-        content_type: headContentType || "text",
-        if_base_revision: headRevision.revision_id,
-        ...(Object.keys(docPatch).length > 0 ? { document: docPatch } : {}),
+      await enqueueAuthoring({
+        operation: "docs.revise",
+        id: document.id,
+        body: {
+          content: editDraft.content.trim(),
+          content_type: editDraft.contentType || "text",
+          if_base_revision: editDraft.baseRevision,
+          ...(Object.keys(docPatch).length ? { document: docPatch } : {}),
+        },
+        target: revisionTarget,
+        draft: revisionSnapshot(),
+        href: $page.url.pathname,
+        title: "Saved document revision",
       });
-
-      document = result.document ?? document;
-      headRevision = result.revision ?? headRevision;
-      selectedRevision = null;
-      revisions = [];
-      editOpen = false;
-      // Drop ?revision= so we show the new head instead of re-resolving the prior URL.
-      if (requestedRevisionId) {
-        await setRequestedRevision("");
-      }
-    } catch (e) {
-      saveError = `Failed to save revision: ${e instanceof Error ? e.message : String(e)}`;
+    } catch {
+      saveError =
+        "Your revision is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       saving = false;
     }
   }
 
   function startTitleEdit() {
-    if (!canEditTitle || titleSaving) return;
+    if (!canEditTitle || titleSaving || savedTitle) return;
     titleError = "";
-    titleDraft = String(document?.title ?? "").trim();
+    if (!titleDraft.trim()) titleDraft = String(document?.title ?? "").trim();
+    if (!titleBase)
+      titleBase = {
+        revision: headRevision?.revision_id,
+        content: headRevision?.content ?? displayedContent,
+        contentType: headContentType || "text",
+      };
     titleEditing = true;
     void tick().then(() => {
       titleInputEl?.focus();
@@ -575,8 +673,28 @@
     titleError = "";
   }
 
+  async function useLatestTitle() {
+    const scope = get(localWorkScope),
+      id = document.id;
+    if (savedTitle && savedTitle.state !== "attention") return;
+    try {
+      if (savedTitle) await editMutation(savedTitle.key);
+      const result = await coreClient.getDocument(id);
+      if (scope !== get(localWorkScope) || id !== document?.id) return;
+      document = result.document ?? document;
+      headRevision = result.revision ?? headRevision;
+      titleBase = {
+        revision: headRevision.revision_id,
+        content: headRevision.content,
+        contentType: headRevision.content_type || "text",
+      };
+    } catch {
+      titleError =
+        "The latest version could not be loaded. Your title is still here.";
+    }
+  }
   async function commitTitleEdit() {
-    if (!titleEditing) return;
+    if (!titleEditing || titleSaving || savedTitle) return;
     const next = titleDraft.trim();
     const current = String(document?.title ?? "").trim();
     if (!next || next === current) {
@@ -584,7 +702,7 @@
       titleError = "";
       return;
     }
-    if (!headRevision?.revision_id) {
+    if (!titleBase?.revision) {
       titleError = "Cannot rename: missing base revision. Please reload.";
       return;
     }
@@ -593,22 +711,23 @@
     try {
       // Title is not patchable via docs.patch, so renaming appends a revision
       // that carries the unchanged head body plus the new title.
-      const result = await coreClient.updateDocument(documentId, {
-        content: headRevision.content ?? displayedContent,
-        content_type: headContentType || "text",
-        if_base_revision: headRevision.revision_id,
-        document: { title: next },
+      await enqueueAuthoring({
+        operation: "docs.revise",
+        id: document.id,
+        body: {
+          content: titleBase.content,
+          content_type: titleBase.contentType,
+          if_base_revision: titleBase.revision,
+          document: { title: next },
+        },
+        target: titleTarget,
+        draft: titleSnapshot(),
+        href: $page.url.pathname,
+        title: "Saved document title",
       });
-      document = result.document ?? document;
-      headRevision = result.revision ?? headRevision;
-      selectedRevision = null;
-      revisions = [];
-      titleEditing = false;
-      if (requestedRevisionId) {
-        await setRequestedRevision("");
-      }
-    } catch (e) {
-      titleError = `Failed to rename: ${e instanceof Error ? e.message : String(e)}`;
+    } catch {
+      titleError =
+        "Your title is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       titleSaving = false;
     }
@@ -655,57 +774,35 @@
     }
   }
 
-  async function handleArchiveDocument() {
-    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
-    docLifecycleBusy = true;
-    try {
-      await coreClient.archiveDocument(documentId, {});
-      await loadDocument(documentId);
-    } finally {
-      docLifecycleBusy = false;
-    }
-  }
-
-  async function handleUnarchiveDocument() {
+  async function queueLifecycle(action) {
     confirmModal = { open: false, action: "" };
-    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
+    if (!document || docLifecycleBusy) return;
     docLifecycleBusy = true;
     try {
-      await coreClient.unarchiveDocument(documentId, {});
-      await loadDocument(documentId);
+      await lifecycleWork.queue([document], action);
+    } catch {
+      /* The saved composer retains the request and its error. */
     } finally {
       docLifecycleBusy = false;
     }
   }
-
+  function handleArchiveDocument() {
+    return queueLifecycle("archive");
+  }
+  function handleUnarchiveDocument() {
+    return queueLifecycle("unarchive");
+  }
+  function handleTrashDocument() {
+    return queueLifecycle("trash");
+  }
+  function handleRestoreDocument() {
+    return queueLifecycle("restore");
+  }
   function handleConfirm() {
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
-    if (action === "archive") handleArchiveDocument();
-    else if (action === "trash") handleTrashDocument();
-  }
-
-  async function handleTrashDocument() {
-    if (!documentId || docLifecycleBusy) return;
-    docLifecycleBusy = true;
-    try {
-      await coreClient.trashDocument(documentId, {});
-      await goto(workspacePath(organizationSlug, workspaceSlug, "/docs"));
-    } finally {
-      docLifecycleBusy = false;
-    }
-  }
-
-  async function handleRestoreDocument() {
-    confirmModal = { open: false, action: "" };
-    if (!documentId || docLifecycleBusy) return;
-    docLifecycleBusy = true;
-    try {
-      await coreClient.restoreDocument(documentId, {});
-      await loadDocument(documentId);
-    } finally {
-      docLifecycleBusy = false;
-    }
+    if (action === "archive") void handleArchiveDocument();
+    else if (action === "trash") void handleTrashDocument();
   }
 
   function isSelectionInsideDocBody(sel) {
@@ -1124,6 +1221,16 @@
   );
 </script>
 
+<DocumentLifecycleWork
+  bind:this={lifecycleWork}
+  target={`document:${document?.id || documentId}:lifecycle`}
+  href={$page.url.pathname + $page.url.search}
+  onconfirmed={(entry) => {
+    if (entry.request.items.some((item) => item.id === document?.id))
+      void loadDocument(documentId);
+  }}
+/>
+
 {#if loading}
   <nav
     class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-fg-muted"
@@ -1536,7 +1643,23 @@
             {/snippet}
           </WorkspaceResourceTopRow>
 
-          <div class="mt-3 mb-1">
+          <div
+            class="mt-3 mb-1"
+            use:durableForm={{
+              target: titleTarget,
+              value: titleSnapshot(),
+              read: titleSnapshot,
+              onRestore: restoreTitle,
+            }}
+          >
+            <MutationSendStatus target={titleTarget} />
+            {#if titleEditing}<button
+                type="button"
+                class="ui-btn-secondary mb-2"
+                disabled={titleSaving ||
+                  Boolean(savedTitle && savedTitle.state !== "attention")}
+                onclick={useLatestTitle}>Use latest version</button
+              >{/if}
             {#if titleEditing}
               <input
                 bind:this={titleInputEl}
@@ -1677,13 +1800,29 @@
           </div>
 
           {#if editOpen}
-            <div class="mt-4">
+            <div
+              class="mt-4"
+              use:durableForm={{
+                target: revisionTarget,
+                value: revisionSnapshot(),
+                read: revisionSnapshot,
+                onRestore: restoreRevision,
+              }}
+            >
+              <MutationSendStatus target={revisionTarget} />
+              <button
+                type="button"
+                class="ui-btn-secondary mb-2"
+                disabled={saving ||
+                  Boolean(savedRevision && savedRevision.state !== "attention")}
+                onclick={useLatestRevision}>Use latest version</button
+              >
               <DocumentMarkdownEditor
                 bind:value={editDraft.content}
-                {saving}
+                saving={saving || Boolean(savedRevision)}
                 {saveError}
                 dirty={editorDirty}
-                baseRevisionId={headRevision?.revision_id ?? ""}
+                baseRevisionId={editDraft.baseRevision ?? ""}
                 onsave={() => void handleSave()}
                 oncancel={closeEdit}
               />

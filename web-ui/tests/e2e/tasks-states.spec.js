@@ -282,7 +282,7 @@ function buildDecisions() {
 async function installTasksApi(page, overrides = {}) {
   const digest = await getExpectedCommandRegistryDigest();
   const api = {
-    work: buildWork(),
+    work: buildWork().map((work) => ({ ...work, version: 1 })),
     workNextCursor: "",
     boards: [
       {
@@ -455,7 +455,17 @@ async function installTasksApi(page, overrides = {}) {
         board: api.boards.find((b) => b.ref === path.slice(8)) || api.boards[0],
       }));
     if (/^\/cards\/.+\/move$/.test(path))
-      return respond("moveCard", () => ({ ok: true }));
+      return respond("moveCard", () => {
+        const body = request.postDataJSON();
+        const work = api.work.find((item) => item.ref === path.slice(7, -5));
+        work.phase = body.column_key;
+        work.version += 1;
+        const board = api.boards.find((item) => item.ref === work.board_ref);
+        board.updated_at = new Date(
+          Date.parse(board.updated_at) + 1,
+        ).toISOString();
+        return { card: { ...work, id: work.handle }, board };
+      });
     if (path === "/work/capabilities")
       return json(200, {
         capabilities: {
@@ -779,11 +789,18 @@ for (const viewport of AUDIT_VIEWPORTS) {
       };
       await page.getByLabel(/needs evidence/).fill(`artifact:${LONG_ID}`);
       await page.getByRole("button", { name: "Mark done" }).click();
-      await expect(page.getByText(/Nothing exists at artifact:/)).toBeVisible();
+      await expect(
+        page.locator('[data-mutation-state="attention"]'),
+      ).toBeVisible();
+      await expect(page.getByLabel(/needs evidence/)).toHaveValue(
+        `artifact:${LONG_ID}`,
+      );
       await expectCleanLayout(page, "evidence rejected", bothEnds);
 
       api.fail = {};
-      await page.getByRole("button", { name: "Mark done" }).click();
+      await page
+        .getByRole("button", { name: "Retry send", exact: true })
+        .click();
       await expect(evidence).toHaveCount(0);
       await expect(notice).toBeVisible();
       await expectCleanLayout(page, "done applied", bothEnds);
@@ -836,10 +853,32 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.fail.createWork = { message: LONG_ERROR };
       api.hold.createWork.resolve();
       api.hold = {};
-      await expect(page.getByRole("alert")).toContainText(
-        "Read permission expired",
+      const saved = page.locator('[data-mutation-state="retrying"]');
+      await expect(saved).toBeVisible();
+      await expect(saved.getByLabel("Saved message")).toHaveValue(
+        `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nBoard: board:archive`,
       );
+      for (const [field, value] of [
+        ["Outcome", LONG_TITLE],
+        ["Context", `${LONG_ERROR}\n${LONG_ID}`],
+        ["Acceptance criteria", LONG_ACTION],
+        ["Accountable owner", LONG_OWNER],
+        ["Next actor", LONG_OWNER],
+        ["Next action", LONG_ACTION],
+      ])
+        await expect(page.getByLabel(field, { exact: true })).toHaveValue(
+          value,
+        );
+      await expect(page.getByLabel("Board")).toHaveValue("board:archive");
+      await expect(
+        saved.getByRole("button", { name: "Copy text" }),
+      ).toBeVisible();
+      const diagnostics = saved.locator("details");
+      await expect(diagnostics).not.toHaveAttribute("open", "");
       await expectCleanLayout(page, "new task save failed", bothEnds);
+      await diagnostics.getByText("Technical details", { exact: true }).click();
+      await expect(diagnostics).toContainText("Read permission expired");
+      await expectCleanLayout(page, "new task failure details", bothEnds);
 
       // Zero boards is not a dead end: the form stays, and Board is hidden
       // because the operator is not choosing among boards.

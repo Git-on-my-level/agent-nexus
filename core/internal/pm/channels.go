@@ -196,20 +196,7 @@ func (s *Service) QueueDecisionCard(ctx context.Context, d Decision, eventID str
 	if err != nil || b.ActorID != d.ActorID {
 		return Delivery{}, ErrForbidden
 	}
-	key := eventID
-	if key == "" {
-		key = "offer"
-	}
-	card := Delivery{
-		ID:          stableID("delivery", "decision-card", d.ID, fmt.Sprint(d.Revision), key),
-		WorkspaceID: d.WorkspaceID,
-		ActorID:     d.ActorID,
-		Origin:      *d.Origin,
-		Text:        decisionCardText(d),
-		ReplyMarkup: decisionReplyMarkup(d.Origin.Transport, d),
-		Status:      Pending,
-		Revision:    1,
-	}
+	card := newDecisionCardDelivery(d, eventID)
 	inserted, err := s.store.insert(ctx, "delivery", card.ID, d.WorkspaceID, d.ActorID, d.ID, card)
 	if err != nil {
 		return Delivery{}, err
@@ -220,6 +207,23 @@ func (s *Service) QueueDecisionCard(ctx context.Context, d Decision, eventID str
 		}
 	}
 	return card, nil
+}
+
+func newDecisionCardDelivery(d Decision, eventID string) Delivery {
+	key := eventID
+	if key == "" {
+		key = "offer"
+	}
+	return Delivery{
+		ID:          stableID("delivery", "decision-card", d.ID, fmt.Sprint(d.Revision), key),
+		WorkspaceID: d.WorkspaceID,
+		ActorID:     d.ActorID,
+		Origin:      *d.Origin,
+		Text:        decisionCardText(d),
+		ReplyMarkup: decisionReplyMarkup(d.Origin.Transport, d),
+		Status:      Pending,
+		Revision:    1,
+	}
 }
 
 // ReconcileDelivery records externally inspected evidence. It cannot reopen a

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -146,6 +147,8 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	var stored map[string]any
+	var atomicReplay *primitives.IdempotencyReplay
+	atomicEvent := typeValue == "message_posted" && strings.TrimSpace(req.RequestKey) != ""
 	if typeValue == humanAttentionWithdrawnEventType {
 		principal, ok := requireAuthenticatedPrincipal(w, r, opts)
 		if !ok {
@@ -190,6 +193,29 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		stored, err = store.AppendTaskAttentionEvent(r.Context(), actorID, req.Event)
+	} else if atomicEvent {
+		store, ok := opts.primitiveStore.(interface {
+			AppendEventWithReplay(context.Context, string, string, string, map[string]any, map[string]any) (primitives.IdempotencyReplay, bool, error)
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "atomic event replay store is not configured")
+			return
+		}
+		var hash string
+		hash, err = hashJSONPayload(req)
+		if err == nil {
+			var replay primitives.IdempotencyReplay
+			var replayed bool
+			replay, replayed, err = store.AppendEventWithReplay(r.Context(), actorID, strings.TrimSpace(req.RequestKey), hash, req.Event, hygiene.attach(map[string]any{}))
+			if err == nil {
+				if replayed {
+					writeJSON(w, replay.Status, replay.Response)
+					return
+				}
+				atomicReplay = &replay
+				stored, _ = replay.Response["event"].(map[string]any)
+			}
+		}
 	} else {
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
@@ -213,7 +239,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusNotFound, "not_found", "human attention request not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+		if !atomicEvent && errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			eventID := firstNonEmptyString(req.Event["id"])
 			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), eventID)
 			if loadErr == nil {
@@ -251,6 +277,11 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
 			log.Printf("best-effort human inbox projection refresh failed (thread=%s): %v", threadID, err)
 		}
+	}
+
+	if atomicReplay != nil {
+		writeJSON(w, atomicReplay.Status, atomicReplay.Response)
+		return
 	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{"event": stored}))
@@ -619,7 +650,24 @@ func handleCreateArtifactAttachment(w http.ResponseWriter, r *http.Request, opts
 	}
 
 	maxBytes := opts.requestBodyLimits.normalize().Attachment
-	created, err := opts.primitiveStore.CreateArtifactAttachment(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes)
+	key := strings.TrimSpace(r.FormValue("request_key"))
+	if len(key) > 256 || strings.ContainsRune(key, 0) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid upload request key")
+		return
+	}
+	var created map[string]any
+	if key != "" {
+		replayStore, ok := opts.primitiveStore.(interface {
+			CreateArtifactAttachmentWithReplay(context.Context, string, map[string]any, string, string, io.Reader, int64, string) (map[string]any, error)
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "replay_unavailable", "safe upload retry is unavailable")
+			return
+		}
+		created, err = replayStore.CreateArtifactAttachmentWithReplay(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes, key)
+	} else {
+		created, err = opts.primitiveStore.CreateArtifactAttachment(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes)
+	}
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "resource not found")

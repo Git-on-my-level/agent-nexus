@@ -335,7 +335,7 @@ The palette (`CommandPalette.svelte`, model in `lib/commandPaletteModel.js`) is 
 2. **Go to:** Overview (G O), Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination. With no PM agent onboarded, "Ask PM about this task" and "Ask PM" are absent and "Set up your PM" takes their place (3.9).
 3. **Search results:** tasks (one row per source item) and docs, from two characters on.
 
-Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through `applyTaskPhaseMove`, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
+Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through the durable task-move outbox, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
 
 Every shortcut the palette shows is bound, by the palette itself, in a capture-phase window listener: G then O/I/A/T/D anywhere; M, A, O on a task page; E on a doc page. None fire while focus is in an input, textarea, select or contenteditable, or while a dialog is open. The Tasks `?` overlay lists G O/I/A/T/D and ⌘K alongside the page's own keys.
 
@@ -498,7 +498,7 @@ read as "install a PM", which would throw away the reader's draft.
   proposal, and describing it without the word would be a worse sentence than
   an accurate one. Moving work a source owns is also gone: that move
   is a PM proposal the PM carries out at the source, so with no PM
-  `applyTaskPhaseMove` refuses before writing and the surfaces say where to
+  The task-move surfaces refuse before saving a submitted request and the surfaces say where to
   set one up, rather than filing a proposal nobody would carry out. A move on
   Nexus-owned work is unaffected.
 - **Setup:** exactly one calm entry point, in the slot Ask PM occupies, leading

@@ -419,6 +419,13 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return decodeJSONBodySyntax(w, r, dst) && authorizeResourceValues(w, r, dst)
 }
 
+// Audited map-valued replay bodies must retain integer precision both for
+// persistence and changed-body key rejection. Keep legacy decoder behavior for
+// callers that have not yet been audited for json.Number values.
+func decodeJSONBodyPreserveNumbers(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodySyntaxWithNumbers(w, r, dst, true) && authorizeResourceValues(w, r, dst)
+}
+
 // Read-side batches may include inaccessible or shared keys. Their scoped
 // loaders authorize each candidate, while writes retain whole-body ownership
 // checks. Text validation, body limits and single-document parsing still apply.
@@ -427,11 +434,18 @@ func decodeJSONReadBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 }
 
 func decodeJSONBodySyntax(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodySyntaxWithNumbers(w, r, dst, false)
+}
+
+func decodeJSONBodySyntaxWithNumbers(w http.ResponseWriter, r *http.Request, dst any, preserveNumbers bool) bool {
 	if r == nil || r.Body == nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
 	}
 	decoder := json.NewDecoder(r.Body)
+	if preserveNumbers {
+		decoder.UseNumber()
+	}
 	if err := decoder.Decode(dst); err != nil {
 		if writeRequestTooLargeError(w, err) {
 			return false

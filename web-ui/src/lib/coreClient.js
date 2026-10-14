@@ -49,9 +49,28 @@ export function getInboxResponseClientOptions() {
 export function captureInboxResponseSender() {
   const client = createAnxCoreClient({
     ...getInboxResponseClientOptions(),
-    fetchFn: globalThis.fetch.bind(globalThis),
+    fetchFn: (url, init) =>
+      globalThis.fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
   });
   return client.respondInboxItem.bind(client);
+}
+
+/** Reconstruct a persisted mutation's routing and actor without using whichever
+ * workspace happens to be on screen when it is retried. Callers gate the scope
+ * against the active verified reader before using this client. */
+export function createLocalMutationClient(scope) {
+  const [organizationSlug, workspaceSlug, agent, actor] = JSON.parse(scope);
+  return createAnxCoreClient({
+    actorIdProvider: () => actor,
+    lockActorIdProvider: () => Boolean(agent),
+    requestContextHeadersProvider: () =>
+      buildCoreWorkspaceRoutingHeadersFromSlugs({
+        organizationSlug,
+        workspaceSlug,
+      }),
+    fetchFn: (url, init) =>
+      globalThis.fetch(url, { ...init, signal: AbortSignal.timeout(30_000) }),
+  });
 }
 
 /** Bind reads to one reader/workspace and propagate cancellation to fetch. */

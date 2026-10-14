@@ -1111,6 +1111,8 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 
 	var req struct {
 		ActorID          string   `json:"actor_id"`
+		RequestKey       string   `json:"request_key"`
+		IfWorkVersion    *int64   `json:"if_version"`
 		IfBoardUpdatedAt *string  `json:"if_board_updated_at"`
 		ColumnKey        string   `json:"column_key"`
 		BeforeCardID     string   `json:"before_card_id"`
@@ -1193,19 +1195,58 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	result, err := opts.primitiveStore.MoveBoardCard(r.Context(), actorID, boardID, cardKey, primitives.MoveBoardCardInput{
-		ColumnKey:        strings.TrimSpace(req.ColumnKey),
-		BeforeCardID:     strings.TrimSpace(req.BeforeCardID),
-		AfterCardID:      strings.TrimSpace(req.AfterCardID),
-		Resolution:       req.Resolution,
-		ResolutionRefs:   &req.ResolutionRefs,
-		IfBoardUpdatedAt: &ifBoardUpdatedAt,
+	// Bind both route identities and the original optimistic tokens. Every
+	// nested write borrows this transaction; keyed lifecycle failures are fatal.
+	if boardID == "" {
+		boardID = anyString(beforeCard["board_id"])
+	}
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.move", actorID, req.RequestKey, struct {
+		BoardID string
+		CardID  string
+		Request any
+	}{boardID, cardKey, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		// Capture lifecycle before-state under the same write lock as the move.
+		beforeCard, err := loadBoardCardForEvent(ctx, opts, boardID, cardKey)
+		if err != nil {
+			return nil, err
+		}
+		result, err := opts.primitiveStore.MoveBoardCard(ctx, actorID, boardID, cardKey, primitives.MoveBoardCardInput{
+			ColumnKey:        strings.TrimSpace(req.ColumnKey),
+			BeforeCardID:     strings.TrimSpace(req.BeforeCardID),
+			AfterCardID:      strings.TrimSpace(req.AfterCardID),
+			Resolution:       req.Resolution,
+			ResolutionRefs:   &req.ResolutionRefs,
+			IfBoardUpdatedAt: &ifBoardUpdatedAt,
+			IfWorkVersion:    req.IfWorkVersion,
+		})
+		if err != nil {
+			return nil, err
+		}
+		emit := func(event map[string]any) error {
+			if event == nil {
+				return nil
+			}
+			_, err := opts.primitiveStore.AppendEvent(ctx, actorID, event)
+			if strings.TrimSpace(req.RequestKey) != "" {
+				return err
+			}
+			return nil // Legacy unkeyed lifecycle notifications remain best effort.
+		}
+		if err := emit(buildCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID)); err != nil {
+			return nil, err
+		}
+		if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
+			if err := emit(buildCardUpdatedEvent(result.Board, beforeCard, result.Card, []string{"resolution", "resolution_refs"})); err != nil {
+				return nil, err
+			}
+		}
+		return map[string]any{"board": result.Board, "card": publicCardView(result.Card)}, nil
 	})
 	if err != nil {
 		switch {
 		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
@@ -1218,12 +1259,8 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID))
-	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
-		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, []string{"resolution", "resolution_refs"}))
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, status, response)
 }
 
 func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
@@ -2382,7 +2419,9 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 				empty := ""
 				input.Assignee = &empty
 			} else {
-				input.Assignee = assigneeStorageStringFromRefs(uniqueSortedStrings(value))
+				// The first ref is the selected accountable owner. Sorting the
+				// list can silently keep an old owner instead of applying the choice.
+				input.Assignee = assigneeStorageStringFromRefs(value)
 			}
 			appendChanged("assignee_refs")
 		case "due_at":

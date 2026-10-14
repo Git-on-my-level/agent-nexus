@@ -61,6 +61,18 @@ func NewService(store *Store, cfg Config, deps Dependencies) (*Service, error) {
 	return s, nil
 }
 func (s *Service) authorize(ctx context.Context, p Principal, permission, ref string) error {
+	if err := s.authorizePermission(ctx, p, permission, ref); err != nil {
+		return err
+	}
+	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.disconnect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
+		return s.RequireOnboarded(ctx)
+	}
+	return nil
+}
+
+// Receipt recovery still checks fresh authority, but does not require a PM to
+// create work that already committed. New proposals retain the onboarding gate.
+func (s *Service) authorizePermission(ctx context.Context, p Principal, permission, ref string) error {
 	if p.ActorID == "" || p.WorkspaceID != s.cfg.WorkspaceID {
 		return ErrForbidden
 	}
@@ -91,22 +103,20 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 		}
 		return ErrForbidden
 	}
-	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.disconnect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
-		if err := s.RequireOnboarded(ctx); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 func validText(text string, max int) bool { return strings.TrimSpace(text) != "" && len(text) <= max }
 func (s *Service) CreateConversation(ctx context.Context, p Principal, in CreateConversation) (Conversation, error) {
+	if in.ReplayKey != "" {
+		return s.createConversationWithReplay(ctx, p, in)
+	}
 	return s.createConversation(ctx, p, in, nil)
 }
 func (s *Service) createConversation(ctx context.Context, p Principal, in CreateConversation, origin *Origin) (Conversation, error) {
-	if err := s.authorize(ctx, p, "pm.read", in.WorkRef); err != nil {
-		return Conversation{}, err
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Conversation{}, ErrForbidden
 	}
-	if err := s.RequireOnboarded(ctx); err != nil {
+	if err := s.authorize(ctx, p, "pm.read", in.WorkRef); err != nil {
 		return Conversation{}, err
 	}
 	refs, err := conversationRefs(in.WorkRef, in.ContextRefs)
@@ -130,6 +140,9 @@ func (s *Service) createConversation(ctx context.Context, p Principal, in Create
 		}
 		return prior, nil
 	} else if !errors.Is(err, ErrNotFound) {
+		return Conversation{}, err
+	}
+	if err := s.RequireOnboarded(ctx); err != nil {
 		return Conversation{}, err
 	}
 	if s.deps.EnsureThread == nil {
@@ -169,7 +182,20 @@ func (s *Service) conversation(ctx context.Context, p Principal, id string) (Con
 	if c.WorkspaceID != p.WorkspaceID || c.ActorID != p.ActorID {
 		return Conversation{}, ErrForbidden
 	}
-	return c, s.authorize(ctx, p, "pm.read", c.WorkRef)
+	if err := s.authorize(ctx, p, "pm.read", c.WorkRef); err != nil {
+		return Conversation{}, err
+	}
+	// Pinned context can be private independently of the primary work. Recheck
+	// it before exposing conversation history, a turn, or a replayed message.
+	for _, ref := range c.ContextRefs {
+		if ref == c.WorkRef {
+			continue
+		}
+		if err := s.authorize(ctx, p, "pm.read", ref); err != nil {
+			return Conversation{}, err
+		}
+	}
+	return c, nil
 }
 func (s *Service) GetConversation(ctx context.Context, p Principal, id string) (ConversationDetail, error) {
 	return s.ConversationHistory(ctx, p, id, 200, "")
@@ -235,14 +261,14 @@ func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, qu
 	return page, nil
 }
 func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID string, in MessageInput) (Turn, error) {
-	if strings.TrimSpace(s.AgentActorID()) == "" {
-		return Turn{}, ErrPMIdentity
+	if in.ReplayKey != "" {
+		return s.postMessageWithReplay(ctx, p, conversationID, in)
+	}
+	if in.ActorID != "" && in.ActorID != p.ActorID {
+		return Turn{}, ErrForbidden
 	}
 	c, err := s.conversation(ctx, p, conversationID)
 	if err != nil {
-		return Turn{}, err
-	}
-	if err = s.RequireOnboarded(ctx); err != nil {
 		return Turn{}, err
 	}
 	if !validText(in.Text, 16000) || !validText(in.RequestKey, 256) {
@@ -258,6 +284,12 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 		}
 		return prior, nil
 	} else if !errors.Is(err, ErrNotFound) {
+		return Turn{}, err
+	}
+	if strings.TrimSpace(s.AgentActorID()) == "" {
+		return Turn{}, ErrPMIdentity
+	}
+	if err = s.RequireOnboarded(ctx); err != nil {
 		return Turn{}, err
 	}
 	if s.deps.Dispatch != nil && s.cfg.AgentHandle == "" {

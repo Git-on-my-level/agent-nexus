@@ -81,6 +81,29 @@ func hashJSONPayload(payload any) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func executeAtomicMutation(ctx context.Context, store PrimitiveStore, scope, actor, key string, payload any, status int, run func(context.Context) (map[string]any, error)) (int, map[string]any, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		response, err := run(ctx)
+		return status, response, err
+	}
+	if len(key) > 256 || strings.ContainsRune(key, 0) {
+		return 0, nil, fmt.Errorf("%w: %w: invalid replay key", primitives.ErrInvalidDocumentRequest, primitives.ErrInvalidWorkRequest)
+	}
+	atomicStore, ok := store.(interface {
+		ExecuteWithReplay(context.Context, string, string, string, string, int, func(context.Context) (map[string]any, error)) (primitives.IdempotencyReplay, error)
+	})
+	if !ok {
+		return 0, nil, errors.New("atomic mutation replay is unavailable")
+	}
+	hash, err := hashJSONPayload(payload)
+	if err != nil {
+		return 0, nil, err
+	}
+	replay, err := atomicStore.ExecuteWithReplay(ctx, scope, actor, key, hash, status, run)
+	return replay.Status, replay.Response, err
+}
+
 func writeIdempotencyError(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false

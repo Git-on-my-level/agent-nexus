@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,7 +48,13 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	bootstrap := len(path) == 2 && path[0] == "turns" && path[1] == "claim" && r.Method == http.MethodPost || len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" && r.Method == http.MethodPost
 	existingRead := r.Method == http.MethodGet && len(path) > 0 && (path[0] == "conversations" || path[0] == "decisions" || path[0] == "actions" || path[0] == "turns")
 	existingAnswer := r.Method == http.MethodPost && len(path) == 3 && (path[0] == "decisions" && (path[2] == "answer" || path[2] == "dispatch") || path[0] == "actions" && (path[2] == "reconcile" || path[2] == "acknowledge"))
-	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer {
+	// Proposal creation owns its onboarding gate: an opt-in stored receipt can
+	// be recovered after disconnect, while both legacy and fresh writes gate.
+	proposal := r.Method == http.MethodPost && len(path) == 1 && path[0] == "decisions"
+	// Chat services check existing keys before their fresh-write setup gate.
+	// A lost confirmation must remain recoverable after PM disconnect.
+	chat := r.Method == http.MethodPost && (len(path) == 1 && path[0] == "conversations" || len(path) == 3 && path[0] == "conversations" && path[2] == "messages")
+	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer && !proposal && !chat {
 		if err = h.Service.RequireOnboarded(ctx); err != nil {
 			writeError(w, err)
 			return
@@ -77,8 +84,15 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodPost:
 		var in CreateConversation
 		if err = decode(&in); err == nil {
-			out, err = s.CreateConversation(ctx, p, in)
+			if in.ReplayKey == "" {
+				err = s.requireChatReplayOrSetup(ctx, p, "conversation", stableID("conversation", p.WorkspaceID, p.ActorID, in.RequestKey), in.RequestKey)
+			}
+			if err == nil {
+				out, err = s.CreateConversation(ctx, p, in)
+			}
 			status = http.StatusCreated
+		} else if gate := s.RequireOnboarded(ctx); gate != nil {
+			err = gate
 		}
 	case len(path) == 2 && path[0] == "conversations" && r.Method == http.MethodGet:
 		var limit int
@@ -93,8 +107,15 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 3 && path[0] == "conversations" && path[2] == "messages" && r.Method == http.MethodPost:
 		var in MessageInput
 		if err = decode(&in); err == nil {
-			out, err = s.PostMessage(ctx, p, path[1], in)
+			if in.ReplayKey == "" {
+				err = s.requireChatReplayOrSetup(ctx, p, "turn", stableID("turn", path[1], in.RequestKey), in.RequestKey)
+			}
+			if err == nil {
+				out, err = s.PostMessage(ctx, p, path[1], in)
+			}
 			status = http.StatusAccepted
+		} else if gate := s.RequireOnboarded(ctx); gate != nil {
+			err = gate
 		}
 	case len(path) == 1 && path[0] == "context" && r.Method == http.MethodGet:
 		var limit int
@@ -112,10 +133,19 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 1 && path[0] == "decisions" && r.Method == http.MethodPost:
 		var in DecisionInput
 		if err = decode(&in); err == nil {
+			if in.ReplayKey == "" {
+				// Retain the legacy route gate before work/domain preflight.
+				err = s.RequireOnboarded(ctx)
+			}
+			if err != nil {
+				break
+			}
 			var d Decision
 			d, err = s.ProposeDecision(ctx, p, in)
 			out = d
-			if !d.Replayed {
+			if d.ProposalReplayStatus != 0 {
+				status = d.ProposalReplayStatus
+			} else if !d.Replayed {
 				status = http.StatusCreated
 			}
 		}
@@ -224,6 +254,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// All turn-bearing endpoints share the same public projection, including
 	// idempotent message replays. Only the runner claim returns credentials.
 	switch value := out.(type) {
+	case Conversation:
+		if len(value.ReplayJSON) > 0 {
+			out = value.ReplayJSON
+		}
 	case Decision:
 		if len(path) == 3 && path[0] == "turns" && path[2] == "decisions" {
 			// Proposal validation already established this conversation owner.
@@ -233,7 +267,13 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				ctx = s.deps.BindRequesterContext(ctx, p)
 			}
 		}
-		out = s.decisionResponse(ctx, p, value)
+		if len(value.ProposalReplayJSON) > 0 {
+			out = value.ProposalReplayJSON
+		} else if len(value.AnswerReplayJSON) > 0 {
+			out = value.AnswerReplayJSON
+		} else {
+			out = s.decisionResponse(ctx, p, value)
+		}
 	case Page[Decision]:
 		items := make([]any, 0, len(value.Items))
 		for _, d := range value.Items {
@@ -241,6 +281,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		out = Page[any]{Items: items, HasMore: value.HasMore, NextCursor: value.NextCursor}
 	case Turn:
+		if len(value.ReplayJSON) > 0 {
+			out = value.ReplayJSON
+			break
+		}
 		view := turnResponse(value, r.Method == http.MethodPost && len(path) == 2 && path[0] == "turns" && path[1] == "claim")
 		if len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" {
 			view.LeaseExpiresAt = &value.LeaseExpiresAt
@@ -384,4 +428,32 @@ func writeAuthenticationError(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusUnauthorized)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": code, "message": message, "recoverable": true, "hint": hint}})
+}
+
+// Keep the legacy fresh-write onboarding response (including invalid fresh
+// bodies), but allow a known owner-bound key to reach normal body/access checks.
+// This peek exposes no record and never grants resource access by itself.
+func (s *Service) requireChatReplayOrSetup(ctx context.Context, p Principal, kind, id, key string) error {
+	gate := s.RequireOnboarded(ctx)
+	if gate == nil {
+		return nil
+	}
+	if !errors.Is(gate, ErrNotOnboarded) || !validText(key, 256) {
+		return gate
+	}
+	var prior struct {
+		WorkspaceID string `json:"workspace_id"`
+		ActorID     string `json:"actor_id"`
+	}
+	err := s.store.get(ctx, kind, id, &prior)
+	if errors.Is(err, ErrNotFound) {
+		return gate
+	}
+	if err != nil {
+		return err
+	}
+	if prior.WorkspaceID != p.WorkspaceID || prior.ActorID != p.ActorID {
+		return gate
+	}
+	return nil
 }

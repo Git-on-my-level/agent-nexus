@@ -903,7 +903,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.",
+        "agent_notes": "Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.",
         "adjacent_commands": [
             "artifacts.archive",
             "artifacts.content",
@@ -3963,6 +3963,14 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "if_version",
+                    "type": "integer"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
+                },
+                {
                     "name": "resolution",
                     "type": "string",
                     "enum_values": [
@@ -4087,6 +4095,10 @@ export const commandRegistry = [
                 },
                 {
                     "name": "patch.topic_ref",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
                     "type": "string"
                 }
             ]
@@ -4274,6 +4286,10 @@ export const commandRegistry = [
             "optional": [
                 {
                     "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
                     "type": "string"
                 },
                 {
@@ -4591,6 +4607,10 @@ export const commandRegistry = [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -5285,6 +5305,10 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
                     "name": "patch.hosts",
                     "type": "list\u003cstring\u003e"
                 },
@@ -5307,6 +5331,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.verified_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -5576,7 +5604,15 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "if_updated_at",
+                    "type": "datetime"
+                },
+                {
                     "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
                     "type": "string"
                 }
             ]
@@ -5686,6 +5722,10 @@ export const commandRegistry = [
                 {
                     "name": "refs",
                     "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -5924,6 +5964,14 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -5996,6 +6044,10 @@ export const commandRegistry = [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -8192,6 +8244,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -8852,8 +8908,16 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
                     "name": "context_refs",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "replay_key",
+                    "type": "string"
                 },
                 {
                     "name": "work_ref",
@@ -9067,6 +9131,16 @@ export const commandRegistry = [
                     "name": "text",
                     "type": "string"
                 }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "replay_key",
+                    "type": "string"
+                }
             ]
         },
         "path_params": [
@@ -9149,6 +9223,16 @@ export const commandRegistry = [
                 },
                 {
                     "name": "text",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
                     "type": "string"
                 }
             ]
@@ -9247,6 +9331,14 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "origin",
+                    "type": "any"
+                },
+                {
                     "name": "payload.evidence_refs",
                     "type": "list\u003cstring\u003e"
                 },
@@ -9269,6 +9361,10 @@ export const commandRegistry = [
                 {
                     "name": "payload.resolution_refs",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "replay_key",
+                    "type": "string"
                 }
             ]
         },
@@ -11764,6 +11860,10 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
                     "name": "patch.board_refs",
                     "type": "list\u003cany\u003e"
                 },
@@ -11802,6 +11902,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.workspace_move",
                     "type": "object"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -12278,6 +12382,10 @@ export const commandRegistry = [
                 {
                     "name": "relations",
                     "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 },
                 {
                     "name": "risk",

@@ -2398,6 +2398,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2432,6 +2433,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2465,7 +2467,9 @@ Inputs:
   - path `document_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4029,7 +4033,9 @@ Inputs:
   - body `request_key` (string)
   - body `title` (string)
   Optional:
+  - body `actor_id` (string)
   - body `context_refs` (list<string>)
+  - body `replay_key` (string)
   - body `work_ref` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
@@ -4138,6 +4144,9 @@ Inputs:
   - path `conversation_id`
   - body `request_key` (string)
   - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `replay_key` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4178,6 +4187,9 @@ Inputs:
   - body `approve` (boolean)
   - body `revision` (integer)
   - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4220,10 +4232,13 @@ Inputs:
   - body `target_revision` (string)
   - body `work_ref` (string)
   Optional:
+  - body `actor_id` (string)
+  - body `origin` (any)
   - body `payload.evidence_refs` (list<string>)
   - body `payload.note` (string)
   - body `payload.phase` (string)
   - body `payload.resolution_refs` (list<string>)
+  - body `replay_key` (string)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
@@ -4864,6 +4879,7 @@ Inputs:
   - body `project_ref` (string)
   - body `related_refs` (list<any>)
   - body `relations` (list<object>)
+  - body `request_key` (string)
   - body `risk` (string)
   - body `roles` (list<string>)
   - body `source.aliases` (list<string>)
@@ -6248,6 +6264,7 @@ Inputs:
   - path `topic_id`
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   Optional:
+  - body `actor_id` (string)
   - body `patch.board_refs` (list<any>)
   - body `patch.document_refs` (list<any>)
   - body `patch.owner_refs` (list<any>)
@@ -6258,6 +6275,7 @@ Inputs:
   - body `patch.summary` (string)
   - body `patch.title` (string)
   - body `patch.workspace_move` (object)
+  - body `request_key` (string)
 
 Local Help: topics patch
 
@@ -7259,6 +7277,7 @@ Inputs:
   - body `patch.resolution_refs` (list<any>)
   - body `patch.risk` (string)
   - body `patch.topic_ref` (string)
+  - body `request_key` (string)
   Enum values: patch.resolution: done; patch.risk: critical, high, low, medium
 
 Local Help: cards patch
@@ -7412,6 +7431,7 @@ Inputs:
   - body `revision.title` (string)
   Optional:
   - body `actor_id` (string)
+  - body `request_key` (string)
   - body `revision.definition_of_done` (list<string>)
   - body `revision.provenance.by_field` (object)
   - body `revision.provenance.notes` (string)
@@ -7537,6 +7557,8 @@ Inputs:
   - body `actor_id` (string)
   - body `after_card_id` (string)
   - body `before_card_id` (string)
+  - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
   - body `resolution` (string)
   - body `resolution_refs` (list<any>)
   Enum values: column_key: backlog, blocked, done, in_progress, ready, review; resolution: done
@@ -7885,7 +7907,7 @@ Generated Help: artifacts attachments create
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
-- Agent notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
+- Agent notes: Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
 - Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Local Help: artifacts attachments create
@@ -8200,6 +8222,7 @@ Inputs:
   - body `provenance.notes` (string)
   - body `provenance.sources` (list<string>)
   - body `refs` (list<any>)
+  - body `request_key` (string)
   Enum values: content_type: binary, structured, text
 
 Global flags:
@@ -8254,6 +8277,8 @@ Inputs:
   - body `reason` (string)
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.

@@ -3421,7 +3421,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTrashRequest'
+              $ref: '#/components/schemas/DocumentTrashRequest'
       responses:
         '200':
           description: Document moved to trash
@@ -5566,7 +5566,7 @@ paths:
       x-anx-command-id: artifacts.attachments.create
       x-anx-cli-path: artifacts attachments create
       x-anx-why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
-      x-anx-agent-notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
+      x-anx-agent-notes: Optional request_key atomically binds metadata, original filename, MIME and file bytes to an actor-scoped original-result replay. Changed key reuse returns 409; fresh authorization applies. Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
       x-anx-input-mode: multipart-form
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
@@ -5581,6 +5581,10 @@ paths:
               type: object
               required: [refs, file]
               properties:
+                request_key:
+                  type: string
+                  maxLength: 256
+                  description: Actor-scoped key retained unchanged until upload confirmation.
                 refs:
                   type: string
                   description: JSON array of typed refs backing the attachment (e.g. `["thread:thread-1"]`).
@@ -9409,8 +9413,15 @@ components:
       type: object
       additionalProperties: true
       properties:
+        actor_id:
+          type: string
+          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
         request_key:
           type: string
+        replay_key:
+          type: string
+          maxLength: 256
+          description: Opt in to an atomic original 201 receipt, binding the authenticated actor and complete decoded request. Requires a new conversation request_key; legacy conversations without a receipt cannot be adopted. Recovery checks current access and works after PM disconnect; new writes retain the setup gate.
         title:
           type: string
         context_refs:
@@ -9427,8 +9438,15 @@ components:
       type: object
       additionalProperties: true
       properties:
+        actor_id:
+          type: string
+          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
         request_key:
           type: string
+        replay_key:
+          type: string
+          maxLength: 256
+          description: Opt in to the original 202 receipt. Atomically commits the turn and durable dispatch intent; binds actor, conversation and complete decoded body. Existing turns without a receipt cannot be adopted. Recovery checks current access and works after PM disconnect. Legacy callers replay current turn state.
         text:
           type: string
       required:
@@ -9548,6 +9566,17 @@ components:
       type: object
       additionalProperties: false
       properties:
+        actor_id:
+          type: string
+          description: Optional original submitting actor; when supplied it must match the authenticated actor.
+        replay_key:
+          type: string
+          maxLength: 256
+          description: Optional actor/workspace-bound original HTTP receipt key. The decision, superseding writes, origin delivery and original response commit atomically. Retain request_key, replay_key and the complete body unchanged until confirmed. Exact retries return the original status/body after fresh authorization, including after PM disconnection. Clients omitting replay_key retain current-decision replay and its terminal-state metadata.
+        origin:
+          allOf:
+            - $ref: '#/components/schemas/PMOrigin'
+          description: Optional existing enabled channel binding owned by the authenticated actor; another actor's origin is rejected.
         request_key:
           type: string
         work_ref:
@@ -9596,9 +9625,16 @@ components:
       - scope
       - target_revision
     PMDecisionAnswerRequest:
+      description: Optional request_key binds the decision, revision, approve flag and text to an actor-scoped replay. The answer, action intent and original response commit atomically; identical keyed retries replay that response after fresh authorization, and changed key reuse returns 409. Unkeyed clients retain revision-based answer replay.
       type: object
       additionalProperties: true
       properties:
+        actor_id:
+          type: string
+          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
+        request_key:
+          type: string
+          maxLength: 256
         revision:
           type: integer
         approve:
@@ -10361,6 +10397,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Actor-scoped original-result replay committed atomically with this mutation; retain unchanged until confirmed.
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
         actor_id:
           type: string
@@ -10984,6 +11024,7 @@ components:
       required: [plan, if_updated_at]
       properties:
         actor_id: {type: string, description: Optional dev-mode actor; authenticated principal otherwise.}
+        request_key: {type: string, maxLength: 256, description: Optional actor-bound replay key. Retries must preserve the complete original plan and if_updated_at; the original response commits atomically with the edit.}
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         if_updated_at: {type: string, format: date-time}
     CardPlanResponse:
@@ -11493,6 +11534,14 @@ components:
     MoveCardInput:
       type: object
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Optional actor-bound key for atomic replay of the original move and lifecycle-event receipt. Reuse requires the same target, body and concurrency tokens.
+        if_version:
+          type: integer
+          format: int64
+          description: Optional original work-version fence, checked in the move transaction alongside the board token.
         column_key:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]
@@ -11541,6 +11590,8 @@ components:
     PatchTopicRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 256, description: "Original-result replay committed atomically with topic, backing thread, refs and update event. Binds the original actor, canonical topic, complete decoded body and metadata base; keep unchanged until confirmed." }
         patch: { $ref: '#/components/schemas/TopicPatchInput' }
         if_updated_at:
           type: string
@@ -11551,7 +11602,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
-        request_key: { type: string }
+        request_key: { type: string, maxLength: 256, description: "Original-result replay committed atomically with document and first revision; retain unchanged until confirmed." }
         document: { $ref: '#/components/schemas/DocumentCreateInput' }
         content: {}
         content_base64:
@@ -11633,6 +11684,11 @@ components:
     PatchDocumentRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        request_key:
+          type: string
+          maxLength: 256
+          description: Actor-scoped original-result replay committed atomically with this mutation; retain unchanged until confirmed.
         patch: { $ref: '#/components/schemas/DocumentPatchInput' }
         if_updated_at:
           type: string
@@ -11642,6 +11698,10 @@ components:
     CreateDocumentRevisionRequest:
       type: object
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Actor-scoped original-result replay committed atomically with this mutation; retain unchanged until confirmed.
         if_base_revision:
           type: string
           description: Base revision ref or handle for optimistic concurrency; must match the document head when appending from the current tip.
@@ -11667,6 +11727,7 @@ components:
           type: string
           description: Base card revision ref or handle for optimistic concurrency; must match the card head.
         actor_id: { type: string }
+        request_key: { type: string, maxLength: 256, description: "Optional actor-bound original-result replay key; retain the original revision body and base token until confirmed." }
         revision: { $ref: '#/components/schemas/CardRevisionCreateInput' }
       required: [if_base_revision, revision]
 
@@ -11817,6 +11878,7 @@ components:
     PatchCardRequest:
       type: object
       properties:
+        request_key: {type: string, maxLength: 256, description: Optional actor-bound replay key; preserve the original patch and concurrency token on retry.}
         actor_id: { type: string }
         patch: { $ref: '#/components/schemas/CardPatchInput' }
         if_updated_at:
@@ -12045,18 +12107,37 @@ components:
       required: [purged, board_ref, board_handle]
 
     DocumentLifecycleMutationRequest:
+      description: Optional request_key recovers the original actor-bound HTTP receipt atomically. Keyed requests require if_updated_at; actual lifecycle changes advance updated_at and updated_by.
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
+        if_updated_at:
+          type: string
+          format: date-time
+
+    DocumentTrashRequest:
+      description: Optional request_key recovers the original actor-bound HTTP receipt atomically. Keyed requests require if_updated_at; actual lifecycle changes advance updated_at and updated_by.
+      type: object
+      required: [reason]
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
+        reason: { type: string }
         if_updated_at:
           type: string
           format: date-time
 
     DocumentRestoreFromTrashRequest:
+      description: Optional request_key recovers the original actor-bound HTTP receipt atomically. Keyed requests require if_updated_at; actual lifecycle changes advance updated_at and updated_by.
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
         reason: { type: string }
+        if_updated_at:
+          type: string
+          format: date-time
 
     PurgeDocumentRequest:
       type: object

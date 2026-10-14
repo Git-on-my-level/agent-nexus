@@ -67,6 +67,25 @@ func (s *Service) validateResolution(ctx context.Context, p Principal, scope str
 // approval equality, idempotency checks, or the source executor's parameters.
 func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision) any {
 	path, err := s.deliveryPath(ctx, Action{SourceAuthority: d.SourceAuthority, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: d.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Scope: d.Scope, TargetRevision: d.TargetRevision, Payload: d.Payload})
+	resolution := make([]ResolutionRef, 0)
+	if d.Payload != nil {
+		for _, ref := range d.Payload.ResolutionRefs {
+			kind, _, _ := strings.Cut(ref, ":")
+			resolved := ResolutionRef{Ref: ref, Kind: kind}
+			if s.deps.ResolveResolution != nil {
+				if live, err := s.deps.ResolveResolution(ctx, p, ref); err == nil {
+					resolved = live
+				}
+			}
+			resolution = append(resolution, resolved)
+		}
+	}
+	return decisionResponseSnapshot(d, path, err, resolution)
+}
+
+// No dependency calls here: original receipts can be assembled under the write
+// lock using preflight projection inputs without reading raw auth storage.
+func decisionResponseSnapshot(d Decision, path string, err error, resolution []ResolutionRef) any {
 	type response struct {
 		Decision
 		WorkMissing            bool   `json:"work_missing"`
@@ -92,17 +111,7 @@ func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision)
 		*ActionPayload
 		Resolution []ResolutionRef `json:"resolution,omitempty"`
 	}
-	payload := payloadResponse{ActionPayload: d.Payload, Resolution: make([]ResolutionRef, 0, len(d.Payload.ResolutionRefs))}
-	for _, ref := range d.Payload.ResolutionRefs {
-		kind, _, _ := strings.Cut(ref, ":")
-		resolved := ResolutionRef{Ref: ref, Kind: kind}
-		if s.deps.ResolveResolution != nil {
-			if live, err := s.deps.ResolveResolution(ctx, p, ref); err == nil {
-				resolved = live
-			}
-		}
-		payload.Resolution = append(payload.Resolution, resolved)
-	}
+	payload := payloadResponse{ActionPayload: d.Payload, Resolution: resolution}
 	return struct {
 		response
 		Payload payloadResponse `json:"payload"`

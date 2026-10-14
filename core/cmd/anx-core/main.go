@@ -641,6 +641,12 @@ func main() {
 		}()
 		defer func() { maintenanceCancel(); <-compactDone }()
 	}
+	replayGCDone := make(chan struct{})
+	go func() {
+		defer close(replayGCDone)
+		storage.RunReplayReceiptMaintenance(maintenanceCtx, workspace.DB(), func(error) { fmt.Fprintln(os.Stderr, "replay receipt maintenance: retrying bounded batch") })
+	}()
+	defer func() { maintenanceCancel(); <-replayGCDone }()
 	commentSearchDone := make(chan struct{})
 	documentSearchDone := make(chan struct{})
 	go func() {

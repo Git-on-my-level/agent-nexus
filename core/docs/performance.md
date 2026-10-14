@@ -1,5 +1,26 @@
 # Performance guardrails
 
+PM proposal admission uses partial expression indexes on workspace, actor, work
+and scope for awaiting decisions, with a separate matching index for pending
+human proposals. Equality fixes every prefix, so SQLite can take the first rowid
+without scanning actor history or sorting. `TestProposalLookupIndexedPlan`
+checks the actual preflight/transactional SQL for indexed SEARCH plans and no
+temporary sort; `TestProposalSameActorHistoryScale` measures the full proposal
+service with 100 and 100,000 same-actor/same-work decision rows, including a dense
+awaiting prefix with unrelated scopes. Its fixed budget is 2,048
+VM steps, 30 queries/returned rows, zero full-scan steps and zero sorts:
+
+```sh
+go test -C core ./internal/pm -run 'TestProposal(LookupIndexedPlan|SameActorHistoryScale)$' -count=1 -v
+```
+
+Receipt GC uses the existing creation-time index and selects at most
+`gcBatchSize` rowids per transaction; its cost is O(batch), not O(receipt history).
+It yields between batches, never runs inside an HTTP writer, and deletes no
+canonical data. Retention/recovery windows are defined once in
+`internal/replaypolicy/policy.json`; see
+`web-ui/docs/durable-user-work.md` for key-reuse and client cutoff semantics.
+
 A read or stream tick must be bounded by its selector or page, with indexed
 filtering before materialization. Hot-path O(workspace) work is a merge-blocking
 P1, including an authorization query that rebuilds a graph or scans stored text.

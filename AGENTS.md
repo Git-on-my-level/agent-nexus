@@ -40,6 +40,24 @@ Agent Nexus is split into a small set of modules with different jobs:
 
 ## Cross-Module Boundaries
 
+### Never lose user input
+
+User-authored work must survive navigation, reload, tab close, offline periods,
+timeouts and uncertain server results. Mutation forms must autosave device-only
+drafts under workspace, principal and target keys, persist each submitted request
+before sending, and reuse its client-generated idempotency key until confirmed.
+Core must atomically record mutations and replay results; do not enable automatic
+retry on a route until its replay safety is verified. Never clear an unconfirmed
+request on error or show raw upstream response bodies as ordinary UI copy.
+Definitive failures keep the text with copy/edit actions; uncertain failures retry
+with bounded backoff. One tab drains an outbox, and sign-out/principal switches
+clear device work to prevent shared-machine disclosure. Storage failure must be
+visible and must prevent sending work that has not been persisted.
+
+The rollout and current coverage are tracked in
+`web-ui/docs/durable-user-work.md`. New mutation surfaces must follow this rule;
+existing gaps are rollout work, not permission to add further bypasses.
+
 - `core` is the system of record. Durable truth lives there, not in the CLI or UI.
 - `core` may consume only a generic heartbeat publisher env contract (`ANX_HEARTBEAT_PUBLISHER_URL`, `ANX_HEARTBEAT_INTERVAL`, `ANX_HEARTBEAT_AUDIENCE`, `ANX_WORKSPACE_SERVICE_ID`, `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`). This is deployment config only; do not add control-plane-specific imports, URLs, or type coupling.
 - `cli` is the automation and agent surface. Preserve deterministic, non-interactive behavior and stable machine-facing output.

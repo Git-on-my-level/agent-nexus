@@ -122,3 +122,42 @@ describe("bulk lifecycle writes", () => {
     expect(visibleError(state)).toBe("");
   });
 });
+
+describe("durable lifecycle queues", () => {
+  for (const fails of [false, true])
+    it(
+      fails
+        ? "retains selection when checkpoint fails"
+        : "checkpoints the whole selection without claiming a server refresh",
+      async () => {
+        const queue = vi.fn(async () => {
+          if (fails) throw new Error("checkpoint unavailable");
+        });
+        const clearSelection = vi.fn(),
+          reload = vi.fn(),
+          setError = vi.fn();
+        const controller = createWorkspaceResourceLifecycleController({
+          resourceSingular: "document",
+          resourcePlural: "documents",
+          selectedItems: () => DOCS,
+          idFor: (doc) => doc.id,
+          isArchived: () => false,
+          isTrashed: () => false,
+          actions: {},
+          queue,
+          clearSelection,
+          reload,
+          setError,
+        });
+        await controller.runBulk(
+          "trash",
+          DOCS.map((doc) => doc.id),
+        );
+        expect(queue).toHaveBeenCalledTimes(1);
+        expect(queue).toHaveBeenCalledWith("trash", ["doc-1", "doc-2"]);
+        expect(reload).not.toHaveBeenCalled();
+        expect(clearSelection).toHaveBeenCalledTimes(fails ? 0 : 1);
+        expect(controller.bulkBusy).toBe(false);
+      },
+    );
+});

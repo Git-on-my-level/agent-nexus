@@ -3,6 +3,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { focusTrap } from "$lib/actions/focusTrap.js";
+  import { durableForm as durableMoveForm } from "$lib/actions/durableForm.js";
+  import { enqueueTaskMove, taskMoveDraft } from "$lib/taskMoveWork.js";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
+  import { enqueueAuthoring, mutationOutbox } from "$lib/mutationOutbox.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { coreClient } from "$lib/coreClient";
   import {
     actorDisplayLabel,
@@ -15,7 +21,6 @@
   import { copyText } from "$lib/clipboard.js";
   import { absoluteUrl } from "$lib/absoluteUrl.js";
   import { modSymbol } from "$lib/keyboardHints.js";
-  import { applyTaskPhaseMove } from "$lib/taskBoardMove.js";
   import { searchDocuments, searchWork } from "$lib/searchHelpers";
   import {
     resourceDisplayLabel,
@@ -39,13 +44,11 @@
   } from "$lib/commandPaletteModel.js";
   import { workspacePath } from "$lib/workspacePaths";
   import {
-    PM_STATES,
-    isPmNotOnboardedRefusal,
     pmFeaturesVisible,
     pmKnownAbsent,
     pmSetupOffered,
   } from "$lib/pm/onboardingState.js";
-  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
+  import { pmPresence } from "$lib/pm/presence.js";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workSummaryModel } from "$lib/workSummary.js";
 
@@ -77,6 +80,81 @@
   let inputEl = $state(null);
   let running = $state(false);
   let contextWork = $state(null);
+  let contextBoardToken = $state("");
+  let moveDraft = $state(null);
+  let moveError = $state("");
+  let moveTarget = $derived(workId ? `task:${workId}:move` : "");
+  let movePending = $derived(
+    $mutationOutbox.some((row) => row.target === moveTarget),
+  );
+  function restoreMove(value, reason) {
+    moveDraft = value;
+    if (reason === "privacy") {
+      moveError = "";
+      contextBoardToken = "";
+      contextWork = null;
+      contextRequestId += 1;
+      close();
+    }
+  }
+  async function rebaseMove() {
+    const draft = moveDraft;
+    const scope = $localWorkScope;
+    const target = moveTarget;
+    try {
+      const result = await coreClient.getWork(
+        draft.work.ref || workKey(draft.work),
+        { summary: 1 },
+      );
+      const board = isNexusOwned(result.work)
+        ? await coreClient.getBoard(
+            result.work.board_ref || result.work.board_id,
+          )
+        : null;
+      if (
+        scope !== $localWorkScope ||
+        target !== moveTarget ||
+        draft !== moveDraft
+      )
+        return;
+      moveDraft = {
+        ...draft,
+        work: result.work,
+        boardToken: (board?.board || board)?.updated_at || "",
+        approved: false,
+      };
+      moveError = "";
+    } catch (err) {
+      if (scope === $localWorkScope && target === moveTarget)
+        moveError = errorMessage(err);
+    }
+  }
+  let assignmentDraft = $state(null);
+  let assignmentError = $state("");
+  let assignmentTarget = $derived(workId ? `card:${workId}:assignment` : "");
+  let assignmentPending = $derived(
+    $mutationOutbox.some((row) => row.target === assignmentTarget),
+  );
+  function restoreAssignment(value, reason, detail) {
+    assignmentDraft = value;
+    if (reason === "privacy") {
+      assignmentError = "";
+      contextWork = null;
+      contextDoc = null;
+      contextRequestId += 1;
+      close();
+    }
+    if (reason === "confirmed" && detail?.result?.card && contextWork) {
+      const card = detail.result.card;
+      contextWork = {
+        ...contextWork,
+        assignee_refs: card.assignee_refs,
+        owner: card.assignee_refs?.[0] || "",
+        updated_at: card.updated_at,
+      };
+    }
+  }
+
   let contextDoc = $state(null);
   /** @type {{ text: string, tone?: "ok" | "danger", href?: string, hrefLabel?: string } | null} */
   let notice = $state(null);
@@ -116,6 +194,7 @@
     const task = workId;
     const doc = documentId;
     const ticket = ++contextRequestId;
+    const scope = $localWorkScope;
     const [loadedWork, loadedDoc] = untrack(() => [contextWork, contextDoc]);
     // A task from another page is not this page's context.
     if (loadedWork && loadedWork.ref !== task && workKey(loadedWork) !== task)
@@ -124,8 +203,17 @@
     if (task)
       void coreClient
         .getWork(task, { summary: 1 })
-        .then((result) => {
-          if (ticket === contextRequestId) contextWork = result?.work ?? null;
+        .then(async (result) => {
+          if (ticket !== contextRequestId || scope !== $localWorkScope) return;
+          contextWork = result?.work ?? null;
+          contextBoardToken = "";
+          if (contextWork && isNexusOwned(contextWork)) {
+            const board = await coreClient.getBoard(
+              contextWork.board_ref || contextWork.board_id,
+            );
+            if (ticket === contextRequestId && scope === $localWorkScope)
+              contextBoardToken = (board?.board || board)?.updated_at || "";
+          }
         })
         .catch(() => {});
     if (!task) contextWork = null;
@@ -133,7 +221,7 @@
       void coreClient
         .getDocument(doc)
         .then((result) => {
-          if (ticket === contextRequestId)
+          if (ticket === contextRequestId && scope === $localWorkScope)
             contextDoc = result?.document ?? null;
         })
         .catch(() => {});
@@ -197,79 +285,126 @@
       .sort((a, b) => a.name.localeCompare(b.name)),
   );
 
-  async function moveContextTask(phase) {
-    const work = contextWork;
-    close();
-    let result;
-    try {
-      result = await applyTaskPhaseMove(coreClient, work, phase, {
-        pmOnboarded: !pmAbsent,
-      });
-    } catch (err) {
-      /*
-       * The move was attempted because presence had not answered yet, and
-       * core has now settled it. Record that so the shell stops waiting and
-       * offers setup, and say it the way the absent case does instead of
-       * passing core's sentence through as a raw failure.
-       */
-      if (!isPmNotOnboardedRefusal(err)) throw err;
-      publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
-      result = { kind: "needs_pm", work };
-    }
-    if (result.kind === "moved") {
-      contextWork = { ...work, phase };
-      return {
-        text: `Moved “${work.title}” to ${phaseLabel(phase)}.`,
-        tone: "ok",
-      };
-    }
-    if (result.kind === "requested") {
-      return {
-        text: `Requested a move to ${phaseLabel(phase)} at ${sourceLabel(work.source)}. It waits in Inbox for a yes.`,
-        href: result.decision?.id
-          ? href(
-              `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
-            )
-          : "",
-        hrefLabel: "Open in Inbox",
-      };
-    }
-    if (result.kind === "needs_pm") {
-      // The rows above are absent once a PM is known to be missing; this
-      // covers running the row before presence answered, and a state that
-      // changed while the palette was open.
+  async function moveContextTask(phase = moveDraft?.phase) {
+    if (movePending) return;
+    const originInput = inputEl;
+    const work = moveDraft?.work || contextWork;
+    if (!work) return;
+    if (!isNexusOwned(work) && pmAbsent)
       return {
         text: `Changing work owned by ${sourceLabel(work.source)} is a request a PM carries out, and this workspace has none.`,
         href: href("/pm/setup"),
         hrefLabel: "Set up your PM",
       };
+    let draft = moveDraft
+      ? {
+          ...moveDraft,
+          phase,
+          approved: moveDraft.phase === phase && moveDraft.approved,
+        }
+      : taskMoveDraft(work, phase, { boardToken: contextBoardToken });
+    moveDraft = draft;
+    if (!isNexusOwned(work) && !draft.approved) {
+      if (
+        !window.confirm(
+          `Ask the PM to request moving “${work.title}” to ${phaseLabel(phase)} at ${sourceLabel(work.source)}? You approve the request in Inbox.`,
+        )
+      )
+        return;
+      draft = { ...draft, approved: true };
+      moveDraft = draft;
     }
-    return null;
+    moveError = "";
+    try {
+      await enqueueTaskMove(draft, {
+        href: href(`/tasks/${encodeURIComponent(workId)}`),
+      });
+      if (inputEl === originInput) close();
+      return {
+        text: `Saved move to ${phaseLabel(phase)}. Waiting for confirmation.`,
+      };
+    } catch (err) {
+      moveError = errorMessage(err);
+      subpage = "move";
+    }
+  }
+
+  async function submitAssignment(draft = assignmentDraft) {
+    if (!draft || assignmentPending) return;
+    assignmentError = "";
+    const originInput = inputEl;
+    const ref = `actor:${draft.actorId}`;
+    const current = draft.work.assignee_refs || [];
+    await enqueueAuthoring({
+      operation: "cards.patch",
+      id: draft.work.cardId,
+      target: assignmentTarget,
+      title: "Saved assignment",
+      href: href(`/tasks/${encodeURIComponent(workId)}`),
+      draft,
+      preview: `Assign “${draft.work.title}” to ${draft.name}`,
+      body: {
+        patch: {
+          assignee_refs: [ref, ...current.filter((entry) => entry !== ref)],
+        },
+        if_updated_at: draft.work.updated_at,
+      },
+    });
+    if (inputEl === originInput) close();
+    return { text: "Assignment saved. Waiting for confirmation." };
   }
 
   async function assignContextTask(actorId, name) {
-    close();
-    // Patch against the card as it is now, not as it was when the palette
-    // opened: the write is fenced on its updated_at.
-    const work = (
-      await coreClient.getWork(workKey(contextWork), { summary: 1 })
-    )?.work;
-    if (!work) throw new Error("This task is no longer available.");
-    const ref = `actor:${actorId}`;
-    const current = Array.isArray(work.assignee_refs) ? work.assignee_refs : [];
-    // The owner is the first assignee; assigning puts this person first and
-    // keeps anyone else already on the task.
-    const assignees = [ref, ...current.filter((entry) => entry !== ref)];
-    await coreClient.updateBoardCard(
-      String(work.board_ref || ""),
-      cardIdFromWork(work),
-      {
-        patch: { assignee_refs: assignees },
-        if_updated_at: work.updated_at,
+    if (assignmentPending) return;
+    const work = contextWork;
+    if (!work || (work.ref !== workId && workKey(work) !== workId))
+      throw new Error("Wait for this task to load before assigning it.");
+    if (!work?.updated_at)
+      throw new Error(
+        "This task did not report a revision. Reload before assigning it.",
+      );
+    // Keep the observed base, including all other assignees, across edits and
+    // recovery. A conflict is rebased only by the explicit action below.
+    assignmentDraft = {
+      actorId,
+      name,
+      work: assignmentDraft?.work || {
+        cardId: cardIdFromWork(work),
+        title: work.title,
+        updated_at: work.updated_at,
+        assignee_refs: [...(work.assignee_refs || [])],
       },
-    );
-    contextWork = { ...work, assignee_refs: assignees, owner: ref };
-    return { text: `Assigned “${work.title}” to ${name}.`, tone: "ok" };
+    };
+    return submitAssignment();
+  }
+
+  async function rebaseAssignment() {
+    const scope = $localWorkScope;
+    const target = assignmentTarget;
+    const draft = assignmentDraft;
+    try {
+      const result = await coreClient.getWork(workId, { summary: 1 });
+      if (
+        scope !== $localWorkScope ||
+        target !== assignmentTarget ||
+        draft !== assignmentDraft
+      )
+        return;
+      if (!result?.work?.updated_at)
+        throw new Error("This task is no longer available.");
+      assignmentDraft = {
+        ...draft,
+        work: {
+          ...draft.work,
+          updated_at: result.work.updated_at,
+          assignee_refs: [...(result.work.assignee_refs || [])],
+        },
+      };
+      assignmentError = "";
+    } catch {
+      assignmentError =
+        "Could not refresh this task. Your assignment is still saved.";
+    }
   }
 
   async function copy(value, what) {
@@ -289,7 +424,8 @@
 
   let taskCommands = $derived.by(() => {
     const work = contextWork;
-    if (!work || !workId) return { root: [], move: [], assign: [] };
+    if (!work || !workId || (work.ref !== workId && workKey(work) !== workId))
+      return { root: [], move: [], assign: [] };
     const group = `Actions on “${work.title || "this task"}”`;
     const owned = isNexusOwned(work);
     const source = sourceLabel(work.source);
@@ -310,18 +446,19 @@
       run: () => moveContextTask(phase),
     }));
     const ownerId = String(work.owner ?? "").replace(/^actor:/, "");
-    const assign = owned
-      ? people
-          .filter((person) => person.id !== ownerId)
-          .map((person) => ({
-            id: `assign:${person.id}`,
-            group,
-            label: `Assign to ${person.name}`,
-            keywords: ["owner"],
-            icon: "persona",
-            run: () => assignContextTask(person.id, person.name),
-          }))
-      : [];
+    const assign =
+      owned && !assignmentPending
+        ? people
+            .filter((person) => person.id !== ownerId)
+            .map((person) => ({
+              id: `assign:${person.id}`,
+              group,
+              label: `Assign to ${person.name}`,
+              keywords: ["owner"],
+              icon: "persona",
+              run: () => assignContextTask(person.id, person.name),
+            }))
+        : [];
     const sourceHref = safeSourceHref(work.source?.url);
     const link = absoluteUrl(
       href(`/tasks/${encodeURIComponent(workKey(work))}`),
@@ -702,6 +839,11 @@
       } else if (key === "a") {
         event.preventDefault();
         openAt("assign");
+        if (
+          event.detail?.scope === $localWorkScope &&
+          event.detail?.target === moveTarget
+        )
+          openAt("move");
       } else if (key === "o") {
         // The page's own source link: a real click, so no popup blocker.
         const link = document.querySelector("[data-task-source-link]");
@@ -717,8 +859,17 @@
   }
 
   onMount(() => {
+    const editAssignment = (event) => {
+      if (
+        event.detail?.scope === $localWorkScope &&
+        event.detail?.target === assignmentTarget
+      )
+        openAt("assign");
+    };
+    window.addEventListener("anx:edit-form", editAssignment);
     window.addEventListener("keydown", handleGlobalKeydown, true);
     return () => {
+      window.removeEventListener("anx:edit-form", editAssignment);
       window.removeEventListener("keydown", handleGlobalKeydown, true);
       clearTimeout(noticeTimer);
       clearTimeout(debounceTimer);
@@ -741,170 +892,232 @@
   );
 </script>
 
-{#if open}
-  <div
-    class="cmd-backdrop ui-fade-in"
-    onclick={handleBackdropClick}
-    onkeydown={handleKeydown}
-    role="dialog"
-    aria-modal="true"
-    aria-label="Command palette"
-    tabindex="-1"
-    use:focusTrap={{ initialFocus: () => inputEl, fallbackFocus }}
-  >
-    <div class="cmd-modal ui-pop-in">
-      <div class="cmd-input-wrap">
-        {#if subpage}
-          <button
-            class="cmd-crumb"
-            type="button"
-            onclick={() => {
-              subpage = "";
-              query = "";
-              inputEl?.focus();
-            }}
-            title="Back (Backspace)">{SUBPAGE_TITLES[subpage]}</button
-          >
-        {:else}
-          <svg
-            class="cmd-search-icon"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        {/if}
-        <input
-          bind:this={inputEl}
-          class="cmd-input"
-          type="text"
-          {placeholder}
-          value={query}
-          oninput={handleInput}
-          spellcheck="false"
-          autocomplete="off"
-          role="combobox"
-          aria-expanded="true"
-          aria-autocomplete="list"
-          aria-controls="cmd-results"
-          aria-activedescendant={items.length
-            ? `cmd-option-${activeIndex}`
-            : undefined}
-        />
-        <kbd class="cmd-esc-hint">{subpage ? "Esc back" : "Esc"}</kbd>
-      </div>
-
-      <div
-        class="cmd-results"
-        id="cmd-results"
-        role="listbox"
-        aria-label="Commands and results"
-      >
-        {#each rows as row (row.key)}
-          {#if row.header}
-            <div class="cmd-group-header" role="presentation">
-              {row.header}
-            </div>
-          {:else}
-            {@const command = row.command}
-            <!-- Keyboard handling lives on the dialog (arrows move, Enter
-                 runs); the option is a listbox row, not a second control. -->
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-            <div
-              class="cmd-result-row"
-              class:cmd-result-row--active={row.index === activeIndex}
-              data-cmd-index={row.index}
-              data-cmd-id={command.id}
-              id={`cmd-option-${row.index}`}
-              role="option"
-              aria-selected={row.index === activeIndex}
-              onclick={() => void run(command)}
-              onmousemove={() => (activeIndex = row.index)}
-            >
-              <svg
-                class="cmd-result-icon"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
+<div
+  use:durableMoveForm={{
+    target: moveTarget,
+    value: moveDraft,
+    read: () => moveDraft,
+    onRestore: restoreMove,
+  }}
+  use:durableForm={{
+    target: assignmentTarget,
+    value: assignmentDraft,
+    read: () => assignmentDraft,
+    onRestore: restoreAssignment,
+  }}
+>
+  {#if open}
+    <div
+      class="cmd-backdrop ui-fade-in"
+      onclick={handleBackdropClick}
+      onkeydown={handleKeydown}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+      tabindex="-1"
+      use:focusTrap={{ initialFocus: () => inputEl, fallbackFocus }}
+    >
+      <div class="cmd-modal ui-pop-in">
+        {#if subpage === "move"}
+          <div class="p-3">
+            <MutationSendStatus target={moveTarget} />
+            {#if moveDraft && !movePending}
+              <p>
+                Saved move: “{moveDraft.work.title}” to {phaseLabel(
+                  moveDraft.phase,
+                )}.
+              </p>
+              <button
+                type="button"
+                class="rounded border border-line px-2 py-1"
+                onclick={() => run({ run: () => moveContextTask() })}
+                >Send move</button
               >
-                <path d={iconPath(command.icon)} />
-              </svg>
-              <div class="cmd-result-text">
-                <span class="cmd-result-title">{command.label}</span>
-                {#if command.summary}
-                  <WorkSummary
-                    summary={command.summary}
-                    density="row"
-                    title={command.label}
-                    class="cmd-result-summary"
-                  />
+              <button
+                type="button"
+                class="rounded border border-line px-2 py-1"
+                onclick={rebaseMove}>Use latest version</button
+              >
+            {/if}
+            {#if moveError}<p role="alert">{moveError}</p>{/if}
+          </div>
+        {/if}
+        {#if subpage === "assign"}
+          <div class="p-3">
+            <MutationSendStatus target={assignmentTarget} />
+            {#if assignmentDraft && !assignmentPending}
+              <p>
+                Saved assignment: {assignmentDraft.name} for “{assignmentDraft
+                  .work.title}”
+              </p>
+              <button
+                type="button"
+                class="rounded border border-line px-2 py-1"
+                onclick={() => run({ run: () => submitAssignment() })}
+                >Send assignment</button
+              >
+              <button
+                type="button"
+                class="rounded border border-line px-2 py-1"
+                onclick={rebaseAssignment}>Use latest version</button
+              >
+            {/if}
+            {#if assignmentError}<p role="alert">{assignmentError}</p>{/if}
+          </div>
+        {/if}
+        <div class="cmd-input-wrap">
+          {#if subpage}
+            <button
+              class="cmd-crumb"
+              type="button"
+              onclick={() => {
+                subpage = "";
+                query = "";
+                inputEl?.focus();
+              }}
+              title="Back (Backspace)">{SUBPAGE_TITLES[subpage]}</button
+            >
+          {:else}
+            <svg
+              class="cmd-search-icon"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          {/if}
+          <input
+            bind:this={inputEl}
+            class="cmd-input"
+            type="text"
+            {placeholder}
+            value={query}
+            oninput={handleInput}
+            spellcheck="false"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls="cmd-results"
+            aria-activedescendant={items.length
+              ? `cmd-option-${activeIndex}`
+              : undefined}
+          />
+          <kbd class="cmd-esc-hint">{subpage ? "Esc back" : "Esc"}</kbd>
+        </div>
+
+        <div
+          class="cmd-results"
+          id="cmd-results"
+          role="listbox"
+          aria-label="Commands and results"
+        >
+          {#each rows as row (row.key)}
+            {#if row.header}
+              <div class="cmd-group-header" role="presentation">
+                {row.header}
+              </div>
+            {:else}
+              {@const command = row.command}
+              <!-- Keyboard handling lives on the dialog (arrows move, Enter
+                 runs); the option is a listbox row, not a second control. -->
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
+              <div
+                class="cmd-result-row"
+                class:cmd-result-row--active={row.index === activeIndex}
+                data-cmd-index={row.index}
+                data-cmd-id={command.id}
+                id={`cmd-option-${row.index}`}
+                role="option"
+                aria-selected={row.index === activeIndex}
+                onclick={() => void run(command)}
+                onmousemove={() => (activeIndex = row.index)}
+              >
+                <svg
+                  class="cmd-result-icon"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d={iconPath(command.icon)} />
+                </svg>
+                <div class="cmd-result-text">
+                  <span class="cmd-result-title">{command.label}</span>
+                  {#if command.summary}
+                    <WorkSummary
+                      summary={command.summary}
+                      density="row"
+                      title={command.label}
+                      class="cmd-result-summary"
+                    />
+                  {/if}
+                  {#if command.subtitle}
+                    <span class="cmd-result-subtitle">{command.subtitle}</span>
+                  {/if}
+                </div>
+                {#if command.hint}
+                  <span class="cmd-result-hint">{command.hint}</span>
                 {/if}
-                {#if command.subtitle}
-                  <span class="cmd-result-subtitle">{command.subtitle}</span>
+                {#if command.kind}
+                  <span class="cmd-result-badge"
+                    >{command.kind === "task" ? "Task" : "Doc"}</span
+                  >
+                {:else if command.shortcut}
+                  <span class="cmd-shortcut" aria-hidden="true">
+                    {#each command.shortcut as key, keyIndex (keyIndex)}<kbd
+                        >{key}</kbd
+                      >{/each}
+                  </span>
+                {:else if command.page}
+                  <span class="cmd-result-hint" aria-hidden="true">›</span>
                 {/if}
               </div>
-              {#if command.hint}
-                <span class="cmd-result-hint">{command.hint}</span>
-              {/if}
-              {#if command.kind}
-                <span class="cmd-result-badge"
-                  >{command.kind === "task" ? "Task" : "Doc"}</span
-                >
-              {:else if command.shortcut}
-                <span class="cmd-shortcut" aria-hidden="true">
-                  {#each command.shortcut as key, keyIndex (keyIndex)}<kbd
-                      >{key}</kbd
-                    >{/each}
-                </span>
-              {:else if command.page}
-                <span class="cmd-result-hint" aria-hidden="true">›</span>
-              {/if}
-            </div>
+            {/if}
+          {/each}
+          {#if searching}
+            <div class="cmd-status" role="status">Searching…</div>
+          {:else if !items.length}
+            <div class="cmd-status">{emptyText}</div>
           {/if}
-        {/each}
-        {#if searching}
-          <div class="cmd-status" role="status">Searching…</div>
-        {:else if !items.length}
-          <div class="cmd-status">{emptyText}</div>
-        {/if}
-      </div>
-      <div class="cmd-footer" aria-hidden="true">
-        <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
-        <span><kbd>↵</kbd> run</span>
-        {#if subpage}<span><kbd>⌫</kbd> back</span>{/if}
-        <span><kbd>G</kbd> then <kbd>I</kbd><kbd>T</kbd><kbd>D</kbd> go</span>
+        </div>
+        <div class="cmd-footer" aria-hidden="true">
+          <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+          <span><kbd>↵</kbd> run</span>
+          {#if subpage}<span><kbd>⌫</kbd> back</span>{/if}
+          <span><kbd>G</kbd> then <kbd>I</kbd><kbd>T</kbd><kbd>D</kbd> go</span>
+        </div>
       </div>
     </div>
-  </div>
-{/if}
+  {/if}
 
-{#if notice}
-  <div class="cmd-notice" class:cmd-notice--danger={notice.tone === "danger"}>
-    <span role="status">{notice.text}</span>
-    {#if notice.href}
-      <a
-        class="ui-prose-link"
-        href={notice.href}
-        onclick={() => (notice = null)}>{notice.hrefLabel || "Open"}</a
+  {#if notice}
+    <div class="cmd-notice" class:cmd-notice--danger={notice.tone === "danger"}>
+      <span role="status">{notice.text}</span>
+      {#if notice.href}
+        <a
+          class="ui-prose-link"
+          href={notice.href}
+          onclick={() => (notice = null)}>{notice.hrefLabel || "Open"}</a
+        >
+      {/if}
+      <button
+        class="cmd-notice-dismiss"
+        type="button"
+        aria-label="Dismiss"
+        onclick={() => (notice = null)}>×</button
       >
-    {/if}
-    <button
-      class="cmd-notice-dismiss"
-      type="button"
-      aria-label="Dismiss"
-      onclick={() => (notice = null)}>×</button
-    >
-  </div>
-{/if}
+    </div>
+  {/if}
+</div>
 
 <style>
   .cmd-backdrop {

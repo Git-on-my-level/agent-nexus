@@ -29,13 +29,8 @@
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
-  import {
-    PM_STATES,
-    isPmNotOnboardedRefusal,
-    pmFeaturesVisible,
-    pmKnownAbsent,
-  } from "$lib/pm/onboardingState.js";
-  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
+  import { pmFeaturesVisible, pmKnownAbsent } from "$lib/pm/onboardingState.js";
+  import { pmPresence } from "$lib/pm/presence.js";
   import {
     actorDirectoryIncomplete,
     actorRegistry,
@@ -56,12 +51,22 @@
   import {
     beforeCardRefForInsert,
     boardPhasePeers,
-    placeWorkInPhase,
   } from "$lib/workBoardDrag.js";
+  import { requestedDecisionMap } from "$lib/taskBoardMove.js";
+
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { localWorkScope } from "$lib/localWorkScope.js";
   import {
-    applyTaskPhaseMove,
-    requestedDecisionMap,
-  } from "$lib/taskBoardMove.js";
+    mutationOutbox,
+    mutationConfirmations,
+  } from "$lib/mutationOutbox.js";
+  import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
+  import {
+    enqueueTaskMove,
+    taskMoveDraft,
+    taskMoveTarget,
+    isTaskMove,
+  } from "$lib/taskMoveWork.js";
 
   import { readerScopeKey } from "$lib/readerScope.js";
   import { createInflightSlot, patchSearchParams } from "$lib/urlState.js";
@@ -477,16 +482,21 @@
       }
     }
   }
+  let boardsRead = 0;
   async function loadBoards() {
+    const ticket = ++boardsRead;
+    const scope = $localWorkScope;
     boardsRequested = true;
     try {
       const result = await coreClient.listBoards({ limit: 200 });
-      boards = Array.isArray(result?.boards) ? result.boards : [];
+      if (ticket === boardsRead && scope === $localWorkScope)
+        boards = Array.isArray(result?.boards) ? result.boards : [];
     } catch {
       // Fail soft: the Board column falls back to the board_ref slug, and
       // the Initiatives filter says it found no initiatives board.
     } finally {
-      boardsLoaded = true;
+      if (ticket === boardsRead && scope === $localWorkScope)
+        boardsLoaded = true;
     }
   }
   const DECISION_PREFETCH_PAGES = 25;
@@ -540,6 +550,61 @@
       void tick().then(() => moveNoticeElement?.focus());
     }
   }
+  function boardToken(work) {
+    return (
+      boards.find((board) =>
+        [board.id, board.ref, `board:${board.id}`].includes(
+          work.board_ref || work.board_id,
+        ),
+      )?.updated_at || ""
+    );
+  }
+  let savedMoves = $derived([
+    ...$mutationOutbox.filter(isTaskMove),
+    ...Object.values($mutationConfirmations)
+      .filter(isTaskMove)
+      .filter(
+        (entry) => !$mutationOutbox.some((row) => row.target === entry.target),
+      ),
+  ]);
+  let movePending = $derived(
+    evidenceFor &&
+      $mutationOutbox.some(
+        (row) => row.target === taskMoveTarget(evidenceFor.work),
+      ),
+  );
+  function restoreMove(value, reason) {
+    evidenceFor = value;
+    if (reason === "privacy") {
+      moveError = "";
+      moveNotice = null;
+    }
+  }
+  async function rebaseMove() {
+    const draft = evidenceFor;
+    const scope = $localWorkScope;
+    try {
+      const result = await coreClient.getWork(
+        draft.work.ref || workKey(draft.work),
+        { summary: 1 },
+      );
+      const work = result.work;
+      const board = isNexusOwned(work)
+        ? await coreClient.getBoard(work.board_ref || work.board_id)
+        : null;
+      if (scope !== $localWorkScope || evidenceFor !== draft) return;
+      evidenceFor = {
+        ...draft,
+        work,
+        boardToken: (board?.board || board)?.updated_at || "",
+        approved: false,
+      };
+      moveError = "";
+    } catch (err) {
+      if (scope === $localWorkScope && evidenceFor === draft)
+        moveError = errorMessage(err);
+    }
+  }
   async function moveTask(
     work,
     phase,
@@ -548,175 +613,85 @@
     moveError = "";
     moveSessionExpired = false;
     const key = workKey(work);
-    const from = work.phase || "unknown";
-    const samePhase = from === phase;
-    const previous = records;
-    if (!isNexusOwned(work)) {
-      // A move on source-owned work files a request for you to approve; that
-      // is an obligation, so it is never created by an accidental keypress.
-      if (samePhase) return;
-      const source = sourceLabel(work.source);
-      /*
-       * The request is carried out at the source by the PM, and answered in
-       * the Inbox. With no PM there is nobody to carry it out, so say that
-       * instead of filing a proposal that would wait forever.
-       */
-      if (pmAbsent) {
-        noticeNoPm(source, { pointer });
-        return;
-      }
+    const samePhase = (work.phase || "unknown") === phase;
+    if ($mutationOutbox.some((entry) => entry.target === taskMoveTarget(work)))
+      return;
+    if (
+      samePhase &&
+      (!isNexusOwned(work) ||
+        (!Number.isInteger(index) &&
+          !Object.hasOwn(evidenceFor || {}, "beforeCardId")))
+    )
+      return;
+    if (!isNexusOwned(work) && pmAbsent) {
+      noticeNoPm(sourceLabel(work.source), { pointer });
+      return;
+    }
+    if (
+      evidenceFor &&
+      (evidenceFor.key !== key ||
+        (evidenceFor.phase !== phase && evidenceFor.ref?.trim())) &&
+      !$mutationOutbox.some(
+        (entry) => entry.target === taskMoveTarget(evidenceFor.work),
+      )
+    ) {
+      moveError = `Finish or discard the saved move for “${evidenceFor.work.title}” before choosing another move.`;
+      return;
+    }
+    let draft =
+      evidenceFor?.key === key
+        ? {
+            ...evidenceFor,
+            phase,
+            approved: evidenceFor.phase === phase && evidenceFor.approved,
+          }
+        : taskMoveDraft(work, phase, {
+            key,
+            ref: "",
+            undo,
+            pointer,
+            boardToken: boardToken(work),
+          });
+    if (Number.isInteger(index))
+      draft = {
+        ...draft,
+        beforeCardId: beforeCardRefForInsert(
+          work,
+          boardPhasePeers(dedupeWorkBySource(records).records, phase, key),
+          index,
+        ),
+        pointer,
+      };
+    evidenceFor = draft;
+    if (phase === "done" && !draft.ref?.trim()) {
+      void loadEvidenceSuggestions();
+      setMoveNotice(null);
+      return;
+    }
+    if (!isNexusOwned(work) && !draft.approved) {
       if (
         !window.confirm(
-          `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${source}? You approve the request in Inbox.`,
+          `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${sourceLabel(work.source)}? You approve the request in Inbox.`,
         )
       )
         return;
+      draft = { ...draft, approved: true };
     }
+    draft = {
+      ...draft,
+      resolutionRefs: phase === "done" ? [draft.ref.trim()] : [],
+    };
+    evidenceFor = draft;
     try {
-      let resolutionRefs = [];
-      if (phase === "done") {
-        // Done is a completion; core requires evidence that exists, whether
-        // Nexus applies it or the PM requests it at the source. Collect it
-        // inline (no prompt(): embedded browsers and phones lack it).
-        if (!evidenceFor || evidenceFor.key !== key) {
-          evidenceFor = { key, work, phase, ref: "" };
-          setMoveNotice(null);
-          void loadEvidenceSuggestions();
-
-          return;
-        }
-        const trimmed = String(evidenceFor.ref ?? "").trim();
-        if (!trimmed) return;
-        resolutionRefs = [trimmed];
-      }
-      let beforeCardId;
-      if (Number.isInteger(index)) {
-        beforeCardId = beforeCardRefForInsert(
-          work,
-          // Drop indexes count the cards the board paints, not folded mirrors.
-          boardPhasePeers(dedupeWorkBySource(previous).records, phase, key),
-          index,
-        );
-      }
-      if (isNexusOwned(work) && Number.isInteger(index)) {
-        records = placeWorkInPhase(records, work, phase, index);
-      }
-      if (samePhase && !Number.isInteger(index)) {
-        return;
-      }
-      const result = await applyTaskPhaseMove(coreClient, work, phase, {
-        resolutionRefs,
-        pmOnboarded: !pmAbsent,
-        ...(Number.isInteger(index) ? { beforeCardId } : {}),
+      await enqueueTaskMove(draft, {
+        draftTarget: "tasks:move",
+        href: workspaceHref("/tasks?view=board"),
       });
-      // The evidence form closes only once core accepted the ref; a rejected
-      // ref keeps the typed value in front of the reader with the error.
-      if (result.kind !== "needs_evidence") evidenceFor = null;
-      if (result.kind === "needs_pm") {
-        // Refused before any write; the guard above already explained it.
-        records = previous;
-        return;
-      }
-      if (result.kind === "needs_evidence") {
-        setMoveNotice(
-          {
-            text: "Done needs evidence. Add the artifact or event that proves completion.",
-          },
-          { pointer },
-        );
-        return;
-      }
-      if (result.kind === "moved") {
-        if (!Number.isInteger(index)) {
-          records = records.map((item) =>
-            workKey(item) === key ? { ...item, phase } : item,
-          );
-        }
-        setMoveNotice(
-          undo
-            ? { text: `Moved “${work.title}” back to ${label(phase)}.` }
-            : {
-                text: samePhase
-                  ? `Moved “${work.title}”.`
-                  : `Moved “${work.title}” to ${label(phase)}.`,
-                undo: samePhase
-                  ? undefined
-                  : () => moveTask({ ...work, phase }, from, { undo: true }),
-              },
-          { pointer },
-        );
-        const next = { ...requested };
-        delete next[key];
-        requested = next;
-        decisions = decisions.filter(
-          (decision) => decision.work_ref !== work.ref,
-        );
-      } else if (
-        result.kind === "requested" &&
-        result.decision &&
-        result.decision.status !== "awaiting_answer"
-      ) {
-        // Core replayed an identical earlier request that is already
-        // answered or closed; nothing new was filed.
-        setMoveNotice(
-          {
-            text: `That request was already ${
-              result.decision.status === "declined" ? "declined" : "answered"
-            }; nothing new was filed. Change the target${pmVisible ? " or ask the PM to propose again" : " and request it again"}.`,
-            href: workspaceHref(
-              `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
-            ),
-          },
-          { pointer },
-        );
-      } else if (result.kind === "requested") {
-        requested = { ...requested, [key]: phase };
-        if (result.decision) decisions = [...decisions, result.decision];
-        setMoveNotice(
-          {
-            text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. It waits in Inbox under Needs you: a change at ${sourceLabel(work.source)} is only sent once someone records a yes, even the person who asked.${
-              result.decision?.supersedes
-                ? result.decision.supersedes_origin_kind === "pm_turn"
-                  ? " This replaced the PM's earlier proposal for this task."
-                  : " This replaced an earlier proposal for this task."
-                : ""
-            }`,
-            href: result.decision?.id
-              ? workspaceHref(
-                  `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
-                )
-              : "",
-          },
-          { pointer },
-        );
-      }
+      setMoveNotice(
+        { text: `Saved move to ${label(phase)}. Waiting for confirmation.` },
+        { pointer },
+      );
     } catch (err) {
-      records = previous;
-      const existing = existingDecisionId(err);
-      if (existing) {
-        setMoveNotice(
-          {
-            text: `A request for this task is already waiting for your answer.`,
-            href: workspaceHref(
-              `/inbox?item=decision:${encodeURIComponent(existing)}`,
-            ),
-          },
-          { pointer },
-        );
-        return;
-      }
-      /*
-       * The move was attempted because presence had not answered yet, and
-       * core has now settled it: there is no PM. Record that so the whole
-       * shell stops waiting and offers setup, and say it the same way the
-       * pre-check does rather than passing core's sentence through.
-       */
-      if (isPmNotOnboardedRefusal(err)) {
-        publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
-        noticeNoPm(sourceLabel(work.source), { pointer });
-        return;
-      }
-      setMoveNotice(null);
       moveError = readableMoveError(err);
       moveSessionExpired = isSessionExpired(err);
     }
@@ -741,13 +716,6 @@
     if (/must include artifact: or event:/i.test(raw))
       return "Evidence must be an artifact or an event ref (artifact:… or event:…); a task ref is not proof.";
     return raw;
-  }
-  // Core answers a replayed request key with the decision it already holds.
-  function existingDecisionId(err) {
-    const details =
-      err?.details?.details ?? err?.details ?? err?.body?.error?.details ?? {};
-    const id = details?.existing_decision_id ?? err?.existing_decision_id;
-    return typeof id === "string" && id ? id : "";
   }
   function isTextEntryTarget(target) {
     return (
@@ -819,6 +787,48 @@
     }
   }
   onMount(() => {
+    const confirmedMove = (event) => {
+      const entry = event.detail;
+      if (entry?.scope !== $localWorkScope || !isTaskMove(entry)) return;
+      const { work, phase, undo } = entry.draft;
+      // The receipt proves delivery; refreshed reads decide current phase and
+      // decision state, which may already have advanced since that receipt.
+      void load(false, filters, { live: true });
+      void loadBoards();
+      void loadDecisions();
+      setMoveNotice(
+        entry.operation === "cards.move"
+          ? {
+              text: `Moved “${work.title}” to ${label(phase)}.`,
+              undo:
+                undo || work.phase === phase
+                  ? undefined
+                  : async () => {
+                      try {
+                        const result = await coreClient.getWork(
+                          work.ref || workKey(work),
+                          { summary: 1 },
+                        );
+                        if (entry.scope !== $localWorkScope) return;
+                        await loadBoards();
+                        if (entry.scope !== $localWorkScope) return;
+                        await moveTask(result.work, work.phase, { undo: true });
+                      } catch (err) {
+                        if (entry.scope === $localWorkScope)
+                          moveError = errorMessage(err);
+                      }
+                    },
+            }
+          : {
+              text: `Move request confirmed. Review it in Inbox.${entry.result.decision.supersedes ? " This replaced an earlier proposal for this task." : ""}`,
+              href: workspaceHref(
+                `/inbox?item=decision:${encodeURIComponent(entry.result.decision.id)}`,
+              ),
+            },
+        { pointer: entry.draft.pointer },
+      );
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmedMove);
     const scope = readerScopeKey();
     const stopDenied = onWorkspaceViewsDenied(scope, (denial) => {
       if (scope !== readerScopeKey()) return;
@@ -915,6 +925,7 @@
     const releaseRoster = startAgentRoster($page.params.workspace);
     return () => {
       disposed = true;
+      window.removeEventListener("anx:mutation-confirmed", confirmedMove);
       stopDenied();
       listController?.abort();
       requestId++;
@@ -1200,53 +1211,81 @@
     {/snippet}
   </WorkspaceListFilters>
 
-  {#if evidenceFor}
-    <form
-      class="flex flex-wrap items-end gap-2 rounded-md bg-bg-soft px-3 py-2 text-meta"
-      role="status"
-      onsubmit={(event) => {
-        event.preventDefault();
-        void moveTask(evidenceFor.work, evidenceFor.phase);
-      }}
-    >
-      <!-- A wide enough minimum that the buttons wrap below on a phone instead
+  <div
+    use:durableForm={{
+      target: "tasks:move",
+      value: evidenceFor,
+      read: () => evidenceFor,
+      onRestore: restoreMove,
+    }}
+  >
+    {#each savedMoves as entry (entry.key)}
+      <MutationSendStatus {entry} />
+    {/each}
+    {#if evidenceFor}
+      <form
+        class="flex flex-wrap items-end gap-2 rounded-md bg-bg-soft px-3 py-2 text-meta"
+        role="status"
+        onsubmit={(event) => {
+          event.preventDefault();
+          void moveTask(evidenceFor.work, evidenceFor.phase);
+        }}
+      >
+        <!-- A wide enough minimum that the buttons wrap below on a phone instead
            of squeezing the prompt and the field down to a few characters; the
            task title comes from a source, so it can be one long token. -->
-      <label
-        class="min-w-56 flex-1 text-micro text-fg-muted [overflow-wrap:anywhere]"
-        >Marking “{evidenceFor.work.title}” done needs evidence. Ref of the
-        artifact or event that proves it<input
-          class="ui-input mt-1"
-          bind:value={evidenceFor.ref}
-          bind:this={evidenceInput}
-          list="done-evidence-suggestions"
-          placeholder="artifact:… or event:…"
-        /></label
-      >
-      <datalist id="done-evidence-suggestions">
-        {#each evidenceSuggestions as entry (entry.ref)}
-          <option value={entry.ref}>{entry.title}</option>
-        {/each}
-      </datalist>
-      <button
-        class="ui-btn-primary"
-        type="submit"
-        disabled={!evidenceFor.ref?.trim()}>Mark done</button
-      >
-      {#if pmVisible}
-        <a
-          class="ui-prose-link text-micro"
-          href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
-          >Ask the PM instead</a
+        {#if evidenceFor.phase === "done"}
+          <label
+            class="min-w-56 flex-1 text-micro text-fg-muted [overflow-wrap:anywhere]"
+            >Marking “{evidenceFor.work.title}” done needs evidence. Ref of the
+            artifact or event that proves it<input
+              class="ui-input mt-1"
+              bind:value={evidenceFor.ref}
+              bind:this={evidenceInput}
+              list="done-evidence-suggestions"
+              placeholder="artifact:… or event:…"
+            /></label
+          >
+          <datalist id="done-evidence-suggestions">
+            {#each evidenceSuggestions as entry (entry.ref)}
+              <option value={entry.ref}>{entry.title}</option>
+            {/each}
+          </datalist>
+        {:else}
+          <p>
+            Saved move: “{evidenceFor.work.title}” to {label(
+              evidenceFor.phase,
+            )}.
+          </p>
+        {/if}
+        <button
+          class="ui-btn-primary"
+          type="submit"
+          disabled={movePending ||
+            (evidenceFor.phase === "done" && !evidenceFor.ref?.trim())}
+          >{evidenceFor.phase === "done" ? "Mark done" : "Send move"}</button
         >
-      {/if}
-      <button
-        class="ui-prose-link text-micro"
-        type="button"
-        onclick={cancelEvidence}>Cancel</button
-      >
-    </form>
-  {/if}
+        {#if pmVisible}
+          <a
+            class="ui-prose-link text-micro"
+            href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
+            >Ask the PM instead</a
+          >
+        {/if}
+        <button
+          class="ui-prose-link text-micro"
+          type="button"
+          onclick={cancelEvidence}>Discard draft</button
+        >
+        <button
+          type="button"
+          class="ui-prose-link text-micro"
+          disabled={movePending}
+          onclick={rebaseMove}>Use latest version</button
+        >
+      </form>
+    {/if}
+  </div>
   <!--
     In flow, like the evidence form above it. As a floating bar pinned near the
     bottom of the viewport it sat on top of whatever board card happened to be
