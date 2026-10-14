@@ -338,7 +338,8 @@ func (b *briefBuild) cardStates(refs []string) (map[string]string, error) {
 		return out, nil
 	}
 	encoded, _ := json.Marshal(keys)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c WHERE (c.id IN (SELECT value FROM json_each(?1)) OR c.handle IN (SELECT value FROM json_each(?1))) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, string(encoded))
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c WHERE c.id IN (SELECT value FROM json_each(?1)) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
+		UNION SELECT c.id,COALESCE(c.handle,''),c.column_key FROM cards c WHERE c.handle IN (SELECT value FROM json_each(?1)) AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, string(encoded))
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +377,8 @@ func (b *briefBuild) cardTitles(refs []string) (map[string]string, error) {
 		return out, nil
 	}
 	encoded, _ := json.Marshal(keys)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c WHERE (c.id IN (SELECT value FROM json_each(?1)) OR c.handle IN (SELECT value FROM json_each(?1))) AND COALESCE(c.trashed_at,'')=''`, string(encoded))
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c WHERE c.id IN (SELECT value FROM json_each(?1)) AND COALESCE(c.trashed_at,'')=''
+		UNION SELECT c.id,COALESCE(c.handle,''),c.title,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'') FROM cards c WHERE c.handle IN (SELECT value FROM json_each(?1)) AND COALESCE(c.trashed_at,'')=''`, string(encoded))
 	if err != nil {
 		return nil, err
 	}
