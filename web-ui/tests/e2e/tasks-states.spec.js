@@ -845,9 +845,22 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
       api.hold.createWork = deferred();
       await page.getByRole("button", { name: "Create task" }).click();
+      // Assert after the outbox reaches the held HTTP request, rather than
+      // catching the brief device-persistence phase before enqueue returns.
+      await expect
+        .poll(
+          () => api.calls.filter((call) => call.name === "createWork").length,
+        )
+        .toBe(1);
+      await expect(
+        page.locator('[data-mutation-state="sending"]'),
+      ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Creating…" }),
       ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Creating…" }),
+      ).toBeDisabled();
       await expectCleanLayout(page, "new task saving");
 
       api.fail.createWork = { message: LONG_ERROR };
@@ -855,6 +868,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold = {};
       const saved = page.locator('[data-mutation-state="retrying"]');
       await expect(saved).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Create task" }),
+      ).toBeDisabled();
       await expect(saved.getByLabel("Saved message")).toHaveValue(
         `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nBoard: board:archive`,
       );
