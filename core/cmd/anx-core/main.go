@@ -780,7 +780,7 @@ func main() {
 				}
 
 				// Counts and times only; never titles or refs.
-				attentionSummary, err := (delivery.Store{DB: workspace.DB()}).AttentionSummary(ctx, time.Now().UTC())
+				attentionSummary, err := (delivery.Store{DB: workspace.DB(), CanRead: server.NewEscalationReadCheck(primitiveStore)}).AttentionSummary(ctx, time.Now().UTC())
 				if err != nil {
 					attentionSummary = nil
 				}

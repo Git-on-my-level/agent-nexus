@@ -119,6 +119,10 @@ type ChannelSetting struct {
 type Store struct {
 	DB  *sql.DB
 	Now func() time.Time
+	// CanRead reports whether principalID may read the ask event. Per-principal
+	// attention counts include an ask only when it returns true. Nil fails
+	// closed for those counts; the workspace totals stay unfiltered.
+	CanRead func(ctx context.Context, principalID, askEventID string) bool
 }
 
 func (s Store) now() time.Time {
