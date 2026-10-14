@@ -205,11 +205,9 @@
         return;
       editDraft = {
         ...snapshot(),
-        base: {
-          title: canonical.title ?? "",
-          summary: canonical.summary ?? "",
-          updated_at: canonical.updated_at,
-        },
+        // Keep the content base the operator edited from. Only refresh the
+        // concurrency token, so untouched stale inputs never become writes.
+        base: { ...snapshot().base, updated_at: canonical.updated_at },
       };
       editOpen = true;
     } catch {
@@ -235,8 +233,8 @@
     try {
       const draft = snapshot();
       const patch = buildTopicPatch(draft.base, {
-        title: draft.title.trim(),
-        summary: draft.summary.trim(),
+        title: draft.title,
+        summary: draft.summary,
       });
       if (Object.keys(patch).length === 0) {
         editNotice = "No changes to save.";
@@ -246,7 +244,7 @@
         operation: "topics.patch",
         id: topicId,
         body: {
-          patch: { ...patch, provenance: { sources: ["event:ui"] } },
+          patch,
           if_updated_at: draft.base.updated_at,
         },
         target,

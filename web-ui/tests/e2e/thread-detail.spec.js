@@ -745,7 +745,6 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     actor_id: actorId,
     patch: {
       title: "Edited after conflict",
-      provenance: { sources: ["event:ui"] },
     },
     if_updated_at: "2026-03-04T00:00:00.000Z",
   });
@@ -755,7 +754,6 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     patch: {
       title: "Final merged title",
       summary: "Final summary body",
-      provenance: { sources: ["event:ui"] },
     },
     if_updated_at: "2026-03-04T02:00:00.000Z",
   });

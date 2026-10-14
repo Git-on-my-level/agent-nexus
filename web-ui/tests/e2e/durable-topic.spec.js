@@ -13,7 +13,7 @@ const json = (route, body, status = 200) =>
     body: JSON.stringify(body),
   });
 
-async function prepare(context, send = null) {
+async function prepare(context, send = null, initial = {}) {
   await setup(context, (route) => json(route, { events: [] }));
   let topic = {
     id,
@@ -21,6 +21,11 @@ async function prepare(context, send = null) {
     title: "Original topic",
     summary: "Original summary",
     updated_at: originalStamp,
+    provenance: {
+      sources: ["event:seed", "inferred"],
+      notes: "Original source notes",
+    },
+    ...initial,
   };
   const writes = [];
   await context.route(`**/${thread}/workspace`, (route) =>
@@ -53,8 +58,8 @@ async function prepare(context, send = null) {
   });
   return {
     writes,
-    latest: () => {
-      topic = { ...topic, updated_at: newerStamp };
+    latest: (patch = {}) => {
+      topic = { ...topic, ...patch, updated_at: newerStamp };
     },
     commitPatch: (patch) => {
       topic = { ...topic, ...patch, updated_at: newerStamp };
@@ -395,3 +400,60 @@ test("failed explicit rebase keeps the exact original request recoverable", asyn
   await expect.poll(() => writes.length).toBe(2);
   expect(writes[1]).toEqual(writes[0]);
 });
+
+for (const editedField of ["summary", "title"]) {
+  test(`explicit rebase preserves concurrent changes to untouched fields when editing ${editedField}`, async ({
+    page,
+    context,
+  }) => {
+    let requireLatest = false;
+    let api;
+    api = await prepare(
+      context,
+      (route, body) => {
+        if (requireLatest && body.if_updated_at !== newerStamp)
+          return json(route, { error: { message: "Version conflict" } }, 409);
+        return json(route, { topic: api.commitPatch(body.patch) });
+      },
+      { title: "  Original topic  ", summary: "Original summary\n\n" },
+    );
+    await page.goto(href);
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const input = editedField === "summary" ? summary(page) : title(page);
+    await input.fill("My authored change");
+    const untouchedField = editedField === "summary" ? "title" : "summary";
+    api.latest({ [untouchedField]: "Concurrent canonical change" });
+    requireLatest = true;
+    await save(page).click();
+    await expect(
+      page.locator('[data-mutation-state="attention"]'),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Use latest version", exact: true })
+      .click();
+    await expect(page.locator('[data-mutation-state="attention"]')).toHaveCount(
+      0,
+    );
+    // Reload after rebasing proves the edited-from content base is durable.
+    await page.reload();
+    await expect(input).toHaveValue("My authored change");
+    await save(page).click();
+    await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
+    expect(api.writes).toHaveLength(2);
+    expect(api.writes[0].if_updated_at).toBe(originalStamp);
+    expect(api.writes[1].if_updated_at).toBe(newerStamp);
+    expect(api.writes[1].request_key).not.toBe(api.writes[0].request_key);
+    expect(api.writes[1].patch).toEqual({
+      [editedField]: "My authored change",
+    });
+    const canonical = await page.evaluate(async (topicId) => {
+      const { coreClient } = await import("/src/lib/coreClient.js");
+      return (await coreClient.getTopic(topicId)).topic;
+    }, id);
+    expect(canonical[untouchedField]).toBe("Concurrent canonical change");
+    expect(canonical.provenance).toEqual({
+      sources: ["event:seed", "inferred"],
+      notes: "Original source notes",
+    });
+  });
+}
