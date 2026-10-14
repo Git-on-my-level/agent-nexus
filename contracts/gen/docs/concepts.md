@@ -354,7 +354,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `15`
+- Commands: `20`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -367,10 +367,15 @@ Generated from `contracts/anx-openapi.yaml`.
   - `asks.get`
   - `asks.stream`
   - `asks.subscribe`
+  - `deliveries.claim`
+  - `deliveries.list`
+  - `deliveries.receipt`
   - `inbox.get`
   - `inbox.respond`
   - `inbox.stream`
   - `inbox.summary`
+  - `notifications.settings.get`
+  - `notifications.settings.set`
 
 ## `inspection`
 

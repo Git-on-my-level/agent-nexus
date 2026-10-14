@@ -29,8 +29,8 @@ var bridgeSubcommandSpec = subcommandSpec{
 
 var notificationsSubcommandSpec = subcommandSpec{
 	command:  "notifications",
-	valid:    []string{"list", "read", "dismiss"},
-	examples: []string{"anx notifications list --status unread", "anx notifications read --wakeup-id wake_123", "anx notifications dismiss --wakeup-id wake_123"},
+	valid:    []string{"list", "read", "dismiss", "settings"},
+	examples: []string{"anx notifications list --status unread", "anx notifications read --wakeup-id wake_123", "anx notifications dismiss --wakeup-id wake_123", "anx notifications settings get"},
 	aliases: map[string]string{
 		"ls": "list",
 	},

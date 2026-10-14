@@ -43,7 +43,7 @@ const (
 	MaxLease            = 10 * time.Minute
 	DefaultLease        = 2 * time.Minute
 	DefaultMaxAttempts  = 6
-	MaxListLimit        = 100
+	MaxListLimit        = 50
 	MaxChannelsPerHuman = 16
 	maxErrorLength      = 500
 	maxAddressLength    = 320
@@ -391,20 +391,33 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 	}
 	rows.Close()
 	receipts := map[string][]Receipt{}
+	if len(out) == 0 {
+		return out, receipts, nil
+	}
+	ids := make([]string, 0, len(out))
 	for _, d := range out {
-		rrows, err := s.DB.QueryContext(ctx, `SELECT outcome, attempt, error, created_at FROM delivery_receipts WHERE delivery_id=? ORDER BY receipt_id DESC LIMIT 10`, d.DeliveryID)
-		if err != nil {
+		ids = append(ids, d.DeliveryID)
+	}
+	encoded, _ := json.Marshal(ids)
+	// One query for every listed delivery: a seek per id on
+	// idx_delivery_receipts_delivery, newest ten receipts each.
+	rrows, err := s.DB.QueryContext(ctx, `SELECT delivery_id, outcome, attempt, error, created_at FROM (
+			SELECT delivery_id, outcome, attempt, error, created_at, ROW_NUMBER() OVER (PARTITION BY delivery_id ORDER BY receipt_id DESC) AS n
+			FROM delivery_receipts WHERE delivery_id IN (SELECT value FROM json_each(?)))
+		WHERE n<=10 ORDER BY delivery_id, n`, string(encoded))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rrows.Close()
+	for rrows.Next() {
+		var r Receipt
+		if err := rrows.Scan(&r.DeliveryID, &r.Outcome, &r.Attempt, &r.Error, &r.CreatedAt); err != nil {
 			return nil, nil, err
 		}
-		for rrows.Next() {
-			r := Receipt{DeliveryID: d.DeliveryID}
-			if err := rrows.Scan(&r.Outcome, &r.Attempt, &r.Error, &r.CreatedAt); err != nil {
-				rrows.Close()
-				return nil, nil, err
-			}
-			receipts[d.DeliveryID] = append(receipts[d.DeliveryID], r)
-		}
-		rrows.Close()
+		receipts[r.DeliveryID] = append(receipts[r.DeliveryID], r)
+	}
+	if err := rrows.Err(); err != nil {
+		return nil, nil, err
 	}
 	return out, receipts, nil
 }

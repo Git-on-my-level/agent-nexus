@@ -180,6 +180,204 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: true}
+  /deliveries:
+    get:
+      operationId: deliveries_list
+      summary: List the caller's own deliveries with receipts
+      tags: [deliveries]
+      x-anx-command-id: deliveries.list
+      x-anx-cli-path: deliveries list
+      x-anx-why: List the caller's own queued notifications and wake deliveries with their receipts.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with the named delivery objects.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [inbox]
+      x-anx-surface: canonical
+      x-anx-stability: beta
+      x-anx-agent-notes: Reads only the caller's own rows; bounded by limit.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 50, default: 50}
+      responses:
+        "200":
+          description: Deliveries with receipts
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deliveries]
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [delivery, receipts]
+                      properties:
+                        delivery: {$ref: "#/components/schemas/Delivery"}
+                        receipts:
+                          type: array
+                          items: {$ref: "#/components/schemas/DeliveryReceipt"}
+  /deliveries/claim:
+    post:
+      operationId: deliveries_claim
+      summary: Claim due deliveries for a channel under a lease
+      tags: [deliveries]
+      x-anx-command-id: deliveries.claim
+      x-anx-cli-path: deliveries claim
+      x-anx-why: Claim due deliveries for a channel the calling adapter delivers.
+      x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: flags
+        flags:
+        - {name: channel, required: true, description: Channel to claim; the active adapter owned by the caller must declare it in delivers.}
+        - {name: limit, description: Maximum deliveries to claim.}
+        - {name: lease-seconds, description: Claim lease length in seconds.}
+      x-anx-examples:
+      - {title: Claim chat deliveries, command: "anx deliveries claim --channel chat --limit 10 --lease-seconds 60"}
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with the named delivery objects.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [inbox]
+      x-anx-surface: canonical
+      x-anx-stability: beta
+      x-anx-agent-notes: Only the owning agent of an active adapter delivering the channel may claim. Claim tokens are returned only here; an expired lease makes the delivery claimable again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [channel]
+              properties:
+                channel: {type: string, pattern: "^[a-z][a-z0-9_-]{0,31}$"}
+                limit: {type: integer, minimum: 1}
+                lease_seconds: {type: integer, minimum: 1}
+      responses:
+        "200":
+          description: Claimed deliveries including address and claim_token
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deliveries]
+                properties:
+                  deliveries:
+                    type: array
+                    items: {$ref: "#/components/schemas/Delivery"}
+  /deliveries/{delivery_id}/receipt:
+    post:
+      operationId: deliveries_receipt
+      summary: Record a delivery outcome for a claimed delivery
+      tags: [deliveries]
+      x-anx-command-id: deliveries.receipt
+      x-anx-cli-path: deliveries receipt
+      x-anx-why: Record delivered or failed for a delivery claimed by this adapter.
+      x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: flags
+        flags:
+        - {name: claim-token, required: true, description: Claim token returned by deliveries claim.}
+        - {name: outcome, required: true, description: delivered or failed.}
+        - {name: error, description: Failure detail; never include secrets.}
+        - {name: retryable, description: Mark a failed delivery as retryable (true or false).}
+      x-anx-examples:
+      - {title: Confirm a delivery, command: "anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered"}
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with the named delivery objects.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [inbox]
+      x-anx-surface: canonical
+      x-anx-stability: beta
+      x-anx-agent-notes: Receipts are idempotent per claim token; a stale or superseded claim returns conflict. A delivery on a channel the caller does not deliver reads as not found.
+      parameters:
+      - name: delivery_id
+        in: path
+        required: true
+        schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [claim_token, outcome]
+              properties:
+                claim_token: {type: string, minLength: 1}
+                outcome: {type: string, enum: [delivered, failed]}
+                error: {type: string, maxLength: 2000}
+                retryable: {type: boolean}
+      responses:
+        "200":
+          description: Updated delivery
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [delivery]
+                properties:
+                  delivery: {$ref: "#/components/schemas/Delivery"}
+  /notification-settings:
+    get:
+      operationId: notification_settings_get
+      summary: Read the caller's notification channel settings
+      tags: [notifications]
+      x-anx-command-id: notifications.settings.get
+      x-anx-cli-path: notifications settings get
+      x-anx-why: Read the caller's notification channels and the channels adapters can deliver.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with the named delivery objects.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [inbox]
+      x-anx-surface: canonical
+      x-anx-stability: beta
+      x-anx-agent-notes: Human principals only; each principal reads its own settings.
+      responses:
+        "200":
+          description: Settings and available channels
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NotificationSettings"}
+    put:
+      operationId: notification_settings_set
+      summary: Replace the caller's notification channel settings
+      tags: [notifications]
+      x-anx-command-id: notifications.settings.set
+      x-anx-cli-path: notifications settings set
+      x-anx-why: Replace the caller's notification channels, addresses and push or digest opt-ins.
+      x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: file-and-body
+        flags:
+        - {name: body-file, required: true, description: UTF-8 notification settings JSON file or stdin (-).}
+      x-anx-examples:
+      - {title: Set channels, command: "anx notifications settings set --body-file settings.json"}
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with the named delivery objects.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [inbox]
+      x-anx-surface: canonical
+      x-anx-stability: beta
+      x-anx-agent-notes: Human principals only. The whole channel list is replaced; channels must be delivered by an active adapter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NotificationSettingsInput"}
+      responses:
+        "200":
+          description: Settings and available channels
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NotificationSettings"}
   /series:
     get:
       operationId: series_list
@@ -13580,7 +13778,7 @@ components:
     AdapterDeclaration:
       type: object
       additionalProperties: false
-      required: [name, description, agent_id, expected_interval, series]
+      required: [name, description, agent_id, expected_interval]
       properties:
         name: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
         description: {type: string, minLength: 1, maxLength: 2000}
@@ -13588,9 +13786,78 @@ components:
         expected_interval: {type: string, description: Duration from 1s to 30d.}
         series:
           type: array
-          minItems: 1
+          minItems: 0
           maxItems: 100
+          description: May be empty when delivers is non-empty.
           items: {$ref: '#/components/schemas/SeriesDefinition'}
+        delivers:
+          type: array
+          maxItems: 8
+          uniqueItems: true
+          description: Notification channels this adapter delivers. "bridge" is reserved.
+          items: {type: string, pattern: "^[a-z][a-z0-9_-]{0,31}$", not: {const: bridge}}
+    Delivery:
+      type: object
+      additionalProperties: false
+      required: [delivery_id, principal_id, channel, kind, status, payload, attempt, max_attempts, next_attempt_at, created_at, updated_at]
+      properties:
+        delivery_id: {type: string}
+        principal_id: {type: string}
+        channel: {type: string, pattern: "^[a-z][a-z0-9_-]{0,31}$"}
+        kind: {type: string}
+        status: {type: string}
+        payload: {type: object, additionalProperties: true}
+        source_ref: {type: string}
+        attempt: {type: integer}
+        max_attempts: {type: integer}
+        next_attempt_at: {type: string, format: date-time}
+        claim_token: {type: string, description: Returned only by deliveries claim.}
+        lease_expires_at: {type: string, format: date-time}
+        last_error: {type: string}
+        address: {type: string, description: Returned only by deliveries claim.}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        delivered_at: {type: string, format: date-time}
+        failed_at: {type: string, format: date-time}
+    DeliveryReceipt:
+      type: object
+      additionalProperties: false
+      required: [delivery_id, outcome, attempt, created_at]
+      properties:
+        delivery_id: {type: string}
+        outcome: {type: string}
+        attempt: {type: integer}
+        error: {type: string}
+        created_at: {type: string, format: date-time}
+    NotificationChannelSetting:
+      type: object
+      additionalProperties: false
+      required: [channel, address, push_enabled, digest_enabled]
+      properties:
+        channel: {type: string, pattern: "^[a-z][a-z0-9_-]{0,31}$"}
+        address: {type: string}
+        push_enabled: {type: boolean}
+        digest_enabled: {type: boolean}
+        updated_at: {type: string, format: date-time}
+    NotificationSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items: {$ref: '#/components/schemas/NotificationChannelSetting'}
+    NotificationSettings:
+      type: object
+      additionalProperties: false
+      required: [channels, available_channels]
+      properties:
+        channels:
+          type: array
+          items: {$ref: '#/components/schemas/NotificationChannelSetting'}
+        available_channels:
+          type: array
+          items: {type: string}
     SeriesPointInput:
       type: object
       additionalProperties: false

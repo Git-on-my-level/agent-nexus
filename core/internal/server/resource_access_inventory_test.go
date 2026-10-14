@@ -19,7 +19,7 @@ func independentPrivacyRoute(p privacyRoutePolicy) bool {
 	}
 	root := strings.Split(strings.TrimPrefix(p.Path, "/"), "/")[0]
 	switch root {
-	case "auth", "meta", "series", "secrets", "adapters", "actors", "sessions":
+	case "auth", "meta", "series", "secrets", "adapters", "actors", "sessions", "deliveries", "notification-settings":
 		return true
 	}
 	switch p.Method + " " + p.Path {

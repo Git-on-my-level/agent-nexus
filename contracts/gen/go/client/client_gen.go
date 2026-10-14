@@ -993,6 +993,52 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline"},
 	},
 	{
+		CommandID: "deliveries.claim",
+		CLIPath:   "deliveries claim",
+		Group:     "deliveries",
+		Method:    "POST",
+		Path:      "/deliveries/claim",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"deliveries.list", "deliveries.receipt"},
+		Examples: []Example{
+			{
+				Title:   "Claim chat deliveries",
+				Command: "anx deliveries claim --channel chat --limit 10 --lease-seconds 60",
+			},
+		},
+	},
+	{
+		CommandID: "deliveries.list",
+		CLIPath:   "deliveries list",
+		Group:     "deliveries",
+		Method:    "GET",
+		Path:      "/deliveries",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"deliveries.claim", "deliveries.receipt"},
+	},
+	{
+		CommandID:  "deliveries.receipt",
+		CLIPath:    "deliveries receipt",
+		Group:      "deliveries",
+		Method:     "POST",
+		Path:       "/deliveries/{delivery_id}/receipt",
+		PathParams: []string{"delivery_id"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"inbox"},
+		Adjacent:   []string{"deliveries.claim", "deliveries.list"},
+		Examples: []Example{
+			{
+				Title:   "Confirm a delivery",
+				Command: "anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered",
+			},
+		},
+	},
+	{
 		CommandID: "derived.rebuild",
 		CLIPath:   "derived rebuild",
 		Group:     "derived",
@@ -1775,6 +1821,34 @@ var CommandRegistry = []CommandSpec{
 		Stability: "stable",
 		Concepts:  []string{"compatibility"},
 		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.readyz"},
+	},
+	{
+		CommandID: "notifications.settings.get",
+		CLIPath:   "notifications settings get",
+		Group:     "notifications",
+		Method:    "GET",
+		Path:      "/notification-settings",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"notifications.settings.set"},
+	},
+	{
+		CommandID: "notifications.settings.set",
+		CLIPath:   "notifications settings set",
+		Group:     "notifications",
+		Method:    "PUT",
+		Path:      "/notification-settings",
+		InputMode: "file-and-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"notifications.settings.get"},
+		Examples: []Example{
+			{
+				Title:   "Set channels",
+				Command: "anx notifications settings set --body-file settings.json",
+			},
+		},
 	},
 	{
 		CommandID: "ops.blob.usage.rebuild",
@@ -3191,6 +3265,18 @@ func (c *Client) CardsTrash(ctx context.Context, pathParams map[string]string, o
 	return c.Invoke(ctx, "cards.trash", pathParams, opts)
 }
 
+func (c *Client) DeliveriesClaim(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "deliveries.claim", nil, opts)
+}
+
+func (c *Client) DeliveriesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "deliveries.list", nil, opts)
+}
+
+func (c *Client) DeliveriesReceipt(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "deliveries.receipt", pathParams, opts)
+}
+
 func (c *Client) DerivedRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "derived.rebuild", nil, opts)
 }
@@ -3425,6 +3511,14 @@ func (c *Client) MetaReadyz(ctx context.Context, opts RequestOptions) (*http.Res
 
 func (c *Client) MetaVersion(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "meta.version", nil, opts)
+}
+
+func (c *Client) NotificationsSettingsGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.settings.get", nil, opts)
+}
+
+func (c *Client) NotificationsSettingsSet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.settings.set", nil, opts)
 }
 
 func (c *Client) OpsBlobUsageRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

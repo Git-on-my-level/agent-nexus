@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `224`
+- Command operations: `229`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `204`
+- Missing recommended examples: `206`
 
 ## Baseline gap counts
 
@@ -223,6 +223,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `cards.revisions.list` `GET /cards/{card_id}/revisions`
 - `cards.timeline` `GET /cards/{card_id}/timeline`
 - `cards.trash` `POST /cards/{card_id}/trash`
+- `deliveries.list` `GET /deliveries`
 - `derived.rebuild` `POST /derived/rebuild`
 - `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`
 - `events.archive` `POST /events/{event_id}/archive`
@@ -264,6 +265,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `meta.livez` `GET /livez`
 - `meta.readyz` `GET /readyz`
 - `meta.version` `GET /version`
+- `notifications.settings.get` `GET /notification-settings`
 - `ops.blob.usage.rebuild` `POST /ops/blob-usage/rebuild`
 - `ops.health` `GET /ops/health`
 - `ops.usage.summary` `GET /ops/usage-summary`

@@ -458,5 +458,13 @@
   {
     "key": "GET /stream/agent-wakeups",
     "milliseconds": 1000
+  },
+  {
+    "key": "GET /deliveries",
+    "milliseconds": 4000
+  },
+  {
+    "key": "GET /notification-settings",
+    "milliseconds": 4000
   }
 ]
