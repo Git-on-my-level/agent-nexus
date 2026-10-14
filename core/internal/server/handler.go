@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/delivery"
 	"context"
 	"encoding/json"
 	"errors"
@@ -187,6 +188,7 @@ type handlerOptions struct {
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
 	seriesStore                    *series.Store
+	deliveryStore                  *delivery.Store
 	authStore                      *auth.Store
 	runStore                       *commandcenter.Store
 	agentChanges                   *agentChangeHub
@@ -1099,6 +1101,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeInvite(w, r, opts, inviteID)
 	})
 
+	for _, path := range []string{"/deliveries", "/deliveries/", "/notification-settings"} {
+		registerRoute(path, deliveryRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleDeliveryRoutes(w, r, opts) })
+	}
 	for _, path := range []string{"/adapters", "/adapters/", "/series", "/series/"} {
 		registerRoute(path, seriesRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSeriesRoutes(w, r, opts) })
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agent-nexus-core/internal/delivery"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -568,6 +569,7 @@ func main() {
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
 		server.WithSeriesStore(&series.Store{DB: workspace.DB(), Auth: authStore}),
+		server.WithDeliveryStore(&delivery.Store{DB: workspace.DB()}),
 		server.WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
@@ -685,6 +687,18 @@ func main() {
 	if answerWakeMaintainer != nil {
 		go answerWakeMaintainer.Run(maintenanceCtx)
 	}
+	// The decide_by escalation clock runs in core on self-hosted and hosted
+	// cores alike; hosted control planes wake idle cores at the earliest
+	// decide_by the heartbeat publishes.
+	escalator := &delivery.Escalator{
+		Store:         delivery.Store{DB: workspace.DB()},
+		WorkspaceName: workspaceName,
+		LinkBase:      publicWebUIWorkspaceURL,
+		DigestHourUTC: envInt("ANX_DIGEST_HOUR_UTC", delivery.DefaultDigestHourUTC),
+		CanRead:       server.NewEscalationReadCheck(primitiveStore),
+		AskPM:         server.NewEscalationPMWaker(workspace.DB(), primitiveStore, authStore, pmRuntime.AgentActorID, workspaceID, workspaceName),
+	}
+	go escalator.Run(maintenanceCtx)
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)
@@ -763,6 +777,11 @@ func main() {
 					usageSummary = asMapAny(usage)
 				}
 
+				// Counts and times only; never titles or refs.
+				attentionSummary, err := (delivery.Store{DB: workspace.DB()}).AttentionSummary(ctx, time.Now().UTC())
+				if err != nil {
+					attentionSummary = nil
+				}
 				return heartbeat.Snapshot{
 					Version:                      coreVersion,
 					Build:                        coreVersion,
@@ -770,6 +789,7 @@ func main() {
 					ProjectionMaintenanceSummary: projectionSummary,
 					UsageSummary:                 usageSummary,
 					ActiveStreamCount:            stream.Snapshot(),
+					AttentionSummary:             attentionSummary,
 				}
 			},
 		}

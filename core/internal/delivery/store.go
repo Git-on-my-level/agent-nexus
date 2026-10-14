@@ -127,7 +127,8 @@ func (s Store) now() time.Time {
 	return time.Now().UTC()
 }
 
-func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+// Fixed-width timestamps keep lexical order equal to time order.
+func stamp(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000000000Z") }
 
 func newID(prefix string) string {
 	var b [12]byte
@@ -490,4 +491,23 @@ func nonNil(m map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	return m
+}
+
+// DeclaredChannels lists channels delivered by at least one active adapter.
+func (s Store) DeclaredChannels(ctx context.Context) ([]string, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT c.channel FROM adapter_channels c JOIN series_adapters a ON a.name=c.adapter
+		WHERE a.revoked_at IS NULL AND a.deleted_at IS NULL ORDER BY c.channel LIMIT 64`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
