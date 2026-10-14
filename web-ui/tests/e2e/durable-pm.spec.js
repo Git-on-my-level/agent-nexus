@@ -54,7 +54,17 @@ test("offline PM submission survives tab closure and sends on reconnect", async 
   const other = await context.newPage();
   const recovered = await setup(other);
   await open(other);
-  await expect(other.getByText(/^Working/)).toBeVisible();
+  // The drain may finish before this page mounts its confirmation listener,
+  // so the recovered turn never renders here; wait on the drained POST
+  // instead of a transient status line.
+  await expect
+    .poll(
+      () =>
+        recovered.calls.filter(
+          (row) => row.method === "POST" && row.path.endsWith("/messages"),
+        ).length,
+    )
+    .toBe(1);
   const messages = recovered.calls.filter((row) =>
     row.path.endsWith("/messages"),
   );
@@ -323,7 +333,17 @@ for (const checkpoint of ["creation", "message"])
       return entry.request;
     }, checkpoint);
     await page.reload();
-    await expect(page.getByText(/^Working/)).toBeVisible();
+    // Recovery drains during boot and may confirm before this page mounts,
+    // so no "Working" turn is guaranteed; the drained POSTs are the
+    // deterministic signal, and the assertions below check their bodies.
+    await expect
+      .poll(
+        () =>
+          calls.filter(
+            (call) => call.method === "POST" && call.path.endsWith("/messages"),
+          ).length,
+      )
+      .toBe(1);
     const posts = calls.filter((call) => call.method === "POST");
     const creates = posts.filter((call) => call.path === "/pm/conversations");
     expect(creates).toHaveLength(checkpoint === "creation" ? 1 : 0);
