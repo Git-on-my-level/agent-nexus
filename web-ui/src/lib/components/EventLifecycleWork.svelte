@@ -15,6 +15,7 @@
   let error = $state("");
   let preparing = $state(false);
   let ready = $state(false);
+  let readyWaiters = [];
   let pending = $derived(
     $mutationOutbox.find((entry) => entry.target === target),
   );
@@ -22,8 +23,20 @@
     draft = value;
     error = "";
   }
+  function markReady(value) {
+    ready = value;
+    if (!ready) return;
+    const waiters = readyWaiters;
+    readyWaiters = [];
+    waiters.forEach((resolve) => resolve());
+  }
+  function whenReady() {
+    if (ready) return Promise.resolve();
+    return new Promise((resolve) => readyWaiters.push(resolve));
+  }
   export async function queue(events, action) {
-    if (!ready || pending || preparing) {
+    while (!ready) await whenReady();
+    if (pending || preparing) {
       error =
         "An event request is already saved. Confirm or edit it before starting another.";
       throw new Error(error);
@@ -224,9 +237,7 @@
     value: draft,
     read: () => draft,
     onRestore: restore,
-    onReady: (value) => {
-      ready = value;
-    },
+    onReady: markReady,
     checkpointClicks: false,
   }}
   onsubmit={(event) => {
