@@ -1313,3 +1313,40 @@ work_summary:
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
     - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.
     - Inbox stream identity uses canonical summary inputs, creation and oldest-ask timestamps. Elapsed age, oldest_age, rolling digest windows and timer-only health changes never change event IDs; underlying plan, progress, ownership, due, movement, source and attention changes do.
+
+curation:
+  description: >
+    Formula and PM curation proposals. A proposal is never an action: it is a
+    human_attention_requested ask (kind ask) whose payload.curation names the
+    action and its targets, addressed to a human. response_proposals[0] accepts;
+    any other answer dismisses. Accepting performs the action as the answering
+    human through normal authority and posts an undo trail (message_posted with
+    payload.curation_applied) in the proposal thread. No new object type.
+  payload:
+    curation:
+      action: { type: string, enum: [withdraw, merge, batch], required: true }
+      targets: { type: array, items: ref, required: true, description: "withdraw: [event:<ask id>]; merge: [duplicate card ref, kept card ref]; batch: 2-10 member ask event refs." }
+      key: { type: string, required: true, description: Stable key over action and sorted targets; one open proposal per key, none after dismissal. }
+      source: { type: string, enum: [formula, pm], required: true }
+      rationale: { type: string, required: true }
+  rules:
+    - Withdraw as moot reuses possibly_moot. Only sources observed as terminal count; one unknown or unresolved source means no proposal; sources are counted, never named.
+    - Withdrawing another principal's ask is only ever proposed (I4). A requester withdraws its own ask directly.
+    - Restricted asks and initiatives are never formula candidates, so a proposal never names a private ref or title.
+    - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Accepting cancels the duplicate with a related ref to the kept initiative; undo restores its phase.
+    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. Accepting records the grouping in the trail.
+    - Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.
+  applied_trail:
+    payload_must_include: ["curation_applied"]
+    fields:
+      proposal_event_id: { type: string, required: true }
+      action: { type: string, required: true }
+      targets: { type: array, items: ref, required: true }
+      applied_by: { type: string, required: true }
+      result: { type: string, enum: [applied, failed, skipped], required: true }
+      undo: { type: object, required: false, description: Enough prior state to reverse the action (for merge the duplicate's prior phase). }
+  metrics:
+    window: Default 30 days, at most 90. Reads at most 2000 asks and 5000 notes; truncated marks a larger window.
+    s17: Weighted median hours from human_attention_requested to human_attention_responded; weight is 1 + count of payload.blocks refs. Curation proposals excluded.
+    s18: Of answered asks, share whose response_text equals response_proposals[0] and share with outcome needs_context; of asks, share withdrawn with a moot or overtaken reason 24h or more after filing.
+    s20: Per card thread, a note with next.at opens a promise; a later note without evidence that changes next.at moves it; a reset (note with evidence, plan step change or observation) at or before the original at meets it, later is slip. Open promises past due are unmet with slip to now.
