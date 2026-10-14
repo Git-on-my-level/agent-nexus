@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"agent-nexus-core/internal/primitives"
@@ -79,6 +80,7 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	if body["schema"] != "brief.v1" {
 		t.Fatal(body)
 	}
+	assertBriefMatchesFixture(t, body)
 	decisions := body["decisions"].([]any)
 	if len(decisions) != 1 {
 		t.Fatalf("decisions = %v", decisions)
@@ -127,5 +129,48 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	readBriefV1(t, store)
 	if large := counter.Count(); large > small+2 {
 		t.Fatalf("brief queries grew with the workspace: %d -> %d", small, large)
+	}
+}
+
+// I7 (core side): the live brief uses only fields the shared fixture that
+// Decide, Watch and orient render from also uses, plus the optional ones.
+func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
+	t.Helper()
+	raw, err := os.ReadFile("../../../contracts/fixtures/brief/brief.v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture map[string]any
+	if err = json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true}
+	for key := range body {
+		if _, ok := fixture[key]; !ok {
+			t.Errorf("brief field %q is not in the shared fixture", key)
+		}
+	}
+	for _, section := range []string{"decisions", "initiatives", "your_asks", "answered_for_you"} {
+		known := map[string]bool{}
+		for _, item := range fixture[section].([]any) {
+			for k := range item.(map[string]any) {
+				known[k] = true
+			}
+		}
+		if section == "your_asks" {
+			for _, item := range fixture["decisions"].([]any) {
+				for k := range item.(map[string]any) {
+					known[k] = true
+				}
+			}
+		}
+		items, _ := body[section].([]any)
+		for _, item := range items {
+			for k := range item.(map[string]any) {
+				if !known[k] && !optional[k] {
+					t.Errorf("%s field %q is not in the shared fixture", section, k)
+				}
+			}
+		}
 	}
 }
