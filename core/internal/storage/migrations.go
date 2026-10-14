@@ -1070,6 +1070,9 @@ var migrations = []migration{
 		ON human_attention_batch_response_claims(inbox_item_id)`},
 	},
 	{Version: 88, AfterApply: installTopicWorkspacePageIndexes},
+	// One durable delivery queue for wakes and human notifications, plus the
+	// indexed open-ask deadline ledger the escalation clock reads.
+	{Version: 95, AfterApply: installDeliveryQueue},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {
