@@ -247,6 +247,7 @@ export function saveLocalWork(
     epoch = localWorkEpoch(scope),
     deletionReason = "",
     confirmation = null,
+    submission = null,
   } = {},
 ) {
   if (epoch !== localWorkEpoch(scope)) {
@@ -265,6 +266,7 @@ export function saveLocalWork(
     deleted: value === null,
     deletionReason,
     confirmation,
+    submission,
     epoch,
   };
   let journalSaved = false;
@@ -312,7 +314,11 @@ export function saveLocalWork(
   return saved;
 }
 
-export async function listLocalWork(scope, kind) {
+export async function listLocalWork(
+  scope,
+  kind,
+  { includeDeleted = false } = {},
+) {
   await operations;
   let stored = [];
   try {
@@ -340,7 +346,7 @@ export async function listLocalWork(scope, kind) {
   return [...merged.values()].filter(
     (record) =>
       record.epoch === localWorkEpoch(scope) &&
-      !record.deleted &&
+      (includeDeleted || !record.deleted) &&
       (!kind || record.kind === kind),
   );
 }

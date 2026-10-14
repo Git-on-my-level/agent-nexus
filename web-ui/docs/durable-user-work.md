@@ -32,6 +32,44 @@ for an unaudited endpoint: an HTTP timeout can occur after the mutation committe
 
 ## Current implementation
 
+### Receipt retention and recovery age
+
+Policy: receipt retention: 30 days; automatic recovery: 25 days.
+The single numeric source is `core/internal/replaypolicy/policy.json`, embedded
+by core and imported by the UI. The policy regression checks this documentation
+against that source. Clients must never recycle a key for a different intent.
+Exact retries do not refresh a receipt's creation time. After the retention
+window the server may no longer recognize a previously used key; duplicate-post
+protection for an old key is no longer guaranteed.
+
+Core collects expired `idempotency_replays` rows in indexed batches bounded by
+`gcBatchSize`, outside request writers. It checks once a minute and yields a
+second between full batches until the backlog clears. Shutdown cancels and joins
+the worker. No canonical event, turn, document, artifact or Inbox history is
+deleted by this maintenance. The existing creation-time index is also installed
+when PM initializes its standalone schema.
+
+Both outboxes stop automatic **and same-key manual** sends at the recovery age,
+including on reload/offline recovery and inside the send lock. Unknown ages fail
+closed, including legacy Inbox records without an immutable creation timestamp;
+their Undo deadline may have changed during a previous manual retry. The request stays in Needs attention with Copy/Edit and an
+explicit **Retry as new** action that warns it may already have been sent.
+That action checkpoints fresh keys before superseding the old request; original
+content, concurrency bases and confirmed partial/conversation checkpoints remain.
+It does not silently refresh a stale resource version. Clients outside this UI
+must enforce the same cutoff before retrying an uncertain old request.
+
+Identical requests submitted concurrently by two tabs are compared against
+persisted scope state under the shared Web Lock. Only transport keys are ignored
+for that comparison; authored JSON, targets, tokens and actor scope remain part
+of the intent. A competing active request is adopted, and a confirmation made
+after this submission began can satisfy it without another wire send. Different
+bodies remain separate intents. A small fingerprint on confirmation tombstones
+closes the race where the first request confirms before the second takes the
+lock. This scans O(device scope records), like existing recovery enumeration;
+there is no server-side history scan. Inbox confirmation clears only an exactly
+equal saved value, retaining newer whitespace-only edits too.
+
 `localWorkStore.js` stores records in IndexedDB, with indexes on scope and
 principal. The scope is the existing organization/workspace/agent/actor tuple.
 A separate synchronous localStorage entry for each record checkpoints each input

@@ -33,6 +33,7 @@ func NewStore(db *sql.DB) (*Store, error) {
  scope TEXT NOT NULL, actor_id TEXT NOT NULL, request_key TEXT NOT NULL, request_hash TEXT NOT NULL,
  response_status INTEGER NOT NULL, response_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(scope,actor_id,request_key));
+ CREATE INDEX IF NOT EXISTS idx_idempotency_replays_created_at ON idempotency_replays(created_at);
  CREATE TABLE IF NOT EXISTS pm_onboarding_backfill (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, first_seen_at TEXT, last_seen_at TEXT);
  CREATE TABLE IF NOT EXISTS pm_registration (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, runner TEXT NOT NULL, host TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS pm_presence (workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL, last_seen_at TEXT NOT NULL, signal TEXT NOT NULL, PRIMARY KEY(workspace_id,actor_id));
@@ -44,6 +45,8 @@ func NewStore(db *sql.DB) (*Store, error) {
  CREATE VIEW IF NOT EXISTS pm_reader_decision_positions AS SELECT kind,workspace_id,actor_id,id,json_extract(body,'$.status') AS status FROM pm_records;
  CREATE INDEX IF NOT EXISTS pm_records_reader_awaiting ON pm_records(kind,workspace_id,actor_id,json_extract(body,'$.status'),id);
  CREATE INDEX IF NOT EXISTS pm_records_card_awaiting ON pm_records(kind,workspace_id,json_extract(body,'$.work_ref'),json_extract(body,'$.status'),id);
+ CREATE INDEX IF NOT EXISTS pm_records_proposal_awaiting ON pm_records(workspace_id,actor_id,json_extract(body,'$.work_ref'),json_extract(body,'$.scope')) WHERE kind='decision' AND json_extract(body,'$.status')='awaiting_answer';
+ CREATE INDEX IF NOT EXISTS pm_records_proposal_human ON pm_records(workspace_id,actor_id,json_extract(body,'$.work_ref'),json_extract(body,'$.scope')) WHERE kind='decision' AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human';
  CREATE INDEX IF NOT EXISTS pm_records_scope ON pm_records(kind,workspace_id,actor_id,parent_id);
  CREATE INDEX IF NOT EXISTS pm_records_page ON pm_records(kind,workspace_id,rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z'));
  CREATE INDEX IF NOT EXISTS pm_records_owner_page ON pm_records(kind,workspace_id,actor_id,rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z'));
@@ -361,7 +364,7 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseTo
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return Decision{}, false, err
 	} else {
-		err = tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
+		err = tx.QueryRowContext(ctx, proposalCandidateSQL, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
 		reuse := false
 		if err == nil {
 			var prior Decision
@@ -515,7 +518,7 @@ func rejectPendingHumanProposal(ctx context.Context, tx *resourceaccess.Tx, d De
 		return nil
 	}
 	var id string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&id)
+	err := tx.QueryRowContext(ctx, pendingHumanProposalSQL, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

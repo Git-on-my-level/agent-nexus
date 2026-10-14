@@ -3,6 +3,7 @@ import { get, writable } from "svelte/store";
 import { isInboxResponseOutcome } from "$lib/askDelivery.js";
 import { captureInboxResponseSender } from "$lib/coreClient";
 import { mutationFailure } from "$lib/mutationStatus.js";
+import { replayExpired, expiredReplayError } from "$lib/replayPolicy.js";
 import {
   listLocalWork,
   loadLocalWork,
@@ -99,6 +100,7 @@ function persistedEntry(entry, state = "pending", failure = null) {
     message: entry.message,
     restore: entry.restore,
     deadline: entry.deadline,
+    createdAt: entry.createdAt,
     attempts: entry.attempts || 0,
     nextAt: entry.nextAt || entry.deadline,
     state,
@@ -161,6 +163,7 @@ async function durableSend(entry) {
         throw new Error(
           "The saved request could not be read. Keep the original response for retry.",
         );
+      if (replayExpired(stored.createdAt)) throw expiredReplayError();
       if (
         stored.state === "retrying" &&
         stored.nextAt > Date.now() &&
@@ -191,7 +194,7 @@ async function durableSend(entry) {
       for (const field of ["reply", "context"]) {
         const target = `inbox:${entry.itemId}:${field}`;
         const draft = await loadLocalWork(entry.identity, "draft", target);
-        if (draft?.trim() === entry.request.response_text?.trim()) {
+        if (draft === entry.request.response_text) {
           await saveLocalWork(entry.identity, "draft", target, null, {
             epoch: entry.localEpoch,
           });
@@ -222,9 +225,10 @@ export async function recoverInboxResponses() {
   recovering = true;
   const identity = scopeIdentity;
   const scope = responseScope();
+  const epoch = localWorkEpoch(identity);
   try {
     const records = await listLocalWork(identity, "inbox-send");
-    if (scope !== responseScope()) return;
+    if (scope !== responseScope() || epoch !== localWorkEpoch(identity)) return;
     const visible = new Map(
       records
         .filter(
@@ -247,6 +251,12 @@ export async function recoverInboxResponses() {
     }
     let next = Infinity;
     for (const { value } of records) {
+      if (
+        identity !== scopeIdentity ||
+        scope !== responseScope() ||
+        epoch !== localWorkEpoch(identity)
+      )
+        return;
       if (value.state === "superseded") continue;
       const key = value.request.idempotency_key;
       if (cancelledSends.has(key)) continue;
@@ -263,8 +273,28 @@ export async function recoverInboxResponses() {
         send: captureInboxResponseSender(),
         timer: null,
         saved: Promise.resolve(),
-        localEpoch: localWorkEpoch(identity),
+        localEpoch: epoch,
       };
+      if (replayExpired(entry.createdAt)) {
+        const classified = mutationFailure(expiredReplayError());
+        const failure = {
+          ...classified,
+          error: classified.message,
+          response_text: entry.request.response_text,
+        };
+        entry.failure = failure;
+        entry.state = "attention";
+        failedByItem.set(entry.itemId, entry);
+        setFailure(entry.itemId, failure);
+        if (!value.failure?.expired) {
+          try {
+            await persistResponse(entry, "attention", failure);
+          } catch {
+            entry.volatile = true;
+          }
+        }
+        continue;
+      }
       const failure = value.failure || {
         error: "Waiting to send. Your response is kept on this device.",
         state: "pending",
@@ -453,6 +483,7 @@ export function queueInboxResponse({
     message: String(message ?? "Response sent"),
     restore: restore ?? null,
     deadline: Date.now() + UNDO_WINDOW_MS,
+    createdAt: Date.now(),
     timer: null,
     localEpoch: bound.localEpoch ?? localWorkEpoch(bound.identity),
   };
@@ -577,10 +608,25 @@ export function flushInboxResponse() {
  * resend a different item's response, which is possible once the failure lives
  * on the row rather than only in the one toast.
  */
-export function retryInboxResponse(itemId = "") {
+export function retryInboxResponse(itemId = "", { asNew = false } = {}) {
   const want = String(itemId ?? "").trim();
   const failed = want ? failedByItem.get(want) : newestFailure();
   if (!failed) return Promise.resolve();
+  const expired = replayExpired(failed.createdAt);
+  if (expired && !asNew) {
+    scheduleRecovery();
+    return Promise.resolve();
+  }
+  if (expired) {
+    queueInboxResponse({
+      itemId: failed.itemId,
+      item: failed.item,
+      request: failed.request,
+      message: failed.message,
+      restore: failed.restore,
+    });
+    return Promise.resolve();
+  }
   const entry = {
     ...failed,
     deadline: Date.now(),
@@ -790,6 +836,7 @@ async function commit(entry, recovered = false) {
       request: entry.request,
       message: entry.message,
       restore: entry.restore,
+      createdAt: entry.createdAt,
       attempts: entry.attempts,
       nextAt: entry.nextAt,
       saved: Promise.resolve(),
@@ -826,6 +873,7 @@ async function commit(entry, recovered = false) {
       state: "failed",
       deadline: 0,
       error: failure.error,
+      expired: failure.expired,
     });
   } finally {
     inFlight.delete(entry.request.idempotency_key);

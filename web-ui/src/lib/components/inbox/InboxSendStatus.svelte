@@ -80,7 +80,9 @@
         <button
           type="button"
           class="ui-btn-secondary"
-          onclick={() => void retryInboxResponse(itemId)}>Retry send</button
+          onclick={() =>
+            void retryInboxResponse(itemId, { asNew: !!failure?.expired })}
+          >{failure?.expired ? "Retry as new" : "Retry send"}</button
         >
       </div>
       {#if copyError}<p class="text-micro text-fg-muted">{copyError}</p>{/if}

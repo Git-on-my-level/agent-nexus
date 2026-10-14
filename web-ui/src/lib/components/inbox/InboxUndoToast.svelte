@@ -4,6 +4,7 @@
     dismissInboxResponseToast,
     inboxResponseToast,
     retryInboxResponse,
+    editInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
 
@@ -34,7 +35,11 @@
         <button
           class="shrink-0 text-micro font-medium text-accent-text hover:underline"
           type="button"
-          onclick={() => void retryInboxResponse(toast.itemId)}>Retry</button
+          onclick={() =>
+            toast.expired
+              ? editInboxResponse(toast.itemId)
+              : void retryInboxResponse(toast.itemId)}
+          >{toast.expired ? "Edit response" : "Retry"}</button
         >
         <button
           class="shrink-0 text-micro text-fg-muted hover:text-fg"

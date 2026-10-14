@@ -78,7 +78,7 @@ func (s *Store) proposalCandidate(ctx context.Context, d Decision) (Decision, er
 		return Decision{}, err
 	}
 	var raw []byte
-	err = s.database().QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
+	err = s.database().QueryRowContext(ctx, proposalCandidateSQL, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, nil
 	}

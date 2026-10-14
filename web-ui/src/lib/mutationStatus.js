@@ -6,6 +6,7 @@ export function mutationFailure(error, subject = "response") {
       message: error.publicMessage || error.message,
       detail: error.publicMessage ? error.message : "",
       status: 400,
+      ...(error.replayExpired ? { expired: true } : {}),
     };
   }
   const status = Number(error?.status || 0);

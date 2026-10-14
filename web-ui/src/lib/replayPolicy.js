@@ -1,0 +1,87 @@
+import policy from "../../../core/internal/replaypolicy/policy.json";
+
+export const replayPolicy = Object.freeze(policy);
+export const autoRetryMaxAgeMs =
+  policy.autoRetryMaxAgeDays * 24 * 60 * 60 * 1000;
+export function replayExpired(createdAt, now = Date.now()) {
+  return (
+    !Number.isFinite(createdAt) ||
+    createdAt <= 0 ||
+    now - createdAt >= autoRetryMaxAgeMs
+  );
+}
+export function expiredReplayError() {
+  return Object.assign(
+    new Error("The original receipt may no longer be available."),
+    {
+      replayExpired: true,
+      publicMessage:
+        "This request is too old for safe retry. It may already have been sent. Copy or edit it, or retry as a new request.",
+    },
+  );
+}
+
+// Strip only transport key locations, never keys inside authored JSON content.
+export function requestIntent(request) {
+  const value = JSON.parse(JSON.stringify(request));
+  for (const body of [
+    value,
+    value.body,
+    value.answer,
+    value.creation,
+    value.message,
+    ...(value.items || []).map((item) => item.body),
+  ]) {
+    if (!body) continue;
+    delete body.request_key;
+    delete body.replay_key;
+  }
+  return value;
+}
+
+export async function intentFingerprint(request) {
+  const canonical = (value) =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, canonical(value[key])]),
+          )
+        : value;
+  const bytes = new TextEncoder().encode(
+    JSON.stringify(canonical(requestIntent(request))),
+  );
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+export function freshRequest(request, operation = "") {
+  const value = JSON.parse(JSON.stringify(request));
+  for (const body of [
+    value,
+    value.body,
+    value.answer,
+    value.creation,
+    value.message,
+    ...(value.items || []).map((item) => item.body),
+  ]) {
+    if (!body) continue;
+    for (const field of ["request_key", "replay_key"]) {
+      if (field in body) body[field] = crypto.randomUUID();
+    }
+  }
+  // This is an explicit new intent, not recovery of the old body. Legacy PM
+  // requests now opt into receipts just like any newly queued PM request.
+  if (operation === "pm.chat.send") {
+    for (const body of [value.creation, value.message]) {
+      if (!body) continue;
+      body.request_key ||= crypto.randomUUID();
+      body.replay_key ||= crypto.randomUUID();
+    }
+  }
+  return value;
+}

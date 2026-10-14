@@ -9,6 +9,7 @@ RUN pnpm install --frozen-lockfile
 
 COPY web-ui/ ./
 COPY contracts/gen/ts/ /src/contracts/gen/ts/
+COPY core/internal/replaypolicy/policy.json /src/core/internal/replaypolicy/policy.json
 
 ENV ADAPTER=node
 RUN pnpm run build

@@ -110,7 +110,9 @@
           <button
             type="button"
             class="rounded border border-line px-2 py-1 text-fg"
-            onclick={() => retryMutation(entry.key)}>Retry send</button
+            onclick={() =>
+              retryMutation(entry.key, { asNew: !!entry.failure?.expired })}
+            >{entry.failure?.expired ? "Retry as new" : "Retry send"}</button
           >
         {/if}
       </div>

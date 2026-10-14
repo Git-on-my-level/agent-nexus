@@ -25,6 +25,12 @@ import { commitInboxView } from "$lib/inboxViewCache.js";
 import { isPmNotOnboardedRefusal, PM_STATES } from "$lib/pm/onboardingState.js";
 import { publishPmPresence } from "$lib/pm/presence.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
+import {
+  replayExpired,
+  expiredReplayError,
+  intentFingerprint,
+  freshRequest,
+} from "$lib/replayPolicy.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -47,6 +53,9 @@ const visible = (entry) => entry.state !== "superseded";
 /** Only audited adapters belong here. A new endpoint must first prove atomic
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
+  if (!active(entry))
+    throw new Error("The submitting identity is no longer active.");
+  if (replayExpired(entry.createdAt)) throw expiredReplayError();
   const client = createLocalMutationClient(entry.scope);
   if (entry.operation === "docs.lifecycle") {
     const methods = {
@@ -427,13 +436,6 @@ export async function enqueueLocalMutation({
   const scope = get(localWorkScope);
   if (!canUseLocalWorkScope(scope))
     throw new Error("Sign in before saving a message.");
-  // One uncertain post per composer avoids a second key for a double-click.
-  if (
-    get(mutationOutbox).some(
-      (entry) => entry.target === target && visible(entry),
-    )
-  )
-    throw new Error("Review the saved message before posting another.");
   const entry = snapshot({
     key,
     scope,
@@ -501,18 +503,71 @@ async function attempt(entry) {
         const saved = latest.value;
         if (saved.state === "attention" || saved.nextAt > Date.now()) return;
         entry = saved;
+        if (replayExpired(entry.createdAt)) throw expiredReplayError();
+        const fingerprint = await intentFingerprint(entry.request);
+        const records = await listLocalWork(entry.scope, "mutation", {
+          includeDeleted: true,
+        });
+        let adopted = null;
+        for (const record of records) {
+          if (record.target === entry.key) continue;
+          if (record.deleted) {
+            if (
+              record.deletionReason === "confirmed" &&
+              record.submission?.confirmedAt >= entry.createdAt &&
+              record.submission?.target === entry.target &&
+              record.submission.operation === entry.operation &&
+              record.submission.fingerprint === fingerprint
+            ) {
+              adopted = record;
+              break;
+            }
+            continue;
+          }
+          const other = record.value;
+          if (
+            !visible(other) ||
+            replayExpired(other.createdAt) ||
+            other.target !== entry.target ||
+            other.operation !== entry.operation
+          )
+            continue;
+          if (
+            other.createdAt > entry.createdAt ||
+            (other.createdAt === entry.createdAt && other.key > entry.key)
+          )
+            continue;
+          if ((await intentFingerprint(other.request)) !== fingerprint)
+            continue;
+          // Another tab owns the identical persisted submission. Adopt its
+          // active request, including its original keys and checkpoints.
+          await persist({
+            ...entry,
+            state: "superseded",
+            adoptedKey: other.key,
+          });
+          volatile.delete(entry.key);
+          return;
+        }
         entry.state = "sending";
         entry.attempts += 1;
         await persist(entry);
         mutationOutbox.update((rows) =>
           rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
         );
-        const result = await send(entry);
+        if (!active(entry)) return;
+        const result = adopted ? adopted.confirmation : await send(entry);
         if (entry.epoch !== localWorkEpoch(entry.scope)) return;
         await saveLocalWork(entry.scope, "mutation", entry.key, null, {
           epoch: entry.epoch,
           deletionReason: "confirmed",
           confirmation: result,
+          submission: {
+            target: entry.target,
+            operation: entry.operation,
+            fingerprint,
+            confirmedAt: Date.now(),
+          },
         });
         volatile.delete(entry.key);
         // Preserve any newer composer contents, even in another tab.
@@ -624,6 +679,22 @@ export async function recoverMutations() {
       let entries = [...rows.values()]
         .filter((entry) => active(entry) && visible(entry))
         .sort((a, b) => a.createdAt - b.createdAt);
+      for (const entry of entries) {
+        if (replayExpired(entry.createdAt) && !entry.failure?.expired) {
+          entry.state = "attention";
+          entry.failure = mutationFailure(expiredReplayError());
+          volatile.set(entry.key, entry);
+          try {
+            await persist(entry);
+            volatile.delete(entry.key);
+          } catch {
+            /* Retain the visible request; sending remains blocked. */
+          }
+        }
+      }
+      // Expiry checkpoints yield to storage; a principal may change while they
+      // complete. Never publish the old principal's recovered plaintext late.
+      entries = entries.filter(active);
       mutationOutbox.set(entries.map(snapshot));
       if (navigator.onLine !== false) {
         const due = entries.find(
@@ -650,9 +721,46 @@ export async function recoverMutations() {
   }
 }
 
-export async function retryMutation(key) {
+export async function retryMutation(key, { asNew = false } = {}) {
   const entry = get(mutationOutbox).find((row) => row.key === key);
   if (!entry || !active(entry)) return;
+  if (replayExpired(entry.createdAt)) {
+    if (!asNew) {
+      requestRecovery();
+      return;
+    }
+    const replacement = {
+      ...snapshot(entry),
+      key: crypto.randomUUID(),
+      request: freshRequest(entry.request, entry.operation),
+      createdAt: Date.now(),
+      state: "pending",
+      failure: null,
+      attempts: 0,
+      nextAt: Date.now(),
+    };
+    // Checkpoint the new intent before superseding the old. If interrupted,
+    // the old one stays in attention and can never drain automatically.
+    try {
+      await persist(replacement);
+      await persist({
+        ...entry,
+        state: "superseded",
+        replacementKey: replacement.key,
+      });
+      volatile.delete(key);
+    } catch (error) {
+      if (!active(entry)) return;
+      entry.state = "attention";
+      entry.failure = {
+        ...mutationFailure(Object.assign(error, { localPersistence: true })),
+        expired: true,
+      };
+      volatile.set(key, entry);
+    }
+    requestRecovery();
+    return;
+  }
   entry.state = "pending";
   entry.nextAt = Date.now();
   volatile.set(key, entry);
