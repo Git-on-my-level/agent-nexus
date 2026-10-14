@@ -113,6 +113,7 @@ it("preserves partial agent counts and accumulated dashboard choices", async () 
   const first = {
     status: "ok",
     pinned_ref: "document:first",
+    pin_updated_at: "edited-from",
     reports: [{ id: "first", report: visualReportExample }],
     next_cursor: "two",
     has_more: true,
@@ -120,6 +121,7 @@ it("preserves partial agent counts and accumulated dashboard choices", async () 
   const merged = mergeDashboardReports(first, {
     status: "ok",
     pinned_ref: null,
+    pin_updated_at: "newer-setting",
     reports: [
       { id: "first", report: visualReportExample },
       { id: "second", report: visualReportExample },
@@ -128,5 +130,6 @@ it("preserves partial agent counts and accumulated dashboard choices", async () 
   });
   expect(merged.reports.map((r) => r.id)).toEqual(["first", "second"]);
   expect(merged.pinned_ref).toBe("document:first");
+  expect(merged.pin_updated_at).toBe("edited-from");
   expect(merged.has_more).toBe(false);
 });

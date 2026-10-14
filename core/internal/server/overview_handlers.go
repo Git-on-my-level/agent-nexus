@@ -57,6 +57,15 @@ func handleSetWorkspaceDashboard(w http.ResponseWriter, r *http.Request, opts ha
 	if !decodeJSONBody(w, r, &raw) {
 		return
 	}
+	key := ""
+	if rawKey, present := raw["request_key"]; present {
+		var valid bool
+		key, valid = rawKey.(string)
+		if !valid || strings.TrimSpace(key) == "" || len(key) > 256 || strings.ContainsRune(key, 0) {
+			writeError(w, 400, "invalid_request", "request_key must be a nonempty string of at most 256 bytes")
+			return
+		}
+	}
 	value, present := raw["document_ref"]
 	if !present {
 		writeError(w, 400, "invalid_request", "document_ref is required; null clears the pin")
@@ -77,6 +86,37 @@ func handleSetWorkspaceDashboard(w http.ResponseWriter, r *http.Request, opts ha
 		if !ok {
 			return
 		}
+	}
+	if key != "" {
+		baseValue, present := raw["if_updated_at"]
+		base, valid := baseValue.(string)
+		if !present || (baseValue != nil && !valid) {
+			writeError(w, 400, "invalid_request", "if_updated_at is required with request_key")
+			return
+		}
+		fenced, ok := store.(interface {
+			SetWorkspaceDashboardIf(context.Context, string, string, *string) (map[string]any, error)
+		})
+		if !ok {
+			writeError(w, 503, "overview_unavailable", "dashboard replay is unavailable")
+			return
+		}
+		// Recheck the selected resource before returning any original receipt.
+		if id != "" {
+			if _, _, err := opts.primitiveStore.GetDocument(r.Context(), id); err != nil {
+				workStoreError(w, r, err)
+				return
+			}
+		}
+		status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "workspace.dashboard.set", actor, key, raw, 200, func(ctx context.Context) (map[string]any, error) {
+			return fenced.SetWorkspaceDashboardIf(ctx, actor, id, &base)
+		})
+		if err != nil {
+			workStoreError(w, r, err)
+			return
+		}
+		writeJSON(w, status, response)
+		return
 	}
 	if err := store.SetWorkspaceDashboard(r.Context(), actor, id); err != nil {
 		workStoreError(w, r, err)

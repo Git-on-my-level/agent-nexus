@@ -3,6 +3,7 @@ package actors
 import (
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -78,6 +79,50 @@ func (s *Store) Register(ctx context.Context, actor Actor) (Actor, error) {
 
 	actor.Tags = tags
 	return actor, nil
+}
+
+// RegisterWithReplay is dev-only identity creation, never a session ceremony.
+// The exact actor and receipt commit together; a legacy collision is not adopted.
+func (s *Store) RegisterWithReplay(ctx context.Context, actor Actor, key string) (Actor, error) {
+	if len(key) > 256 || strings.TrimSpace(key) == "" || strings.ContainsRune(key, 0) {
+		return Actor{}, ErrAlreadyExists
+	}
+	raw, err := json.Marshal(actor)
+	if err != nil {
+		return Actor{}, err
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
+	var result Actor
+	err = s.db.WriteTransaction(ctx, func(ctx context.Context, tx *resourceaccess.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE idempotency_replays SET request_hash=request_hash WHERE scope='actors.register' AND actor_id=? AND request_key=?`, actor.ID, key); err != nil {
+			return err
+		}
+		var knownHash, receipt string
+		err := tx.QueryRowContext(ctx, `SELECT request_hash,response_json FROM idempotency_replays WHERE scope='actors.register' AND actor_id=? AND request_key=?`, actor.ID, key).Scan(&knownHash, &receipt)
+		if err == nil {
+			if knownHash != hash {
+				return ErrAlreadyExists
+			}
+			if _, err := s.Get(ctx, actor.ID); err != nil {
+				return err
+			}
+			return json.Unmarshal([]byte(receipt), &result)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		result, err = s.Register(ctx, actor)
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES('actors.register',?,?,?,201,?)`, actor.ID, key, hash, string(encoded))
+		return err
+	})
+	return result, err
 }
 
 func (s *Store) EnsureRegistered(ctx context.Context, actor Actor) (Actor, error) {

@@ -2854,7 +2854,8 @@ func handleRegisterActor(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	var req struct {
-		Actor struct {
+		RequestKey string `json:"request_key"`
+		Actor      struct {
 			ID          string   `json:"id"`
 			DisplayName string   `json:"display_name"`
 			Tags        []string `json:"tags"`
@@ -2891,12 +2892,24 @@ func handleRegisterActor(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
-	registered, err := opts.actorRegistry.Register(r.Context(), actors.Actor{
-		ID:          req.Actor.ID,
-		DisplayName: req.Actor.DisplayName,
-		Tags:        req.Actor.Tags,
-		CreatedAt:   req.Actor.CreatedAt,
-	})
+	input := actors.Actor{
+		ID: req.Actor.ID, DisplayName: req.Actor.DisplayName, Tags: req.Actor.Tags, CreatedAt: req.Actor.CreatedAt,
+	}
+	var registered actors.Actor
+	var err error
+	if req.RequestKey != "" {
+		registry, ok := opts.actorRegistry.(interface {
+			RegisterWithReplay(context.Context, actors.Actor, string) (actors.Actor, error)
+		})
+		if !ok {
+			writeError(w, 503, "actor_registry_unavailable", "actor replay is unavailable")
+			return
+		}
+		registered, err = registry.RegisterWithReplay(r.Context(), input, req.RequestKey)
+	} else {
+		registered, err = opts.actorRegistry.Register(r.Context(), input)
+	}
+
 	if err != nil {
 		if errors.Is(err, actors.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "actor_exists", "actor with this id already exists")

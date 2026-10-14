@@ -557,7 +557,12 @@ export function mergeDashboardReports(current, next) {
   return {
     ...current,
     ...next,
-    pinned_ref: current?.pinned_ref ?? next?.pinned_ref ?? null,
+    // Loading selector candidates does not rebase the setting the operator
+    // already saw. Preserve its pin and concurrency token as one snapshot.
+    pinned_ref: current
+      ? (current.pinned_ref ?? null)
+      : (next?.pinned_ref ?? null),
+    pin_updated_at: current ? current.pin_updated_at : next?.pin_updated_at,
     reports: [...reports.values()],
   };
 }

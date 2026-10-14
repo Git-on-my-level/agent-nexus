@@ -25,6 +25,8 @@
     loadOverview,
     parseReportDocumentContent,
   } from "$lib/overview.js";
+  import DashboardWork from "$lib/components/overview/DashboardWork.svelte";
+  let dashboardWork = $state(null);
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import RecentChanges from "$lib/components/overview/RecentChanges.svelte";
   import { workSummaryCards } from "$lib/workSummaryCards.js";
@@ -459,13 +461,10 @@
     pinning = true;
     pinError = "";
     try {
-      await coreClient.setWorkspaceDashboard({ document_ref: ref });
-      await overviewRead.refresh({ replace: true });
-    } catch (error) {
+      await dashboardWork.queue(ref, model.reports.pin_updated_at);
+    } catch {
       pinError =
-        error instanceof Error
-          ? error.message
-          : "Dashboard could not be pinned.";
+        "Your dashboard choice could not be saved. Keep this page open and try again.";
     } finally {
       pinning = false;
     }
@@ -759,6 +758,11 @@
           </div>
         {/if}
       </header>
+      <DashboardWork
+        bind:this={dashboardWork}
+        href={$page.url.pathname}
+        onconfirmed={() => void overviewRead.refresh({ replace: true })}
+      />
       {#if pinError}<p
           class="px-3 py-2 text-meta text-danger-text"
           role="alert"

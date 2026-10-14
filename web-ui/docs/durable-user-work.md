@@ -601,6 +601,43 @@ This consuming-query bound excludes existing cold/stale canonical authorization
 closure admission and ordinary business-write authorization; those remain the
 shared policy's costs, not a claim that all Inbox requests are bounded already.
 
+## Dashboard and development identity recovery
+
+Dashboard pin/unpin clicks save a full choice before sending. The outbox freezes
+`request_key`, `document_ref` and `if_updated_at`; a later setting, including an
+unpin/pin round trip, conflicts. Use latest version refreshes only the explicit
+setting base, preserving the saved choice. Confirmations replace older Overview
+reads, and clear only an exact matching draft. The setting and original
+`{ ok, updated_at, document_ref }` receipt commit in one writer. Selected document
+visibility is checked on every HTTP retry and is inherited by stored receipts.
+A null base uses insert-only admission: an inaccessible existing pin cannot be
+mistaken for permission to overwrite it. Null and hidden settings return the
+same visible base without exposing a private timestamp.
+
+Development actor creation is an explicit identity protocol, not automatic
+outbox recovery. Before an identity is selected, only the display name and
+frozen actor payload/key are stored in a separate public workspace namespace.
+Submitted requests have individual journals and tab pointers; typing in another
+tab cannot erase the original key. Reload restores input but never sends or
+selects an identity. The operator explicitly resends; the atomic actor/receipt
+writer returns the original actor and never adopts an existing legacy ID.
+Each send journals uncertainty before transport. Attempt records are separate
+per tab, so one refusal cannot clear another tab’s unresolved send. Live forms
+observe those records; editing and beginning a send share a browser lock. A
+definitively rejected request is retired under that lock before a replacement
+key is created. Browsers without safe coordination refuse submission.
+Definitive rejections retain a correction action. Public drafts and requests
+are purged when an identity arrives, and confirmation clears only matching
+stored snapshots. Storage failure prevents submission. No credentials,
+challenges, tokens or private auth results enter this protocol store.
+
+These reads add no workspace scan: the dashboard singleton primary key,
+`idempotency_replays(scope,actor_id,request_key)` and actor primary key select one
+record each. A real SQLite replay fixture at 0 and 4,096 background identities
+and receipts uses 3 queries/2 rows/66 VM steps for actor recovery and 2 queries/
+1 row/54 VM steps for dashboard recovery, with no scans or sorts. This consuming
+lookup proof excludes the inherited canonical authorization admission cost.
+
 ## Stage 2 handoff
 
 SCA-786 owns the remaining rollout. This section is the follow-up pointer for
@@ -614,8 +651,9 @@ groups in separate reviewable PRs; do not expand the merged Stage 1 PR.
   [Event lifecycle recovery](#event-lifecycle-recovery).
 - Inbox controls: migrated through frozen keyed control requests; see
   [Inbox control recovery](#inbox-control-recovery).
-- Task refresh, dashboard selection and dev actor creation: audit receipts and
-  migrate full intents before automatic retry.
+- Dashboard selection and dev actor creation: migrated; see
+  [Dashboard and development identity recovery](#dashboard-and-development-identity-recovery).
+- Task refresh: audit its source-read admission before automatic retry.
 - Access/host/enrollment/invite/admin/principal controls, Secrets, setup/tour
   choices, workspace activation and login/session controls: design authorization,
   private-result and credential handling before choosing device persistence.

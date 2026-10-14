@@ -118,6 +118,7 @@
                           "docs.lifecycle",
                           "events.lifecycle",
                           "inbox.controls",
+                          "workspace.dashboard.set",
                         ].includes(entry.operation)
                       ? "Edit request"
                       : entry.operation === "topics.patch"

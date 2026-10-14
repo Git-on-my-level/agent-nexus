@@ -3,6 +3,7 @@ package primitives_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -259,6 +260,10 @@ func TestDashboardFiltersPrivatePinsAndNewerReportsBeforeBlobReads(t *testing.T)
 		if strings.Contains(string(raw), "Confidential") {
 			t.Fatal(string(raw))
 		}
+	}
+	absent := ""
+	if _, err = store.SetWorkspaceDashboardIf(readerCtx, "reader", "", &absent); !errors.Is(err, primitives.ErrConflict) {
+		t.Fatalf("hidden pin was overwritten: %v", err)
 	}
 	ownerDashboard, err := store.DashboardReports(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "owner"}))
 	if err != nil {
