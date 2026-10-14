@@ -658,3 +658,86 @@ test("evidence reads as a sheet at phone width", async ({ page }) => {
     page.locator("[data-inbox-evidence-doc='document:rulings']"),
   ).toBeFocused();
 });
+
+test("a confirmed control refresh fences older ask and context responses for the same selected row", async ({
+  page,
+}) => {
+  await setupInbox(page, { completed: [DELIVERED] });
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let asks = 0;
+  let notes = 0;
+  const json = (route, body) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+  await page.route(isAskUrl, async (route) => {
+    const first = ++asks === 1;
+    if (first) await gate;
+    await json(route, {
+      ...ASK_OUTCOMES["event:ask-del"],
+      task_outcome: {
+        card_ref: "card:anx-7",
+        phase: first ? "blocked" : "ready",
+        next_actor: "codex-worker",
+      },
+    });
+  });
+  await page.route(/\/events(?:\?.*)?$/, async (route) => {
+    const first = ++notes === 1;
+    if (first) await gate;
+    await json(route, {
+      events: [
+        {
+          id: first ? "old-note" : "new-note",
+          type: "message_posted",
+          ts: new Date().toISOString(),
+          payload: {
+            text: first ? "Outdated progress note" : "Current progress note",
+          },
+        },
+      ],
+    });
+  });
+  await page.goto(
+    `/o/local/w/local/inbox?mailbox=handled&item=${encodeURIComponent(DELIVERED.id)}`,
+  );
+  await expect.poll(() => asks).toBe(1);
+  await expect.poll(() => notes).toBeGreaterThan(0);
+  await page.evaluate(async () => {
+    const { readerScopeKey } = await import("/src/lib/readerScope.js");
+    window.dispatchEvent(
+      new CustomEvent("anx:mutation-confirmed", {
+        detail: {
+          operation: "inbox.controls",
+          scope: readerScopeKey(),
+          request: { items: [] },
+          result: { controls: [] },
+        },
+      }),
+    );
+  });
+  await expect(page.locator("[data-inbox-task-outcome]")).toHaveText(
+    "Ready · next: codex-worker",
+  );
+  await expect(page.locator("[data-inbox-last-note]")).toContainText(
+    "Current progress note",
+  );
+  release();
+  // Wait for both old responses and their completion callbacks, then check that
+  // the newer selected-row projection remains intact.
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator("[data-inbox-task-outcome]")).toHaveText(
+    "Ready · next: codex-worker",
+  );
+  await expect(page.locator("[data-inbox-last-note]")).toContainText(
+    "Current progress note",
+  );
+  await expect(page.locator("[data-inbox-last-note]")).not.toContainText(
+    "Outdated progress note",
+  );
+});

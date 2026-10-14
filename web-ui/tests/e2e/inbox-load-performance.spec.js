@@ -646,6 +646,7 @@ function blockedTask(
   return {
     ref: `card:${id}`,
     title: `Blocked ${id}`,
+    version: 0,
     phase: "blocked",
     owner,
     source: { authority: source },

@@ -54,34 +54,22 @@
       "revokeHostEnrollmentToken": 2
     }
   },
-  "lib/components/timeline/MessagesTab.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: event archive/unarchive/trash intent snapshots and atomic original receipts; message posting itself is migrated.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "archiveEvent": 1,
-      "trashEvent": 1,
-      "unarchiveEvent": 1
-    }
-  },
-  "lib/components/timeline/TimelineTab.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: event single/bulk lifecycle snapshots, per-item receipts and partial confirmations.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "archiveEvent": 3,
-      "trashEvent": 3,
-      "unarchiveEvent": 3
-    }
-  },
   "lib/coreClient.js": {
     "classification": "transport",
     "reason": "Scoped sender construction, frozen Inbox sender binding and fetch plumbing.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
-      "raw-fetch": 5,
+      "raw-fetch": 3,
       "respondInboxItem": 1,
       "transport:fetchFn": 1
+    }
+  },
+  "lib/sharedReadFetch.js": {
+    "classification": "transport",
+    "reason": "Finite GET sharing and cancellation transport; mutations pass through unchanged to existing durable senders.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "transport:fetchFn": 2
     }
   },
   "lib/dev/fetchLoopGuard.js": {
@@ -98,21 +86,24 @@
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "answerPmDecision": 1,
-      "computed-dispatch": 1,
+      "computed-dispatch": 2,
       "createArtifactAttachment": 1,
       "createDocument": 1,
       "createEvent": 1,
       "createPmConversation": 1,
       "createPmDecision": 1,
       "createWork": 1,
-      "dispatchPmDecision": 1,
+      "dispatchPmDecision": 2,
       "moveBoardCard": 1,
       "patchDocument": 1,
-      "reconcilePmAction": 1,
+      "reconcilePmAction": 2,
       "sendPmMessage": 1,
       "updateBoardCard": 1,
       "updateDocument": 1,
-      "updateTopic": 1
+      "updateTopic": 1,
+      "acknowledgePmAction": 1,
+      "archiveCard": 1,
+      "markHomeRead": 1
     }
   },
   "lib/workspaceActivation.js": {
@@ -173,18 +164,6 @@
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
-    }
-  },
-  "routes/o/[organization]/w/[workspace]/inbox/+page.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: explicit PM dispatch/reconcile/acknowledge and card archive; markHomeRead is read-state bookkeeping. Answers are migrated.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "acknowledgePmAction": 1,
-      "archiveCard": 1,
-      "dispatchPmDecision": 1,
-      "markHomeRead": 1,
-      "reconcilePmAction": 1
     }
   },
   "routes/o/[organization]/w/[workspace]/integrations/+page.svelte": {

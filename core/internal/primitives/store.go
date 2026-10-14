@@ -59,7 +59,9 @@ type ArtifactListFilter struct {
 }
 
 type DocumentListFilter struct {
-	States []string
+	ids          []string
+	metadataOnly bool
+	States       []string
 
 	ThreadID  string
 	Query     string
@@ -1105,492 +1107,207 @@ func (s *Store) RestoreArtifact(ctx context.Context, actorID, artifactID string)
 	return metadata, nil
 }
 
+// Each expansion reads at most 2002 raw indexed event-ref edges.
+// Only candidate IDs bypass the relation shadow; scoped events must authorize
+// each candidate before recursion or output. Filtering raw edges before the
+// cap would permit workspace-sized invisible fanout scans. A high raw
+// degree fails closed even if some edges point outside this message thread.
+// UNION deduplicates cycles; the global cap permits at most 2002 expansions.
+const eventDescendantsQuery = `WITH RECURSIVE descendants(id, overflow) AS (
+ SELECT ?, 0 UNION
+ SELECT events.id, 0 FROM descendants CROSS JOIN events ON events.id IN (
+   SELECT CASE WHEN source_type='event' AND edge_type='ref' THEN source_id ELSE NULL END FROM main.ref_edges INDEXED BY idx_ref_edges_target
+   WHERE target_type='event' AND target_id=descendants.id
+   LIMIT 2002
+ ) WHERE descendants.overflow=0 AND CASE WHEN events.thread_id=? AND events.type='message_posted' THEN 1 ELSE 0 END=1
+ UNION SELECT NULL, 1 FROM descendants WHERE descendants.overflow=0 AND (
+   SELECT count(*) FROM (SELECT CASE WHEN source_type='event' AND edge_type='ref' THEN source_id ELSE NULL END FROM main.ref_edges INDEXED BY idx_ref_edges_target
+     WHERE target_type='event' AND target_id=descendants.id
+     LIMIT 2002)
+ ) > 2001
+ LIMIT 2002) SELECT id, overflow FROM descendants`
+
 func (s *Store) collectMessageDescendantIDs(ctx context.Context, threadID, parentID string) ([]string, error) {
+	// Borrow the writer snapshot: indexed candidate checks share one current
+	// epoch-admitted point proof instead of rematerializing denied identities.
+	read, finish, err := s.BeginResourceRead(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
+	rows, err := s.db.QueryContext(read, eventDescendantsQuery, parentID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id sql.NullString
+		var overflow int
+		if err := rows.Scan(&id, &overflow); err != nil {
+			return nil, err
+		}
+		if overflow != 0 {
+			return nil, ErrConflict
+		}
+		if id.String != parentID {
+			ids = append(ids, id.String)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) > 2000 {
+		return nil, ErrConflict
+	}
+	return ids, nil
+}
+
+// EventLifecycleBase fences the mutable visibility exception to append-only events.
+type EventLifecycleBase struct {
+	ArchivedAt *string `json:"archived_at"`
+	TrashedAt  *string `json:"trashed_at"`
+}
+
+func (s *Store) ApplyEventLifecycle(ctx context.Context, actorID, eventID, action, reason string, base *EventLifecycleBase) (map[string]any, []string, error) {
+	return s.ApplyEventLifecycleSelection(ctx, actorID, eventID, action, reason, base, nil)
+}
+
+// Selected bases protect explicitly selected replies that an ancestor may cover.
+// The shared snapshot is checked only for scoped members of this cascade.
+func (s *Store) ApplyEventLifecycleSelection(ctx context.Context, actorID, eventID, action, reason string, base *EventLifecycleBase, selectedBases map[string]EventLifecycleBase) (map[string]any, []string, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
+		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
-	threadID = strings.TrimSpace(threadID)
-	parentID = strings.TrimSpace(parentID)
-	if threadID == "" || parentID == "" {
-		return nil, nil
+	actorID = strings.TrimSpace(actorID)
+	eventID = strings.TrimSpace(eventID)
+	if actorID == "" || eventID == "" {
+		return nil, nil, fmt.Errorf("actor_id and event_id are required")
 	}
-
-	queue := []string{parentID}
-	seen := map[string]bool{parentID: true}
-	var descendants []string
-
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		rows, err := s.db.QueryContext(ctx,
-			`SELECT events.id
-			 FROM ref_edges
-			 JOIN events ON events.id = ref_edges.source_id
-			 WHERE ref_edges.source_type = 'event'
-			   AND ref_edges.target_type = 'event'
-			   AND ref_edges.target_id = ?
-			   AND ref_edges.edge_type = ?
-			   AND events.thread_id = ?
-			   AND events.type = 'message_posted'`,
-			current, refEdgeTypeRef, threadID,
-		)
+	var result map[string]any
+	var affected []string
+	err := s.db.WriteTransaction(ctx, func(ctx context.Context, tx *resourceaccess.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE events SET archived_at=archived_at WHERE id=?`, eventID); err != nil {
+			return err
+		}
+		current, err := s.GetEvent(ctx, eventID)
 		if err != nil {
-			return nil, fmt.Errorf("query message descendants: %w", err)
+			return err
 		}
-		for rows.Next() {
-			var childID string
-			if err := rows.Scan(&childID); err != nil {
-				_ = rows.Close()
-				return nil, fmt.Errorf("scan message descendant: %w", err)
+		value := func(v any) string {
+			if v == nil {
+				return ""
 			}
-			if !seen[childID] {
-				seen[childID] = true
-				descendants = append(descendants, childID)
-				queue = append(queue, childID)
+			return fmt.Sprint(v)
+		}
+		expected := func(v *string) string {
+			if v == nil {
+				return ""
+			}
+			return *v
+		}
+		if base != nil && (value(current["archived_at"]) != expected(base.ArchivedAt) || value(current["trashed_at"]) != expected(base.TrashedAt)) {
+			return ErrConflict
+		}
+		if action == "archive" && value(current["trashed_at"]) != "" {
+			return ErrAlreadyTrashed
+		}
+		if action == "unarchive" && value(current["archived_at"]) == "" {
+			return ErrNotArchived
+		}
+		if action == "restore" && value(current["trashed_at"]) == "" {
+			return ErrNotTrashed
+		}
+		if (action == "archive" && value(current["archived_at"]) != "") || (action == "trash" && value(current["trashed_at"]) != "") {
+			result = current
+			return nil
+		}
+		ids := []string{eventID}
+		if current["type"] == "message_posted" {
+			desc, err := s.collectMessageDescendantIDs(ctx, value(current["thread_id"]), eventID)
+			if err != nil {
+				return err
+			}
+			ids = append(ids, desc...)
+		}
+		marks := make([]string, len(ids))
+		args := make([]any, 0, len(ids)+3)
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		var update, guard string
+		switch action {
+		case "archive":
+			update = "archived_at=?,archived_by=?"
+			args = append(args, now, actorID)
+			guard = " AND COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')=''"
+		case "unarchive":
+			update = "archived_at=NULL,archived_by=NULL"
+			guard = " AND COALESCE(archived_at,'')<>''"
+		case "trash":
+			update = "trashed_at=?,trashed_by=?,trash_reason=?,archived_at=NULL,archived_by=NULL"
+			args = append(args, now, actorID, strings.TrimSpace(reason))
+			guard = " AND COALESCE(trashed_at,'')=''"
+		case "restore":
+			update = "trashed_at=NULL,trashed_by=NULL,trash_reason=NULL"
+			guard = " AND COALESCE(trashed_at,'')<>''"
+		default:
+			return ErrInvalidDocumentRequest
+		}
+		for i, id := range ids {
+			marks[i] = "?"
+			args = append(args, id)
+		}
+		selector := " WHERE id IN (" + strings.Join(marks, ",") + ")"
+		// Include unchanged rows too: a selected reply's base must match even
+		// when the action guard would omit that reply from the write.
+		selected, err := tx.QueryContext(ctx, "SELECT id,archived_at,trashed_at FROM events"+selector, args[len(args)-len(ids):]...)
+		if err != nil {
+			return err
+		}
+		for selected.Next() {
+			var id string
+			var archived, trashed sql.NullString
+			if err = selected.Scan(&id, &archived, &trashed); err != nil {
+				selected.Close()
+				return err
+			}
+			if selectedBase, ok := selectedBases[id]; ok && (archived.String != expected(selectedBase.ArchivedAt) || trashed.String != expected(selectedBase.TrashedAt)) {
+				selected.Close()
+				return ErrConflict
+			}
+			changes := (action == "archive" && archived.String == "" && trashed.String == "") || (action == "unarchive" && archived.String != "") || (action == "trash" && trashed.String == "") || (action == "restore" && trashed.String != "")
+			if changes {
+				affected = append(affected, id)
 			}
 		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("iterate message descendants: %w", err)
+		err = selected.Err()
+		selected.Close()
+		if err != nil {
+			return err
 		}
-		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("close message descendant rows: %w", err)
+		if _, err = tx.ExecContext(ctx, "UPDATE events SET "+update+" WHERE id IN ("+strings.Join(marks, ",")+")"+guard, args...); err != nil {
+			return err
 		}
-	}
-	return descendants, nil
-}
-
-func (s *Store) archiveEventCascadeChild(ctx context.Context, actorID, childID string) error {
-	var trashedAt, archivedAt sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT trashed_at, archived_at FROM events WHERE id = ?`,
-		childID,
-	).Scan(&trashedAt, &archivedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("query event for cascade archive: %w", err)
-	}
-	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
-		return nil
-	}
-	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
-		return nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET archived_at = ?, archived_by = ? WHERE id = ?`,
-		now, actorID, childID,
-	)
-	if err != nil {
-		return fmt.Errorf("cascade archive event: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) unarchiveEventCascadeChild(ctx context.Context, childID string) error {
-	var archivedAt sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT archived_at FROM events WHERE id = ?`,
-		childID,
-	).Scan(&archivedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("query event for cascade unarchive: %w", err)
-	}
-	if !archivedAt.Valid || strings.TrimSpace(archivedAt.String) == "" {
-		return nil
-	}
-
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
-		childID,
-	)
-	if err != nil {
-		return fmt.Errorf("cascade unarchive event: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) trashEventCascadeChild(ctx context.Context, actorID, childID, reason string) error {
-	var trashedAt sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT trashed_at FROM events WHERE id = ?`,
-		childID,
-	).Scan(&trashedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("query event for cascade trash: %w", err)
-	}
-	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
-		return nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
-		now, actorID, strings.TrimSpace(reason), childID,
-	)
-	if err != nil {
-		return fmt.Errorf("cascade trash event: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) restoreEventCascadeChild(ctx context.Context, childID string) error {
-	var trashedAt sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT trashed_at FROM events WHERE id = ?`,
-		childID,
-	).Scan(&trashedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("query event for cascade restore: %w", err)
-	}
-	if !trashedAt.Valid || strings.TrimSpace(trashedAt.String) == "" {
-		return nil
-	}
-
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
-		childID,
-	)
-	if err != nil {
-		return fmt.Errorf("cascade restore event: %w", err)
-	}
-	return nil
+		result, err = s.GetEvent(ctx, eventID)
+		return err
+	})
+	return result, affected, err
 }
 
 func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[string]any, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
-	}
-	actorID = strings.TrimSpace(actorID)
-	if actorID == "" {
-		return nil, fmt.Errorf("actor_id is required")
-	}
-	eventID = strings.TrimSpace(eventID)
-	if eventID == "" {
-		return nil, fmt.Errorf("event_id is required")
-	}
-
-	var (
-		eventIDScan string
-		eventHandle string
-		typeValue   string
-		ts          string
-		actorIDScan string
-		threadID    sql.NullString
-		refsJSON    string
-		payloadJSON string
-		archivedAt  sql.NullString
-		archivedBy  sql.NullString
-		trashedAt   sql.NullString
-		trashedBy   sql.NullString
-		trashReason sql.NullString
-	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
-			archived_at, archived_by, trashed_at, trashed_by, trash_reason
-		 FROM events WHERE id = ?`,
-		eventID,
-	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
-		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query event for archive: %w", err)
-	}
-
-	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
-		return nil, ErrAlreadyTrashed
-	}
-
-	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
-	if err != nil {
-		return nil, err
-	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
-
-	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
-		return body, nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET archived_at = ?, archived_by = ? WHERE id = ?`,
-		now, actorID, eventID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("archive event: %w", err)
-	}
-	body["archived_at"] = now
-	body["archived_by"] = actorID
-
-	if typeValue == "message_posted" && threadID.Valid && strings.TrimSpace(threadID.String) != "" {
-		desc, err := s.collectMessageDescendantIDs(ctx, threadID.String, eventID)
-		if err != nil {
-			return nil, err
-		}
-		for _, childID := range desc {
-			if err := s.archiveEventCascadeChild(ctx, actorID, childID); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return body, nil
+	result, _, err := s.ApplyEventLifecycle(ctx, actorID, eventID, "archive", "", nil)
+	return result, err
 }
-
 func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (map[string]any, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
-	}
-	actorID = strings.TrimSpace(actorID)
-	if actorID == "" {
-		return nil, fmt.Errorf("actor_id is required")
-	}
-	eventID = strings.TrimSpace(eventID)
-	if eventID == "" {
-		return nil, fmt.Errorf("event_id is required")
-	}
-
-	var (
-		eventIDScan string
-		eventHandle string
-		typeValue   string
-		ts          string
-		actorIDScan string
-		threadID    sql.NullString
-		refsJSON    string
-		payloadJSON string
-		archivedAt  sql.NullString
-		archivedBy  sql.NullString
-		trashedAt   sql.NullString
-		trashedBy   sql.NullString
-		trashReason sql.NullString
-	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
-			archived_at, archived_by, trashed_at, trashed_by, trash_reason
-		 FROM events WHERE id = ?`,
-		eventID,
-	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
-		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query event for unarchive: %w", err)
-	}
-
-	if !archivedAt.Valid || strings.TrimSpace(archivedAt.String) == "" {
-		return nil, ErrNotArchived
-	}
-
-	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
-	if err != nil {
-		return nil, err
-	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
-	delete(body, "archived_at")
-	delete(body, "archived_by")
-
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
-		eventID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unarchive event: %w", err)
-	}
-
-	if typeValue == "message_posted" && threadID.Valid && strings.TrimSpace(threadID.String) != "" {
-		desc, err := s.collectMessageDescendantIDs(ctx, threadID.String, eventID)
-		if err != nil {
-			return nil, err
-		}
-		for _, childID := range desc {
-			if err := s.unarchiveEventCascadeChild(ctx, childID); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return body, nil
+	result, _, err := s.ApplyEventLifecycle(ctx, actorID, eventID, "unarchive", "", nil)
+	return result, err
 }
-
 func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
-	}
-	actorID = strings.TrimSpace(actorID)
-	if actorID == "" {
-		return nil, fmt.Errorf("actor_id is required")
-	}
-	eventID = strings.TrimSpace(eventID)
-	if eventID == "" {
-		return nil, fmt.Errorf("event_id is required")
-	}
-
-	var (
-		eventIDScan string
-		eventHandle string
-		typeValue   string
-		ts          string
-		actorIDScan string
-		threadID    sql.NullString
-		refsJSON    string
-		payloadJSON string
-		archivedAt  sql.NullString
-		archivedBy  sql.NullString
-		trashedAt   sql.NullString
-		trashedBy   sql.NullString
-		trashReason sql.NullString
-	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
-			archived_at, archived_by, trashed_at, trashed_by, trash_reason
-		 FROM events WHERE id = ?`,
-		eventID,
-	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
-		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query event for trash: %w", err)
-	}
-
-	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
-	if err != nil {
-		return nil, err
-	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
-
-	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
-		return body, nil
-	}
-
-	delete(body, "archived_at")
-	delete(body, "archived_by")
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
-		now, actorID, strings.TrimSpace(reason), eventID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("trash event: %w", err)
-	}
-	body["trashed_at"] = now
-	body["trashed_by"] = actorID
-	if strings.TrimSpace(reason) != "" {
-		body["trash_reason"] = strings.TrimSpace(reason)
-	}
-
-	if typeValue == "message_posted" && threadID.Valid && strings.TrimSpace(threadID.String) != "" {
-		desc, err := s.collectMessageDescendantIDs(ctx, threadID.String, eventID)
-		if err != nil {
-			return nil, err
-		}
-		for _, childID := range desc {
-			if err := s.trashEventCascadeChild(ctx, actorID, childID, reason); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return body, nil
+	result, _, err := s.ApplyEventLifecycle(ctx, actorID, eventID, "trash", reason, nil)
+	return result, err
 }
-
 func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[string]any, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
-	}
-	actorID = strings.TrimSpace(actorID)
-	if actorID == "" {
-		return nil, fmt.Errorf("actor_id is required")
-	}
-	eventID = strings.TrimSpace(eventID)
-	if eventID == "" {
-		return nil, fmt.Errorf("event_id is required")
-	}
-
-	var (
-		eventIDScan string
-		eventHandle string
-		typeValue   string
-		ts          string
-		actorIDScan string
-		threadID    sql.NullString
-		refsJSON    string
-		payloadJSON string
-		archivedAt  sql.NullString
-		archivedBy  sql.NullString
-		trashedAt   sql.NullString
-		trashedBy   sql.NullString
-		trashReason sql.NullString
-	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
-			archived_at, archived_by, trashed_at, trashed_by, trash_reason
-		 FROM events WHERE id = ?`,
-		eventID,
-	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
-		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
-	_ = trashedBy
-	_ = trashReason
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query event for restore: %w", err)
-	}
-
-	if !trashedAt.Valid || strings.TrimSpace(trashedAt.String) == "" {
-		return nil, ErrNotTrashed
-	}
-
-	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
-	if err != nil {
-		return nil, err
-	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
-	delete(body, "trashed_at")
-	delete(body, "trashed_by")
-	delete(body, "trash_reason")
-
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
-		eventID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("restore event: %w", err)
-	}
-
-	if typeValue == "message_posted" && threadID.Valid && strings.TrimSpace(threadID.String) != "" {
-		desc, err := s.collectMessageDescendantIDs(ctx, threadID.String, eventID)
-		if err != nil {
-			return nil, err
-		}
-		for _, childID := range desc {
-			if err := s.restoreEventCascadeChild(ctx, childID); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return body, nil
+	result, _, err := s.ApplyEventLifecycle(ctx, actorID, eventID, "restore", "", nil)
+	return result, err
 }
 
 func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) error {
@@ -3006,24 +2723,29 @@ type homeGroupLookup struct {
 	threadToGroupRef map[string]string
 }
 
-func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
+func (s *Store) homeGroupLookup(ctx context.Context, candidates ...homeGroupCandidates) (*homeGroupLookup, error) {
 	lookup := &homeGroupLookup{
 		groupByRef:       map[string]*homeGroupMeta{},
 		aliasToGroupRef:  map[string]string{},
 		threadToGroupRef: map[string]string{},
 	}
 
-	if err := s.loadTopicGroups(ctx, lookup); err != nil {
+	if err := s.loadTopicGroups(ctx, lookup, candidates...); err != nil {
 		return nil, err
 	}
-	if err := s.loadBoardGroups(ctx, lookup); err != nil {
+	if err := s.loadBoardGroups(ctx, lookup, candidates...); err != nil {
 		return nil, err
 	}
 	return lookup, nil
 }
 
-func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`)
+func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup, candidates ...homeGroupCandidates) error {
+	query := `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`
+	args := []any{}
+	if len(candidates) > 0 {
+		query += homeGroupCandidateSQL(candidates[0].Topics, candidates[0].Threads, &args)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query home topics: %w", err)
 	}
@@ -3061,8 +2783,13 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 	return nil
 }
 
-func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`)
+func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup, candidates ...homeGroupCandidates) error {
+	query := `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`
+	args := []any{}
+	if len(candidates) > 0 {
+		query += homeGroupCandidateSQL(candidates[0].Boards, candidates[0].Threads, &args)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query home boards: %w", err)
 	}

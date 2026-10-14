@@ -1,3 +1,17 @@
+import { createSharedReadFetch } from "$lib/sharedReadFetch.js";
+import { getSessionEpoch } from "$lib/authSession.js";
+
+// A principal/workspace change retires the in-flight sharing namespace even
+// when the reader later returns to the same workspace and identity.
+const sharedReadFetch = createSharedReadFetch({
+  scope: () => [
+    getSessionEpoch(),
+    getAuthenticatedActorId() || getSelectedActorId(),
+  ],
+});
+const browserReadFetch = (url, init) =>
+  sharedReadFetch(globalThis.fetch.bind(globalThis), url, init);
+
 import { browser } from "$app/environment";
 import {
   getAuthenticatedActorId,
@@ -75,7 +89,7 @@ export function createLocalMutationClient(scope) {
 
 /** Bind reads to one reader/workspace and propagate cancellation to fetch. */
 export function createWorkspaceReadClient(signal) {
-  const fetchFn = globalThis.fetch.bind(globalThis);
+  const fetchFn = browserReadFetch;
   return createAnxCoreClient({
     ...getInboxResponseClientOptions(),
     fetchFn: (url, init) => fetchFn(url, { ...init, signal }),
@@ -93,7 +107,7 @@ function resolveBrowserClient() {
   }
 
   if (!browserClient) {
-    const fetchFn = globalThis.fetch.bind(globalThis);
+    const fetchFn = browserReadFetch;
     browserClient = createAnxCoreClient({
       ...getBrowserCoreClientOptions(),
       fetchFn,
@@ -154,7 +168,7 @@ export function workspaceScopedCoreClient({
           organizationSlug: org,
           workspaceSlug: workspace,
         }),
-      fetchFn: globalThis.fetch.bind(globalThis),
+      fetchFn: browserReadFetch,
     });
     workspaceScopedClients.set(key, client);
   }

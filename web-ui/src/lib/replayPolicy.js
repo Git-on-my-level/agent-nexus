@@ -28,6 +28,8 @@ export function requestIntent(request) {
     value,
     value.body,
     value.answer,
+    value.autoDispatch,
+    value.autoReconcile,
     value.creation,
     value.message,
     ...(value.items || []).map((item) => item.body),
@@ -59,17 +61,33 @@ export async function intentFingerprint(request) {
   ).join("");
 }
 
-export function freshRequest(request, operation = "") {
+export function freshRequest(request, operation = "", receipt = null) {
   const value = JSON.parse(JSON.stringify(request));
   for (const body of [
     value,
     value.body,
     value.answer,
+    value.autoDispatch,
+    value.autoReconcile,
     value.creation,
     value.message,
     ...(value.items || []).map((item) => item.body),
   ]) {
     if (!body) continue;
+    // A partial batch's confirmed members remain attached to their old keys.
+    // Explicit renewal rotates only requests whose outcome is still unknown.
+    if (
+      operation === "inbox.controls" &&
+      receipt?.controls?.some((done) => done.key === body.request_key)
+    )
+      continue;
+    if (
+      operation === "pm.decision.answer" &&
+      ((body === value.answer && receipt?.decision) ||
+        (body === value.autoDispatch && receipt?.dispatchedAction) ||
+        (body === value.autoReconcile && receipt?.reconciledAction))
+    )
+      continue;
     for (const field of ["request_key", "replay_key"]) {
       if (field in body) body[field] = crypto.randomUUID();
     }

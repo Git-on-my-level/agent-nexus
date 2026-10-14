@@ -337,154 +337,133 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 	writeJSON(w, http.StatusOK, map[string]any{"event": event})
 }
 
-func handleArchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-
-	event, err := opts.primitiveStore.ArchiveEvent(r.Context(), actorID, eventID)
-	if err != nil {
-		if writePrimitiveQuotaViolationError(w, err) {
-			return
-		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "event not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrAlreadyTrashed) {
-			writeError(w, http.StatusConflict, "already_trashed", "event is trashed")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive event")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"event": event})
+func handleArchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, id string) {
+	handleEventLifecycle(w, r, opts, id, "archive")
+}
+func handleUnarchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, id string) {
+	handleEventLifecycle(w, r, opts, id, "unarchive")
+}
+func handleTrashEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, id string) {
+	handleEventLifecycle(w, r, opts, id, "trash")
+}
+func handleRestoreEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, id string) {
+	handleEventLifecycle(w, r, opts, id, "restore")
 }
 
-func handleUnarchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
+func handleEventLifecycle(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID, action string) {
 	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		writeError(w, 503, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-
 	var req struct {
-		ActorID string `json:"actor_id"`
+		ActorID       string                        `json:"actor_id"`
+		RequestKey    string                        `json:"request_key"`
+		Reason        string                        `json:"reason"`
+		IfLifecycle   map[string]*string            `json:"if_lifecycle"`
+		SelectedBases map[string]map[string]*string `json:"selected_bases,omitempty"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	var base *primitives.EventLifecycleBase
+	if req.IfLifecycle != nil {
+		archived, a := req.IfLifecycle["archived_at"]
+		trashed, t := req.IfLifecycle["trashed_at"]
+		if !a || !t {
+			writeError(w, 400, "invalid_request", "if_lifecycle requires archived_at and trashed_at")
+			return
+		}
+		base = &primitives.EventLifecycleBase{ArchivedAt: archived, TrashedAt: trashed}
+	} else if strings.TrimSpace(req.RequestKey) != "" {
+		writeError(w, 400, "invalid_request", "if_lifecycle is required for keyed event requests")
+		return
+	}
+	if len(req.SelectedBases) > 2000 {
+		writeError(w, 400, "invalid_request", "too many selected event bases")
+		return
+	}
+	selectedBases := make(map[string]primitives.EventLifecycleBase, len(req.SelectedBases))
+	for id, pair := range req.SelectedBases {
+		archived, a := pair["archived_at"]
+		trashed, t := pair["trashed_at"]
+		if id == "" || !a || !t {
+			writeError(w, 400, "invalid_request", "selected_bases requires event IDs and both lifecycle fields")
+			return
+		}
+		selectedBases[id] = primitives.EventLifecycleBase{ArchivedAt: archived, TrashedAt: trashed}
+	}
+	actor, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
-
-	event, err := opts.primitiveStore.UnarchiveEvent(r.Context(), actorID, eventID)
+	// Fresh scoped visibility before receipt access; the writer also rechecks.
+	event, err := opts.primitiveStore.GetEvent(r.Context(), eventID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, 404, "not_found", "event not found")
+		} else {
+			writeError(w, 500, "internal_error", "failed to load event")
+		}
+		return
+	}
+	if !requireAccessibleEvent(w, r, opts, event) {
+		return
+	}
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "events."+action, actor, req.RequestKey, struct {
+		ID   string
+		Body any
+	}{eventID, req}, 200, func(ctx context.Context) (map[string]any, error) {
+		var result map[string]any
+		var affected []string
+		var err error
+		if store, ok := opts.primitiveStore.(interface {
+			ApplyEventLifecycleSelection(context.Context, string, string, string, string, *primitives.EventLifecycleBase, map[string]primitives.EventLifecycleBase) (map[string]any, []string, error)
+		}); ok {
+			result, affected, err = store.ApplyEventLifecycleSelection(ctx, actor, eventID, action, req.Reason, base, selectedBases)
+		} else {
+			if base != nil || len(selectedBases) > 0 {
+				return nil, errors.New("atomic lifecycle base checking is unavailable")
+			}
+			switch action {
+			case "archive":
+				result, err = opts.primitiveStore.ArchiveEvent(ctx, actor, eventID)
+			case "unarchive":
+				result, err = opts.primitiveStore.UnarchiveEvent(ctx, actor, eventID)
+			case "trash":
+				result, err = opts.primitiveStore.TrashEvent(ctx, actor, eventID, req.Reason)
+			case "restore":
+				result, err = opts.primitiveStore.RestoreEvent(ctx, actor, eventID)
+			}
+		}
+		response := map[string]any{"event": result}
+		if affected != nil && strings.TrimSpace(req.RequestKey) != "" {
+			response["affected_event_ids"] = affected
+		}
+		return response, err
+	})
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "event not found")
-			return
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
+			writeError(w, 404, "not_found", "event not found")
+		case errors.Is(err, primitives.ErrAlreadyTrashed):
+			writeError(w, 409, "already_trashed", "event is trashed")
+		case errors.Is(err, primitives.ErrNotArchived):
+			writeError(w, 409, "not_archived", "event is not archived")
+		case errors.Is(err, primitives.ErrNotTrashed):
+			writeError(w, 409, "not_trashed", "event is not trashed")
+		case errors.Is(err, primitives.ErrConflict):
+			writeError(w, 409, "conflict", "event visibility changed or reply cascade exceeds its limit")
+		case errors.Is(err, primitives.ErrInvalidDocumentRequest):
+			writeError(w, 400, "invalid_request", "invalid event request")
+		default:
+			writeError(w, 500, "internal_error", "failed to change event visibility")
 		}
-		if errors.Is(err, primitives.ErrNotArchived) {
-			writeError(w, http.StatusConflict, "not_archived", "event is not archived")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive event")
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"event": event})
-}
-
-func handleTrashEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-
-	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-
-	event, err := opts.primitiveStore.TrashEvent(r.Context(), actorID, eventID, req.Reason)
-	if err != nil {
-		if writePrimitiveQuotaViolationError(w, err) {
-			return
-		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "event not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash event")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"event": event})
-}
-
-func handleRestoreEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-
-	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-
-	event, err := opts.primitiveStore.RestoreEvent(r.Context(), actorID, eventID)
-	if err != nil {
-		if writePrimitiveQuotaViolationError(w, err) {
-			return
-		}
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "event not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrNotTrashed) {
-			writeError(w, http.StatusConflict, "not_trashed", "event is not currently trashed")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore event")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"event": event})
+	writeJSON(w, status, response)
 }
 
 func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

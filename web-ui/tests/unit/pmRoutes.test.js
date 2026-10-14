@@ -134,6 +134,8 @@ import {
   startInboxCount,
 } from "../../src/lib/inboxCount.js";
 import { readerScopeKey } from "../../src/lib/readerScope.js";
+import { mutationOutbox } from "../../src/lib/mutationOutbox.js";
+import { commitInboxView } from "../../src/lib/inboxViewCache.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -774,11 +776,13 @@ describe("PM operator interactions", () => {
         id: "action-one",
         decision_id: decision.id,
         status: "pending_delivery",
+        revision: 1,
       })
       .mockResolvedValueOnce({
         id: "action-one",
         decision_id: decision.id,
         status: "failed",
+        revision: 2,
         receipt: { detail: "Source unavailable" },
       });
     client.dispatchPmDecision.mockRejectedValue(
@@ -808,12 +812,105 @@ describe("PM operator interactions", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Deliver approved instruction" }),
     );
-    // The receipt shows in the panel and, once joined, on the row badge too.
+    // An uncertain delivery keeps the exact admitted intent for recovery.
+    await screen.findByText("Retrying", { exact: true });
+    expect(client.dispatchPmDecision).toHaveBeenCalledWith(
+      "decision-one",
+      expect.objectContaining({
+        request_key: expect.any(String),
+        if_revision: 3,
+        if_action_revision: 1,
+      }),
+    );
+    await within(screen.getByLabelText("Selected inbox item")).findByText(
+      "Failed",
+      { exact: true },
+    );
     expect(
-      (await screen.findAllByText("Failed", { exact: true })).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("button", { name: "Retry confirmation", exact: true }),
+    ).toBeTruthy();
     expect(screen.getByText("Within the stated scope")).toBeTruthy();
     expect(screen.queryByText("Outcome verified")).toBeNull();
+  });
+  it("a restored failed control keeps delayed feeds loading without downgrading its receipt", async () => {
+    state.route("/inbox?item=decision:restored-control");
+    const decision = {
+      id: "restored-control",
+      work_ref: "card:one",
+      instruction: "Restored approval",
+      status: "answered",
+      revision: 3,
+      action_id: "restored-action",
+      answer: "Keep this note",
+    };
+    const pending = {
+      id: "restored-action",
+      decision_id: decision.id,
+      status: "pending_delivery",
+      revision: 1,
+    };
+    const list = deferred(),
+      tasks = deferred();
+    client.listPmDecisions.mockResolvedValue({ items: [decision] });
+    client.listPmActions.mockReturnValue(list.promise);
+    client.listWork.mockReturnValue(tasks.promise);
+    client.getPmAction.mockResolvedValue({
+      ...pending,
+      status: "failed",
+      revision: 3,
+    });
+    render(InboxPage);
+    await waitFor(() => expect(client.getPmAction).toHaveBeenCalled());
+    const previous = getStore(mutationOutbox);
+    try {
+      mutationOutbox.set([
+        {
+          key: "restored-control",
+          scope: readerScopeKey(),
+          operation: "inbox.controls",
+          target: "inbox:controls",
+          state: "attention",
+          attempts: 1,
+          request: {
+            items: [
+              {
+                action: "dispatch",
+                id: decision.id,
+                body: {
+                  request_key: "original",
+                  if_revision: 3,
+                  if_action_revision: 1,
+                },
+              },
+            ],
+          },
+        },
+      ]);
+      await waitFor(() =>
+        expect(client.getPmAction.mock.calls.length).toBeGreaterThan(1),
+      );
+      list.resolve({ items: [pending] });
+      tasks.resolve({ work: [work("card:one", "Loaded delayed task")] });
+      await screen.findByRole("heading", { name: "Loaded delayed task" });
+      await within(screen.getByLabelText("Selected inbox item")).findByText(
+        "Failed",
+        { exact: true },
+      );
+      expect(client.listWork).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(
+          readWorkspaceView(`${readerScopeKey()}:inbox`)?.[1]?.value?.items[0]
+            ?.revision,
+        ).toBe(1),
+      );
+      commitInboxView(readerScopeKey(), { decision });
+      await within(screen.getByLabelText("Selected inbox item")).findByText(
+        "Failed",
+        { exact: true },
+      );
+    } finally {
+      mutationOutbox.set(previous);
+    }
   });
   it("confirmation cancels a selected getter before it can restore an unanswered decision", async () => {
     state.route("/inbox?item=decision:pending-getter");
@@ -881,6 +978,50 @@ describe("PM operator interactions", () => {
     expect(
       readWorkspaceView(`${readerScopeKey()}:inbox`)[0].value.items[0].status,
     ).toBe("answered");
+  });
+  it("a confirmed inbox control reloads sources and fences a stale selected decision", async () => {
+    state.route("/inbox?item=decision:control-refresh");
+    const stale = {
+      id: "control-refresh",
+      instruction: "Control refresh",
+      work_ref: "card:one",
+      status: "awaiting_answer",
+      revision: 1,
+    };
+    const getter = deferred();
+    client.listPmDecisions.mockResolvedValue({ items: [] });
+    client.getPmDecision.mockReturnValue(getter.promise);
+    render(InboxPage);
+    await waitFor(() => expect(client.getPmDecision).toHaveBeenCalled());
+    client.listPmDecisions.mockResolvedValue({
+      items: [
+        {
+          ...stale,
+          status: "answered",
+          revision: 2,
+          answer: "Already approved",
+        },
+      ],
+    });
+    window.dispatchEvent(
+      new CustomEvent("anx:mutation-confirmed", {
+        detail: {
+          operation: "inbox.controls",
+          scope: readerScopeKey(),
+          request: { items: [] },
+          result: { controls: [] },
+        },
+      }),
+    );
+    await screen.findByRole("heading", { name: "Control refresh" });
+    getter.resolve(stale);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Approve", exact: true }),
+      ).toBeNull(),
+    );
+    expect(client.listPmDecisions.mock.calls.length).toBeGreaterThan(1);
+    expect(screen.getByText("Already approved")).toBeTruthy();
   });
   it("loads a directly linked decision and receipt beyond the partial list", async () => {
     state.route("/inbox?item=decision:older-decision");
@@ -1073,6 +1214,7 @@ describe("PM operator interactions", () => {
       const task = {
         ref: "card:stale",
         title: "Blocked stale",
+        version: 1,
         phase: "blocked",
         source: { authority: "nexus" },
         work_summary: {
@@ -1174,7 +1316,9 @@ describe("PM operator interactions", () => {
               answer: "Wait for evidence",
               revision: 2,
             }
-          : { event: { id: "confirmed" } },
+          : kind === "archive"
+            ? { card: { id: "stale", version: 2 } }
+            : { event: { id: "confirmed" } },
       );
       if (write) await write;
       await waitFor(() => {

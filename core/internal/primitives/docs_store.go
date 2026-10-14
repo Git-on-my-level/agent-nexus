@@ -75,6 +75,11 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		LEFT JOIN artifacts a ON a.id = dr.artifact_id`
 	args := make([]any, 0, 6)
 	var conditions []string
+	if filter.ids != nil {
+		raw, _ := json.Marshal(filter.ids)
+		conditions = append(conditions, `(d.id IN (SELECT value FROM json_each(?)) OR d.handle IN (SELECT value FROM json_each(?)))`)
+		args = append(args, string(raw), string(raw))
+	}
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		conditions = append(conditions, "d.thread_id = ?")
 		args = append(args, threadID)
@@ -104,6 +109,9 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		}
 	}
 
+	if filter.metadataOnly {
+		return `WITH doc_page AS (` + inner + `) SELECT dp.*,NULL,NULL,NULL,NULL,NULL FROM doc_page dp`, args
+	}
 	// Scoped aggregates keyed to the current limit page avoid scanning all revisions/events.
 	query := `WITH doc_page AS (` + inner + `)
 SELECT dp.*,
@@ -222,7 +230,9 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 		nextCursor = encodeCursor(offset + *filter.Limit)
 	}
 
-	s.attachDocumentListCharacterCounts(ctx, documents)
+	if !filter.metadataOnly {
+		s.attachDocumentListCharacterCounts(ctx, documents)
+	}
 
 	return documents, nextCursor, nil
 }

@@ -53,6 +53,15 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
       if (
         node.type === "MemberExpression" &&
         [
+          "markHomeRead",
+          "archiveCard",
+          "dispatchPmDecision",
+          "reconcilePmAction",
+          "acknowledgePmAction",
+          "archiveEvent",
+          "unarchiveEvent",
+          "trashEvent",
+          "restoreEvent",
           "updateTopic",
           "respondInboxItem",
           "createEvent",
@@ -245,6 +254,22 @@ it("topic metadata checkpoints its complete editor snapshot", () => {
       `${root}/lib/components/topic-detail/TopicOverviewTab.svelte`,
       "utf8",
     ),
+  );
+  let actions = 0;
+  walk(ast.html, (node) => {
+    if (node.type === "Action" && node.name === "durableForm") actions++;
+  });
+  expect(actions).toBe(1);
+});
+
+it("event lifecycle surfaces share a durable batch composer", () => {
+  for (const file of ["TimelineTab", "MessagesTab"]) {
+    expect(
+      readFileSync(`${root}/lib/components/timeline/${file}.svelte`, "utf8"),
+    ).toContain("<EventLifecycleWork");
+  }
+  const ast = parse(
+    readFileSync(`${root}/lib/components/EventLifecycleWork.svelte`, "utf8"),
   );
   let actions = 0;
   walk(ast.html, (node) => {

@@ -316,8 +316,14 @@ func TestAskRespondSuppressesWakeForDeliveryNone(t *testing.T) {
 	if status != http.StatusCreated {
 		t.Fatalf("answer batch ask: %d %#v", status, result)
 	}
-	// The flush fires because no open asks remain, so the debounced batch is
-	// already dispatched into the agent's durable wakeup.
+	// The request only commits durable wake work. Maintenance dispatches it
+	// once no open asks remain; delivery=none still contributes no wake entry.
+	maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
+		PrimitiveStore: store, WorkspaceID: "test-workspace", FlushWhenNoOpenAsks: true,
+	})
+	if err := maintainer.FlushTarget(ctx, agent.ActorID); err != nil {
+		t.Fatalf("flush durable answer: %v", err)
+	}
 	wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: agent.ActorID})
 	if err != nil {
 		t.Fatalf("list agent wakeups: %v", err)
@@ -448,8 +454,18 @@ func TestAskBatchValidationAndMixedDeliveryWakes(t *testing.T) {
 	if status != http.StatusCreated {
 		t.Fatalf("mixed batch respond: %d %#v", status, result)
 	}
-	// Only the non-none member may ride the wake. The flush dispatches it
-	// because the batch left no open asks behind.
+	// Delivery is durable follow-on work, outside the answer request. Only the
+	// non-none member may ride the wake when maintenance dispatches the batch.
+	before, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: agent.ActorID})
+	if err != nil || len(before) != 0 {
+		t.Fatalf("answer dispatched a wake inline: %#v err=%v", before, err)
+	}
+	maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
+		PrimitiveStore: store, WorkspaceID: "test-workspace", FlushWhenNoOpenAsks: true,
+	})
+	if err := maintainer.FlushTarget(ctx, agent.ActorID); err != nil {
+		t.Fatalf("flush durable answer batch: %v", err)
+	}
 	wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: agent.ActorID})
 	if err != nil {
 		t.Fatalf("list agent wakeups: %v", err)

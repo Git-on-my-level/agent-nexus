@@ -258,6 +258,7 @@ type MoveBoardCardInput struct {
 }
 
 type RemoveBoardCardInput struct {
+	IfLifecycle           *EventLifecycleBase
 	IfBoardUpdatedAt      *string
 	IfWorkVersion         *int64
 	IfLatestObservationID *string
@@ -2516,6 +2517,13 @@ func (s *Store) RemoveBoardCard(ctx context.Context, actorID, boardID, identifie
 	}, nil
 }
 
+// Lifecycle transitions advance the existing work fence even when the visibility
+// tuple later returns to its original value. Preserve source-owned annotations.
+func advanceCardLifecycleVersion(ctx context.Context, tx *resourceaccess.Tx, cardID, actorID, now string) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,'nexus','{"source":{"authority":"nexus"}}',1,?,?) ON CONFLICT(card_id) DO UPDATE SET version=work_metadata.version+1,updated_at=excluded.updated_at,updated_by=excluded.updated_by`, cardID, now, actorID)
+	return err
+}
+
 func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifier string, input RemoveBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
@@ -2574,7 +2582,7 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		}
 	}
 	if input.IfLatestObservationID != nil {
-		if strings.TrimSpace(*input.IfLatestObservationID) == "" {
+		if strings.TrimSpace(*input.IfLatestObservationID) == "" && input.IfLifecycle == nil {
 			_ = tx.Rollback()
 			return BoardCardMutationResult{}, invalidBoardRequest("if_latest_observation_id must be nonempty")
 		}
@@ -2585,6 +2593,13 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return BoardCardMutationResult{}, fmt.Errorf("read archive observation fence: %w", err)
 			}
+			return BoardCardMutationResult{}, ErrConflict
+		}
+	}
+	if input.IfLifecycle != nil {
+		archived, trashed := nullableStringPtr(cardRow.ArchivedAt), nullableStringPtr(cardRow.TrashedAt)
+		if !equalLifecycleString(archived, input.IfLifecycle.ArchivedAt) || !equalLifecycleString(trashed, input.IfLifecycle.TrashedAt) {
+			_ = tx.Rollback()
 			return BoardCardMutationResult{}, ErrConflict
 		}
 	}
@@ -2625,7 +2640,7 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 	if input.IfLatestObservationID != nil {
 		// Keep the observation fence on the mutation itself. Successful polls
 		// can replace this ID without changing either the board or work version.
-		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND latest_observation_id = ?)`
+		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND COALESCE(latest_observation_id,'') = ?)`
 		archiveArgs = append(archiveArgs, cardRow.CardID, *input.IfLatestObservationID)
 	}
 	archiveResult, err := tx.ExecContext(ctx, archiveQuery, archiveArgs...)
@@ -2646,6 +2661,10 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			}
 			return BoardCardMutationResult{}, ErrConflict
 		}
+	}
+	if err := advanceCardLifecycleVersion(ctx, tx, cardRow.CardID, actorID, now); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
 	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
@@ -2762,6 +2781,10 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		cardRow.ArchivedBy = sql.NullString{}
 	}
 
+	if err := advanceCardLifecycleVersion(ctx, tx, cardRow.CardID, actorID, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -5468,4 +5491,14 @@ func markBoardCardProjectionDirtyTx(ctx context.Context, tx *accessTx, cards ...
 		}
 	}
 	return markTopicProjectionsDirtyTx(ctx, tx, threadIDs, time.Now().UTC())
+}
+
+func nullableStringPtr(value sql.NullString) *string {
+	if !value.Valid || value.String == "" {
+		return nil
+	}
+	return &value.String
+}
+func equalLifecycleString(left, right *string) bool {
+	return left == nil && right == nil || left != nil && right != nil && *left == *right
 }

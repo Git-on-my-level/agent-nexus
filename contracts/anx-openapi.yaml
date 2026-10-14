@@ -953,7 +953,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMEmptyRequest'
+              $ref: '#/components/schemas/PMControlRequest'
       responses:
         '409':
           description: Decision state conflict; superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
@@ -1106,7 +1106,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMEmptyRequest'
+              $ref: '#/components/schemas/PMControlRequest'
       responses:
         '200':
           description: Read back an action outcome without resending
@@ -1164,7 +1164,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMEmptyRequest'
+              $ref: '#/components/schemas/PMControlRequest'
       responses:
         '200':
           description: Acknowledge a failed, unresolvable, or undeliverable action
@@ -2502,7 +2502,7 @@ paths:
       x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/TopicID'
-        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Opt in to at most 50 computed card previews with cards_truncated. Omit for the complete legacy bundle.}
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Opt in to computed plans on the bounded workspace preview (50 cards/documents, 10 boards, 100 threads). Use collection/detail routes for further resources; resources_truncated marks an incomplete bundle.}
       responses:
         '200':
           description: Topic workspace payload
@@ -5189,16 +5189,26 @@ paths:
       x-anx-why: Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ groups, unread_count, group_count, generated_at }`."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-output-envelope: "Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history."
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request]
       x-anx-concepts: [home, events]
       x-anx-stability: beta
       parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 200 }
+          description: Maximum eligible events inspected on this page, before unread/group filtering. Pages may be empty while next_cursor still advances.
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque keyset cursor returned by the previous page.
         - name: reader_id
           in: query
           schema: { type: string }
           description: Development legacy actor-mode reader id. Authenticated deployments derive the reader from the bearer token principal.
       responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Home unread feed
           content:
@@ -5218,8 +5228,8 @@ paths:
       x-anx-why: Advance durable per-group Home read cursors for the authenticated operator.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ ok, unread_count, group_count }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-output-envelope: "Keyed requests return the original `{ ok: true }` receipt; legacy requests return `{ ok, unread_count, group_count }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [home, events, write]
       x-anx-stability: beta
       requestBody:
@@ -5238,6 +5248,11 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /stream/events:
@@ -5311,7 +5326,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '200':
           description: Event archived
@@ -5350,7 +5365,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '200':
           description: Event unarchived
@@ -5389,7 +5404,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTrashRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '409':
           $ref: '#/components/responses/ErrorResponse'
@@ -5428,7 +5443,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+              $ref: '#/components/schemas/EventLifecycleMutationRequest'
       responses:
         '200':
           description: Event restored
@@ -9785,6 +9800,19 @@ components:
       required:
       - lease_token
       - reason
+    PMControlRequest:
+      type: object
+      description: >-
+        Optional keyed control. request_key and if_revision must be supplied together.
+        Dispatch also requires if_action_revision. Replays return the original admitted
+        action after current authorization checks. A dispatch receipt confirms admission
+        (usually sending), not delivery; read the action for its current outcome. The
+        first action CAS and receipt commit atomically, before an external handoff.
+      properties:
+        request_key: { type: string, minLength: 1, maxLength: 256 }
+        if_revision: { type: integer, minimum: 1 }
+        if_action_revision: { type: integer, minimum: 1 }
+
     PMEmptyRequest:
       type: object
       additionalProperties: true
@@ -12199,6 +12227,35 @@ components:
         reason: { type: string, minLength: 1 }
       required: [request_event_id, request_event_ref, withdrawn_by_actor_id, reason]
 
+    EventLifecycleMutationRequest:
+      type: object
+      description: |
+        Optional original-result replay. Keyed calls require if_lifecycle, the
+        original parent visibility state. Mutations and reply cascades commit
+        atomically. A cascade admits at most 2000 descendants and each expanded
+        event admits at most 2001 inbound raw reference edges of any kind,
+        including unrelated sources. Saturated targets or larger trees return conflict without changes. Legacy unkeyed calls remain supported.
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
+        reason: { type: string }
+        selected_bases:
+          type: object
+          maxProperties: 2000
+          description: Frozen lifecycle bases for explicitly selected events. Every scoped member of the ancestor cascade is compared in the writer transaction before any changes; a mismatch conflicts the entire request.
+          additionalProperties:
+            type: object
+            required: [archived_at, trashed_at]
+            properties:
+              archived_at: { type: string, nullable: true }
+              trashed_at: { type: string, nullable: true }
+        if_lifecycle:
+          type: object
+          required: [archived_at, trashed_at]
+          properties:
+            archived_at: { type: string, nullable: true }
+            trashed_at: { type: string, nullable: true }
+
     TopicLifecycleMutationRequest:
       type: object
       properties:
@@ -12427,7 +12484,8 @@ components:
     TopicWorkspaceResponse:
       type: object
       properties:
-        cards_truncated: {type: boolean, description: Present only with summary=1; computed card preview was capped at 50.}
+        cards_truncated: {type: boolean, description: Workspace card preview is bounded to 50 cards.}
+        resources_truncated: {type: boolean, description: Some resource collections are candidate limited; use collection/detail routes to read more.}
         topic: { $ref: '#/components/schemas/Topic' }
         cards:
           type: array
@@ -12820,6 +12878,11 @@ components:
     EventResponse:
       type: object
       properties:
+        affected_event_ids:
+          type: array
+          maxItems: 2001
+          items: { type: string }
+          description: Lifecycle receipt only; scoped event IDs actually changed atomically, including replies. No-op calls may omit it.
         event: { $ref: '#/components/schemas/Event' }
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [event]
@@ -13200,8 +13263,10 @@ components:
         groups:
           type: array
           items: { $ref: '#/components/schemas/HomeUnreadGroup' }
-        unread_count: { type: integer, minimum: 0 }
-        group_count: { type: integer, minimum: 0 }
+        unread_count: { type: integer, minimum: 0, description: "Unread events represented by this page, not a workspace total." }
+        group_count: { type: integer, minimum: 0, description: "Groups represented by this page; a group may recur on later pages." }
+        next_cursor: { type: string }
+        has_more: { type: boolean }
         generated_at: { type: string, format: date-time }
       required: [groups, unread_count, group_count, generated_at]
 
@@ -13222,6 +13287,10 @@ components:
     MarkHomeReadRequest:
       type: object
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Keyed requests require a frozen cursor for every group; the original receipt commits atomically.
         reader_id:
           type: string
           description: Development legacy actor-mode reader id. Authenticated deployments derive the reader from the bearer token principal.
@@ -13384,6 +13453,17 @@ components:
     ArchiveCardRequest:
       type: object
       properties:
+        if_lifecycle:
+          type: object
+          required: [archived_at, trashed_at]
+          properties:
+            archived_at: { type: string, nullable: true }
+            trashed_at: { type: string, nullable: true }
+          description: Frozen visibility tuple; a concurrent archive/restore conflicts before writing.
+        request_key:
+          type: string
+          maxLength: 256
+          description: Original receipt key committed atomically with archive; reuse on retry. Keyed archives require if_version, if_lifecycle and if_latest_observation_id.
         actor_id: { type: string }
         if_board_updated_at:
           type: string
@@ -13391,11 +13471,10 @@ components:
         if_version:
           type: integer
           minimum: 0
-          description: Optional source work-version fence for atomic archive after a transfer has been verified.
+          description: Optional monotonic work-version fence for atomic archive. Every committed archive and restore advances this version, including an archive/restore round trip.
         if_latest_observation_id:
           type: string
-          minLength: 1
-          description: Optional atomic fence matching work.latest_observation.id from work get. A different or absent latest successful observation returns 409 conflict, including observations that leave phase and board timestamp unchanged. Checked in the archive transaction; use with if_board_updated_at and if_version to fence canonical and annotation changes too.
+          description: Optional atomic fence matching work.latest_observation.id from work get. Keyed archives also allow an empty string to fence the absence of any successful observation; legacy unkeyed requests must use a nonempty ID. A different or absent latest successful observation returns 409 conflict, including observations that leave phase and board timestamp unchanged. Checked in the archive transaction; use with if_board_updated_at and if_version to fence canonical and annotation changes too.
 
     SecretMetadata:
       type: object

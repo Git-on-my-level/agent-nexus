@@ -332,6 +332,7 @@ export async function setup(page, overrides = {}) {
           id: "action-sample",
           decision_id: decisions[0].id,
           status: "pending_delivery",
+          revision: 1,
           receipt: {},
           attempts: [],
         });
