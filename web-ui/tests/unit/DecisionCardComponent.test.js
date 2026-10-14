@@ -73,15 +73,41 @@ describe("DecisionCard", () => {
     ).toBe("by Oct 17");
   });
 
-  it("answers access and host decisions with approved or rejected", async () => {
-    const host = brief.decisions.find((d) => d.kind === "host");
-    const { container } = render(DecisionCard, { decision: host, now: NOW });
+  it("answers access with rejected at once and approved after a confirm", async () => {
+    const access = brief.decisions.find((d) => d.kind === "access");
+    const { container, getByText } = render(DecisionCard, {
+      decision: access,
+      now: NOW,
+    });
     expect(container.querySelector("[data-decision-reply-toggle]")).toBeNull();
-    const deny = container.querySelectorAll("[data-decision-proposal]")[1];
-    await fireEvent.click(deny);
+    await fireEvent.click(container.querySelectorAll("[data-decision-proposal]")[0]);
+    expect(queue.queueInboxResponse).not.toHaveBeenCalled();
+    await fireEvent.click(getByText("Approve access"));
     expect(queue.queueInboxResponse.mock.calls[0][0].request.outcome).toBe(
+      "approved",
+    );
+    cleanup();
+    const again = render(DecisionCard, { decision: access, now: NOW });
+    await fireEvent.click(
+      again.container.querySelectorAll("[data-decision-proposal]")[1],
+    );
+    expect(queue.queueInboxResponse.mock.calls[1][0].request.outcome).toBe(
       "rejected",
     );
+  });
+
+  it("opens host enrollments in Access and unanswerable PM proposals in Ask", () => {
+    for (const kind of ["host", "pm_proposal"]) {
+      const { container } = render(DecisionCard, {
+        decision: { ...merge, kind, pmDecision: null },
+        now: NOW,
+      });
+      expect(container.querySelector("[data-decision-proposal]")).toBeNull();
+      expect(
+        container.querySelector("[data-decision-open]").getAttribute("href"),
+      ).toBe(kind === "host" ? "/o/acme/w/main/access" : "/o/acme/w/main/pm");
+      cleanup();
+    }
   });
 
   it("copies the ref from the button and from the c key", async () => {

@@ -235,7 +235,6 @@
   /** How many ready steps fit before the rest become a count. */
   const NEXT_PREVIEW = 3;
   let shownNextSteps = $derived(nextSteps.slice(0, NEXT_PREVIEW));
-  let moreNextSteps = $derived(Math.max(0, nextSteps.length - NEXT_PREVIEW));
   /** Computed step status by id, for the one word the header needs. */
   let stepStatus = $derived(
     new Map(
@@ -299,15 +298,6 @@
     shownNextSteps.length && stepStatus.get(shownNextSteps[0].id) === "active"
       ? "with"
       : "waiting on",
-  );
-  /** "waiting on David", for the single status line. */
-  let waitingLabel = $derived(
-    // A real name or nothing: a role the registries cannot place belongs in
-    // the Next section, where there is room to say that nobody is named, not
-    // on a status line that would then read "waiting on agent".
-    nextActor?.named && shownNextSteps.length
-      ? `${waitingVerb} ${nextActor.label}`
-      : "",
   );
   /**
    * The hand-written next action, where the plan has not already passed it.

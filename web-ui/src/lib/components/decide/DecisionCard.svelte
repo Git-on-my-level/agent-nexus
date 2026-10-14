@@ -17,6 +17,7 @@
     queueInboxResponse,
     retryInboxResponse,
   } from "$lib/inboxResponseQueue.js";
+  import { enqueuePmDecisionAnswer } from "$lib/mutationOutbox.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
 
@@ -64,10 +65,27 @@
     Boolean(overlay && overlay.status !== "failed") || Boolean(unsent),
   );
 
-  /** Access and host approvals answer approved/rejected; core refuses text. */
-  let structured = $derived(
-    decision.kind === "access" || decision.kind === "host",
+  /**
+   * How this kind is answered. Asks, reviews and access requests are inbox
+   * items (POST /inbox/{id}/respond). A PM proposal answers through the
+   * durable PM decision route. A host enrollment is approved on Access,
+   * whose routes need the enrollment record, so it opens there.
+   */
+  let structured = $derived(decision.kind === "access");
+  let pmAnswer = $derived(
+    decision.kind === "pm_proposal" && Boolean(decision.pmDecision),
   );
+  let elsewhere = $derived(
+    decision.kind === "host" ||
+      (decision.kind === "pm_proposal" && !decision.pmDecision),
+  );
+  let elsewhereHref = $derived(
+    decision.kind === "host" ? href("/access") : href("/pm"),
+  );
+  /** Approving access hands over authority, so it asks once more. */
+  let confirming = $state("");
+  let pmSent = $state(false);
+  let saveError = $state("");
 
   function outcomeFor(proposal) {
     if (!structured) return "answered";
@@ -92,8 +110,36 @@
     onAnswered?.(decision);
   }
 
-  function choose(proposal) {
-    send(proposal, outcomeFor(proposal));
+  async function choose(proposal, index) {
+    if (pmAnswer) {
+      saveError = "";
+      try {
+        // Persisted before it is sent; a storage failure stops the send.
+        await enqueuePmDecisionAnswer({
+          decisionId: decision.pmDecision.id,
+          revision: decision.pmDecision.revision,
+          approve: index === 0,
+          text: proposal,
+          target: `pm-decision:${decision.pmDecision.id}`,
+          href: href(`/decide/${encodeURIComponent(itemId)}`),
+          title: decision.title,
+          preview: proposal,
+        });
+        pmSent = true;
+        onAnswered?.(decision);
+      } catch {
+        saveError =
+          "Couldn’t save your answer on this device, so it was not sent.";
+      }
+      return;
+    }
+    const outcome = outcomeFor(proposal);
+    if (structured && outcome === "approved" && confirming !== proposal) {
+      confirming = proposal;
+      return;
+    }
+    confirming = "";
+    send(proposal, outcome);
   }
 
   function sendReply(event) {
@@ -213,6 +259,10 @@
     </div>
   {/if}
 
+  {#if saveError}
+    <p class="mt-2 text-meta text-danger-text" role="alert">{saveError}</p>
+  {/if}
+
   {#if failure}
     <div
       class="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-danger bg-danger-soft px-2 py-1.5 text-meta"
@@ -237,7 +287,32 @@
   {/if}
 
   <div class="mt-3 flex flex-wrap items-center gap-2">
-    {#if answered}
+    {#if pmSent}
+      <span class="text-meta text-fg-muted" data-decision-answered
+        >Answer saved. Sending to your PM…</span
+      >
+    {:else if elsewhere}
+      <a
+        class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg hover:bg-panel-hover sm:min-h-0"
+        href={elsewhereHref}
+        data-decision-open
+        >{decision.kind === "host" ? "Review in Access" : "Open in Ask"}</a
+      >
+    {:else if confirming}
+      <span class="text-meta text-fg" role="status" data-decision-confirm
+        >Approving grants this access now.</span
+      >
+      <button
+        type="button"
+        class="min-h-11 rounded-md border border-accent-solid bg-accent-solid px-3 py-1.5 text-meta font-medium text-white sm:min-h-0"
+        onclick={() => choose(confirming, 0)}>Approve access</button
+      >
+      <button
+        type="button"
+        class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta text-fg sm:min-h-0"
+        onclick={() => (confirming = "")}>Cancel</button
+      >
+    {:else if answered}
       <span class="text-meta text-fg-muted" data-decision-answered
         >{overlay?.status === "pending"
           ? "Answer waiting to send…"
@@ -253,13 +328,13 @@
             : 'border-line bg-panel text-fg hover:bg-panel-hover'}"
           data-decision-proposal={index + 1}
           data-recommended={index === 0 ? "true" : undefined}
-          onclick={() => choose(proposal)}
+          onclick={() => choose(proposal, index)}
           >{proposal}{#if index === 0 && decision.proposals.length > 1}<span
               class="ml-1 font-normal opacity-80">(recommended)</span
             >{/if}</button
         >
       {/each}
-      {#if !structured}
+      {#if !structured && !pmAnswer}
         <button
           type="button"
           class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta text-fg hover:bg-panel-hover sm:min-h-0"
@@ -282,7 +357,11 @@
        keeps saving whether or not it is open. -->
   <form
     class="mt-2 space-y-2"
-    class:hidden={!(replying || full) || answered || structured}
+    class:hidden={!(replying || full) ||
+      answered ||
+      structured ||
+      pmAnswer ||
+      elsewhere}
     onsubmit={sendReply}
     data-anx-save-scope
   >

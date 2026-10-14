@@ -99,10 +99,10 @@
     },
     {
       "ref": "inbox:ask-95",
-      "kind": "host",
+      "kind": "access",
       "inbox_item_id": "ask-95",
-      "title": "Enroll host m6-mini",
-      "body": "Token by fleet-agent \u00b7 key 3a:9c\u2026",
+      "title": "Give fleet-agent access to this workspace",
+      "body": "Requested by fleet-agent for host m6-mini.",
       "requested_by": {
         "id": "agent:fleet",
         "display": "fleet-agent"

@@ -125,6 +125,15 @@ function normalizeDecision(raw) {
     ),
     priority: text(raw.priority).toLowerCase(),
     subject: refTitle(raw.subject),
+    // A PM proposal answers through /pm/decisions, which needs its revision.
+    pmDecision: raw.pm_decision?.id
+      ? {
+          id: text(raw.pm_decision.id),
+          revision: Number(raw.pm_decision.revision) || 0,
+        }
+      : null,
+    // A host enrollment answers on the Access page's own routes.
+    accessRequestId: text(raw.access_request_id),
     // Core orders proposals with the recommendation first; keep that order.
     proposals: (Array.isArray(raw.proposals) ? raw.proposals : [])
       .map(text)
