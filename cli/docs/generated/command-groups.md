@@ -144,12 +144,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `boards.unarchive` (`boards unarchive`)
   - `boards.workspace` (`boards workspace`)
 
-## `brief`
-
-- Commands: `1`
-- Command IDs:
-  - `brief.get` (`brief`)
-
 ## `cards`
 
 - Commands: `13`
@@ -262,6 +256,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.blob.usage.rebuild` (`ops blob usage rebuild`)
   - `ops.health` (`ops health`)
   - `ops.usage.summary` (`ops usage summary`)
+
+## `orient`
+
+- Commands: `1`
+- Command IDs:
+  - `brief.get` (`orient`)
 
 ## `overview`
 

@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"agent-nexus-cli/internal/errnorm"
 )
@@ -98,6 +99,30 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 			"reason": {kind: preflightFlagString}, "actor-id": {kind: preflightFlagString},
 			"dry-run": {kind: preflightFlagBool},
 		})
+	}
+	switch args[0] {
+	case "orient":
+		return "orient", parseOrientArgs(args[1:])
+	case "note":
+		_, err := parseNoteArgs(args[1:], time.Now())
+		return "note", err
+	case "done":
+		_, _, err := parseDoneArgs(args[1:])
+		return "done", err
+	case "context":
+		if len(args) < 2 {
+			return "context", errnorm.Usage("invalid_args", "usage: anx context <card> [--limit N] [--cursor C]")
+		}
+		_, err := parseWorkCommand(append([]string{"work", "context"}, args[1:]...))
+		return "context", err
+	case "api":
+		if len(args) >= 2 && args[1] != "call" && !isHelpToken(args[1]) {
+			_, err := parseAPIOperationArgs(args[1:])
+			return "api", err
+		}
+	}
+	if args[0] == "work" && len(args) >= 2 && (args[1] == "note" || args[1] == "done" || args[1] == "context") {
+		return "work " + args[1], errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown work subcommand %q; the loop verb is anx %s", args[1], args[1]))
 	}
 	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
 		name := "work " + args[1]
@@ -265,7 +290,7 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], draftSubcommandSpec)
 	case "provenance":
 		return preflightSubcommand(args[1:], provenanceSubcommandSpec)
-	case "orient", "ask", "review", "escalate", "await":
+	case "orient", "note", "done", "context", "ask", "review", "escalate", "await":
 		return nil
 	case "secret":
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
@@ -541,7 +566,7 @@ func preflightDocsIngestArgs(args []string) error {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}
@@ -566,12 +591,9 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		}
 	}
 	addLayer(map[string]map[string]preflightFlagSpec{
-		"orient":     {"stale-hours": {kind: preflightFlagString}},
 		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}},
 		"work start": {},
-		"work note":  {},
 		"work block": {"ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}, "body": {kind: preflightFlagString}, "body-file": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}},
-		"work done":  {"evidence": {kind: preflightFlagString}},
 	})
 	for _, kind := range []string{"ask", "review", "escalate"} {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {
@@ -585,6 +607,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"requester-label": {kind: preflightFlagString}, "coverage-hint": {kind: preflightFlagString},
 			"severity": {kind: preflightFlagString}, "actor-id": {kind: preflightFlagString},
 			"dry-run": {kind: preflightFlagBool},
+			"by":      {kind: preflightFlagString}, "blocks": {kind: preflightFlagString}, "priority": {kind: preflightFlagString},
 		}})
 	}
 	// Lowest precedence: lifecycle verbs derived from the resource registry.

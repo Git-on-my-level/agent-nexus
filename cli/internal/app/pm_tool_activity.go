@@ -87,7 +87,7 @@ func pmToolStep(args []string) (string, string) {
 	}
 
 	// Resource get/inspect and turn-context calls have a leading resource ref.
-	if target == "" && len(tail) > 0 && (strings.HasSuffix(name, " get") || strings.HasSuffix(name, " inspect") || name == "work context" || name == "cards messages" || name == "topics messages") && pmActivityRef.MatchString(tail[0]) {
+	if target == "" && len(tail) > 0 && (strings.HasSuffix(name, " get") || strings.HasSuffix(name, " inspect") || name == "work context" || name == "context" || name == "cards messages" || name == "topics messages") && pmActivityRef.MatchString(tail[0]) {
 		target = tail[0]
 	}
 	return "anx " + name, target
