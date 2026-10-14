@@ -462,6 +462,40 @@ with late creation success/message failure. The guard enforces exact saved-body
 sends and rejects statically named computed direct SDK calls in migrated surfaces.
 Remaining live forms, general replay gaps and whole-UI enforcement stay open.
 
+## Topic patch server prerequisite
+
+`PATCH /topics/{id}` now accepts an optional actor-bound `request_key`. Keyed
+requests require the original `if_updated_at`; canonical target, complete decoded
+body and original timestamp representation are bound before markdown/timestamp
+normalization. Topic metadata, backing-thread fields, reference edges, dirty
+projections, update event and original HTTP result commit together. Current
+resource visibility is checked before recovering a receipt. Eight concurrent
+retries, changed body/base/target rejection, quota changes, later edits, write
+failures, cold-ledger rollback and revoked ownership are tested with one connection.
+
+Keyed and legacy topic patches now read/merge/check their base under a scoped
+writer. Quota locking precedes it and is shared with the replay wrapper. Update
+events participate in quota accounting; cold ledger initialization joins rollback.
+Topic patch and lifecycle writes merge managed backing-thread JSON fields instead
+of replacing the entire body, preserving ownership metadata and other extensions.
+Partial topic provenance patches retain omitted notes/extensions; explicit empty
+notes still clear them.
+Regression tests cover patch/archive/unarchive/trash/restore. Topic metadata and
+patch decoding preserve large integer values, including through later edits and
+changed-body rejection; other endpoint decoders retain their existing behavior.
+
+**The live topic editor remains rollout work.** Its current parent catches a 409,
+refreshes and returns success to the child, allowing it to close the unsaved form.
+The next stage must replace that direct sender with a complete durable snapshot
+and the outbox. Only title and summary are editable today; owners/resource refs
+are display-only. Initialize the base from canonical `getTopic`, not the backing
+thread projection's timestamp. Retain the authored fields across conflicts and
+refresh bases only through an explicit latest-version action. Topic lifecycle
+original receipts, legacy knowledge PUT, purge and remaining live forms stay open.
+The existing `POST /topics` helper records replay after creation and can adopt a
+legacy ID collision without a receipt; it needs a separate atomic replay audit
+before a topic-creation outbox is added. No current Svelte caller was found.
+
 ## Replay audit
 
 No HTTP routes or database migrations are added. PM request contracts now accept
@@ -486,6 +520,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics      | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                                   | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
 | `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                      | Current detail/list/bulk lifecycle UI covered; unused legacy adapters removed; purge remains an API audit                                             |
+| `PATCH /topics/{id}`                                                              | Actor/canonical-target/body/base-bound atomic topic/thread/refs/event/original receipt; concurrent replay, quota/cold-ledger/write rollback, integer precision and revoked-ownership tests                                                            | Server prerequisite covered; live topic editor draft/outbox migration remains open                                                                    |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                                  | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -226,14 +227,25 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 
 	var req struct {
 		ActorID     string         `json:"actor_id"`
+		RequestKey  string         `json:"request_key"`
 		Patch       map[string]any `json:"patch"`
 		IfUpdatedAt *string        `json:"if_updated_at"`
 	}
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeJSONBodyPreserveNumbers(w, r, &req) {
+		return
+	}
+	// Preserve the complete decoded input before timestamp/markdown normalization.
+	originalBody, err := json.Marshal(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid topic patch")
 		return
 	}
 	if req.Patch == nil || len(req.Patch) == 0 {
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
+		return
+	}
+	if strings.TrimSpace(req.RequestKey) != "" && req.IfUpdatedAt == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "if_updated_at is required for keyed topic patches")
 		return
 	}
 	if req.IfUpdatedAt != nil {
@@ -258,7 +270,25 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 
-	result, err := opts.primitiveStore.PatchTopic(r.Context(), actorID, topicID, req.Patch, req.IfUpdatedAt)
+	// Current visibility is required even when recovering an original receipt.
+	if _, err := opts.primitiveStore.GetTopic(r.Context(), topicID); err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "topic not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load topic")
+		}
+		return
+	}
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "topics.patch", actorID, req.RequestKey, struct {
+		ID   string
+		Body json.RawMessage
+	}{topicID, originalBody}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		result, err := opts.primitiveStore.PatchTopic(ctx, actorID, topicID, req.Patch, req.IfUpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"topic": result.Topic}), nil
+	})
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -268,7 +298,7 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 			writeError(w, http.StatusNotFound, "not_found", "topic not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "topic has been updated; refresh and retry")
-		case errors.Is(err, primitives.ErrInvalidTopicRequest):
+		case errors.Is(err, primitives.ErrInvalidTopicRequest), errors.Is(err, primitives.ErrInvalidWorkRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch topic")
@@ -276,11 +306,8 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 
-	if primaryThreadID := topicPrimaryThreadID(result.Topic); primaryThreadID != "" {
-		notifyProjectionMaintainer(opts)
-	}
-
-	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"topic": result.Topic}))
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, status, response)
 }
 
 func handleArchiveTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {

@@ -11860,6 +11860,10 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
                     "name": "patch.board_refs",
                     "type": "list\u003cany\u003e"
                 },
@@ -11898,6 +11902,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.workspace_move",
                     "type": "object"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },

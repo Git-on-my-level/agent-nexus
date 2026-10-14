@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/resourceaccess"
+
 	"github.com/google/uuid"
 )
 
@@ -245,7 +247,9 @@ func marshalTopicExtensionsJSON(m map[string]any) (string, error) {
 func (r topicRow) toMap(buckets topicRefBuckets) (map[string]any, error) {
 	ext := map[string]any{}
 	if strings.TrimSpace(r.ExtensionsJSON) != "" {
-		if err := json.Unmarshal([]byte(r.ExtensionsJSON), &ext); err != nil {
+		decoder := json.NewDecoder(strings.NewReader(r.ExtensionsJSON))
+		decoder.UseNumber()
+		if err := decoder.Decode(&ext); err != nil {
 			ext = map[string]any{}
 		}
 	}
@@ -255,7 +259,9 @@ func (r topicRow) toMap(buckets topicRefBuckets) (map[string]any, error) {
 
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {
-		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
+		decoder := json.NewDecoder(strings.NewReader(r.ProvenanceJSON))
+		decoder.UseNumber()
+		if err := decoder.Decode(&provenance); err != nil {
 			provenance = map[string]any{}
 		}
 	}
@@ -600,6 +606,26 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	if s == nil || s.db == nil {
 		return TopicPatchResult{}, fmt.Errorf("primitives store database is not initialized")
 	}
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+		ctx = context.WithValue(ctx, replayQuotaKey{}, s)
+	}
+	var out TopicPatchResult
+	err := s.db.WriteTransaction(ctx, func(ctx context.Context, tx *resourceaccess.Tx) error {
+		// Own the write snapshot before reading/merging metadata or checking its
+		// base. Under keyed replay this and the inner transaction are savepoints.
+		if _, err := tx.ExecContext(ctx, `UPDATE topics SET updated_at=updated_at WHERE id=?`, strings.TrimSpace(topicID)); err != nil {
+			return err
+		}
+		var err error
+		out, err = s.patchTopic(ctx, actorID, topicID, patch, ifUpdatedAt)
+		return err
+	})
+	return out, err
+}
+
+func (s *Store) patchTopic(ctx context.Context, actorID string, topicID string, patch map[string]any, ifUpdatedAt *string) (TopicPatchResult, error) {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return TopicPatchResult{}, ErrInvalidTopicRequest
@@ -648,7 +674,11 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 		if !ok {
 			return TopicPatchResult{}, fmt.Errorf("topic.provenance must be an object")
 		}
-		nextProvenance = cloneMap(provenancePatch)
+		// Provenance is a patch too: omitted notes/extensions survive, while
+		// supplied fields (including empty notes and source lists) replace them.
+		for key, value := range provenancePatch {
+			nextProvenance[key] = value
+		}
 		delete(bodyPatch, "provenance")
 		provenanceChanged = !reflectDeepEqual(currentProvenance, nextProvenance)
 	}
@@ -743,10 +773,12 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 		return TopicPatchResult{}, err
 	}
 
+	// Update only managed backing-thread fields. Replacing the whole JSON body
+	// would erase ownership metadata (including pm_actor_id) and other extensions.
 	if _, err := tx.ExecContext(
 		ctx,
 		`UPDATE threads
-			SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
+			SET body_json = json_patch(body_json, ?), provenance_json = ?, updated_at = ?, updated_by = ?
 		  WHERE id = ?`,
 		string(threadBodyJSON),
 		string(threadProvenanceJSON),
@@ -777,6 +809,9 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
 		return TopicPatchResult{}, fmt.Errorf("prepare topic event: %w", err)
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(preparedEvent.PayloadJSON) + len(preparedEvent.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
+		return TopicPatchResult{}, err
 	}
 	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
 		return TopicPatchResult{}, fmt.Errorf("emit topic event: %w", err)
@@ -990,7 +1025,7 @@ func (s *Store) applyTopicLifecycleWithReasonAndPrecondition(ctx context.Context
 			}
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET archived_at = ?, archived_by = ?, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
+			`UPDATE threads SET archived_at = ?, archived_by = ?, body_json = json_patch(body_json, ?), provenance_json = ?, updated_at = ?, updated_by = ?
 			  WHERE id = ?`,
 			now, actorID, string(threadBodyJSON), inferredProvenanceJSON(), now, actorID,
 			primaryThreadID,
@@ -1005,7 +1040,7 @@ func (s *Store) applyTopicLifecycleWithReasonAndPrecondition(ctx context.Context
 			return nil, fmt.Errorf("unarchive topic: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET archived_at = NULL, archived_by = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
+			`UPDATE threads SET archived_at = NULL, archived_by = NULL, body_json = json_patch(body_json, ?), provenance_json = ?, updated_at = ?, updated_by = ?
 			  WHERE id = ?`,
 			string(threadBodyJSON), inferredProvenanceJSON(), now, actorID,
 			primaryThreadID,
@@ -1020,7 +1055,7 @@ func (s *Store) applyTopicLifecycleWithReasonAndPrecondition(ctx context.Context
 			return nil, fmt.Errorf("trash topic: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
+			`UPDATE threads SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, body_json = json_patch(body_json, ?), provenance_json = ?, updated_at = ?, updated_by = ?
 			  WHERE id = ?`,
 			now, actorID, strings.TrimSpace(reason), string(threadBodyJSON), inferredProvenanceJSON(), now, actorID,
 			primaryThreadID,
@@ -1035,7 +1070,7 @@ func (s *Store) applyTopicLifecycleWithReasonAndPrecondition(ctx context.Context
 			return nil, fmt.Errorf("restore topic: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
+			`UPDATE threads SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = json_patch(body_json, ?), provenance_json = ?, updated_at = ?, updated_by = ?
 			  WHERE id = ?`,
 			string(threadBodyJSON), inferredProvenanceJSON(), now, actorID,
 			primaryThreadID,

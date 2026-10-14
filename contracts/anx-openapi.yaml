@@ -11590,6 +11590,8 @@ components:
     PatchTopicRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 256, description: "Original-result replay committed atomically with topic, backing thread, refs and update event. Binds the original actor, canonical topic, complete decoded body and metadata base; keep unchanged until confirmed." }
         patch: { $ref: '#/components/schemas/TopicPatchInput' }
         if_updated_at:
           type: string

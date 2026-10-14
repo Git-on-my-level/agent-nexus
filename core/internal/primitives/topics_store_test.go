@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"agent-nexus-core/internal/storage"
@@ -74,6 +75,57 @@ func TestTopicCreationEventCarriesWorkspaceMoveMarker(t *testing.T) {
 	loaded, err := store.GetTopic(ctx, created.Topic["id"].(string))
 	if err != nil || loaded["workspace_move"].(map[string]any)["source_ref"] != "topic:source" {
 		t.Fatalf("topic marker did not persist: %#v %v", loaded, err)
+	}
+}
+
+func TestTopicWritesPreserveBackingThreadOwnershipAndExtensions(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	store := NewTestStore(ws.DB(), "")
+	created, err := store.CreateTopic(ctx, "owner", map[string]any{"title": "Private topic", "summary": "Original description"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, thread := created.Topic["id"].(string), created.Topic["thread_id"].(string)
+	if _, err = store.PatchThread(ctx, "owner", thread, map[string]any{"pm_actor_id": "owner", "custom_extension": "Keep this metadata"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ctx = WithAccessScope(ctx, AccessScope{ActorID: "owner"})
+	writes := []struct {
+		name string
+		run  func() error
+	}{
+		{"patch", func() error {
+			_, err := store.PatchTopic(ctx, "owner", id, map[string]any{"summary": "Updated description"}, nil)
+			return err
+		}},
+		{"archive", func() error { _, err := store.ArchiveTopic(ctx, "owner", id); return err }},
+		{"unarchive", func() error { _, err := store.UnarchiveTopic(ctx, "owner", id); return err }},
+		{"trash", func() error { _, err := store.TrashTopic(ctx, "owner", id, "Keep ownership"); return err }},
+		{"restore", func() error { _, err := store.RestoreTopic(ctx, "owner", id); return err }},
+	}
+	for _, write := range writes {
+		if err = write.run(); err != nil {
+			t.Fatal(write.name, err)
+		}
+		var raw string
+		if err = ws.DB().QueryRow(`SELECT body_json FROM threads WHERE id=?`, thread).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		if err = json.Unmarshal([]byte(raw), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body["pm_actor_id"] != "owner" || body["custom_extension"] != "Keep this metadata" {
+			t.Fatal(write.name, "erased metadata", body)
+		}
+		if _, err := store.GetTopic(WithAccessScope(context.Background(), AccessScope{ActorID: "other"}), id); !errors.Is(err, ErrNotFound) {
+			t.Fatal(write.name, "exposed private topic", err)
+		}
 	}
 }
 

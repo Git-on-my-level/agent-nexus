@@ -599,6 +599,21 @@ continues. Cursors belong to the authenticated principal and inbox status.
 Workspace projection freshness retains the complete status and `thread_count`,
 with at most 100 thread details and `truncated` for additional threads.
 
+### Topic patch original receipts
+
+`PATCH /topics/{id}` accepts optional `request_key` and `actor_id`. Keyed requests
+require `if_updated_at`, binding the authenticated actor, canonical topic and
+complete decoded body before normalization. The topic, backing-thread metadata,
+reference edges, projection invalidation, update event and original 200 response
+commit together. Recovery checks current access and returns the original result
+after later edits or quota changes; changed-body/key reuse returns 409. Legacy
+patches retain their optional base semantics, with merge/base checks under the
+same scoped writer. Topic patches account for event quota and preserve unknown
+metadata and integer precision. Patch/archive/unarchive/trash/restore preserve
+backing-thread ownership fields. Partial provenance patches preserve omitted
+notes/extensions; supplying empty notes explicitly clears them. These topic lifecycle actions do not yet have
+original-receipt mode; their receipt audit remains separate.
+
 ### PM chat original receipts
 
 Conversation creation and message POSTs accept optional `replay_key` alongside

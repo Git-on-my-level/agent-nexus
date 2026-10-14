@@ -6264,6 +6264,7 @@ Inputs:
   - path `topic_id`
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   Optional:
+  - body `actor_id` (string)
   - body `patch.board_refs` (list<any>)
   - body `patch.document_refs` (list<any>)
   - body `patch.owner_refs` (list<any>)
@@ -6274,6 +6275,7 @@ Inputs:
   - body `patch.summary` (string)
   - body `patch.title` (string)
   - body `patch.workspace_move` (object)
+  - body `request_key` (string)
 
 Local Help: topics patch
 
