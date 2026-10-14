@@ -24,6 +24,15 @@ mutation already satisfies the invariant.
 | Task/document authoring   | New tasks; new documents, document descriptions, revisions and inline titles                                          | Atomic nested mutation/replay, frozen original concurrency tokens, reload/offline/attention recovery and explicit rebase                                        |
 | Remaining authoring       | Remaining card/plan/settings/lifecycle mutations and all other forms                                                  | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
 
+Decide replaced both Inbox surfaces. `DecisionCard` keeps the Inbox response
+foundation unchanged: proposal taps and replies go through
+`inboxResponseQueue.js` (persisted before the undo window, original key on
+retry), the reply draft keeps the `inbox:<item-id>:reply` key on the list, the
+permalink and the initiative page, and a PM decision answer goes through
+`enqueuePmDecisionAnswer`, which refuses to send when it cannot persist.
+Watch's by-stage moves use `enqueueTaskMove`. `tests/e2e/decide.spec.js` covers
+one-tap answers, undo and drafts across the list and the permalink.
+
 The full invariant remains incomplete. Do not enable blind retries
 for an unaudited endpoint: an HTTP timeout can occur after the mutation committed.
 

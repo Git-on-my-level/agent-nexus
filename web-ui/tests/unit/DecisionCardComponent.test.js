@@ -96,18 +96,25 @@ describe("DecisionCard", () => {
     );
   });
 
-  it("opens host enrollments in Access and unanswerable PM proposals in Ask", () => {
-    for (const kind of ["host", "pm_proposal"]) {
-      const { container } = render(DecisionCard, {
-        decision: { ...merge, kind, pmDecision: null },
-        now: NOW,
-      });
-      expect(container.querySelector("[data-decision-proposal]")).toBeNull();
-      expect(
-        container.querySelector("[data-decision-open]").getAttribute("href"),
-      ).toBe(kind === "host" ? "/o/acme/w/main/access" : "/o/acme/w/main/pm");
-      cleanup();
-    }
+  it("opens host enrollments in Access", () => {
+    const { container } = render(DecisionCard, {
+      decision: { ...merge, kind: "host" },
+      now: NOW,
+    });
+    expect(container.querySelector("[data-decision-proposal]")).toBeNull();
+    expect(
+      container.querySelector("[data-decision-open]").getAttribute("href"),
+    ).toBe("/o/acme/w/main/access");
+  });
+
+  it("answers a curation proposal like an ask, the first proposal applying it", async () => {
+    const proposal = brief.decisions.find((d) => d.kind === "pm_proposal");
+    const { container } = render(DecisionCard, { decision: proposal, now: NOW });
+    await fireEvent.click(container.querySelector('[data-decision-proposal="1"]'));
+    expect(queue.queueInboxResponse.mock.calls[0][0]).toMatchObject({
+      itemId: "ask-93",
+      request: { response_text: "Withdraw", outcome: "answered" },
+    });
   });
 
   it("copies the ref from the button and from the c key", async () => {

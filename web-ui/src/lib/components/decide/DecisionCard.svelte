@@ -66,22 +66,19 @@
   );
 
   /**
-   * How this kind is answered. Asks, reviews and access requests are inbox
-   * items (POST /inbox/{id}/respond). A PM proposal answers through the
-   * durable PM decision route. A host enrollment is approved on Access,
-   * whose routes need the enrollment record, so it opens there.
+   * How this kind is answered. Asks, reviews, access requests and curation
+   * proposals (`pm_proposal`, an ask whose first proposal is "do it") are
+   * inbox items: POST /inbox/{id}/respond. A proposal that carries a PM
+   * decision record answers through the durable PM decision route instead.
+   * A host enrollment is approved on Access, whose routes need the
+   * enrollment record, so it opens there.
    */
   let structured = $derived(decision.kind === "access");
   let pmAnswer = $derived(
     decision.kind === "pm_proposal" && Boolean(decision.pmDecision),
   );
-  let elsewhere = $derived(
-    decision.kind === "host" ||
-      (decision.kind === "pm_proposal" && !decision.pmDecision),
-  );
-  let elsewhereHref = $derived(
-    decision.kind === "host" ? href("/access") : href("/pm"),
-  );
+  let elsewhere = $derived(decision.kind === "host");
+  let elsewhereHref = $derived(href("/access"));
   /** Approving access hands over authority, so it asks once more. */
   let confirming = $state("");
   let pmSent = $state(false);
@@ -296,7 +293,7 @@
         class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg hover:bg-panel-hover sm:min-h-0"
         href={elsewhereHref}
         data-decision-open
-        >{decision.kind === "host" ? "Review in Access" : "Open in Ask"}</a
+        >Review in Access</a
       >
     {:else if confirming}
       <span class="text-meta text-fg" role="status" data-decision-confirm
