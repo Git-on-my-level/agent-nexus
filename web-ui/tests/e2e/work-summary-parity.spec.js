@@ -102,19 +102,19 @@ const planlessCard = {
 };
 
 /**
- * A dark card whose every linked source has already finished: core reads the
- * state dark (nothing dated will surface it) and flags it possibly moot
- * (the PRs merged under it). The flag is a top-level row field beside the
- * summary, and every surface that renders the card carries the evidence.
+ * An active dark card whose every linked source has already finished: core
+ * reads the state dark (nothing dated will surface it) and flags it possibly
+ * moot (the PRs merged under it). The flag is a top-level row field beside
+ * the summary, and every surface that renders the card carries the evidence.
  */
 const darkCard = {
   ref: "card:quiet-decision",
   handle: "quiet-decision",
   title: "Quiet decision",
-  summary: "A decision nothing will surface for weeks.",
-  summary_text: "A decision nothing will surface for weeks.",
-  phase: "ready",
-  column_key: "ready",
+  summary: "Active work nothing will surface for weeks.",
+  summary_text: "Active work nothing will surface for weeks.",
+  phase: "in_progress",
+  column_key: "in_progress",
   board_ref: "board:initiatives",
   updated_at: MOVED_AT,
   source: { authority: "nexus" },

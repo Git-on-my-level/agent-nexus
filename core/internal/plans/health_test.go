@@ -42,19 +42,52 @@ func TestInitiativeHealthRules(t *testing.T) {
 			}
 		})
 	}
-	// A longer stale threshold keeps the card out of stale, but with no dated
-	// signal anywhere it now reads dark rather than on_track.
+	// A longer stale threshold keeps the card out of stale. With no phase
+	// known the card never darkens, so it reads on_track as before.
 	p := Plan{Steps: []Step{{ID: "a", Title: "A"}}}
 	state := Compute(p, nil, old, now, 0)
-	got := HealthFor(&p, state, old, old, now, 96*time.Hour, "", DarkInput{})
-	if got.State != "dark" || got.Since != nil {
+	if got := HealthFor(&p, state, old, old, now, 96*time.Hour, "", DarkInput{}); got.State != "on_track" {
+		t.Fatal(got)
+	}
+	// Rule (a): an ACTIVE card with no dated checkpoint at all reads dark,
+	// never on_track.
+	if got := HealthFor(&p, state, old, old, now, 96*time.Hour, "", DarkInput{Phase: "in_progress"}); got.State != "dark" || got.Since != nil {
 		t.Fatal(got)
 	}
 	// The same card with a signal inside the horizon stays on_track.
 	near := Plan{Steps: []Step{{ID: "a", Title: "A", Due: "2026-10-09"}}}
 	state = Compute(near, nil, old, now, 0)
-	if got := HealthFor(&near, state, old, old, now, 96*time.Hour, "", DarkInput{}); got.State != "on_track" {
+	if got := HealthFor(&near, state, old, old, now, 96*time.Hour, "", DarkInput{Phase: "in_progress"}); got.State != "on_track" {
 		t.Fatal(got)
+	}
+}
+
+func TestDarkOnlyForActiveCards(t *testing.T) {
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	movement := now.Add(-time.Hour)
+	p := Plan{Steps: []Step{{ID: "a", Title: "A"}}}
+	state := Compute(p, nil, movement, now, 0)
+	for _, tc := range []struct {
+		name string
+		dark DarkInput
+		want string
+	}{
+		{"in-progress-darkens", DarkInput{Phase: "in_progress"}, "dark"},
+		{"review-darkens", DarkInput{Phase: "review"}, "dark"},
+		{"done-stays", DarkInput{Phase: "done"}, "on_track"},
+		{"cancelled-stays", DarkInput{Phase: "cancelled"}, "on_track"},
+		{"backlog-stays", DarkInput{Phase: "backlog"}, "on_track"},
+		{"ready-stays", DarkInput{Phase: "ready"}, "on_track"},
+		{"blocked-stays", DarkInput{Phase: "blocked"}, "on_track"},
+		{"archived-stays", DarkInput{Phase: "in_progress", Archived: true}, "on_track"},
+		{"unknown-phase-stays", DarkInput{Phase: "unknown"}, "on_track"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := HealthFor(&p, state, movement, now.Add(-48*time.Hour), now, 0, "", tc.dark)
+			if got.State != tc.want {
+				t.Fatalf("got=%+v want=%s", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -71,18 +104,18 @@ func TestDarkHealth(t *testing.T) {
 		want      string
 		wantSince string
 	}{
-		{"no-signal", "", DarkInput{}, "dark", ""},
-		{"far-step-due", "2026-11-05", DarkInput{}, "dark", "2026-11-05T00:00:00Z"},
-		{"near-step-due", "2026-10-09", DarkInput{}, "on_track", ""},
-		{"horizon-boundary", "2026-10-12T12:00:00Z", DarkInput{}, "on_track", ""},
-		{"just-past-horizon", "2026-10-12T12:00:01Z", DarkInput{}, "dark", "2026-10-12T12:00:01Z"},
-		{"earliest-signal-wins", "2026-10-20", DarkInput{Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-10-20T00:00:00Z"},
-		{"wake-earlier-wins", "2026-11-20", DarkInput{Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-11-05T00:00:00Z"},
-		{"wake-near", "", DarkInput{Wake: "wake on 2026-10-08"}, "on_track", ""},
-		{"wake-near-fractional", "", DarkInput{Wake: "wake on 2026-10-08T09:00:00.000Z"}, "on_track", ""},
-		{"past-wake-not-dark", "", DarkInput{Wake: "was due 2026-09-01"}, "on_track", ""},
-		{"per-card-horizon", "2026-10-20", DarkInput{Threshold: 48 * time.Hour}, "dark", "2026-10-20T00:00:00Z"},
-		{"per-card-horizon-covers", "2026-10-20", DarkInput{Threshold: 30 * 24 * time.Hour}, "on_track", ""},
+		{"no-signal", "", DarkInput{Phase: "in_progress"}, "dark", ""},
+		{"far-step-due", "2026-11-05", DarkInput{Phase: "in_progress"}, "dark", "2026-11-05T00:00:00Z"},
+		{"near-step-due", "2026-10-09", DarkInput{Phase: "in_progress"}, "on_track", ""},
+		{"horizon-boundary", "2026-10-12T12:00:00Z", DarkInput{Phase: "in_progress"}, "on_track", ""},
+		{"just-past-horizon", "2026-10-12T12:00:01Z", DarkInput{Phase: "in_progress"}, "dark", "2026-10-12T12:00:01Z"},
+		{"earliest-signal-wins", "2026-10-20", DarkInput{Phase: "in_progress", Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-10-20T00:00:00Z"},
+		{"wake-earlier-wins", "2026-11-20", DarkInput{Phase: "in_progress", Wake: "revisit 2026-11-05 after the launch"}, "dark", "2026-11-05T00:00:00Z"},
+		{"wake-near", "", DarkInput{Phase: "in_progress", Wake: "wake on 2026-10-08"}, "on_track", ""},
+		{"wake-near-fractional", "", DarkInput{Phase: "in_progress", Wake: "wake on 2026-10-08T09:00:00.000Z"}, "on_track", ""},
+		{"past-wake-not-dark", "", DarkInput{Phase: "in_progress", Wake: "was due 2026-09-01"}, "on_track", ""},
+		{"per-card-horizon", "2026-10-20", DarkInput{Phase: "in_progress", Threshold: 48 * time.Hour}, "dark", "2026-10-20T00:00:00Z"},
+		{"per-card-horizon-covers", "2026-10-20", DarkInput{Phase: "in_progress", Threshold: 30 * 24 * time.Hour}, "on_track", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := plan(tc.due)
@@ -121,7 +154,7 @@ func TestDarkLosesToAlarms(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := Compute(*tc.p, nil, movement, now, 0)
-			if got := HealthFor(tc.p, state, movement, now.Add(-48*time.Hour), now, 0, tc.due, DarkInput{}); got.State != tc.want {
+			if got := HealthFor(tc.p, state, movement, now.Add(-48*time.Hour), now, 0, tc.due, DarkInput{Phase: "in_progress"}); got.State != tc.want {
 				t.Fatalf("got=%+v want=%s", got, tc.want)
 			}
 		})
@@ -188,10 +221,25 @@ func TestPlanlessCardHealthUsesPhaseAndDue(t *testing.T) {
 		{"cancelled", "2020-01-01", now.Add(-100 * time.Hour), "cancelled"},
 		{"ready", "2020-01-01", now, "at_risk"},
 		{"in_progress", "", now.Add(-100 * time.Hour), "stale"},
+		// Rule (a): an active planless card with no dated checkpoint reads
+		// dark on plan_health, never no_plan or on_track.
+		{"in_progress", "", now, "dark"},
+		{"review", "", now, "dark"},
+		{"in_progress", now.Add(30 * 24 * time.Hour).Format("2006-01-02"), now, "dark"},
+		// Parked planless cards keep their phase; a near due outranks dark.
+		{"backlog", "", now, "no_plan"},
+		{"ready", "", now, "no_plan"},
+		{"in_progress", now.Add(2 * time.Hour).Format(time.RFC3339), now, "at_risk"},
+		{"in_progress", now.Add(3 * 24 * time.Hour).Format("2006-01-02"), now, "no_plan"},
 	} {
-		got := HealthFor(nil, State{}, tc.movement, now.Add(-200*time.Hour), now, 0, tc.due, DarkInput{}, tc.phase)
+		got := HealthFor(nil, State{}, tc.movement, now.Add(-200*time.Hour), now, 0, tc.due, DarkInput{Phase: tc.phase}, tc.phase)
 		if got.State != tc.want {
-			t.Fatalf("phase %q: got %+v want %s", tc.phase, got, tc.want)
+			t.Fatalf("phase %q due %q: got %+v want %s", tc.phase, tc.due, got, tc.want)
 		}
+	}
+	// Archived planless work never darkens.
+	got := HealthFor(nil, State{}, now, now.Add(-200*time.Hour), now, 0, "", DarkInput{Phase: "in_progress", Archived: true}, "in_progress")
+	if got.State != "no_plan" {
+		t.Fatal(got)
 	}
 }

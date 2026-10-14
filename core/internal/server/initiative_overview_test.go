@@ -103,13 +103,6 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		if err = json.Unmarshal(raw, &want); err != nil {
 			t.Fatal(err)
 		}
-		if os.Getenv("ANX_TEST_DUMP_FIXTURE") != "" {
-			out, _ := json.MarshalIndent(got, "", "  ")
-			if werr := os.WriteFile(os.Getenv("ANX_TEST_DUMP_FIXTURE"), out, 0o644); werr != nil {
-				t.Fatal(werr)
-			}
-			return
-		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("wire fixture differs: got=%v want=%v", got, want)
 		}

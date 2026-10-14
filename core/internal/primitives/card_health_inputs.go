@@ -16,16 +16,18 @@ type cardHealthInput struct {
 	Source               map[string]any
 	Children             []string
 	// Wake is the raw wake_condition annotation; Related holds the card's
-	// related_refs linked sources; DarkAfter is the per-card dark horizon.
+	// related_refs linked sources; DarkAfter is the per-card dark horizon;
+	// Archived excludes the card from dark entirely.
 	Wake      string
 	Related   []string
 	DarkAfter time.Duration
+	Archived  bool
 }
 
 // darkInput resolves the per-card dark inputs for plans.HealthFor: the wake
 // annotation plus the horizon, falling back to the workspace default.
 func (input cardHealthInput) darkInput() plans.DarkInput {
-	return plans.DarkInput{Wake: input.Wake, Threshold: input.darkHorizon()}
+	return plans.DarkInput{Wake: input.Wake, Threshold: input.darkHorizon(), Phase: input.Phase, Archived: input.Archived}
 }
 
 func (input cardHealthInput) darkHorizon() time.Duration {

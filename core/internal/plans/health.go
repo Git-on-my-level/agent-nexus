@@ -23,10 +23,25 @@ const DefaultDarkAfter = 7 * 24 * time.Hour
 
 // DarkInput carries the per-card dark inputs. Wake is the raw wake_condition
 // annotation; Threshold is the per-card horizon, where zero means the default.
+// Phase and Archived gate who can go dark at all: dark is a statement about
+// active work going quiet, so only an unarchived card whose stored phase is
+// active (in progress or in review) may read dark. Callers that know no phase
+// pass none, and the card simply never darkens.
 type DarkInput struct {
 	Wake      string
 	Threshold time.Duration
+	Phase     string
+	Archived  bool
 }
+
+// DarkApplies reports whether this card may read dark at all: unarchived,
+// with a stored phase that says the work is active.
+func DarkApplies(dark DarkInput) bool {
+	return !dark.Archived && Status(dark.Phase) == "active"
+}
+
+// darkApplies is the internal spelling.
+func darkApplies(dark DarkInput) bool { return DarkApplies(dark) }
 
 // wakeTimePattern matches an embedded RFC3339 instant or YYYY-MM-DD date.
 // Order matters: the instant alternative must win over its own date prefix.
@@ -157,6 +172,15 @@ func HealthFor(p *Plan, state State, movement, created, now time.Time, threshold
 				if !movement.IsZero() {
 					anchor = movement.Add(threshold)
 				}
+			} else if darkApplies(dark) {
+				// A planless active card is exactly the card rule (a) names: it
+				// is being worked and nothing is dated, so it reads dark on
+				// plan_health too, not only in the summary. Callers that omit
+				// the phase keep the legacy no-plan vocabulary.
+				if reason, at, ok := DarkOutcome(nil, State{}, cardDue, dark, now); ok {
+					h.State, h.Reason = "dark", reason
+					anchor = at
+				}
 			}
 		}
 	} else if state.Progress.Done == state.Progress.Total {
@@ -197,9 +221,15 @@ func HealthFor(p *Plan, state State, movement, created, now time.Time, threshold
 				anchor = movement.Add(threshold)
 			}
 		default:
-			if reason, at, ok := DarkOutcome(p, state, cardDue, dark, now); ok {
-				h.State, h.Reason = "dark", reason
-				anchor = at
+			// Dark describes active work going quiet. Done, cancelled, blocked,
+			// parked (backlog/ready) and archived cards keep the states they
+			// already read; only an active card with a missing or distant
+			// signal darkens.
+			if darkApplies(dark) {
+				if reason, at, ok := DarkOutcome(p, state, cardDue, dark, now); ok {
+					h.State, h.Reason = "dark", reason
+					anchor = at
+				}
 			}
 		}
 	}

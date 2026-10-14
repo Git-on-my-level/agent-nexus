@@ -77,11 +77,10 @@ func TestEffectiveHealthInputsAgreeAcrossSurfaces(t *testing.T) {
 					t.Fatal(err)
 				}
 				a, b, c := rawCard["plan_health"].(plans.Health), work["plan_health"].(plans.Health), *preview[0].PlanHealth
-				expected := "no_plan"
-				if withPlan {
-					// No dated signal anywhere: the plan reads dark, not green.
-					expected = "dark"
-				}
+				// The tracker observes this card in progress: it is active and
+				// nothing is dated, so every surface reads dark, with or
+				// without a plan.
+				expected := "dark"
 				if !cleared {
 					expected = "at_risk"
 				}
@@ -292,9 +291,9 @@ func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now, 0)
-	// The child plan edit counts as activity: stale resolves to dark (the
-	// plan has no dated signal), not back to stale.
-	if err != nil || after[0].PlanHealth.State != "dark" {
+	// The child plan edit counts as activity: stale resolves to on_track
+	// (the parked parent has no dated signal, but dark is for active work).
+	if err != nil || after[0].PlanHealth.State != "on_track" {
 		t.Fatalf("child plan activity missing=%+v %v", after, err)
 	}
 }

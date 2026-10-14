@@ -268,9 +268,9 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
 				t.Fatal(err)
 			}
-			// Activity resets recency: stale resolves to dark (the plan has no
-			// dated signal), never back to stale.
-			if card["plan_health"].(plans.Health).State != "dark" {
+			// Activity resets recency: stale resolves to on_track (the parked
+			// card has no dated signal, but dark is for active work).
+			if card["plan_health"].(plans.Health).State != "on_track" {
 				t.Fatal(card["plan_health"])
 			}
 		})

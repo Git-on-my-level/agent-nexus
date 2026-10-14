@@ -46,14 +46,22 @@ func TestPossiblyMootFromFacts(t *testing.T) {
 			wantSources: 2,
 		},
 		{
-			name: "unresolvable sources are excluded, not blocking",
+			// Rule (b): an unobserved source stays unknown and withholds the
+			// flag, even though every source ANX did observe is terminal.
+			name: "one unobserved url blocks the flag",
+			refs: []string{"https://example.test/pr/1", "https://example.test/pr/2"},
+			facts: map[string]plans.Fact{
+				"https://example.test/pr/1": {Known: true, Status: "merged"},
+			},
+			wantFlagged: false,
+		},
+		{
+			name: "an invisible card blocks the flag",
 			refs: []string{"card:done", "card:private"},
 			facts: map[string]plans.Fact{
 				"card:done": {Known: true, Status: "done"},
 			},
-			wantFlagged:   true,
-			wantSources:   1,
-			wantReasonHas: "all 1 linked source is done",
+			wantFlagged: false,
 		},
 		{
 			name:        "only unresolvable sources never flag",
@@ -86,15 +94,30 @@ func TestPossiblyMootFromFacts(t *testing.T) {
 			wantReasonHas: "all 1 linked source is done",
 		},
 		{
-			name: "unknown status excludes the source",
+			name: "an unknown workflow state blocks the flag",
 			refs: []string{"card:mystery", "card:done"},
 			facts: map[string]plans.Fact{
 				"card:mystery": {Known: true, Status: "unknown"},
 				"card:done":    {Known: true, Status: "closed"},
 			},
-			wantFlagged:   true,
-			wantSources:   1,
-			wantReasonHas: "all 1 linked source is closed",
+			wantFlagged: false,
+		},
+		{
+			name: "a ref absent from the facts blocks the flag",
+			refs: []string{"card:done", "card:budget-dropped"},
+			facts: map[string]plans.Fact{
+				"card:done": {Known: true, Status: "done"},
+			},
+			wantFlagged: false,
+		},
+		{
+			name: "a known source with an empty status blocks the flag",
+			refs: []string{"card:done", "card:silent"},
+			facts: map[string]plans.Fact{
+				"card:done":   {Known: true, Status: "done"},
+				"card:silent": {Known: true, Status: ""},
+			},
+			wantFlagged: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

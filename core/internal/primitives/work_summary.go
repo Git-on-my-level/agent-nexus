@@ -133,14 +133,20 @@ func summaryHealth(input cardHealthInput, p *plans.Plan, state plans.State, at, 
 			health.Since = &anchor
 			return health
 		}
-		health = plans.HealthFor(nil, state, at, input.Created, now, threshold, "", input.darkInput())
+		// The recompute answers one question — is the card also stale — so it
+		// drops the near due and, with it, the dark gate: a due-soon card
+		// stays at_risk here and returns to its phase, never dark.
+		recompute := input.darkInput()
+		recompute.Phase = ""
+		health = plans.HealthFor(nil, state, at, input.Created, now, threshold, "", recompute)
 	}
 	if health.State == "no_plan" {
 		health.State = summaryWorkflowPhase(input.Phase)
 		health.Reason = "The card is marked " + summaryLabel(health.State) + "."
 		// An active planless card with no dated signal inside the horizon is
-		// dark: it reads as moving but nothing will surface it again.
-		if health.State == "in_progress" {
+		// dark: it reads as moving but nothing will surface it again. The gate
+		// is the same one plan_health uses, so the chip and the field agree.
+		if plans.DarkApplies(input.darkInput()) {
 			if reason, anchor, ok := plans.DarkOutcome(nil, plans.State{}, input.Due, input.darkInput(), now); ok {
 				health.State, health.Reason = "dark", reason
 				health.Since = nil
@@ -249,7 +255,7 @@ func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, f
 // BasicWorkSummary supports mutation echoes and lightweight test stores. Current
 // reads replace it with the same presentation built from batched canonical facts.
 func BasicWorkSummary(card map[string]any, now time.Time, threshold time.Duration) *WorkSummary {
-	input := cardHealthInput{Phase: firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])), Due: workString(card["due_at"]), Owner: workString(card["owner"]), Source: workMap(card["source"]), Wake: workString(card["wake_condition"]), DarkAfter: parseDarkAfter(workString(card["dark_after"]))}
+	input := cardHealthInput{Phase: firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])), Due: workString(card["due_at"]), Owner: workString(card["owner"]), Source: workMap(card["source"]), Wake: workString(card["wake_condition"]), DarkAfter: parseDarkAfter(workString(card["dark_after"])), Archived: strings.TrimSpace(workString(card["archived_at"])) != ""}
 	input.Created, _ = time.Parse(time.RFC3339Nano, workString(card["created_at"]))
 	input.Activity = latestCardActivity(workString(card["updated_at"]))
 	if input.Owner == "" {

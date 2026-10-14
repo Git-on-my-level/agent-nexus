@@ -23,8 +23,11 @@ func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
 		{name: "ready", phase: "ready", want: "ready"},
 		{name: "in-progress", phase: "in_progress", want: "dark"},
 		{name: "empty-plan", phase: "in_progress", want: "dark", planned: true},
-		{name: "review", phase: "review", want: "review"},
-		{name: "review-alias", phase: "in_review", want: "review"},
+		// Review is active: a planless review card with nothing dated reads
+		// dark, like in-progress does.
+		{name: "review", phase: "review", want: "dark"},
+		{name: "review-alias", phase: "in_review", want: "dark"},
+		{name: "review-due-soon", phase: "review", due: "2026-10-08T13:00:00Z", want: "review"},
 		{name: "done", phase: "done", due: "2020-01-01", old: true, want: "done"},
 		{name: "cancelled", phase: "cancelled", old: true, want: "cancelled"},
 		{name: "blocked", phase: "blocked", due: "2020-01-01", old: true, want: "blocked"},

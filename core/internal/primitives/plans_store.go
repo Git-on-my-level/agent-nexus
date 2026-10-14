@@ -264,14 +264,14 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,COALESCE(c.archived_at,'') FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, darkAfter, relatedRaw string
-		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &darkAfter, &relatedRaw); err != nil {
+		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, darkAfter, relatedRaw, archivedAt string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &darkAfter, &relatedRaw, &archivedAt); err != nil {
 			return nil, nil, nil, err
 		}
 		var entries []any
@@ -286,7 +286,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 			}
 			out[id] = p
 		}
-		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake, DarkAfter: parseDarkAfter(darkAfter)}
+		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake, DarkAfter: parseDarkAfter(darkAfter), Archived: strings.TrimSpace(archivedAt) != ""}
 		var related []string
 		if strings.TrimSpace(relatedRaw) != "" {
 			if err = json.Unmarshal([]byte(relatedRaw), &related); err != nil {

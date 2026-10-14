@@ -45,32 +45,30 @@ const model = (overrides = {}) => card(overrides).summary;
 describe("the Overview card reads core's serialized initiative", () => {
   it("renders the computed status core sends, with core's own label", () => {
     expect(tile.work_summary.status).toEqual({
-      state: "dark",
-      label: "Dark",
-      reason:
-        "Nothing is dated: no open step due date, card due date or wake date, so no signal will surface this card.",
+      state: "on_track",
+      label: "In progress",
+      reason: "Open steps are progressing.",
+      since: "2026-10-04T12:00:00Z",
     });
     /*
-     * The healthy `on_track` reason was dropped rather than printed: core
-     * answers "why is this card in this state" for every card, and "Open
-     * steps are progressing." under an `In progress` badge can never tell a
-     * reader something the badge did not. The dark reason names its cause —
-     * nothing is dated — so the model keeps it and the badge's tooltip
-     * carries the evidence.
+     * And drops that reason rather than printing it. Core answers "why is
+     * this card in this state" for every card, including the ones where the
+     * answer is that nothing is wrong; under a badge reading `In progress`,
+     * "Open steps are progressing." is a line that can never tell a reader
+     * something the badge did not. A reason that names a cause keeps its line.
      */
     expect(model().status).toMatchObject({
-      state: "dark",
-      label: "Dark",
-      reason: tile.work_summary.status.reason,
-      tone: "warn",
+      state: "on_track",
+      label: "In progress",
+      reason: "",
+      tone: "ok",
     });
   });
 
   it("shows the stored phase core says disagrees with the computed status", () => {
-    // The fixture's card sits in `backlog` with a partly done plan, so the
-    // computed state disagrees with the stored phase and the card has to say
-    // both: "Dark · marked backlog" is exactly the disagreement this change
-    // exists to show.
+    // The fixture's card sits in `backlog` with an untouched plan that core
+    // computes as on track, so the card has to say both: "In progress ·
+    // marked backlog" is exactly the disagreement this change exists to show.
     expect(tile.work_summary.set_status).toEqual({
       state: "backlog",
       label: "Backlog",
@@ -185,8 +183,7 @@ describe("the Overview card reads core's serialized initiative", () => {
     const legacyRow = { ...tile };
     delete legacyRow.work_summary;
     const legacy = workSummaryCard(legacyRow, { now: NOW }).summary;
-    // The fixture tile reads dark now: no dated signal anywhere.
-    expect(legacy.status.state).toBe("dark");
+    expect(legacy.status.state).toBe("on_track");
     expect(legacy.progress).toMatchObject({ done: 1, total: 2 });
     expect(legacy.next).toMatchObject({ id: "build", title: "Build" });
     expect(legacy.steps.groups.map((list) => list.key)).toEqual(["next"]);

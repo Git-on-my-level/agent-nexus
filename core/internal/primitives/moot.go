@@ -32,9 +32,9 @@ func mootSourceTerminal(status string) bool {
 
 // possiblyMootLinked selects the linked sources that participate in the flag:
 // refs carrying a workflow state. Context-only refs (documents, topics,
-// boards) say nothing about whether the work happened, so they neither
-// contribute nor block. Unresolvable refs are skipped the same way; the flag
-// is computed from what the reader can actually see.
+// boards, threads) say nothing about whether the work happened, so they
+// neither contribute nor block. Everything else must resolve: an unobserved
+// source stays unknown and withholds the flag rather than counting as done.
 func possiblyMootLinked(refs []string) []string {
 	linked := make([]string, 0, len(refs))
 	seen := map[string]bool{}
@@ -54,9 +54,11 @@ func possiblyMootLinked(refs []string) []string {
 }
 
 // PossiblyMootFromFacts evaluates linked source refs against the same batched
-// ref facts the plan computation already resolved. At least one known source
-// is required, and every known source must be terminal; anything else leaves
-// the flag off with the evaluated count as the only trace.
+// ref facts the plan computation already resolved. Only sources ANX has
+// actually observed may count as terminal: a ref with no fact, an unresolved
+// one, or one whose workflow state is unknown keeps the flag off entirely, so
+// a card is never closed over a source that might still be open. At least one
+// known source is required, and every known source must be terminal.
 func PossiblyMootFromFacts(refs []string, facts map[string]plans.Fact) PossiblyMoot {
 	out := PossiblyMoot{}
 	terminal := 0
@@ -64,7 +66,9 @@ func PossiblyMootFromFacts(refs []string, facts map[string]plans.Fact) PossiblyM
 	for _, ref := range possiblyMootLinked(refs) {
 		fact, ok := facts[ref]
 		if !ok || !fact.Known || fact.Status == "" || fact.Status == "unknown" {
-			continue
+			// Unknown stays unknown: it never counts as terminal, and one
+			// unknown source is enough to withhold the flag.
+			return PossiblyMoot{}
 		}
 		out.Sources++
 		if mootSourceTerminal(fact.Status) {

@@ -437,8 +437,13 @@ reports add `plan_health: {state, reason, since}`, `next_step: {id, title, ref}`
 Health precedence: no steps → `no_plan` if recent, `stale` after the inactivity threshold; all complete → `done`; any unfinished
 blocked step/dependency → `blocked`; card or unfinished step due within 24 hours
 or overdue → `at_risk`; no card/plan/step activity for 72 hours → `stale`;
-an otherwise `on_track` card whose next dated signal lies further out than the
-dark horizon or does not exist → `dark`; otherwise `on_track`. The next dated
+an active card — stored phase in progress or in review, and not archived —
+that would otherwise read `on_track` and whose next dated signal lies further
+out than the dark horizon or does not exist → `dark`; otherwise `on_track`.
+Done, cancelled, blocked, backlog, ready and archived cards keep the states
+they already read. A planless active card reads `dark` on `plan_health` too,
+replacing `no_plan`, so agents reading this field see what the summary chip
+says. The next dated
 signal is the earliest of open (unfinished) step due dates, the effective card
 `due_at`, and the first RFC3339 instant or YYYY-MM-DD date inside the
 `wake_condition` annotation (first 1024 bytes scanned; a past signal still
@@ -454,14 +459,17 @@ next dated signal (null when the card has no dated signal at all). Ready steps p
 critical path, then lexicographic id, skipping unreadable linked resources.
 `status_mismatch` is true for backlog cards with completed steps; computation
 never changes phase.
-`possibly_moot` is `{flagged, reason, sources}`: a backlog or ready card — or an
-open inbox ask over its `subject_ref` and `related_refs` — is flagged when at
-least one linked source is known and every known linked source has reached a
-terminal state (done, cancelled, closed, merged, published, resolved), with PR
-URLs resolved through the ingested observation evidence, never a read-time
-fetch. Context-only refs (documents, topics, boards) and refs that resolve to
-nothing visible are excluded rather than blocking; `sources` counts the
-evaluated set and zero never flags. The flag only carries evidence ("all 2
+`possibly_moot` is `{flagged, reason, sources}`: only sources ANX has actually
+observed count as terminal — a done card, or a PR observed merged or closed
+through the observation cache. A backlog or ready card — or an open inbox ask
+over its `subject_ref` and `related_refs` — is flagged when at least one linked
+source is known and every linked source has reached a terminal state (done,
+cancelled, closed, merged, published, resolved), with PR URLs resolved through
+the ingested observation evidence, never a read-time fetch. Context-only refs
+(documents, topics, boards, threads) neither contribute nor block; any other
+ref that is unresolved, invisible to the reader, or of unknown workflow state
+withholds the flag entirely — an unobserved source never counts as terminal.
+`sources` counts the known sources and zero never flags. The flag only carries evidence ("all 2
 linked sources are merged"); it never auto-closes anything, and computation
 never changes phase.
 `plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, `dark` (unnamed there) to on_track, other detailed states to on_track. New clients read `plan_health.state`.

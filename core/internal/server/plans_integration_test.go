@@ -230,8 +230,11 @@ func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
 	if moot["flagged"] != true || moot["sources"] != float64(2) || anyString(moot["reason"]) == "" {
 		t.Fatal("plan response lost the moot flag", put)
 	}
-	if put["plan_health"].(map[string]any)["state"] != "dark" {
-		t.Fatal("a decision card with no dated signal must read dark", put)
+	// The decision card is parked in Ready: dark is for active work, so the
+	// card stays on_track even with nothing dated — the moot flag is what
+	// speaks up here.
+	if put["plan_health"].(map[string]any)["state"] != "on_track" {
+		t.Fatal("a ready decision card must not read dark", put)
 	}
 	read := workGetJSON(t, h.baseURL+"/work/"+anyString(decision["ref"]), 200)["work"].(map[string]any)
 	if read["possibly_moot"].(map[string]any)["flagged"] != true {
@@ -254,11 +257,25 @@ func TestDarkHealthAndPossiblyMootEndToEnd(t *testing.T) {
 	if openMoot["flagged"] != false || openMoot["sources"] != float64(2) {
 		t.Fatal("an open linked source must block the flag", openMoot)
 	}
+	// Rule (b): one observed-merged PR and one URL ANX has never observed —
+	// the merged observation cannot speak for the unobserved source, so the
+	// card is not flagged and the evidence names nothing.
+	half := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Half observed","phase":"ready"}`, 201)["work"].(map[string]any)
+	halfEndpoint := h.baseURL + "/cards/" + anyString(half["ref"]) + "/plan"
+	halfBefore := workGetJSON(t, halfEndpoint, 200)
+	halfPut := planRequest(t, "PUT", halfEndpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": halfBefore["if_updated_at"], "plan": map[string]any{"steps": []any{
+		map[string]any{"id": "seen", "title": "Observed PR", "ref": "https://github.com/example/repo/pull/123"},
+		map[string]any{"id": "unseen", "title": "Unobserved PR", "ref": "https://github.com/example/repo/other/pull/999"},
+	}}}, 200)
+	halfMoot := halfPut["possibly_moot"].(map[string]any)
+	if halfMoot["flagged"] != false || halfMoot["sources"] != float64(0) || anyString(halfMoot["reason"]) != "" {
+		t.Fatal("an unobserved source must withhold the flag entirely", halfMoot)
+	}
 
-	// Dark sequencing on a fresh card: nothing dated reads dark with no anchor,
-	// a far wake date supplies the anchor, a near due leaves the dark state,
-	// and a per-card horizon re-darkens it.
-	quiet := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Quiet initiative"}`, 201)["work"].(map[string]any)
+	// Dark sequencing on a fresh active card: nothing dated reads dark with no
+	// anchor, a far wake date supplies the anchor, a near due leaves the dark
+	// state, and a per-card horizon re-darkens it.
+	quiet := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Quiet initiative","phase":"in_progress"}`, 201)["work"].(map[string]any)
 	quietEndpoint := h.baseURL + "/cards/" + anyString(quiet["ref"]) + "/plan"
 	quietBefore := workGetJSON(t, quietEndpoint, 200)
 	planRequest(t, "PUT", quietEndpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": quietBefore["if_updated_at"], "plan": map[string]any{"steps": []any{
@@ -336,6 +353,9 @@ func TestInboxOpenAskCarriesPossiblyMoot(t *testing.T) {
 		{"kind": "ask", "status": "open", "subject_ref": anyString(doneSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/pull/123"}},
 		{"kind": "ask", "status": "open", "subject_ref": anyString(openSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/pull/123"}},
 		{"kind": "ask", "status": "answered", "subject_ref": anyString(doneSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/pull/123"}},
+		// Rule (b): the observed-merged PR cannot speak for a URL this
+		// workspace never observed, so the ask gets no flag at all.
+		{"kind": "ask", "status": "open", "subject_ref": anyString(doneSubject["ref"]), "related_refs": []any{"https://github.com/example/repo/other/pull/999"}},
 	}
 	if err = enrichInboxCardSummaries(req, handlerOptions{primitiveStore: s}, items); err != nil {
 		t.Fatal(err)
@@ -351,5 +371,8 @@ func TestInboxOpenAskCarriesPossiblyMoot(t *testing.T) {
 	// Answered asks are not evaluated, so they carry no flag at all.
 	if _, evaluated := items[2]["possibly_moot"]; evaluated {
 		t.Fatalf("answered asks must not carry the flag: %+v", items[2])
+	}
+	if _, evaluated := items[3]["possibly_moot"]; evaluated {
+		t.Fatalf("an unobserved source must withhold the flag entirely: %+v", items[3])
 	}
 }
