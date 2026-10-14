@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -269,5 +270,67 @@ func TestWorkSummaryAliasesShareAttentionAndSourceClearing(t *testing.T) {
 	}
 	if previews[0].Summary.Owner != "" || previews[0].Summary.SetStatus != nil || previews[0].Summary.Source["native_status"] != nil {
 		t.Fatalf("cleared source fields resurrected: %+v", previews[0].Summary)
+	}
+}
+
+func TestWorkSummaryRelatedAskWaitDeduplicatesAndCloses(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	w, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Wait"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	ref := workString(w["ref"])
+	thread := workString(w["thread_id"])
+	items := []DerivedInboxItem{}
+	for i, age := range []time.Duration{47 * 24 * time.Hour, time.Hour} {
+		id := fmt.Sprint("wait-", i)
+		data := map[string]any{"kind": "ask", "related_refs": []string{ref, "card:" + workString(w["id"]), ref}}
+		if i == 1 {
+			data["subject_ref"] = ref
+		}
+		items = append(items, DerivedInboxItem{ID: id, ThreadID: thread, Category: "ask", TriggerAt: now.Add(-age).Format(time.RFC3339Nano), GeneratedAt: now.Format(time.RFC3339Nano), SourceHash: id, Data: data})
+	}
+	if err = s.ReplaceDerivedInboxItems(ctx, thread, items); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		done, e := ws.MaintainScopeInboxBatch(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if done {
+			break
+		}
+	}
+	read := func() *SummaryAttention {
+		rows, e := s.ResolveRefs(ctx, []string{ref}, nil, now, 0)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return rows[0].Summary.Attention
+	}
+	a := read()
+	if a == nil || a.Count != 2 || a.OldestAge != 47*86400 {
+		t.Fatalf("attention=%+v", a)
+	}
+	if err = s.ReplaceDerivedInboxItems(ctx, thread, items[1:]); err != nil {
+		t.Fatal(err)
+	}
+	a = read()
+	if a == nil || a.Count != 1 || a.OldestAge != 3600 {
+		t.Fatal(a)
+	}
+	if err = s.ReplaceDerivedInboxItems(ctx, thread, nil); err != nil {
+		t.Fatal(err)
+	}
+	if a = read(); a != nil {
+		t.Fatal("closed asks retained", a)
 	}
 }

@@ -1070,6 +1070,7 @@ var migrations = []migration{
 		ON human_attention_batch_response_claims(inbox_item_id)`},
 	},
 	{Version: 88, AfterApply: installTopicWorkspacePageIndexes},
+	{Version: 89, AfterApply: upgradeWorkSummaryAskLinks},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

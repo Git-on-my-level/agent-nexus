@@ -209,3 +209,33 @@ func TestPlanSetAndBatchResolve(t *testing.T) {
 		t.Fatal("incorrect side effect classification")
 	}
 }
+
+func TestSeriesRefResolvePreservesMetricOutput(t *testing.T) {
+	ref := "series:cost?loop=test&_baseline=100"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ Refs []string }
+		json.NewDecoder(r.Body).Decode(&request)
+		if len(request.Refs) != 1 || request.Refs[0] != ref {
+			t.Fatal(request)
+		}
+		io.WriteString(w, `{"items":[{"ref":"series:cost?loop=test&_baseline=100","resolvable":true,"kind":"series","metric":{"name":"cost","latest":{"value":80},"baseline":{"value":100},"change":-20,"status":"ok","observed_at":"2026-10-14T00:00:00Z"}}]}`)
+	}))
+	defer server.Close()
+	for _, jsonMode := range []bool{false, true} {
+		args := []string{"--base-url", server.URL, "refs", "resolve", ref}
+		if jsonMode {
+			args = append([]string{"--json"}, args...)
+		}
+		raw := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture-token"}, nil, args)
+		if jsonMode {
+			assertEnvelopeOK(t, raw)
+			if !strings.Contains(raw, `"change": -20`) && !strings.Contains(raw, `"change":-20`) {
+				t.Fatal(raw)
+			}
+		} else {
+			if !strings.Contains(raw, "metric.change=-20") || !strings.Contains(raw, "metric.latest.value=80") {
+				t.Fatal(raw)
+			}
+		}
+	}
+}

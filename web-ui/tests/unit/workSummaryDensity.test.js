@@ -268,3 +268,40 @@ describe("parts core omitted are not invented", () => {
     );
   });
 });
+
+it.each(["row", "card", "header"])(
+  "%s shows oldest waiting age and metric baseline",
+  (density) => {
+    const el = at(density, {
+      work_summary: {
+        ...row.work_summary,
+        attention: {
+          count: 10,
+          oldest_age: 47 * 86400,
+          oldest_at: ago(47 * 86400000),
+        },
+        metrics: [
+          {
+            ref: "series:cost",
+            name: "cost",
+            unit: "USD",
+            status: "stale",
+            latest: { value: 80 },
+            baseline: { value: 100 },
+            change: -20,
+            observed_at: ago(3600000),
+            stale: true,
+          },
+        ],
+      },
+    });
+    expect(el.querySelector("[data-summary-attention]").textContent).toContain(
+      "waiting on you 47d",
+    );
+    const metric = el.querySelector("[data-summary-metric]").textContent;
+    expect(metric).toContain("80 USD");
+    expect(metric).toContain("vs 100");
+    expect(metric).toContain("(-20)");
+    expect(metric).toContain("stale");
+  },
+);

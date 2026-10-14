@@ -23,7 +23,7 @@ func planHelpText(topic string) (string, bool) {
 		return "", false
 	}
 	if strings.HasPrefix(topic, "refs") {
-		return "anx refs resolve <ref>... | --from-file <path|-> (JSON {refs:[]}); at most 200 refs, preserving unknown entries.\n", true
+		return "anx refs resolve <ref>... | --from-file <path|-> (JSON {refs:[]}); at most 200 refs, preserving unknown entries. Series refs accept URL-encoded labels, _range (default 30d, max 90d) and _baseline; resolved metric includes latest, baseline, change and freshness.\n", true
 	}
 	usage := map[string]string{
 		"plan show":        "anx plan show <card>",

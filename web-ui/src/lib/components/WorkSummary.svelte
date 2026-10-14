@@ -114,6 +114,23 @@
   );
   // Core samples the viewer's open asks; a capped window is a lower bound and
   // has to read as one rather than as an exact count.
+  let attentionWaitingLabel = $derived.by(() => {
+    if (!attention) return "";
+    const at =
+      attention.oldestAt ||
+      (attention.oldestAge == null
+        ? ""
+        : new Date(now - attention.oldestAge * 1000).toISOString());
+    const elapsed = at ? now - Date.parse(at) : NaN;
+    const age =
+      elapsed >= 86400000
+        ? `${Math.floor(elapsed / 86400000)}d`
+        : at
+          ? formatAge(at, now)
+          : "";
+    return `waiting on you${age ? ` ${age}` : ""}`;
+  });
+
   let attentionTitle = $derived.by(() => {
     if (!attention) return "";
     /*
@@ -127,7 +144,7 @@
       (attention.oldestAge == null
         ? ""
         : new Date(now - attention.oldestAge * 1000).toISOString());
-    const oldest = firedAt ? `oldest ${formatAge(firedAt, now)}` : "";
+    const oldest = firedAt ? attentionWaitingLabel : "";
     const bound = attention.truncated || summary?.attentionTruncated;
     return [
       `${attention.count}${bound ? " or more" : ""} open ${attention.count === 1 ? "ask" : "asks"} for you`,
@@ -363,6 +380,32 @@
       {/if}
     {/if}
 
+    {#if summary?.metrics?.length}
+      <span class="summary__foot" data-summary-metrics>
+        {#each summary.metrics as metric (metric.ref)}
+          <span
+            data-summary-metric={metric.ref}
+            title={metric.observed_at ? `Observed ${metric.observed_at}` : ""}
+          >
+            {metric.name}: {metric.latest?.state ??
+              metric.latest?.value ??
+              metric.status}{metric.unit ? ` ${metric.unit}` : ""}
+            {#if metric.baseline}
+              <span>vs {metric.baseline.state ?? metric.baseline.value}</span>
+              {#if metric.change != null}<span
+                  >({metric.change > 0 ? "+" : ""}{metric.change})</span
+                >{/if}
+            {/if}
+            {#if metric.observed_at}<span
+                >· {formatAge(metric.observed_at, now)}</span
+              >{/if}
+            {#if metric.stale}<span>· stale</span>{/if}
+          </span>
+        {/each}
+        {#if summary.metricsTruncated}<span>More metrics omitted</span>{/if}
+      </span>
+    {/if}
+
     {#if ownerLabel || placeLabel || summary?.due || attention}
       <span class="summary__foot" data-summary-foot>
         {#if ownerLabel}<span class="summary__owner" data-summary-owner
@@ -386,7 +429,8 @@
             class="ui-badge ui-badge--warn summary__badge"
             data-summary-attention={attention.count}
             aria-label={attentionTitle}
-            use:tooltip={attentionTitle}>{attention.label}</span
+            use:tooltip={attentionTitle}
+            >{attention.label} · {attentionWaitingLabel}</span
           >
         {/if}
       </span>

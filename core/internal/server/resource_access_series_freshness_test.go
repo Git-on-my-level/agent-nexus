@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,15 @@ func TestResourceAccessSeriesFreshnessAndReportProvenance(t *testing.T) {
 			}
 		}
 		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: reader.actor})
+		previews, e := s.ResolveRefs(scope, []string{"series:sibling?ref=" + url.QueryEscape(anyString(card["ref"]))}, nil, time.Now().UTC(), 0)
+		if e != nil {
+			t.Fatal(e)
+		}
+		b, _ := json.Marshal(previews)
+		if has := strings.Contains(string(b), `"value":9`); has != reader.owner {
+			t.Fatalf("series ref disclosure for %s: %s", reader.actor, b)
+		}
+
 		rr := reportReader{r: httptest.NewRequest("GET", "/report", nil).WithContext(scope), opts: handlerOptions{seriesStore: &series.Store{DB: env.workspace.DB(), Auth: env.authStore}}, now: time.Now().UTC()}
 		panel := rr.materializeSeries(reports.Panel{ID: "public", Type: "metric", Source: &reports.SeriesSource{Series: "prs", Range: "1h"}})
 		body, _ := json.Marshal(panel)

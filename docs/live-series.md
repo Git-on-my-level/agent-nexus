@@ -150,3 +150,57 @@ with their original "as of" time. Stale data never becomes a current snapshot.
 Metrics require an exact single label set; use strips, charts or tables for
 several groups. Wide panels declare when the displayed data is truncated.
 Examples and schedule snippets are in `adapters/series/`.
+
+## Card metrics and series refs
+
+Link any card to a pushed metric using `series:<name>` in its `refs`,
+`related_refs`, or a plan step's `ref`. For example:
+
+```sh
+anx work get card:reduce-cost
+anx work patch card:reduce-cost --from-file card-metrics.json
+anx refs resolve 'series:cost.total?service=worker&_range=30d&_baseline=100'
+```
+
+Copy the returned `version` into `card-metrics.json` as `if_version`, for example:
+
+```json
+{
+  "if_version": 1,
+  "related_refs": ["series:cost.total?service=worker&_range=30d&_baseline=100"]
+}
+```
+
+Query keys are URL-encoded label selectors (AND, exact values). `_range` is a
+positive Go duration or whole-day duration, from one second to 90 days; it
+defaults to 30 days. `_baseline` is an optional finite numeric value. Without
+it, the first exact observation in range is the baseline. The latest exact
+observation in that same range supplies the current value and freshness.
+Numeric change is latest minus baseline; percentage change divides by the
+absolute baseline and is omitted for zero. State series compare first and
+latest state without numeric change; a numeric baseline on a state series
+makes that metric unavailable. Multiple matching label sets are ambiguous and
+expose no value; add selectors to identify one stream. No observations means
+unavailable. Malformed stored refs remain unresolved and do not break cards.
+
+`anx refs resolve` returns `metric` with latest, baseline, change, observation
+age and stale state. Card reads using `summary=1` return these in
+`work_summary.metrics`, capped at eight metrics per card and 200 distinct refs
+per enrichment page; `metrics_truncated` marks omitted metrics. Task rows and
+task pages show the same computed metric. Visibility uses the existing scoped
+series/report read policy, including contributor provenance after compaction.
+
+## Waiting for a person
+
+Card summaries include `attention.count`, `oldest_at` and `oldest_age` (seconds)
+for open asks directed to the reader or broadcast. Both an ask's `subject_ref`
+and its `related_refs` link it to cards; duplicates count once per card. Task
+rows and pages show “waiting on you 47d” from the oldest visible ask, even when
+the card has recent activity. This is independent of subject inactivity
+staleness. Overview's needs-you rows carry `waiting_since` and sort oldest
+wait first, with undated rows last.
+
+Attention retains the bounded oldest-first sample: counts are lower bounds
+when truncated, and scoped readers always receive `attention_truncated` to
+avoid revealing private candidates. Historical related-ref links backfill in
+bounded maintenance chunks; reads never scan or repair inbox history.

@@ -673,3 +673,31 @@ lease cannot hide outside p95. Overlap uses those gates rather than fixed sleeps
 or a random backoff window. The scale tests use the shared canonical synthetic
 corpus with real ownership/reference indexes and report physical file bytes,
 pre-serving duration, certification time, background writes and answer maximum.
+
+## Card metric references and waiting ages
+
+Series metric enrichment admits eight refs per card and 200 distinct refs per
+page. One scoped SQL query uses `json_each` of the admitted refs, primary-key
+lookups on `series_definitions(name)` and `series_adapters(name)`, at most 100
+registered label sets per ref through `series_labels(series,labels)`, and two
+endpoint seeks per matching stream through
+`series_points(series,labels,ts)`. It admits at most two matching streams to
+recognize ambiguity; no history aggregates or per-ref statements. Ranges cap
+at raw retention (90 days) so first/latest points are exact. Plan fact batches
+use definition primary-key lookups without observation hydration.
+
+Ask links use `work_summary_asks(subject_ref,recipient_actor_id,trigger_at,inbox_id)`
+with at most eleven candidates per card identity and audience, joined back to
+the scoped `derived_inbox_items` primary key. Related refs are indexed at write
+time; the read checks only each bounded candidate's refs. Migration 89 changes
+triggers and resets the existing 64-row maintenance cursor, with no startup
+history scan. Sorting needs-you rows costs O(page log page) over existing rows
+and adds no query.
+
+Verify the metric endpoint budget (100 streams, 10,000 observations, four refs;
+one query, four result rows, at most 20,000 VM steps and indexed point seeks):
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series \
+  -run '^TestPerformanceSeriesRefEndpointBudget$' -count=1 -v
+```

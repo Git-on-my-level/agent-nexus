@@ -10214,6 +10214,32 @@ components:
       items: { $ref: '#/components/schemas/SourceRef' }
       description: Generic source evidence stored in card-backed work annotations. Write via work.create or work.patch with if_version. Full list replacement; omission preserves and [] clears. Identities authority/connection_id/native_id must be unique.
 
+    SeriesMetric:
+      type: object
+      required: [ref, name, kind, unit, status]
+      properties:
+        ref: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [gauge, counter, state]}
+        unit: {type: string}
+        status: {type: string, enum: [ok, stale, unavailable, ambiguous]}
+        labels: {type: object, additionalProperties: {type: string}}
+        latest: {$ref: '#/components/schemas/SeriesObservation'}
+        baseline: {$ref: '#/components/schemas/SeriesObservation'}
+        baseline_source: {type: string, enum: [first_in_range, declared]}
+        change: {type: number, description: Latest minus baseline for numeric series.}
+        change_percent: {type: number, description: 100 * change / absolute baseline; omitted for zero baseline.}
+        changed: {type: boolean, description: State or numeric values differ.}
+        observed_at: {type: string, format: date-time}
+        age: {type: integer, minimum: 0}
+        stale: {type: boolean}
+    SeriesObservation:
+      type: object
+      properties:
+        ts: {type: string, format: date-time}
+        value: {type: number}
+        state: {type: string}
+
     WorkSummary:
       type: object
       description: Computed card presentation, independent of board role. Planless cards use workflow phase with blocked, overdue (at_risk), or inactivity (stale) overrides; no_plan is a hint and never a status. Planned cards retain plan health. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
@@ -10262,6 +10288,11 @@ components:
         source: {$ref: '#/components/schemas/WorkSource'}
         steps: {$ref: '#/components/schemas/PlanStepDigest'}
         resolution_truncated: {type: boolean, description: Linked plan or child facts exceeded the bounded ref budget.}
+        metrics:
+          type: array
+          maxItems: 8
+          items: {$ref: '#/components/schemas/SeriesMetric'}
+        metrics_truncated: {type: boolean}
         attention:
           type: object
           required: [count, oldest_age]
@@ -11140,6 +11171,7 @@ components:
       type: object
       required: [ref, resolvable]
       properties:
+        metric: {$ref: '#/components/schemas/SeriesMetric'}
         summary: {$ref: '#/components/schemas/WorkSummary'}
         ref: {type: string}
         resolvable: {type: boolean}
@@ -13241,6 +13273,7 @@ components:
       required: [id, title, source, href]
       additionalProperties: true
       properties:
+        waiting_since: {type: string, format: date-time, description: Oldest visible waiting anchor; rows sort oldest first with undated rows last.}
         id: { type: string }
         title: { type: string }
         source: { type: string }

@@ -773,6 +773,8 @@ function fromComputed(raw, row, { now }) {
           ? raw.hints
           : ["no_plan"],
       ),
+      metrics: Array.isArray(raw.metrics) ? raw.metrics.slice(0, 8) : [],
+      metricsTruncated: raw.metrics_truncated === true,
       attention: attentionPart(raw.attention),
       attentionTruncated: raw.attention_truncated === true,
       resolutionTruncated: raw.resolution_truncated === true,

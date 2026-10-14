@@ -58,7 +58,7 @@ func (s *Store) enrichSummaryAttention(ctx context.Context, inputs map[string]ca
  ) SELECT candidate.card_id,candidate.inbox_id,i.trigger_at FROM candidates candidate
  LEFT JOIN derived_inbox_items i ON i.id=candidate.inbox_id
  AND COALESCE(json_extract(i.data_json,'$.kind'),i.category)='ask'
- AND COALESCE(json_extract(i.data_json,'$.subject_ref'),'')=candidate.subject_ref
+ AND (COALESCE(json_extract(i.data_json,'$.subject_ref'),'')=candidate.subject_ref OR EXISTS (SELECT 1 FROM json_each(i.data_json,'$.related_refs') WHERE value=candidate.subject_ref))
  AND COALESCE(json_extract(i.data_json,'$.recipient_actor_id'),'')=candidate.recipient`, string(raw), workJSONList(audiences))
 		if err != nil {
 			return err
