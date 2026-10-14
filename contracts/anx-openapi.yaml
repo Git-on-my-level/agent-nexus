@@ -5046,6 +5046,35 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /brief:
+    get:
+      operationId: getBrief
+      summary: Read the caller's brief.v1 for this workspace
+      description: >
+        Decisions waiting on the caller, initiatives against their promises, the caller's own open
+        asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: brief.get
+      x-anx-agent-notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
+      x-anx-cli-path: brief
+      x-anx-why: One brief for the human surfaces and the agent orient loop.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns the bare brief.v1 object."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [home, inbox, cards]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: The caller's brief.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brief'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /overview:
     get:
       operationId: getOverview
@@ -13173,6 +13202,114 @@ components:
             status: { type: string, enum: [ok, unavailable] }
             message: { type: string }
             items: { type: array, items: { type: object, additionalProperties: true } }
+    Brief:
+      type: object
+      required: [schema, generated_at, principal, decisions, initiatives, your_asks, answered_for_you, truncated]
+      description: brief.v1. See anx-schema.yaml `brief` and `promises` for ordering and derivation rules.
+      properties:
+        schema: { type: string, enum: [brief.v1] }
+        generated_at: { type: string, format: date-time }
+        principal: { $ref: '#/components/schemas/BriefPrincipal' }
+        decisions: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
+        initiatives: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefInitiative' } }
+        your_asks: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
+        answered_for_you: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefAnswered' } }
+        truncated:
+          type: object
+          required: [decisions, initiatives, your_asks, answered_for_you]
+          properties:
+            decisions: { type: boolean }
+            initiatives: { type: boolean }
+            your_asks: { type: boolean }
+            answered_for_you: { type: boolean }
+    BriefPrincipal:
+      type: object
+      required: [id, display]
+      properties:
+        id: { type: string }
+        display: { type: string }
+        kind: { type: string, enum: [human, agent, service] }
+    BriefRefTitle:
+      type: object
+      required: [ref]
+      properties:
+        ref: { type: string }
+        title: { type: string }
+    BriefDecision:
+      type: object
+      required: [ref, inbox_item_id, kind, title, requested_by, created_at, age_seconds, decide_by, overdue_for_seconds, blocks, blocks_count, proposals]
+      properties:
+        ref: { type: string, description: "inbox:<id>" }
+        inbox_item_id: { type: string }
+        kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
+        title: { type: string }
+        body: { type: string }
+        requested_by: { $ref: '#/components/schemas/BriefPrincipal' }
+        subject: { $ref: '#/components/schemas/BriefRefTitle' }
+        created_at: { type: string, format: date-time }
+        age_seconds: { type: integer }
+        decide_by: { type: string, format: date-time, nullable: true }
+        overdue_for_seconds: { type: integer, nullable: true, description: "now - decide_by when positive, 0 before decide_by, null without decide_by." }
+        blocks: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/BriefRefTitle' }, description: Open blocked refs the reader can see. Terminal refs clear automatically. }
+        blocks_count: { type: integer }
+        priority: { type: string }
+        proposals: { type: array, maxItems: 6, items: { type: string }, description: First is the recommended response. }
+    BriefPromise:
+      type: object
+      required: [at, what, source]
+      properties:
+        at: { type: string, format: date-time }
+        what: { type: string, maxLength: 160 }
+        source: { type: string, enum: [note, plan_step, due_at, wake_condition] }
+        source_ref: { type: string }
+        author: { $ref: '#/components/schemas/BriefPrincipal' }
+    BriefNote:
+      type: object
+      required: [text, author, at]
+      properties:
+        text: { type: string }
+        author: { $ref: '#/components/schemas/BriefPrincipal' }
+        at: { type: string, format: date-time }
+    BriefInitiative:
+      type: object
+      required: [ref, title, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot]
+      properties:
+        ref: { type: string, description: "card:<handle-or-id>" }
+        title: { type: string }
+        state: { type: string, enum: [past_promise, moving, no_promise, done] }
+        placement: { type: string, enum: [backlog, ready, in_progress, review, done] }
+        promise: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefPromise' }] }
+        past_promise_for_seconds: { type: integer, nullable: true }
+        promise_moves: { type: integer }
+        last_evidence_at: { type: string, format: date-time, nullable: true }
+        progress:
+          type: object
+          nullable: true
+          required: [done, total]
+          properties:
+            done: { type: integer }
+            total: { type: integer }
+        blocked_count: { type: integer, description: Open asks and blocks refs holding this initiative. }
+        waiting_on_you_count: { type: integer, description: Open decisions addressed to the reader about this initiative. }
+        note: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefNote' }] }
+        possibly_moot:
+          type: object
+          required: [flagged]
+          properties:
+            flagged: { type: boolean }
+            reason: { type: string }
+    BriefAnswered:
+      type: object
+      required: [ref, inbox_item_id, title, answer, answered_at, answered_by, followed_recommendation]
+      properties:
+        ref: { type: string }
+        inbox_item_id: { type: string }
+        title: { type: string }
+        answer: { type: string }
+        outcome: { type: string }
+        answered_at: { type: string, format: date-time }
+        answered_by: { $ref: '#/components/schemas/BriefPrincipal' }
+        followed_recommendation: { type: boolean }
     OverviewBrief:
       type: object
       required: [status, generated_at, decisions, since_last_look, at_risk, machine, initiatives]

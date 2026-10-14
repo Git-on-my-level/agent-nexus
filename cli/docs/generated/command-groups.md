@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `33`
+- Groups: `34`
 
 ## `topics`
 
@@ -143,6 +143,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `boards.trash` (`boards trash`)
   - `boards.unarchive` (`boards unarchive`)
   - `boards.workspace` (`boards workspace`)
+
+## `brief`
+
+- Commands: `1`
+- Command IDs:
+  - `brief.get` (`brief`)
 
 ## `cards`
 

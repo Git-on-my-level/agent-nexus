@@ -2117,6 +2117,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
+	registerRoute("/brief", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetBriefV1(w, r, opts) })
 	registerRoute("/overview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetOverview(w, r, opts) })
 	registerRoute("/overview/changes", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleOverviewChanges(w, r, opts) })
 	registerRoute("/workspace/dashboard/reports", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleListWorkspaceDashboardReports(w, r, opts) })

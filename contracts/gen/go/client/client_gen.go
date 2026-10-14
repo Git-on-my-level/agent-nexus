@@ -839,6 +839,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"boards.archive", "boards.cards.batch_add", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.trash", "boards.unarchive"},
 	},
 	{
+		CommandID: "brief.get",
+		CLIPath:   "brief",
+		Group:     "brief",
+		Method:    "GET",
+		Path:      "/brief",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"home", "inbox", "cards"},
+	},
+	{
 		CommandID:  "cards.archive",
 		CLIPath:    "cards archive",
 		Group:      "cards",
@@ -3181,6 +3191,10 @@ func (c *Client) BoardsUnarchive(ctx context.Context, pathParams map[string]stri
 
 func (c *Client) BoardsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "boards.workspace", pathParams, opts)
+}
+
+func (c *Client) BriefGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "brief.get", nil, opts)
 }
 
 func (c *Client) CardsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

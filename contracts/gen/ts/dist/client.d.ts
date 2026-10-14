@@ -125,6 +125,7 @@ export declare class AnxClient {
     boardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    briefGet(options?: RequestOptions): Promise<InvokeResult>;
     cardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsCreate(options?: RequestOptions): Promise<InvokeResult>;
     cardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
