@@ -35,6 +35,8 @@
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import InfoTip from "$lib/components/InfoTip.svelte";
   import DecisionCard from "$lib/components/decide/DecisionCard.svelte";
+  import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
+  import { undoInboxResponse } from "$lib/inboxResponseQueue.js";
   import { briefStore, mountBrief } from "$lib/briefStore.js";
   import {
     decisionsForInitiative,
@@ -1466,15 +1468,6 @@
               </p>
             {/if}
           </section>
-          <section>
-            <h2 class="ui-label">Inbox</h2>
-            <a
-              class="mt-2 inline-block text-accent-text hover:underline"
-              href={workspaceHref(
-                `/inbox?mailbox=watching&work_ref=${encodeURIComponent(work.ref || workId)}`,
-              )}>Inbox for this initiative →</a
-            >
-          </section>
         {/if}
       </aside>
     </div>
@@ -1482,3 +1475,5 @@
 </WorkspacePageShell>
 <!-- One preview layer for every chip on the page. -->
 <AnxRefPreview bind:this={refPreview} />
+<!-- Answers from Open decisions wait here for Undo before they send. -->
+<InboxUndoToast onUndo={() => undoInboxResponse()} />

@@ -39,10 +39,22 @@
     now = Date.now(),
     focused = false,
     onAnswered = undefined,
+    /**
+     * For an account-level page answering a row from another workspace: that
+     * row's slugs (links) and a response binding (`{ send, scope, identity }`,
+     * as `captureInboxResponseBinding()` returns) that sends to it. Default:
+     * the workspace in the route.
+     */
+    organizationSlug = "",
+    workspaceSlug = "",
+    binding = null,
   } = $props();
 
   let href = $derived(
-    bindWorkspaceHref($page.params.organization, $page.params.workspace),
+    bindWorkspaceHref(
+      organizationSlug || $page.params.organization,
+      workspaceSlug || $page.params.workspace,
+    ),
   );
   let itemId = $derived(decision.inboxItemId);
   let draftKey = $derived(`inbox:${itemId}:reply`);
@@ -98,7 +110,7 @@
     queueInboxResponse({
       itemId,
       item: { id: itemId, kind: decision.kind, title: decision.title },
-      binding: captureInboxResponseBinding(),
+      binding: binding ?? captureInboxResponseBinding(),
       request: { response_text: body, outcome, notify_mode: "original" },
       message: who ? `Sent to ${who}` : "Answer sent",
       restore: { origin: "decide", reply, chosen: body },

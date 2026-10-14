@@ -123,7 +123,7 @@
     if (
       !isNexusOwned(work) &&
       !window.confirm(
-        `Ask the PM to request moving “${row.title}”? You approve the request in Inbox.`,
+        `Ask the PM to request moving “${row.title}”? You approve the request in Decide.`,
       )
     )
       return;

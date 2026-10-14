@@ -671,7 +671,7 @@
     if (!isNexusOwned(work) && !draft.approved) {
       if (
         !window.confirm(
-          `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${sourceLabel(work.source)}? You approve the request in Inbox.`,
+          `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${sourceLabel(work.source)}? You approve the request in Decide.`,
         )
       )
         return;
@@ -820,9 +820,9 @@
                     },
             }
           : {
-              text: `Move request confirmed. Review it in Inbox.${entry.result.decision.supersedes ? " This replaced an earlier proposal for this initiative." : ""}`,
+              text: `Move request confirmed. Review it in Decide.${entry.result.decision.supersedes ? " This replaced an earlier proposal for this initiative." : ""}`,
               href: workspaceHref(
-                `/inbox?item=decision:${encodeURIComponent(entry.result.decision.id)}`,
+                "/decide",
               ),
             },
         { pointer: entry.draft.pointer },
@@ -949,7 +949,7 @@
     ["Move focused initiative to the previous or next placement", ["←", "→"]],
     ["Placement view", ["B"]],
     ["Table view", ["T"]],
-    ["Go to Overview, Inbox, Agents, Initiatives or Docs", ["G", "O I A T D"]],
+    ["Go to Decide, Watch, Initiatives or Ask", ["G", "D W I A"]],
     ["Commands and search", [formatShortcut("K")]],
     ["Shortcut help", ["?"]],
     ["Close this help", ["Esc"]],
@@ -1309,7 +1309,7 @@
       {/if}
       {#if moveNotice.href}
         <a class="ui-prose-link text-micro" href={moveNotice.href}
-          >{moveNotice.hrefLabel || "Open in Inbox"}</a
+          >{moveNotice.hrefLabel || "Open in Decide"}</a
         >
       {/if}
       <button

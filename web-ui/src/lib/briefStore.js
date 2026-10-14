@@ -34,6 +34,10 @@ function create(scope) {
 export function briefStore() {
   const scope = readerScopeKey();
   if (!instance || instanceScope !== scope) {
+    // A reader switch drops the old reader's live subscription with it.
+    unmount?.();
+    unmount = null;
+    mounts = 0;
     instance?.destroy();
     instance = create(scope);
     instanceScope = scope;
@@ -41,28 +45,50 @@ export function briefStore() {
   return instance;
 }
 
+let mounts = 0;
+let unmount = null;
+
 /**
  * Mount the brief on a screen: refresh now, on reconnect and visibility, and
- * when an ask or work event lands. Returns the cleanup.
+ * when an ask or work event lands. Mounts are counted, so the nav badge and
+ * the page share one live subscription. Returns the cleanup.
  */
 export function mountBrief() {
   const store = briefStore();
-  // Answers persisted before a reload or crash resume sending from here.
-  void recoverInboxResponses().catch(() => {});
-  return store.mount({
-    connect: (refresh) => {
-      const stopInbox = liveInboxChanges({ client: coreClient, onChange: refresh });
-      const stopEvents = liveWorkspaceEvents({
-        client: coreClient,
-        onChange: refresh,
-        debounceMs: 800,
-      });
-      return () => {
-        stopInbox();
-        stopEvents();
-      };
-    },
-  });
+  mounts += 1;
+  if (mounts === 1) {
+    // Answers persisted before a reload or crash resume sending from here.
+    void recoverInboxResponses().catch(() => {});
+    unmount = store.mount({
+      connect: (refresh) => {
+        const stopInbox = liveInboxChanges({
+          client: coreClient,
+          onChange: refresh,
+        });
+        const stopEvents = liveWorkspaceEvents({
+          client: coreClient,
+          onChange: refresh,
+          debounceMs: 800,
+        });
+        return () => {
+          stopInbox();
+          stopEvents();
+        };
+      },
+    });
+  } else {
+    void store.refresh({ force: false });
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    mounts -= 1;
+    if (mounts === 0) {
+      unmount?.();
+      unmount = null;
+    }
+  };
 }
 
 /** Force a refresh, for a confirmed mutation. */

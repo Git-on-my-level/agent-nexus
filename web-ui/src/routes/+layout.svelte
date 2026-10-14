@@ -69,7 +69,7 @@
     devActorModeReady,
   } from "$lib/workspaceContext";
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
-  import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
+  import DecideNavCount from "$lib/components/decide/DecideNavCount.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import AccessNavCount from "$lib/components/access/AccessNavCount.svelte";
   import {
@@ -1274,7 +1274,7 @@
                   {/if}
                 </span>
                 {#if item.count === "decide-waiting"}
-                  <InboxNavCount
+                  <DecideNavCount
                     workspace={activeWorkspaceSlug}
                     enabled={identityReady &&
                       !workspaceBootstrapPending &&
@@ -1603,7 +1603,7 @@
           </svg>
           <span class="shell-bottom-nav-label">{item.label}</span>
           {#if item.count === "decide-waiting"}
-            <InboxNavCount
+            <DecideNavCount
               workspace={activeWorkspaceSlug}
               enabled={identityReady &&
                 !workspaceBootstrapPending &&

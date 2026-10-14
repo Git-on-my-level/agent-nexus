@@ -458,7 +458,7 @@
                     {/if}
                     <a
                       class="text-micro font-medium text-accent-text hover:underline"
-                      href={workspaceHref(entry.href)}>Answer in Inbox</a
+                      href={workspaceHref(entry.href)}>Answer in Decide</a
                     >
                   </div>
                 </li>

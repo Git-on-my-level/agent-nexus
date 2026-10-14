@@ -109,7 +109,7 @@
             class="inline-flex rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-accent"
             href={requestedHref}
             draggable="false"
-            aria-label="Answer this request in Inbox"
+            aria-label="Answer this request in Decide"
             ondragstart={(event) => event.preventDefault()}
           >
             <SignalBadge tone="warn">Requested</SignalBadge>
