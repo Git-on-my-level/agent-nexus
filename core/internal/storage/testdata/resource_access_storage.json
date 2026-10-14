@@ -3226,8 +3226,16 @@
     "../testutil/perfguard/work.go:installWorkTrace": "20693ec50f01e251d446fa1734baa1fc77f77140ad874d577bd8ebc14484e3a4"
   },
   "external_key_publications": {
-    "work_evidence_record": ["evidence_json"],
-    "work_metadata": ["metadata_json.source", "metadata_json.source_refs.*"],
-    "work_observation": ["body_json.facts", "body_json.evidence.*"]
+    "work_evidence_record": [
+      "evidence_json"
+    ],
+    "work_metadata": [
+      "metadata_json.source",
+      "metadata_json.source_refs.*"
+    ],
+    "work_observation": [
+      "body_json.facts",
+      "body_json.evidence.*"
+    ]
   }
 }
