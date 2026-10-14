@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 230,
+  "route_count": 231,
   "routes": [
     {
       "method": "GET",
@@ -400,6 +400,11 @@
     {
       "method": "GET",
       "path": "/boards/{board_id}/workspace",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/brief",
       "access_class": "workspace_business_surface"
     },
     {

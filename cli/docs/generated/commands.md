@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `224`
+- Commands: `225`
 
 ## `actors.create`
 
@@ -873,6 +873,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `boards`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
+
+## `brief.get`
+
+- CLI path: `brief`
+- HTTP: `GET /brief`
+- Stability: `stable`
+- Surface: `projection`
+- Input mode: `none`
+- Why: One brief for the human surfaces and the agent orient loop.
+- Concepts: `home`, `inbox`, `cards`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns the bare brief.v1 object.
+- Agent notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
 
 ## `cards.archive`
 

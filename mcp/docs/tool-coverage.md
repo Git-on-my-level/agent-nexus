@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 224
+- Command count: 225
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -19,6 +19,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | asks | 4 |
 | auth | 22 |
 | boards | 13 |
+| brief | 1 |
 | cards | 13 |
 | derived | 1 |
 | docs | 19 |
@@ -48,7 +49,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 81 |
+| exposed_read | 82 |
 | exposed_write | 67 |
 | gated_admin | 28 |
 | gated_sensitive | 13 |
@@ -62,8 +63,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 148 | exposed_read + exposed_write + adapted |
-| hosted default | 66 | explicit read-only private-app allowlist |
+| standalone default | 149 | exposed_read + exposed_write + adapted |
+| hosted default | 67 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 35 | not represented as direct MCP tools in v1 |
@@ -142,6 +143,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | boards.trash | boards | POST | /boards/{board_id}/trash | exposed_write | ordinary reversible board lifecycle write |
 | boards.unarchive | boards | POST | /boards/{board_id}/unarchive | exposed_write | ordinary reversible board lifecycle write |
 | boards.workspace | boards | GET | /boards/{board_id}/workspace | exposed_read | bounded board workspace projection |
+| brief.get | brief | GET | /brief | exposed_read | brief.v1: the caller's decisions, initiatives against promises, own asks and answers. |
 | cards.archive | cards | POST | /cards/{card_id}/archive | exposed_write | ordinary reversible card lifecycle write |
 | cards.create | cards | POST | /cards | exposed_write | ordinary card creation |
 | cards.get | cards | GET | /cards/{card_id} | exposed_read | card read |

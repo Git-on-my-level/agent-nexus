@@ -701,6 +701,18 @@ reference_conventions:
 
     message_posted:
       thread_id: "required as thread_ref when the message belongs to a backing thread"
+      optional_payload:
+        next:
+          description: >
+            The author's promise for the next signal on the subject: {at, what}. `at` uses
+            the review_by grammar (UTC date, zoned RFC3339 timestamp or positive s/m/h/d
+            duration resolved from the event ts); `what` is free text of at most 160
+            characters and is never validated. A missing or far promise never rejects a write.
+        evidence_refs:
+          description: >
+            Typed refs that evidence progress. A note resets the promise clock only when at
+            least one evidence ref resolves (bounded check, at most 8 refs). A note that only
+            moves `next` records a promise move.
 
     document_created:
       refs_must_include: ["document:<document_handle>", "document_revision:<revision_handle>", "artifact:<artifact_handle>"]
@@ -746,6 +758,18 @@ reference_conventions:
     human_attention_requested:
       refs_must_include: ["thread:<thread_id>"]
       payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id", "response_proposals"]
+      optional_payload:
+        by:
+          description: >
+            The requester's deadline for the human (review_by grammar, resolved from the
+            request event ts). Core derives decide_by and overdue_for from it. It is not a
+            promise by the agent.
+        blocks:
+          description: >
+            Typed refs (at most 20) this decision blocks. A blocks ref that reaches a
+            terminal state stops counting automatically; readers only see refs they can read.
+        priority:
+          description: Optional agent-set badge (p0..p3 or critical/high/medium/low). A sort key after decide_by and blocks, never a deadline.
       authoring: >
         Reuse payload.title for a one-line decision (recommended maximum 100 Unicode
         characters; hard maximum 160 on new writes) and payload.body for Markdown
@@ -1313,3 +1337,47 @@ work_summary:
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
     - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.
     - Inbox stream identity uses canonical summary inputs, creation and oldest-ask timestamps. Elapsed age, oldest_age, rolling digest windows and timer-only health changes never change event IDs; underlying plan, progress, ownership, due, movement, source and attention changes do.
+
+promises:
+  description: >
+    One clock: promise versus evidence. A promise is a field on things agents already write,
+    never an object, table or status enum. Durations are computed at read time.
+  sources: [note, plan_step, due_at, wake_condition]
+  rules:
+    - "Which promise counts: a card's promise is the earliest unmet `at` among open plan-step due dates, the latest message_posted payload.next per principal on the card, the effective due_at, and the first date inside wake_condition."
+    - "Met: a promise is met when a reset event lands before its `at`. A met promise no longer counts."
+    - "Reset: only a note carrying a resolvable evidence ref, a plan-step state change, or a changed source observation resets the clock (last_evidence_at)."
+    - "Move: a note that changes the author's latest next.at without a resolving evidence ref records a move. promise_moves counts moves since the last reset."
+    - "Grammar: `at` reuses the review_by grammar; `what` is free text up to 160 characters."
+    - "Horizon: a promise beyond 2 days warns at write time and shows its distance; it is never a state."
+    - "Blocks: human_attention_requested payload.blocks refs that reach a terminal state clear automatically."
+    - "Fallback: an active initiative with no promise reads no_promise. The only duration fallback is ANX_NO_PROMISE_FALLBACK (default 7d), used solely to order no_promise rows by last evidence; it never creates a state."
+  derived_outputs: [past_promise_for, promise_moves, decide_by, overdue_for]
+  states:
+    past_promise: "The counted promise's `at` is in the past and no reset event landed since."
+    moving: "A counted promise exists and is still in the future."
+    no_promise: "An open initiative with no counted promise."
+    done: "The initiative is done or cancelled."
+
+brief:
+  schema: brief.v1
+  route: GET /brief
+  description: >
+    The principal's brief for this workspace: what needs their decision, how each initiative
+    stands against its promise, their own open asks, and asks answered for them. The same
+    object backs Decide, Watch and `anx orient --json`. Facts are materialized on write events;
+    durations (age, overdue_for, past_promise_for) are computed at read time. One workspace
+    only; aggregation across workspaces happens in a hosted shell, never in core.
+  sections: [decisions, initiatives, your_asks, answered_for_you]
+  section_limit: 50
+  decision_kinds: [ask, review, access, host, pm_proposal]
+  initiative_states: [past_promise, moving, no_promise, done]
+  placements: [backlog, ready, in_progress, review, done]
+  decision_order: "decide_by ascending (absent last), then blocks_count descending, then priority (critical/p0, high/p1, medium/p2, low/p3, absent), then created_at ascending, then ref."
+  initiative_order: "past_promise (longest past first), moving (soonest promise first), no_promise (oldest last evidence first), done (most recent first)."
+  rules:
+    - "Every count and ref is filtered by the reader's access; nothing reveals a withheld ref, title or value."
+    - "Reads are bounded: indexed lookups, at most section_limit rows per section, truncated flags when more exist."
+    - "decide_by is derived from human_attention_requested payload.by; overdue_for is now minus decide_by when positive, 0 before, null without decide_by."
+    - "followed_recommendation is true when the response text equals the first response proposal."
+
