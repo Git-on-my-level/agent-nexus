@@ -41,8 +41,16 @@ const NOW = Date.parse("2026-10-15T09:00:00Z");
 
 /** Visible text, one line per block-ish element, whitespace collapsed. */
 function textOf(root) {
-  return [...root.querySelectorAll("[data-decision-ref], [data-watch-row], h2, h3, button[aria-expanded]")]
-    .filter((el) => !el.closest("[data-decision-ref], [data-watch-row]") || el.matches("[data-decision-ref], [data-watch-row]"))
+  return [
+    ...root.querySelectorAll(
+      "[data-decision-ref], [data-watch-row], h2, h3, button[aria-expanded]",
+    ),
+  ]
+    .filter(
+      (el) =>
+        !el.closest("[data-decision-ref], [data-watch-row]") ||
+        el.matches("[data-decision-ref], [data-watch-row]"),
+    )
     .map((el) => el.textContent.replace(/\s+/g, " ").trim())
     .join("\n");
 }
@@ -77,8 +85,14 @@ describe("computed-source lint (I1)", () => {
   it("every Watch row, in both variants", () => {
     for (const initiative of brief.initiatives) {
       for (const variant of ["row", "card"]) {
-        const { container } = render(WatchRow, { initiative, variant, now: NOW });
-        expect(lintComputed(container), `${initiative.ref} ${variant}`).toEqual([]);
+        const { container } = render(WatchRow, {
+          initiative,
+          variant,
+          now: NOW,
+        });
+        expect(lintComputed(container), `${initiative.ref} ${variant}`).toEqual(
+          [],
+        );
         cleanup();
       }
     }
@@ -105,7 +119,8 @@ describe("computed-source lint (I1)", () => {
 
   it("flags unattributed computed text", () => {
     const root = document.createElement("div");
-    root.innerHTML = '<p>9d past</p><span data-source="computed:health">x</span>';
+    root.innerHTML =
+      '<p>9d past</p><span data-source="computed:health">x</span>';
     expect(lintComputed(root)).toHaveLength(2);
   });
 });

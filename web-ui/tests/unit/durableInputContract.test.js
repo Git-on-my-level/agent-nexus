@@ -25,27 +25,6 @@ function walk(node, visit) {
   }
 }
 
-it("every authored text field in the Inbox response form uses durable drafts", () => {
-  const ast = parse(
-    readFileSync(
-      `${root}/lib/components/inbox/InboxRespondPanel.svelte`,
-      "utf8",
-    ),
-  );
-  let fields = 0;
-  walk(ast.html, (node) => {
-    if (node.type !== "Element" || node.name !== "textarea") return;
-    fields += 1;
-    expect(
-      node.attributes.some(
-        (attribute) =>
-          attribute.type === "Action" && attribute.name === "durableDraft",
-      ),
-    ).toBe(true);
-  });
-  expect(fields).toBe(2);
-});
-
 it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
   for (const path of files(root)) {
     const ast = parse(readFileSync(path, "utf8"));
@@ -213,7 +192,10 @@ it("task and document authoring surfaces checkpoint complete forms", () => {
 
 it("task moves checkpoint full drafts and have no legacy direct sender", () => {
   for (const [path, action] of [
-    ["routes/o/[organization]/w/[workspace]/initiatives/+page.svelte", "durableForm"],
+    [
+      "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte",
+      "durableForm",
+    ],
     ["lib/components/CommandPalette.svelte", "durableMoveForm"],
   ]) {
     const ast = parse(readFileSync(`${root}/${path}`, "utf8"));

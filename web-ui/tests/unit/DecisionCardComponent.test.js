@@ -22,7 +22,9 @@ vi.mock("$lib/inboxResponseQueue.js", () => ({
   inboxResponseOverlay: writable({}),
   inboxUnsentResponses: writable([]),
 }));
-const outbox = vi.hoisted(() => ({ enqueuePmDecisionAnswer: vi.fn(async () => ({})) }));
+const outbox = vi.hoisted(() => ({
+  enqueuePmDecisionAnswer: vi.fn(async () => ({})),
+}));
 vi.mock("$lib/mutationOutbox.js", () => outbox);
 vi.mock("$lib/actions/durableDraft.js", () => ({
   durableDraft: () => ({ update() {}, destroy() {} }),
@@ -82,7 +84,9 @@ describe("DecisionCard", () => {
       now: NOW,
     });
     expect(container.querySelector("[data-decision-reply-toggle]")).toBeNull();
-    await fireEvent.click(container.querySelectorAll("[data-decision-proposal]")[0]);
+    await fireEvent.click(
+      container.querySelectorAll("[data-decision-proposal]")[0],
+    );
     expect(queue.queueInboxResponse).not.toHaveBeenCalled();
     await fireEvent.click(getByText("Approve access"));
     expect(queue.queueInboxResponse.mock.calls[0][0].request.outcome).toBe(
@@ -111,8 +115,13 @@ describe("DecisionCard", () => {
 
   it("answers a curation proposal like an ask, the first proposal applying it", async () => {
     const proposal = brief.decisions.find((d) => d.kind === "pm_proposal");
-    const { container } = render(DecisionCard, { decision: proposal, now: NOW });
-    await fireEvent.click(container.querySelector('[data-decision-proposal="1"]'));
+    const { container } = render(DecisionCard, {
+      decision: proposal,
+      now: NOW,
+    });
+    await fireEvent.click(
+      container.querySelector('[data-decision-proposal="1"]'),
+    );
     expect(queue.queueInboxResponse.mock.calls[0][0]).toMatchObject({
       itemId: "ask-93",
       request: { response_text: "Withdraw", outcome: "answered" },
@@ -156,9 +165,15 @@ describe("DecisionCard", () => {
       decision: record,
       now: NOW,
     });
-    await fireEvent.click(container.querySelector('[data-decision-proposal="2"]'));
+    await fireEvent.click(
+      container.querySelector('[data-decision-proposal="2"]'),
+    );
     expect(outbox.enqueuePmDecisionAnswer).toHaveBeenCalledWith(
-      expect.objectContaining({ decisionId: "pm_7", revision: 3, approve: false }),
+      expect.objectContaining({
+        decisionId: "pm_7",
+        revision: 3,
+        approve: false,
+      }),
     );
     expect(queue.queueInboxResponse).not.toHaveBeenCalled();
     await findByText(/Sending to your PM/);
@@ -167,9 +182,16 @@ describe("DecisionCard", () => {
   it("keeps the answer and says so when it cannot be saved", async () => {
     outbox.enqueuePmDecisionAnswer.mockRejectedValueOnce(new Error("quota"));
     const record = brief.decisions.find((d) => d.ref === "decision:pm_7");
-    const { container, findByRole } = render(DecisionCard, { decision: record, now: NOW });
-    await fireEvent.click(container.querySelector('[data-decision-proposal="1"]'));
+    const { container, findByRole } = render(DecisionCard, {
+      decision: record,
+      now: NOW,
+    });
+    await fireEvent.click(
+      container.querySelector('[data-decision-proposal="1"]'),
+    );
     expect((await findByRole("alert")).textContent).toContain("not sent");
-    expect(container.querySelector('[data-decision-proposal="1"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-decision-proposal="1"]'),
+    ).not.toBeNull();
   });
 });

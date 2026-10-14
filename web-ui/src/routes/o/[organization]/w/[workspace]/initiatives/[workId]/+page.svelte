@@ -482,8 +482,7 @@
     const card = requestId;
     resolveRefsInBatches(wanted, (batch) => coreClient.resolveRefs(batch))
       .then((resolved) => {
-        if (card === requestId)
-          planRefs = new Map([...planRefs, ...resolved]);
+        if (card === requestId) planRefs = new Map([...planRefs, ...resolved]);
       })
       .catch(() => {});
   });
@@ -575,9 +574,7 @@
       work?.due_at,
     ),
   );
-  let hasDetails = $derived(
-    Boolean(work?.executions?.length),
-  );
+  let hasDetails = $derived(Boolean(work?.executions?.length));
   $effect(() => {
     const id = workId;
     if (ready) void load(id);

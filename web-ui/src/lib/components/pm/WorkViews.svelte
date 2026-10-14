@@ -491,9 +491,10 @@
     tabindex="0"
   >
     <p id="task-board-card-help" class="sr-only">
-      Drag an initiative between phases, or focus it and press the left or right arrow
-      to move it. Enter opens the initiative. Moving an initiative that lives in another
-      tracker asks for confirmation and files a request for you to approve.
+      Drag an initiative between phases, or focus it and press the left or right
+      arrow to move it. Enter opens the initiative. Moving an initiative that
+      lives in another tracker asks for confirmation and files a request for you
+      to approve.
     </p>
     {#each groups as group (group.key)}
       {@const folded =
@@ -554,7 +555,9 @@
                 tabindex={slot.placeholder ? undefined : 0}
                 role={slot.placeholder ? "presentation" : "group"}
                 aria-hidden={slot.placeholder ? "true" : undefined}
-                aria-label={work ? work.title || "Untitled initiative" : undefined}
+                aria-label={work
+                  ? work.title || "Untitled initiative"
+                  : undefined}
                 aria-keyshortcuts={slot.placeholder
                   ? undefined
                   : "ArrowLeft ArrowRight Enter"}

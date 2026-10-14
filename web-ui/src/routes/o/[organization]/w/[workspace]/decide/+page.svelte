@@ -103,7 +103,9 @@
 
   {#if initiative}
     <p class="text-meta text-fg-muted" data-decide-filter>
-      Only decisions for <span class="text-fg">{filterTitle || "this initiative"}</span>.
+      Only decisions for <span class="text-fg"
+        >{filterTitle || "this initiative"}</span
+      >.
       <a class="ui-prose-link" href="?">Show all</a>
     </p>
   {/if}
@@ -114,7 +116,12 @@
       role="status"
       data-decide-stale
     >
-      <span>Couldn’t refresh. Showing what loaded {freshness.replace(/^as of /, "")}.</span>
+      <span
+        >Couldn’t refresh. Showing what loaded {freshness.replace(
+          /^as of /,
+          "",
+        )}.</span
+      >
       <button
         type="button"
         class="ui-prose-link"

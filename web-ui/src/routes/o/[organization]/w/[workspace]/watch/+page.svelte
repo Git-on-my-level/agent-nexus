@@ -8,7 +8,8 @@
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   import { patchSearchParams } from "$lib/urlState.js";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
-  import { ageSeconds, formatSpan, freshnessLabel } from "$lib/brief.js";
+  import { freshnessLabel } from "$lib/brief.js";
+  import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import { isNexusOwned, workKey } from "$lib/pm/presentation.js";
   import {
@@ -55,14 +56,7 @@
     });
   }
 
-  let staleAge = $derived.by(() => {
-    const age = ageSeconds(
-      $store.updatedAt ? new Date($store.updatedAt).toISOString() : "",
-      now,
-    );
-    if (age === null) return "a while ago";
-    return formatSpan(age) === "now" ? "just now" : `${formatSpan(age)} ago`;
-  });
+  let staleAge = $derived(formatAgo($store.updatedAt, now) || "earlier");
 
   // Optimistic placements, dropped as soon as a fresh brief lands.
   let placed = $state({});
@@ -83,11 +77,12 @@
   let confirmed = $derived(
     Object.values($mutationConfirmations).filter(isTaskMove).length,
   );
-  let seenConfirmed = -1;
+  // Effect bookkeeping, deliberately not reactive.
+  const seen = { confirmed: -1 };
   $effect(() => {
     const count = confirmed;
-    if (seenConfirmed >= 0 && count !== seenConfirmed) void refreshBrief();
-    seenConfirmed = count;
+    if (seen.confirmed >= 0 && count !== seen.confirmed) void refreshBrief();
+    seen.confirmed = count;
   });
 
   async function moveInitiative(row, placement, beforeRef = "") {

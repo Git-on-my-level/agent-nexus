@@ -47,7 +47,7 @@ describe("operator vocabulary", () => {
   });
 
   it("uses operator nouns on compact RefLink chips", () => {
-    expect(compactNounForPrefix("card")).toBe("Task");
+    expect(compactNounForPrefix("card")).toBe("Initiative");
     expect(compactNounForPrefix("topic")).toBe("Project");
     // RefLink must not reintroduce its own map: that drift is the bug.
     expect(readSrc("lib/components/RefLink.svelte")).not.toMatch(

@@ -821,9 +821,7 @@
             }
           : {
               text: `Move request confirmed. Review it in Decide.${entry.result.decision.supersedes ? " This replaced an earlier proposal for this initiative." : ""}`,
-              href: workspaceHref(
-                "/decide",
-              ),
+              href: workspaceHref("/decide"),
             },
         { pointer: entry.draft.pointer },
       );
@@ -1029,7 +1027,9 @@
           >Ask PM</a
         >
       {/if}
-      <a class="ui-btn-primary" href={workspaceHref("/initiatives/new")}>New initiative</a>
+      <a class="ui-btn-primary" href={workspaceHref("/initiatives/new")}
+        >New initiative</a
+      >
     {/snippet}
   </WorkspacePageHeader>
 

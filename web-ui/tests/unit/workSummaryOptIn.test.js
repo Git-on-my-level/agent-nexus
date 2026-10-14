@@ -106,10 +106,6 @@ describe("no card read is left opted out", () => {
    */
   const NO_STATE_SHOWN = new Map([
     [
-      "getWork src/lib/components/inbox/InboxControlWork.svelte",
-      "refreshes only frozen work/lifecycle/observation bases for an explicit saved-control rebase; renders no computed card state",
-    ],
-    [
       "listWork src/lib/inboxSources.js",
       "names the source behind an inbox row",
     ],

@@ -98,7 +98,7 @@ describe("initiativeLine", () => {
 
 describe("freshnessLabel", () => {
   it("reads minutes, hours and nothing", () => {
-    expect(freshnessLabel("2026-10-15T08:58:00Z", NOW)).toBe("as of 2 min ago");
+    expect(freshnessLabel("2026-10-15T08:58:00Z", NOW)).toBe("as of 2m ago");
     expect(freshnessLabel("2026-10-15T06:00:00Z", NOW)).toBe("as of 3h ago");
     expect(freshnessLabel("2026-10-15T09:00:00Z", NOW)).toBe("as of just now");
     expect(freshnessLabel("", NOW)).toBe("");

@@ -111,6 +111,7 @@
       itemId,
       item: { id: itemId, kind: decision.kind, title: decision.title },
       binding: binding ?? captureInboxResponseBinding(),
+      crossWorkspace: Boolean(binding),
       request: { response_text: body, outcome, notify_mode: "original" },
       message: who ? `Sent to ${who}` : "Answer sent",
       restore: { origin: "decide", reply, chosen: body },
@@ -215,11 +216,13 @@
     </h3>
     <p class="flex flex-wrap items-center gap-x-1.5 text-meta text-fg-muted">
       {#if decision.kind !== "ask"}
-        <span class="rounded-sm bg-bg-soft px-1.5 text-micro uppercase tracking-wide"
+        <span
+          class="rounded-sm bg-bg-soft px-1.5 text-micro uppercase tracking-wide"
           >{DECISION_KIND_LABELS[decision.kind] ?? decision.kind}</span
         >
       {/if}
-      {#if workspace}<span>{workspace}</span><span aria-hidden="true">·</span>{/if}
+      {#if workspace}<span>{workspace}</span><span aria-hidden="true">·</span
+        >{/if}
       {#if age !== null}<span>{formatSpan(age)}</span>{/if}
       {#if deadline}
         <span aria-hidden="true">·</span>
@@ -246,7 +249,11 @@
               .join(", ")}{/if}</span
         >
       {/if}
-      {#if decision.blocksCount && decision.requestedBy}<span aria-hidden="true"> · </span>{/if}
+      {#if decision.blocksCount && decision.requestedBy}<span
+          aria-hidden="true"
+        >
+          ·
+        </span>{/if}
       {#if decision.requestedBy}
         <span data-author-chip title={decision.requestedBy.id}
           >from {decision.requestedBy.display}</span
@@ -304,8 +311,7 @@
       <a
         class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg hover:bg-panel-hover sm:min-h-0"
         href={elsewhereHref}
-        data-decision-open
-        >Review in Access</a
+        data-decision-open>Review in Access</a
       >
     {:else if confirming}
       <span class="text-meta text-fg" role="status" data-decision-confirm

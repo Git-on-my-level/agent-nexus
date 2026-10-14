@@ -53,7 +53,9 @@
             )}>{decision.subject.title || "this initiative"}</a
           >
         {:else}
-          <span class="text-fg">{decision.subject.title || decision.subject.ref}</span>
+          <span class="text-fg"
+            >{decision.subject.title || decision.subject.ref}</span
+          >
         {/if}
       </p>
     {/if}

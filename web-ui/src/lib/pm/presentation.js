@@ -701,7 +701,8 @@ export function decisionConsequence(item, work = null) {
   if (scope === "work.phase") {
     const target = phase ? ` to ${label(phase)}` : "";
     if (item?.deliverable === false) {
-      const where = source && source !== "Managed here" ? source : "this source";
+      const where =
+        source && source !== "Managed here" ? source : "this source";
       return `No delivery path exists for ${where} yet. Approving records your decision${target} and keeps the request pending; nothing changes at ${where} until a delivery path exists.`;
     }
     if (!work)

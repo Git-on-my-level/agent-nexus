@@ -763,7 +763,9 @@ describe("update rows", () => {
         ({ "actor-leo": "Leo Park", "actor-nina": "Nina Vale" })[id] || "",
     });
     const row = rows.find((item) => item.kind === "update");
-    expect(row.source).toBe("Leo moved 2 initiatives to review · Nina commented");
+    expect(row.source).toBe(
+      "Leo moved 2 initiatives to review · Nina commented",
+    );
     expect(row.source).not.toMatch(/Board updates|Thread updates/);
     expect(inboxRowBadge(row)).toBeNull();
   });

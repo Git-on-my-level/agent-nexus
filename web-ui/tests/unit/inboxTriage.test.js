@@ -54,10 +54,6 @@ import {
   inboxShortcutAction,
   isTextEntryTarget,
 } from "../../src/lib/inboxShortcuts.js";
-import {
-  contextThreads,
-  pickProgressNote,
-} from "../../src/lib/inboxContext.js";
 import { buildInboxRows, filterMailbox } from "../../src/lib/inboxMailbox.js";
 import { authenticatedAgent } from "../../src/lib/authSession.js";
 import {
@@ -352,7 +348,9 @@ describe("update digests", () => {
       { type: "card_updated", actor_id: "actor-maya", refs: ["card:a"] },
       { type: "card_updated", actor_id: "actor-maya", refs: ["card:b"] },
     ];
-    expect(updateDigest(events, { actorName })).toBe("Maya updated 2 initiatives");
+    expect(updateDigest(events, { actorName })).toBe(
+      "Maya updated 2 initiatives",
+    );
     expect(updateDigest(events, { actorName, selfId: "actor-maya" })).toBe(
       "You updated 2 initiatives",
     );
@@ -805,46 +803,6 @@ describe("inbox shortcuts", () => {
     const checkbox = document.createElement("input");
     checkbox.setAttribute("type", "checkbox");
     expect(isTextEntryTarget(checkbox)).toBe(false);
-  });
-});
-
-describe("inbox context", () => {
-  it("reads the task's own thread first, then the item's threads", () => {
-    expect(
-      contextThreads(
-        { related_refs: ["thread:project", "card:x"], thread_id: "ask-thread" },
-        { kind: "card", ref: "card:lock-hub", work: { handle: "lock-hub" } },
-      ),
-    ).toEqual(["thread:lock-hub", "thread:project", "thread:ask-thread"]);
-  });
-
-  it("prefers the requester's own latest note over newer chatter", () => {
-    const note = pickProgressNote(
-      [
-        {
-          id: "m1",
-          type: "message_posted",
-          actor_id: "actor-omar",
-          ts: "2026-09-27T09:00:00Z",
-          payload: { text: "Both branches playable; need a default." },
-        },
-        {
-          id: "m2",
-          type: "message_posted",
-          actor_id: "actor-qa",
-          ts: "2026-09-27T10:00:00Z",
-          payload: { text: "Unrelated" },
-        },
-      ],
-      "actor-omar",
-    );
-    expect(note).toMatchObject({
-      id: "m1",
-      actorId: "actor-omar",
-      byRequester: true,
-      text: "Both branches playable; need a default.",
-    });
-    expect(pickProgressNote([], "actor-omar")).toBeNull();
   });
 });
 

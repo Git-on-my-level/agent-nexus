@@ -58,7 +58,9 @@
     ]),
   );
   let summary = $derived(participationSummary(groups, now));
-  let scope = $derived(agentId ? "Recent initiative participation" : "Participation");
+  let scope = $derived(
+    agentId ? "Recent initiative participation" : "Participation",
+  );
   /**
    * Nothing reported and nothing unavailable. Loading is not content: a
    * surface that asked to hide when empty must stay gone while a read is in
@@ -190,8 +192,9 @@
             {#if agentId && !group.unavailable}
               <a
                 class="mb-2 block break-words text-meta text-accent-text hover:text-accent-hover"
-                href={workspaceHref(`/initiatives/${encodeURIComponent(group.ref)}`)}
-                >{group.title || "Open initiative"}</a
+                href={workspaceHref(
+                  `/initiatives/${encodeURIComponent(group.ref)}`,
+                )}>{group.title || "Open initiative"}</a
               >
             {/if}
             {#if group.unavailable}

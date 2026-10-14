@@ -2,7 +2,10 @@ import { get } from "svelte/store";
 import { coreClient } from "$lib/coreClient";
 import { normalizeBrief } from "$lib/brief.js";
 import { recoverInboxResponses } from "$lib/inboxResponseQueue.js";
-import { liveInboxChanges, liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
+import {
+  liveInboxChanges,
+  liveWorkspaceEvents,
+} from "$lib/liveWorkspaceEvents.js";
 import { readerScopeKey } from "$lib/readerScope.js";
 import { staleWhileRevalidate } from "$lib/staleWhileRevalidate.js";
 

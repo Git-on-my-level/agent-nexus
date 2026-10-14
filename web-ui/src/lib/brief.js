@@ -10,6 +10,8 @@
  * All helpers are pure and take `now` so goldens are deterministic.
  */
 
+import { formatAgo } from "$lib/time/format.js";
+
 /** The four computed initiative states, in attention order. */
 export const WATCH_STATES = ["past_promise", "moving", "no_promise", "done"];
 
@@ -368,7 +370,7 @@ export function initiativeLine(row, now = Date.now()) {
     if (age !== null)
       parts.push({
         field: "initiatives.last_evidence_at",
-        text: `evidence ${formatSpan(age) === "now" ? "just now" : `${formatSpan(age)} ago`}`,
+        text: `evidence ${formatAgo(row.lastEvidenceAt, now)}`,
       });
     if (row.promise)
       parts.push({
@@ -384,14 +386,14 @@ export function initiativeLine(row, now = Date.now()) {
       text:
         age === null
           ? "no evidence yet"
-          : `last evidence ${formatSpan(age) === "now" ? "just now" : `${formatSpan(age)} ago`}`,
+          : `last evidence ${formatAgo(row.lastEvidenceAt, now)}`,
     });
   } else if (row.state === "done") {
     const age = ageSeconds(row.lastEvidenceAt, now);
     if (age !== null)
       parts.push({
         field: "initiatives.last_evidence_at",
-        text: `done ${formatSpan(age) === "now" ? "just now" : `${formatSpan(age)} ago`}`,
+        text: `done ${formatAgo(row.lastEvidenceAt, now)}`,
       });
   }
   if (row.promiseMoves > 0 && row.state !== "done")
@@ -425,13 +427,10 @@ export function decisionDeadline(decision, now = Date.now()) {
   };
 }
 
-/** "as of 2 min ago"; empty when the brief carries no time. */
+/** "as of <relative time>"; empty when the brief carries no time. */
 export function freshnessLabel(asOf, now = Date.now()) {
-  const age = ageSeconds(asOf, now);
-  if (age === null) return "";
-  if (age < 60) return "as of just now";
-  if (age < HOUR) return `as of ${Math.floor(age / 60)} min ago`;
-  return `as of ${formatSpan(age)} ago`;
+  const label = formatAgo(asOf, now);
+  return label ? `as of ${label}` : "";
 }
 
 /** Decisions whose subject or blocks name this initiative. */

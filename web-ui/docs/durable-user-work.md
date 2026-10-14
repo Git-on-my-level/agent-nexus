@@ -545,7 +545,7 @@ need protocol-specific review before persistence, not blind generic retries.
 | Surface                         | Remaining direct mutations                                                                                         |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Root actor creation             | `createActor` in the shell; preserve the complete creation form                                                    |
-| Overview dashboard chooser      | `setWorkspaceDashboard`; preserve the selected document                                                            |
+| Watch dashboard chooser         | `setWorkspaceDashboard`; preserve the selected document                                                            |
 | Access and agent details        | Host patches/revocation, enrollment token creation/revocation, human invites/revocation and principal revocation   |
 | Access administrator grants     | Grant/revoke mutations in `AuthAdminGrants`                                                                        |
 | Setup prompt and workspace tour | Enrollment token issuance/revocation; audit their cleanup and authentication boundaries                            |

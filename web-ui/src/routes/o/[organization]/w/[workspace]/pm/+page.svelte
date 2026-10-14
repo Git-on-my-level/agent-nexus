@@ -800,8 +800,8 @@
           {now}
           manageHref={workspaceHref("/pm/setup")}
         />{/snippet}
-      {#snippet subtitle()}{#if isNewConversation}Ask about your initiatives. If the
-          PM proposes a change, you approve it in Decide.{/if}{/snippet}
+      {#snippet subtitle()}{#if isNewConversation}Ask about your initiatives. If
+          the PM proposes a change, you approve it in Decide.{/if}{/snippet}
       {#snippet actions()}
         <details
           class="pm-history"

@@ -8,7 +8,8 @@
    */
   import { page } from "$app/stores";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { ageSeconds, formatSpan, initiativeLine } from "$lib/brief.js";
+  import { initiativeLine } from "$lib/brief.js";
+  import { formatAgo } from "$lib/time/format.js";
 
   let {
     initiative,
@@ -22,11 +23,7 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   let line = $derived(initiativeLine(initiative, now));
-  let noteAge = $derived.by(() => {
-    const age = ageSeconds(initiative.note?.at, now);
-    if (age === null) return "";
-    return formatSpan(age) === "now" ? "just now" : `${formatSpan(age)} ago`;
-  });
+  let noteAge = $derived(formatAgo(initiative.note?.at, now));
   let decideHref = $derived(
     workspaceHref(`/decide?initiative=${encodeURIComponent(initiative.ref)}`),
   );

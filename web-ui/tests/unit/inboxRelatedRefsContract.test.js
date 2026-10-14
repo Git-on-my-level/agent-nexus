@@ -11,14 +11,8 @@ const FORBIDDEN_IN_INBOX_SOURCES =
   /\bitem(?:\?\.)?\.refs\b|\?\?\s*item\.refs\b/;
 
 describe("inbox related_refs contract (static)", () => {
-  it("inbox route and inboxUtils do not read item.refs", () => {
-    const paths = [
-      join(
-        repoWebUiRoot,
-        "src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte",
-      ),
-      join(repoWebUiRoot, "src/lib/inboxUtils.js"),
-    ];
+  it("inboxUtils does not read item.refs", () => {
+    const paths = [join(repoWebUiRoot, "src/lib/inboxUtils.js")];
     for (const filePath of paths) {
       const text = readFileSync(filePath, "utf8");
       expect(

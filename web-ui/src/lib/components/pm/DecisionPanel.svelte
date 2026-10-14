@@ -202,8 +202,8 @@
           id="decision-moot-note"
           class="mt-3 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"
         >
-          The initiative is already at {label(targetPhase)}, so there is nothing left
-          to approve.
+          The initiative is already at {label(targetPhase)}, so there is nothing
+          left to approve.
           <button
             class="ui-prose-link"
             type="button"
@@ -217,8 +217,8 @@
           id="decision-gone-note"
           class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
         >
-          The initiative this proposal refers to no longer exists, so there is nothing
-          to approve.
+          The initiative this proposal refers to no longer exists, so there is
+          nothing to approve.
           <button
             class="ui-prose-link"
             type="button"
@@ -232,8 +232,9 @@
           id="decision-stale-note"
           class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
         >
-          This proposal is older than the initiative: it was made against an earlier
-          revision, so approving it would fail. {proposer === "You proposed"
+          This proposal is older than the initiative: it was made against an
+          earlier revision, so approving it would fail. {proposer ===
+          "You proposed"
             ? "Propose it again from Initiatives or the CLI."
             : "Ask the PM to propose again."}
           <button
