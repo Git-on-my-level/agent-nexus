@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `33`
+- Groups: `35`
 
 ## `topics`
 
@@ -162,6 +162,14 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.timeline` (`cards timeline`)
   - `cards.trash` (`cards trash`)
 
+## `deliveries`
+
+- Commands: `3`
+- Command IDs:
+  - `deliveries.claim` (`deliveries claim`)
+  - `deliveries.list` (`deliveries list`)
+  - `deliveries.receipt` (`deliveries receipt`)
+
 ## `derived`
 
 - Commands: `1`
@@ -248,6 +256,13 @@ Generated from `contracts/anx-openapi.yaml`.
   - `meta.livez` (`meta livez`)
   - `meta.readyz` (`meta readyz`)
   - `meta.version` (`meta version`)
+
+## `notifications`
+
+- Commands: `2`
+- Command IDs:
+  - `notifications.settings.get` (`notifications settings get`)
+  - `notifications.settings.set` (`notifications settings set`)
 
 ## `ops`
 

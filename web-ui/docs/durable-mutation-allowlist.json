@@ -98,6 +98,7 @@
       "patchDocument": 1,
       "reconcilePmAction": 2,
       "sendPmMessage": 1,
+      "setNotificationSettings": 1,
       "updateBoardCard": 1,
       "updateDocument": 1,
       "updateTopic": 1,

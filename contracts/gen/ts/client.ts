@@ -174,6 +174,12 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "name",
           "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "delivers",
+          "type": "list\u003cstring\u003e"
         },
         {
           "name": "series",
@@ -4680,6 +4686,213 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "cardsTrash"
   },
   {
+    "command_id": "deliveries.claim",
+    "cli_path": "deliveries claim",
+    "group": "deliveries",
+    "method": "POST",
+    "path": "/deliveries/claim",
+    "operation_id": "deliveries_claim",
+    "summary": "Claim due deliveries for a channel under a lease",
+    "why": "Claim due deliveries for a channel the calling adapter delivers.",
+    "input_mode": "flags",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "flags",
+      "flags": [
+        {
+          "name": "channel",
+          "required": true,
+          "description": "Channel to claim; the active adapter owned by the caller must declare it in delivers."
+        },
+        {
+          "name": "limit",
+          "description": "Maximum deliveries to claim."
+        },
+        {
+          "name": "lease-seconds",
+          "description": "Claim lease length in seconds."
+        }
+      ]
+    },
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Only the owning agent of an active adapter delivering the channel may claim. Claim tokens are returned only here; an expired lease makes the delivery claimable again.",
+    "examples": [
+      {
+        "title": "Claim chat deliveries",
+        "command": "anx deliveries claim --channel chat --limit 10 --lease-seconds 60"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "channel",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "lease_seconds",
+          "type": "integer"
+        },
+        {
+          "name": "limit",
+          "type": "integer"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "deliveries.list",
+      "deliveries.receipt"
+    ],
+    "go_method": "DeliveriesClaim",
+    "ts_method": "deliveriesClaim"
+  },
+  {
+    "command_id": "deliveries.list",
+    "cli_path": "deliveries list",
+    "group": "deliveries",
+    "method": "GET",
+    "path": "/deliveries",
+    "operation_id": "deliveries_list",
+    "summary": "List the caller's own deliveries with receipts",
+    "why": "List the caller's own queued notifications and wake deliveries with their receipts.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Reads only the caller's own rows; bounded by limit.",
+    "adjacent_commands": [
+      "deliveries.claim",
+      "deliveries.receipt"
+    ],
+    "go_method": "DeliveriesList",
+    "ts_method": "deliveriesList"
+  },
+  {
+    "command_id": "deliveries.receipt",
+    "cli_path": "deliveries receipt",
+    "group": "deliveries",
+    "method": "POST",
+    "path": "/deliveries/{delivery_id}/receipt",
+    "operation_id": "deliveries_receipt",
+    "summary": "Record a delivery outcome for a claimed delivery",
+    "why": "Record delivered or failed for a delivery claimed by this adapter.",
+    "input_mode": "flags",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "flags",
+      "flags": [
+        {
+          "name": "claim-token",
+          "required": true,
+          "description": "Claim token returned by deliveries claim."
+        },
+        {
+          "name": "outcome",
+          "required": true,
+          "description": "delivered or failed."
+        },
+        {
+          "name": "error",
+          "description": "Failure detail; never include secrets."
+        },
+        {
+          "name": "retryable",
+          "description": "Mark a failed delivery as retryable (true or false)."
+        }
+      ]
+    },
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Receipts are idempotent per claim token; a stale or superseded claim returns conflict. A delivery on a channel the caller does not deliver reads as not found.",
+    "examples": [
+      {
+        "title": "Confirm a delivery",
+        "command": "anx deliveries receipt \u003cdelivery_id\u003e --claim-token \u003ctoken\u003e --outcome delivered"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "claim_token",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "enum_values": [
+            "delivered",
+            "failed"
+          ]
+        }
+      ],
+      "optional": [
+        {
+          "name": "error",
+          "type": "string"
+        },
+        {
+          "name": "retryable",
+          "type": "boolean"
+        }
+      ]
+    },
+    "path_params": [
+      "delivery_id"
+    ],
+    "adjacent_commands": [
+      "deliveries.claim",
+      "deliveries.list"
+    ],
+    "go_method": "DeliveriesReceipt",
+    "ts_method": "deliveriesReceipt"
+  },
+  {
     "command_id": "derived.rebuild",
     "cli_path": "derived rebuild",
     "group": "derived",
@@ -8254,6 +8467,99 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "MetaVersion",
     "ts_method": "metaVersion"
+  },
+  {
+    "command_id": "notifications.settings.get",
+    "cli_path": "notifications settings get",
+    "group": "notifications",
+    "method": "GET",
+    "path": "/notification-settings",
+    "operation_id": "notification_settings_get",
+    "summary": "Read the caller's notification channel settings",
+    "why": "Read the caller's notification channels and the channels adapters can deliver.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only; each principal reads its own settings.",
+    "adjacent_commands": [
+      "notifications.settings.set"
+    ],
+    "go_method": "NotificationsSettingsGet",
+    "ts_method": "notificationsSettingsGet"
+  },
+  {
+    "command_id": "notifications.settings.set",
+    "cli_path": "notifications settings set",
+    "group": "notifications",
+    "method": "PUT",
+    "path": "/notification-settings",
+    "operation_id": "notification_settings_set",
+    "summary": "Replace the caller's notification channel settings",
+    "why": "Replace the caller's notification channels, addresses and push or digest opt-ins.",
+    "input_mode": "file-and-body",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "file-and-body",
+      "flags": [
+        {
+          "name": "body-file",
+          "required": true,
+          "description": "UTF-8 notification settings JSON file or stdin (-)."
+        }
+      ]
+    },
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only. The whole channel list is replaced; channels must be delivered by an active adapter.",
+    "examples": [
+      {
+        "title": "Set channels",
+        "command": "anx notifications settings set --body-file settings.json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "channels",
+          "type": "list\u003cany\u003e"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "notifications.settings.get"
+    ],
+    "go_method": "NotificationsSettingsSet",
+    "ts_method": "notificationsSettingsSet"
   },
   {
     "command_id": "ops.blob.usage.rebuild",
@@ -13861,6 +14167,18 @@ export class AnxClient {
     return this.invoke("cards.trash", pathParams, options);
   }
 
+  deliveriesClaim(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("deliveries.claim", {}, options);
+  }
+
+  deliveriesList(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("deliveries.list", {}, options);
+  }
+
+  deliveriesReceipt(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("deliveries.receipt", pathParams, options);
+  }
+
   derivedRebuild(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("derived.rebuild", {}, options);
   }
@@ -14095,6 +14413,14 @@ export class AnxClient {
 
   metaVersion(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("meta.version", {}, options);
+  }
+
+  notificationsSettingsGet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("notifications.settings.get", {}, options);
+  }
+
+  notificationsSettingsSet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("notifications.settings.set", {}, options);
   }
 
   opsBlobUsageRebuild(options: RequestOptions = {}): Promise<InvokeResult> {

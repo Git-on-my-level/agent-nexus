@@ -1074,6 +1074,11 @@ var migrations = []migration{
 	// brief.v1 facts materialized on write events (asks, notes, plan and
 	// card changes), with a one-time backfill. See brief_facts.go.
 	{Version: 90, AfterApply: installBriefFacts},
+	{Version: 91, AfterApply: installBriefAskBlocks},
+	// One durable delivery queue for wakes and human notifications, plus the
+	// indexed open-ask deadline ledger the escalation clock reads. Version 92
+	// is reserved for the curation lane's curation_proposals table.
+	{Version: 93, AfterApply: installDeliveryQueue},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

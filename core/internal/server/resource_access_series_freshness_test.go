@@ -68,7 +68,7 @@ func TestResourceAccessSeriesFreshnessAndReportProvenance(t *testing.T) {
 			}
 		}
 		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: reader.actor})
-		previews, e := s.ResolveRefs(scope, []string{deniedRef}, nil, time.Now().UTC(), 0)
+		previews, e := s.ResolveRefs(scope, []string{deniedRef}, nil, time.Now().UTC())
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -87,7 +87,7 @@ func TestResourceAccessSeriesFreshnessAndReportProvenance(t *testing.T) {
 			}
 		}
 		cards := []map[string]any{map[string]any{"id": initiative["id"], "ref": initiative["ref"]}}
-		if e = s.EnrichCardPlans(scope, cards, nil, time.Now().UTC(), 0); e != nil {
+		if e = s.EnrichCardPlans(scope, cards, nil, time.Now().UTC()); e != nil {
 			t.Fatal(e)
 		}
 		summary := cards[0]["work_summary"].(*primitives.WorkSummary)

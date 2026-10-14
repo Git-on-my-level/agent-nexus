@@ -5,7 +5,6 @@ import (
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testsql"
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -69,20 +68,19 @@ func TestEffectiveHealthInputsAgreeAcrossSurfaces(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err = s.EnrichCardPlans(ctx, []map[string]any{rawCard, work}, nil, now, 72*time.Hour); err != nil {
+				if err = s.EnrichCardPlans(ctx, []map[string]any{rawCard, work}, nil, now); err != nil {
 					t.Fatal(err)
 				}
-				preview, err := s.ResolveRefs(ctx, []string{card["ref"].(string)}, nil, now, 72*time.Hour)
+				preview, err := s.ResolveRefs(ctx, []string{card["ref"].(string)}, nil, now)
 				if err != nil {
 					t.Fatal(err)
 				}
 				a, b, c := rawCard["plan_health"].(plans.Health), work["plan_health"].(plans.Health), *preview[0].PlanHealth
-				// The tracker observes this card in progress: it is active and
-				// nothing is dated, so every surface reads dark, with or
-				// without a plan.
-				expected := "dark"
+				// The overdue due_at is a missed promise; cleared, nothing is
+				// promised. Every surface agrees, with or without a plan.
+				expected := "no_promise"
 				if !cleared {
-					expected = "at_risk"
+					expected = "past_promise"
 				}
 				if !reflect.DeepEqual(a, b) || !reflect.DeepEqual(a, c) || a.State != expected {
 					t.Fatalf("plan=%v cleared=%v raw=%+v work=%+v preview=%+v expected=%s", withPlan, cleared, a, b, c, expected)
@@ -125,7 +123,7 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 	_ = lower
 	refs := []string{"ACME-42", "ticket_42", "unpublished-42", "acme:ticket/42", "FOO", "foo", "Älias", "älias"}
 	counter.Reset()
-	got, err := s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
+	got, err := s.ResolveRefs(ctx, refs, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +141,7 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 	if _, err = s.PatchWork(ctx, "actor", card["id"].(string), work["version"].(int64), map[string]any{"source_refs": []any{}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err = s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
+	got, err = s.ResolveRefs(ctx, refs, nil, time.Now())
 	if err != nil || got[0].Resolvable || got[1].Resolvable {
 		t.Fatalf("removed alias survived %+v %v", got, err)
 	}
@@ -178,45 +176,6 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 	}
 }
 
-// The legacy health field reports every state it has a name for. It used to
-// flatten no_plan, at_risk and done into "on_track", which is how seven
-// unplanned initiatives came to render green. Only "stale" is still renamed,
-// to the "stalled" spelling older clients know, and only a state this core
-// does not recognise falls back to "on_track".
-func TestLegacyHealthAndDigestVocabulary(t *testing.T) {
-	t.Parallel()
-	for state, want := range map[string]string{
-		"no_plan":  "no_plan",
-		"stale":    "stalled",
-		"stalled":  "stalled",
-		"blocked":  "blocked",
-		"at_risk":  "at_risk",
-		"on_track": "on_track",
-		"done":     "done",
-		"":         "on_track",
-		"invented": "on_track",
-	} {
-		if legacy := plans.LegacyHealth(state); legacy != want {
-			t.Fatalf("LegacyHealth(%q)=%q want %q", state, legacy, want)
-		}
-	}
-	for _, state := range []string{"no_plan", "stale", "blocked", "at_risk", "on_track", "done"} {
-		if legacy := plans.LegacyHealth(state); legacy == "on_track" && state != "on_track" {
-			t.Fatalf("%s must not be reported as on_track", state)
-		}
-	}
-	d := primitives.OverviewChanges{Items: []primitives.OverviewChange{}}
-	d.Add(primitives.OverviewChange{Kind: "initiative_stale", Ref: "card:initiative", Title: "Initiative"})
-	raw, _ := json.Marshal(d)
-	var old struct{ Items []struct{ Kind string } }
-	if err := json.Unmarshal(raw, &old); err != nil {
-		t.Fatal(err)
-	}
-	if len(old.Items) != 1 || old.Items[0].Kind != "initiative_stalled" || d.Items[0].KindV2 != "initiative_stale" {
-		t.Fatal(string(raw))
-	}
-}
-
 func TestObservationEvidenceInheritsItsObservationTimestamp(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -243,7 +202,7 @@ func TestObservationEvidenceInheritsItsObservationTimestamp(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE cards SET updated_at=? WHERE id=?`, old, card["id"]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.ResolveRefs(ctx, []string{"TARGET-42"}, nil, now, 0)
+	got, err := s.ResolveRefs(ctx, []string{"TARGET-42"}, nil, now)
 	if err != nil || got[0].Status != "done" || got[0].ObservedAt != now.Format(time.RFC3339Nano) {
 		t.Fatalf("latest observation evidence lost: %+v %v", got, err)
 	}
@@ -283,17 +242,16 @@ func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE card_plans SET updated_at=?`, old); err != nil {
 		t.Fatal(err)
 	}
-	before, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now, 0)
-	if err != nil || before[0].PlanHealth.State != "stale" {
+	before, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now)
+	if err != nil || before[0].PlanHealth.State != "no_promise" || before[0].PlanHealth.LastEvidenceAt == nil {
 		t.Fatalf("before=%+v %v", before, err)
 	}
 	if _, err = ws.DB().Exec(`UPDATE card_plans SET updated_at=? WHERE card_id=?`, now.Format(time.RFC3339Nano), child["id"]); err != nil {
 		t.Fatal(err)
 	}
-	after, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now, 0)
-	// The child plan edit counts as activity: stale resolves to on_track
-	// (the parked parent has no dated signal, but dark is for active work).
-	if err != nil || after[0].PlanHealth.State != "on_track" {
+	after, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now)
+	// The child plan edit moves the linked step: it is evidence.
+	if err != nil || after[0].PlanHealth.State != "no_promise" || *after[0].PlanHealth.LastEvidenceAt == *before[0].PlanHealth.LastEvidenceAt {
 		t.Fatalf("child plan activity missing=%+v %v", after, err)
 	}
 }
@@ -319,7 +277,7 @@ func TestNativeCardAndSourceURLLookupUsesIndexes(t *testing.T) {
 	if err != nil || len(filtered) != 2 {
 		t.Fatalf("access matches: %v %v", filtered, err)
 	}
-	got, err := s.ResolveRefs(ctx, []string{card["ref"].(string), "card:" + card["id"].(string), sourceURL}, nil, time.Now(), 0)
+	got, err := s.ResolveRefs(ctx, []string{card["ref"].(string), "card:" + card["id"].(string), sourceURL}, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -411,6 +411,17 @@ fenced examples and counting empty Markdown checkbox lines.
 
 See `../../docs/live-series.md` for adapter declaration, scoped token exchange, bounded queries, caps, retention, panel sources and fallback semantics. The canonical paths and JSON schemas are in `contracts/anx-openapi.yaml`.
 
+## Delivery queue and notification settings
+
+One durable queue carries agent wakes (bridge channel, mirrored from `agent_wakeups`) and human push or digest notifications. Adapters that declare `delivers: [channel]` (up to 8 per declaration; `bridge` is reserved) move deliveries for those channels; `series` may be empty when `delivers` is non-empty.
+
+- `GET /deliveries?limit=N` (`anx deliveries list`): the caller's own deliveries, newest first, each with up to 10 receipts: `{"deliveries":[{"delivery":{...},"receipts":[...]}]}`. Any authenticated principal; `limit` is capped at 200.
+- `POST /deliveries/claim` (`anx deliveries claim --channel`): body `{channel, limit, lease_seconds}`. Only the owning agent of an active adapter that delivers the channel may claim; others get `403 forbidden`. Returns `{"deliveries":[...]}` including `address` and `claim_token`. An expired lease makes a delivery claimable again.
+- `POST /deliveries/{delivery_id}/receipt` (`anx deliveries receipt`): body `{claim_token, outcome: delivered|failed, error, retryable}`; returns `{"delivery":{...}}`. A stale or superseded claim returns `409 conflict`; a delivery on a channel the caller does not deliver returns `404 not_found`. Retryable failures back off from 30 seconds, doubling to 1 hour, and fail permanently after 6 attempts.
+- `GET /notification-settings` and `PUT /notification-settings` (`anx notifications settings get|set`): a human principal's own channels. `PUT` replaces the whole list `{"channels":[{channel,address,push_enabled,digest_enabled}]}`; each channel must be delivered by an active adapter (`400 invalid_request` otherwise). Both return `{"channels":[...],"available_channels":[...]}`. Agent principals get `403 forbidden`.
+
+Receipts (`notification_delivered`, `notification_failed`) live in the queue, not the event log. Push and digest content is built only for principals who can read the ask; the heartbeat `attention_summary` carries counts and times only. Claim and receipt mutate under a lease and claim token and are not auto-retried by routes; see the `delivery` section of `contracts/anx-schema.yaml`.
+
 ### Conditional card archive
 
 `POST /cards/{card_id}/archive` accepts optional `if_latest_observation_id`, a

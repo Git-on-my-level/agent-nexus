@@ -126,7 +126,7 @@ func TestPerformanceScopedSeriesRefEndpointBudget(t *testing.T) {
 	defer closeRead()
 	refs := []string{"series:builds?stream=s000"}
 	capture.Start()
-	previews, e := scopedStore.ResolveRefs(scoped, refs, nil, now, 0)
+	previews, e := scopedStore.ResolveRefs(scoped, refs, nil, now)
 	statements, queries, rows := capture.Stop()
 	work := capture.Work()
 	if e != nil || capture.WorkError() != nil || len(previews) != 1 || previews[0].Metric == nil {

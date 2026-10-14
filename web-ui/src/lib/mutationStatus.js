@@ -48,6 +48,15 @@ export function mutationFailure(error, subject = "response") {
       422: "Check the destination and evidence before sending this move.",
     });
   }
+  if (subject === "notification settings") {
+    Object.assign(messages, {
+      400: "Check the saved notification settings. A channel may no longer be installed.",
+      401: "Sign in again to save notification settings.",
+      403: "Only people can change notification settings.",
+      409: "Notification settings changed. Review your saved choices and try again.",
+      422: "Check the saved notification settings before sending them.",
+    });
+  }
   if (subject === "event action") {
     Object.assign(messages, {
       400: "Check the saved event request before sending it.",

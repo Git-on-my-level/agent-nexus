@@ -95,6 +95,12 @@ See `AGENTS.md` in this module for the canonical list. Summary:
   `v1/internal/accounts/status`), `ANX_ACCOUNT_STATUS_AUDIENCE` (default
   `anx-control-plane`).
 
+The heartbeat payload carries an optional `attention_summary`: open and overdue
+decision counts, the earliest unescalated `decide_by`, and the same counts per
+human who chose a notification channel (`principal_id` is the actor id). It
+never carries titles, refs or addresses. A control plane that idle-stops cores
+can wake one at `earliest_decide_by`; the escalation pass runs at boot.
+
 Filesystem blobs remain the default for self-hosted deployments.
 
 Set `ANX_BLOB_BACKEND=s3` only when you explicitly want S3-compatible object
@@ -159,6 +165,30 @@ unknown wakeup outcomes. A full queue returns `429 busy` with `reason: queue`,
 Channel ingress turns carry `origin` and use this same claim pipeline. See
 `cli/docs/runbook.md` for the omp / `zai/glm-5.3` recipe and `{prompt}` Hermes
 or Codex argv.
+
+## Decision deadlines and notification delivery
+
+Core keeps one durable delivery queue (`deliveries`, receipts in
+`delivery_receipts`). Agent wakes appear there on the `bridge` channel; the
+bridge keeps claiming them through `/agent-wakeups/*`. Human notifications use
+channels declared by adapters (`"delivers": ["email"]` on an adapter
+declaration). The owning agent claims with `POST /deliveries/claim` and closes
+each claim with `POST /deliveries/{delivery_id}/receipt`. A retryable failure
+returns to the queue after 30s, doubling to at most 1h, for six attempts.
+Receipts stay in the queue and never reach the event log.
+
+Humans choose channels, their address and push/digest toggles per workspace
+with `PUT /notification-settings` (`anx notifications settings set`).
+
+The escalation clock runs every 30s and once at boot. When an ask's `decide_by`
+passes unanswered it pushes immediately if the ask's window was at most 2h or
+it still blocks 3+ open refs; otherwise the ask joins the daily digest. It also
+wakes the workspace PM, when one is configured and can read the ask, to answer,
+withdraw or re-ask. A push or digest only names asks the recipient can read.
+`ANX_DIGEST_HOUR_UTC` (default `9`) sets the first hour at which the day's
+digest is queued, one message per channel per day, only when something is
+overdue. Reference adapters live in `adapters/channels/` (SMTP email and
+Telegram).
 
 ## PM channels (Telegram and Discord)
 

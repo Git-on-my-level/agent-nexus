@@ -220,6 +220,10 @@
     "milliseconds": 4911
   },
   {
+    "key": "GET /brief",
+    "milliseconds": 20000
+  },
+  {
     "key": "GET /overview",
     "milliseconds": 81860
   },
@@ -458,5 +462,13 @@
   {
     "key": "GET /stream/agent-wakeups",
     "milliseconds": 1000
+  },
+  {
+    "key": "GET /deliveries",
+    "milliseconds": 4000
+  },
+  {
+    "key": "GET /notification-settings",
+    "milliseconds": 4000
   }
 ]

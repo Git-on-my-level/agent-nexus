@@ -11,9 +11,9 @@ import (
 )
 
 type overviewVisitStore interface {
-	OverviewVisible(context.Context, map[string]bool, map[string]bool, func(string, string) bool, time.Time, time.Duration) (map[string]any, error)
+	OverviewVisible(context.Context, map[string]bool, map[string]bool, func(string, string) bool, time.Time) (map[string]any, error)
 	OverviewChanges(context.Context, string, []map[string]any, bool, func(string, string) bool, time.Time) (primitives.OverviewChanges, error)
-	LoadOverviewChanges(context.Context, string, func(string, string) bool, time.Time, time.Duration) (primitives.OverviewChanges, error)
+	LoadOverviewChanges(context.Context, string, func(string, string) bool, time.Time) (primitives.OverviewChanges, error)
 	RecordOverviewVisit(context.Context, string, []map[string]any, time.Time) error
 }
 
@@ -53,7 +53,7 @@ func appendOverviewDecisions(r *http.Request, opts handlerOptions, d *primitives
 	if !ok {
 		return nil
 	}
-	previews, err := store.ResolveRefs(r.Context(), refs, planVisibility(r, opts), now, planStalledAfter())
+	previews, err := store.ResolveRefs(r.Context(), refs, planVisibility(r, opts), now)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func handleOverviewChanges(w http.ResponseWriter, r *http.Request, opts handlerO
 		r = r.WithContext(ctx)
 	}
 	now := time.Now().UTC()
-	d, err := store.LoadOverviewChanges(r.Context(), overviewPrincipal(r), planVisibility(r, opts), now, planStalledAfter())
+	d, err := store.LoadOverviewChanges(r.Context(), overviewPrincipal(r), planVisibility(r, opts), now)
 	if err == nil {
 		err = appendOverviewDecisions(r, opts, &d, now)
 	}

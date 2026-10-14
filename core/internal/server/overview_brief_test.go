@@ -249,7 +249,7 @@ func TestBriefCountsNeverLeakRowsTheReaderCannotSee(t *testing.T) {
 	}
 	risk := briefSection(t, scoped, "at_risk")
 	if risk["count"] != 0 {
-		t.Fatalf("a denied blocked card was counted as risk: %v", risk)
+		t.Fatalf("a denied card was counted as risk: %v", risk)
 	}
 }
 
@@ -405,70 +405,45 @@ func TestBriefMachineCountsStuckOnlyWhenWorkRidesOnTheSilence(t *testing.T) {
 	}
 }
 
-/*
-The bug this section exists to fix: seven initiatives with no plan reported
-on_track, which rendered green. no_plan must be visible as a gap and must
-never be counted as healthy.
-*/
-func TestBriefInitiativesReportNoPlanHonestly(t *testing.T) {
-	t.Parallel()
-	planless := map[string]any{"ref": "card:i1", "title": "Hosted onboarding", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 0, "total": 3}, "health": map[string]any{"status": "no_plan", "state": "no_plan", "reason": "Initiative has no plan steps."}}
-	blockedSince := briefAt(50 * time.Hour)
-	blocked := map[string]any{"ref": "card:i2", "title": "Billing", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 1, "total": 4}, "health": map[string]any{"status": "blocked", "state": "blocked", "reason": "An unfinished step or dependency is blocked."}, "plan_health": plans.Health{State: "blocked", Reason: "An unfinished step or dependency is blocked.", Since: &blockedSince}}
-	healthy := map[string]any{"ref": "card:i3", "title": "Docs", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 2, "total": 2}, "health": map[string]any{"status": "on_track", "state": "on_track", "reason": "Open steps are progressing."}}
+func briefPast(ago time.Duration) plans.Health {
+	since := briefAt(ago)
+	secs := int64(ago / time.Second)
+	return plans.Health{State: plans.PromisePast, Reason: "Past its plan_step promise.", Since: &since, PastPromiseForSeconds: &secs}
+}
 
-	in := briefInputs{now: briefNow, workAvailable: true, needsOK: true, signals: map[string]briefSignal{}, initiatives: []map[string]any{planless, healthy, blocked}}
+/*
+No promise must be visible as a gap and never counted as moving; at_risk holds
+only past-promise rows, longest past first.
+*/
+func TestBriefInitiativesReportPromiseStates(t *testing.T) {
+	t.Parallel()
+	none := map[string]any{"ref": "card:i1", "title": "Hosted onboarding", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 0, "total": 3}, "plan_health": plans.Health{State: plans.PromiseNone, Reason: "No promise and no evidence yet."}}
+	past := map[string]any{"ref": "card:i2", "title": "Billing", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 1, "total": 4}, "plan_health": briefPast(50 * time.Hour)}
+	moving := map[string]any{"ref": "card:i3", "title": "Docs", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 2, "total": 2}, "plan_health": plans.Health{State: plans.PromiseMoving, Reason: "Next: docs by tomorrow."}}
+
+	in := briefInputs{now: briefNow, workAvailable: true, needsOK: true, signals: map[string]briefSignal{}, initiatives: []map[string]any{none, moving, past}}
 	brief := buildOverviewBrief(in)
 	section := briefSection(t, brief, "initiatives")
 	byState := section["by_state"].(map[string]int)
-	if byState["no_plan"] != 1 || byState["blocked"] != 1 || byState["on_track"] != 1 {
-		t.Fatalf("state counts hide the planless initiative: %v", byState)
+	if byState["no_promise"] != 1 || byState["past_promise"] != 1 || byState["moving"] != 1 {
+		t.Fatalf("state counts hide the unpromised initiative: %v", byState)
 	}
 	items := briefItems(t, section)
-	if items[0]["state"] != "blocked" || items[0]["ref"] != "card:i2" {
-		t.Fatalf("initiatives are not worst first: %v", items)
+	if items[0]["ref"] != "card:i2" || items[1]["ref"] != "card:i1" || items[2]["ref"] != "card:i3" {
+		t.Fatalf("initiatives are not in promise order: %v", items)
 	}
 	for _, item := range items {
-		if item["ref"] == "card:i1" && item["state"] != "no_plan" {
-			t.Fatalf("planless initiative reported as %v", item["state"])
-		}
 		if item["reason"] == "" {
 			t.Fatalf("initiative row has no computed reason: %v", item)
 		}
 	}
-
-	// At risk means off track with a reason. A planless initiative is a gap to
-	// fill, and a healthy one is not a risk; neither belongs here.
 	risk := briefSection(t, brief, "at_risk")
 	riskItems := briefItems(t, risk)
-	if risk["count"] != 1 || riskItems[0]["ref"] != "card:i2" {
-		t.Fatalf("at_risk is not computed from off-track rows only: %v", risk)
+	if risk["count"] != 1 || riskItems[0]["ref"] != "card:i2" || riskItems[0]["state"] != "past_promise" {
+		t.Fatalf("at_risk is not computed from past-promise rows only: %v", risk)
 	}
-	if riskItems[0]["since"] != blockedSince {
+	if riskItems[0]["since"] != *briefPast(50 * time.Hour).Since {
 		t.Fatalf("risk row lost its computed anchor: %v", riskItems[0])
-	}
-	if !strings.Contains(riskItems[0]["reason"].(string), "blocked") {
-		t.Fatalf("risk row has no computed reason: %v", riskItems[0])
-	}
-}
-
-func TestBriefAtRiskExplainsBlockedWorkWithRecordedBlockers(t *testing.T) {
-	t.Parallel()
-	work := []map[string]any{
-		briefCard("card:stuck", "Restore the replica", "blocked", 8*time.Hour, map[string]any{"blockers": []any{"waiting on vendor access", "needs a maintenance window"}}),
-		briefCard("card:quiet", "Blocked, unexplained", "blocked", 2*time.Hour, nil),
-		briefCard("card:fine", "Moving", "in_progress", time.Hour, nil),
-	}
-	in := briefInputs{now: briefNow, workAvailable: true, work: work, needsOK: true, dependents: briefDependents(work), signals: map[string]briefSignal{}}
-	items := briefItems(t, briefSection(t, buildOverviewBrief(in), "at_risk"))
-	if len(items) != 2 {
-		t.Fatalf("expected both blocked cards: %v", items)
-	}
-	if items[0]["reason"] != "Blocked on waiting on vendor access (+1 more)" {
-		t.Fatalf("recorded blockers not used as the reason: %v", items[0])
-	}
-	if items[1]["reason"] != "Task is in the blocked column." {
-		t.Fatalf("unexplained block lost its computed reason: %v", items[1])
 	}
 }
 
@@ -478,7 +453,7 @@ func TestBriefSectionsShowTopRowsAndCountTheRest(t *testing.T) {
 	rows := []map[string]any{}
 	for i := 0; i < 9; i++ {
 		ref := "card:r" + string(rune('a'+i))
-		work = append(work, briefCard(ref, "Row", "blocked", time.Duration(i+1)*time.Hour, nil))
+		work = append(work, briefCard(ref, "Row", "blocked", time.Duration(i+1)*time.Hour, map[string]any{"plan_health": briefPast(time.Duration(i+1) * time.Hour)}))
 		rows = append(rows, briefNeedsRow("task:"+ref, "Row"))
 	}
 	in := briefInputs{now: briefNow, workAvailable: true, work: work, needsOK: true, dependents: briefDependents(work), signals: map[string]briefSignal{}, needsRows: rows}

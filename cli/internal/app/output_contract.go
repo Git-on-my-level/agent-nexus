@@ -54,6 +54,18 @@ func commandSideEffectClass(command string) string {
 		}
 		return "read_only"
 	}
+	if parts[0] == "deliveries" {
+		if len(parts) > 1 && parts[1] == "list" {
+			return "read_only"
+		}
+		return "remote_coordination_write"
+	}
+	if command == "notifications settings get" {
+		return "read_only"
+	}
+	if command == "notifications settings set" {
+		return "remote_coordination_write"
+	}
 	if parts[0] == "adapters" {
 		if len(parts) > 1 && parts[1] == "list" {
 			return "read_only"

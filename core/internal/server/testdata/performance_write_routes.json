@@ -618,5 +618,20 @@
     "method": "POST",
     "path": "/pm/disconnect",
     "reason": "Explicit selected-PM reset: primary-key presence/migration-marker writes and status-indexed unfinished-turn mutation. No historical read or materialization; mutation cost proportional to unfinished turns."
+  },
+  {
+    "method": "POST",
+    "path": "/deliveries/claim",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/deliveries/{delivery_id}/receipt",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "PUT",
+    "path": "/notification-settings",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   }
 ]

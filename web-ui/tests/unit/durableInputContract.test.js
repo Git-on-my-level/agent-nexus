@@ -78,6 +78,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "updateBoardCard",
           "moveBoardCard",
           "createCardRevision",
+          "setNotificationSettings",
           "archiveDocument",
           "unarchiveDocument",
           "trashDocument",
@@ -270,6 +271,20 @@ it("event lifecycle surfaces share a durable batch composer", () => {
   }
   const ast = parse(
     readFileSync(`${root}/lib/components/EventLifecycleWork.svelte`, "utf8"),
+  );
+  let actions = 0;
+  walk(ast.html, (node) => {
+    if (node.type === "Action" && node.name === "durableForm") actions++;
+  });
+  expect(actions).toBe(1);
+});
+
+it("notification settings checkpoint their complete form and send only through the outbox", () => {
+  const ast = parse(
+    readFileSync(
+      `${root}/routes/o/[organization]/w/[workspace]/notifications/+page.svelte`,
+      "utf8",
+    ),
   );
   let actions = 0;
   walk(ast.html, (node) => {

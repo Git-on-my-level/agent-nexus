@@ -36,6 +36,10 @@ type Snapshot struct {
 	UsageSummary                 map[string]any `json:"usage_summary"`
 	ActiveStreamCount            int            `json:"active_stream_count"`
 	LastSuccessfulBackupAt       *string        `json:"last_successful_backup_at,omitempty"`
+	// AttentionSummary carries per-principal due-decision counts and the
+	// earliest unescalated decide_by (counts and times only) so a control plane
+	// can wake an idle core when its escalation clock must run.
+	AttentionSummary map[string]any `json:"attention_summary,omitempty"`
 }
 
 type Publisher struct {

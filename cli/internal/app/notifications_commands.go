@@ -17,6 +17,9 @@ func (a *App) runNotificationsCommand(ctx context.Context, args []string, cfg co
 	}
 	sub := notificationsSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "settings":
+		name, result, err := a.runNotificationSettingsCommand(ctx, args[1:], cfg)
+		return result, name, err
 	case "list":
 		result, err := a.runNotificationsList(ctx, args[1:], cfg)
 		return result, "notifications list", err

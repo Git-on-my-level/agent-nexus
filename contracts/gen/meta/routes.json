@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 231,
+  "route_count": 236,
   "routes": [
     {
       "method": "GET",
@@ -483,6 +483,21 @@
       "access_class": "workspace_business_surface"
     },
     {
+      "method": "GET",
+      "path": "/deliveries",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/deliveries/claim",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/deliveries/{delivery_id}/receipt",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
       "method": "POST",
       "path": "/derived/rebuild",
       "access_class": "workspace_business_surface"
@@ -711,6 +726,16 @@
       "method": "GET",
       "path": "/meta/handshake",
       "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/notification-settings",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/notification-settings",
+      "access_class": "authenticated_principal_surface"
     },
     {
       "method": "POST",

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
-	"time"
 
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/readmodel"
@@ -157,7 +156,7 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 			target, found := targets[key]
 			applyNotificationTargetStatus(payload, humanAttentionResponseTarget{ActorID: target.ActorID, AgentID: target.AgentID, Handle: target.Username}, found, nil)
 		}
-		return store.EnrichInboxAskStaleness(ctx, payloads, time.Now().UTC())
+		return nil
 	}
 	for _, principal := range []struct {
 		id, token string

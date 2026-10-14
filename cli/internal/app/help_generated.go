@@ -31,6 +31,7 @@ type localHelperTopic struct {
 var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "series", Description: "Push and query declared live series with source provenance"},
 	{Path: "adapters", Description: "Declare and administer scoped host-local live data sources"},
+	{Path: "deliveries", Description: "List, claim and receipt durable notification and wake deliveries"},
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
@@ -65,6 +66,11 @@ var localHelperTopics = []localHelperTopic{
 	{Path: "adapters list", Summary: "List declared sources and grant state.", QuickStart: "anx adapters list", Examples: []string{"anx adapters list"}, Flags: []localHelperFlag{}},
 	{Path: "adapters revoke", Summary: "Revoke a source grant immediately; keep observations.", QuickStart: "anx adapters revoke <name>", Examples: []string{"anx adapters revoke github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters revoke."}}},
 	{Path: "adapters delete", Summary: "Delete a source and its series history; invalidate its tokens.", QuickStart: "anx adapters delete <name>", Examples: []string{"anx adapters delete github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters delete."}}},
+	{Path: "deliveries list", Summary: "List your own deliveries with receipts.", QuickStart: "anx deliveries list", Examples: []string{"anx deliveries list --limit 20"}, Flags: []localHelperFlag{{Name: "--limit <n>", Description: "Accepted by deliveries list."}}},
+	{Path: "deliveries claim", Summary: "Claim due deliveries for a channel your adapter delivers.", QuickStart: "anx deliveries claim --channel <channel>", Examples: []string{"anx deliveries claim --channel chat --limit 10 --lease-seconds 60"}, Flags: []localHelperFlag{{Name: "--channel <channel>", Description: "Accepted by deliveries claim."}, {Name: "--limit <n>", Description: "Accepted by deliveries claim."}, {Name: "--lease-seconds <n>", Description: "Accepted by deliveries claim."}}},
+	{Path: "deliveries receipt", Summary: "Record delivered or failed for a claimed delivery.", QuickStart: "anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered", Examples: []string{"anx deliveries receipt <delivery_id> --claim-token <token> --outcome failed --error timeout --retryable true"}, Flags: []localHelperFlag{{Name: "<delivery_id>", Description: "Accepted by deliveries receipt."}, {Name: "--claim-token <token>", Description: "Accepted by deliveries receipt."}, {Name: "--outcome <delivered|failed>", Description: "Accepted by deliveries receipt."}, {Name: "--error <text>", Description: "Accepted by deliveries receipt."}, {Name: "--retryable <bool>", Description: "Accepted by deliveries receipt."}}},
+	{Path: "notifications settings get", Summary: "Read your notification channels and the channels adapters deliver.", QuickStart: "anx notifications settings get", Examples: []string{"anx notifications settings get"}, Flags: []localHelperFlag{}},
+	{Path: "notifications settings set", Summary: "Replace your notification channels, addresses and push or digest opt-ins.", QuickStart: "anx notifications settings set --body-file <path|->", Examples: []string{"anx notifications settings set --body-file settings.json"}, Flags: []localHelperFlag{{Name: "--body-file <path|->", Description: "Accepted by notifications settings set."}}},
 	{Path: "adapters token", Summary: "Exchange owner identity for a short-lived, push-only token.", QuickStart: "anx adapters token <name>", Examples: []string{"anx --json adapters token github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters token."}}},
 
 	{
@@ -2060,6 +2066,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
 		{command: "series", valid: []string{"list", "show", "query", "push"}},
 		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},
+		{command: "deliveries", valid: []string{"list", "claim", "receipt"}},
 		{command: "runs", valid: []string{"list", "get", "ingest"}},
 		{command: "host", valid: []string{"list", "revoke"}},
 		authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec,

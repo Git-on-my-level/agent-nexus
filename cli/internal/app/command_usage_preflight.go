@@ -46,6 +46,14 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		p, err := parseSeriesCommand(args)
 		return p.group + " " + p.verb, err
 	}
+	if args[0] == "deliveries" {
+		p, err := parseDeliveriesCommand(args[1:])
+		return "deliveries " + p.verb, err
+	}
+	if len(args) >= 2 && args[0] == "notifications" && args[1] == "settings" {
+		p, err := parseNotificationSettingsCommand(args[2:])
+		return "notifications settings " + p.verb, err
+	}
 	if args[0] == "debug" {
 		if len(args) < 2 || !isDebugGroup(args[1]) {
 			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")

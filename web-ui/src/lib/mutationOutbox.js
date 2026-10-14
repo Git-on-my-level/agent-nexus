@@ -229,6 +229,12 @@ async function send(entry) {
     }
     return entry.receipt;
   }
+  if (entry.operation === "notifications.settings.set") {
+    const result = await client.setNotificationSettings(entry.request.body);
+    if (!Array.isArray(result?.channels))
+      throw new Error("Notification settings receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "topics.patch") {
     const result = await client.updateTopic(
       entry.request.id,
@@ -916,7 +922,9 @@ async function attempt(entry) {
                   ? "document action"
                   : entry.operation === "topics.patch"
                     ? "topic edit"
-                    : "response",
+                    : entry.operation === "notifications.settings.set"
+                      ? "notification settings"
+                      : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =

@@ -284,7 +284,7 @@ func (s *Store) SetWorkspaceDashboard(ctx context.Context, actor, id string) err
 }
 
 func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNames map[string]bool) (map[string]any, error) {
-	result, err := s.OverviewVisible(ctx, humanIDs, agentNames, nil, time.Now().UTC(), 0)
+	result, err := s.OverviewVisible(ctx, humanIDs, agentNames, nil, time.Now().UTC())
 	if result != nil {
 		delete(result, "_visit_work")
 	}
@@ -292,7 +292,7 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 }
 
 // overviewWork shares the bounded report projection and its joined privacy context.
-func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, map[string]bool, error) {
+func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, includeClosed bool) ([]map[string]any, bool, map[string]bool, error) {
 	// Scoped SQL has already applied canonical card and contributor privacy.
 	// Keep legacy callbacks for direct/unscoped callers; do not query every thread
 	// again for rows already filtered by this request's immutable policy.
@@ -339,15 +339,15 @@ func (s *Store) overviewWork(ctx context.Context, visible func(string, string) b
 		}
 		return a > b
 	})
-	if err = s.EnrichCardPlans(ctx, work, visible, now, threshold); err != nil {
+	if err = s.EnrichCardPlans(ctx, work, visible, now); err != nil {
 		return nil, false, nil, err
 	}
 	return work, page.Truncated, initiativeBoards, nil
 }
 
-func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[string]bool, visible func(string, string) bool, now time.Time, threshold time.Duration) (map[string]any, error) {
+func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[string]bool, visible func(string, string) bool, now time.Time) (map[string]any, error) {
 	result := map[string]any{"generated_at": now.Format(time.RFC3339Nano)}
-	work, truncated, initiativeBoards, err := s.overviewWork(ctx, visible, now, threshold, true)
+	work, truncated, initiativeBoards, err := s.overviewWork(ctx, visible, now, true)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 		ask := strings.Join(needsHuman, " · ")
 		ref := anyStringValue(w["ref"])
 		href := "/tasks/" + url.PathEscape(strings.TrimPrefix(ref, "card:"))
-		initiative := map[string]any{"ref": ref, "title": w["title"], "work_summary": w["work_summary"], "summary": summary, "summary_text": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "health": initiativeHealth(w), "plan_health": w["plan_health"], "next_step": w["next_step"], "status_mismatch": w["status_mismatch"], "possibly_moot": w["possibly_moot"], "plan_resolution_truncated": w["plan_resolution_truncated"], "plan_step_digest": w["plan_step_digest"]}
+		initiative := map[string]any{"ref": ref, "title": w["title"], "work_summary": w["work_summary"], "summary": summary, "summary_text": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "plan_health": w["plan_health"], "next_step": w["next_step"], "status_mismatch": w["status_mismatch"], "possibly_moot": w["possibly_moot"], "plan_resolution_truncated": w["plan_resolution_truncated"], "plan_step_digest": w["plan_step_digest"]}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			initiative["plan_state"] = state
 			initiative["progress"] = state.Progress
@@ -422,11 +422,11 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 	return result, nil
 }
 
-// A missing plan is reported as a missing plan. The fallback used to claim
-// on_track, which rendered green for an initiative nobody had planned.
-func initiativeHealth(w map[string]any) map[string]any {
+// initiativeHealthState is the enriched promise state; unenriched rows have
+// no promise.
+func initiativeHealthState(w map[string]any) string {
 	if health, ok := w["plan_health"].(plans.Health); ok {
-		return map[string]any{"status": plans.LegacyHealth(health.State), "state": health.State, "reason": health.Reason}
+		return health.State
 	}
-	return map[string]any{"status": "no_plan", "state": "no_plan", "reason": "Initiative has no plan steps."}
+	return plans.PromiseNone
 }

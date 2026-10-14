@@ -305,7 +305,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 				return pm.ContextPage{}, pm.ErrContextWorkCursor
 			}
 			if !strings.HasPrefix(ref, "card:") && !strings.HasPrefix(ref, "work:") {
-				previews, err := store.ResolveRefs(ctx, []string{ref}, nil, time.Now().UTC(), planStalledAfter())
+				previews, err := store.ResolveRefs(ctx, []string{ref}, nil, time.Now().UTC())
 				if err != nil {
 					return pm.ContextPage{}, err
 				}

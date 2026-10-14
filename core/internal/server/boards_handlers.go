@@ -1586,7 +1586,7 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		if len(visibility) > 0 {
 			visible = visibility[0]
 		}
-		if err = store.EnrichCardPlans(ctx, cards, visible, time.Now().UTC(), planStalledAfter()); err != nil {
+		if err = store.EnrichCardPlans(ctx, cards, visible, time.Now().UTC()); err != nil {
 			return nil, err
 		}
 		for _, card := range cards {
@@ -2748,7 +2748,7 @@ func boardCardDerivedSummary(card map[string]any, threadID string, states map[st
 		return nil
 	}
 	projection := states[threadID].Projection
-	riskState, dueAt, hasDueAt := boardCardRiskState(card, now, defaultInboxRiskHorizon)
+	_, dueAt, hasDueAt := boardCardRiskState(card, now, defaultInboxRiskHorizon)
 	summary := map[string]any{
 		"decision_request_count": projection.DecisionRequestCount,
 		"decision_count":         projection.DecisionCount,
@@ -2756,8 +2756,6 @@ func boardCardDerivedSummary(card map[string]any, threadID string, states map[st
 		"document_count":         projection.DocumentCount,
 		"inbox_count":            projection.InboxCount,
 		"latest_activity_at":     nullableStringValue(projection.LastActivityAt),
-		"stale":                  projection.Stale,
-		"risk_state":             nullableStringValue(riskState),
 	}
 	if hasDueAt {
 		summary["due_at"] = dueAt.Format(time.RFC3339)

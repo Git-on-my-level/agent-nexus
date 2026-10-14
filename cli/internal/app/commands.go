@@ -120,6 +120,8 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	switch args[0] {
 	case "series", "adapters":
 		return a.runSeriesCommand(ctx, args, cfg)
+	case "deliveries":
+		return a.runDeliveriesCommand(ctx, args[1:], cfg)
 	case "version":
 		result, err := a.runVersion(cfg)
 		return "version", result, err

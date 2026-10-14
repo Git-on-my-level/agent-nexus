@@ -26,6 +26,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `series` (group): Push and query declared live series with source provenance
 - `adapters` (group): Declare and administer scoped host-local live data sources
+- `deliveries` (group): List, claim and receipt durable notification and wake deliveries
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Inspect the enrolled host and derived-agent identity
@@ -177,6 +178,11 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `adapters list` (local-helper): List declared sources and grant state.
 - `adapters revoke` (local-helper): Revoke a source grant immediately; keep observations.
 - `adapters delete` (local-helper): Delete a source and its series history; invalidate its tokens.
+- `deliveries list` (local-helper): List your own deliveries with receipts.
+- `deliveries claim` (local-helper): Claim due deliveries for a channel your adapter delivers.
+- `deliveries receipt` (local-helper): Record delivered or failed for a claimed delivery.
+- `notifications settings get` (local-helper): Read your notification channels and the channels adapters deliver.
+- `notifications settings set` (local-helper): Replace your notification channels, addresses and push or digest opt-ins.
 - `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
 - `inbox list` (local-helper): List asks addressed to the active agent, including answer and per-answer read state.
 - `inbox summary` (local-helper): Count open human asks and read the top asks visible in this workspace.
@@ -952,6 +958,26 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx adapters ... ; anx --json adapters ... ; anx adapters ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `deliveries`
+
+List, claim and receipt durable notification and wake deliveries
+
+```text
+Generated Help: deliveries
+
+Commands:
+  deliveries claim         Claim due deliveries for a channel under a lease
+  deliveries list          List the caller's own deliveries with receipts
+  deliveries receipt       Record a delivery outcome for a claimed delivery
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx deliveries ... ; anx --json deliveries ... ; anx deliveries ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -5897,6 +5923,8 @@ Inputs:
   - body `description` (string)
   - body `expected_interval` (string)
   - body `name` (string)
+  Optional:
+  - body `delivers` (list<string>)
   - body `series` (list<any>)
 
 CLI input:
@@ -6037,6 +6065,205 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx adapters delete ... ; anx --json adapters delete ... ; anx adapters delete ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `deliveries list`
+
+List your own deliveries with receipts.
+
+```text
+Generated Help: deliveries list
+
+- Command ID: `deliveries.list`
+- CLI path: `deliveries list`
+- HTTP: `GET /deliveries`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List the caller's own queued notifications and wake deliveries with their receipts.
+- Output: Returns JSON with the named delivery objects.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Concepts: `inbox`
+- Agent notes: Reads only the caller's own rows; bounded by limit.
+- Adjacent commands: `deliveries claim`, `deliveries receipt`
+
+Local Help: deliveries list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: List your own deliveries with receipts.
+- Quick start: anx deliveries list
+- Examples:
+  - `anx deliveries list --limit 20`
+
+Flags:
+  --limit <n>                  Accepted by deliveries list.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx deliveries list ... ; anx --json deliveries list ... ; anx deliveries list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `deliveries claim`
+
+Claim due deliveries for a channel your adapter delivers.
+
+```text
+Generated Help: deliveries claim
+
+- Command ID: `deliveries.claim`
+- CLI path: `deliveries claim`
+- HTTP: `POST /deliveries/claim`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `flags`
+- Why: Claim due deliveries for a channel the calling adapter delivers.
+- Output: Returns JSON with the named delivery objects.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Concepts: `inbox`
+- Agent notes: Only the owning agent of an active adapter delivering the channel may claim. Claim tokens are returned only here; an expired lease makes the delivery claimable again.
+- Adjacent commands: `deliveries list`, `deliveries receipt`
+- Examples:
+  - Claim chat deliveries: `anx deliveries claim --channel chat --limit 10 --lease-seconds 60`
+
+Inputs:
+  Required:
+  - body `channel` (string)
+  Optional:
+  - body `lease_seconds` (integer)
+  - body `limit` (integer)
+
+CLI input:
+  Flags:
+  - `--channel` required: Channel to claim; the active adapter owned by the caller must declare it in delivers.
+  - `--limit`: Maximum deliveries to claim.
+  - `--lease-seconds`: Claim lease length in seconds.
+
+Local Help: deliveries claim
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Claim due deliveries for a channel your adapter delivers.
+- Quick start: anx deliveries claim --channel <channel>
+- Examples:
+  - `anx deliveries claim --channel chat --limit 10 --lease-seconds 60`
+
+Flags:
+  --channel <channel>          Accepted by deliveries claim.
+  --limit <n>                  Accepted by deliveries claim.
+  --lease-seconds <n>          Accepted by deliveries claim.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx deliveries claim ... ; anx --json deliveries claim ... ; anx deliveries claim ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `deliveries receipt`
+
+Record delivered or failed for a claimed delivery.
+
+```text
+Generated Help: deliveries receipt
+
+- Command ID: `deliveries.receipt`
+- CLI path: `deliveries receipt`
+- HTTP: `POST /deliveries/{delivery_id}/receipt`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `flags`
+- Why: Record delivered or failed for a delivery claimed by this adapter.
+- Output: Returns JSON with the named delivery objects.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Concepts: `inbox`
+- Agent notes: Receipts are idempotent per claim token; a stale or superseded claim returns conflict. A delivery on a channel the caller does not deliver reads as not found.
+- Adjacent commands: `deliveries claim`, `deliveries list`
+- Examples:
+  - Confirm a delivery: `anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered`
+
+Inputs:
+  Required:
+  - path `delivery_id`
+  - body `claim_token` (string)
+  - body `outcome` (string)
+  Optional:
+  - body `error` (string)
+  - body `retryable` (boolean)
+  Enum values: outcome: delivered, failed
+
+CLI input:
+  Flags:
+  - `--claim-token` required: Claim token returned by deliveries claim.
+  - `--outcome` required: delivered or failed.
+  - `--error`: Failure detail; never include secrets.
+  - `--retryable`: Mark a failed delivery as retryable (true or false).
+
+Local Help: deliveries receipt
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Record delivered or failed for a claimed delivery.
+- Quick start: anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered
+- Examples:
+  - `anx deliveries receipt <delivery_id> --claim-token <token> --outcome failed --error timeout --retryable true`
+
+Flags:
+  <delivery_id>                Accepted by deliveries receipt.
+  --claim-token <token>        Accepted by deliveries receipt.
+  --outcome <delivered|failed> Accepted by deliveries receipt.
+  --error <text>               Accepted by deliveries receipt.
+  --retryable <bool>           Accepted by deliveries receipt.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx deliveries receipt ... ; anx --json deliveries receipt ... ; anx deliveries receipt ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `notifications settings get`
+
+Read your notification channels and the channels adapters deliver.
+
+```text
+Local Help: notifications settings get
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Read your notification channels and the channels adapters deliver.
+- Quick start: anx notifications settings get
+- Examples:
+  - `anx notifications settings get`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx notifications settings get ... ; anx --json notifications settings get ... ; anx notifications settings get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `notifications settings set`
+
+Replace your notification channels, addresses and push or digest opt-ins.
+
+```text
+Local Help: notifications settings set
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Replace your notification channels, addresses and push or digest opt-ins.
+- Quick start: anx notifications settings set --body-file <path|->
+- Examples:
+  - `anx notifications settings set --body-file settings.json`
+
+Flags:
+  --body-file <path|->         Accepted by notifications settings set.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx notifications settings set ... ; anx --json notifications settings set ... ; anx notifications settings set ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

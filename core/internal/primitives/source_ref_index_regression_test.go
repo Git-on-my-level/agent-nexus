@@ -31,7 +31,7 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ref := range []string{"ANY-PREFIX-42", "custom-reference", "arbitrary-provider:opaque"} {
-		items, err := s.ResolveRefs(ctx, []string{ref}, nil, time.Now(), 0)
+		items, err := s.ResolveRefs(ctx, []string{ref}, nil, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,11 +39,11 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 			t.Fatal(items)
 		}
 	}
-	other, err := s.ResolveRefs(ctx, []string{"other-provider:opaque"}, nil, time.Now(), 0)
+	other, err := s.ResolveRefs(ctx, []string{"other-provider:opaque"}, nil, time.Now())
 	if err != nil || other[0].Resolvable || other[0].Status != "" || other[0].Authority != "" {
 		t.Fatalf("typed identity broadened: %v %v", other, err)
 	}
-	unknown, err := s.ResolveRefs(ctx, []string{"UNPUBLISHED-42"}, nil, time.Now(), 0)
+	unknown, err := s.ResolveRefs(ctx, []string{"UNPUBLISHED-42"}, nil, time.Now())
 	if err != nil || unknown[0].Resolvable || unknown[0].Authority != "" {
 		t.Fatalf("unknown=%v err=%v", unknown, err)
 	}
@@ -53,7 +53,7 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	items, err := s.ResolveRefs(ctx, []string{"custom-reference"}, nil, time.Now(), 0)
+	items, err := s.ResolveRefs(ctx, []string{"custom-reference"}, nil, time.Now())
 	if err != nil || items[0].Title != "Public source" {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
@@ -86,7 +86,7 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	items, err = s.ResolveRefs(ctx, []string{"overloaded-alias"}, nil, time.Now(), 0)
+	items, err = s.ResolveRefs(ctx, []string{"overloaded-alias"}, nil, time.Now())
 	if err != nil || items[0].Resolvable {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
@@ -98,7 +98,7 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 	if _, err = s.PatchWork(ctx, "actor", card["id"].(string), work["version"].(int64), map[string]any{"source_refs": []any{}}); err != nil {
 		t.Fatal(err)
 	}
-	items, err = s.ResolveRefs(ctx, []string{"custom-reference"}, nil, time.Now(), 0)
+	items, err = s.ResolveRefs(ctx, []string{"custom-reference"}, nil, time.Now())
 	if err != nil || items[0].Resolvable {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
@@ -216,7 +216,7 @@ func TestSourceRefIndexBackfillsExistingMetadata(t *testing.T) {
 	}
 	defer ws.Close()
 	s = NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-	rows, err := s.ResolveRefs(ctx, []string{"preexisting-alias"}, nil, time.Now(), 0)
+	rows, err := s.ResolveRefs(ctx, []string{"preexisting-alias"}, nil, time.Now())
 	if err != nil || rows[0].Status != "done" {
 		t.Fatalf("backfill: %v %v card=%v", rows, err, card["id"])
 	}
@@ -237,7 +237,7 @@ func TestSourceURLLookupStaysBounded(t *testing.T) {
 		}
 	}
 	checks := 0
-	items, err := s.ResolveRefs(WithAccessScope(ctx, AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), []string{"https://source.test/shared"}, func(string, string) bool { checks++; return true }, time.Now(), 0)
+	items, err := s.ResolveRefs(WithAccessScope(ctx, AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), []string{"https://source.test/shared"}, func(string, string) bool { checks++; return true }, time.Now())
 	if err != nil || items[0].Resolvable || checks > 2*(2+33) {
 		t.Fatalf("unbounded URL: items=%v checks=%d err=%v", items, checks, err)
 	}
@@ -259,7 +259,7 @@ func TestProviderSpellingsUseOnlyPublishedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	refs := []string{"team/repo#42", "github:team/repo#42", "https://github.com/team/repo/pull/42", "https://github.com/team/repo/issues/42", "github:team/repo#999", "TEAM/repo#42"}
-	items, err := s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
+	items, err := s.ResolveRefs(ctx, refs, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
