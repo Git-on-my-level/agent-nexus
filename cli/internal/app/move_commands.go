@@ -286,8 +286,17 @@ func moveValidateSnapshot(marker map[string]any, sourceWorkspace, kind, sourceRe
 		return errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s changed after move snapshot (%s, now %s); no remaining source resources will be archived", kind, sourceRef, wantRevision, gotRevision))
 	}
 	if kind == "card" && allowJournalRevision {
-		if expectedVersion := moveInt64(marker["source_archive_version"]); expectedVersion > 0 && moveInt64(object["version"]) != expectedVersion {
-			return errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source card %s revision changed after the verified move journal; source remains active", sourceRef))
+		if expectedVersion := moveInt64(marker["source_archive_version"]); expectedVersion > 0 {
+			currentVersion := moveInt64(object["version"])
+			// The completed journal stores the pre-archive fence. Current cores
+			// advance it once in the archive transaction; older cores leave it
+			// unchanged. Only an archived, completed source may take that one
+			// extra step. Restore or later edits must still conflict, even when
+			// the snapshotted content and move marker are unchanged.
+			ownArchive := moveState(object) == "archived" && moveFieldString(marker, "status") == "complete" && currentVersion == expectedVersion+1
+			if currentVersion != expectedVersion && !ownArchive {
+				return errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source card %s revision changed after the verified move journal (expected %d, now %d); source remains active", sourceRef, expectedVersion, currentVersion))
+			}
 		}
 	}
 	if wantRevision != gotRevision && !allowJournalRevision {
@@ -671,7 +680,17 @@ func moveInt64(value any) int64 {
 
 func moveInt64Pointer(value int64) *int64 { return &value }
 
-func moveState(object map[string]any) string { return strings.TrimSpace(anyString(object["state"])) }
+func moveState(object map[string]any) string {
+	// Work projects lifecycle timestamps rather than the canonical card's state.
+	// Prefer those fields when present, with trash taking precedence over archive.
+	if moveFieldString(object, "trashed_at") != "" {
+		return "trashed"
+	}
+	if moveFieldString(object, "archived_at") != "" {
+		return "archived"
+	}
+	return strings.TrimSpace(anyString(object["state"]))
+}
 
 func moveSetPhase(marker map[string]any, phase string) {
 	order := map[string]int{"snapshot": 0, "create_destination": 1, "refs_rewritten": 2, "verified": 3, "source_transition": 4, "complete": 5}
@@ -703,6 +722,9 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 		return nil, errnorm.New(errnorm.KindRemote, "source_archived", "archived source card has no matching move marker")
 	}
 	if moveState(source) == "archived" && moveHasMarker(sourceMarker, moveID) && anyString(sourceMarker["status"]) == "complete" {
+		if err := moveValidateSnapshot(sourceMarker, sourceCfg.BaseURL, "card", sourceRef, source, true); err != nil {
+			return nil, err
+		}
 		return movePlanResult("card", moveID, sourceRef, sourceURL, destCfg.BaseURL, anyString(sourceMarker["destination_ref"]), []map[string]any{}, dryRun), nil
 	}
 	snapshotRevision := moveSourceRevision("card", source)

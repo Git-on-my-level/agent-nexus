@@ -294,6 +294,37 @@ func TestMoveTopicRealCoresResumesFromEveryJournalPhase(t *testing.T) {
 	}
 }
 
+func TestMoveTopicRealCoreRejectsLifecycleRoundTripAfterJournalArchive(t *testing.T) {
+	pair := newMoveCorePair(t)
+	for _, rearchive := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rearchive-%t", rearchive), func(t *testing.T) {
+			fixture := pair.createTopicFixture(t, fmt.Sprintf("lifecycle-%t", rearchive))
+			pair.sourceFault.arm(moveIntegrationPhaseRule("complete"))
+			first := pair.source.runCLI(t, "move-agent", nil, "move", "topic", fixture.topic, "--to", "destination")
+			if first.ExitCode == 0 || !pair.sourceFault.wasFired() {
+				t.Fatalf("complete-phase fault did not interrupt: %s", first.Stdout)
+			}
+			before := pair.source.getCore(t, "/work/"+url.PathEscape(fixture.cardA))
+			if moveIntegrationState(before, "work") != "archived" {
+				t.Fatalf("journal archive missing: %v", before)
+			}
+			pair.source.runCLIExpectOK(t, "move-agent", nil, "cards", "restore", fixture.cardA)
+			if rearchive {
+				pair.source.runCLIExpectOK(t, "move-agent", nil, "cards", "archive", fixture.cardA)
+			}
+			changed := pair.source.getCore(t, "/work/"+url.PathEscape(fixture.cardA))
+			resumed := pair.source.runCLI(t, "move-agent", nil, "move", "topic", fixture.topic, "--to", "destination")
+			if resumed.ExitCode == 0 || !strings.Contains(resumed.Stdout, "source_changed") {
+				t.Fatalf("foreign lifecycle transition was accepted: %s", resumed.Stdout)
+			}
+			after := pair.source.getCore(t, "/work/"+url.PathEscape(fixture.cardA))
+			if moveIntegrationState(changed, "work") != moveIntegrationState(after, "work") || fmt.Sprint(integrationMap(changed["work"])["version"]) != fmt.Sprint(integrationMap(after["work"])["version"]) {
+				t.Fatalf("resume overwrote foreign lifecycle: before=%v after=%v", changed, after)
+			}
+		})
+	}
+}
+
 func TestMoveTopicRealCoreDryRunListsInaccessibleLinkedDocument(t *testing.T) {
 	pair := newMoveCorePair(t)
 	topic := pair.createTopic(t, "missing-doc")
@@ -383,6 +414,25 @@ func TestMoveCardRealCoreRejectsConflictingIdentityAndMissingDestinationGrant(t 
 			t.Fatalf("missing destination grant changed the source: %#v", work)
 		}
 	})
+}
+
+func TestMoveCardRealCoreCompletedJournalFencesRearchive(t *testing.T) {
+	pair := newMoveCorePair(t)
+	card := pair.createCard(t, "completed-journal", map[string]any{"authority": "nexus"}, "")
+	pair.source.runCLIExpectOK(t, "move-agent", nil, "move", "card", card, "--to", "destination")
+	// Repeating only our completed archive is safe and must not write again.
+	pair.source.runCLIExpectOK(t, "move-agent", nil, "move", "card", card, "--to", "destination")
+	pair.source.runCLIExpectOK(t, "move-agent", nil, "cards", "restore", card)
+	pair.source.runCLIExpectOK(t, "move-agent", nil, "cards", "archive", card)
+	before := pair.source.getCore(t, "/work/"+url.PathEscape(card))
+	resumed := pair.source.runCLI(t, "move-agent", nil, "move", "card", card, "--to", "destination")
+	if resumed.ExitCode == 0 || !strings.Contains(resumed.Stdout, "source_changed") {
+		t.Fatalf("completed journal accepted a foreign rearchive: %s", resumed.Stdout)
+	}
+	after := pair.source.getCore(t, "/work/"+url.PathEscape(card))
+	if fmt.Sprint(integrationMap(before["work"])["version"]) != fmt.Sprint(integrationMap(after["work"])["version"]) {
+		t.Fatalf("failed recovery changed the source: before=%v after=%v", before, after)
+	}
 }
 
 func TestMoveCardRealCoreFencesSourceEditMidTransfer(t *testing.T) {
