@@ -47,6 +47,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "createPmConversation",
           "sendPmMessage",
           "answerPmDecision",
+          "ungroupCurationBatch",
           "createPmDecision",
           "createArtifactAttachment",
           "createWork",

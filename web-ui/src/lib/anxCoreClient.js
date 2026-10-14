@@ -433,6 +433,11 @@ const adapterCommandTable = [
     (id, payload) => pb(pathParams({ decision_id: id }), payload),
   ],
   [
+    "ungroupCurationBatch",
+    "curation.ungroup",
+    (payload) => ({ options: b(payload) }),
+  ],
+  [
     "dispatchPmDecision",
     "pm.decisions.dispatch",
     (id, payload = {}) => pb(pathParams({ decision_id: id }), payload),
