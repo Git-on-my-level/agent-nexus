@@ -645,7 +645,8 @@ func TestHumanAskCommandResolvesThreadIDFromCardSubjectRef(t *testing.T) {
 	})
 	assertEnvelopeOK(t, raw)
 
-	if len(seen) != 2 || seen[0] != "GET /cards/card:launch" || seen[1] != "POST /events" {
+	// The trailing GET /brief is the best-effort ask_no_deadline count.
+	if len(seen) != 3 || seen[0] != "GET /cards/card:launch" || seen[1] != "POST /events" || seen[2] != "GET /brief" {
 		t.Fatalf("expected card lookup before event create, got %#v", seen)
 	}
 	event, _ := captured["event"].(map[string]any)

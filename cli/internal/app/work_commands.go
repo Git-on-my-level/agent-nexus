@@ -398,6 +398,9 @@ func workHelpText(topic string) (string, bool) {
 		return fmt.Sprintf("Usage: anx pm context\n\nInside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.\n\nAdjacent commands: `%s`\n\nOutside a claimed turn\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
 	}
 
+	if isInternalWorkCommand(topic) {
+		return "", false
+	}
 	spec, exact := workCommands[topic]
 	if !exact && !isWorkCommandGroup(topic) {
 		return "", false
@@ -1010,6 +1013,13 @@ func applyPMTurnContextBody(a *App, parsed parsedWorkCommand, object map[string]
 			object["limit"] = n
 		}
 	}
+}
+
+// isInternalWorkCommand reports registry entries that only back the top-level
+// loop verb (anx context). They are not a user-facing `anx work` subcommand and
+// must not appear in help or the generated runtime reference.
+func isInternalWorkCommand(name string) bool {
+	return name == "work context"
 }
 
 func isWorkCommandGroup(topic string) bool {

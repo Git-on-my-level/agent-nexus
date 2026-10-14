@@ -239,7 +239,7 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 			if text, ok := helpTopicText(topic); ok {
 				return "help", &commandResult{Text: text, Data: helpEnvelopeResult(topic, text)}, nil
 			}
-			return "help", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown help topic %q", topic))
+			return "help", nil, errnorm.Usage("unknown_command", unknownHelpTopicMessage(topic))
 		}
 		text := a.rootUsageText()
 		return "help", &commandResult{Text: text, Data: helpEnvelopeResult("", text)}, nil
@@ -550,4 +550,16 @@ func parseOverviewCommand(args []string) (string, string, error) {
 		return "overview changes", "overview.changes", nil
 	}
 	return "overview", "", errnorm.Usage("invalid_args", "usage: anx overview [changes]")
+}
+
+// unknownHelpTopicMessage names the loop verb for the removed `anx work
+// note|done|context` shapes, so a stale help lookup lands on the real command.
+func unknownHelpTopicMessage(topic string) string {
+	topic = strings.TrimSpace(topic)
+	for _, verb := range []string{"note", "done", "context"} {
+		if topic == "work "+verb || strings.HasPrefix(topic, "work "+verb+" ") {
+			return fmt.Sprintf("unknown help topic %q; the loop verb is anx %s (see anx help %s)", topic, verb, verb)
+		}
+	}
+	return fmt.Sprintf("unknown help topic %q", topic)
 }

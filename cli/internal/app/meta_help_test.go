@@ -1398,3 +1398,14 @@ func runHelpCommandAllowExit(t *testing.T, args []string) (string, string, int) 
 	exitCode := cli.Run(args)
 	return stdout.String(), stderr.String(), exitCode
 }
+
+func TestHelpWorkContextPointsToLoopVerb(t *testing.T) {
+	for _, verb := range []string{"context", "note", "done"} {
+		args := []string{"--json", "help", "work", verb}
+		payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), nil, nil, args))
+		msg := anyString(asMap(payload["error"])["message"])
+		if !strings.Contains(msg, "unknown help topic") || !strings.Contains(msg, "anx "+verb) {
+			t.Fatalf("work %s: message=%q", verb, msg)
+		}
+	}
+}

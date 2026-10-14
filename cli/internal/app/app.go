@@ -144,7 +144,7 @@ func (a *App) Run(args []string) int {
 	if topic, help := commandHelpTopic(remaining); help {
 		text, ok := helpTopicText(topic)
 		if !ok {
-			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", "unknown help topic "+topic))
+			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", unknownHelpTopicMessage(topic)))
 		}
 		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: helpEnvelopeResult(topic, text)})
 		return 0
