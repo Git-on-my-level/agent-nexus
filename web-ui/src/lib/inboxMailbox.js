@@ -193,7 +193,7 @@ export function classifyInboxRow(row, now = Date.now()) {
     }
     const freshness = workFreshness(row.item || row, now);
     if (
-      row.item?.work_summary?.status?.state === "stale" ||
+      row.item?.work_summary?.status?.state === "past_promise" ||
       freshness.key === "stale" ||
       freshness.key === "error"
     ) {
@@ -247,10 +247,7 @@ export function inboxRowBadge(row, now = Date.now()) {
     };
   if (row.kind === "task") {
     const status = row.item?.work_summary?.status;
-    if (
-      status?.label &&
-      ["blocked", "stale", "at_risk"].includes(status.state)
-    ) {
+    if (status?.label && ["blocked", "past_promise"].includes(status.state)) {
       return { label: status.label, tone: "warn" };
     }
     if (taskIsBlocked(row)) return { label: "Blocked", tone: "warn" };
@@ -653,7 +650,6 @@ export function buildInboxRows({
       waitingSince:
         item.source_event_time || item.trigger_at || item.created_at || "",
       status: item.status || (item.responded_at ? "completed" : "open"),
-      stale: item.is_stale === true && inboxItemNeedsResponse(item),
       category: String(item.kind ?? item.category ?? "").trim(),
       severity: item.severity || "",
       requester: { name: requesterName, id: requesterId },

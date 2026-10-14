@@ -45,38 +45,30 @@ const model = (overrides = {}) => card(overrides).summary;
 describe("the Overview card reads core's serialized initiative", () => {
   it("renders the computed status core sends, with core's own label", () => {
     expect(tile.work_summary.status).toEqual({
-      state: "on_track",
-      label: "In progress",
-      reason: "Open steps are progressing.",
+      state: "no_promise",
+      label: "No promise",
+      reason: "No promise.",
       since: "2026-10-04T12:00:00Z",
     });
     /*
      * And drops that reason rather than printing it. Core answers "why is
-     * this card in this state" for every card, including the ones where the
-     * answer is that nothing is wrong; under a badge reading `In progress`,
-     * "Open steps are progressing." is a line that can never tell a reader
+     * this card in this state" for every card; under a badge reading
+     * `No promise`, "No promise." is a line that can never tell a reader
      * something the badge did not. A reason that names a cause keeps its line.
      */
     expect(model().status).toMatchObject({
-      state: "on_track",
-      label: "In progress",
+      state: "no_promise",
+      label: "No promise",
       reason: "",
-      tone: "ok",
+      tone: "neutral",
     });
   });
 
-  it("shows the stored phase core says disagrees with the computed status", () => {
-    // The fixture's card sits in `backlog` with an untouched plan that core
-    // computes as on track, so the card has to say both: "In progress ·
-    // marked backlog" is exactly the disagreement this change exists to show.
-    expect(tile.work_summary.set_status).toEqual({
-      state: "backlog",
-      label: "Backlog",
-    });
-    expect(model().setStatus).toMatchObject({
-      state: "backlog",
-      label: "Backlog",
-    });
+  it("shows the stored phase when core sends one beside the computed status", () => {
+    const set_status = { state: "backlog", label: "Backlog" };
+    expect(
+      model({ work_summary: { ...tile.work_summary, set_status } }).setStatus,
+    ).toMatchObject({ state: "backlog", label: "Backlog" });
   });
 
   it("takes progress and its unit from the computed summary", () => {
@@ -152,28 +144,32 @@ describe("the Overview card reads core's serialized initiative", () => {
   });
 
   it("degrades for a planless initiative without inventing a plan", () => {
-    // Core sends no progress, next or steps, and a no_plan status.
+    // Core sends no progress, next or steps, and a no_promise status.
     const planless = model({
       plan_state: null,
       geometry: null,
       work_summary: {
         status: {
-          state: "no_plan",
-          label: "No plan",
-          reason: "Card has no plan steps.",
+          state: "no_promise",
+          label: "No promise",
+          reason: "No promise.",
         },
+        hints: ["no_plan"],
       },
     });
     expect(planless.segments).toEqual([]);
     expect(planless.shape).toBe("");
     expect(planless.next).toBeNull();
     expect(planless.progress).toBeNull();
-    expect(planless.status.state).toBe("no_plan");
+    expect(planless.status.state).toBe("no_promise");
     expect(
       card({
         plan_state: null,
         geometry: null,
-        work_summary: { status: { state: "no_plan", label: "No plan" } },
+        work_summary: {
+          status: { state: "no_promise", label: "No promise" },
+          hints: ["no_plan"],
+        },
       }).group,
     ).toBe("no_plan");
   });
@@ -183,7 +179,7 @@ describe("the Overview card reads core's serialized initiative", () => {
     const legacyRow = { ...tile };
     delete legacyRow.work_summary;
     const legacy = workSummaryCard(legacyRow, { now: NOW }).summary;
-    expect(legacy.status.state).toBe("on_track");
+    expect(legacy.status.state).toBe("no_promise");
     expect(legacy.progress).toMatchObject({ done: 1, total: 2 });
     expect(legacy.next).toMatchObject({ id: "build", title: "Build" });
     expect(legacy.steps.groups.map((list) => list.key)).toEqual(["next"]);
@@ -240,12 +236,11 @@ describe("Since you last looked reads core's digest", () => {
     expect(strip.since).toBe(digest.since);
     expect(strip.counts).toEqual({
       step_completed: 1,
-      initiative_stale: 1,
-      initiative_blocked: 1,
+      initiative_past_promise: 1,
       ask_answered: 1,
     });
     expect(strip.summary).toBe(
-      "1 step done · 1 blocked · 1 stale · 1 ask answered",
+      "1 step done · 1 past promise · 1 ask answered",
     );
   });
 
@@ -253,8 +248,7 @@ describe("Since you last looked reads core's digest", () => {
     expect(
       sinceYouLastLookedStrip(digest).items.map((item) => item.kind),
     ).toEqual([
-      "initiative_blocked",
-      "initiative_stale",
+      "initiative_past_promise",
       "ask_answered",
       "step_completed",
     ]);
@@ -343,9 +337,9 @@ describe("the digest's decision items", () => {
     expect(
       labels([
         {
-          kind: "initiative_blocked",
+          kind: "initiative_past_promise",
           ref: "card:q",
-          title: "Fix the blocked queue",
+          title: "Fix the past promise report",
         },
         { kind: "step_completed", ref: "card:s", title: "Step 3 done" },
         {
@@ -355,7 +349,7 @@ describe("the digest's decision items", () => {
         },
       ]),
       // Worst first, as the strip orders every digest.
-    ).toEqual(["blocked", "new decision", "step done"]);
+    ).toEqual(["past promise", "new decision", "step done"]);
   });
 
   it("summarizes once there is more than one change to read", () => {
@@ -373,8 +367,7 @@ describe("the digest's decision items", () => {
     // Guards the mismatch class rather than the one instance of it.
     const enumerated = [
       "step_completed",
-      "initiative_stale",
-      "initiative_blocked",
+      "initiative_past_promise",
       "ask_answered",
       "decision_created",
     ];

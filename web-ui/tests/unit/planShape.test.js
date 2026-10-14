@@ -149,7 +149,6 @@ describe("planLayout lanes", () => {
   it("reports no shape of its own when core computed none", () => {
     const layout = planLayout(plan([step("a"), step("b", ["a"])]));
     expect(layout.shape).toBe("");
-    expect(layout.health).toBe("");
     expect(layout.progress).toBeNull();
     expect(layout.hasState).toBe(false);
   });

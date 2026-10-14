@@ -2,7 +2,7 @@
  * What an ask's answer did, and whether anyone received it.
  *
  * Core owns every fact here. `GET /asks/{ask_id}` (contract `AskOutcome`)
- * carries the ask's status, whether it has gone stale, the task decision the
+ * carries the ask's status, the task decision the
  * answer recorded, and one row per delivery subscription. The ask event's own
  * payload carries the authoring evidence — typed refs for native resources and
  * labelled external links. This module turns both into the one vocabulary the
@@ -281,13 +281,6 @@ export function askDeliveryModel(
   }
   return {
     status,
-    /*
-     * Core computes staleness per ask, from the subject card's last change
-     * against the deployment's `ANX_ASK_STALE_AFTER`, and only `GET
-     * /asks/{ask_id}` carries it — an inbox row does not, so this is a fact the
-     * detail knows and the list cannot.
-     */
-    isStale: outcome.is_stale === true,
     needsContext: status === NEEDS_CONTEXT_OUTCOME,
     task,
     subscriptions,

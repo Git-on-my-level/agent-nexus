@@ -315,11 +315,10 @@ describe("ask delivery model", () => {
     const model = askDeliveryModel({
       ask_id: "event:ask-1",
       status: "open",
-      is_stale: true,
       delivery: [],
     });
     expect(model.notDelivered).toBeNull();
-    expect(model.isStale).toBe(true);
+    expect(model.isStale).toBeUndefined();
     expect(model.needsContext).toBe(false);
   });
 
@@ -494,13 +493,12 @@ describe("a handled context request in the Inbox list", () => {
     ).toBeNull();
   });
 
-  it("folds an open ask only when core projects is_stale", () => {
-    // Only the projected signal folds the row; ask age alone does not.
+  it("never folds an open ask on a stale flag, which core no longer projects", () => {
     const rows = buildInboxRows({
       inboxItems: [openAsk({ is_stale: true }), openAsk({ id: "inbox-2" })],
       now: NOW,
     });
-    expect(rows.map((row) => row.stale)).toEqual([false, true]);
+    expect(rows.map((row) => Boolean(row.stale))).toEqual([false, false]);
   });
 });
 

@@ -1,80 +1,55 @@
 /**
  * Plan health, for a core that computes no card summary.
  *
- * `workSummary.js` is the one status vocabulary now, and `WorkSummary.svelte`
- * the one renderer. This is its back-compatibility reader, and nothing else
- * should import it: core publishes `work_summary` on every card-bearing read,
- * and this reads the separate fields an older core sent instead. Two shapes
- * arrive:
+ * `workSummary.js` is the one status vocabulary, and `WorkSummary.svelte` the
+ * one renderer. This reads the separate `plan_health` field a row carries when
+ * it has no `work_summary`:
  *
- * - `plan_health {state, reason, since}` — the computed field, where `state`
- *   is one of `no_plan | stale | blocked | at_risk | on_track | done`.
- * - `health {status, reason}` — the older projection field, whose `status` is
- *   one of `on_track | stalled | blocked`.
+ * - `plan_health {state, reason, since}` — where `state` is one of
+ *   `past_promise | moving | no_promise | done`, computed by core from the
+ *   promise against the evidence. `reason` is time-independent; how long a
+ *   promise has been past is `past_promise_for_seconds`.
  *
- * The older field is read as the newer one (`stalled` is `stale`), and the two
- * states it cannot express — `done` and `no_plan` — are derived from the plan
- * progress and the presence of a plan. Nothing else is inferred: a row with no
- * health at all gets no badge rather than an invented "on track".
- *
- * `ATTENTION_ORDER` and `PLAN_HEALTH` stay here because this file is what
- * turns a legacy row into the one vocabulary; `workSummary.js` owns the order
- * and the tone every surface actually renders.
+ * Nothing else is inferred: a row with no plan health gets no badge rather
+ * than an invented state.
  */
 
 const asText = (value) => String(value ?? "").trim();
 
-/** Worst first. This is the Overview's initiative sort. */
+/** The shared order: past promise first, then no promise, moving, done. */
 export const ATTENTION_ORDER = Object.freeze([
-  "blocked",
-  "at_risk",
-  "stale",
-  "dark",
-  "on_track",
+  "past_promise",
+  "no_promise",
+  "moving",
   "done",
-  "no_plan",
 ]);
 
 /**
  * What each state is called, short and long.
  *
- * `short` is what a compact badge shows and is deliberately never truncated —
- * that is the whole point of having one. `label` is the full text, which rides
- * along in the `title` and the accessible name.
+ * `short` is what a compact badge shows and is deliberately never truncated.
+ * `label` is the full text, which rides along in the `title` and the
+ * accessible name.
  */
 export const PLAN_HEALTH = Object.freeze({
-  blocked: {
-    state: "blocked",
-    label: "Blocked",
-    short: "Blocked",
-    glyph: "■",
-    tone: "danger",
-  },
-  at_risk: {
-    state: "at_risk",
-    label: "At risk",
-    short: "At risk",
+  past_promise: {
+    state: "past_promise",
+    label: "Past promise",
+    short: "Past promise",
     glyph: "▲",
     tone: "warn",
   },
-  stale: {
-    state: "stale",
-    label: "Stale",
-    short: "Stale",
-    glyph: "◷",
-    tone: "warn",
+  no_promise: {
+    state: "no_promise",
+    label: "No promise",
+    short: "No promise",
+    glyph: "–",
+    tone: "neutral",
   },
-  dark: {
-    state: "dark",
-    label: "Dark",
-    short: "Dark",
-    glyph: "☾",
-    tone: "warn",
-  },
-  on_track: {
-    state: "on_track",
-    label: "On track",
-    short: "On track",
+  moving: {
+    state: "moving",
+    label: "Moving",
+    short: "Moving",
     glyph: "●",
     tone: "ok",
   },
@@ -85,101 +60,32 @@ export const PLAN_HEALTH = Object.freeze({
     glyph: "✓",
     tone: "ok",
   },
-  no_plan: {
-    state: "no_plan",
-    label: "No plan",
-    short: "No plan",
-    glyph: "–",
-    tone: "neutral",
-  },
-});
-
-/** Legacy `health.status` values, as plan-health states. */
-const LEGACY_STATUS = Object.freeze({
-  on_track: "on_track",
-  stalled: "stale",
-  stale: "stale",
-  blocked: "blocked",
-  at_risk: "at_risk",
-  dark: "dark",
-  done: "done",
-  no_plan: "no_plan",
 });
 
 export function attentionRank(state) {
   const index = ATTENTION_ORDER.indexOf(asText(state));
-  // An unknown state sorts with the planless tail rather than above blocked.
+  // An unknown state sorts with the tail rather than above past promise.
   return index === -1 ? ATTENTION_ORDER.length : index;
-}
-
-function progressOf(source) {
-  const done = Number(source?.done);
-  const total = Number(source?.total);
-  if (!Number.isFinite(done) || !Number.isFinite(total) || total <= 0) {
-    return null;
-  }
-  return { done: Math.max(0, Math.min(done, total)), total };
 }
 
 /**
  * One row's plan health.
  *
  * @param {object} item an initiative/card projection row
- * @param {{ hasPlan?: boolean|null, progress?: {done: number, total: number}|null }} [options]
- *   Overrides for callers that already know the plan state — the initiative
- *   page reads the plan itself, where the Overview reads the projection.
  * @returns {{
  *   state: string, label: string, short: string, glyph: string, tone: string,
  *   reason: string, since: string, rank: number, known: boolean
  * }}
  */
-export function planHealthModel(item, options = {}) {
+export function planHealthModel(item) {
   const planHealth = item?.plan_health ?? null;
-  const legacy = item?.health ?? null;
-
-  const hasPlan =
-    options.hasPlan ??
-    (item?.plan_state ? true : item?.plan_state === null ? false : null);
-  const progress =
-    options.progress ??
-    progressOf(item?.plan_state?.progress) ??
-    progressOf(item?.progress);
-
-  // The computed field is authoritative where it exists.
-  let state =
-    LEGACY_STATUS[
-      asText(
-        planHealth?.state ?? legacy?.state ?? item?.plan_state?.health_state,
-      )
-    ] ?? "";
-  if (!state) {
-    // The older field cannot express `no_plan`: core derives its status from
-    // the card's native phase even for an initiative with no plan at all, so
-    // its `on_track` there means "nothing is wrong", not "on track". For a
-    // planless initiative that reads as No plan, which is where the Overview
-    // files it. A legacy `blocked` or `stalled` is a real signal about the
-    // card and keeps precedence — a blocked initiative belongs in the urgent
-    // band whether or not anyone has written it a plan.
-    const fromLegacy = LEGACY_STATUS[asText(legacy?.status ?? legacy)] ?? "";
-    state =
-      hasPlan === false && (!fromLegacy || fromLegacy === "on_track")
-        ? "no_plan"
-        : fromLegacy;
-  }
-
-  // Finished work outranks the computed status — an initiative whose every
-  // step is done is done, whatever the stall clock says — but not a blocked
-  // one, where the block is the thing the reader has to see.
-  if (progress && progress.done >= progress.total && state !== "blocked") {
-    state = "done";
-  }
-
-  const known = Boolean(state);
-  const definition = PLAN_HEALTH[state] ?? PLAN_HEALTH.no_plan;
+  const state = asText(planHealth?.state);
+  const definition = PLAN_HEALTH[state];
+  const known = Boolean(definition);
   return {
-    ...definition,
-    state: known ? definition.state : "",
-    reason: asText(planHealth?.reason ?? legacy?.reason),
+    ...(definition ?? PLAN_HEALTH.no_promise),
+    state: known ? state : "",
+    reason: asText(planHealth?.reason),
     since: asText(planHealth?.since),
     rank: attentionRank(state),
     known,

@@ -3,7 +3,7 @@
  *
  * A plan is a list of steps with `after[]` dependencies. Agents never choose a
  * view: the shape of what they wrote picks it — but *core* decides that shape,
- * along with step status, the critical path, next steps, progress and health.
+ * along with step status, the critical path, next steps and progress.
  * This module reads those and turns them into positions on a page.
  *
  * It used to compute them too, as a port of `plans.Compute`. A second
@@ -18,8 +18,6 @@
  * step occupies, where its edges run, and where today falls on a timeline.
  */
 
-import { planStateHealth } from "./healthState.js";
-
 /** Step statuses, in the order a reader scans them. */
 export const PLAN_STEP_STATUSES = Object.freeze([
   "done",
@@ -29,15 +27,6 @@ export const PLAN_STEP_STATUSES = Object.freeze([
 ]);
 
 export const PLAN_SHAPES = Object.freeze(["chain", "dag", "lanes"]);
-
-export const PLAN_HEALTH = Object.freeze([
-  "no_plan",
-  "stale",
-  "blocked",
-  "at_risk",
-  "on_track",
-  "done",
-]);
 
 /**
  * The caps the plan contract states (`initiative_plan.max_steps`,
@@ -207,12 +196,11 @@ export function planComponents(steps) {
  * drifted from core's — so the duplicate is gone. When a field is missing the
  * view shows nothing for it rather than guessing.
  *
- * @param {{steps?: object[], progress?: object, critical_path?: string[], next_steps?: string[], shape?: string, health?: string, last_movement_at?: string}|null} planState
+ * @param {{steps?: object[], progress?: object, critical_path?: string[], next_steps?: string[], shape?: string, last_movement_at?: string}|null} planState
  */
 function readPlanState(planState) {
   if (!planState || typeof planState !== "object") return null;
   const shape = asText(planState.shape);
-  const health = planStateHealth(planState);
   const statusById = {};
   for (const step of Array.isArray(planState.steps) ? planState.steps : []) {
     const id = asText(step?.id);
@@ -222,7 +210,6 @@ function readPlanState(planState) {
   }
   return {
     shape: PLAN_SHAPES.includes(shape) ? shape : "",
-    health: PLAN_HEALTH.includes(health) ? health : "",
     statusById,
     criticalPath: Array.isArray(planState.critical_path)
       ? planState.critical_path.map(asText)
@@ -247,7 +234,7 @@ function readPlanState(planState) {
  * the edges, the highlighted path and the summary a tile shows.
  *
  * Geometry is the only thing computed here. Shape, step status, critical path,
- * next steps, progress and health all come from `options.planState` — core's
+ * next steps and progress all come from `options.planState` — core's
  * `plan_state` — and a plan rendered without one shows its steps and its
  * dependency layout and nothing else. That is deliberate: a status this module
  * invented would disagree with the one core computed from source activity and
@@ -320,7 +307,6 @@ export function planLayout(plan, options = {}) {
     // `""` where core said nothing, so a caller can tell "not computed" from a
     // computed value and render accordingly.
     shape,
-    health: server?.health ?? "",
     hasState: Boolean(server),
     nodes,
     edges,

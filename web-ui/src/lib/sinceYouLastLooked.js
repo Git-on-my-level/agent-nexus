@@ -19,8 +19,7 @@ const asText = (value) => String(value ?? "").trim();
  */
 const KINDS = Object.freeze({
   step_completed: { label: "step done", tone: "ok" },
-  initiative_stale: { label: "stale", tone: "warn" },
-  initiative_blocked: { label: "blocked", tone: "danger" },
+  initiative_past_promise: { label: "past promise", tone: "warn" },
   ask_answered: { label: "answered", tone: "ok" },
   // The contract enum is `decision_created`; an earlier guess at
   // `decision_recorded` silently dropped every decision the digest reported.
@@ -29,8 +28,7 @@ const KINDS = Object.freeze({
 
 /** Order the strip reads in: what needs attention first, then what progressed. */
 const ORDER = [
-  "initiative_blocked",
-  "initiative_stale",
+  "initiative_past_promise",
   "decision_created",
   "ask_answered",
   "step_completed",
@@ -50,8 +48,7 @@ export function sinceYouLastLookedStrip(digest, { limit = 6 } = {}) {
   const items = (Array.isArray(digest.items) ? digest.items : [])
     .map((item) => {
       const rawKind = asText(item?.kind);
-      const kind =
-        rawKind === "initiative_stalled" ? "initiative_stale" : rawKind;
+      const kind = rawKind;
       const known = KINDS[kind];
       if (!known) return null;
       return {
@@ -106,8 +103,8 @@ export function sinceYouLastLookedStrip(digest, { limit = 6 } = {}) {
  * Does the row's own title already end with what the label would say?
  *
  * A suffix, not a bag of words. "Ask answered" ends with "answered", so the
- * label is the title again. "Fix the blocked queue" merely contains
- * "blocked", and dropping the label there would leave the kind visible only
+ * label is the title again. "Fix the past promise report" merely contains
+ * "past promise", and dropping the label there would leave the kind visible only
  * in a decorative dot — nothing a screen reader reads, and nothing
  * separating one kind from the next in a wrapped row.
  */
@@ -133,11 +130,8 @@ function summarize(counts) {
   if (counts.step_completed) {
     parts.push(plural(counts.step_completed, "step done", "steps done"));
   }
-  if (counts.initiative_blocked) {
-    parts.push(`${counts.initiative_blocked} blocked`);
-  }
-  if (counts.initiative_stale) {
-    parts.push(`${counts.initiative_stale} stale`);
+  if (counts.initiative_past_promise) {
+    parts.push(`${counts.initiative_past_promise} past promise`);
   }
   if (counts.ask_answered) {
     parts.push(plural(counts.ask_answered, "ask answered", "asks answered"));

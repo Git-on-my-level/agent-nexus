@@ -17,7 +17,7 @@
  *   `source` and `attention` apply. Core omits a part rather than sending an
  *   empty one, so "present" is the whole test; there is no branching on what
  *   kind of card it is.
- * - **Legacy**: a core before this field, whose `plan_health` / `health`,
+ * - **Legacy**: a core before this field, whose `plan_health`,
  *   `progress`, `next_step` and `plan_step_digest` carry the same facts in
  *   separate fields. `planHealth.js` already reads those, so the fallback
  *   composes them into the same model rather than rendering a second way.
@@ -69,12 +69,9 @@ const SHAPE_LABELS = Object.freeze({
  */
 const STATUS_PRESENTATION = Object.freeze({
   blocked: { tone: "danger", glyph: "■" },
-  at_risk: { tone: "warn", glyph: "▲" },
-  overdue: { tone: "warn", glyph: "▲" },
-  stale: { tone: "warn", glyph: "◷" },
-  stalled: { tone: "warn", glyph: "◷" },
-  dark: { tone: "warn", glyph: "☾" },
-  on_track: { tone: "ok", glyph: "●" },
+  past_promise: { tone: "warn", glyph: "▲" },
+  moving: { tone: "ok", glyph: "●" },
+  no_promise: { tone: "neutral", glyph: "–" },
   in_progress: { tone: "ok", glyph: "●" },
   done: { tone: "ok", glyph: "✓" },
   review: { tone: "neutral", glyph: "◆" },
@@ -82,7 +79,6 @@ const STATUS_PRESENTATION = Object.freeze({
   ready: { tone: "neutral", glyph: "○" },
   backlog: { tone: "neutral", glyph: "○" },
   cancelled: { tone: "neutral", glyph: "×" },
-  no_plan: { tone: "neutral", glyph: "–" },
   unknown: { tone: "neutral", glyph: "·" },
 });
 
@@ -91,12 +87,9 @@ const NEUTRAL = Object.freeze({ tone: "neutral", glyph: "·" });
 /** Worst first. The order every list of cards is sorted by. */
 export const ATTENTION_ORDER = Object.freeze([
   "blocked",
-  "at_risk",
-  "overdue",
-  "stale",
-  "stalled",
-  "dark",
-  "on_track",
+  "past_promise",
+  "no_promise",
+  "moving",
   "in_progress",
   "review",
   "in_review",
@@ -104,7 +97,6 @@ export const ATTENTION_ORDER = Object.freeze([
   "backlog",
   "done",
   "cancelled",
-  "no_plan",
 ]);
 
 export function statusRank(state) {
@@ -145,20 +137,7 @@ const CLOSED_STATES = new Set(["done", "cancelled"]);
  * out of a collapsed fold — one definition, so the band and the fold cannot
  * disagree about which cards a reader must not miss.
  */
-export const ATTENTION_STATES = Object.freeze([
-  "blocked",
-  "at_risk",
-  "stale",
-  /*
-   * The same two risks under the words the specification uses for them.
-   * Core's tokens are `at_risk` (its reason is "overdue or due within 24
-   * hours") and `stale`; reading both spellings costs nothing and is the
-   * difference between an overdue card leading the dashboard and collapsing
-   * out of it.
-   */
-  "overdue",
-  "stalled",
-]);
+export const ATTENTION_STATES = Object.freeze(["blocked", "past_promise"]);
 
 /** Is this card asking for someone's attention? */
 export function needsAttention(summary) {
@@ -168,7 +147,7 @@ export function needsAttention(summary) {
 /**
  * What a hint is called.
  *
- * Hints are not statuses. `no_plan` used to be one, and a planless card then
+ * Hints are not statuses. `no_plan` used to be a status, and a planless card then
  * read "No plan" in the Tasks table's Status column — for most of the tasks
  * in it, since most tasks have no plan. Core computes the state from the
  * phase now and says "this has no plan" separately, as a note a surface can
@@ -214,12 +193,9 @@ export function hasHint(summary, key) {
  */
 const FALLBACK_LABELS = Object.freeze({
   blocked: "Blocked",
-  at_risk: "At risk",
-  overdue: "Overdue",
-  stale: "Stale",
-  stalled: "Stale",
-  dark: "Dark",
-  on_track: "In progress",
+  past_promise: "Past promise",
+  moving: "Moving",
+  no_promise: "No promise",
   in_progress: "In progress",
   review: "In review",
   in_review: "In review",
@@ -227,7 +203,6 @@ const FALLBACK_LABELS = Object.freeze({
   backlog: "Backlog",
   done: "Done",
   cancelled: "Cancelled",
-  no_plan: "No plan",
   unknown: "Unknown",
 });
 
@@ -270,7 +245,7 @@ function reasonAddsToLabel(reason, label) {
    * healthy answer is one fixed sentence — "Open steps are progressing."
    * Printed under a badge reading `In progress` it is a line that can never
    * tell a reader something the badge did not. A reason that names a cause —
-   * blocked, overdue, stale, a step that is waiting — keeps its words and so
+   * blocked, past its promise, a step that is waiting — keeps its words and so
    * keeps its line.
    */
   const filler = new Set([
@@ -556,12 +531,7 @@ export function statusStateOf(row) {
     const part = statusPart(raw.status);
     return part ? part.state : "unknown";
   }
-  const health = planHealthModel({
-    ...row,
-    health:
-      row?.health ??
-      (row?.plan_state?.health ? { status: row.plan_state.health } : undefined),
-  });
+  const health = planHealthModel(row);
   // Mirrors `fromLegacy` exactly, including its last resort: a row with no
   // health and no phase is Unknown, not blank, so a count and a rendered row
   // never disagree about what a bare row is.
@@ -763,16 +733,7 @@ function fromComputed(raw, row, { now }) {
        * a badge beside it would say the same thing twice.
        */
       sourceStatusShown: sourceWordAdds(sourceStatus, status),
-      /*
-       * A core between the two contracts still reports "no plan" where the
-       * status goes, so it is read back as the hint it has become. One rule
-       * for "does this card have a plan", whichever wire shape answered.
-       */
-      hints: hintParts(
-        Array.isArray(raw.hints) || status?.state !== "no_plan"
-          ? raw.hints
-          : ["no_plan"],
-      ),
+      hints: hintParts(raw.hints),
       metrics: Array.isArray(raw.metrics) ? raw.metrics.slice(0, 8) : [],
       metricsTruncated: raw.metrics_truncated === true,
       attention: attentionPart(raw.attention),
@@ -801,18 +762,7 @@ function fromLegacy(row, { now }) {
     asText(row?.source?.authority).toLowerCase() === "nexus"
       ? ""
       : asText(row?.source?.native_status);
-  /*
-   * `plan_state.health` is the oldest spelling of all and the one a plan read
-   * still returns, so it is normalized into the field `planHealth.js` reads
-   * rather than left for each page to map — which is how the task page ended
-   * up doing it on its own.
-   */
-  const health = planHealthModel({
-    ...row,
-    health:
-      row?.health ??
-      (row?.plan_state?.health ? { status: row.plan_state.health } : undefined),
-  });
+  const health = planHealthModel(row);
   const phase = asText(row?.phase ?? row?.column_key);
   const status = health.known
     ? statusPart(
@@ -849,13 +799,6 @@ function fromLegacy(row, { now }) {
       hasPlan: Array.isArray(row?.plan_state?.steps)
         ? row.plan_state.steps.length > 0
         : Boolean(row?.plan_state),
-      /*
-       * Same rule for a core with no computed summary at all — and only that
-       * rule. `hasPlan` is false for every list row from such a core, since
-       * list rows carry no plan state at all, so deriving the hint from it
-       * would put "No plan" on every row in the table.
-       */
-      hints: hintParts(status?.state === "no_plan" ? ["no_plan"] : null),
       // `nextStepModel` calls the remainder `extra`; the contract calls it
       // `more`, and one renderer can only read one name.
       next: nextPart(legacyNext(row)),
