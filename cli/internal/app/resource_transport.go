@@ -190,12 +190,17 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 		Body:    requestBody,
 	})
 	if invokeErr != nil {
-		return nil, mutationTransportError(commandName, method, body, invokeErr)
+		err := mutationTransportError(commandName, method, body, invokeErr)
+		a.writes.record(method, err)
+		return nil, err
 	}
 	responseBody := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
+		err := errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
+		a.writes.record(method, err)
+		return nil, err
 	}
+	a.writes.record(method, nil)
 	headersSorted := normalizedHeaders(resp.Headers)
 	parsedBody := parseResponseBody(responseBody)
 	data := map[string]any{
@@ -248,11 +253,16 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 		Body:    body,
 	})
 	if resp != nil && resp.StatusCode >= http.StatusBadRequest {
-		return a.recoverCardMove(ctx, cfg, commandID, pathParams, body, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Header, responseBody))
+		recovered, err := a.recoverCardMove(ctx, cfg, commandID, pathParams, body, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Header, responseBody))
+		a.writes.record(resolveCommandMethod(commandID), err)
+		return recovered, err
 	}
 	if invokeErr != nil {
-		return a.recoverCardMove(ctx, cfg, commandID, pathParams, body, mutationTransportError(commandName, resolveCommandMethod(commandID), body, invokeErr))
+		recovered, err := a.recoverCardMove(ctx, cfg, commandID, pathParams, body, mutationTransportError(commandName, resolveCommandMethod(commandID), body, invokeErr))
+		a.writes.record(resolveCommandMethod(commandID), err)
+		return recovered, err
 	}
+	a.writes.record(resolveCommandMethod(commandID), nil)
 
 	headersSorted := normalizedHeaders(resp.Header)
 	parsedBody := parseResponseBody(responseBody)
@@ -617,12 +627,16 @@ func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Res
 		Body:    body.Bytes(),
 	})
 	if invokeErr != nil {
+		a.writes.record(http.MethodPost, invokeErr)
 		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "artifacts attachments create request failed", invokeErr)
 	}
 	responseBody := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
+		err := errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
+		a.writes.record(http.MethodPost, err)
+		return nil, err
 	}
+	a.writes.record(http.MethodPost, nil)
 
 	headersSorted := normalizedHeaders(resp.Headers)
 	parsedBody := parseResponseBody(responseBody)

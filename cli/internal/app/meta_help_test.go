@@ -984,7 +984,7 @@ func TestRunMetaSkillCursorAliasWritesSkillFile(t *testing.T) {
 	if !strings.Contains(string(content), "## Daily loop") {
 		t.Fatalf("expected written daily loop section content=%s", string(content))
 	}
-	if !strings.Contains(output, "anx host enroll") {
+	if !strings.Contains(output, "anx help enroll") {
 		t.Fatalf("expected host enrollment guidance output=%s", output)
 	}
 }

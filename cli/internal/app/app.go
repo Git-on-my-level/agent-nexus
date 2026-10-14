@@ -37,6 +37,7 @@ type App struct {
 	skillLookPath      func(string) (string, error)
 	stdinConsumed      bool
 	outputStarted      bool
+	writes             writeTracker
 }
 
 func (a *App) clockNow() time.Time {
@@ -334,22 +335,21 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 		copyDetails["hint"] = normalized.Hint
 		details = copyDetails
 	}
+	phase, writeSent := a.writes.phase()
+	payload := &output.ErrorPayload{
+		Code:        normalized.Code,
+		Message:     normalized.Message,
+		Retryable:   errnorm.RecoverableValue(normalized),
+		ExitCode:    errnorm.ExitCode(err),
+		Details:     details,
+		NextActions: deriveErrorActions(identity.Command, normalized),
+		Phase:       phase,
+		WriteSent:   &writeSent,
+	}
+	envelope := output.Envelope{OK: false, Command: identity.Command, Error: payload}
 	if jsonMode {
-		envelope := output.Envelope{
-			OK:      false,
-			Command: identity.Command,
-			Error: &output.ErrorPayload{
-				Code:        normalized.Code,
-				Message:     normalized.Message,
-				Retryable:   errnorm.RecoverableValue(normalized),
-				ExitCode:    errnorm.ExitCode(err),
-				Details:     details,
-				NextActions: deriveErrorActions(identity.Command, normalized),
-			},
-		}
 		a.renderEnvelope(a.Stdout, true, envelope)
 	} else {
-		envelope := output.Envelope{OK: false, Command: identity.Command, Error: &output.ErrorPayload{Code: normalized.Code, Message: normalized.Message, Retryable: errnorm.RecoverableValue(normalized), ExitCode: errnorm.ExitCode(err), Details: details, NextActions: deriveErrorActions(identity.Command, normalized)}}
 		a.renderEnvelope(a.Stderr, false, envelope)
 	}
 	return errnorm.ExitCode(err)
