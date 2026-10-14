@@ -239,19 +239,13 @@ describe("Since you last looked reads core's digest", () => {
       initiative_past_promise: 1,
       ask_answered: 1,
     });
-    expect(strip.summary).toBe(
-      "1 step done · 1 past promise · 1 ask answered",
-    );
+    expect(strip.summary).toBe("1 step done · 1 past promise · 1 ask answered");
   });
 
   it("leads with what needs attention", () => {
     expect(
       sinceYouLastLookedStrip(digest).items.map((item) => item.kind),
-    ).toEqual([
-      "initiative_past_promise",
-      "ask_answered",
-      "step_completed",
-    ]);
+    ).toEqual(["initiative_past_promise", "ask_answered", "step_completed"]);
   });
 
   it("renders nothing on a first visit", () => {
