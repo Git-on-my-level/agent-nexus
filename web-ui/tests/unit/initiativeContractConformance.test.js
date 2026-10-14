@@ -47,7 +47,7 @@ describe("the Overview card reads core's serialized initiative", () => {
     expect(tile.work_summary.status).toEqual({
       state: "no_promise",
       label: "No promise",
-      reason: "No promise; last evidence 0m ago.",
+      reason: "No promise.",
       since: "2026-10-04T12:00:00Z",
     });
     // The UI lane owns the promise-state presentation; the card must at

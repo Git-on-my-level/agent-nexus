@@ -202,7 +202,9 @@ func (f PromiseFold) At(now time.Time) PromiseState {
 	return s
 }
 
-// Reason is a one-line computed explanation of the state.
+// Reason is a one-line computed explanation of the state. It never names an
+// elapsed duration: durations live in past_promise_for_seconds and
+// last_evidence_at, so a reason only changes when the facts change.
 func (s PromiseState) Reason(now time.Time) string {
 	switch s.State {
 	case PromiseDone:
@@ -211,9 +213,9 @@ func (s PromiseState) Reason(now time.Time) string {
 		if s.LastEvidenceAt.IsZero() {
 			return "No promise and no evidence yet."
 		}
-		return fmt.Sprintf("No promise; last evidence %s ago.", humanDuration(now.Sub(s.LastEvidenceAt)))
+		return "No promise."
 	case PromisePast:
-		r := fmt.Sprintf("Past its %s promise by %s.", s.Promise.Source, humanDuration(*s.PastPromiseFor))
+		r := fmt.Sprintf("Past its %s promise.", s.Promise.Source)
 		if s.Moves > 0 {
 			r += fmt.Sprintf(" Moved %d×.", s.Moves)
 		}
@@ -230,20 +232,6 @@ func firstNonBlank(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func humanDuration(d time.Duration) string {
-	if d < 0 {
-		d = 0
-	}
-	switch {
-	case d >= 48*time.Hour:
-		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
-	case d >= time.Hour:
-		return fmt.Sprintf("%dh", int(d/time.Hour))
-	default:
-		return fmt.Sprintf("%dm", int(d/time.Minute))
-	}
 }
 
 func clipWhat(s string) string {
