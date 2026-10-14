@@ -71,6 +71,41 @@ describe("DecisionCard", () => {
     });
   });
 
+  it("wakes an agent requester and records a human requester's answer without a wake", async () => {
+    const agent = normalizeBrief({
+      decisions: [
+        {
+          ...fixture.decisions[0],
+          requested_by: { id: "a1", display: "Agent", kind: "agent" },
+        },
+      ],
+    }).decisions[0];
+    render(DecisionCard, { decision: agent, now: NOW });
+    await fireEvent.click(
+      document.querySelector("[data-decision-proposal='1']"),
+    );
+    expect(queue.queueInboxResponse.mock.calls[0][0].request.notify_mode).toBe(
+      "original",
+    );
+    cleanup();
+    queue.queueInboxResponse.mockClear();
+    const human = normalizeBrief({
+      decisions: [
+        {
+          ...fixture.decisions[0],
+          requested_by: { id: "h1", display: "Dev", kind: "human" },
+        },
+      ],
+    }).decisions[0];
+    render(DecisionCard, { decision: human, now: NOW });
+    await fireEvent.click(
+      document.querySelector("[data-decision-proposal='1']"),
+    );
+    expect(queue.queueInboxResponse.mock.calls[0][0].request.notify_mode).toBe(
+      "none",
+    );
+  });
+
   it("shows blocked titles, not slugs, and the deadline as computed", () => {
     const { container } = render(DecisionCard, { decision: merge, now: NOW });
     const blocks = container.querySelector(

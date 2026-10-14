@@ -160,13 +160,18 @@
   function send(text, outcome = "answered") {
     const body = String(text ?? "").trim();
     if (!body || answered) return;
-    const who = decision.requestedBy?.display || "";
+    // Core wakes only an agent requester; a human or unknown-kind requester
+    // reads the answer from their asks, so "original" would be a 409 dead end.
+    const notifyMode =
+      decision.requestedBy?.kind === "human" ? "none" : "original";
+    const who =
+      notifyMode === "original" ? decision.requestedBy?.display || "" : "";
     queueInboxResponse({
       itemId,
       item: { id: itemId, kind: decision.kind, title: decision.title },
       binding: binding ?? captureInboxResponseBinding(),
       crossWorkspace: Boolean(binding),
-      request: { response_text: body, outcome, notify_mode: "original" },
+      request: { response_text: body, outcome, notify_mode: notifyMode },
       message: who ? `Sent to ${who}` : "Answer sent",
       restore: { origin: "decide", reply, chosen: body },
     });

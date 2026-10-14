@@ -92,7 +92,8 @@ function actor(value) {
   if (typeof value === "string") return { id: value, display: value };
   const id = text(value.id);
   const display = text(value.display) || id;
-  return id || display ? { id, display } : null;
+  const kind = text(value.kind);
+  return id || display ? { id, display, ...(kind ? { kind } : {}) } : null;
 }
 
 function refTitle(value) {
