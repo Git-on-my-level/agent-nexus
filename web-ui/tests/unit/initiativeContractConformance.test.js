@@ -45,37 +45,16 @@ const model = (overrides = {}) => card(overrides).summary;
 describe("the Overview card reads core's serialized initiative", () => {
   it("renders the computed status core sends, with core's own label", () => {
     expect(tile.work_summary.status).toEqual({
-      state: "on_track",
-      label: "In progress",
-      reason: "Open steps are progressing.",
+      state: "no_promise",
+      label: "No promise",
+      reason: "No promise; last evidence 0m ago.",
       since: "2026-10-04T12:00:00Z",
     });
-    /*
-     * And drops that reason rather than printing it. Core answers "why is
-     * this card in this state" for every card, including the ones where the
-     * answer is that nothing is wrong; under a badge reading `In progress`,
-     * "Open steps are progressing." is a line that can never tell a reader
-     * something the badge did not. A reason that names a cause keeps its line.
-     */
+    // The UI lane owns the promise-state presentation; the card must at
+    // least carry core's state and label through.
     expect(model().status).toMatchObject({
-      state: "on_track",
-      label: "In progress",
-      reason: "",
-      tone: "ok",
-    });
-  });
-
-  it("shows the stored phase core says disagrees with the computed status", () => {
-    // The fixture's card sits in `backlog` with an untouched plan that core
-    // computes as on track, so the card has to say both: "In progress ·
-    // marked backlog" is exactly the disagreement this change exists to show.
-    expect(tile.work_summary.set_status).toEqual({
-      state: "backlog",
-      label: "Backlog",
-    });
-    expect(model().setStatus).toMatchObject({
-      state: "backlog",
-      label: "Backlog",
+      state: "no_promise",
+      label: "No promise",
     });
   });
 
@@ -183,7 +162,7 @@ describe("the Overview card reads core's serialized initiative", () => {
     const legacyRow = { ...tile };
     delete legacyRow.work_summary;
     const legacy = workSummaryCard(legacyRow, { now: NOW }).summary;
-    expect(legacy.status.state).toBe("on_track");
+    expect(legacy.status.state).toBe("no_promise");
     expect(legacy.progress).toMatchObject({ done: 1, total: 2 });
     expect(legacy.next).toMatchObject({ id: "build", title: "Build" });
     expect(legacy.steps.groups.map((list) => list.key)).toEqual(["next"]);
@@ -240,24 +219,16 @@ describe("Since you last looked reads core's digest", () => {
     expect(strip.since).toBe(digest.since);
     expect(strip.counts).toEqual({
       step_completed: 1,
-      initiative_stale: 1,
-      initiative_blocked: 1,
+      initiative_past_promise: 1,
       ask_answered: 1,
     });
-    expect(strip.summary).toBe(
-      "1 step done · 1 blocked · 1 stale · 1 ask answered",
-    );
+    expect(strip.summary).toBe("1 step done · 1 past promise · 1 ask answered");
   });
 
   it("leads with what needs attention", () => {
     expect(
       sinceYouLastLookedStrip(digest).items.map((item) => item.kind),
-    ).toEqual([
-      "initiative_blocked",
-      "initiative_stale",
-      "ask_answered",
-      "step_completed",
-    ]);
+    ).toEqual(["initiative_past_promise", "ask_answered", "step_completed"]);
   });
 
   it("renders nothing on a first visit", () => {

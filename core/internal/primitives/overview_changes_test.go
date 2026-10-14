@@ -208,12 +208,14 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	}
 	item["last_moved_at"] = "2026-10-04T12:00:00Z"
 	health := item["plan_health"].(map[string]any)
-	// A dark card with no dated signal at all carries a null anchor.
-	if since, ok := health["since"]; ok && since != nil {
-		if _, err = time.Parse(time.RFC3339Nano, since.(string)); err != nil {
-			t.Fatal(err)
+	// Anchors are real timestamps; the fixture pins them.
+	for _, key := range []string{"since", "last_evidence_at"} {
+		if at, ok := health[key]; ok && at != nil {
+			if _, err = time.Parse(time.RFC3339Nano, at.(string)); err != nil {
+				t.Fatal(err)
+			}
+			health[key] = "2026-10-04T12:00:00Z"
 		}
-		health["since"] = "2026-10-04T12:00:00Z"
 	}
 	summary := item["summary"].(map[string]any)
 	if _, err = time.Parse(time.RFC3339Nano, summary["created_at"].(string)); err != nil {
