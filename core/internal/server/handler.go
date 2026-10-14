@@ -74,7 +74,7 @@ type PrimitiveStore interface {
 	ReadInbox(ctx context.Context, options primitives.InboxReadOptions) ([]primitives.DerivedInboxItem, int, error)
 	ListInboxThreadIDs(ctx context.Context) ([]string, error)
 	GetDerivedInboxItem(ctx context.Context, id string) (primitives.DerivedInboxItem, error)
-	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem) error
+	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem, expectedGeneration ...int64) error
 	GetDerivedTopicProjection(ctx context.Context, threadID string) (primitives.DerivedTopicProjection, error)
 	ListDerivedTopicProjections(ctx context.Context, threadIDs []string) (map[string]primitives.DerivedTopicProjection, error)
 	PutDerivedTopicProjection(ctx context.Context, projection primitives.DerivedTopicProjection) error

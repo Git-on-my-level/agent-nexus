@@ -227,7 +227,7 @@ func (m *ProjectionMaintainer) RefreshThread(ctx context.Context, threadID strin
 	if startedGeneration == 0 {
 		return nil
 	}
-	if err := refreshDerivedTopicProjection(ctx, m.opts, threadID, now, m.systemActorID); err != nil {
+	if err := refreshDerivedTopicProjection(ctx, m.opts, threadID, now, m.systemActorID, startedGeneration); err != nil {
 		failureMessage := fmt.Sprintf("refresh dirty projection %s: %v", threadID, err)
 		m.stepMu.Lock()
 		if queueErr := m.opts.primitiveStore.RequeueTopicProjectionRefresh(ctx, threadID, now); queueErr != nil {
@@ -320,7 +320,7 @@ func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.T
 			processed++
 			continue
 		}
-		if err := refreshDerivedTopicProjection(ctx, m.opts, entry.ThreadID, startedAt, m.systemActorID); err != nil {
+		if err := refreshDerivedTopicProjection(ctx, m.opts, entry.ThreadID, startedAt, m.systemActorID, startedGeneration); err != nil {
 			failureMessage := fmt.Sprintf("refresh dirty projection %s: %v", entry.ThreadID, err)
 			queuedAt, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(entry.DirtyAt))
 			if parseErr != nil || queuedAt.IsZero() {

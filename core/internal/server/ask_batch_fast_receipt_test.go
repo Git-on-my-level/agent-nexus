@@ -55,6 +55,16 @@ func TestAskBatchFastResponsePersistsCompleteReceiptAndWake(t *testing.T) {
 	if _, err := env.primitiveStore.GetDerivedInboxItem(ctx, items[0].ID); err != primitives.ErrNotFound {
 		t.Fatalf("resolved batch persisted until maintenance: %v", err)
 	}
+	// A stale batch candidate must also be rejected without a generation guard.
+	if err := env.primitiveStore.ReplaceDerivedInboxItems(ctx, thread, items); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"derived_inbox_items", "scope_inbox_live"} {
+		var count int
+		if err := env.workspace.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE id=?", items[0].ID).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("resolved batch reopened in %s: count=%d err=%v", table, count, err)
+		}
+	}
 	// No projection refresh or synchronous wake delivery occurs between answer
 	// and retry. Reopening the store must still expose the durable wake work.
 	reopened := primitives.NewTestStore(env.workspace.DB(), env.workspace.Layout().ArtifactContentDir)

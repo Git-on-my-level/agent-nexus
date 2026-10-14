@@ -423,6 +423,14 @@ func formatTopicWorkspace(body any) string {
 	root := asMap(body)
 	fullID := asBool(root["full_id"])
 	lines := []string{formatTopicRecord(extractNestedMap(root, "topic"))}
+	for _, field := range []string{"cards_truncated", "resources_truncated"} {
+		if value, present := root[field]; present {
+			lines = append(lines, fmt.Sprintf("%s: %t", field, asBool(value)))
+		}
+	}
+	if asBool(root["cards_truncated"]) || asBool(root["resources_truncated"]) {
+		lines = append(lines, "Bounded workspace preview. Read more via GET /cards, /boards, /documents, /threads, /inbox and their detail routes.")
+	}
 	lines = appendGroupedScanList(lines, "Cards", asSlice(root["cards"]), "card", fullID, renderCardListItem)
 	lines = appendGroupedScanList(lines, "Boards", asSlice(root["boards"]), "board", fullID, renderBoardRowFlat)
 	lines = appendGroupedScanList(lines, "Documents", asSlice(root["documents"]), "document", fullID, renderDocumentListItem)
