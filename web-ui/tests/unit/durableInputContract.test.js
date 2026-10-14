@@ -2,6 +2,11 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "svelte/compiler";
 import { expect, it } from "vitest";
+import {
+  browserMutationInventory,
+  mutationMethods,
+  mutationReferences,
+} from "./durableMutationInventory.js";
 
 const root = fileURLToPath(new URL("../../src/", import.meta.url));
 function* files(dir) {
@@ -41,7 +46,7 @@ it("every authored text field in the Inbox response form uses durable drafts", (
   expect(fields).toBe(2);
 });
 
-it("no UI mutation surface bypasses the Inbox outbox sender", () => {
+it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
   for (const path of files(root)) {
     const ast = parse(readFileSync(path, "utf8"));
     walk(ast.instance, (node) => {
@@ -75,6 +80,43 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
       }
     });
   }
+});
+
+it("all existing browser mutation and transport exceptions are explicitly inventoried", () => {
+  const inventory = JSON.parse(
+    readFileSync(`${root}/../docs/durable-mutation-allowlist.json`, "utf8"),
+  );
+  const expected = {};
+  for (const [path, entry] of Object.entries(inventory)) {
+    expect(entry.reason.length).toBeGreaterThan(15);
+    expect(["outbox", "transport", "read-helper", "stage-2"]).toContain(
+      entry.classification,
+    );
+    expect(entry.followup).toBe("durable-user-work.md#stage-2-handoff");
+    expected[path] = entry.references;
+  }
+  // Exact equality rejects both new bypasses and stale exceptions. Do not
+  // regenerate this allowlist to bless a new form: implement its outbox first.
+  expect(browserMutationInventory(root.replace(/\/$/, ""))).toEqual(expected);
+});
+
+it("the inventory catches SDK writes in helpers, computed names, templates and raw transport", () => {
+  const methods = mutationMethods(
+    readFileSync(`${root}/lib/anxCoreClient.js`, "utf8"),
+  );
+  expect(
+    mutationReferences(
+      `<script>const send = client["updateTopic"]; function save() { client.createSecret({}); fetch("/write", {method: "POST"}); client[method](body); }</script><button onclick={() => client.archiveEvent(id)}>Save</button>`,
+      true,
+      methods,
+    ),
+  ).toEqual({
+    archiveEvent: 1,
+    "computed-dispatch": 1,
+    createSecret: 1,
+    "transport:fetch": 1,
+    updateTopic: 1,
+  });
 });
 
 it("discussion text and metadata use a durable composer and outbox", () => {

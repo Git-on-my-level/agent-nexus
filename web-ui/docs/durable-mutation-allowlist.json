@@ -1,0 +1,279 @@
+{
+  "lib/anxCoreClient.js": {
+    "classification": "transport",
+    "reason": "Generated SDK adapter and direct upload/read transport; entrypoints counted, not safe-retry exemptions.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "transport:baseFetchFn": 1,
+      "transport:fetchFn": 1,
+      "transport:invokeCommand": 5,
+      "transport:invokeDirectRaw": 6
+    }
+  },
+  "lib/authSession.js": {
+    "classification": "stage-2",
+    "reason": "TODO: authentication/session refresh and sign-out require a separate credential replay and privacy audit; never queue credentials blindly.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1,
+      "transport:requestJSON": 2
+    }
+  },
+  "lib/components/access/AuthAdminGrants.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: audit grant/revoke authorization and original receipts, then durable intent recovery.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "grantAuthAdmin": 1,
+      "revokeAuthAdmin": 1
+    }
+  },
+  "lib/components/onboarding/WorkspaceTour.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: enrollment token creation and cleanup need private-result and original-receipt design.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "createHostEnrollmentToken": 1,
+      "revokeHostEnrollmentToken": 1
+    }
+  },
+  "lib/components/reports/VisualReport.svelte": {
+    "classification": "read-helper",
+    "reason": "POST resolveRefs is a bounded read helper, not authored mutation data.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "resolveRefs": 1
+    }
+  },
+  "lib/components/setup/SetupPrompt.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: setup enrollment token creation/revocation, runner selection and cleanup recovery.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "createHostEnrollmentToken": 1,
+      "revokeHostEnrollmentToken": 2
+    }
+  },
+  "lib/components/timeline/MessagesTab.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: event archive/unarchive/trash intent snapshots and atomic original receipts; message posting itself is migrated.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "archiveEvent": 1,
+      "trashEvent": 1,
+      "unarchiveEvent": 1
+    }
+  },
+  "lib/components/timeline/TimelineTab.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: event single/bulk lifecycle snapshots, per-item receipts and partial confirmations.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "archiveEvent": 3,
+      "trashEvent": 3,
+      "unarchiveEvent": 3
+    }
+  },
+  "lib/coreClient.js": {
+    "classification": "transport",
+    "reason": "Scoped sender construction, frozen Inbox sender binding and fetch plumbing.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 5,
+      "respondInboxItem": 1,
+      "transport:fetchFn": 1
+    }
+  },
+  "lib/dev/fetchLoopGuard.js": {
+    "classification": "transport",
+    "reason": "Development fetch observation/wrapping; does not create mutations.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 5
+    }
+  },
+  "lib/mutationOutbox.js": {
+    "classification": "outbox",
+    "reason": "Audited persisted-request adapters, including finite document lifecycle method selection; not a direct form sender.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "answerPmDecision": 1,
+      "computed-dispatch": 1,
+      "createArtifactAttachment": 1,
+      "createDocument": 1,
+      "createEvent": 1,
+      "createPmConversation": 1,
+      "createPmDecision": 1,
+      "createWork": 1,
+      "dispatchPmDecision": 1,
+      "moveBoardCard": 1,
+      "patchDocument": 1,
+      "reconcilePmAction": 1,
+      "sendPmMessage": 1,
+      "updateBoardCard": 1,
+      "updateDocument": 1
+    }
+  },
+  "lib/pages/WorkspaceTopicThreadDetailPage.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: topic editor title/summary snapshot and canonical base; remove swallowed-409 close path during migration. Server prerequisite exists.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "updateTopic": 1
+    }
+  },
+  "lib/workspaceActivation.js": {
+    "classification": "stage-2",
+    "reason": "TODO: workspace activation POST needs an authority/session recovery audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "transport:fetchFn": 1
+    }
+  },
+  "lib/workspaceBootstrap.js": {
+    "classification": "stage-2",
+    "reason": "TODO: development persona/session creation and activation helpers; audit identity and credential boundaries.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 5,
+      "transport:fetchFn": 4
+    }
+  },
+  "routes/+layout.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: dev actor creation form needs complete durable snapshots and an audited creation receipt.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "createActor": 2
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/access/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: approval/denial, host/enrollment/invite/principal lifecycle and private token results.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "approveAccessRequest": 1,
+      "approveHostEnrollment": 1,
+      "createHostEnrollmentToken": 1,
+      "createInvite": 1,
+      "denyAccessRequest": 1,
+      "denyHostEnrollment": 1,
+      "patchHost": 1,
+      "revokeHost": 1,
+      "revokeHostEnrollmentToken": 1,
+      "revokeInvite": 2,
+      "revokePrincipal": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: host edits and principal revocation require original intent/base/authority recovery.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "patchHost": 1,
+      "revokePrincipal": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/events/+page.svelte": {
+    "classification": "transport",
+    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/inbox/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: explicit PM dispatch/reconcile/acknowledge and card archive; markHomeRead is read-state bookkeeping. Answers are migrated.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "acknowledgePmAction": 1,
+      "archiveCard": 1,
+      "dispatchPmDecision": 1,
+      "markHomeRead": 1,
+      "reconcilePmAction": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/integrations/+page.svelte": {
+    "classification": "transport",
+    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/login/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: passkey challenge and identity controls need a separate credential protocol audit; do not persist challenges as generic outbox requests.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "passkeyDevLogin": 1,
+      "passkeyDevRegister": 1,
+      "passkeyLoginOptions": 1,
+      "passkeyLoginVerify": 1,
+      "passkeyRegisterOptions": 1,
+      "passkeyRegisterVerify": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/overview/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: dashboard selection needs complete intent and original receipt recovery.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "setWorkspaceDashboard": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/pm/+page.svelte": {
+    "classification": "transport",
+    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1,
+      "resolveRefs": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/pm/setup/+page.svelte": {
+    "classification": "transport",
+    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/secrets/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: secret create/delete/reveal needs privacy and private-result recovery design before local persistence.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "createSecret": 1,
+      "deleteSecret": 1,
+      "revealSecret": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/tasks/+page.svelte": {
+    "classification": "transport",
+    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte": {
+    "classification": "stage-2",
+    "reason": "TODO: work refresh intent/replay; fetch is PM presence wiring and resolveRefs is a read helper.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1,
+      "requestWorkRefresh": 1,
+      "resolveRefs": 1
+    }
+  },
+  "routes/o/[organization]/w/[workspace]/tasks/new/+page.svelte": {
+    "classification": "transport",
+    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "raw-fetch": 1
+    }
+  }
+}

@@ -6,7 +6,15 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 
 ## Rollout and acceptance
 
-SCA-781 permits reviewable stages. The first changes cover the human-attention
+PR #390 is frozen for stage-1 review by the coordinator's 2026-10-14 scope
+instruction. Do not add further mutation surfaces to that branch or queue
+self-continuation work. The existing completed stages and server prerequisites
+are retained for review; the topic editor migration has not started. SCA-781
+is handed off in review at the published head, without claiming whole-UI
+acceptance. The coordinator will file stage 2 after #390 merges; see
+[Stage 2 handoff](#stage-2-handoff).
+
+SCA-781 permits reviewable stages. The existing changes cover the human-attention
 response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat attachment uploads, task creation and document authoring. It does not claim that every UI
 mutation already satisfies the invariant.
 
@@ -19,7 +27,7 @@ mutation already satisfies the invariant.
 | Task/document authoring   | New tasks; new documents, document descriptions, revisions and inline titles                                          | Atomic nested mutation/replay, frozen original concurrency tokens, reload/offline/attention recovery and explicit rebase                                        |
 | Remaining authoring       | Remaining card/plan/settings/lifecycle mutations and all other forms                                                  | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
 
-The issue remains in progress until all stages pass. Do not enable blind retries
+The full invariant remains incomplete. Do not enable blind retries
 for an unaudited endpoint: an HTTP timeout can occur after the mutation committed.
 
 ## Current implementation
@@ -370,10 +378,13 @@ API audit; it has no current authoring form.
 
 ## Remaining live UI mutation audit
 
-The following are actual direct SDK calls found in current browser code. This is
-a rollout inventory; it does not yet cover every dynamic command, raw fetch,
-authentication control or authored control. The migrated-surface guard must grow
-into a complete enforcement rule before issue acceptance.
+The following are actual direct SDK calls found in current browser code. Each
+remaining callsite is now explicitly allowlisted in
+`durable-mutation-allowlist.json`, including raw transport entrypoints, helper
+modules and statically named computed calls. The test rejects added calls and
+stale exceptions. This finite AST inventory does not prove arbitrary JavaScript
+dataflow or whole-UI durability. Authentication and private credential controls
+need protocol-specific review before persistence, not blind generic retries.
 
 | Surface                         | Remaining direct mutations                                                                                         |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -388,6 +399,41 @@ into a complete enforcement rule before issue acceptance.
 | Inbox lifecycle and PM delivery | Card archive, decision dispatch, action reconcile and acknowledgement                                              |
 | Task refresh                    | `requestWorkRefresh`; preserve the requested target and original intent                                            |
 | PM setup and lifecycle          | Audit the setup wizard and remaining retry/cancel/control adapters, beyond direct SDK-call matching                |
+
+## Stage 2 handoff
+
+The follow-up owner is the coordinator, who will file a new issue after #390
+merges. This section is the follow-up pointer for every remaining exception in
+`durable-mutation-allowlist.json`; no follow-up issue number exists yet. Do not
+expand #390 to implement these TODOs.
+
+- Topic title/summary editor: complete snapshot, canonical topic timestamp,
+  retained conflicts, explicit latest-version action and outbox recovery. Atomic
+  PATCH receipts are present, but the current UI still catches 409 and closes
+  the form; this is a known input-loss gap outside frozen stage 1.
+- Event single/bulk lifecycle, remaining Inbox card archive and explicit PM
+  dispatch/reconcile/acknowledgement, task refresh, dashboard selection and dev
+  actor creation: audit receipts and migrate full intents before automatic retry.
+- Access/host/enrollment/invite/admin/principal controls, Secrets, setup/tour
+  choices, workspace activation and login/session controls: design authorization,
+  private-result and credential handling before choosing device persistence.
+- Remaining card/document/plan edit forms: creation, document text/title,
+  assignment, task moves/evidence and document lifecycle are already migrated.
+  No current card content or plan editor exists; new editors must use the store
+  and outbox. The server revision/plan prerequisites do not constitute UI coverage.
+- Topic creation/lifecycle, legacy knowledge PUT, permanent purge and remaining
+  unaudited server replay: audit nested writes, quota locking, current authority,
+  original receipts, tombstones and physical blob deletion. Purge cannot safely
+  inherit generic retry semantics without its deletion/recovery protocol.
+- Replace finite exceptions with whole-UI enforcement, including dynamically
+  aliased senders, raw transport, authored controls and protocol-specific auth
+  exclusions. Existing exceptions are not permission for new bypasses.
+
+Review boundary: the invariant tests enforce migrated Inbox/discussion/PM,
+uploads, task/document authoring, assignments, moves and document lifecycle.
+The separate exact callsite inventory makes all remaining known SDK/transport
+exceptions visible. Neither test claims complete semantic analysis or complete
+delivery of the issue's original acceptance criteria.
 
 ## PM chat HTTP recovery prerequisite
 
