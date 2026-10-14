@@ -78,8 +78,11 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "await" {
 		return "remote_coordination_write"
 	}
-	if parts[0] == "orient" {
+	if parts[0] == "orient" || parts[0] == "context" {
 		return "read_only"
+	}
+	if parts[0] == "note" || parts[0] == "done" {
+		return "remote_coordination_write"
 	}
 	if command == "auth access-requests request" || command == "auth access-requests approve" || command == "auth access-requests deny" {
 		return "remote_coordination_write"
@@ -241,7 +244,7 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 					if anyString(root["outcome"]) == "approved" {
 						label = "Record approval"
 					}
-					actions = append(actions, action(label, "anx", "work", "note", answer, subject))
+					actions = append(actions, action(label, "anx", "note", subject, answer))
 				}
 			case "acknowledged":
 				actions = append(actions, action("Review acknowledged work", "anx", "work", "get", subject))

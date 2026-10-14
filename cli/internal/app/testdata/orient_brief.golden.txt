@@ -1,0 +1,9 @@
+you: codex on m5 · workspace omi
+answered for you:  ask/88 "Ship nightly digest?" → "Hold a week" (not your recommendation)
+waiting on human:  ask/91 "Merge battery-v2 calibration?" 2d · by Oct 16 · blocks 2
+waiting on human:  ask/93 "Pick label scheme?" 1h
+your initiatives:  battery-measurement  PAST PROMISE 9d (Oct 6 checkpoint with bench data) · moved 2×
+your initiatives:  fleet-onboarding  moving · next Oct 16 enroll m6
+your initiatives:  labels  no promise · last evidence Oct 1 · possibly moot
+your initiatives:  observability  done
+next: anx note card:battery-measurement --evidence <ref> --next <date> "<what>"

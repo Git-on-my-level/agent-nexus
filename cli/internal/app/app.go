@@ -289,7 +289,9 @@ func needsAgentIdentity(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "help", "version", "doctor", "config", "update", "install", "skills", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "api":
+	case "api":
+		return len(args) > 1 && args[1] != "call" && !isHelpToken(args[1])
+	case "help", "version", "doctor", "config", "update", "install", "skills", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
 		return false
 	}
 	return true

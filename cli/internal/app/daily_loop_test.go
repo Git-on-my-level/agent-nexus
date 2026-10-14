@@ -41,40 +41,6 @@ func dailyJSON(t *testing.T, out *bytes.Buffer) map[string]any {
 	return v
 }
 
-func TestOrientIncludesSecondaryAssigneeAndAnswers(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/agents/agent-1":
-			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host","host_slug":"host","current_card_ref":"card:task"},"open_asks":[],"recent_notes":[]}`)
-		case r.URL.Path == "/work":
-			fmt.Fprint(w, `{"work":[{"ref":"card:task","title":"Task","phase":"in_progress","assignee_refs":["actor:other","actor:actor-1"]}],"has_more":false}`)
-		case r.URL.Path == "/agent-inbox/asks":
-			fmt.Fprint(w, `{"items":[{"ask_id":"event:ask-2","status":"open","title":"Still pending","subject_ref":"card:task","answer_unread":false},{"ask_id":"event:ask-1","status":"answered","title":"Need answer","subject_ref":"card:task","answer":{"text":"Yes","response_event_id":"response-1"},"answer_unread":true}],"page_info":{"has_more":false}}`)
-		case r.URL.Path == "/agent-notifications":
-			fmt.Fprint(w, `{"items":[{"status":"unread","trigger_event_id":"response-1"}]}`)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "orient"}); exit != 0 {
-		t.Fatalf("orient exit=%d output=%s", exit, out.String())
-	}
-	result := asMap(dailyJSON(t, out)["result"])
-	if result["my_work_matched"] != float64(1) {
-		t.Fatalf("secondary assignee omitted: %#v", result)
-	}
-	if len(asSlice(result["stale_items"])) != 1 {
-		t.Fatalf("stale item omitted: %#v", result)
-	}
-	asks := asSlice(result["my_asks_and_answers"])
-	if len(asks) != 2 || anyString(asMap(asks[0])["ask_id"]) != "event:ask-1" || asMap(asks[0])["answer_unread"] != true || anyString(asMap(asMap(asks[0])["answer"])["text"]) != "Yes" {
-		t.Fatalf("answer omitted: %#v", asks)
-	}
-}
-
 func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 	for _, tc := range []struct {
 		name, answer, outcome string

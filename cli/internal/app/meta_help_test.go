@@ -830,7 +830,7 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 	if !strings.Contains(stdout.String(), "anx help onboarding") {
 		t.Fatalf("expected onboarding hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Daily loop") || !strings.Contains(stdout.String(), "orient ") {
+	if !strings.Contains(stdout.String(), "Loop (stable)") || !strings.Contains(stdout.String(), "orient ") {
 		t.Fatalf("expected orient command output=%s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "anx install skill --path ./SKILL.md") {
@@ -867,7 +867,7 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "anx install skill --path") {
 		t.Fatalf("expected skill export hint output=%s", output)
 	}
-	if !strings.Contains(output, "anx host enroll") || !strings.Contains(output, "anx work done") {
+	if !strings.Contains(output, "anx host enroll") || !strings.Contains(output, "anx done") {
 		t.Fatalf("expected host enrollment and daily loop output=%s", output)
 	}
 	if !strings.Contains(output, "CEO by default") || !strings.Contains(output, "small set of outcome cards") {

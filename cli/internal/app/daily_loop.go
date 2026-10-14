@@ -24,7 +24,7 @@ const orientReturnLimit = 50
 
 func isDailyWorkVerb(verb string) bool {
 	switch verb {
-	case "start", "note", "block", "done":
+	case "start", "block":
 		return true
 	}
 	return false
@@ -63,171 +63,12 @@ func (a *App) currentCardRef(ctx context.Context, cfg config.Resolved) (string, 
 	return ref, nil
 }
 
-func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	fs := newSilentFlagSet("orient")
-	var staleHours trackedInt
-	fs.Var(&staleHours, "stale-hours", "Hours without a progress note before in-progress work is stale (default 24)")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	if len(fs.Args()) != 0 {
-		return nil, errnorm.Usage("invalid_args", "orient takes no positional arguments")
-	}
-	hours := 24
-	if staleHours.set {
-		hours = staleHours.value
-	}
-	if hours < 1 || hours > 720 {
-		return nil, errnorm.Usage("invalid_request", "--stale-hours must be 1..720")
-	}
-	agent, detail, err := a.dailyAgent(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	actorRef := "actor:" + strings.TrimPrefix(anyString(agent["actor_id"]), "actor:")
-	workResult, err := a.invokeRawJSON(ctx, cfg, "orient work", "GET", "/work?limit=200", nil)
-	if err != nil {
-		return nil, err
-	}
-	workBody := commandResultBody(workResult)
-	matched := 0
-	workByPhase := map[string]any{}
-	stale := []any{}
-	darkCount, mootCount := 0, 0
-	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour)
-	notes := asSlice(detail["recent_notes"])
-	for _, raw := range asSlice(workBody["work"]) {
-		row := asMap(raw)
-		assigned := false
-		for _, ref := range asSlice(row["assignee_refs"]) {
-			if anyString(ref) == actorRef {
-				assigned = true
-				break
-			}
-		}
-		if !assigned {
-			continue
-		}
-		matched++
-		// Dark and possibly-moot counts keep the digest honest about work that
-		// will go quiet or is already overtaken, without duplicating the rows.
-		if anyString(asMap(row["plan_health"])["state"]) == "dark" {
-			darkCount++
-		}
-		if asMap(row["possibly_moot"])["flagged"] == true {
-			mootCount++
-		}
-		if matched > orientReturnLimit {
-			continue
-		}
-		phase := firstNonEmpty(anyString(row["phase"]), "unknown")
-		group := asSlice(workByPhase[phase])
-		group = append(group, row)
-		workByPhase[phase] = group
-		if phase == "in_progress" {
-			latest := time.Time{}
-			for _, n := range notes {
-				note := asMap(n)
-				if anyString(note["card_ref"]) != anyString(row["ref"]) {
-					continue
-				}
-				at, parseErr := time.Parse(time.RFC3339Nano, anyString(note["at"]))
-				if parseErr == nil && at.After(latest) {
-					latest = at
-				}
-			}
-			if latest.IsZero() || latest.Before(cutoff) {
-				stale = append(stale, row)
-			}
-		}
-	}
-	allOwnAsks, err := a.loadOwnInboxAsksForActor(ctx, cfg, anyString(agent["actor_id"]))
-	if err != nil {
-		return nil, err
-	}
-	askMatched := len(allOwnAsks)
-	ownRequests := make([]any, 0, min(askMatched, orientReturnLimit))
-	for i := 0; i < len(allOwnAsks) && i < orientReturnLimit; i++ {
-		ownRequests = append(ownRequests, allOwnAsks[i])
-	}
-	notifications, err := a.invokeRawJSON(ctx, cfg, "orient notifications", "GET", "/agent-notifications?status=unread", nil)
-	if err != nil {
-		return nil, err
-	}
-	notificationBody := commandResultBody(notifications)
-	allNotifications := asSlice(notificationBody["items"])
-	returnedNotifications := allNotifications
-	if len(returnedNotifications) > orientReturnLimit {
-		returnedNotifications = returnedNotifications[:orientReturnLimit]
-	}
-	sort.SliceStable(ownRequests, func(i, j int) bool {
-		return asMap(ownRequests[i])["answer_unread"] == true && asMap(ownRequests[j])["answer_unread"] != true
-	})
-	next := []any{}
-	if ref := anyString(agent["current_card_ref"]); ref != "" {
-		next = append(next, []string{"anx", "cards", "get", ref})
-	}
-	allOpenAsks := asSlice(detail["open_asks"])
-	returnedOpenAsks := allOpenAsks
-	if len(returnedOpenAsks) > orientReturnLimit {
-		returnedOpenAsks = returnedOpenAsks[:orientReturnLimit]
-	}
-	deliveryHealth, deliveryWarnings := a.orientDeliveryHealth(cfg, allOpenAsks)
-	for _, raw := range returnedOpenAsks {
-		if len(next) >= 10 {
-			break
-		}
-		ask := asMap(raw)
-		if ref := inboxAskID(ask); ref != "" {
-			next = append(next, []string{"anx", "await", ref})
-		}
-	}
-	if len(next) == 0 {
-		for _, phase := range []string{"in_progress", "ready", "backlog"} {
-			items := asSlice(workByPhase[phase])
-			if len(items) > 0 {
-				if ref := anyString(asMap(items[0])["ref"]); ref != "" {
-					next = append(next, []string{"anx", "work", "start", ref})
-					break
-				}
-			}
-		}
-	}
-	if len(next) == 0 {
-		next = append(next, []string{"anx", "work", "list"})
-	}
-	resolution := cfg.IdentitySource
-	if resolution == "" {
-		_, resolution, _ = a.identityName(cfg)
-	}
-	for _, warning := range deliveryWarnings {
-		if warning.Code == "ask_delivery" {
-			next = append(next, []string{"anx", "bridge", "install"})
-		}
-	}
-	result := map[string]any{
-		"me":               map[string]any{"agent": agent["id"], "handle": agent["handle"], "host": agent["host_slug"], "current_card_ref": agent["current_card_ref"], "identity_resolved_by": resolution},
-		"my_work_by_phase": workByPhase, "my_work_matched": matched, "my_work_returned": min(matched, orientReturnLimit),
-		"work_page_limit": orientPageLimit, "work_has_more": anyString(workBody["next_cursor"]) != "", "work_next_cursor": workBody["next_cursor"],
-		"my_asks_and_answers": ownRequests, "my_asks_matched": askMatched, "my_asks_returned": len(ownRequests), "ask_page_limit": 200,
-		"open_asks": returnedOpenAsks, "open_asks_matched": len(allOpenAsks), "open_asks_returned": len(returnedOpenAsks),
-		"delivery_health":        deliveryHealth,
-		"mentions_notifications": map[string]any{"items": returnedNotifications, "matched": len(allNotifications), "returned": len(returnedNotifications)},
-		"stale_items":            stale, "stale_hours": hours,
-		"health_tally": map[string]int{"dark": darkCount, "possibly_moot": mootCount},
-		"next":         next,
-	}
-	orientResult := &commandResult{Data: result}
-	orientResult.Warnings = append(orientResult.Warnings, deliveryWarnings...)
-	return orientResult, nil
-}
-
 func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("work " + verb)
 	var askFlag, force trackedBool
 	var body, bodyFile, reason trackedString
 	var recommend trackedString
-	var alts, evidence trackedStrings
+	var alts trackedStrings
 	fs.Var(&askFlag, "ask", "Open an operator ask when blocking")
 	fs.Var(&recommend, "recommend", "Recommended answer for the optional ask")
 	fs.Var(&alts, "alt", "Alternative answer for the optional ask (repeatable)")
@@ -235,14 +76,13 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 	fs.Var(&bodyFile, "body-file", "Read optional ask body from file or stdin (-)")
 	fs.Var(&force, "force", "Override ask authoring lint with --reason")
 	fs.Var(&reason, "reason", "Recorded ask authoring override reason")
-	fs.Var(&evidence, "evidence", "Evidence URL or typed ref (repeatable)")
 	leading, rest := splitLeadingPositionals(args)
 	if err := fs.Parse(rest); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := append(leading, fs.Args()...)
 	var text, cardRef string
-	if verb == "note" || verb == "block" {
+	if verb == "block" {
 		if len(positionals) == 0 {
 			return nil, errnorm.Usage("invalid_request", "progress text is required")
 		}
@@ -266,12 +106,6 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 	}
 	if verb != "block" && (askFlag.set || recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
 		return nil, errnorm.Usage("invalid_flags", "ask flags belong to work block")
-	}
-	if verb != "done" && len(evidence.values) > 0 {
-		return nil, errnorm.Usage("invalid_flags", "--evidence belongs to work done")
-	}
-	if verb == "done" && len(evidence.values) == 0 {
-		return nil, errnorm.Usage("invalid_request", "work done requires --evidence <url|ref>")
 	}
 	if verb == "block" && askFlag.value && strings.TrimSpace(recommend.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "work block --ask requires --recommend")
@@ -347,13 +181,6 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 		if _, err := a.invokeRawJSON(ctx, cfg, "work presence", "PATCH", "/agents/me/presence", map[string]any{"current_card_ref": cardRef}); err != nil {
 			return nil, err
 		}
-	case "note":
-		if _, _, err := a.runCardsCommand(ctx, []string{"message", cardRef, "--body", text}, cfg); err != nil {
-			return nil, err
-		}
-		if _, err := a.invokeRawJSON(ctx, cfg, "work presence", "PATCH", "/agents/me/presence", map[string]any{"current_card_ref": cardRef, "note": truncateRunes(text, 500)}); err != nil {
-			return nil, err
-		}
 	case "block":
 		if err := a.dailyMove(ctx, cfg, cardRef, "blocked"); err != nil {
 			return nil, err
@@ -372,31 +199,8 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			result := &commandResult{Data: map[string]any{"card_ref": cardRef, "phase": "blocked", "ask_id": commandResultBody(askResult)["ask_id"]}, Warnings: askResult.Warnings}
 			return result, nil
 		}
-	case "done":
-		resolveArgs := []string{"resolve", cardRef}
-		var urls []string
-		for _, e := range evidence.values {
-			if strings.HasPrefix(e, "event:") || strings.HasPrefix(e, "artifact:") {
-				resolveArgs = append(resolveArgs, "--resolution-ref", e)
-			} else {
-				u, parseErr := url.Parse(e)
-				if parseErr != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-					return nil, errnorm.Usage("invalid_request", "--evidence must be an http(s) URL or event:/artifact: ref")
-				}
-				urls = append(urls, e)
-			}
-		}
-		if len(urls) > 0 {
-			resolveArgs = append(resolveArgs, "--body", strings.Join(urls, "\n"))
-		}
-		if _, _, err := a.runCardsCommand(ctx, resolveArgs, cfg); err != nil {
-			return nil, err
-		}
-		if _, err := a.invokeRawJSON(ctx, cfg, "work presence", "PATCH", "/agents/me/presence", map[string]any{"current_card_ref": nil, "note": nil}); err != nil {
-			return nil, err
-		}
 	}
-	result := &commandResult{Data: map[string]any{"card_ref": cardRef, "phase": map[string]string{"start": "in_progress", "note": anyString(card["column_key"]), "block": "blocked", "done": "done"}[verb], "note": text}}
+	result := &commandResult{Data: map[string]any{"card_ref": cardRef, "phase": map[string]string{"start": "in_progress", "block": "blocked"}[verb], "note": text}}
 	return result, nil
 }
 
