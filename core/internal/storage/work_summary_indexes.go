@@ -29,6 +29,10 @@ func installWorkSummaryAttention(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
+	return installWorkSummaryAskIndex(ctx, tx)
+}
+
+func installWorkSummaryAskIndex(ctx context.Context, tx *sql.Tx) error {
 	exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items")
 	if err != nil || !exists {
 		return err
@@ -53,8 +57,10 @@ func installWorkSummaryAttention(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 func workSummaryAskSelect(id string) string {
-	return `SELECT json_extract(data_json,'$.subject_ref'),COALESCE(json_extract(data_json,'$.recipient_actor_id'),''),id,trigger_at
- FROM derived_inbox_items WHERE id=` + id + ` AND COALESCE(json_extract(data_json,'$.kind'),category)='ask' AND json_extract(data_json,'$.subject_ref') LIKE 'card:%'`
+	return `SELECT ref.value,COALESCE(json_extract(i.data_json,'$.recipient_actor_id'),''),i.id,i.trigger_at
+ FROM derived_inbox_items i CROSS JOIN json_each(json_insert(COALESCE(json_extract(i.data_json,'$.related_refs'),'[]'),'$[#]',json_extract(i.data_json,'$.subject_ref'))) ref
+ WHERE i.id=` + id + ` AND COALESCE(json_extract(i.data_json,'$.kind'),i.category)='ask' AND ref.type='text' AND ref.value LIKE 'card:%'`
+
 }
 
 // Share the existing bounded inbox maintenance lifecycle. Reads never repair or
@@ -146,4 +152,23 @@ func repairPrimaryCardPhases(ctx context.Context, tx *sql.Tx) error {
 		}
 		cursor = ids[len(ids)-1]
 	}
+}
+
+// Reinstall triggers and reset the bounded maintenance cursor. Existing rows
+// remain usable while historical related-ref associations are backfilled.
+func upgradeWorkSummaryAskLinks(ctx context.Context, tx *sql.Tx) error {
+	for _, name := range []string{"work_summary_asks_insert", "work_summary_asks_update", "work_summary_asks_delete"} {
+		if _, err := tx.ExecContext(ctx, "DROP TRIGGER IF EXISTS "+name); err != nil {
+			return err
+		}
+	}
+	if err := installWorkSummaryAskIndex(ctx, tx); err != nil {
+		return err
+	}
+	exists, err := sqliteTableExists(ctx, tx, "work_summary_asks_job")
+	if err != nil || !exists {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE work_summary_asks_job SET cursor='',done=0 WHERE singleton=1`)
+	return err
 }

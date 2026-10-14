@@ -41,6 +41,24 @@ const workSummary = {
   next: { id: "ship", title: "Ship it", ref: "", more: 1 },
   last_movement_at: MOVED_AT,
   age: 7200,
+  attention: {
+    count: 10,
+    oldest_age: 47 * 86400,
+    oldest_at: "2026-08-18T12:00:00Z",
+  },
+  metrics: [
+    {
+      ref: "series:cost",
+      name: "cost",
+      unit: "USD",
+      status: "ok",
+      latest: { value: 80 },
+      baseline: { value: 100 },
+      change: -20,
+      observed_at: MOVED_AT,
+      stale: false,
+    },
+  ],
 };
 
 const card = {
@@ -203,6 +221,7 @@ function asCore(row, optedIn) {
 }
 
 async function install(page) {
+  await page.clock.setFixedTime(new Date(NOW));
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
     principals: [{ actor_id: "operator", principal_kind: "human" }],
@@ -328,6 +347,17 @@ for (const viewport of [
     const board = await readSummary(
       page.locator(`[data-work-slot][data-work-ref="${CARD_REF}"]`),
     );
+
+    await expect(
+      page.locator(
+        `[data-work-slot][data-work-ref="${CARD_REF}"] [data-summary-attention]`,
+      ),
+    ).toContainText("waiting on you 47d");
+    await expect(
+      page.locator(
+        `[data-work-slot][data-work-ref="${CARD_REF}"] [data-summary-metric]`,
+      ),
+    ).toContainText("vs 100");
 
     // The point of the whole change.
     expect(table).toEqual(overview);
