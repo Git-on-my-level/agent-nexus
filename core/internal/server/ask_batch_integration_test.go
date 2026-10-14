@@ -683,3 +683,300 @@ func TestAskBatchAnsweredRetryAuthorizes(t *testing.T) {
 		t.Fatalf("authorized no-key retry must 409, got %d %#v", status, result)
 	}
 }
+
+// Regression (review round 1, P1): an answered batch behind a private thread
+// must be indistinguishable from a missing item for a principal who cannot
+// see it — 404, never a 409 that discloses the answer's existence.
+func TestAnsweredPrivateBatchIsAbsentToStrangers(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	agent := seedNotificationTestAgent(t, env, "ask.agent")
+	ctx := context.Background()
+	db := env.workspace.DB()
+	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "batch-owner", "batch-owner-actor", "batch-owner", "batch-owner-token")
+	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "batch-stranger", "batch-stranger-actor", "batch-stranger", "batch-stranger-token")
+	store := env.primitiveStore.(*primitives.Store)
+
+	board, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Private batch board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := store.CreateBoardCard(ctx, owner.ActorID, anyString(board["id"]), primitives.AddBoardCardInput{Title: "Private batch card", ColumnKey: "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cardID := anyString(card.Card["id"])
+	threadID := anyString(card.Card["thread_id"])
+	if _, err := store.PatchThread(ctx, owner.ActorID, threadID, map[string]any{"pm_actor_id": owner.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate the filed batch the way the store lays it down: shared batch id
+	// on a private thread with the private card as every member's subject.
+	for index, id := range []string{"batch-oracle-a", "batch-oracle-b"} {
+		if _, err := store.AppendEvent(ctx, owner.ActorID, map[string]any{
+			"id": id, "type": "human_attention_requested", "thread_id": threadID,
+			"refs": []string{"thread:" + threadID, "card:" + cardID},
+			"payload": map[string]any{
+				"kind": "ask", "title": fmt.Sprintf("Private decision %d", index+1),
+				"subject_ref":        "card:" + cardID,
+				"requester_actor_id": agent.ActorID,
+				"requester_label":    agent.Username,
+				"response_proposals": []any{"Yes"},
+				"delivery":           "batch",
+				"batch_id":           "askbatch_oracle",
+			},
+			"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: env.primitiveStore}, threadID, time.Now().UTC(), owner.ActorID); err != nil {
+		t.Fatalf("refresh projection: %v", err)
+	}
+	items, err := env.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("expected one private batch item, got %d (%v)", len(items), err)
+	}
+	batchItemID := items[0].ID
+
+	// Before the answer, a stranger already sees nothing.
+	status, _ := hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItemID)+"/respond", stranger.AccessToken, map[string]any{
+		"response_text": "sneak", "outcome": "answered",
+	})
+	if status != http.StatusNotFound {
+		t.Fatalf("open private batch must 404 for a stranger, got %d", status)
+	}
+
+	// The owner answers the whole batch.
+	sections, _ := items[0].Data["batch"].(map[string]any)["asks"].([]any)
+	answers := []map[string]any{}
+	for _, raw := range sections {
+		section, _ := raw.(map[string]any)
+		answers = append(answers, map[string]any{
+			"ask_ref":       section["request_event_ref"],
+			"response_text": "Owner decision",
+			"outcome":       "answered",
+		})
+	}
+	status, result := hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItemID)+"/respond", owner.AccessToken, map[string]any{"answers": answers})
+	if status != http.StatusCreated {
+		t.Fatalf("owner batch respond: %d %#v", status, result)
+	}
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: env.primitiveStore}, threadID, time.Now().UTC(), owner.ActorID); err != nil {
+		t.Fatalf("refresh after answer: %v", err)
+	}
+
+	// After the answer, the batch claim must stay invisible: a stranger's
+	// response attempt reports the item missing, never "already answered".
+	status, body := hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItemID)+"/respond", stranger.AccessToken, map[string]any{
+		"response_text": "sneak", "outcome": "answered",
+	})
+	if status != http.StatusNotFound {
+		t.Fatalf("answered private batch must 404 for a stranger, got %d %#v", status, body)
+	}
+	if code, _ := body["error"].(map[string]any); code != nil && anyString(code["code"]) == "conflict" {
+		t.Fatalf("stranger must not learn the private batch was answered: %#v", body)
+	}
+	// The owner still replays the stored result by key.
+	status, body = hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(batchItemID)+"/respond", owner.AccessToken, map[string]any{"answers": answers})
+	if status != http.StatusConflict {
+		t.Fatalf("owner without the key sees the honest conflict, got %d", status)
+	}
+}
+
+// Regression (review round 1, P2): a member withdrawn between the reader's
+// load and the submit aborts the whole batch with the withdrawn ask named,
+// leaving every other member uncommitted; the shrunk list then answers.
+func TestAskBatchWithdrawnMemberAbortsAndNamesTheAsk(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	agent := seedNotificationTestAgent(t, env, "ask.agent")
+	ctx := context.Background()
+	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "abort-human", "abort-human-actor", "abort-human", "abort-human-token")
+
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, agent.ActorID, map[string]any{
+		"title": "Abort thread", "type": "incident", "status": "active", "priority": "p2",
+		"tags": []any{"asks"}, "cadence": "daily", "next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary": "summary", "next_actions": []any{"check"}, "key_artifacts": []any{},
+		"provenance": map[string]any{"sources": []any{"inferred"}},
+	})
+	member := func(title string) map[string]any {
+		return map[string]any{
+			"type":      "human_attention_requested",
+			"thread_id": threadID,
+			"summary":   title,
+			"refs":      []string{"thread:" + threadID},
+			"payload": map[string]any{
+				"kind": "ask", "title": title,
+				"subject_ref":        "thread:" + threadID,
+				"requester_actor_id": agent.ActorID,
+				"requester_label":    agent.Username,
+				"response_proposals": []any{"Yes", "No"},
+				"delivery":           "batch",
+			},
+			"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+		}
+	}
+	status, filed := hostHTTP(t, http.MethodPost, env.server.URL+"/asks/batch", agent.AccessToken, map[string]any{
+		"asks": []map[string]any{member("Abort withdrawn"), member("Abort kept A"), member("Abort kept B")},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("file batch: %d %#v", status, filed)
+	}
+	events, _ := filed["events"].([]any)
+	withdrawnID := anyString(events[0].(map[string]any)["id"])
+
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: env.primitiveStore}, threadID, time.Now().UTC(), agent.ActorID); err != nil {
+		t.Fatalf("refresh projection: %v", err)
+	}
+	items, err := env.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("expected one batch item, got %d (%v)", len(items), err)
+	}
+	staleSections, _ := items[0].Data["batch"].(map[string]any)["asks"].([]any)
+
+	// Withdraw the first member WITHOUT refreshing the projection, so the
+	// reader is still looking at the pre-withdrawal section list.
+	status, result := hostHTTP(t, http.MethodPost, env.server.URL+"/events", agent.AccessToken, map[string]any{
+		"event": map[string]any{
+			"type":      "human_attention_withdrawn",
+			"thread_id": threadID,
+			"summary":   "Abort withdrawn",
+			"refs":      []string{"event:" + withdrawnID},
+			"payload": map[string]any{
+				"request_event_id":      withdrawnID,
+				"request_event_ref":     "event:" + withdrawnID,
+				"withdrawn_by_actor_id": agent.ActorID,
+				"reason":                "No longer needed",
+			},
+			"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("withdraw member: %d %#v", status, result)
+	}
+
+	fullAnswers := []map[string]any{}
+	for _, raw := range staleSections {
+		section, _ := raw.(map[string]any)
+		fullAnswers = append(fullAnswers, map[string]any{
+			"ask_ref":       section["request_event_ref"],
+			"response_text": "Submitted against the stale list",
+			"outcome":       "answered",
+		})
+	}
+	status, result = hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(items[0].ID)+"/respond", human.AccessToken, map[string]any{"answers": fullAnswers})
+	if status != http.StatusConflict {
+		t.Fatalf("stale submit must conflict, got %d %#v", status, result)
+	}
+	message := ""
+	if errMap, ok := result["error"].(map[string]any); ok {
+		message = anyString(errMap["message"])
+	}
+	if !strings.Contains(message, "was withdrawn") || !strings.Contains(message, "event:"+withdrawnID) {
+		t.Fatalf("conflict must name the withdrawn ask: %q", message)
+	}
+
+	// Nothing committed: the still-open members have no answers.
+	listResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/agent-inbox/asks?limit=200", agent.AccessToken, http.StatusOK)
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&page); err != nil {
+		t.Fatal(err)
+	}
+	listResp.Body.Close()
+	for _, item := range page.Items {
+		if item["answer"] != nil {
+			t.Fatalf("no member may be answered by the aborted submit: %#v", item)
+		}
+	}
+
+	// The shrunk list answers the remaining members.
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: env.primitiveStore}, threadID, time.Now().UTC(), agent.ActorID); err != nil {
+		t.Fatalf("refresh projection: %v", err)
+	}
+	items, err = env.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("batch item must survive the withdrawal, got %d (%v)", len(items), err)
+	}
+	shrunkSections, _ := items[0].Data["batch"].(map[string]any)["asks"].([]any)
+	if len(shrunkSections) != 2 {
+		t.Fatalf("expected two open sections after withdrawal, got %#v", items[0].Data["batch"])
+	}
+	shrunkAnswers := []map[string]any{}
+	for _, raw := range shrunkSections {
+		section, _ := raw.(map[string]any)
+		shrunkAnswers = append(shrunkAnswers, map[string]any{
+			"ask_ref":       section["request_event_ref"],
+			"response_text": "Answered against the shrunk list",
+			"outcome":       "answered",
+		})
+	}
+	status, result = hostHTTP(t, http.MethodPost, env.server.URL+"/inbox/"+url.PathEscape(items[0].ID)+"/respond", human.AccessToken, map[string]any{"answers": shrunkAnswers})
+	if status != http.StatusCreated {
+		t.Fatalf("shrunk batch respond: %d %#v", status, result)
+	}
+}
+
+// Regression (review round 1): the filing replay row commits with the member
+// events, so the same key against a different body conflicts, and a private
+// subject reports 404 the same way a single ask does.
+func TestAskBatchFilingReplayConflictAndMissingSubject(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	agent := seedNotificationTestAgent(t, env, "ask.agent")
+
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, agent.ActorID, map[string]any{
+		"title": "Replay thread", "type": "incident", "status": "active", "priority": "p2",
+		"tags": []any{"asks"}, "cadence": "daily", "next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary": "summary", "next_actions": []any{"check"}, "key_artifacts": []any{},
+		"provenance": map[string]any{"sources": []any{"inferred"}},
+	})
+	member := func(title string) map[string]any {
+		return map[string]any{
+			"type":      "human_attention_requested",
+			"thread_id": threadID,
+			"summary":   title,
+			"refs":      []string{"thread:" + threadID},
+			"payload": map[string]any{
+				"kind": "ask", "title": title,
+				"subject_ref":        "thread:" + threadID,
+				"requester_actor_id": agent.ActorID,
+				"requester_label":    agent.Username,
+				"response_proposals": []any{"Yes", "No"},
+				"delivery":           "batch",
+			},
+			"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+		}
+	}
+	first := []map[string]any{member("Replay A"), member("Replay B")}
+	status, filed := hostHTTP(t, http.MethodPost, env.server.URL+"/asks/batch", agent.AccessToken, map[string]any{
+		"request_key": "replay-key-1", "asks": first,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("file: %d %#v", status, filed)
+	}
+
+	// Same key, different body: the key belongs to the original batch.
+	status, result := hostHTTP(t, http.MethodPost, env.server.URL+"/asks/batch", agent.AccessToken, map[string]any{
+		"request_key": "replay-key-1", "asks": []map[string]any{member("Replay A"), member("Replay CHANGED")},
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("changed body under the same key must conflict, got %d %#v", status, result)
+	}
+
+	// A subject the caller cannot resolve is 404, like a single ask.
+	status, result = hostHTTP(t, http.MethodPost, env.server.URL+"/asks/batch", agent.AccessToken, map[string]any{
+		"asks": []map[string]any{member("Replay A"), func() map[string]any {
+			ghost := member("Ghost subject")
+			ghost["payload"].(map[string]any)["subject_ref"] = "card:no-such-card-anywhere"
+			ghost["refs"] = []string{"thread:" + threadID, "card:no-such-card-anywhere"}
+			return ghost
+		}()},
+	})
+	if status != http.StatusNotFound {
+		t.Fatalf("unresolvable subject must 404, got %d %#v", status, result)
+	}
+}

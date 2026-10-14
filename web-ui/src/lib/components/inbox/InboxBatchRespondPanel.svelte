@@ -22,7 +22,14 @@
    * Sending is the caller's job (`onSend(answers)`); it queues the batch
    * behind the same undo toast as a single reply.
    */
-  let { batch = null, itemKey = "", busy = false, onSend } = $props();
+  let {
+    batch = null,
+    itemKey = "",
+    busy = false,
+    /** `{token, drafts}` handed back by an Undo: re-fills sections in place. */
+    restore = null,
+    onSend,
+  } = $props();
 
   let sections = $derived(Array.isArray(batch?.asks) ? batch.asks : []);
 
@@ -60,6 +67,28 @@
         false,
       ]),
     );
+  });
+
+  /*
+   * An Undo of a batch send hands every section's text back. The token makes
+   * repeated undos of identical drafts visible too; the outcome rides along so
+   * a section the reader had sent back for context reopens in that state.
+   */
+  let restoredToken = null;
+  $effect(() => {
+    if (!restore || restore.token === restoredToken) return;
+    restoredToken = restore.token;
+    const drafts = restore.drafts ?? {};
+    const outcomes = restore.outcomes ?? {};
+    for (const section of sections) {
+      const ref = String(section?.request_event_ref ?? "");
+      if (typeof drafts[ref] === "string") {
+        replies[ref] = drafts[ref];
+      }
+      if (typeof outcomes[ref] === "string") {
+        contextAsked[ref] = outcomes[ref] === NEEDS_CONTEXT_OUTCOME;
+      }
+    }
   });
 
   function sectionDraftKey(ref) {

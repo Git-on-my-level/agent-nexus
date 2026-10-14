@@ -850,9 +850,12 @@ func deriveHumanAttentionInboxItem(event map[string]any) (derivedInboxItem, bool
 // deriveHumanAttentionBatchInboxItem collapses the members of one filed ask
 // batch into a single inbox item. The id is pinned to the oldest member so it
 // stays stable while members are withdrawn; sections list only the members
-// that are still open. The caller suppresses the whole item once a response
-// refs it (batch answers are atomic, so there are no partial answers).
-func deriveHumanAttentionBatchInboxItem(members []map[string]any) (derivedInboxItem, bool) {
+// that are neither withdrawn nor answered, and every access-bearing field
+// (subject, refs, title, requester) is rebuilt from those open members so a
+// withdrawn private member cannot keep gating or leaking onto the item. The
+// caller suppresses the whole item once a response refs it (batch answers are
+// atomic, so there are no partial answers) or when no member stays open.
+func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map[string]struct{}) (derivedInboxItem, bool) {
 	if len(members) < 2 {
 		return derivedInboxItem{}, false
 	}
@@ -865,6 +868,8 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any) (derivedInboxI
 		}
 		return strings.TrimSpace(anyString(ordered[i]["id"])) < strings.TrimSpace(anyString(ordered[j]["id"]))
 	})
+	// The anchor is the oldest member of the full set, withdrawn or not: it
+	// pins the stable item id across membership changes.
 	anchor := ordered[0]
 	threadID := strings.TrimSpace(anyString(anchor["thread_id"]))
 	anchorEventID := strings.TrimSpace(anyString(anchor["id"]))
@@ -879,15 +884,17 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any) (derivedInboxI
 		return derivedInboxItem{}, false
 	}
 
-	subjectRef := strings.TrimSpace(anyString(anchorPayload["subject_ref"]))
-	if subjectRef == "" {
-		subjectRef = pickSubjectRefFromEventRefs(mustEventRefs(anchor), threadID)
-	}
 	sections := make([]map[string]any, 0, len(ordered))
 	for _, member := range ordered {
-		payload, _ := member["payload"].(map[string]any)
 		memberEventID := strings.TrimSpace(anyString(member["id"]))
-		if payload == nil || memberEventID == "" {
+		if memberEventID == "" {
+			return derivedInboxItem{}, false
+		}
+		if _, decided := decidedIDs["event:"+memberEventID]; decided {
+			continue
+		}
+		payload, _ := member["payload"].(map[string]any)
+		if payload == nil {
 			return derivedInboxItem{}, false
 		}
 		proposals, err := NormalizeHumanAttentionResponseProposals(payload["response_proposals"])
@@ -908,18 +915,59 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any) (derivedInboxI
 		}
 		sections = append(sections, section)
 	}
-
-	title := strings.TrimSpace(anyString(anchorPayload["title"]))
-	if title == "" {
-		title = strings.TrimSpace(anyString(anchor["summary"]))
+	if len(sections) == 0 {
+		return derivedInboxItem{}, false
 	}
+	// The lead is the oldest still-open member: it carries the display and
+	// access fields, so a withdrawn private member neither names nor gates
+	// the item for readers who could never see it.
+	var leadPayload map[string]any
+	leadEventID := ""
+	leadTS := anchor["ts"]
+	for _, member := range ordered {
+		memberEventID := strings.TrimSpace(anyString(member["id"]))
+		if _, decided := decidedIDs["event:"+memberEventID]; decided {
+			continue
+		}
+		payload, _ := member["payload"].(map[string]any)
+		if payload == nil {
+			return derivedInboxItem{}, false
+		}
+		// `ordered` is sorted, so the first open member is the oldest.
+		leadPayload = payload
+		leadEventID = memberEventID
+		leadTS = member["ts"]
+		break
+	}
+	if leadPayload == nil {
+		return derivedInboxItem{}, false
+	}
+
+	subjectRef := strings.TrimSpace(anyString(leadPayload["subject_ref"]))
+	if subjectRef == "" {
+		for _, member := range ordered {
+			memberEventID := strings.TrimSpace(anyString(member["id"]))
+			if _, decided := decidedIDs["event:"+memberEventID]; decided {
+				continue
+			}
+			if refs := pickSubjectRefFromEventRefs(mustEventRefs(member), threadID); refs != "" {
+				subjectRef = refs
+				break
+			}
+		}
+	}
+	if subjectRef == "" {
+		subjectRef = "thread:" + threadID
+	}
+
+	title := strings.TrimSpace(anyString(leadPayload["title"]))
 	if title == "" {
 		title = "Human attention requested"
 	}
 	id := makeInboxItemID(kind, threadID, batchID, anchorEventID)
-	// Access to the batch item must imply access to every member: a section
-	// whose subject card is restricted makes the whole item invisible to a
-	// principal who cannot see it, matching what N single items would do.
+	// Access to the batch item must imply access to every open member: a
+	// section whose subject card is restricted makes the whole item invisible
+	// to a principal who cannot see it, matching what N single items would do.
 	batchRelated := []string{"thread:" + threadID, subjectRef}
 	for _, section := range sections {
 		if sectionSubject := strings.TrimSpace(anyString(section["subject_ref"])); sectionSubject != "" {
@@ -930,22 +978,22 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any) (derivedInboxI
 		"id":                 id,
 		"kind":               kind,
 		"thread_id":          threadID,
-		"source_event_id":    anchorEventID,
-		"request_event_ref":  "event:" + anchorEventID,
+		"source_event_id":    leadEventID,
+		"request_event_ref":  "event:" + leadEventID,
 		"subject_ref":        subjectRef,
 		"related_refs":       typedRefStringsToAnyList(mergeUniqueSortedRefs(batchRelated...)),
 		"title":              title,
-		"body":               strings.TrimSpace(anyString(anchorPayload["body"])),
-		"requester_actor_id": strings.TrimSpace(anyString(anchorPayload["requester_actor_id"])),
-		"requester_agent_id": strings.TrimSpace(anyString(anchorPayload["requester_agent_id"])),
-		"requester_label":    strings.TrimSpace(anyString(anchorPayload["requester_label"])),
-		"created_at":         strings.TrimSpace(anyString(anchor["ts"])),
+		"body":               strings.TrimSpace(anyString(leadPayload["body"])),
+		"requester_actor_id": strings.TrimSpace(anyString(leadPayload["requester_actor_id"])),
+		"requester_agent_id": strings.TrimSpace(anyString(leadPayload["requester_agent_id"])),
+		"requester_label":    strings.TrimSpace(anyString(leadPayload["requester_label"])),
+		"created_at":         strings.TrimSpace(anyString(leadTS)),
 		"batch": map[string]any{
 			"id":   batchID,
 			"asks": sections,
 		},
 	}
-	if delivery := strings.TrimSpace(anyString(anchorPayload["delivery"])); delivery != "" {
+	if delivery := strings.TrimSpace(anyString(leadPayload["delivery"])); delivery != "" {
 		data["delivery"] = delivery
 	}
 	data["response_proposals"] = sections[0]["response_proposals"]

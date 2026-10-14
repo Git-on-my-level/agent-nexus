@@ -397,6 +397,24 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"actor_id": actor, "board_ref": "board:" + board, "title": "attempt"}
 	case "/events":
 		return map[string]any{"actor_id": actor, "event": map[string]any{"type": "message_posted", "thread_id": thread, "refs": refs, "payload": map[string]any{"text": "attempt"}}}
+	case "/asks/batch":
+		ask := func() map[string]any {
+			return map[string]any{
+				"type":      "human_attention_requested",
+				"thread_id": thread,
+				"summary":   "attempt",
+				"refs":      []string{"thread:" + thread, "card:" + card},
+				"payload": map[string]any{
+					"kind": "ask", "title": "attempt",
+					"subject_ref":        "card:" + card,
+					"requester_actor_id": actor,
+					"requester_label":    "matrix",
+					"response_proposals": []any{"attempt"},
+				},
+				"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+			}
+		}
+		return map[string]any{"actor_id": actor, "asks": []any{ask(), ask()}}
 	case "/artifacts", "/artifacts/attachments":
 		return map[string]any{"actor_id": actor, "artifact": map[string]any{"kind": "note", "refs": refs}, "content": "attempt", "content_type": "text"}
 	case "/docs":

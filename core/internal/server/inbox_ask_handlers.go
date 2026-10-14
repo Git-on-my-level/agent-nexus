@@ -1086,6 +1086,12 @@ func handleRespondInboxBatch(
 			writeError(w, http.StatusConflict, "conflict", "this ask batch has already been answered")
 			return
 		}
+		if errors.Is(err, primitives.ErrHumanAttentionMemberWithdrawn) {
+			// Nothing committed: the reader refreshes the item and re-submits
+			// against the shrunk batch.
+			writeError(w, http.StatusConflict, "conflict", "batch member "+err.Error()+" was withdrawn; refresh the item and answer the remaining asks")
+			return
+		}
 		if errors.Is(err, primitives.ErrHumanAttentionIdempotencyConflict) {
 			writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
 			return

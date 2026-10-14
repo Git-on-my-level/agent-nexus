@@ -27,7 +27,7 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 	batchStore, ok := opts.primitiveStore.(interface {
-		AppendTaskAttentionEventBatch(context.Context, string, []map[string]any) (string, []map[string]any, error)
+		AppendTaskAttentionEventBatch(context.Context, string, string, string, []map[string]any) (map[string]any, bool, error)
 	})
 	if !ok {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "task attention batch store is not configured")
@@ -58,6 +58,14 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 	requestPayload := map[string]any{"actor_id": body.ActorID, "request_key": body.RequestKey, "asks": body.Asks}
+	requestHash := ""
+	if strings.TrimSpace(body.RequestKey) != "" {
+		var err error
+		if requestHash, err = hashJSONPayload(requestPayload); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to hash ask batch")
+			return
+		}
+	}
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "asks.batch.create", actorID, body.RequestKey, requestPayload)
 	if writeIdempotencyError(w, err) {
 		return
@@ -96,7 +104,10 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 		members = append(members, event)
 	}
 
-	batchID, stored, err := batchStore.AppendTaskAttentionEventBatch(r.Context(), actorID, members)
+	// The filing replay row commits inside the store transaction, so an exact
+	// retry after a crash or a concurrent same-key create replays the original
+	// batch instead of filing a second one.
+	response, replayed, err := batchStore.AppendTaskAttentionEventBatch(r.Context(), actorID, body.RequestKey, requestHash, members)
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -113,8 +124,18 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 			writeError(w, http.StatusConflict, "conflict", "event already exists")
 			return
 		}
+		// A subject (or thread ref) the caller cannot resolve is absent, the
+		// same answer a single ask gives; the body never names the private id.
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "human attention request not found")
+			return
+		}
 		log.Printf("append ask batch failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append ask batch")
+		return
+	}
+	if replayed {
+		writeJSON(w, http.StatusCreated, response)
 		return
 	}
 	notifyProjectionMaintainer(opts)
@@ -123,15 +144,7 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 			log.Printf("best-effort ask batch projection refresh failed (thread=%s): %v", sharedThread, err)
 		}
 	}
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "asks.batch.create", actorID, body.RequestKey, requestPayload, http.StatusCreated, map[string]any{"batch_id": batchID, "events": stored})
-	if writeIdempotencyError(w, err) {
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
-		return
-	}
-	writeJSON(w, status, payload)
+	writeJSON(w, http.StatusCreated, response)
 }
 
 // validatedAskBatchMember applies the per-ask validation POST /events applies

@@ -462,6 +462,7 @@
       batchRestore = {
         token: (batchRestore?.token ?? 0) + 1,
         drafts: { ...state.drafts },
+        outcomes: { ...(state.outcomes ?? {}) },
       };
     }
     responseDraft = String(state.draft ?? "");
@@ -622,10 +623,12 @@
     )
       return;
     const drafts = {};
+    const outcomes = {};
     for (const answer of answers) {
       drafts[String(answer?.ask_ref ?? "")] = String(
         answer?.response_text ?? "",
       );
+      outcomes[String(answer?.ask_ref ?? "")] = String(answer?.outcome ?? "");
     }
     const who = requesterName();
     queueInboxResponse({
@@ -640,6 +643,7 @@
         origin: "item",
         href: $page.url.pathname,
         drafts,
+        outcomes,
       },
     });
   }

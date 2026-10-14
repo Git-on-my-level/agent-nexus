@@ -160,6 +160,8 @@
   let choice = $state("");
   let reply = $state("");
   let chosen = $state("");
+  /** Batch section drafts an Undo hands back to the open batch panel. */
+  let batchPaneRestore = $state(null);
   // Core accepts an access decision from a person only.
   let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
   let helpOpen = $state(false);
@@ -1283,6 +1285,12 @@
         rowId: row.id,
         mailbox,
         drafts: { ...drafts },
+        outcomes: Object.fromEntries(
+          (answers ?? []).map((answer) => [
+            String(answer?.ask_ref ?? ""),
+            String(answer?.outcome ?? ""),
+          ]),
+        ),
       },
     });
     if (row.id !== selected?.id) return;
@@ -1302,6 +1310,26 @@
     }
     const rowId = restore.rowId || "";
     if (!rowId) return;
+    if (restore.drafts && typeof restore.drafts === "object") {
+      // A batch send hands its sections' text (and outcomes) back to the
+      // panel, whether the undone row is on screen or behind a navigation.
+      const restored = {
+        token: (batchPaneRestore?.token ?? 0) + 1,
+        drafts: { ...restore.drafts },
+        outcomes: { ...(restore.outcomes ?? {}) },
+      };
+      if (selected?.id === rowId) {
+        batchPaneRestore = restored;
+      } else {
+        stashInboxRestore(entry.itemId, {
+          ...restore,
+          origin: "item",
+          href: href({ mailbox: restore.mailbox || "needs-you", item: rowId }),
+        });
+      }
+      if (selected?.id !== rowId) return;
+      return;
+    }
     if (selected?.id === rowId) {
       reply = restore.reply || "";
       chosen = restore.chosen || "";
@@ -2209,6 +2237,7 @@
                     batch={selected.item.batch}
                     itemKey={String(selected.item?.id || selected.id)}
                     {busy}
+                    restore={batchPaneRestore}
                     onSend={(answers, context) => {
                       respondInboxBatch(selected, answers, {
                         binding: captureInboxResponseBinding(),

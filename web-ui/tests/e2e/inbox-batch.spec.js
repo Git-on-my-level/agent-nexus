@@ -235,21 +235,36 @@ test("per-section drafts survive a reload", async ({ page, context }) => {
   );
 });
 
-test("undo hands each section's draft back to its own ask", async ({
+test("undo hands each section's draft back in place, without navigating", async ({
   page,
   context,
 }) => {
   await setup(context, {});
   await page.goto(ITEM_URL);
   await expect(page.locator("[data-inbox-batch-panel]")).toBeVisible();
-  await fillAll(page);
+  for (const [index, ask] of BATCH_ASKS.entries()) {
+    await sectionReply(page, ask.request_event_ref).fill(`Answer ${index + 1}`);
+  }
+  // One section goes back for context; Undo must reopen it in that state.
+  await page
+    .locator(`[data-inbox-batch-context="${BATCH_ASKS[2].request_event_ref}"]`)
+    .click();
   await (await submitEnabled(page)).click();
+  await expect(sectionReply(page, BATCH_ASKS[0].request_event_ref)).toHaveValue(
+    "",
+  );
   await page.getByRole("button", { name: "Undo" }).click();
-  await page.goto(ITEM_URL);
-  await expect(page.locator("[data-inbox-batch-panel]")).toBeVisible();
+  // The open composer refills in place: no reload, no second navigation.
   for (const [index, ask] of BATCH_ASKS.entries()) {
     await expect(sectionReply(page, ask.request_event_ref)).toHaveValue(
       `Answer ${index + 1}`,
     );
   }
+  await expect(
+    page.locator(
+      `[data-inbox-batch-context="${BATCH_ASKS[2].request_event_ref}"]`,
+    ),
+  ).toHaveAttribute("aria-pressed", "true");
+  // The restored batch is still submittable.
+  await expect(page.locator("[data-inbox-batch-submit]")).toBeEnabled();
 });

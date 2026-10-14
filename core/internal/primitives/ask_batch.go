@@ -19,27 +19,36 @@ import (
 const MaxAskBatchMembers = 10
 const MinAskBatchMembers = 2
 
+// ErrHumanAttentionMemberWithdrawn reports that a batch member was withdrawn
+// before its answer could commit. The error text carries the member's ask ref;
+// every other member of the batch is left untouched.
+var ErrHumanAttentionMemberWithdrawn = errors.New("human_attention_member_withdrawn")
+
 // AppendTaskAttentionEventBatch files N related asks as one atomic batch: the
 // server-assigned batch id lands in every member's payload, and either every
-// member commits or none does. Callers must have validated the member events;
-// bodies are cloned so the caller's maps are never mutated.
-func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor string, events []map[string]any) (string, []map[string]any, error) {
+// member commits or none does. When requestKey is set, the filing replay row
+// commits inside the same transaction as the member events (the
+// asks.batch.create scope, shaped like AppendEventWithReplay), so a crash
+// after commit or a concurrent same-key create replays the original batch
+// instead of filing a second one. Callers must have validated the member
+// events; bodies are cloned so the caller's maps are never mutated.
+func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor, requestKey, requestHash string, events []map[string]any) (map[string]any, bool, error) {
 	if len(events) < MinAskBatchMembers || len(events) > MaxAskBatchMembers {
-		return "", nil, fmt.Errorf("ask batch must contain %d to %d asks", MinAskBatchMembers, MaxAskBatchMembers)
+		return nil, false, fmt.Errorf("ask batch must contain %d to %d asks", MinAskBatchMembers, MaxAskBatchMembers)
 	}
 	bodies := make([]map[string]any, 0, len(events))
 	dbBytes := 0
 	for _, event := range events {
 		body := cloneMap(event)
 		if strings.TrimSpace(anyStringValue(asMapValue(body["payload"])["subject_ref"])) == "" {
-			return "", nil, workInvalid("subject_ref is required")
+			return nil, false, workInvalid("subject_ref is required")
 		}
 		if strings.TrimSpace(anyStringValue(asMapValue(body["payload"])["batch_id"])) != "" {
-			return "", nil, workInvalid("batch_id is assigned by the server")
+			return nil, false, workInvalid("batch_id is assigned by the server")
 		}
 		prepared, err := prepareEventForInsert(actor, body)
 		if err != nil {
-			return "", nil, err
+			return nil, false, err
 		}
 		dbBytes += len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 4096
 		bodies = append(bodies, body)
@@ -57,18 +66,37 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor string,
 		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {
 			if err := s.ensureBlobUsageLedgerInitialized(ctx); err != nil {
-				return "", nil, err
+				return nil, false, err
 			}
 		}
 	}
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(dbBytes)}, blobLedgerWritePlan{}); err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 	defer tx.Rollback()
+	if requestKey != "" {
+		// Replay inside the filing transaction: an exact retry returns the
+		// original batch and a changed body conflicts before anything writes.
+		var replay IdempotencyReplay
+		var raw string
+		err = tx.QueryRowContext(ctx, `SELECT request_hash,response_status,response_json FROM idempotency_replays WHERE scope='asks.batch.create' AND actor_id=? AND request_key=?`, actor, requestKey).Scan(&replay.RequestHash, &replay.Status, &raw)
+		if err == nil {
+			if replay.RequestHash != requestHash {
+				return nil, false, ErrConflict
+			}
+			if err := json.Unmarshal([]byte(raw), &replay.Response); err != nil {
+				return nil, false, err
+			}
+			return replay.Response, true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, false, err
+		}
+	}
 	stored := make([]map[string]any, 0, len(bodies))
 	var stagedWrites []blob.StagedWrite
 	defer func() {
@@ -79,22 +107,32 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor string,
 	for _, body := range bodies {
 		storedBody, staged, _, err := s.appendTaskAttentionEventTx(ctx, tx, actor, body)
 		if err != nil {
-			return "", nil, err
+			return nil, false, err
 		}
 		if staged != nil {
 			stagedWrites = append(stagedWrites, staged)
 		}
 		stored = append(stored, storedBody)
 	}
+	response := map[string]any{"batch_id": batchID, "events": stored}
+	if requestKey != "" {
+		encoded, err := json.Marshal(response)
+		if err != nil {
+			return nil, false, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES('asks.batch.create',?,?,?,201,?)`, actor, requestKey, requestHash, string(encoded)); err != nil {
+			return nil, false, err
+		}
+	}
 	if err = tx.Commit(); err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 	for _, staged := range stagedWrites {
 		if err = staged.Promote(); err != nil {
-			return "", nil, err
+			return nil, false, err
 		}
 	}
-	return batchID, stored, nil
+	return response, false, nil
 }
 
 // HumanAttentionBatchResponseMember is one member answer inside an atomic
@@ -182,6 +220,13 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 				if !errors.Is(replayErr, ErrNotFound) {
 					return nil, false, replayErr
 				}
+			}
+			// A member withdrawn after the reader loaded the item must not be
+			// reported as "already answered": name it so the caller can refresh
+			// against the shrunk batch, and leave the other members untouched.
+			var resolutionType string
+			if err := s.db.QueryRowContext(ctx, `SELECT resolution_type FROM human_attention_request_resolutions WHERE request_event_id=?`, pm.member.SourceEventID).Scan(&resolutionType); err == nil && resolutionType == "withdrawn" {
+				return nil, false, fmt.Errorf("%w: %s", ErrHumanAttentionMemberWithdrawn, "event:"+pm.member.SourceEventID)
 			}
 			return nil, false, ErrHumanAttentionAlreadyResponded
 		}

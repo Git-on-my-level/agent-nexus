@@ -564,10 +564,38 @@ export function queueInboxResponse({
  * Take back the waiting response. Returns what was queued (so the caller can
  * restore the draft and the selection), or null when nothing is undoable.
  */
+/**
+ * Per-section drafts and outcomes for a batch send, used by undo, the
+ * attention state and Edit so the text returns to its own section's composer
+ * key — never to the single-reply key a batch request does not have.
+ */
+function batchAnswerDrafts(entry) {
+  if (!Array.isArray(entry.request?.answers)) return null;
+  const drafts = {};
+  const outcomes = {};
+  for (const answer of entry.request.answers) {
+    const ref = String(answer?.ask_ref ?? "");
+    drafts[ref] = String(answer?.response_text ?? "");
+    outcomes[ref] = String(answer?.outcome ?? "");
+  }
+  return { drafts, outcomes };
+}
+
 export function undoInboxResponse() {
   if (!pending) return null;
   const entry = pending;
   pending = null;
+  // A batch send restores per section, whether or not the caller built the
+  // restore map itself; outcomes ride along so needs-context sections reopen
+  // in that state.
+  const batch = batchAnswerDrafts(entry);
+  if (batch) {
+    entry.restore = {
+      ...(entry.restore ?? {}),
+      drafts: entry.restore?.drafts ?? batch.drafts,
+      outcomes: entry.restore?.outcomes ?? batch.outcomes,
+    };
+  }
   clearTimeout(entry.timer);
   cancelledSends.add(entry.request.idempotency_key);
   inboxUnsentResponses.update((records) =>
@@ -708,17 +736,32 @@ export function dismissInboxResponseFailure(itemId = "") {
       error: "Review your saved response before sending.",
       response_text: entry.request.response_text,
     });
-    void saveLocalWork(
-      entry.identity,
-      "draft",
-      `inbox:${target}:reply`,
-      entry.request.response_text,
-    );
+    const batch = batchAnswerDrafts(entry);
+    if (batch) {
+      // A failed batch keeps each section's text under its own key; the
+      // single-reply key would have nothing to say.
+      for (const [ref, text] of Object.entries(batch.drafts)) {
+        void saveLocalWork(
+          entry.identity,
+          "draft",
+          `inbox:${target}:reply:${ref}`,
+          text,
+        );
+      }
+    } else {
+      void saveLocalWork(
+        entry.identity,
+        "draft",
+        `inbox:${target}:reply`,
+        entry.request.response_text,
+      );
+    }
     stashInboxRestore(target, {
       ...entry.restore,
       draft: entry.request.response_text,
       reply: entry.request.response_text,
       chosen: "",
+      ...(batch ?? {}),
     });
   }
   forgetFailure(target);
@@ -732,6 +775,22 @@ export function editInboxResponse(itemId) {
   const entry = failedByItem.get(String(itemId));
   if (!entry) return;
   dismissInboxResponseFailure(itemId);
+  if (Array.isArray(entry.request?.answers)) {
+    // Edit points every answer at its own section's durable draft, so the
+    // mounted batch panel fills in place instead of one merged blob.
+    for (const answer of entry.request.answers) {
+      window.dispatchEvent(
+        new CustomEvent("anx:edit-draft", {
+          detail: {
+            scope: entry.identity,
+            target: `inbox:${itemId}:reply:${String(answer?.ask_ref ?? "")}`,
+            text: String(answer?.response_text ?? ""),
+          },
+        }),
+      );
+    }
+    return;
+  }
   window.dispatchEvent(
     new CustomEvent("anx:edit-draft", {
       detail: {

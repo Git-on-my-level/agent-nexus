@@ -186,44 +186,21 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 			}
 			continue
 		}
-		item, ok := deriveHumanAttentionBatchInboxItem(members)
+		// One derive pass filters withdrawn/answered members, rebuilds the
+		// access-bearing fields from the still-open ones and drops the item
+		// entirely when nothing stays open.
+		item, ok := deriveHumanAttentionBatchInboxItem(members, decidedIDs)
 		if !ok {
 			continue
 		}
 		if _, decided := decidedIDs[item.ID]; decided {
 			continue
 		}
-		remaining := openBatchSections(members, decidedIDs)
-		if len(remaining) == 0 {
-			continue
-		}
-		item.Data["batch"] = map[string]any{"id": strings.TrimSpace(anyString(item.Data["batch"].(map[string]any)["id"])), "asks": remaining}
 		items = append(items, item)
 	}
 
 	sortInboxItems(items)
 	return items, nil
-}
-
-// openBatchSections rebuilds the batch item's decision sections from the
-// members that are neither withdrawn nor answered, keeping the filed order.
-func openBatchSections(members []map[string]any, decidedIDs map[string]struct{}) []map[string]any {
-	item, ok := deriveHumanAttentionBatchInboxItem(members)
-	if !ok {
-		return nil
-	}
-	batch, _ := item.Data["batch"].(map[string]any)
-	sections, _ := batch["asks"].([]map[string]any)
-	out := make([]map[string]any, 0, len(sections))
-	for _, section := range sections {
-		ref := strings.TrimSpace(anyString(section["request_event_ref"]))
-		memberID := strings.TrimPrefix(ref, "event:")
-		if _, withdrawn := decidedIDs["event:"+memberID]; withdrawn {
-			continue
-		}
-		out = append(out, section)
-	}
-	return out
 }
 
 func loadDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string) (primitives.DerivedTopicProjection, error) {
