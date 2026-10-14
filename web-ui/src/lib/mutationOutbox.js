@@ -48,6 +48,48 @@ const visible = (entry) => entry.state !== "superseded";
  * mutation/replay and changed-body key rejection in real core tests. */
 async function send(entry) {
   const client = createLocalMutationClient(entry.scope);
+  if (entry.operation === "docs.lifecycle") {
+    const methods = {
+      archive: "archiveDocument",
+      unarchive: "unarchiveDocument",
+      trash: "trashDocument",
+      restore: "restoreDocument",
+    };
+    for (const item of entry.request.items) {
+      if (entry.receipt?.documents?.some((done) => done.id === item.id))
+        continue;
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      const method = methods[item.action];
+      if (!method)
+        throw Object.assign(new Error("Unknown document action"), {
+          status: 400,
+        });
+      const result = await client[method](item.id, item.body);
+      if (
+        result.document?.id !== item.id ||
+        !result.document?.updated_at ||
+        !result.revision
+      )
+        throw new Error("Document lifecycle receipt is incomplete.");
+      if (!active(entry))
+        throw new Error("The submitting identity is no longer active.");
+      entry.receipt = {
+        documents: [
+          ...(entry.receipt?.documents || []),
+          { id: item.id, result },
+        ],
+      };
+      await persist(entry);
+      mutationOutbox.update((rows) =>
+        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
+      );
+      window.dispatchEvent(
+        new CustomEvent("anx:mutation-progress", { detail: snapshot(entry) }),
+      );
+    }
+    return entry.receipt;
+  }
   if (entry.operation === "cards.move") {
     const result = await client.moveBoardCard(
       entry.request.board,
@@ -223,6 +265,51 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
         request_key: key,
         actor_id: JSON.parse(get(localWorkScope))[3],
       },
+    },
+  });
+}
+
+export function enqueueDocumentLifecycle({ draft, ...options }) {
+  const scope = get(localWorkScope);
+  const actor_id = JSON.parse(scope)[3];
+  const documents = snapshot(draft.documents);
+  if (!documents.length || documents.some((doc) => !doc.id || !doc.updated_at))
+    throw new Error(
+      "The original document version is unavailable. Your request is retained; use the latest version explicitly.",
+    );
+  if (
+    get(mutationOutbox).some(
+      (entry) =>
+        entry.operation === "docs.lifecycle" &&
+        entry.request.items.some((item) =>
+          documents.some((doc) => doc.id === item.id),
+        ),
+    )
+  )
+    throw new Error(
+      "A saved request already includes this document. Confirm or edit that request first.",
+    );
+  const key = crypto.randomUUID();
+  return enqueueLocalMutation({
+    ...options,
+    draft,
+    key,
+    operation: "docs.lifecycle",
+    title: "Saved document action",
+    preview: `${draft.action}: ${documents.map((doc) => doc.title || doc.id).join(", ")}\n${draft.reason || ""}`,
+    request: {
+      items: documents.map((doc) => ({
+        id: doc.id,
+        action: draft.action,
+        body: {
+          actor_id,
+          request_key: crypto.randomUUID(),
+          if_updated_at: doc.updated_at,
+          ...(["trash", "restore"].includes(draft.action)
+            ? { reason: draft.reason || "" }
+            : {}),
+        },
+      })),
     },
   });
 }
@@ -463,7 +550,9 @@ async function attempt(entry) {
           ? "move"
           : entry.operation === "cards.patch"
             ? "assignment"
-            : "response",
+            : entry.operation === "docs.lifecycle"
+              ? "document action"
+              : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =
@@ -582,9 +671,37 @@ export async function editMutation(key) {
   }
   // Transfer to a durable composer before superseding; retain the old exact
   // request for recovery history rather than silently discarding it.
-  const draft = entry.receipt?.conversationId
-    ? { ...entry.draft, conversationId: entry.receipt.conversationId }
-    : entry.draft;
+  const currentDraft =
+    entry.operation === "docs.lifecycle"
+      ? await loadLocalWork(
+          entry.scope,
+          "draft",
+          entry.draftTarget || entry.target,
+        )
+      : null;
+  const lifecycleDraft =
+    currentDraft &&
+    currentDraft.action === entry.draft?.action &&
+    JSON.stringify(currentDraft.documents?.map((doc) => doc.id)) ===
+      JSON.stringify(entry.draft.documents?.map((doc) => doc.id))
+      ? currentDraft
+      : entry.draft;
+  const draft =
+    entry.operation === "docs.lifecycle"
+      ? {
+          ...lifecycleDraft,
+          documents: lifecycleDraft.documents.filter(
+            (doc) =>
+              !entry.receipt?.documents?.some((done) => done.id === doc.id),
+          ),
+          confirmed: [
+            ...(entry.draft.confirmed || []),
+            ...(entry.receipt?.documents || []),
+          ],
+        }
+      : entry.receipt?.conversationId
+        ? { ...entry.draft, conversationId: entry.receipt.conversationId }
+        : entry.draft;
   await saveLocalWork(
     entry.scope,
     "draft",

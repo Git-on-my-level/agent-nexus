@@ -315,7 +315,7 @@ revision sends. The move browser suite additionally covers network timeouts,
 journal fallback, total storage failure preventing sends, and authenticated
 principal replacement clearing other tabs and fencing late failures.
 
-## Document lifecycle replay prerequisite
+## Document lifecycle recovery
 
 Archive, unarchive, trash and restore now accept an optional `request_key` and
 `if_updated_at`. Keyed requests require the original metadata base and bind the
@@ -343,13 +343,31 @@ uses atomic document PATCH; new tests cover complete original metadata,
 concurrent replay, receipt failure, explicit clearing, changed-body rejection and
 revoked access. The current UI has no separate knowledge editor.
 
-**This is a server prerequisite.** Detail and list/bulk lifecycle controls still
-send directly and must migrate to complete durable intents and the shared outbox.
-Bulk selection must be checkpointed in full before any first network send, with
-per-document original bases/keys and persisted partial confirmations. Legacy
-knowledge PUT and permanent purge remain separate replay audits; purge includes
-post-commit physical blob deletion and needs a tombstone/access recovery design.
-Settings, original PM chat HTTP receipts and whole-UI enforcement remain open.
+Detail archive/unarchive/trash/restore and list single/bulk lifecycle actions now
+use complete durable snapshots and the shared outbox. A bulk selection is one
+local checkpoint before its first send, with separate original keys, actors,
+actions and metadata bases per document. Confirmed receipts are checkpointed
+between documents; recovery skips confirmed items and retries uncertain sends
+with their exact original bodies. Partial failures expose confirmed counts.
+Editing keeps newer reason text and transfers only unfinished documents; the
+original batch and receipts remain in recovery history. Only “Use latest version”
+refreshes saved bases. Confirmation retains newer edits in another tab. Failed
+local saving prevents sends and keeps the complete visible draft with copy and
+explicit discard actions. Existing archive/trash confirmation guards remain.
+
+The browser suite covers 524 and network timeouts, duplicate recovery across tabs,
+offline tab closure, partial confirmation/reload, conflict editing and explicit
+base refresh, newer reason preservation, total storage denial and cross-tab
+principal replacement with late-send fencing. Existing lifecycle layout checks
+cover four viewports. The AST guard rejects new direct document lifecycle calls
+in Svelte surfaces and requires both routes to mount the durable composer.
+
+The shared workspace-trash helper still restores documents directly; it is a
+remaining lifecycle surface, alongside permanent purge. Legacy knowledge PUT and
+purge remain separate replay audits; purge includes post-commit physical blob
+deletion and needs a tombstone/access recovery design. Remaining settings and
+lifecycle surfaces, original PM chat HTTP receipts and whole-UI enforcement stay
+open. This does not claim the full issue invariant.
 
 ## Replay audit
 
@@ -374,7 +392,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                          |
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                              | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
-| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Server prerequisite covered; detail and list/bulk durable snapshots/outbox migration remains open                                                     |
+| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Detail and list/bulk drafts/outbox covered; workspace-trash helper restore and purge remain open                                                      |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                             | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules

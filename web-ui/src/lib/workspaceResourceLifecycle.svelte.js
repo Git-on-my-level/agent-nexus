@@ -28,6 +28,7 @@ export function normalizeResourceIds(ids) {
  * @property {(item: unknown) => boolean} isArchived
  * @property {(item: unknown) => boolean} isTrashed
  * @property {{ archive?: (id: string) => Promise<unknown>, unarchive?: (id: string) => Promise<unknown>, trash?: (id: string) => Promise<unknown> }} actions
+ * @property {(action: WorkspaceLifecycleAction, ids: string[]) => Promise<unknown>} [queue]
  * @property {() => Promise<unknown>} reload
  * @property {() => void} clearSelection
  * @property {(message: string) => void} setError
@@ -111,12 +112,23 @@ export function createWorkspaceResourceLifecycleController(options) {
   async function runSingle(action, id) {
     const runner = actionRunner(action);
     const normalized = normalizeId(id);
-    if (!runner || !normalized || archiveBusyId || trashBusyId || bulkBusy) {
+    if (
+      (!runner && !options.queue) ||
+      !normalized ||
+      archiveBusyId ||
+      trashBusyId ||
+      bulkBusy
+    ) {
       return;
     }
     setSingleBusy(action, normalized);
     options.setError("");
     try {
+      if (options.queue) {
+        await options.queue(action, [normalized]);
+        confirmModal = emptyConfirmModal();
+        return;
+      }
       await runner(normalized);
       confirmModal = emptyConfirmModal();
       await options.reload();
@@ -136,9 +148,23 @@ export function createWorkspaceResourceLifecycleController(options) {
   async function runBulk(action, ids) {
     const runner = actionRunner(action);
     const list = normalizeResourceIds(ids);
-    if (!runner || !list.length || bulkBusy) return;
+    if ((!runner && !options.queue) || !list.length || bulkBusy) return;
     bulkBusy = true;
     options.setError("");
+    if (options.queue) {
+      try {
+        await options.queue(action, list);
+        options.clearSelection();
+        confirmModal = emptyConfirmModal();
+      } catch {
+        options.setError(
+          "Your document request is retained. Check its saved status before closing this page.",
+        );
+      } finally {
+        bulkBusy = false;
+      }
+      return;
+    }
     /*
      * A bulk run is not atomic: it stops at the first failure with everything
      * before it already applied. Reporting only "Archive failed" and leaving

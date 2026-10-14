@@ -3,6 +3,7 @@
   import { durableForm } from "$lib/actions/durableForm.js";
   import { enqueueAuthoring, mutationOutbox } from "$lib/mutationOutbox.js";
   import { localWorkScope } from "$lib/localWorkScope.js";
+  import DocumentLifecycleWork from "$lib/components/DocumentLifecycleWork.svelte";
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -103,6 +104,7 @@
   let retrying = $state(false);
   let activeDocumentListLoadToken = 0;
   let lifecycle = $state();
+  let lifecycleWork = $state();
 
   const docSel = createWorkspaceListSelection({
     bulkBusy: () => lifecycle?.bulkBusy ?? false,
@@ -223,11 +225,12 @@
     idFor: (doc) => doc?.id,
     isArchived: isDocArchived,
     isTrashed: isDocTrashed,
-    actions: {
-      archive: (id) => coreClient.archiveDocument(id, {}),
-      unarchive: (id) => coreClient.unarchiveDocument(id, {}),
-      trash: (id) => coreClient.trashDocument(id, {}),
-    },
+    actions: {},
+    queue: (action, ids) =>
+      lifecycleWork.queue(
+        ids.map((id) => documents.find((doc) => doc.id === id)),
+        action,
+      ),
     reload: () => loadDocuments(),
     clearSelection: () => clearDocSelection(),
     setError: (message) => {
@@ -488,6 +491,13 @@
 </script>
 
 <WorkspacePageShell data-tour="docs">
+  <DocumentLifecycleWork
+    bind:this={lifecycleWork}
+    target="documents:lifecycle"
+    href={$page.url.pathname + $page.url.search}
+    onconfirmed={() => void loadDocuments()}
+  />
+
   <WorkspacePageHeader title="Docs">
     {#snippet actions()}
       <!-- Every list header carries workspace search, because ⌘K is not

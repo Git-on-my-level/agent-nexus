@@ -470,9 +470,11 @@ async function installDocsApi(page, overrides = {}) {
     (route, pathname) => {
       const [id, action] = pathname.split("/docs/")[1].split("/");
       return respond(route, `${action}Document`, () => {
-        const current = api.detail[decodeURIComponent(id)];
+        const current =
+          api.detail[decodeURIComponent(id)] ||
+          api.documents.find((row) => row.id === decodeURIComponent(id));
         if (current) {
-          const next = { ...current };
+          const next = { ...current, updated_at: "2026-03-29T11:00:00Z" };
           if (action === "archive") {
             next.state = "archived";
             next.archived_at = "2026-03-29T10:00:00Z";
@@ -496,7 +498,10 @@ async function installDocsApi(page, overrides = {}) {
             ? { ...row, state: action === "unarchive" ? "active" : row.state }
             : row,
         );
-        return { ok: true };
+        return {
+          document: api.detail[decodeURIComponent(id)],
+          revision: revision(decodeURIComponent(id)),
+        };
       });
     },
   );
@@ -634,6 +639,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "bulk archive running", bothEnds);
       api.hold.archiveDocument.resolve();
       api.hold = {};
+      await expect(
+        page.locator(
+          '[data-document-lifecycle-work] [data-mutation-state="sent"]',
+        ),
+      ).toBeVisible();
 
       await page.getByRole("button", { name: "Select all" }).click();
       api.fail.trashDocument = {
@@ -646,7 +656,15 @@ for (const viewport of AUDIT_VIEWPORTS) {
         .getByRole("dialog")
         .getByRole("button", { name: "Trash" })
         .click();
-      await expect(page.getByText(/trash refused/)).toBeVisible();
+      await expect(
+        page.locator(
+          '[data-document-lifecycle-work] [data-mutation-state="retrying"]',
+        ),
+      ).toBeVisible();
+      await expect(
+        page.locator("[data-document-lifecycle-work] details[open]"),
+      ).toHaveCount(0);
+      await expect(page.getByText(/trash refused/)).not.toBeVisible();
       await expectCleanLayout(page, "bulk trash failed", bothEnds);
     });
 

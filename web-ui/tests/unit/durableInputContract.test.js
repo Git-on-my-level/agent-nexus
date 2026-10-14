@@ -63,6 +63,10 @@ it("no UI mutation surface bypasses the Inbox outbox sender", () => {
           "updateBoardCard",
           "moveBoardCard",
           "createCardRevision",
+          "archiveDocument",
+          "unarchiveDocument",
+          "trashDocument",
+          "restoreDocument",
         ].includes(node.property?.name)
       ) {
         throw new Error(
@@ -147,4 +151,24 @@ it("task moves checkpoint full drafts and have no legacy direct sender", () => {
   expect(readFileSync(`${root}/lib/taskBoardMove.js`, "utf8")).not.toMatch(
     /(?:moveBoardCard|createPmDecision|applyTaskPhaseMove)/,
   );
+});
+
+it("document lifecycle requests checkpoint complete drafts", () => {
+  const component = readFileSync(
+    `${root}/lib/components/DocumentLifecycleWork.svelte`,
+    "utf8",
+  );
+  let actions = 0;
+  walk(parse(component).html, (node) => {
+    if (node.type === "Action" && node.name === "durableForm") actions++;
+  });
+  expect(actions).toBe(1);
+  for (const path of [
+    "routes/o/[organization]/w/[workspace]/docs/+page.svelte",
+    "routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte",
+  ]) {
+    expect(readFileSync(`${root}/${path}`, "utf8")).toContain(
+      "<DocumentLifecycleWork",
+    );
+  }
 });

@@ -7,6 +7,7 @@
     editMutation,
   } from "$lib/mutationOutbox.js";
   import { localWorkScope } from "$lib/localWorkScope.js";
+  import DocumentLifecycleWork from "$lib/components/DocumentLifecycleWork.svelte";
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -29,7 +30,7 @@
   import { coreClient } from "$lib/coreClient";
   import Time from "$lib/time/Time.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
-  import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
     actorRegistry,
@@ -170,6 +171,7 @@
   let loadingSelectedRevisionKey = $state("");
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
+  let lifecycleWork = $state();
   /**
    * Per polish §P8: Archive and Trash collapse into a single "More actions"
    * kebab so "Edit" (new revision) is the only competing primary in the doc header.
@@ -772,57 +774,35 @@
     }
   }
 
-  async function handleArchiveDocument() {
-    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
-    docLifecycleBusy = true;
-    try {
-      await coreClient.archiveDocument(documentId, {});
-      await loadDocument(documentId);
-    } finally {
-      docLifecycleBusy = false;
-    }
-  }
-
-  async function handleUnarchiveDocument() {
+  async function queueLifecycle(action) {
     confirmModal = { open: false, action: "" };
-    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
+    if (!document || docLifecycleBusy) return;
     docLifecycleBusy = true;
     try {
-      await coreClient.unarchiveDocument(documentId, {});
-      await loadDocument(documentId);
+      await lifecycleWork.queue([document], action);
+    } catch {
+      /* The saved composer retains the request and its error. */
     } finally {
       docLifecycleBusy = false;
     }
   }
-
+  function handleArchiveDocument() {
+    return queueLifecycle("archive");
+  }
+  function handleUnarchiveDocument() {
+    return queueLifecycle("unarchive");
+  }
+  function handleTrashDocument() {
+    return queueLifecycle("trash");
+  }
+  function handleRestoreDocument() {
+    return queueLifecycle("restore");
+  }
   function handleConfirm() {
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
-    if (action === "archive") handleArchiveDocument();
-    else if (action === "trash") handleTrashDocument();
-  }
-
-  async function handleTrashDocument() {
-    if (!documentId || docLifecycleBusy) return;
-    docLifecycleBusy = true;
-    try {
-      await coreClient.trashDocument(documentId, {});
-      await goto(workspacePath(organizationSlug, workspaceSlug, "/docs"));
-    } finally {
-      docLifecycleBusy = false;
-    }
-  }
-
-  async function handleRestoreDocument() {
-    confirmModal = { open: false, action: "" };
-    if (!documentId || docLifecycleBusy) return;
-    docLifecycleBusy = true;
-    try {
-      await coreClient.restoreDocument(documentId, {});
-      await loadDocument(documentId);
-    } finally {
-      docLifecycleBusy = false;
-    }
+    if (action === "archive") void handleArchiveDocument();
+    else if (action === "trash") void handleTrashDocument();
   }
 
   function isSelectionInsideDocBody(sel) {
@@ -1240,6 +1220,16 @@
       `${document?.title ? `${document.title} · Docs` : "Docs"} · Agent Nexus`,
   );
 </script>
+
+<DocumentLifecycleWork
+  bind:this={lifecycleWork}
+  target={`document:${document?.id || documentId}:lifecycle`}
+  href={$page.url.pathname + $page.url.search}
+  onconfirmed={(entry) => {
+    if (entry.request.items.some((item) => item.id === document?.id))
+      void loadDocument(documentId);
+  }}
+/>
 
 {#if loading}
   <nav

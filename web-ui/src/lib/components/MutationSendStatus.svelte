@@ -55,6 +55,12 @@
             ? "Retrying"
             : "Pending"}
     </p>
+    {#if entry.operation === "docs.lifecycle"}
+      <p class="mt-1 text-fg-muted">
+        {entry.receipt?.documents?.length || 0} of {entry.request.items.length} documents
+        confirmed.
+      </p>
+    {/if}
     {#if entry.state !== "sent"}
       <p class="mt-1 text-fg-muted">
         {entry.failure?.message ||
@@ -83,18 +89,24 @@
           onclick={copy}>Copy text</button
         >
         {#if entry.state === "attention"}
-          <button
-            type="button"
-            class="rounded border border-line px-2 py-1 text-fg"
-            onclick={edit}
-            >{entry.operation === "artifacts.attachments.create"
-              ? "Choose replacement"
-              : ["cards.move", "pm.decisions.create"].includes(entry.operation)
-                ? "Edit move"
-                : entry.operation === "cards.patch"
-                  ? "Edit assignment"
-                  : "Edit message"}</button
-          >
+          {#if entry.operation !== "docs.lifecycle" || entry.receipt?.documents?.length !== entry.request.items.length}
+            <button
+              type="button"
+              class="rounded border border-line px-2 py-1 text-fg"
+              onclick={edit}
+              >{entry.operation === "artifacts.attachments.create"
+                ? "Choose replacement"
+                : ["cards.move", "pm.decisions.create"].includes(
+                      entry.operation,
+                    )
+                  ? "Edit move"
+                  : entry.operation === "cards.patch"
+                    ? "Edit assignment"
+                    : entry.operation === "docs.lifecycle"
+                      ? "Edit request"
+                      : "Edit message"}</button
+            >
+          {/if}
           <button
             type="button"
             class="rounded border border-line px-2 py-1 text-fg"
