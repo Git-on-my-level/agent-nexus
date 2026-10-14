@@ -1338,7 +1338,7 @@ promises:
     - "Grammar: `at` reuses the review_by grammar; `what` is free text up to 160 characters."
     - "Horizon: a promise beyond 2 days warns at write time and shows its distance; it is never a state."
     - "Blocks: human_attention_requested payload.blocks refs that reach a terminal state clear automatically."
-    - "Fallback: an active initiative with no promise reads no_promise. The only duration fallback is ANX_NO_PROMISE_FALLBACK (default 7d), used solely to order no_promise rows by last evidence; it never creates a state."
+    - "Fallback: an active initiative with no promise reads no_promise. The only duration fallback is the constant plans.NoPromiseFallback (7d, no env knob): a no_promise row whose last evidence is older is quiet. It never creates a state; TestStalenessKnobs pins it as the single knob."
   derived_outputs: [past_promise_for, promise_moves, decide_by, overdue_for]
   states:
     past_promise: "The counted promise's `at` is in the past and no reset event landed since."
