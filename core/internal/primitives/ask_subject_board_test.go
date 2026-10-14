@@ -169,10 +169,11 @@ func TestAskBatchCompatibilityCardBlobSurvivesCommit(t *testing.T) {
 	member := func(title string) map[string]any {
 		return map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{threadRef}, "payload": map[string]any{"subject_ref": threadRef, "title": title, "requester_actor_id": "requester"}}
 	}
-	_, stored, err := s.AppendTaskAttentionEventBatch(ctx, "requester", []map[string]any{member("Batch card A?"), member("Batch card B?")})
+	response, _, err := s.AppendTaskAttentionEventBatch(ctx, "requester", "", "", []map[string]any{member("Batch card A?"), member("Batch card B?")})
 	if err != nil {
 		t.Fatal(err)
 	}
+	stored, _ := response["events"].([]map[string]any)
 	for _, event := range stored {
 		work, err := s.GetWork(ctx, anyStringValue(asMapValue(event["payload"])["subject_ref"]))
 		if err != nil {
