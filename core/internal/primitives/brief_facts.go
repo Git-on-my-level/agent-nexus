@@ -326,3 +326,37 @@ func sortBriefAsks(asks []BriefAsk) {
 		return a.AskID < b.AskID
 	})
 }
+
+// SortBriefDecisions orders rendered decision rows with the brief order, for
+// callers that merge rows from another source (PM decision records).
+func SortBriefDecisions(items []map[string]any) {
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		da, _ := a["decide_by"].(string)
+		db, _ := b["decide_by"].(string)
+		if (da == "") != (db == "") {
+			return da != ""
+		}
+		if da != db {
+			return da < db
+		}
+		ba, _ := a["blocks_count"].(int)
+		bb, _ := b["blocks_count"].(int)
+		if ba != bb {
+			return ba > bb
+		}
+		pa, _ := a["priority"].(string)
+		pb, _ := b["priority"].(string)
+		if ra, rb := briefPriority(pa), briefPriority(pb); ra != rb {
+			return ra < rb
+		}
+		ca, _ := a["created_at"].(string)
+		cb, _ := b["created_at"].(string)
+		if ca != cb {
+			return ca < cb
+		}
+		ra, _ := a["ref"].(string)
+		rb, _ := b["ref"].(string)
+		return ra < rb
+	})
+}

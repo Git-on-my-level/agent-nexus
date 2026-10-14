@@ -13003,6 +13003,14 @@ components:
         blocks_count: { type: integer }
         priority: { type: string }
         proposals: { type: array, maxItems: 6, items: { type: string }, description: First is the recommended response. }
+        pm_decision:
+          type: object
+          description: Present on a PM decision record awaiting this human; answer it through the PM decision answer route with this revision.
+          required: [id, revision]
+          properties:
+            id: { type: string }
+            revision: { type: integer }
+        curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts." }
     BriefPromise:
       type: object
       required: [at, what, source]
