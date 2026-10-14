@@ -56,6 +56,10 @@ async function prepare(context, send = null) {
     latest: () => {
       topic = { ...topic, updated_at: newerStamp };
     },
+    commitPatch: (patch) => {
+      topic = { ...topic, ...patch, updated_at: newerStamp };
+      return topic;
+    },
   };
 }
 const title = (page) => page.getByLabel("Title", { exact: true });
@@ -216,6 +220,30 @@ test("topic conflict preserves newer edits, hides diagnostics, and rebases only 
   expect(writes[1].if_updated_at).toBe(newerStamp);
   await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
   expect(writes[1].request_key).not.toBe(writes[0].request_key);
+});
+
+test("confirmed topic save refreshes the header after leaving About", async ({
+  page,
+  context,
+}) => {
+  let finish;
+  const gate = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const prepared = await prepare(context, async (route, body) => {
+    await gate;
+    return json(route, {
+      topic: prepared.commitPatch(body.patch),
+    });
+  });
+  await edit(page);
+  await save(page).click();
+  await expect(page.locator('[data-mutation-state="sending"]')).toBeVisible();
+  await page.getByRole("tab", { name: "Messages", exact: true }).click();
+  finish();
+  await expect(
+    page.getByRole("heading", { name: "Authored topic" }),
+  ).toBeVisible();
 });
 
 test("confirmed topic send preserves newer text including an empty summary", async ({

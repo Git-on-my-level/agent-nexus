@@ -1,10 +1,12 @@
 <script>
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
-  import { get, derived } from "svelte/store";
   import { page } from "$app/stores";
+  import { onMount } from "svelte";
+  import { get, derived } from "svelte/store";
 
   import { coreClient } from "$lib/coreClient";
+  import { localWorkScope } from "$lib/localWorkScope.js";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import { setTimelineContext } from "$lib/timelineContext";
   import {
@@ -168,6 +170,29 @@
         clearInterval(coordination.reconcileTimer);
       }
     };
+  });
+
+  // Display refresh must outlive the About tab. The editor is destroyed when
+  // leaving About, but confirmation still has to update the header snapshot.
+  onMount(() => {
+    const confirmed = (event) => {
+      const topicId =
+        /^topic:(.+)$/.exec(String(topic?.topic_ref ?? ""))?.[1] || "";
+      const target = topicId ? `topic:${topicId}:metadata` : "";
+      if (
+        event.detail.scope !== get(localWorkScope) ||
+        event.detail.target !== target
+      )
+        return;
+      if (!threadId) return;
+      void topicDetailStore.queueRefreshTopicDetail(threadId, {
+        workspace: true,
+        timeline: true,
+      });
+    };
+    window.addEventListener("anx:mutation-confirmed", confirmed);
+    return () =>
+      window.removeEventListener("anx:mutation-confirmed", confirmed);
   });
 
   /** @param {string} routeScopeId topic id or thread id for listTopicTimeline / refresh coalescing */
@@ -340,14 +365,7 @@
     {#if activeTab === "about"}
       <div role="tabpanel" tabindex="0">
         {#key topic.topic_ref || threadId}
-          <TopicOverviewTab
-            {threadId}
-            onConfirmed={() =>
-              topicDetailStore.queueRefreshTopicDetail(threadId, {
-                workspace: true,
-                timeline: true,
-              })}
-          />
+          <TopicOverviewTab {threadId} />
         {/key}
       </div>
     {/if}

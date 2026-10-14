@@ -21,7 +21,7 @@
   import { buildTopicPatch } from "$lib/topicPatch";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
-  let { threadId, onConfirmed = () => {} } = $props();
+  let { threadId } = $props();
 
   let topic = $derived($topicDetailStore.topic);
 
@@ -93,21 +93,9 @@
   }
 
   onMount(() => {
-    const confirmed = (event) => {
-      if (
-        event.detail.scope !== get(localWorkScope) ||
-        event.detail.target !== target
-      )
-        return;
-      // Canonical display refresh never changes this composer's saved base or
-      // newer text. Only the matching durableForm confirmation clears it.
-      void onConfirmed();
-    };
-    window.addEventListener("anx:mutation-confirmed", confirmed);
     return () => {
       alive = false;
       ++loadTicket;
-      window.removeEventListener("anx:mutation-confirmed", confirmed);
     };
   });
 
