@@ -53,6 +53,11 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
       if (
         node.type === "MemberExpression" &&
         [
+          "markHomeRead",
+          "archiveCard",
+          "dispatchPmDecision",
+          "reconcilePmAction",
+          "acknowledgePmAction",
           "archiveEvent",
           "unarchiveEvent",
           "trashEvent",

@@ -774,11 +774,13 @@ describe("PM operator interactions", () => {
         id: "action-one",
         decision_id: decision.id,
         status: "pending_delivery",
+        revision: 1,
       })
       .mockResolvedValueOnce({
         id: "action-one",
         decision_id: decision.id,
         status: "failed",
+        revision: 2,
         receipt: { detail: "Source unavailable" },
       });
     client.dispatchPmDecision.mockRejectedValue(
@@ -808,10 +810,16 @@ describe("PM operator interactions", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Deliver approved instruction" }),
     );
-    // The receipt shows in the panel and, once joined, on the row badge too.
-    expect(
-      (await screen.findAllByText("Failed", { exact: true })).length,
-    ).toBeGreaterThan(0);
+    // An uncertain delivery keeps the exact admitted intent for recovery.
+    await screen.findByText("Retrying", { exact: true });
+    expect(client.dispatchPmDecision).toHaveBeenCalledWith(
+      "decision-one",
+      expect.objectContaining({
+        request_key: expect.any(String),
+        if_revision: 3,
+        if_action_revision: 1,
+      }),
+    );
     expect(screen.getByText("Within the stated scope")).toBeTruthy();
     expect(screen.queryByText("Outcome verified")).toBeNull();
   });
@@ -1073,6 +1081,7 @@ describe("PM operator interactions", () => {
       const task = {
         ref: "card:stale",
         title: "Blocked stale",
+        version: 1,
         phase: "blocked",
         source: { authority: "nexus" },
         work_summary: {
@@ -1174,7 +1183,9 @@ describe("PM operator interactions", () => {
               answer: "Wait for evidence",
               revision: 2,
             }
-          : { event: { id: "confirmed" } },
+          : kind === "archive"
+            ? { card: { id: "stale", version: 2 } }
+            : { event: { id: "confirmed" } },
       );
       if (write) await write;
       await waitFor(() => {

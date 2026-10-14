@@ -1372,6 +1372,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
           voidDecision("dec_gone", { work_missing: true }),
           {
             id: "dec_deliver",
+            revision: 3,
             status: "answered",
             scope: "work.phase",
             work_ref: "card:card-nexus",
@@ -1389,6 +1390,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         actions: [
           {
             id: "act_pending",
+            revision: 1,
             decision_id: "dec_deliver",
             status: "pending_delivery",
             scope: "work.phase",
@@ -1418,20 +1420,22 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "approved awaiting delivery", bothEnds);
 
       api.hold.dispatch = deferred();
+      api.fail.dispatch = { status: 403, message: LONG_ERROR };
       await deliver.click();
       await expect(
-        page.getByRole("button", { name: "Requesting delivery…" }),
+        page.locator(
+          '[data-inbox-control-work] [data-mutation-state="sending"]',
+        ),
       ).toBeVisible();
       await expectCleanLayout(page, "delivery in flight");
       api.hold.dispatch.resolve();
       api.hold = {};
-
-      api.fail.dispatch = { message: LONG_ERROR };
-      await page
-        .getByRole("button", { name: "Deliver approved instruction" })
-        .click();
-      await expect(page.getByRole("alert").first()).toBeVisible();
-      await expectCleanLayout(page, "delivery failed", bothEnds);
+      await expect(
+        page.locator(
+          '[data-inbox-control-work] [data-mutation-state="attention"]',
+        ),
+      ).toBeVisible();
+      await expectCleanLayout(page, "delivery failed and retained", bothEnds);
 
       // With no last-known snapshot, unreadable receipts make delivery unknown.
       // Earlier visits now persist known receipts across full navigation;

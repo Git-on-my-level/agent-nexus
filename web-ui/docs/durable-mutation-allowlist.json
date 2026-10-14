@@ -85,14 +85,17 @@
       "createPmConversation": 1,
       "createPmDecision": 1,
       "createWork": 1,
-      "dispatchPmDecision": 1,
+      "dispatchPmDecision": 2,
       "moveBoardCard": 1,
       "patchDocument": 1,
-      "reconcilePmAction": 1,
+      "reconcilePmAction": 2,
       "sendPmMessage": 1,
       "updateBoardCard": 1,
       "updateDocument": 1,
-      "updateTopic": 1
+      "updateTopic": 1,
+      "acknowledgePmAction": 1,
+      "archiveCard": 1,
+      "markHomeRead": 1
     }
   },
   "lib/workspaceActivation.js": {
@@ -153,18 +156,6 @@
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
-    }
-  },
-  "routes/o/[organization]/w/[workspace]/inbox/+page.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: explicit PM dispatch/reconcile/acknowledge and card archive; markHomeRead is read-state bookkeeping. Answers are migrated.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "acknowledgePmAction": 1,
-      "archiveCard": 1,
-      "dispatchPmDecision": 1,
-      "markHomeRead": 1,
-      "reconcilePmAction": 1
     }
   },
   "routes/o/[organization]/w/[workspace]/integrations/+page.svelte": {

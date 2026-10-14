@@ -1,4 +1,6 @@
 <script>
+  import InboxControlWork from "$lib/components/inbox/InboxControlWork.svelte";
+  let controlWork = $state(null);
   import InboxSendStatus from "$lib/components/inbox/InboxSendStatus.svelte";
   import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
@@ -933,6 +935,33 @@
     const confirmed = async (event) => {
       const entry = event.detail;
       if (
+        entry?.operation === "inbox.controls" &&
+        entry.scope === readerScopeKey()
+      ) {
+        for (const done of entry.result?.controls ||
+          entry.receipt?.controls ||
+          []) {
+          if (done.action === "archive") {
+            const item = entry.request.items.find(
+              (item) => item.body.request_key === done.key,
+            );
+            if (item?.ref) {
+              commitInboxView(entry.scope, { archivedRef: item.ref });
+              archivedWorkRefs.add(item.ref);
+            }
+          } else if (done.action === "read")
+            updates = updates.filter((group) => group.group_ref !== done.id);
+          else
+            actions = [
+              ...actions.filter((row) => row.id !== done.result.id),
+              done.result,
+            ];
+        }
+        notice = "Inbox request confirmed.";
+        void load({ quiet: true });
+        return;
+      }
+      if (
         entry?.operation !== "pm.decision.answer" ||
         entry.scope !== readerScopeKey()
       )
@@ -1000,33 +1029,6 @@
       window.removeEventListener("anx:mutation-confirmed", confirmed);
   });
 
-  /**
-   * A 409 on an answer or delivery can mean the PM replaced this proposal;
-   * core names the replacement in the error details.
-   */
-  function supersededMessage(err) {
-    const details =
-      err?.body?.error?.details ?? err?.details?.details ?? err?.details ?? {};
-    const replacement = String(details?.superseded_by ?? "").trim();
-    if (!replacement) return "";
-    notice = "";
-    supersededHref = href({ item: `decision:${replacement}` });
-    // The replacement can be the reader's own board move; say who.
-    const by = String(details?.superseded_by_proposed_by ?? "").trim();
-    const origin = String(details?.superseded_by_origin_kind ?? "").trim();
-    const who =
-      by && by === ($selectedActorId || "")
-        ? "You replaced this proposal (by moving the task)"
-        : origin === "human" && by
-          ? `${actorDisplayLabel(by, $actorRegistry, $principalRegistry) || "Someone"} replaced this proposal`
-          : "The PM replaced this proposal";
-    return `${who} before it was answered. Open the replacement to decide on it.`;
-  }
-  function errorCode(err) {
-    return String(
-      err?.body?.error?.code ?? err?.details?.error?.code ?? err?.code ?? "",
-    );
-  }
   let supersededHref = $state("");
   let sessionExpired = $state(false);
   function signInAgain() {
@@ -1040,53 +1042,31 @@
     });
   }
 
-  async function deliver() {
-    if (!selectedDecision || busy) return;
+  async function queueControl(item) {
+    if (!controlWork) return;
     busy = true;
-    busyWith = "deliver";
     error = "";
     notice = "";
     try {
-      const result = await coreClient.dispatchPmDecision(selectedDecision.id);
-      actions = [...actions.filter((item) => item.id !== result.id), result];
-      // The dispatch call succeeds even when the delivery it records did not.
-      const status = String(result?.status ?? "");
-      notice =
-        status === "failed"
-          ? "Delivery failed; the receipt below says why."
-          : status === "verified"
-            ? "Delivered and read back."
-            : status === "delivered"
-              ? "Delivered; waiting for the source to read it back."
-              : "Delivery request recorded.";
+      await controlWork.queue([item]);
     } catch (err) {
-      const raw = errorMessage(err);
-      if (errorCode(err) === "source_revision_changed") {
-        // Terminal, and the receipt below says so; a Retry would contradict it.
-        const reason = String(
-          err?.body?.error?.details?.reason ?? err?.details?.reason ?? "",
-        );
-        notice =
-          reason === "work_missing"
-            ? "Not delivered: the task this approval refers to no longer exists. Nothing was sent; acknowledge it to file it under Handled."
-            : reason === "work_read_failed"
-              ? "Not delivered: the task could not be read just now. Nothing was sent; try again shortly."
-              : "Not delivered: the task changed after this was approved. A fresh proposal and approval are needed.";
-        await refreshReceipt();
-        return;
-      }
-      // Core has no executor for this source yet: the approval is intact and
-      // the action stays pending. That is not an outage.
-      error =
-        supersededMessage(err) ||
-        (/not configured|unavailable/i.test(raw)
-          ? "No delivery path is configured for this source yet. The approved request stays pending until one is."
-          : raw);
-      await refreshReceipt();
+      error = errorMessage(err);
     } finally {
       busy = false;
       busyWith = "";
     }
+  }
+  async function deliver() {
+    if (!selectedDecision || !action || busy) return;
+    await queueControl({
+      action: "dispatch",
+      id: selectedDecision.id,
+      title: selectedDecision.instruction || "Delivery",
+      body: {
+        if_revision: selectedDecision.revision,
+        if_action_revision: action.revision,
+      },
+    });
   }
 
   async function refreshReceipt() {
@@ -1101,49 +1081,39 @@
 
   async function acknowledge() {
     if (!action || busy) return;
-    busy = true;
-    busyWith = "acknowledge";
-    actionError = "";
-    try {
-      const result = await coreClient.acknowledgePmAction(action.id);
-      actions = actions.map((item) => (item.id === result.id ? result : item));
-      notice = "Acknowledged. It now sits under Handled.";
-    } catch (err) {
-      actionError = errorMessage(err);
-    } finally {
-      busy = false;
-      busyWith = "";
-    }
+    await queueControl({
+      action: "acknowledge",
+      id: action.id,
+      title: "Acknowledge delivery",
+      body: { if_revision: action.revision },
+    });
   }
 
   async function reconcile() {
     if (!action || busy) return;
-    busy = true;
-    busyWith = "reconcile";
-    actionError = "";
-    try {
-      const result = await coreClient.reconcilePmAction(action.id);
-      actions = actions.map((item) => (item.id === result.id ? result : item));
-      notice = "Read-back finished.";
-    } catch (err) {
-      actionError = errorMessage(err);
-    } finally {
-      busy = false;
-      busyWith = "";
-    }
+    await queueControl({
+      action: "reconcile",
+      id: action.id,
+      title: "Read back delivery",
+      body: { if_revision: action.revision },
+    });
   }
 
   async function markUpdateRead(group) {
-    const ref = String(group?.group_ref ?? "").trim();
-    if (!ref) return;
-    const next = neighbourId(`update:${ref}`);
-    try {
-      await coreClient.markHomeRead({ group_ref: ref });
-      updates = updates.filter((entry) => entry.group_ref !== ref);
-      if (explicitId === `update:${ref}`) await select(next);
-    } catch (err) {
-      error = errorMessage(err);
-    }
+    const ref = String(group?.group_ref || "").trim();
+    if (!ref || busy) return;
+    await queueControl({
+      action: "read",
+      id: ref,
+      title: group.display_name || ref,
+      body: {
+        group_ref: ref,
+        expected_newest_event_cursor: {
+          id: group.newest_event?.id,
+          ts: group.newest_event?.ts,
+        },
+      },
+    });
   }
 
   /** The row to land on once `id` leaves the list: the next, else the previous. */
@@ -1419,43 +1389,20 @@
     if (busy || !row.stale || !isNexusOwned(row.item)) return;
     const { prefix, id } = splitTypedRef(row.ref);
     if (prefix !== "card" || !id) return;
-    busy = true;
-    const scope = readerScopeKey();
-    actionError = "";
-    try {
-      await coreClient.archiveCard(id, {
-        ...(Number.isInteger(row.item.version)
-          ? { if_version: row.item.version }
-          : {}),
-      });
-      commitInboxView(scope, { archivedRef: row.ref });
-      if (scope !== readerScopeKey()) return;
-      // Invalidate feed reads and prevent pending single-item reads from
-      // restoring this task's decisions, without cancelling unrelated reads.
-      requestId++;
-      loadController?.abort();
-      loading = false;
-      refreshPending = false;
-      archivedWorkRefs.add(row.ref);
-      // Navigate while the old row still exists. Related decisions also leave
-      // after archive, so select only a row that will survive the removal.
-      if (selectedId === row.id || selected?.ref === row.ref) {
-        selectionRequest++;
-        heldItem = "";
-        await select(neighbourId(selectedId, row.ref));
-      }
-      work = work.filter((item) => workKey(item) !== row.ref);
-      decisions = decisions.filter((item) => item.work_ref !== row.ref);
-      actions = actions.filter((item) => item.work_ref !== row.ref);
-      // Flush selection effects before setting the outcome they normally clear.
-      await tick();
-      notice = "Task archived. You can restore it from Archive.";
-      scheduleLiveRefresh();
-    } catch (err) {
-      error = errorMessage(err);
-    } finally {
-      busy = false;
-    }
+    await queueControl({
+      action: "archive",
+      id,
+      title: row.item.title || row.ref,
+      ref: row.ref,
+      body: {
+        if_version: row.item.version,
+        if_lifecycle: {
+          archived_at: row.item.archived_at ?? null,
+          trashed_at: row.item.trashed_at ?? null,
+        },
+        if_latest_observation_id: row.item.latest_observation?.id || "",
+      },
+    });
   }
 
   function inboxKindLabel(row) {
@@ -1750,6 +1697,7 @@
       {reconnecting ? "Reconnecting…" : loading && ready ? "Refreshing…" : ""}
     </span>
   </nav>
+  <InboxControlWork bind:this={controlWork} href={href({})} />
   {#if error}
     <StateError
       message={error}

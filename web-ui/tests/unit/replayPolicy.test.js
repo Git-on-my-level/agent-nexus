@@ -56,3 +56,19 @@ it("a deliberate new request replaces transport keys without changing content or
   );
   expect(legacy.message.replay_key).toBeUndefined();
 });
+
+it("renewing an expired inbox batch keeps confirmed member keys and frozen remaining bases", () => {
+  const request = {
+    items: [
+      { id: "first", body: { request_key: "confirmed", if_revision: 2 } },
+      { id: "second", body: { request_key: "pending", if_revision: 7 } },
+    ],
+  };
+  const fresh = freshRequest(request, "inbox.controls", {
+    controls: [{ key: "confirmed" }],
+  });
+  expect(fresh.items[0]).toEqual(request.items[0]);
+  expect(fresh.items[1].body.request_key).not.toBe("pending");
+  expect(fresh.items[1].body.if_revision).toBe(7);
+  expect(request.items[1].body.request_key).toBe("pending");
+});

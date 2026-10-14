@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -50,6 +52,7 @@ func handleMarkHomeRead(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	var req struct {
+		RequestKey                string   `json:"request_key,omitempty"`
 		ReaderID                  string   `json:"reader_id"`
 		ActorID                   string   `json:"actor_id"`
 		GroupRef                  string   `json:"group_ref"`
@@ -64,6 +67,10 @@ func handleMarkHomeRead(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		} `json:"group_cursors"`
 	}
 	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if req.RequestKey != "" && (strings.TrimSpace(req.RequestKey) == "" || len(req.RequestKey) > 256 || strings.ContainsRune(req.RequestKey, 0)) {
+		writeError(w, 400, "invalid_request", "invalid saved read key")
 		return
 	}
 	readerID, ok := resolveHomeReaderID(w, r, opts, firstNonEmptyString(req.ReaderID, req.ActorID))
@@ -93,6 +100,35 @@ func handleMarkHomeRead(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			continue
 		}
 		expected[groupRef] = primitives.EventCursor{TS: strings.TrimSpace(cursor.TS), ID: strings.TrimSpace(cursor.ID)}
+	}
+
+	if req.RequestKey != "" {
+		frozen, ok := opts.primitiveStore.(interface {
+			CheckHomeReadCursors(context.Context, []string, map[string]primitives.EventCursor) error
+			MarkHomeReadFrozen(context.Context, string, []string, map[string]primitives.EventCursor) error
+		})
+		if !ok {
+			writeError(w, 503, "unavailable", "frozen read cursors are unavailable")
+			return
+		}
+		// Current visibility is checked even on replay. The receipt contains no
+		// projection counts, and later arrivals are never folded into this request.
+		if err := frozen.CheckHomeReadCursors(r.Context(), groupRefs, expected); err != nil {
+			writeFrozenHomeReadError(w, r, err)
+			return
+		}
+		status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "home.read", readerID, req.RequestKey, req, 200, func(ctx context.Context) (map[string]any, error) {
+			if err := frozen.MarkHomeReadFrozen(ctx, readerID, groupRefs, expected); err != nil {
+				return nil, err
+			}
+			return map[string]any{"ok": true}, nil
+		})
+		if err != nil {
+			writeFrozenHomeReadError(w, r, err)
+			return
+		}
+		writeJSON(w, status, response)
+		return
 	}
 	if err := opts.primitiveStore.MarkHomeReadAt(r.Context(), readerID, groupRefs, expected); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to mark home activity read")
@@ -133,4 +169,18 @@ func resolveHomeReaderID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return "", false
 	}
 	return readerID, true
+}
+
+func writeFrozenHomeReadError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case writeStoreContentionError(w, r, err):
+	case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		writeError(w, 400, "invalid_request", "a frozen visible event cursor is required for each of at most 100 groups")
+	case errors.Is(err, primitives.ErrNotFound):
+		writeError(w, 404, "not_found", "activity is no longer available")
+	case errors.Is(err, primitives.ErrConflict):
+		writeError(w, 409, "conflict", "saved read request has changed")
+	default:
+		writeError(w, 500, "internal_error", "failed to mark saved activity read")
+	}
 }

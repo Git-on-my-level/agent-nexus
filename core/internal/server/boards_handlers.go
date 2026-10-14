@@ -1344,12 +1344,30 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	var req struct {
-		ActorID               string  `json:"actor_id"`
-		IfBoardUpdatedAt      *string `json:"if_board_updated_at"`
-		IfWorkVersion         *int64  `json:"if_version"`
-		IfLatestObservationID *string `json:"if_latest_observation_id"`
+		ActorID               string             `json:"actor_id"`
+		RequestKey            string             `json:"request_key,omitempty"`
+		IfLifecycle           map[string]*string `json:"if_lifecycle,omitempty"`
+		IfBoardUpdatedAt      *string            `json:"if_board_updated_at"`
+		IfWorkVersion         *int64             `json:"if_version"`
+		IfLatestObservationID *string            `json:"if_latest_observation_id"`
 	}
 	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	var lifecycle *primitives.EventLifecycleBase
+	if req.IfLifecycle != nil {
+		if _, ok := req.IfLifecycle["archived_at"]; !ok {
+			writeError(w, 400, "invalid_request", "if_lifecycle requires archived_at and trashed_at")
+			return
+		}
+		if _, ok := req.IfLifecycle["trashed_at"]; !ok {
+			writeError(w, 400, "invalid_request", "if_lifecycle requires archived_at and trashed_at")
+			return
+		}
+		lifecycle = &primitives.EventLifecycleBase{ArchivedAt: req.IfLifecycle["archived_at"], TrashedAt: req.IfLifecycle["trashed_at"]}
+	}
+	if req.RequestKey != "" && (strings.TrimSpace(req.RequestKey) == "" || len(req.RequestKey) > 256 || strings.ContainsRune(req.RequestKey, 0) || req.IfWorkVersion == nil || req.IfLifecycle == nil || req.IfLatestObservationID == nil) {
+		writeError(w, 400, "invalid_request", "keyed archive requires an original key, work version and lifecycle base")
 		return
 	}
 	if req.IfBoardUpdatedAt != nil {
@@ -1363,7 +1381,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusBadRequest, "invalid_request", "if_version must be non-negative")
 		return
 	}
-	if req.IfLatestObservationID != nil && strings.TrimSpace(*req.IfLatestObservationID) == "" {
+	if req.IfLatestObservationID != nil && strings.TrimSpace(*req.IfLatestObservationID) == "" && req.RequestKey == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "if_latest_observation_id must be nonempty")
 		return
 	}
@@ -1371,11 +1389,20 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	if !ok {
 		return
 	}
-	result, err := opts.primitiveStore.ArchiveBoardCard(r.Context(), actorID, boardID, identifier, primitives.RemoveBoardCardInput{
-		IfBoardUpdatedAt:      req.IfBoardUpdatedAt,
-		IfWorkVersion:         req.IfWorkVersion,
-		IfLatestObservationID: req.IfLatestObservationID,
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.archive:"+identifier, actorID, req.RequestKey, req, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		result, err := opts.primitiveStore.ArchiveBoardCard(ctx, actorID, boardID, identifier, primitives.RemoveBoardCardInput{
+			IfLifecycle:           lifecycle,
+			IfBoardUpdatedAt:      req.IfBoardUpdatedAt,
+			IfWorkVersion:         req.IfWorkVersion,
+			IfLatestObservationID: req.IfLatestObservationID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		emitCardLifecycleEventBestEffort(ctx, opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
+		return map[string]any{"board": result.Board, "card": publicCardView(result.Card)}, nil
 	})
+
 	if err != nil {
 		switch {
 		case writeStoreContentionError(w, r, err):
@@ -1393,8 +1420,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		}
 		return
 	}
-	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
+	writeJSON(w, status, response)
 }
 
 func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {

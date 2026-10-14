@@ -59,7 +59,7 @@ export async function intentFingerprint(request) {
   ).join("");
 }
 
-export function freshRequest(request, operation = "") {
+export function freshRequest(request, operation = "", receipt = null) {
   const value = JSON.parse(JSON.stringify(request));
   for (const body of [
     value,
@@ -70,6 +70,13 @@ export function freshRequest(request, operation = "") {
     ...(value.items || []).map((item) => item.body),
   ]) {
     if (!body) continue;
+    // A partial batch's confirmed members remain attached to their old keys.
+    // Explicit renewal rotates only requests whose outcome is still unknown.
+    if (
+      operation === "inbox.controls" &&
+      receipt?.controls?.some((done) => done.key === body.request_key)
+    )
+      continue;
     for (const field of ["request_key", "replay_key"]) {
       if (field in body) body[field] = crypto.randomUUID();
     }

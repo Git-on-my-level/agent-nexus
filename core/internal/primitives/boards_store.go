@@ -258,6 +258,7 @@ type MoveBoardCardInput struct {
 }
 
 type RemoveBoardCardInput struct {
+	IfLifecycle           *EventLifecycleBase
 	IfBoardUpdatedAt      *string
 	IfWorkVersion         *int64
 	IfLatestObservationID *string
@@ -2574,7 +2575,7 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		}
 	}
 	if input.IfLatestObservationID != nil {
-		if strings.TrimSpace(*input.IfLatestObservationID) == "" {
+		if strings.TrimSpace(*input.IfLatestObservationID) == "" && input.IfLifecycle == nil {
 			_ = tx.Rollback()
 			return BoardCardMutationResult{}, invalidBoardRequest("if_latest_observation_id must be nonempty")
 		}
@@ -2585,6 +2586,13 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return BoardCardMutationResult{}, fmt.Errorf("read archive observation fence: %w", err)
 			}
+			return BoardCardMutationResult{}, ErrConflict
+		}
+	}
+	if input.IfLifecycle != nil {
+		archived, trashed := nullableStringPtr(cardRow.ArchivedAt), nullableStringPtr(cardRow.TrashedAt)
+		if !equalLifecycleString(archived, input.IfLifecycle.ArchivedAt) || !equalLifecycleString(trashed, input.IfLifecycle.TrashedAt) {
+			_ = tx.Rollback()
 			return BoardCardMutationResult{}, ErrConflict
 		}
 	}
@@ -2625,7 +2633,7 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 	if input.IfLatestObservationID != nil {
 		// Keep the observation fence on the mutation itself. Successful polls
 		// can replace this ID without changing either the board or work version.
-		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND latest_observation_id = ?)`
+		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND COALESCE(latest_observation_id,'') = ?)`
 		archiveArgs = append(archiveArgs, cardRow.CardID, *input.IfLatestObservationID)
 	}
 	archiveResult, err := tx.ExecContext(ctx, archiveQuery, archiveArgs...)
@@ -5468,4 +5476,14 @@ func markBoardCardProjectionDirtyTx(ctx context.Context, tx *accessTx, cards ...
 		}
 	}
 	return markTopicProjectionsDirtyTx(ctx, tx, threadIDs, time.Now().UTC())
+}
+
+func nullableStringPtr(value sql.NullString) *string {
+	if !value.Valid || value.String == "" {
+		return nil
+	}
+	return &value.String
+}
+func equalLifecycleString(left, right *string) bool {
+	return left == nil && right == nil || left != nil && right != nil && *left == *right
 }

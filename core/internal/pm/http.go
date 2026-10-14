@@ -157,9 +157,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out, err = s.AnswerDecision(ctx, p, path[1], in)
 		}
 	case len(path) == 3 && path[0] == "decisions" && path[2] == "dispatch" && r.Method == http.MethodPost:
-		var in struct{}
+		var in ControlInput
 		if err = decode(&in); err == nil {
-			out, err = s.DispatchDecision(ctx, p, path[1])
+			out, err = s.control(ctx, p, "dispatch", path[1], in)
 		}
 	case len(path) == 1 && path[0] == "actions" && r.Method == http.MethodGet:
 		var limit int
@@ -171,14 +171,14 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 2 && path[0] == "actions" && r.Method == http.MethodGet:
 		out, err = s.action(ctx, p, path[1], "pm.read")
 	case len(path) == 3 && path[0] == "actions" && path[2] == "reconcile" && r.Method == http.MethodPost:
-		var in struct{}
+		var in ControlInput
 		if err = decode(&in); err == nil {
-			out, err = s.ReconcileAction(ctx, p, path[1])
+			out, err = s.control(ctx, p, "reconcile", path[1], in)
 		}
 	case len(path) == 3 && path[0] == "actions" && path[2] == "acknowledge" && r.Method == http.MethodPost:
-		var in struct{}
+		var in ControlInput
 		if err = decode(&in); err == nil {
-			out, err = s.AcknowledgeAction(ctx, p, path[1])
+			out, err = s.control(ctx, p, "acknowledge", path[1], in)
 		}
 	case len(path) == 1 && path[0] == "bindings" && r.Method == http.MethodGet:
 		var limit int

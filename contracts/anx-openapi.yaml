@@ -953,7 +953,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMEmptyRequest'
+              $ref: '#/components/schemas/PMControlRequest'
       responses:
         '409':
           description: Decision state conflict; superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
@@ -1106,7 +1106,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMEmptyRequest'
+              $ref: '#/components/schemas/PMControlRequest'
       responses:
         '200':
           description: Read back an action outcome without resending
@@ -1164,7 +1164,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMEmptyRequest'
+              $ref: '#/components/schemas/PMControlRequest'
       responses:
         '200':
           description: Acknowledge a failed, unresolvable, or undeliverable action
@@ -9785,6 +9785,19 @@ components:
       required:
       - lease_token
       - reason
+    PMControlRequest:
+      type: object
+      description: >-
+        Optional keyed control. request_key and if_revision must be supplied together.
+        Dispatch also requires if_action_revision. Replays return the original admitted
+        action after current authorization checks. A dispatch receipt confirms admission
+        (usually sending), not delivery; read the action for its current outcome. The
+        first action CAS and receipt commit atomically, before an external handoff.
+      properties:
+        request_key: { type: string, minLength: 1, maxLength: 256 }
+        if_revision: { type: integer, minimum: 1 }
+        if_action_revision: { type: integer, minimum: 1 }
+
     PMEmptyRequest:
       type: object
       additionalProperties: true
@@ -13232,6 +13245,10 @@ components:
     MarkHomeReadRequest:
       type: object
       properties:
+        request_key:
+          type: string
+          maxLength: 256
+          description: Keyed requests require a frozen cursor for every group; the original receipt commits atomically.
         reader_id:
           type: string
           description: Development legacy actor-mode reader id. Authenticated deployments derive the reader from the bearer token principal.
@@ -13394,6 +13411,17 @@ components:
     ArchiveCardRequest:
       type: object
       properties:
+        if_lifecycle:
+          type: object
+          required: [archived_at, trashed_at]
+          properties:
+            archived_at: { type: string, nullable: true }
+            trashed_at: { type: string, nullable: true }
+          description: Frozen visibility tuple; a concurrent archive/restore conflicts before writing.
+        request_key:
+          type: string
+          maxLength: 256
+          description: Original receipt key committed atomically with archive; reuse on retry. Keyed archives require if_version, if_lifecycle and if_latest_observation_id.
         actor_id: { type: string }
         if_board_updated_at:
           type: string
@@ -13404,8 +13432,7 @@ components:
           description: Optional source work-version fence for atomic archive after a transfer has been verified.
         if_latest_observation_id:
           type: string
-          minLength: 1
-          description: Optional atomic fence matching work.latest_observation.id from work get. A different or absent latest successful observation returns 409 conflict, including observations that leave phase and board timestamp unchanged. Checked in the archive transaction; use with if_board_updated_at and if_version to fence canonical and annotation changes too.
+          description: Optional atomic fence matching work.latest_observation.id from work get. Keyed archives also allow an empty string to fence the absence of any successful observation; legacy unkeyed requests must use a nonempty ID. A different or absent latest successful observation returns 409 conflict, including observations that leave phase and board timestamp unchanged. Checked in the archive transaction; use with if_board_updated_at and if_version to fence canonical and annotation changes too.
 
     SecretMetadata:
       type: object
