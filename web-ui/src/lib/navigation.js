@@ -1,61 +1,72 @@
 /**
- * Primary navigation: Overview (workspace home; it summarizes and links,
- * it does not take attention actions), Inbox (the only attention surface),
- * Agents (presence: who is working, waiting or stale), then Tasks and Docs.
- * The PM conversation is an action ("Ask PM" in the sidebar header and the
- * mobile bottom bar), not a destination category; that same slot offers
- * setup while no PM agent is onboarded. Settings (Access, Secrets,
- * Integrations) and Diagnostics (Audit, Threads) live in the account menu in
- * the sidebar footer and in the mobile More hub.
+ * Primary navigation is three destinations: Decide (every decision waiting
+ * on the reader), Watch (outcomes per workspace) and Ask (the PM
+ * conversation). Ask is flagged `requiresPm`: the shell hides it entirely
+ * while no PM is connected, and PM setup lives one hop down under Settings.
+ * Everything else (Initiatives, Docs, Agents, Archive, Access, Secrets,
+ * Integrations, Audit, Threads) is secondary: it sits in the account menu in
+ * the sidebar footer, in the mobile More hub and in the command palette.
  */
 export const navigationItems = [
   {
-    label: "Overview",
-    href: "/overview",
-    icon: "overview",
-    hint: "Workspace home",
-  },
-  {
-    label: "Inbox",
-    href: "/inbox",
+    label: "Decide",
+    href: "/decide",
     icon: "inbox",
-    hint: "Needs attention",
-    // The shell shows how many rows sit in Needs you beside this item.
-    count: "inbox-needs-you",
+    hint: "Waiting on you",
+    // The shell shows how many decisions wait on the reader beside this item.
+    count: "decide-waiting",
   },
   {
-    label: "Agents",
-    href: "/agents",
-    icon: "agents",
-    hint: "Who is working",
-    // The shell shows how many agents are working beside this item.
-    count: "agents-working",
+    label: "Watch",
+    href: "/watch",
+    icon: "overview",
+    hint: "Outcomes",
   },
   {
-    label: "Tasks",
-    href: "/tasks",
-    icon: "tasks",
-    hint: "Table and board",
-  },
-  {
-    label: "Docs",
-    href: "/docs",
-    icon: "docs",
-    hint: "Shared knowledge",
+    label: "Ask",
+    href: "/pm",
+    icon: "askPm",
+    hint: "Your PM",
+    requiresPm: true,
   },
 ];
 
 /** Secondary destinations, grouped. Rendered in the sidebar footer and on /more. */
 export const settingsNavGroups = [
   {
-    label: "Settings",
+    label: "Workspace",
     items: [
+      {
+        label: "Initiatives",
+        href: "/initiatives",
+        icon: "tasks",
+        hint: "All initiatives",
+      },
+      {
+        label: "Docs",
+        href: "/docs",
+        icon: "docs",
+        hint: "Shared knowledge",
+      },
+      {
+        label: "Agents",
+        href: "/agents",
+        icon: "agents",
+        hint: "Who is working",
+        // The shell shows how many agents are working beside this item.
+        count: "agents-working",
+      },
       {
         label: "Archive",
         href: "/archive",
         icon: "docs",
         hint: "Archived work and context",
       },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
       {
         label: "Access",
         href: "/access",
@@ -77,14 +88,20 @@ export const settingsNavGroups = [
         icon: "integrations",
         hint: "Source freshness and coverage",
       },
+      {
+        label: "PM setup",
+        href: "/pm/setup",
+        icon: "askPm",
+        hint: "Connect or manage your PM",
+      },
     ],
   },
   {
     // Infrastructure surfaces. These expose core primitives that are
     // deliberately not operator nouns (see anx-ui-spec.md "Canonical operator
     // vocabulary"). They belong behind an explicit Diagnostics label rather
-    // than in primary nav — and rather than being reachable only by typing a
-    // URL, which is how `/threads` was orphaned after the Tasks refactor.
+    // than in primary nav, and rather than being reachable only by typing a
+    // URL.
     label: "Diagnostics",
     items: [
       {
@@ -121,7 +138,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "56rem",
   },
   {
-    match: /^\/(overview|tasks|inbox|integrations)(\/|$)/,
+    match: /^\/(decide|watch|initiatives|integrations)(\/|$)/,
     mode: "fluid",
     maxWidth: "112rem",
   },
@@ -174,12 +191,8 @@ function normalizePathname(pathname) {
   return pathname;
 }
 
-/**
- * Live routes that are not nav items: the PM action's targets. The sidebar
- * slot points at setup until a PM is onboarded, and at the conversation
- * after, so both have to count as known sections.
- */
-const NON_NAV_ROUTES = ["/pm", "/pm/setup"];
+/** Live routes that are in neither list: the more hub. */
+const NON_NAV_ROUTES = ["/more"];
 
 export function isKnownSection(pathname) {
   const normalizedPathname = normalizePathname(pathname);
@@ -211,7 +224,7 @@ export function isMoreHubActivePath(pathname) {
  * so nothing moves when the real header replaces the placeholder.
  */
 const DESTINATION_SKELETONS = [
-  { match: /^\/tasks$/, title: "Tasks", rows: 8 },
+  { match: /^\/initiatives$/, title: "Initiatives", rows: 8 },
   { match: /^\/docs$/, title: "Docs", rows: 8 },
   { match: /^\/threads$/, title: "Threads", rows: 6 },
 ];

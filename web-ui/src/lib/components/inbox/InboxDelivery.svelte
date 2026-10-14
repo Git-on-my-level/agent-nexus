@@ -41,7 +41,7 @@
   <div class="space-y-2" data-inbox-delivery>
     {#if task}
       <div class="space-y-1">
-        <p class="ui-label">Task</p>
+        <p class="ui-label">Initiative</p>
         <!-- A context request clears the blocker too, so `task.label` reads
              "Returned for context" rather than "Unblocked": the ask was not
              answered, and the header above already says so. -->

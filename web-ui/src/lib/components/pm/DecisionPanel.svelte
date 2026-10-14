@@ -131,10 +131,10 @@
     if (busy || savedAnswer || !voidReason) return;
     choice = "reject";
     answer = gone
-      ? "The task this proposal refers to no longer exists."
+      ? "The initiative this proposal refers to no longer exists."
       : moot
         ? `Already at ${label(targetPhase || work?.phase || "")}; nothing to do.`
-        : "The task changed after this was proposed; the proposal no longer applies.";
+        : "The initiative changed after this was proposed; the proposal no longer applies.";
     onAnswer?.(event);
   }
   let unappliable = $derived(
@@ -202,7 +202,7 @@
           id="decision-moot-note"
           class="mt-3 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"
         >
-          The task is already at {label(targetPhase)}, so there is nothing left
+          The initiative is already at {label(targetPhase)}, so there is nothing left
           to approve.
           <button
             class="ui-prose-link"
@@ -217,7 +217,7 @@
           id="decision-gone-note"
           class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
         >
-          The task this proposal refers to no longer exists, so there is nothing
+          The initiative this proposal refers to no longer exists, so there is nothing
           to approve.
           <button
             class="ui-prose-link"
@@ -232,9 +232,9 @@
           id="decision-stale-note"
           class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
         >
-          This proposal is older than the task: it was made against an earlier
+          This proposal is older than the initiative: it was made against an earlier
           revision, so approving it would fail. {proposer === "You proposed"
-            ? "Propose it again from the board or the CLI."
+            ? "Propose it again from Initiatives or the CLI."
             : "Ask the PM to propose again."}
           <button
             class="ui-prose-link"
@@ -275,7 +275,7 @@
         <summary class="cursor-pointer">Technical details</summary>
         <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1">
           <div class="flex gap-1.5">
-            <dt>Task ref</dt>
+            <dt>Initiative ref</dt>
             <dd class="break-all font-mono text-fg">
               {selected.work_ref || "—"}
             </dd>
@@ -287,7 +287,7 @@
             </dd>
           </div>
           <div class="flex gap-1.5">
-            <dt>{work?.source?.revision ? "Source revision" : "Revision"}</dt>
+            <dt>{work?.source?.revision ? "Source version" : "Version"}</dt>
             <dd class="break-all font-mono text-fg">
               {selected.target_revision || "—"}
             </dd>
@@ -446,10 +446,10 @@
         <p class="mt-2 text-meta text-fg">
           Nothing was sent, and this approval will not be resent.
           {#if selected?.work_missing}
-            The task it refers to no longer exists.
+            The initiative it refers to no longer exists.
           {:else if selected?.origin_kind === "human" && workHref}
             To try again, <a class="ui-prose-link" href={workHref}
-              >propose it again from the task</a
+              >propose it again from the initiative</a
             > and approve the new proposal.
           {:else if pmHref}
             To try again,
@@ -516,8 +516,8 @@
           {#if action.status === "pending_delivery" && (targetMoved || (undeliverable && selected?.work_missing))}
             <p class="text-meta text-warn-text">
               {selected?.work_missing
-                ? "The task this approval refers to no longer exists, so it cannot be delivered."
-                : "The task changed after this was approved, so this approval cannot be delivered."}
+                ? "The initiative this approval refers to no longer exists, so it cannot be delivered."
+                : "The initiative changed after this was approved, so this approval cannot be delivered."}
               A fresh proposal and approval are needed.
             </p>
           {:else if action.status === "pending_delivery" && !undeliverable && isApprover}

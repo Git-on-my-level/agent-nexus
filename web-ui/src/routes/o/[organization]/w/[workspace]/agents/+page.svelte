@@ -318,7 +318,7 @@
         >
         <span><kbd class="agents-kbd">Enter</kbd> open</span>
         <span><kbd class="agents-kbd">I</kbd> answer in Inbox</span>
-        <span><kbd class="agents-kbd">T</kbd> task</span>
+        <span><kbd class="agents-kbd">T</kbd> initiative</span>
         <button
           class="ml-auto hover:text-fg"
           type="button"

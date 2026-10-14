@@ -18,7 +18,7 @@ export function inboxShortcutList() {
     ["Write a reply", ["R"]],
     ["Send the reply", [mod, "Enter"]],
     ["Acknowledge, or mark read", ["E"]],
-    ["Open the task or doc", ["O"]],
+    ["Open the initiative or doc", ["O"]],
     ["Undo the last response", [mod, "Z"]],
     ["Shortcut help", ["?"]],
     ["Clear the selection, or close this help", ["Esc"]],

@@ -14,8 +14,8 @@
 /** Section / panel title used everywhere a Discussion is shown. */
 export const DISCUSSION_TITLE = "Discussion";
 
-/** Secondary panel title for document revision history. */
-export const REVISIONS_TITLE = "Revisions";
+/** Secondary panel title for document version history. */
+export const REVISIONS_TITLE = "Versions";
 
 /** Composer placeholder for an ordinary message. */
 export const COMPOSER_PLACEHOLDER = "Write a message…";
@@ -65,6 +65,6 @@ export const DOC_EMPTY =
 
 /** Topic Discussion empty-state copy. */
 export function topicEmpty(topicTitle) {
-  const title = String(topicTitle ?? "").trim() || "this topic";
-  return `Everything about ${title} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`;
+  const title = String(topicTitle ?? "").trim() || "this project";
+  return `Everything about ${title} lives here. Post a message to start the conversation. Docs and reports you link to this project appear in their tabs.`;
 }

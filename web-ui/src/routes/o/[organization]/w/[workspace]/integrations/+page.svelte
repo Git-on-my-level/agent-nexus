@@ -131,7 +131,8 @@
         onclick={() => load()}
         disabled={loading}
         >{loading ? "Loading health…" : "Reload health"}</button
-      ><a class="ui-btn-secondary" href={workspaceHref("/tasks")}>Tasks</a
+      ><a class="ui-btn-secondary" href={workspaceHref("/initiatives")}
+        >Initiatives</a
       >{/snippet}</WorkspacePageHeader
   >
   {#if error}<StateError
@@ -197,7 +198,7 @@
               <a
                 class="break-words text-meta font-medium text-fg hover:text-accent-text"
                 href={workspaceHref(
-                  `/tasks/${encodeURIComponent(workKey(item))}`,
+                  `/initiatives/${encodeURIComponent(workKey(item))}`,
                 )}>{item.title || item.ref}</a
               >{#if item.refresh?.last_error}
                 <p class="mt-0.5 text-micro text-warn-text">

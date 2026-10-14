@@ -13,7 +13,7 @@ import { clearPrincipalLocalWork } from "../../src/lib/localWorkStore.js";
 import { readerScope } from "../../src/lib/readerScope.js";
 const state = vi.hoisted(() => {
   let value = {
-    url: new URL("http://localhost/o/local/w/local/tasks"),
+    url: new URL("http://localhost/o/local/w/local/initiatives"),
     params: { organization: "local", workspace: "local" },
   };
   const listeners = new Set();
@@ -111,8 +111,8 @@ vi.mock("$app/navigation", () => ({
   invalidate: vi.fn(),
   invalidateAll: vi.fn(),
 }));
-import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte";
-import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte";
+import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte";
+import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte";
 import PMPage from "../../src/routes/o/[organization]/w/[workspace]/pm/+page.svelte";
 import { get as getStore } from "svelte/store";
 import {
@@ -163,7 +163,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   for (const mock of Object.values(client)) mock.mockReset();
   navigation.guards.length = 0;
-  state.route("/tasks");
+  state.route("/initiatives");
   client.listWork.mockResolvedValue({ work: [], next_cursor: "" });
   client.listWorkParticipants.mockResolvedValue({
     participants: [],
@@ -223,7 +223,7 @@ describe("PM operator interactions", () => {
     });
     render(WorkPage);
     await waitFor(() => expect(client.listWork).toHaveBeenCalledTimes(1));
-    state.route("/tasks?q=new");
+    state.route("/initiatives?q=new");
     await waitFor(() => expect(screen.getByText("Current work")).toBeTruthy());
     old.resolve({ work: [work("card:old", "Old work")], next_cursor: "" });
     await Promise.resolve();
@@ -340,7 +340,7 @@ describe("PM operator interactions", () => {
       },
     });
     await new Promise((resolve) => setTimeout(resolve, 800));
-    state.route("/tasks?q=new");
+    state.route("/initiatives?q=new");
     await screen.findByText("New filter result");
     slow.resolve({
       work: [work("card:old", "Old filter result")],
@@ -429,7 +429,7 @@ describe("PM operator interactions", () => {
   ])(
     "task plan badge reads canonical and legacy health %j",
     async (health, badge) => {
-      state.route("/tasks/card%3Aone", { workId: "card:one" });
+      state.route("/initiatives/card%3Aone", { workId: "card:one" });
       client.getWork.mockResolvedValue({
         work: work("card:one", "Plan health"),
       });
@@ -463,7 +463,7 @@ describe("PM operator interactions", () => {
           signal?.addEventListener("abort", resolve);
         }),
     );
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Planned work"),
     });
@@ -510,7 +510,7 @@ describe("PM operator interactions", () => {
           signal?.addEventListener("abort", resolve);
         }),
     );
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Planned work"),
     });
@@ -549,7 +549,7 @@ describe("PM operator interactions", () => {
     expect(document.querySelector('[data-plan-node="ship"]')).toBeTruthy();
   });
   it("does not promote the claimed verification field, and refresh only queues", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: { ...work("card:one", "Claimed work"), refresh: { state: "idle" } },
     });
@@ -585,7 +585,7 @@ describe("PM operator interactions", () => {
    * reader opened to read a task.
    */
   it("shows no decisions error on a task when no PM is onboarded", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Ungated work"),
     });
@@ -604,7 +604,7 @@ describe("PM operator interactions", () => {
   });
 
   it("still reports a real failure to read a task's decisions", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Broken read"),
     });
@@ -615,7 +615,7 @@ describe("PM operator interactions", () => {
   });
 
   it("scopes task detail decisions to this work, newest first, with an inbox answer link", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Decided work"),
     });
@@ -657,7 +657,7 @@ describe("PM operator interactions", () => {
       screen
         .getByRole("link", { name: "Answer", exact: true })
         .getAttribute("href"),
-    ).toBe("/o/local/w/local/inbox?item=decision:d-new");
+    ).toBe("/o/local/w/local/decide?item=decision:d-new");
     const rows = [
       ...screen
         .getByText("Newer question")
@@ -679,7 +679,7 @@ describe("PM operator interactions", () => {
     expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
       "SELECT",
     );
-    state.route("/tasks?view=board");
+    state.route("/initiatives?view=board");
     await screen.findByRole("region", {
       name: "Task board grouped by phase",
     });
@@ -1393,7 +1393,7 @@ describe("PM operator interactions", () => {
     );
   });
   it("clears an old refresh request state when navigating to another commitment", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork
       .mockResolvedValueOnce({ work: work("card:one", "First commitment") })
       .mockResolvedValueOnce({ work: work("card:two", "Second commitment") });
@@ -1405,7 +1405,7 @@ describe("PM operator interactions", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Check GitHub now" }),
     );
-    state.route("/tasks/card%3Atwo", { workId: "card:two" });
+    state.route("/initiatives/card%3Atwo", { workId: "card:two" });
     await screen.findByRole("heading", { name: "Second commitment" });
     expect(
       screen.getByRole("button", { name: "Check GitHub now" }).disabled,
@@ -1492,7 +1492,7 @@ describe("PM operator interactions", () => {
     expect(wide).toEqual(["Task", "Board", "Status", "Owner", "Last checked"]);
   });
   it("keeps the latest handoff report when older observation pagination fails", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Evidence task"),
     });
@@ -1525,7 +1525,7 @@ describe("PM operator interactions", () => {
     });
   });
   it("marks handoff unavailable when the initial evidence read fails", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Evidence task"),
     });
@@ -1537,7 +1537,7 @@ describe("PM operator interactions", () => {
     expect(screen.queryByText("Latest shared report")).toBeNull();
   });
   it("shows task evidence as one source line with each link once", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: {
         ...work("card:one", "Issue work"),

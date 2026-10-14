@@ -105,7 +105,7 @@ describe("agent roster model", () => {
     expect(model.ask.severity).toBe("high");
     expect(model.ask.subjectTitle).toBe("Lock hub quest path");
     expect(model.ask.href).toBe(
-      "/inbox?mailbox=needs-you&item=inbox%3Aask%3At%3Ae1",
+      "/decide?mailbox=needs-you&item=inbox%3Aask%3At%3Ae1",
     );
     expect(model.duration).toBe("3h 12m");
     expect(model.moreAsks).toBe(1);
@@ -113,7 +113,7 @@ describe("agent roster model", () => {
 
   it("links to Needs you while the inbox projection catches up", () => {
     expect(inboxAskPath({ id: "e1", inbox_item_id: null })).toBe(
-      "/inbox?mailbox=needs-you",
+      "/decide?mailbox=needs-you",
     );
   });
 
@@ -204,7 +204,7 @@ describe("agent roster model", () => {
         }),
         { now: NOW },
       ).headline,
-    ).toBe("No signal for 2d 2h on this task");
+    ).toBe("No signal for 2d 2h on this initiative");
   });
 
   it("counts never-checked-in identities apart from the agents that exist", () => {

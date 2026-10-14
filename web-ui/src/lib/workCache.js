@@ -77,7 +77,7 @@ function scoped(key, scope) {
 }
 
 /**
- * Every handle the router might name this card by. `/tasks/{workId}` takes a
+ * Every handle the router might name this card by. `/initiatives/{workId}` takes a
  * ref, a bare handle or an id, so a snapshot primed from a list row has to be
  * findable under all three.
  *

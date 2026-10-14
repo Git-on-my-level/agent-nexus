@@ -220,7 +220,7 @@ describe("ask delivery model", () => {
       nextActorLabel: "Dana",
     });
     expect(model.notDelivered).toBe(
-      "Not delivered: no subscriber; the task is ready for Dana.",
+      "Not delivered: no subscriber; the initiative is ready for Dana.",
     );
     expect(model.subscriptions).toEqual([]);
   });
@@ -238,7 +238,7 @@ describe("ask delivery model", () => {
       { nextActorLabel: "Dana" },
     );
     expect(blocked.notDelivered).toBe(
-      "Not delivered: no subscriber; the task is blocked for Dana.",
+      "Not delivered: no subscriber; the initiative is blocked for Dana.",
     );
     const sourceOwned = askDeliveryModel({
       ...answered,
@@ -250,20 +250,20 @@ describe("ask delivery model", () => {
       },
     });
     expect(sourceOwned.notDelivered).toBe(
-      "Not delivered: no subscriber; the task is in progress for jira-bot.",
+      "Not delivered: no subscriber; the initiative is in progress for jira-bot.",
     );
     for (const model of [blocked, sourceOwned]) {
       expect(model.notDelivered).not.toContain("unblocked");
     }
   });
 
-  it("says the task was closed when no subscriber was waiting", () => {
+  it("says the initiative was closed when no subscriber was waiting", () => {
     const model = askDeliveryModel({
       ...answered,
       task_outcome: { card_ref: "card:anx-7", phase: "done" },
     });
     expect(model.notDelivered).toBe(
-      "Not delivered: no subscriber; the task was closed.",
+      "Not delivered: no subscriber; the initiative was closed.",
     );
   });
 

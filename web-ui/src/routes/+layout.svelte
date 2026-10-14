@@ -71,7 +71,6 @@
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
   import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
-  import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
   import AccessNavCount from "$lib/components/access/AccessNavCount.svelte";
   import {
     pendingAccessCount,
@@ -109,11 +108,7 @@
     shouldRedirectToLoginForBootstrapState,
     WORKSPACE_BOOTSTRAP_STATES,
   } from "$lib/workspaceBootstrap.js";
-  import {
-    pmFeaturesVisible,
-    pmSetupOffered,
-    pmStateKnown,
-  } from "$lib/pm/onboardingState.js";
+  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
   import {
     SHELL_REFRESH_MIN_MS,
     clearPmPresence,
@@ -126,7 +121,7 @@
   const pageTitleOverride = providePageTitle();
 
   function onWorkspaceRenderError(error) {
-    if (currentAppPath === "/overview" || currentAppPath === "/") {
+    if (currentAppPath === "/watch" || currentAppPath === "/") {
       if (!isStaleChunkError(error))
         warnOverviewRecovery(
           "render-boundary",
@@ -381,32 +376,27 @@
   let destinationSkeleton = $derived(getDestinationSkeleton(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
   const shellNavForTitle = [
+    // PM setup must be tried before Ask: `/pm` prefix-matches it.
+    ...settingsNavItems.filter((item) => item.href === "/pm/setup"),
     ...navigationItems,
-    // PM is an action, not a nav item; it still names its page's title.
-    { label: "PM setup", href: "/pm/setup" },
-    { label: "PM", href: "/pm" },
     ...settingsNavItems,
   ];
 
   /*
    * A PM agent runs on the reader's own computer, so a workspace can have
-   * none. Until one is onboarded the shell offers setup instead of Ask PM,
-   * and every other PM surface is absent (see `pm/onboardingState.js`). State
-   * the shell has not read yet shows neither: naming the product's
-   * primary verb on a guess is worse than showing nothing for a moment.
+   * none. Until one is connected Ask is not shown at all (setup is one hop
+   * down under Settings), and every other PM surface is absent (see
+   * `pm/onboardingState.js`). State the shell has not read yet shows
+   * nothing: naming Ask on a guess is worse than showing it a moment late.
    */
   let pmState = $derived(
     $pmPresence.workspace === activeWorkspaceSlug ? $pmPresence : null,
   );
   let pmVisible = $derived(pmFeaturesVisible(pmState));
-  let pmNeedsSetup = $derived(pmSetupOffered(pmState));
-  /*
-   * Until core answers, the slot holds its space but says nothing: either
-   * label would be a guess, and guessing makes it flash in and out on every
-   * load. A read that never succeeds leaves it empty rather than offering a
-   * conversation that cannot happen.
-   */
-  let pmSlotKnown = $derived(pmStateKnown(pmState));
+  /** Primary items the shell renders: Ask only while a PM is connected. */
+  let shellPrimaryItems = $derived(
+    navigationItems.filter((item) => !item.requiresPm || pmVisible),
+  );
 
   let pageTitle = $derived(() => {
     const navItem = shellNavForTitle.find(
@@ -839,35 +829,23 @@
   }
 
   function isActive(href) {
-    return (
-      (href === "/overview" && currentAppPath === "/") ||
-      currentAppPath === href ||
-      currentAppPath.startsWith(`${href}/`)
-    );
+    if (href === "/decide" && currentAppPath === "/") return true;
+    // `/pm` prefix-matches PM setup, which is not the conversation.
+    if (href === "/pm" && currentAppPath.startsWith("/pm/setup")) return false;
+    return currentAppPath === href || currentAppPath.startsWith(`${href}/`);
   }
 
   let workspaceHref = $derived(
     bindWorkspaceHref(activeOrganizationSlug, activeWorkspaceSlug),
   );
 
-  let pmActionHref = $derived(
-    workspaceHref(pmNeedsSetup ? "/pm/setup" : "/pm"),
-  );
-  let pmActionLabel = $derived(pmNeedsSetup ? "Set up your PM" : "Ask PM");
-  /*
-   * `isActive` prefix-matches, so Ask PM would read as the current page while
-   * the reader is on PM setup (reached from "Manage"). Each state marks only
-   * the page its own link goes to.
-   */
-  let pmActionActive = $derived(
-    pmNeedsSetup
-      ? isActive("/pm/setup")
-      : isActive("/pm") && !isActive("/pm/setup"),
-  );
-
   function switchDestination(workspace) {
     // Resource IDs belong to one workspace. Switch to the corresponding list.
-    const section = currentAppPath.split("/")[1] || "overview";
+    const rawSection = currentAppPath.split("/")[1] || "decide";
+    const section =
+      { inbox: "decide", overview: "watch", tasks: "initiatives" }[
+        rawSection
+      ] ?? rawSection;
     return workspacePath(
       workspace.organizationSlug,
       workspace.slug,
@@ -898,14 +876,16 @@
   /** @param {string} href */
   function dataTourForNav(href) {
     switch (String(href)) {
-      case "/overview":
-        return "overview";
-      case "/inbox":
-        return "inbox";
+      case "/decide":
+        return "decide";
+      case "/watch":
+        return "watch";
+      case "/pm":
+        return "pm";
       case "/agents":
         return "agents";
-      case "/tasks":
-        return "tasks";
+      case "/initiatives":
+        return "initiatives";
       case "/docs":
         return "docs";
       case "/access":
@@ -1158,52 +1138,6 @@
             <span class="shell-nav-copy">Search</span>
             <kbd class="shell-search-kbd">⌘K</kbd>
           </button>
-          <!--
-            One slot for the PM, whatever state it is in: the product's
-            primary verb once a PM is onboarded, and the single calm way in
-            before that. Never two entry points, and never a dead one — and
-            nothing at all until core says which it is, so the row cannot
-            flash the wrong label on the way in.
-          -->
-          {#if !pmSlotKnown}
-            <!--
-              Holds the row's space so the sidebar does not jump, and keeps
-              the tour's spotlight target so its PM step still has something
-              to point at.
-            -->
-            <div
-              class="shell-ask-pm shell-ask-pm--pending"
-              data-tour="pm"
-              aria-hidden="true"
-            ></div>
-          {:else}
-            <a
-              class="shell-ask-pm {pmNeedsSetup ? 'shell-ask-pm--setup' : ''}"
-              href={pmActionHref}
-              data-tour="pm"
-              data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
-              aria-label={pmActionLabel}
-              title={navCollapsed ? pmActionLabel : undefined}
-              aria-current={pmActionActive ? "page" : undefined}
-            >
-              <svg
-                class="shell-ask-pm-icon"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d={navIconPath("askPm")} />
-              </svg>
-              <span class="shell-nav-copy">{pmActionLabel}</span>
-              {#if !pmNeedsSetup}
-                <kbd class="shell-search-kbd">⌘J</kbd>
-              {/if}
-            </a>
-          {/if}
         </div>
 
         <div class="shell-sidebar-main">
@@ -1311,7 +1245,7 @@
           {/if}
 
           <nav class="shell-nav" aria-label="Primary">
-            {#each navigationItems as item}
+            {#each shellPrimaryItems as item (item.href)}
               {@const active = isActive(item.href)}
               {@const tour = dataTourForNav(item.href)}
               <a
@@ -1339,16 +1273,8 @@
                     <span class="shell-nav-hint">{item.hint}</span>
                   {/if}
                 </span>
-                {#if item.count === "inbox-needs-you"}
+                {#if item.count === "decide-waiting"}
                   <InboxNavCount
-                    workspace={activeWorkspaceSlug}
-                    enabled={identityReady &&
-                      !workspaceBootstrapPending &&
-                      !shouldRedirectToLogin}
-                  />
-                {/if}
-                {#if item.count === "agents-working"}
-                  <AgentsNavCount
                     workspace={activeWorkspaceSlug}
                     enabled={identityReady &&
                       !workspaceBootstrapPending &&
@@ -1653,7 +1579,7 @@
     </div>
 
     <nav class="shell-bottom-nav" aria-label="Primary navigation">
-      {#each navigationItems as item}
+      {#each shellPrimaryItems as item (item.href)}
         {@const active = isActive(item.href)}
         {@const tour = dataTourForNav(item.href)}
         <a
@@ -1676,17 +1602,8 @@
             <path d={navIconPath(item.icon)} />
           </svg>
           <span class="shell-bottom-nav-label">{item.label}</span>
-          {#if item.count === "inbox-needs-you"}
+          {#if item.count === "decide-waiting"}
             <InboxNavCount
-              workspace={activeWorkspaceSlug}
-              enabled={identityReady &&
-                !workspaceBootstrapPending &&
-                !shouldRedirectToLogin}
-              variant="bottom"
-            />
-          {/if}
-          {#if item.count === "agents-working"}
-            <AgentsNavCount
               workspace={activeWorkspaceSlug}
               enabled={identityReady &&
                 !workspaceBootstrapPending &&
@@ -1696,52 +1613,6 @@
           {/if}
         </a>
       {/each}
-      <!--
-        Same rule as the sidebar slot: hold the tab, say nothing yet. All
-        three states share the glyph box and a label sized to the longer of
-        the two, so the bar keeps its geometry when the PM read lands.
-      -->
-      {#snippet pmTabLabel(shown)}
-        <span class="shell-bottom-nav-label shell-bottom-nav-label-stack">
-          <span class:invisible={shown !== "ask"}>Ask PM</span>
-          <span class:invisible={shown !== "setup"}>PM setup</span>
-        </span>
-      {/snippet}
-      {#if !pmSlotKnown}
-        <span class="shell-bottom-nav-item" aria-hidden="true">
-          <span class="shell-bottom-nav-glyph"></span>
-          {@render pmTabLabel("")}
-        </span>
-      {:else}
-        <a
-          class="shell-bottom-nav-item {pmNeedsSetup
-            ? ''
-            : 'shell-bottom-nav-item--accent'}"
-          href={pmActionHref}
-          data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
-          aria-current={pmActionActive ? "page" : undefined}
-        >
-          <span class="shell-bottom-nav-glyph" aria-hidden="true">
-            <svg
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d={navIconPath("askPm")} />
-            </svg>
-          </span>
-          <!--
-            Neither "Set up your PM" nor "Set up PM" fits a phone tab: at
-            390px seven tabs leave about 48px each, and "Set up PM" wrapped
-            onto a second line, pushing this tab's glyph out of line with the
-            other six. The page the tab opens says the rest.
-          -->
-          {@render pmTabLabel(pmNeedsSetup ? "setup" : "ask")}
-        </a>
-      {/if}
       <a
         class="shell-bottom-nav-item {moreBottomNavActive
           ? 'shell-bottom-nav-item--active'

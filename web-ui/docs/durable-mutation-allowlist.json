@@ -222,7 +222,7 @@
       "revealSecret": 1
     }
   },
-  "routes/o/[organization]/w/[workspace]/tasks/+page.svelte": {
+  "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte": {
     "classification": "transport",
     "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
@@ -230,17 +230,17 @@
       "raw-fetch": 1
     }
   },
-  "routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte": {
+  "routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte": {
     "classification": "stage-2",
     "reason": "TODO: work refresh intent/replay; fetch is PM presence wiring and resolveRefs is a read helper.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1,
       "requestWorkRefresh": 1,
-      "resolveRefs": 1
+      "resolveRefs": 2
     }
   },
-  "routes/o/[organization]/w/[workspace]/tasks/new/+page.svelte": {
+  "routes/o/[organization]/w/[workspace]/initiatives/new/+page.svelte": {
     "classification": "transport",
     "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",

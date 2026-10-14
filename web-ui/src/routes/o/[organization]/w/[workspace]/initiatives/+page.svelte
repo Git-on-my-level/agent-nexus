@@ -107,7 +107,7 @@
       workspaceSlug: $page.params.workspace,
       hostedMode: $page.data?.shellCapabilities?.mode === "hosted",
       workspaceId: $page.data?.workspace?.workspaceId,
-      currentAppPath: "/tasks",
+      currentAppPath: "/initiatives",
       search: $page.url.search,
     });
   }
@@ -351,12 +351,12 @@
     );
   }
   function queryHref(changes) {
-    return `${workspaceHref("/tasks")}?${filterParams(changes)}`;
+    return `${workspaceHref("/initiatives")}?${filterParams(changes)}`;
   }
   function navigateFilters(changes) {
     const params = filterParams(changes);
     inflightSearch.set(params);
-    void goto(`${workspaceHref("/tasks")}?${params}`, {
+    void goto(`${workspaceHref("/initiatives")}?${params}`, {
       keepFocus: true,
       noScroll: true,
     });
@@ -685,7 +685,7 @@
     try {
       await enqueueTaskMove(draft, {
         draftTarget: "tasks:move",
-        href: workspaceHref("/tasks?view=board"),
+        href: workspaceHref("/initiatives?view=board"),
       });
       setMoveNotice(
         { text: `Saved move to ${label(phase)}. Waiting for confirmation.` },
@@ -714,7 +714,7 @@
     if (missing)
       return `Nothing exists at ${missing[1]}. Evidence must be an existing artifact or event: pick one from the list, or paste the ref of the file or event that proves completion.`;
     if (/must include artifact: or event:/i.test(raw))
-      return "Evidence must be an artifact or an event ref (artifact:… or event:…); a task ref is not proof.";
+      return "Evidence must be an artifact or an event ref (artifact:… or event:…); an initiative ref is not proof.";
     return raw;
   }
   function isTextEntryTarget(target) {
@@ -820,7 +820,7 @@
                     },
             }
           : {
-              text: `Move request confirmed. Review it in Inbox.${entry.result.decision.supersedes ? " This replaced an earlier proposal for this task." : ""}`,
+              text: `Move request confirmed. Review it in Inbox.${entry.result.decision.supersedes ? " This replaced an earlier proposal for this initiative." : ""}`,
               href: workspaceHref(
                 `/inbox?item=decision:${encodeURIComponent(entry.result.decision.id)}`,
               ),
@@ -943,13 +943,13 @@
     ["other", "Other"],
   ];
   const SHORTCUTS = [
-    ["Next task", ["J"]],
-    ["Previous task", ["K"]],
-    ["Open focused task", ["Enter"]],
-    ["Move focused task to the previous or next phase (board)", ["←", "→"]],
-    ["Board view", ["B"]],
+    ["Next initiative", ["J"]],
+    ["Previous initiative", ["K"]],
+    ["Open focused initiative", ["Enter"]],
+    ["Move focused initiative to the previous or next placement", ["←", "→"]],
+    ["Placement view", ["B"]],
     ["Table view", ["T"]],
-    ["Go to Overview, Inbox, Agents, Tasks or Docs", ["G", "O I A T D"]],
+    ["Go to Overview, Inbox, Agents, Initiatives or Docs", ["G", "O I A T D"]],
     ["Commands and search", [formatShortcut("K")]],
     ["Shortcut help", ["?"]],
     ["Close this help", ["Esc"]],
@@ -970,12 +970,12 @@
     }
   });
 
-  usePageTitle(() => "Tasks · Agent Nexus");
+  usePageTitle(() => "Initiatives · Agent Nexus");
 </script>
 
 <svelte:window onkeydown={handleShortcutKeydown} />
 <WorkspacePageShell>
-  <WorkspacePageHeader title="Tasks">
+  <WorkspacePageHeader title="Initiatives">
     {#snippet subtitle()}
       {#if !visible.length && loading && !records.length}
         <!-- Holds the counts line so the page does not shift when it lands. -->
@@ -1029,7 +1029,7 @@
           >Ask PM</a
         >
       {/if}
-      <a class="ui-btn-primary" href={workspaceHref("/tasks/new")}>New task</a>
+      <a class="ui-btn-primary" href={workspaceHref("/initiatives/new")}>New initiative</a>
     {/snippet}
   </WorkspacePageHeader>
 
@@ -1041,7 +1041,7 @@
         setFilter("q", search);
       }}
     >
-      <label class="sr-only" for="task-search">Search tasks</label>
+      <label class="sr-only" for="task-search">Search initiatives</label>
       <input
         id="task-search"
         class="ui-input"
@@ -1054,7 +1054,7 @@
          390px screen, so the toggle that leads there is hidden below 640px. -->
     <nav
       class="hidden rounded-md border border-line bg-bg-soft p-0.5 sm:flex"
-      aria-label="Task view"
+      aria-label="Initiative view"
     >
       <a
         class="rounded px-2.5 py-1 text-micro font-medium {view === 'table'
@@ -1068,7 +1068,7 @@
           ? 'bg-panel text-fg'
           : 'text-fg-muted'}"
         href={queryHref({ view: "board" })}
-        aria-current={view === "board" ? "page" : undefined}>Board</a
+        aria-current={view === "board" ? "page" : undefined}>By placement</a
       >
     </nav>
   </div>
@@ -1076,8 +1076,8 @@
   {#if initiativesOnly && !initiativesPending}
     <p class="text-micro text-fg-muted" data-task-initiatives-filter>
       {initiativeBoardRefs.size
-        ? "Showing tasks on the initiatives board."
-        : "No board has the initiatives role, so there is nothing to show. Set it on a board to use this filter."}
+        ? "Showing initiatives only."
+        : "No initiatives are marked yet, so there is nothing to show. Mark one to use this filter."}
       <a class="ui-prose-link" href={queryHref({ initiatives: "" })}>Clear</a>
     </p>
   {/if}
@@ -1099,7 +1099,7 @@
     toggleTestId="tasks-filters-toggle"
     panelTestId="tasks-filter-panel"
     openWhenFiltered={activeFilters}
-    onclear={() => void goto(workspaceHref(`/tasks?view=${view}`))}
+    onclear={() => void goto(workspaceHref(`/initiatives?view=${view}`))}
   >
     {#snippet children()}
       <div class="flex items-end gap-2">
@@ -1144,7 +1144,7 @@
           onchange={(event) =>
             setFilter("initiatives", event.currentTarget.value)}
         >
-          <option value="">All tasks</option>
+          <option value="">All initiatives</option>
           <option value="1">Initiatives only</option>
         </select>
       </div>
@@ -1190,7 +1190,7 @@
             name="project_ref"
             class="ui-input w-auto"
             value={filters.project_ref}
-            placeholder="topic:project"
+            placeholder="project:name"
             onchange={(event) =>
               setFilter("project_ref", event.currentTarget.value.trim())}
           />
@@ -1327,14 +1327,12 @@
     />
   {/if}
 
-  {#if reconnecting || (loading && records.length)}
-    <p class="text-micro text-fg-muted" role="status">
-      {reconnecting ? "Reconnecting…" : "Refreshing…"}
-    </p>
+  {#if reconnecting}
+    <p class="text-micro text-fg-muted" role="status">Reconnecting…</p>
   {/if}
   {#if error}
     <StateError
-      title="Tasks could not be refreshed"
+      title="Initiatives could not be refreshed"
       message={error}
       onretry={sessionExpired ? signInAgain : () => load()}
       retryLabel={sessionExpired ? "Sign in again" : "Retry"}
@@ -1352,8 +1350,8 @@
     <div aria-busy="true" data-tasks-loading>
       <p class="sr-only" role="status">
         {initiativesPending && !loading
-          ? "Reading the initiatives board…"
-          : "Loading tasks…"}
+          ? "Reading initiatives…"
+          : "Loading initiatives…"}
       </p>
       {#if view === "board"}
         <div
@@ -1400,19 +1398,19 @@
   {:else if !error && !visible.length}
     <section class="py-14 text-center">
       <h2 class="text-subtitle font-semibold text-fg">
-        {activeFilters ? "No matching tasks" : "Nothing tracked yet"}
+        {activeFilters ? "No matching initiatives" : "Nothing tracked yet"}
       </h2>
       <p class="mx-auto mt-2 max-w-md text-meta text-fg-muted">
         {activeFilters
           ? "Change or clear the filters."
-          : "Create task here, or connect a source so its issues show up."}
+          : "Create an initiative here, or connect a source so its issues show up."}
       </p>
       <a
         class="ui-prose-link mt-4 inline-block text-meta"
         href={activeFilters
-          ? workspaceHref("/tasks")
-          : workspaceHref("/tasks/new")}
-        >{activeFilters ? "Clear filters" : "Create task"}</a
+          ? workspaceHref("/initiatives")
+          : workspaceHref("/initiatives/new")}
+        >{activeFilters ? "Clear filters" : "Create initiative"}</a
       >
     </section>
   {:else if visible.length}

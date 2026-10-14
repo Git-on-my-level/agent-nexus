@@ -194,7 +194,7 @@ describe("timeline utils", () => {
     expect(view.changePreviewLines.some((l) => l.startsWith("Title:"))).toBe(
       false,
     );
-    expect(view.changePreviewLines.some((l) => l.startsWith("Column:"))).toBe(
+    expect(view.changePreviewLines.some((l) => l.startsWith("Stage:"))).toBe(
       true,
     );
     expect(view.changePreviewLines.some((l) => l.startsWith("Summary:"))).toBe(
@@ -212,7 +212,7 @@ describe("timeline utils", () => {
       { threadId: "thread-1" },
     );
     expect(view.headline).toContain("backlog");
-    expect(view.changePreviewLines.some((l) => l.startsWith("Column:"))).toBe(
+    expect(view.changePreviewLines.some((l) => l.startsWith("Stage:"))).toBe(
       false,
     );
   });
@@ -226,7 +226,7 @@ describe("timeline utils", () => {
       },
       { threadId: "thread-1" },
     );
-    expect(view.changePreviewLines.some((l) => l.startsWith("Column:"))).toBe(
+    expect(view.changePreviewLines.some((l) => l.startsWith("Stage:"))).toBe(
       true,
     );
   });
@@ -239,7 +239,7 @@ describe("timeline utils", () => {
         { revision_id: "rv1", document_id: "d1", revision_number: 2 },
       ]),
     );
-    expect(hints["document_revision:rv1"]).toBe("Doc revision 2");
+    expect(hints["document_revision:rv1"]).toBe("Doc version 2");
   });
 
   it("builds label hints from timeline expansions", () => {
@@ -258,7 +258,7 @@ describe("timeline utils", () => {
     expect(hints["artifact:artifact_1"]).toBe("Reproduce issue");
     expect(hints["document:doc_1"]).toBe("Product Constitution");
     expect(hints["document_revision:rev_1"]).toBe(
-      "Product Constitution revision 3",
+      "Product Constitution version 3",
     );
   });
 });

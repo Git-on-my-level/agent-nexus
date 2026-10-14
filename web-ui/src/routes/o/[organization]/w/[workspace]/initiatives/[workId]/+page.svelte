@@ -1,6 +1,5 @@
 <script>
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
-  import { decisionRowStatus } from "$lib/inboxMailbox.js";
   import { onMount, untrack } from "svelte";
   import { get } from "svelte/store";
   import { page } from "$app/stores";
@@ -35,7 +34,13 @@
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import InfoTip from "$lib/components/InfoTip.svelte";
-  import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import DecisionCard from "$lib/components/decide/DecisionCard.svelte";
+  import { briefStore, mountBrief } from "$lib/briefStore.js";
+  import {
+    decisionsForInitiative,
+    initiativeLine,
+    WATCH_STATE_LABELS,
+  } from "$lib/brief.js";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
@@ -44,21 +49,17 @@
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
   import {
     collectPageRefs,
+    isChipRef,
     indexResolvedRefs,
     resolveRefsInBatches,
   } from "$lib/refResolve.js";
-  import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import {
-    decisionPayload,
-    decisionTitle,
     safeSourceHref,
     sourceLabel,
     isNexusOwned,
-    workFreshness,
     workKey,
     errorMessage,
     readErrorExplanation,
-    receiptSignal,
     workSourceKey,
     humanizeInstants,
     connectionName,
@@ -80,10 +81,7 @@
     observationStatusLabel,
     observationStatusTone,
   } from "$lib/pm/evidence.js";
-  import {
-    isPmNotOnboardedRefusal,
-    pmFeaturesVisible,
-  } from "$lib/pm/onboardingState.js";
+  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let work = $state(null),
@@ -100,10 +98,6 @@
     error = $state(""),
     notFound = $state(false),
     evidenceError = $state(""),
-    decisions = $state([]),
-    actions = $state([]),
-    decisionsError = $state(""),
-    decisionsLoading = $state(false),
     notice = $state(""),
     refreshing = $state(false),
     ready = $state(false),
@@ -453,7 +447,12 @@
         ...(work?.definition_of_done ?? []),
         ...(work?.blockers ?? []),
       ],
-      { extraRefs: steps.map((step) => step?.ref).filter(Boolean) },
+      {
+        extraRefs: [
+          ...steps.map((step) => step?.ref),
+          ...(work?.relations ?? []).map((relation) => relation?.ref),
+        ].filter(Boolean),
+      },
     );
     if (!refs.length) return;
     try {
@@ -466,11 +465,40 @@
       if (read.live()) planRefs = indexResolvedRefs({}, refs);
     }
   }
+  const briefState = briefStore();
+  let initiativeRef = $derived(`card:${workId}`);
+  let briefRow = $derived(
+    $briefState.data?.initiatives?.find((row) => row.ref === initiativeRef) ??
+      null,
+  );
+  let briefParts = $derived(briefRow ? initiativeLine(briefRow, now) : []);
+  let decisions = $derived(
+    decisionsForInitiative($briefState.data, initiativeRef),
+  );
+  /**
+   * Evidence refs arrive with the observations, after the plan's batch. They
+   * are resolved here once, so a chip shows a title rather than an id.
+   */
+  $effect(() => {
+    const refs = [];
+    for (const observation of observations)
+      for (const entry of observation?.evidence ?? [])
+        if (entry?.ref && isChipRef(entry.ref) && !planRefs.has(entry.ref))
+          refs.push(entry.ref);
+    const wanted = [...new Set(refs)];
+    if (!wanted.length) return;
+    const card = requestId;
+    resolveRefsInBatches(wanted, (batch) => coreClient.resolveRefs(batch))
+      .then((resolved) => {
+        if (card === requestId)
+          planRefs = new Map([...planRefs, ...resolved]);
+      })
+      .catch(() => {});
+  });
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   let workId = $derived($page.params.workId);
-  let signal = $derived(workFreshness(work));
   let pmState = $derived(
     $pmPresence.workspace === ($page.data?.workspace?.slug ?? "")
       ? $pmPresence
@@ -552,12 +580,11 @@
       sourceDetailsWorthShowing ||
       work?.project_ref ||
       work?.start_at ||
-      work?.due_at ||
-      cardSummary?.attention,
+      work?.due_at,
     ),
   );
   let hasDetails = $derived(
-    Boolean(work?.relations?.length || work?.executions?.length),
+    Boolean(work?.executions?.length),
   );
   $effect(() => {
     const id = workId;
@@ -570,11 +597,9 @@
     error = "";
     notFound = false;
     evidenceError = "";
-    decisionsError = "";
     refreshing = false;
     notice = "";
     observations = [];
-    decisions = [];
     mirrors = [];
     showAllLinks = false;
     nextCursor = "";
@@ -596,13 +621,11 @@
     workPartial = Boolean(snapshot && !snapshot.full);
 
     /*
-     * Everything this page needs, started at once. The plan and the PM
-     * decisions used to wait for `work.get` to come back first, which turned
-     * one round trip into three in sequence — neither of them needs the card
-     * record to be issued, only to be filed.
+     * Everything this page needs, started at once. The plan used to wait for
+     * `work.get` to come back first, which turned one round trip into two in
+     * sequence — it does not need the card record to be issued, only filed.
      */
     const planRead = loadPlanRequest(read, id);
-    const decisionsLoaded = decisionsRequest(ticket);
     const results = await Promise.allSettled([
       // `summary=1`: core computes the shared summary only when asked.
       coreClient.getWork(id, { summary: 1 }),
@@ -621,11 +644,10 @@
         work = record;
         workPartial = false;
       }
-      if (!record) error = "The workspace did not return this task.";
+      if (!record) error = "The workspace did not return this initiative.";
       else {
         cacheWorkRecord(record);
         void loadMirrors(ticket, record);
-        void fileDecisions(ticket, record, decisionsLoaded);
         void filePlan(read, planRead);
       }
     } else if (read.live()) {
@@ -635,8 +657,6 @@
       work = null;
       workPartial = false;
     }
-    // Nothing will file the decisions now, so the panel must stop waiting.
-    if (!work) decisionsLoading = false;
     if (results[1].status === "fulfilled") {
       observations = results[1].value.observations || [];
       nextCursor = results[1].value.next_cursor || "";
@@ -663,67 +683,6 @@
     }
     if (!read.live()) return;
     void filePlan(read, loadPlanRequest(read, workId));
-  }
-  /** Every page of one paginated PM list, in order. */
-  async function readAllPages(read) {
-    const items = [];
-    let cursor;
-    for (let page = 0; page < 10; page += 1) {
-      const result = await read(cursor);
-      items.push(...(result?.items || []));
-      cursor = result?.next_cursor || "";
-      if (!cursor) break;
-    }
-    return items;
-  }
-
-  /**
-   * Decisions and their receipts, both started with the card read rather than
-   * after it. Neither list is filtered by card server-side yet, so the page
-   * reads them and files them itself — but it no longer reads one, then the
-   * other, then waits for the card first.
-   */
-  function decisionsRequest(ticket) {
-    decisionsLoading = true;
-    decisionsError = "";
-    decisions = [];
-    return Promise.all([
-      readAllPages((cursor) =>
-        coreClient.listPmDecisions({ limit: 200, cursor }),
-      ),
-      // Receipts decide what an answered decision reads as; fail soft.
-      readAllPages((cursor) =>
-        coreClient.listPmActions({ limit: 200, cursor }),
-      ).catch(() => []),
-    ]).catch((err) => {
-      if (ticket !== requestId) return null;
-      /*
-       * Core refuses the PM routes outright where no PM is onboarded. There
-       * are then no proposals on this task, which is an empty section rather
-       * than "Decisions unavailable" on a page that is not about the PM.
-       */
-      if (isPmNotOnboardedRefusal(err)) {
-        decisionsLoading = false;
-        return [[], []];
-      }
-      decisionsError = errorMessage(err);
-      decisionsLoading = false;
-      return null;
-    });
-  }
-
-  async function fileDecisions(ticket, loadedWork, request) {
-    const result = await request;
-    if (ticket !== requestId || !result) return;
-    const [items, receipts] = result;
-    actions = receipts;
-    const ref = workKey(loadedWork);
-    decisions = items
-      .filter((decision) => decision.work_ref === ref)
-      .sort(
-        (a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0),
-      );
-    decisionsLoading = false;
   }
   async function loadMirrors(ticket, loadedWork) {
     const key = workSourceKey(loadedWork);
@@ -781,6 +740,7 @@
   }
   onMount(() => {
     let disposed = false;
+    const stopBrief = mountBrief();
     // A move or assignment made elsewhere (the ⌘K palette, an agent, the
     // board) re-reads this task's record and its plan. Reader reports are
     // refreshed by "Check <source> now" and by re-opening the card.
@@ -825,29 +785,30 @@
       disposed = true;
       requestId++;
       stopLive();
+      stopBrief();
       window.clearInterval(clock);
     };
   });
 
-  usePageTitle(() => `${work?.title || "Task"} · Agent Nexus`);
+  usePageTitle(() => `${work?.title || "Initiative"} · Agent Nexus`);
 </script>
 
 <svelte:window bind:innerWidth={viewportWidth} />
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-fg-muted hover:text-fg"
-    href={workspaceHref("/tasks")}>← Tasks</a
+    href={workspaceHref("/initiatives")}>← Initiatives</a
   >
   {#if error && notFound}
-    <!-- A missing task is not an outage: retrying a 404 cannot help. -->
+    <!-- A missing initiative is not an outage: retrying a 404 cannot help. -->
     <StateEmpty
-      title="Task not found"
+      title="Initiative not found"
       helper="It may have been removed, or this link points somewhere else."
-      actionLabel="Back to tasks"
-      actionHref={workspaceHref("/tasks")}
+      actionLabel="Back to initiatives"
+      actionHref={workspaceHref("/initiatives")}
     />
   {:else if error}<StateError
-      title="Task unavailable"
+      title="Initiative unavailable"
       message={error}
       onretry={() => load()}
       retrying={loading}
@@ -865,47 +826,42 @@
     </div>
   {/if}
   {#if work}
-    <WorkspacePageHeader title={work.title || "Untitled task"}>
+    <WorkspacePageHeader title={work.title || "Untitled initiative"}>
       {#snippet subtitle()}
         <!-- Baseline, not centre: the summary can run to a second line, and
              the badges belong on its first. -->
-        <span class="flex flex-wrap items-baseline gap-1.5">
-          <!--
-            The card's computed state, with the reason core gave for it and,
-            when the board disagrees, what it is filed as. The header used to
-            print the stored phase on its own, which is exactly the thing the
-            Tasks table and the Overview could then contradict.
-
-            One line of it: the badge, the step count, the age and who the
-            next step is with. The generic health sentence that used to sit
-            under it ("Open steps are progressing.") is gone from the model
-            itself — it restated the badge — so the line below this one
-            appears only when core named a cause worth reading.
-          -->
-          <WorkSummary
-            summary={cardSummary}
-            density="header"
-            title={work.title}
-            {waitingLabel}
-            {now}
-          />
-          {#if !nexusOwned}
-            <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
-          {/if}
-          {#if !workPartial && !work.definition_of_done?.length}
-            <!-- A badge, not a sentence: the reader needs the fact, not a
-                 lecture about what a finished run cannot do.
-
-                 Only once the card itself has been read: a list row does not
-                 carry acceptance criteria, so claiming there are none from one
-                 would be a warning the page invented. -->
-            <SignalBadge tone="warn">No acceptance criteria</SignalBadge>
+        <span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <!-- State and its reason come from the brief, the one computed
+               read. Nothing on this line is stored or hand-written. -->
+          {#if briefRow}
+            <span
+              class="text-meta font-medium text-fg"
+              data-source="computed:initiatives.state"
+              >{WATCH_STATE_LABELS[briefRow.state]}</span
+            >
+            {#each briefParts as part (part.field)}
+              <span
+                class="text-meta text-fg-muted"
+                data-source={`computed:${part.field}`}>{part.text}</span
+              >
+            {/each}
+            {#if briefRow.progress}
+              <span
+                class="text-meta text-fg-muted"
+                data-source="computed:initiatives.progress"
+                >{briefRow.progress.done} of {briefRow.progress.total} done</span
+              >
+            {/if}
+          {:else if !$briefState.data}
+            <span class="text-micro text-fg-subtle" role="status"
+              >Reading state…</span
+            >
           {/if}
           {#if workPartial}
             <!-- The list's own row is on screen while the card is read. Say
                  so rather than letting a partial view pass for the whole. -->
             <span class="text-micro text-fg-subtle" role="status"
-              >Reading the card…</span
+              >Reading the initiative…</span
             >
           {/if}
         </span>
@@ -940,28 +896,35 @@
       data-task-rail={railCollapsed ? "collapsed" : "expanded"}
     >
       <div class="min-w-0 space-y-7">
-        <!--
-          An initiative leads with its plan: where it stands, how healthy it is
-          and what the shape of the remaining work looks like. The card body is
-          still here, below the sections that answer those questions first.
-        -->
+        {#if cardProse}
+          <!-- The description, once, collapsed. The plan below is the
+               working view; this is only what the initiative was filed as. -->
+          <details class="text-meta" data-initiative-description>
+            <summary class="w-fit cursor-pointer text-micro text-fg-muted"
+              >Description</summary
+            >
+            <MarkdownRenderer
+              source={cardProse}
+              class="mt-2 text-meta text-fg [overflow-wrap:anywhere]"
+              resolved={planRefs}
+              organizationSlug={$page.params.organization}
+              workspaceSlug={$page.params.workspace}
+              onpreview={(model, anchor) => refPreview?.open(model, anchor)}
+              onpreviewclose={() => refPreview?.requestClose()}
+            />
+          </details>
+        {/if}
         {#if plan}
           <section data-initiative-plan>
             <div class="flex flex-wrap items-baseline justify-between gap-2">
               <h2 class="ui-label">Plan</h2>
-              <div class="flex flex-wrap items-center gap-2">
-                <!-- Computed on every read, not maintained by hand. Saying so
-                     here is what distinguishes it from the card body below.
-                     The plan's status, progress and age are in the page
-                     header above: one summary per page, not two. -->
-                <ProvenanceChip
-                  model={liveProvenance(
-                    planReadAt,
-                    { status: planReadAt ? "ok" : "loading" },
-                    now,
-                  )}
-                />
-              </div>
+              <ProvenanceChip
+                model={liveProvenance(
+                  planReadAt,
+                  { status: planReadAt ? "ok" : "loading" },
+                  now,
+                )}
+              />
             </div>
             <div class="mt-3">
               <PlanView
@@ -975,24 +938,11 @@
               />
             </div>
           </section>
-        {:else if cardProse}
-          <MarkdownRenderer
-            source={cardProse}
-            class="text-meta text-fg [overflow-wrap:anywhere]"
-            resolved={planRefs}
-            organizationSlug={$page.params.organization}
-            workspaceSlug={$page.params.workspace}
-            onpreview={(model, anchor) => refPreview?.open(model, anchor)}
-            onpreviewclose={() => refPreview?.requestClose()}
-          />
         {/if}
         {#if work.definition_of_done?.length}
           <section>
             <h2 class="ui-label">Done when</h2>
             <ul class="list-disc space-y-1 break-words pl-5 text-meta text-fg">
-              <!-- Criteria are authored text: a `card:` in one is the same
-                   chip it is anywhere else, and `\`On tr…\`` is a code span,
-                   not three backticks. -->
               {#each work.definition_of_done as criterion}<li>
                   <MarkdownRenderer
                     inline
@@ -1007,10 +957,16 @@
                 </li>{/each}
             </ul>
           </section>
+        {:else if !workPartial}
+          <!-- Only once the card itself has been read: a list row does not
+               carry acceptance criteria. Start-aligned with its section. -->
+          <section class="flex justify-start" data-no-acceptance-criteria>
+            <SignalBadge tone="warn">No acceptance criteria</SignalBadge>
+          </section>
         {/if}
         {#if hasNext}
           <section>
-            <h2 class="ui-label">Next</h2>
+            <h2 class="ui-label">Who is next</h2>
             <!--
               Who acts next, as a name a reader recognises. A `next_actor` no
               registry can name is a role, not a principal, so it is written
@@ -1021,53 +977,13 @@
                   label={nextActor.label}
                   seed={nextActor.id}
                   size="xs"
-                  prefix={shownNextSteps.length ? waitingVerb : "owner"}
+                  prefix={nextSteps.length ? waitingVerb : "owner"}
                 />{:else if nextActor}<span
                   class="min-w-0 break-words text-fg [overflow-wrap:anywhere]"
                   data-next-actor-role
                   >Next actor: {nextActor.label} — no principal named</span
                 >{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
             </p>
-            {#if shownNextSteps.length}
-              <!-- The steps core computed as ready: their dependencies are
-                   done and nothing about them is blocked. Named by the plan's
-                   own titles rather than by their raw ids. -->
-              <ul
-                class="mt-1 list-disc space-y-1 break-words pl-5 text-meta text-fg"
-                data-next-steps
-              >
-                {#each shownNextSteps as step (step.id)}
-                  <li data-next-step={step.id}>
-                    {step.title}
-                    {#if step.ref}
-                      <span class="ml-1 align-middle">
-                        <AnxRefChip
-                          refValue={step.ref}
-                          resolved={planRefs}
-                          organizationSlug={$page.params.organization}
-                          workspaceSlug={$page.params.workspace}
-                          showKind={false}
-                          onpreview={(model, anchor) =>
-                            refPreview?.open(model, anchor)}
-                          onpreviewclose={() => refPreview?.requestClose()}
-                        />
-                      </span>
-                    {/if}
-                  </li>
-                {/each}
-                {#if moreNextSteps}
-                  <li class="text-fg-muted" data-next-more>
-                    +{moreNextSteps} more ready
-                  </li>
-                {/if}
-              </ul>
-            {:else if plan}
-              <!-- The plan has steps left and core says none of them is ready.
-                   Why is the status badge's job, not a second opinion here. -->
-              <p class="mt-1 text-meta text-fg-muted" data-next-none>
-                No step is ready to start.
-              </p>
-            {/if}
             {#if nextNote}
               <div
                 class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1"
@@ -1096,6 +1012,32 @@
               </p>{/if}
           </section>
         {/if}
+        <section data-initiative-decisions>
+          <h2 class="ui-label">Open decisions</h2>
+          {#if decisions.length}
+            <ul class="mt-3 space-y-3">
+              {#each decisions as decision (decision.ref)}
+                <li><DecisionCard {decision} variant="row" /></li>
+              {/each}
+            </ul>
+          {:else if $briefState.error && !$briefState.data}
+            <p class="mt-2 text-meta text-fg-muted" role="status">
+              Decisions could not be read.
+              <button
+                class="ui-prose-link"
+                type="button"
+                onclick={() => briefState.refresh({ force: true })}
+                >Retry</button
+              >
+            </p>
+          {:else if !$briefState.data}
+            <p class="mt-2 text-meta text-fg-muted" role="status">
+              Loading decisions…
+            </p>
+          {:else}
+            <p class="mt-2 text-meta text-fg-muted">Nothing waiting on you.</p>
+          {/if}
+        </section>
         <!-- Nothing to report is not worth a line. An empty Participation
              section on a card nobody has run against said "No activity ·
              Check again", directly above an Evidence section saying "No
@@ -1109,12 +1051,12 @@
           class={evidenceWorthShowing ? "" : "hidden"}
           data-task-evidence
         >
-          <h2 class="ui-label">Evidence</h2>
+          <h2 class="ui-label">Evidence, newest first</h2>
           <EvidenceHandoff
             {observations}
             unavailable={Boolean(evidenceError) && !observations.length}
             note={nexusOwned && !lastCheckedAt && !observations.length
-              ? "This task was created here, so there is no outside tracker to read back from."
+              ? "This initiative was created here, so there is no outside tracker to read back from."
               : ""}
           />
           {#if nexusOwned && !lastCheckedAt && !observations.length}
@@ -1174,7 +1116,15 @@
                 >
                   {#each visibleLinks as link (link.key)}
                     <li class="min-w-0 break-words">
-                      {#if link.href}<a
+                      {#if link.ref && isChipRef(link.ref)}<AnxRefChip
+                          refValue={link.ref}
+                          resolved={planRefs}
+                          organizationSlug={$page.params.organization}
+                          workspaceSlug={$page.params.workspace}
+                          onpreview={(model, anchor) =>
+                            refPreview?.open(model, anchor)}
+                          onpreviewclose={() => refPreview?.requestClose()}
+                        />{:else if link.href}<a
                           class="text-accent-text hover:underline"
                           href={link.href}
                           target="_blank"
@@ -1244,9 +1194,9 @@
               />
             </div>{/if}
           {#if observations.length}
-            <details class="mt-3 text-micro text-fg-muted">
+            <details open class="mt-3 text-micro text-fg-muted">
               <summary class="w-fit cursor-pointer"
-                >Observation history{nextCursor
+                >Timeline{nextCursor
                   ? ""
                   : ` (${observations.length})`}</summary
               >
@@ -1280,6 +1230,17 @@
                           >{humanizeInstants(row.message)}</span
                         >{/if}
                     {:else if observation.evidence?.length}
+                      {#each observation.evidence.filter((entry) => entry?.ref && isChipRef(entry.ref)) as entry (entry.ref)}
+                        <AnxRefChip
+                          refValue={entry.ref}
+                          resolved={planRefs}
+                          organizationSlug={$page.params.organization}
+                          workspaceSlug={$page.params.workspace}
+                          onpreview={(model, anchor) =>
+                            refPreview?.open(model, anchor)}
+                          onpreviewclose={() => refPreview?.requestClose()}
+                        />
+                      {/each}
                       <span class="text-micro text-fg-subtle"
                         >· {observation.evidence.length === 1
                           ? "1 link"
@@ -1306,19 +1267,15 @@
               >
               <ul class="mt-2 space-y-1">
                 {#each mirrors as mirror (workKey(mirror))}
-                  {@const mirrorRead = workFreshness(mirror)}
                   <li class="flex flex-wrap items-center gap-2">
                     <a
                       class="text-accent-text hover:underline"
                       href={workspaceHref(
-                        `/tasks/${encodeURIComponent(workKey(mirror))}`,
+                        `/initiatives/${encodeURIComponent(workKey(mirror))}`,
                       )}
                       >{mirror.source?.connection_id
                         ? connectionName(mirror.source)
                         : "Other connection"}</a
-                    >
-                    <SignalBadge tone={mirrorRead.tone}
-                      >{mirrorRead.label}</SignalBadge
                     >
                   </li>
                 {/each}
@@ -1326,119 +1283,36 @@
             </details>
           {/if}
         </section>
-        <section
-          class={!decisionsLoading && !decisions.length && !decisionsError
-            ? "hidden"
-            : ""}
-        >
-          <h2 class="ui-label">Decisions</h2>
-          {#if decisionsError}<div class="mt-3">
-              <StateError
-                title="Decisions unavailable"
-                message={decisionsError}
-                onretry={() => load()}
-              />
-            </div>{/if}
-          {#if decisionsLoading && !decisions.length}<p
-              class="mt-3 text-meta text-fg-muted"
-              role="status"
-            >
-              Loading decisions…
-            </p>{/if}
-          <ul
-            class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
-          >
-            {#each decisions as decision (decision.id)}
-              {@const decisionBadge = receiptSignal(
-                decisionRowStatus(decision, actions),
-              )}
-              <li class="py-3">
-                <p class="whitespace-pre-wrap break-words text-meta text-fg">
-                  {decisionTitle(decision, work?.title || "")}
-                </p>
-                {#if decisionPayload(decision)}
-                  <details class="mt-1 text-micro text-fg-muted">
-                    <summary class="cursor-pointer">Proposed payload</summary>
-                    <pre
-                      class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{decisionPayload(
-                        decision,
-                      )}</pre>
-                  </details>
-                {/if}
-                <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                  <ReceiptSignal signal={decisionBadge} /><time
-                    class="text-micro text-fg-muted"
-                    datetime={decision.created_at}
-                    title={formatAbsoluteDateTime(decision.created_at)}
-                    >{formatTimestamp(decision.created_at) ||
-                      "time unknown"}</time
-                  >
-                  {#if decision.status === "awaiting_answer"}<a
-                      class="ui-prose-link text-micro"
-                      href={workspaceHref(
-                        `/inbox?item=decision:${encodeURIComponent(decision.id)}`,
-                      )}>Answer</a
-                    >{/if}
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </section>
-        {#if plan && cardProse}
-          <section data-initiative-body>
-            <div class="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 class="ui-label">Card body</h2>
-              <!--
-                Hand-written prose, next to a plan that is computed.
-                
-                No date and no review deadline. `work.updated_at` is the card's
-                concurrency token — a phase move or a plan write bumps it
-                without anyone touching this prose — so dating the body with it
-                would claim a rewrite that never happened. And a card body is
-                narrative: amber a week later would be noise, not news.
-              -->
-              <ProvenanceChip
-                model={authoredProvenance({ reviewable: false })}
-              />
-            </div>
-            <MarkdownRenderer
-              source={cardProse}
-              class="mt-2 text-meta text-fg [overflow-wrap:anywhere]"
-              resolved={planRefs}
-              organizationSlug={$page.params.organization}
-              workspaceSlug={$page.params.workspace}
-              onpreview={(model, anchor) => refPreview?.open(model, anchor)}
-              onpreviewclose={() => refPreview?.requestClose()}
-            />
-          </section>
-        {/if}
         <!--
           One Details disclosure. Relations, run provenance and the raw reader
           reports are the answers to "prove it" — real, occasionally needed,
           and not what the page is for.
         -->
+        {#if work.relations?.length}
+          <section data-initiative-linked>
+            <h2 class="ui-label">Linked docs and refs</h2>
+            <ul class="mt-2 space-y-1 text-meta">
+              {#each work.relations as relation}<li
+                  class="flex flex-wrap items-center gap-x-2 break-words"
+                >
+                  <span class="text-fg-muted">{relation.kind}</span>
+                  {#if relation.ref && isChipRef(relation.ref)}<AnxRefChip
+                      refValue={relation.ref}
+                      resolved={planRefs}
+                      organizationSlug={$page.params.organization}
+                      workspaceSlug={$page.params.workspace}
+                      onpreview={(model, anchor) =>
+                        refPreview?.open(model, anchor)}
+                      onpreviewclose={() => refPreview?.requestClose()}
+                    />{:else}<span class="text-fg">{relation.ref}</span>{/if}
+                </li>{/each}
+            </ul>
+          </section>
+        {/if}
         {#if hasDetails || observations.length}
           <details class="text-micro text-fg-muted">
             <summary class="w-fit cursor-pointer">Details</summary>
             <div class="mt-3 space-y-5">
-              {#if work.relations?.length}
-                <section>
-                  <h2 class="ui-label">Related</h2>
-                  <ul class="space-y-1 text-meta">
-                    {#each work.relations as relation}<li class="break-words">
-                        <span class="text-fg-muted">{relation.kind}</span>
-                        {#if relation.ref?.startsWith("card:")}<a
-                            class="font-mono text-accent-text hover:underline"
-                            href={workspaceHref(
-                              `/tasks/${encodeURIComponent(relation.ref)}`,
-                            )}>{relation.ref}</a
-                          >{:else}<span class="font-mono text-fg"
-                            >{relation.ref}</span
-                          >{/if}
-                      </li>{/each}
-                  </ul>
-                </section>
-              {/if}
               {#if work.executions?.length}
                 <section>
                   <h2 class="ui-label">Runs</h2>
@@ -1517,8 +1391,8 @@
         <div class="flex items-center justify-between gap-2">
           <h2 class="ui-label mb-0 flex items-center gap-1.5">
             Source{#if !sourceDetailsWorthShowing}<InfoTip
-                label="Where this task came from"
-                text="This task was created here and nobody is assigned, so there is no outside tracker or owner to name."
+                label="Where this initiative came from"
+                text="This initiative was created here and nobody is assigned, so there is no outside tracker or owner to name."
               />{/if}
           </h2>
           <PanelToggle
@@ -1604,21 +1478,11 @@
           </section>
           <section>
             <h2 class="ui-label">Inbox</h2>
-            <!-- What is actually waiting, when core says something is. The
-                 count is the viewer's own open asks on this card, from the
-                 same `attention` part every other surface badges; "Inbox for
-                 this task" is the link to read when there are none. -->
             <a
-              class="mt-2 inline-block {cardSummary?.attention
-                ? 'text-warn-text'
-                : 'text-accent-text'} hover:underline"
-              data-task-inbox-waiting={cardSummary?.attention?.count ?? null}
+              class="mt-2 inline-block text-accent-text hover:underline"
               href={workspaceHref(
-                `/inbox?mailbox=${cardSummary?.attention ? "needs-you" : "watching"}&work_ref=${encodeURIComponent(work.ref || workId)}`,
-              )}
-              >{cardSummary?.attention
-                ? `${cardSummary.attention.label.replace(/ asks?$/, "")} waiting on you →`
-                : "Inbox for this task →"}</a
+                `/inbox?mailbox=watching&work_ref=${encodeURIComponent(work.ref || workId)}`,
+              )}>Inbox for this initiative →</a
             >
           </section>
         {/if}

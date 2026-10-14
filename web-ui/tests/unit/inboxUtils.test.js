@@ -225,7 +225,7 @@ describe("inbox typed-ref rendering targets", () => {
   });
 
   it("labels inbox subjects with operator nouns", () => {
-    expect(inboxSubjectNoun("card")).toBe("Task");
+    expect(inboxSubjectNoun("card")).toBe("Initiative");
     expect(inboxSubjectNoun("topic")).toBe("Project");
     expect(inboxSubjectNoun("mystery")).toBe("mystery");
   });

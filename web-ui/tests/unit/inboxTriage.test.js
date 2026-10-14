@@ -352,9 +352,9 @@ describe("update digests", () => {
       { type: "card_updated", actor_id: "actor-maya", refs: ["card:a"] },
       { type: "card_updated", actor_id: "actor-maya", refs: ["card:b"] },
     ];
-    expect(updateDigest(events, { actorName })).toBe("Maya updated 2 tasks");
+    expect(updateDigest(events, { actorName })).toBe("Maya updated 2 initiatives");
     expect(updateDigest(events, { actorName, selfId: "actor-maya" })).toBe(
-      "You updated 2 tasks",
+      "You updated 2 initiatives",
     );
     expect(shortActorName("codex on workstation-a")).toBe(
       "codex on workstation-a",

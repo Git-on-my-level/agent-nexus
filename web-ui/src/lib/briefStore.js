@@ -24,7 +24,8 @@ function create(scope) {
     scope,
     key: `${scope}::brief.v1`,
     currentScope: readerScopeKey,
-    read: async (signal) => normalizeBrief(await coreClient.getBrief({ signal })),
+    // Late results are dropped by the store's generation check.
+    read: async () => normalizeBrief(await coreClient.getBrief()),
     maxAgeMs: 15_000,
   });
 }

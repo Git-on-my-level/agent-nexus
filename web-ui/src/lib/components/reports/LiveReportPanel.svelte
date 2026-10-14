@@ -87,7 +87,7 @@
           <li>
             {#if canNavigate}<a
                 href={workspaceHref(
-                  `/inbox?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
+                  `/decide?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
                 )}>{item.title}</a
               >{:else}<strong>{item.title}</strong>{/if}
             <p class="muted">
@@ -116,7 +116,7 @@
         {#each items as item, index (item.ref ?? index)}
           <li>
             {#if canNavigate}<a
-                href={workspaceHref(`/tasks/${encodeURIComponent(item.ref)}`)}
+                href={workspaceHref(`/initiatives/${encodeURIComponent(item.ref)}`)}
                 >{item.title}</a
               >{:else}<strong class="row-title">{item.title}</strong>{/if}
             <p class="muted">
@@ -138,7 +138,7 @@
       </ul>
     {:else}<p class="muted">No cards match this filter.</p>{/if}
   {:else if panel.type === "live-work-mix"}
-    <p class="muted">{live.data.total} open tasks · by {live.data.group_by}</p>
+    <p class="muted">{live.data.total} open initiatives · by {live.data.group_by}</p>
     {#if buckets.length}
       <ul class="mix" aria-label="Open work distribution">
         {#each buckets as bucket (bucket.key)}

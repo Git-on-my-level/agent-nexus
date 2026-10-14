@@ -193,7 +193,7 @@ it("PM recovery sends the checkpointed bodies without upgrading or rebuilding th
 
 it("task and document authoring surfaces checkpoint complete forms", () => {
   for (const [path, expected] of [
-    ["routes/o/[organization]/w/[workspace]/tasks/new/+page.svelte", 1],
+    ["routes/o/[organization]/w/[workspace]/initiatives/new/+page.svelte", 1],
     ["lib/components/CommandPalette.svelte", 1],
     ["routes/o/[organization]/w/[workspace]/docs/+page.svelte", 1],
     [
@@ -213,7 +213,7 @@ it("task and document authoring surfaces checkpoint complete forms", () => {
 
 it("task moves checkpoint full drafts and have no legacy direct sender", () => {
   for (const [path, action] of [
-    ["routes/o/[organization]/w/[workspace]/tasks/+page.svelte", "durableForm"],
+    ["routes/o/[organization]/w/[workspace]/initiatives/+page.svelte", "durableForm"],
     ["lib/components/CommandPalette.svelte", "durableMoveForm"],
   ]) {
     const ast = parse(readFileSync(`${root}/${path}`, "utf8"));

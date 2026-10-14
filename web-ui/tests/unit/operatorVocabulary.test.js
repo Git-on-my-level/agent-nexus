@@ -77,7 +77,7 @@ describe("operator vocabulary", () => {
 
   it("never says card in the Tasks keyboard shortcut list", () => {
     const src = readSrc(
-      "routes/o/[organization]/w/[workspace]/tasks/+page.svelte",
+      "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte",
     );
     const list = src.match(/SHORTCUTS\s*=\s*\[([\s\S]*?)\n\s*\];/)?.[1];
     expect(list, "shortcut list not found").toBeTruthy();

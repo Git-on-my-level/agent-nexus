@@ -52,7 +52,7 @@ const asText = (value) => String(value ?? "").trim();
 
 /** Operator nouns. `topic:` is a Project and `card:` is a Task to a reader. */
 const KIND_LABELS = Object.freeze({
-  card: "Task",
+  card: "Initiative",
   doc: "Doc",
   document: "Doc",
   topic: "Project",
@@ -358,7 +358,7 @@ function refHref({
   const org = asText(context.organizationSlug);
   const workspace = asText(context.workspaceSlug);
 
-  // Core returns a path relative to the workspace (`/tasks/<handle>`), not a
+  // Core returns a path relative to the workspace (`/initiatives/<handle>`), not a
   // routable one. The UI's routes are `/o/<org>/w/<workspace>/…` under the app
   // base path, so a server path has to be rebased or it navigates out of the
   // workspace the reader is looking at.
@@ -375,7 +375,7 @@ function refHref({
     return workspacePath(
       org,
       workspace,
-      `/tasks/${encodeURIComponent(`card:${value}`)}`,
+      `/initiatives/${encodeURIComponent(`card:${value}`)}`,
     );
   }
   if (prefix === "doc" || prefix === "document") {
@@ -387,7 +387,7 @@ function refHref({
     return workspacePath(
       org,
       workspace,
-      `/tasks?project_ref=${encodeURIComponent(`topic:${value}`)}`,
+      `/initiatives?project_ref=${encodeURIComponent(`topic:${value}`)}`,
     );
   }
   return "";

@@ -95,7 +95,7 @@ function humanizedLabelForPrefix(prefix, value) {
   const short = compactValue(value);
   if (prefix === "artifact") return `Artifact ${short}`.trim();
   // The operator noun: a `card:` ref links to /tasks and reads as a Task.
-  if (prefix === "card") return `Task ${short}`.trim();
+  if (prefix === "card") return `Initiative ${short}`.trim();
   if (prefix === "message") return "Message";
   if (prefix === "thread") return `Thread ${short}`.trim();
   // Topics are Projects to an operator: core reports `"projects": "topics"`
@@ -121,7 +121,7 @@ function humanizedLabelForPrefix(prefix, value) {
 const COMPACT_NOUN_BY_PREFIX = {
   artifact: "Artifact",
   board: "Board",
-  card: "Task",
+  card: "Initiative",
   document: "Doc",
   document_revision: "Doc rev",
   thread: "Thread",
@@ -300,7 +300,7 @@ const LINK_RESOLVERS = {
   card: ({ workspaceSlug, organizationSlug, value }) =>
     buildInternalHref(
       workspaceSlug,
-      `/tasks/${encodeURIComponent(`card:${value}`)}`,
+      `/initiatives/${encodeURIComponent(`card:${value}`)}`,
       organizationSlug,
     ),
   message: ({ workspaceSlug, organizationSlug, threadId, value }) =>
@@ -321,7 +321,7 @@ const LINK_RESOLVERS = {
   inbox: ({ workspaceSlug, organizationSlug, value }) =>
     buildInternalHref(
       workspaceSlug,
-      `/inbox#inbox-${asPathSegment(value)}`,
+      `/decide#inbox-${asPathSegment(value)}`,
       organizationSlug,
     ),
   document: ({ workspaceSlug, organizationSlug, value }) =>

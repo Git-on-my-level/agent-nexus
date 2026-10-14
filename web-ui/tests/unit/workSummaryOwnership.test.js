@@ -395,7 +395,7 @@ describe("card status is rendered in one component", () => {
       "names the target of a move command: a button, not a claim about state",
     ],
     [
-      "src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte",
+      "src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte",
       "lists phases as filter options and labels the move confirmations",
     ],
     [

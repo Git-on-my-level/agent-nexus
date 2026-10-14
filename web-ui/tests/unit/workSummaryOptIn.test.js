@@ -122,7 +122,7 @@ describe("no card read is left opted out", () => {
       "picks a task by title for a PM conversation",
     ],
     [
-      "listWork src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte",
+      "listWork src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte",
       "the mirrors list: other tasks on the same source item, by title and read state",
     ],
   ]);

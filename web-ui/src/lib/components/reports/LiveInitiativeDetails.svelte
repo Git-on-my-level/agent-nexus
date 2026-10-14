@@ -47,7 +47,7 @@
       <header>
         <div class="heading">
           {#if canNavigate}<a
-              href={workspaceHref(`/tasks/${encodeURIComponent(item.ref)}`)}
+              href={workspaceHref(`/initiatives/${encodeURIComponent(item.ref)}`)}
               >{item.title}</a
             >{:else}<strong>{item.title}</strong>{/if}
           <span class="meta">

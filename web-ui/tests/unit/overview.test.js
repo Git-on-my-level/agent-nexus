@@ -67,7 +67,7 @@ describe("overview work matrix", () => {
     expect(github.cells.find((cell) => cell.phase === "in_progress")).toEqual({
       phase: "in_progress",
       count: 2,
-      href: "/tasks?source=github&phase=in_progress",
+      href: "/initiatives?source=github&phase=in_progress",
     });
     expect(github.cells.find((cell) => cell.phase === "blocked").count).toBe(0);
     expect(matrix.rows.find((row) => row.key === "multica").total).toBe(1);
@@ -81,15 +81,15 @@ describe("overview work matrix", () => {
     expect(blank).toEqual({
       phase: "none",
       count: 1,
-      href: "/tasks?source=github",
+      href: "/initiatives?source=github",
     });
     expect(matrix.phases.find((phase) => phase.key === "none").label).toBe(
       "No phase",
     );
     expect(github.cells.find((cell) => cell.phase === "unknown").href).toBe(
-      "/tasks?source=github&phase=unknown",
+      "/initiatives?source=github&phase=unknown",
     );
-    expect(tasksQuery({ phase: "blocked" })).toBe("/tasks?phase=blocked");
+    expect(tasksQuery({ phase: "blocked" })).toBe("/initiatives?phase=blocked");
   });
 });
 
@@ -126,9 +126,9 @@ describe("overview freshness", () => {
     expect(
       buckets.map((bucket) => [bucket.key, bucket.count, bucket.href]),
     ).toEqual([
-      ["stale", 1, "/tasks?freshness=stale"],
-      ["unknown", 1, "/tasks?freshness=unknown"],
-      ["error", 1, "/tasks?freshness=error"],
+      ["stale", 1, "/initiatives?freshness=stale"],
+      ["unknown", 1, "/initiatives?freshness=unknown"],
+      ["error", 1, "/initiatives?freshness=error"],
     ]);
   });
 });
@@ -334,8 +334,8 @@ describe("overview work paging", () => {
     }));
     expect(listed.truncated).toBe(false);
     expect(listed.work).toHaveLength(1);
-    expect(formatPartialCount(4, true)).toBe("4+");
-    expect(formatPartialCount(0, true)).toBe("0+");
+    expect(formatPartialCount(4, true)).toBe("at least 4");
+    expect(formatPartialCount(0, true)).toBe("at least 0");
     expect(formatPartialCount(4, false)).toBe("4");
   });
 

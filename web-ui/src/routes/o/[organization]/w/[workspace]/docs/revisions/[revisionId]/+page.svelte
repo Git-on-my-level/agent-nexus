@@ -94,9 +94,9 @@
         }
       }
 
-      error = `Document revision '${targetRevisionId}' was not found.`;
+      error = `Document version '${targetRevisionId}' was not found.`;
     } catch (e) {
-      error = `Failed to resolve document revision: ${e instanceof Error ? e.message : String(e)}`;
+      error = `Failed to resolve document version: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       if (activeLookupKey === lookupKey) {
         loading = false;
@@ -107,7 +107,7 @@
 
 <div class="mx-auto max-w-2xl rounded-md border border-line bg-panel p-4">
   {#if loading}
-    <p class="text-meta text-fg-muted">Resolving document revision…</p>
+    <p class="text-meta text-fg-muted">Resolving document version…</p>
   {:else if error}
     <div class="space-y-3">
       <p class="text-meta text-danger-text [overflow-wrap:anywhere]">{error}</p>

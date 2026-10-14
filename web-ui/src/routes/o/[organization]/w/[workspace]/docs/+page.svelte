@@ -741,7 +741,7 @@
     {:else}
       <StateEmpty
         title="No docs yet"
-        helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
+        helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full version history."
       />
     {/if}
   {/if}
@@ -869,7 +869,7 @@
                   {#if doc.head_revision_number != null}
                     <span
                       class="font-mono text-micro tabular-nums text-fg-subtle"
-                      title="Head revision"
+                      title="Latest version"
                     >
                       v{doc.head_revision_number}
                     </span>
@@ -932,7 +932,7 @@
                     {#if doc.head_revision_number != null}
                       <span
                         class="font-mono text-micro tabular-nums text-fg-subtle"
-                        title="Head revision"
+                        title="Latest version"
                       >
                         v{doc.head_revision_number}
                       </span>

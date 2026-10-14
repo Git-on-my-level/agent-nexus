@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pageStore = vi.hoisted(() => {
   let value = {
-    url: new URL("http://localhost/o/acme/w/ops/overview"),
+    url: new URL("http://localhost/o/acme/w/ops/watch"),
     params: { organization: "acme", workspace: "ops" },
   };
   const subscribers = new Set();
@@ -28,7 +28,7 @@ const pageStore = vi.hoisted(() => {
     },
     reset() {
       value = {
-        url: new URL("http://localhost/o/acme/w/ops/overview"),
+        url: new URL("http://localhost/o/acme/w/ops/watch"),
         params: { organization: "acme", workspace: "ops" },
       };
       for (const fn of subscribers) fn(value);
@@ -94,8 +94,12 @@ async function reachLastStep() {
   await fireEvent.click(
     screen.getByRole("button", { name: "Take the tour →" }),
   );
+  // The step count depends on whether a PM is connected: press Next until
+  // the last step stops offering it.
   for (let i = 0; i < 6; i += 1) {
-    await fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const next = screen.queryByRole("button", { name: "Next" });
+    if (!next) break;
+    await fireEvent.click(next);
   }
   await waitFor(() =>
     expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),

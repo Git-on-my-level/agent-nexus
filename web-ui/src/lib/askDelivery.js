@@ -268,13 +268,13 @@ export function askDeliveryModel(
     if (!task) {
       notDelivered = "Not delivered: no subscriber was registered.";
     } else if (task.closed) {
-      notDelivered = "Not delivered: no subscriber; the task was closed.";
+      notDelivered = "Not delivered: no subscriber; the initiative was closed.";
     } else if (phase && owner) {
-      notDelivered = `Not delivered: no subscriber; the task is ${phase} for ${owner}.`;
+      notDelivered = `Not delivered: no subscriber; the initiative is ${phase} for ${owner}.`;
     } else if (phase) {
-      notDelivered = `Not delivered: no subscriber; the task is ${phase}.`;
+      notDelivered = `Not delivered: no subscriber; the initiative is ${phase}.`;
     } else if (owner) {
-      notDelivered = `Not delivered: no subscriber; the task is with ${owner}.`;
+      notDelivered = `Not delivered: no subscriber; the initiative is with ${owner}.`;
     } else {
       notDelivered = "Not delivered: no subscriber was registered.";
     }

@@ -120,11 +120,11 @@
         target,
         draft: snapshot(),
         href: $page.url.pathname,
-        title: "Saved task",
+        title: "Saved initiative",
       });
     } catch {
       error =
-        "Your task is still here. Review the saved work above, or copy it before closing this tab.";
+        "Your initiative is still here. Review the saved work above, or copy it before closing this tab.";
     } finally {
       saving = false;
     }
@@ -141,7 +141,7 @@
         (!Object.values(snapshot()).some(Boolean) ||
           JSON.stringify(snapshot()) === JSON.stringify(entry.draft))
       ) {
-        void goto(workspaceHref(`/tasks/${encodeURIComponent(key)}`));
+        void goto(workspaceHref(`/initiatives/${encodeURIComponent(key)}`));
       }
     };
     window.addEventListener("anx:mutation-confirmed", confirmed);
@@ -149,15 +149,15 @@
       window.removeEventListener("anx:mutation-confirmed", confirmed);
   });
 
-  usePageTitle(() => "New task · Agent Nexus");
+  usePageTitle(() => "New initiative · Agent Nexus");
 </script>
 
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-accent-text hover:underline"
-    href={workspaceHref("/tasks")}>← Tasks</a
+    href={workspaceHref("/initiatives")}>← Initiatives</a
   >
-  <WorkspacePageHeader title="New task" />
+  <WorkspacePageHeader title="New initiative" />
   {#if error}<StateError message={error} />{/if}
   {#if loading}<p role="status" class="text-fg-muted">Loading…</p>{:else}
     <form
@@ -186,8 +186,8 @@
         /></label
       >
       {#if chooseBoard}<label class="block text-micro font-medium text-fg-muted"
-          >Board<select class="ui-input mt-1" bind:value={board} required
-            ><option value="" disabled>Choose a board</option
+          >Group<select class="ui-input mt-1" bind:value={board} required
+            ><option value="" disabled>Choose a group</option
             >{#each boards as item}<option
                 value={item.ref || item.handle || item.id}
                 >{item.title || item.name || item.handle || item.id}</option
@@ -250,10 +250,10 @@
             !criteria.trim() ||
             (chooseBoard && !board)}
           data-anx-save-shortcut
-          >{creating ? "Creating…" : "Create task"}</button
+          >{creating ? "Creating…" : "Create initiative"}</button
         ><a
           class="text-meta text-fg-muted hover:text-fg"
-          href={workspaceHref("/tasks")}>Cancel</a
+          href={workspaceHref("/initiatives")}>Cancel</a
         >
       </div>
     </form>{/if}

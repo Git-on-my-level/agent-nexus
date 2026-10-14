@@ -169,7 +169,7 @@ export function inboxAskPath(ask) {
   const itemId = text(ask?.inbox_item_id);
   const id = itemId ? inboxItemMailboxId({ id: itemId }) : "";
   if (id) params.set("item", id);
-  return `/inbox?${params.toString()}`;
+  return `/decide?${params.toString()}`;
 }
 
 /**
@@ -272,7 +272,7 @@ export function agentRowModel(
   if (state === "idle") {
     return {
       ...base,
-      headline: cardTitle || "No current task",
+      headline: cardTitle || "No current initiative",
       duration: signalAge,
       durationTitle: "Last signal",
     };
@@ -283,7 +283,7 @@ export function agentRowModel(
       ...base,
       // The alarming case: something is riding on a silence.
       headline: cardTitle
-        ? `No signal for ${signalAge} on this task`
+        ? `No signal for ${signalAge} on this initiative`
         : `No signal for ${signalAge} during a run`,
       duration: signalAge,
       durationTitle: "Last signal",
@@ -412,7 +412,7 @@ export function isRunActive(run) {
 /** Task page path for a `card:<slug>` ref. */
 export function taskPath(cardRef) {
   const ref = text(cardRef);
-  return ref ? `/tasks/${encodeURIComponent(ref)}` : "";
+  return ref ? `/initiatives/${encodeURIComponent(ref)}` : "";
 }
 
 /** A readable task title from `card:<slug>` when no title is loaded. */

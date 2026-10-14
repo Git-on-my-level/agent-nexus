@@ -84,7 +84,7 @@
     <h3
       class="line-clamp-2 break-words text-meta font-medium leading-snug text-fg"
     >
-      {work.title || "Untitled task"}
+      {work.title || "Untitled initiative"}
     </h3>
   </a>
   <div class="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">

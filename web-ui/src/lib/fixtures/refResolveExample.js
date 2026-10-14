@@ -27,7 +27,7 @@ export const refResolveExample = {
       last_moved_at: "2026-10-04T09:12:00Z",
       next_step: { title: "Computed progress and health" },
       progress: { done: 3, total: 7 },
-      url: "/tasks/initiative-plans",
+      url: "/initiatives/initiative-plans",
       resolvable: true,
     },
     {
@@ -42,7 +42,7 @@ export const refResolveExample = {
       priority: "p2",
       last_moved_at: "2026-10-03T17:40:00Z",
       progress: { done: 5, total: 5 },
-      url: "/tasks/shared-report-contracts",
+      url: "/initiatives/shared-report-contracts",
       resolvable: true,
     },
     {
@@ -58,7 +58,7 @@ export const refResolveExample = {
       last_moved_at: "2026-09-27T11:02:00Z",
       next_step: { title: "Waiting on the panel binding decision" },
       progress: { done: 1, total: 6 },
-      url: "/tasks/pushed-series",
+      url: "/initiatives/pushed-series",
       resolvable: true,
     },
     {

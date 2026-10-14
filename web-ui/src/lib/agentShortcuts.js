@@ -10,7 +10,7 @@ export function agentShortcutList() {
     ["Previous agent", ["K"]],
     ["Open the agent", ["Enter"]],
     ["Answer its ask in Inbox", ["I"]],
-    ["Open its current task", ["T"]],
+    ["Open its current initiative", ["T"]],
     ["Shortcut help", ["?"]],
     ["Close this help", ["Esc"]],
   ];

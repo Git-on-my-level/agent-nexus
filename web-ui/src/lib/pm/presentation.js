@@ -270,7 +270,7 @@ export function isNexusOwned(work) {
 }
 
 export function taskDetailPath(work) {
-  return `/tasks/${encodeURIComponent(workKey(work))}`;
+  return `/initiatives/${encodeURIComponent(workKey(work))}`;
 }
 
 export function cardIdFromWork(work) {
@@ -493,7 +493,7 @@ export function workKey(work) {
 export function sourceLabel(source) {
   return (
     {
-      nexus: "Nexus",
+      nexus: "Managed here",
       github: "GitHub",
       forgejo: "Forgejo",
       gitea: "Gitea",
@@ -502,7 +502,7 @@ export function sourceLabel(source) {
       ssh_git: "Git over SSH",
     }[source?.authority] ||
     source?.authority ||
-    "Authority unknown"
+    "Source unknown"
   );
 }
 /**
@@ -701,19 +701,19 @@ export function decisionConsequence(item, work = null) {
   if (scope === "work.phase") {
     const target = phase ? ` to ${label(phase)}` : "";
     if (item?.deliverable === false) {
-      const where = source && source !== "Nexus" ? source : "this source";
+      const where = source && source !== "Managed here" ? source : "this source";
       return `No delivery path exists for ${where} yet. Approving records your decision${target} and keeps the request pending; nothing changes at ${where} until a delivery path exists.`;
     }
     if (!work)
-      return `Approving authorizes this change${target}. If the task lives in another tracker, it is requested there rather than applied here.`;
-    if (owned || source === "Nexus")
+      return `Approving authorizes this change${target}. If the initiative lives in another tracker, it is requested there rather than applied here.`;
+    if (owned || source === "Managed here")
       return phase
-        ? `Approving moves this task${target} in Nexus.`
+        ? `Approving moves this initiative${target}.`
         : "This proposal names no target phase, so it cannot be applied. Decline it and ask the PM to propose again.";
     return `Approving asks the PM to request this change${target} at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
   }
   if (scope === "work.annotate")
-    return "Approving records the PM's note on this task in Nexus. The source is not changed.";
+    return "Approving records the PM's note on this initiative. The source is not changed.";
   if (["github", "multica", "ssh_git", "git"].includes(scope))
     return `Approving authorizes the PM to act at ${sourceLabel({ authority: scope })}. The result is read back before it counts as done.`;
   return "Approving authorizes exactly this proposal. Delivery and outcome are tracked below.";
