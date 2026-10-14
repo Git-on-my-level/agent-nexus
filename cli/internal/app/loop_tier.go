@@ -615,3 +615,67 @@ func briefDay(raw string) string {
 	}
 	return at.UTC().Format("Jan 2")
 }
+
+// askDecision carries the optional ask fields core uses to order decisions:
+// by (the requester's deadline for the human), blocks and priority.
+type askDecision struct {
+	by       string
+	blocks   []string
+	priority string
+}
+
+func (d askDecision) empty() bool { return d.by == "" && len(d.blocks) == 0 }
+
+func (d askDecision) apply(payload map[string]any) {
+	if d.by != "" {
+		payload["by"] = d.by
+	}
+	if len(d.blocks) > 0 {
+		payload["blocks"] = d.blocks
+	}
+	if d.priority != "" {
+		payload["priority"] = d.priority
+	}
+}
+
+// parseAskDecisionFlags validates only malformed values; a missing value is
+// never an error.
+func parseAskDecisionFlags(by trackedString, blocks []string, priority trackedString, now time.Time) (askDecision, error) {
+	var out askDecision
+	if by.set {
+		raw := strings.TrimSpace(by.value)
+		if _, ok := parsePromiseWhen(raw, now); !ok {
+			return out, errnorm.Usage("invalid_by", fmt.Sprintf("--by %q must be a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration like 36h or 2d", by.value))
+		}
+		out.by = raw
+	}
+	if len(blocks) > maxAskBlocksRefs {
+		return out, errnorm.Usage("invalid_request", fmt.Sprintf("at most %d --blocks refs", maxAskBlocksRefs))
+	}
+	for _, raw := range blocks {
+		ref := strings.TrimSpace(raw)
+		if err := validateTypedRef(ref); err != nil || strings.HasPrefix(ref, "http") {
+			return out, errnorm.Usage("invalid_request", fmt.Sprintf("--blocks %q must be a typed ref such as card:<slug>", raw))
+		}
+		out.blocks = append(out.blocks, ref)
+	}
+	out.blocks = uniqueStringsInOrder(out.blocks)
+	if priority.set {
+		p := strings.ToLower(strings.TrimSpace(priority.value))
+		switch p {
+		case "p0", "p1", "p2", "p3", "critical", "high", "medium", "low":
+			out.priority = p
+		default:
+			return out, errnorm.Usage("invalid_request", "--priority must be p0..p3 or critical/high/medium/low")
+		}
+	}
+	return out, nil
+}
+
+func askWarning(id, message string, argv []string) output.Warning {
+	w := output.Warning{Code: id, Message: message}
+	if len(argv) > 0 {
+		w.Details = map[string]any{"suggest": argv}
+	}
+	return w
+}
