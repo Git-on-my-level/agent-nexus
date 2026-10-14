@@ -104,15 +104,19 @@ const askDeadlineSelect = `SELECT id,
 		trim(COALESCE(json_extract(payload_json,'$.payload.decide_by'), json_extract(payload_json,'$.payload.by'), '')),
 		CASE WHEN json_type(payload_json,'$.payload.blocks')='array' THEN json_array_length(payload_json,'$.payload.blocks') ELSE 0 END`
 
+// Trigger inserts use ON CONFLICT DO NOTHING rather than INSERT OR IGNORE:
+// an outer statement's OR-conflict policy (for example INSERT OR REPLACE)
+// overrides a trigger's own OR clause, but not an upsert clause.
 var deliveryQueueEventTriggers = []string{
 	`CREATE TRIGGER IF NOT EXISTS ask_deadlines_on_ask AFTER INSERT ON events
 	WHEN NEW.type='human_attention_requested' AND COALESCE(NEW.trashed_at,'')='' BEGIN
-		INSERT OR IGNORE INTO ask_deadlines(request_event_id, requester_actor_id, ask_ts, by_raw, blocks_count)
+		INSERT INTO ask_deadlines(request_event_id, requester_actor_id, ask_ts, by_raw, blocks_count)
 		VALUES(NEW.id,
 			trim(COALESCE(json_extract(NEW.payload_json,'$.payload.requester_actor_id'),'')),
 			NEW.ts,
 			trim(COALESCE(json_extract(NEW.payload_json,'$.payload.decide_by'), json_extract(NEW.payload_json,'$.payload.by'), '')),
-			CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN json_array_length(NEW.payload_json,'$.payload.blocks') ELSE 0 END);
+			CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN json_array_length(NEW.payload_json,'$.payload.blocks') ELSE 0 END)
+		ON CONFLICT DO NOTHING;
 	END`,
 	`CREATE TRIGGER IF NOT EXISTS ask_deadlines_on_trash AFTER UPDATE OF trashed_at ON events
 	WHEN NEW.type='human_attention_requested' AND COALESCE(NEW.trashed_at,'')<>'' BEGIN
@@ -131,7 +135,7 @@ var deliveryQueueResolutionTriggers = []string{
 // Wake status maps onto the queue status; completed/failed append a receipt.
 var deliveryQueueWakeTriggers = []string{
 	`CREATE TRIGGER IF NOT EXISTS deliveries_wake_insert AFTER INSERT ON agent_wakeups BEGIN
-		INSERT OR IGNORE INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, next_attempt_at, claimed_by, created_at, updated_at, delivered_at, failed_at)
+		INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, next_attempt_at, claimed_by, created_at, updated_at, delivered_at, failed_at)
 		VALUES('dlv_wake_'||NEW.wakeup_id, 'wake:'||NEW.wakeup_id, NEW.target_actor_id, 'bridge', 'wake',
 			CASE NEW.status WHEN 'claimed' THEN 'claimed' WHEN 'completed' THEN 'delivered' WHEN 'failed' THEN 'failed' ELSE 'pending' END,
 			json_object('wakeup_id', NEW.wakeup_id, 'thread_id', NEW.thread_id),
@@ -139,7 +143,8 @@ var deliveryQueueWakeTriggers = []string{
 			CASE WHEN NEW.status IN ('claimed','completed','failed') THEN 1 ELSE 0 END,
 			NEW.created_at, NEW.bridge_instance_id, NEW.created_at, NEW.updated_at,
 			CASE WHEN NEW.status='completed' THEN COALESCE(NEW.completed_at,NEW.updated_at) ELSE '' END,
-			CASE WHEN NEW.status='failed' THEN COALESCE(NEW.failed_at,NEW.updated_at) ELSE '' END);
+			CASE WHEN NEW.status='failed' THEN COALESCE(NEW.failed_at,NEW.updated_at) ELSE '' END)
+		ON CONFLICT DO NOTHING;
 	END`,
 	`CREATE TRIGGER IF NOT EXISTS deliveries_wake_status AFTER UPDATE OF status ON agent_wakeups
 	WHEN NEW.status<>OLD.status BEGIN
@@ -165,10 +170,11 @@ var deliveryQueueWakeTriggers = []string{
 // the queue mirrors each webhook delivery and its outcome (channel "webhook").
 var deliveryQueueWebhookTriggers = []string{
 	`CREATE TRIGGER IF NOT EXISTS deliveries_webhook_insert AFTER INSERT ON ask_deliveries WHEN NEW.kind='webhook' BEGIN
-		INSERT OR IGNORE INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, max_attempts, next_attempt_at, created_at, updated_at)
+		INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, max_attempts, next_attempt_at, created_at, updated_at)
 		SELECT 'dlv_webhook_'||NEW.id, 'webhook:'||NEW.id, s.actor_id, 'webhook', 'webhook', 'pending',
 			json_object('ask_delivery_id', NEW.id), 'event:'||NEW.ask_id, NEW.attempts, 5, NEW.next_at, NEW.next_at, NEW.next_at
-		FROM ask_subscriptions s WHERE s.id=NEW.subscription_id;
+		FROM ask_subscriptions s WHERE s.id=NEW.subscription_id
+		ON CONFLICT DO NOTHING;
 	END`,
 	`CREATE TRIGGER IF NOT EXISTS deliveries_webhook_state AFTER UPDATE ON ask_deliveries
 	WHEN NEW.kind='webhook' AND (NEW.state<>OLD.state OR NEW.attempts<>OLD.attempts) BEGIN
