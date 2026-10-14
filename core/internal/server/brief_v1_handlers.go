@@ -80,7 +80,7 @@ func appendBriefPMDecisions(r *http.Request, opts handlerOptions, brief map[stri
 		items = append(items, map[string]any{
 			"ref": "decision:" + d.ID, "inbox_item_id": d.ID, "kind": "pm_proposal", "title": firstNonEmptyBriefString(title, "PM proposal"),
 			"requested_by": map[string]any{"id": firstNonEmptyBriefString(d.ProposedBy, d.ActorID), "display": firstNonEmptyBriefString(d.ProposedBy, d.ActorID)},
-			"subject": map[string]any{"ref": d.WorkRef}, "created_at": d.CreatedAt.UTC().Format(time.RFC3339), "age_seconds": int64(now.Sub(d.CreatedAt) / time.Second),
+			"subject":      map[string]any{"ref": d.WorkRef}, "created_at": d.CreatedAt.UTC().Format(time.RFC3339), "age_seconds": int64(now.Sub(d.CreatedAt) / time.Second),
 			"decide_by": nil, "overdue_for_seconds": nil, "blocks": []map[string]any{}, "blocks_count": 0,
 			"proposals": []string{"Approve", "Reject"}, "pm_decision": map[string]any{"id": d.ID, "revision": d.Revision},
 		})

@@ -30,7 +30,7 @@ func loadBriefFixture(t *testing.T) map[string]any {
 
 // I7: orient renders from the shared brief.v1 fixture.
 func TestOrientTextRendersSharedBriefFixture(t *testing.T) {
-	got := renderOrientText(loadBriefFixture(t), "codex on m5 · workspace omi")
+	got := renderOrientText(loadBriefFixture(t), "build-agent on host-1 · workspace demo")
 	golden := filepath.Join("testdata", "orient_brief.golden.txt")
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
 		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {

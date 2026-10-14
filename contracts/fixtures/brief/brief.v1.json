@@ -1,83 +1,312 @@
 {
   "schema": "brief.v1",
   "generated_at": "2026-10-15T09:00:00Z",
-  "principal": {"id": "human:operator", "display": "Operator", "kind": "human"},
+  "principal": {
+    "id": "human:operator",
+    "display": "Operator",
+    "kind": "human"
+  },
   "decisions": [
     {
-      "ref": "inbox:ask-91", "inbox_item_id": "ask-91", "kind": "ask",
+      "ref": "inbox:ask-91",
+      "kind": "ask",
+      "inbox_item_id": "ask-91",
       "title": "Merge battery-v2 calibration?",
-      "body": "Calibration matches the bench within 2%.\n\n**Recommend:** merge.",
-      "requested_by": {"id": "agent:codex", "display": "codex", "kind": "agent"},
-      "subject": {"ref": "card:battery-measurement", "title": "Battery measurement"},
-      "created_at": "2026-10-13T09:00:00Z", "age_seconds": 172800,
-      "decide_by": "2026-10-16T17:00:00Z", "overdue_for_seconds": 0,
-      "blocks": [{"ref": "card:battery-report", "title": "Battery report"}, {"ref": "card:battery-dashboard", "title": "Battery dashboard"}],
-      "blocks_count": 2, "priority": "p1",
-      "proposals": ["Merge", "Hold a week"]
+      "body": "Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below.",
+      "requested_by": {
+        "id": "agent:codex",
+        "display": "build-agent on host-1"
+      },
+      "created_at": "2026-10-13T09:00:00Z",
+      "decide_by": "2026-10-17T17:00:00Z",
+      "overdue_for_seconds": 0,
+      "blocks": [
+        {
+          "ref": "pr:acme/app#212",
+          "title": "Battery curve v2"
+        },
+        {
+          "ref": "pr:acme/app#214",
+          "title": "Calibration table refresh"
+        }
+      ],
+      "priority": "high",
+      "subject": {
+        "ref": "card:battery-measurement",
+        "title": "Battery measurement"
+      },
+      "proposals": [
+        "Merge",
+        "Hold a week"
+      ],
+      "blocks_count": 2,
+      "age_seconds": 172800
     },
     {
-      "ref": "inbox:ask-93", "inbox_item_id": "ask-93", "kind": "ask",
-      "title": "Pick label scheme?",
-      "requested_by": {"id": "agent:pm", "display": "pm", "kind": "agent"},
-      "subject": {"ref": "card:labels", "title": "Labels"},
-      "created_at": "2026-10-15T08:00:00Z", "age_seconds": 3600,
-      "decide_by": null, "overdue_for_seconds": null,
-      "blocks": [], "blocks_count": 0,
-      "proposals": ["Short names", "Full names"]
+      "ref": "inbox:ask-93",
+      "kind": "pm_proposal",
+      "inbox_item_id": "ask-93",
+      "title": "Withdraw \"pick label scheme\"?",
+      "body": "Overtaken: PR #212 and #214 merged since the initiative last moved.",
+      "requested_by": {
+        "id": "agent:pm",
+        "display": "PM"
+      },
+      "created_at": "2026-10-15T08:58:00Z",
+      "decide_by": null,
+      "overdue_for_seconds": null,
+      "blocks": [],
+      "subject": {
+        "ref": "card:labels",
+        "title": "Label scheme"
+      },
+      "proposals": [
+        "Withdraw",
+        "Keep"
+      ],
+      "blocks_count": 0,
+      "age_seconds": 120
+    },
+    {
+      "ref": "inbox:ask-88",
+      "kind": "review",
+      "inbox_item_id": "ask-88",
+      "title": "Review fleet onboarding runbook",
+      "body": "",
+      "requested_by": {
+        "id": "agent:claude",
+        "display": "claude on m6"
+      },
+      "created_at": "2026-10-10T09:00:00Z",
+      "decide_by": "2026-10-14T09:00:00Z",
+      "overdue_for_seconds": 86400,
+      "blocks": [
+        {
+          "ref": "card:fleet-onboarding",
+          "title": "Fleet onboarding"
+        }
+      ],
+      "subject": {
+        "ref": "card:fleet-onboarding",
+        "title": "Fleet onboarding"
+      },
+      "proposals": [
+        "Approve",
+        "Request changes"
+      ],
+      "blocks_count": 1,
+      "age_seconds": 432000
+    },
+    {
+      "ref": "inbox:ask-95",
+      "kind": "access",
+      "inbox_item_id": "ask-95",
+      "title": "Give fleet-agent access to this workspace",
+      "body": "Requested by fleet-agent for host m6-mini.",
+      "requested_by": {
+        "id": "agent:fleet",
+        "display": "fleet-agent"
+      },
+      "created_at": "2026-10-15T06:00:00Z",
+      "decide_by": null,
+      "overdue_for_seconds": null,
+      "blocks": [],
+      "subject": null,
+      "proposals": [
+        "Approve",
+        "Deny"
+      ],
+      "blocks_count": 0,
+      "age_seconds": 10800
+    },
+    {
+      "ref": "decision:pm_7",
+      "kind": "pm_proposal",
+      "inbox_item_id": "pm_7",
+      "title": "Move \"BLE reliability\" to In progress?",
+      "body": "Requested from the initiative page; the source is outside this workspace.",
+      "requested_by": {
+        "id": "agent:pm",
+        "display": "PM"
+      },
+      "created_at": "2026-10-15T07:00:00Z",
+      "age_seconds": 7200,
+      "decide_by": null,
+      "overdue_for_seconds": null,
+      "blocks": [],
+      "blocks_count": 0,
+      "subject": {
+        "ref": "card:ble-reliability"
+      },
+      "proposals": [
+        "Approve",
+        "Reject"
+      ],
+      "pm_decision": {
+        "id": "pm_7",
+        "revision": 3
+      }
     }
   ],
   "initiatives": [
     {
-      "ref": "card:battery-measurement", "title": "Battery measurement",
-      "state": "past_promise", "placement": "in_progress",
-      "promise": {"at": "2026-10-06T00:00:00Z", "what": "checkpoint with bench data", "source": "note", "source_ref": "event:evt-12", "author": {"id": "agent:codex", "display": "codex", "kind": "agent"}},
-      "past_promise_for_seconds": 777600, "promise_moves": 2,
-      "last_evidence_at": "2026-10-03T12:00:00Z",
-      "progress": {"done": 6, "total": 9},
-      "blocked_count": 1, "waiting_on_you_count": 1,
-      "note": {"text": "Bench rig back; rerunning sweeps.", "author": {"id": "agent:codex", "display": "codex", "kind": "agent"}, "at": "2026-10-05T10:00:00Z"},
-      "possibly_moot": {"flagged": false}
+      "ref": "card:battery-measurement",
+      "title": "Battery measurement",
+      "state": "past_promise",
+      "placement": "in_progress",
+      "promise": {
+        "at": "2026-10-06T00:00:00Z",
+        "what": "Oct 21 checkpoint",
+        "source": "plan_step"
+      },
+      "past_promise_for_seconds": 777600,
+      "promise_moves": 2,
+      "last_evidence_at": "2026-10-04T12:00:00Z",
+      "progress": {
+        "done": 6,
+        "total": 9
+      },
+      "blocked_count": 0,
+      "waiting_on_you_count": 1,
+      "note": {
+        "text": "Rig 4 is drifting; re-running overnight.",
+        "author": {
+          "id": "agent:codex",
+          "display": "build-agent on host-1"
+        },
+        "at": "2026-10-04T12:00:00Z"
+      },
+      "possibly_moot": {
+        "flagged": false
+      }
     },
     {
-      "ref": "card:fleet-onboarding", "title": "Fleet onboarding",
-      "state": "moving", "placement": "in_progress",
-      "promise": {"at": "2026-10-16T12:00:00Z", "what": "enroll m6", "source": "plan_step", "source_ref": "card:fleet-onboarding#enroll-m6"},
-      "past_promise_for_seconds": null, "promise_moves": 0,
+      "ref": "card:fleet-onboarding",
+      "title": "Fleet onboarding",
+      "state": "moving",
+      "placement": "review",
+      "promise": {
+        "at": "2026-10-16T00:00:00Z",
+        "what": "enroll m6",
+        "source": "note"
+      },
+      "past_promise_for_seconds": 0,
+      "promise_moves": 0,
       "last_evidence_at": "2026-10-15T06:00:00Z",
-      "progress": {"done": 4, "total": 7},
-      "blocked_count": 0, "waiting_on_you_count": 0,
+      "progress": {
+        "done": 4,
+        "total": 7
+      },
+      "blocked_count": 1,
+      "waiting_on_you_count": 1,
       "note": null,
-      "possibly_moot": {"flagged": false}
+      "possibly_moot": {
+        "flagged": false
+      }
     },
     {
-      "ref": "card:labels", "title": "Labels",
-      "state": "no_promise", "placement": "ready",
-      "promise": null, "past_promise_for_seconds": null, "promise_moves": 0,
-      "last_evidence_at": "2026-10-01T00:00:00Z",
+      "ref": "card:observability",
+      "title": "Observability",
+      "state": "moving",
+      "placement": "in_progress",
+      "promise": {
+        "at": "2026-10-28T00:00:00Z",
+        "what": "dashboards live",
+        "source": "plan_step"
+      },
+      "past_promise_for_seconds": 0,
+      "promise_moves": 0,
+      "last_evidence_at": "2026-10-14T09:00:00Z",
+      "progress": {
+        "done": 1,
+        "total": 4
+      },
+      "blocked_count": 0,
+      "waiting_on_you_count": 0,
+      "note": null,
+      "possibly_moot": {
+        "flagged": false
+      }
+    },
+    {
+      "ref": "card:labels",
+      "title": "Label scheme",
+      "state": "no_promise",
+      "placement": "backlog",
+      "promise": null,
+      "past_promise_for_seconds": null,
+      "promise_moves": 0,
+      "last_evidence_at": "2026-10-03T09:00:00Z",
       "progress": null,
-      "blocked_count": 0, "waiting_on_you_count": 1,
+      "blocked_count": 0,
+      "waiting_on_you_count": 1,
       "note": null,
-      "possibly_moot": {"flagged": true, "reason": "all 2 linked sources are merged"}
+      "possibly_moot": {
+        "flagged": true,
+        "reason": "PR #212 and #214 merged since it last moved"
+      }
     },
     {
-      "ref": "card:observability", "title": "Observability",
-      "state": "done", "placement": "done",
-      "promise": null, "past_promise_for_seconds": null, "promise_moves": 0,
-      "last_evidence_at": "2026-10-14T00:00:00Z",
-      "progress": {"done": 4, "total": 4},
-      "blocked_count": 0, "waiting_on_you_count": 0,
+      "ref": "card:ble-reliability",
+      "title": "BLE reliability",
+      "state": "no_promise",
+      "placement": "ready",
+      "promise": null,
+      "past_promise_for_seconds": null,
+      "promise_moves": 0,
+      "last_evidence_at": null,
+      "progress": {
+        "done": 0,
+        "total": 3
+      },
+      "blocked_count": 0,
+      "waiting_on_you_count": 0,
       "note": null,
-      "possibly_moot": {"flagged": false}
+      "possibly_moot": {
+        "flagged": false
+      }
+    },
+    {
+      "ref": "card:docs-refresh",
+      "title": "Docs refresh",
+      "state": "done",
+      "placement": "done",
+      "promise": null,
+      "past_promise_for_seconds": null,
+      "promise_moves": 0,
+      "last_evidence_at": "2026-10-13T09:00:00Z",
+      "progress": {
+        "done": 5,
+        "total": 5
+      },
+      "blocked_count": 0,
+      "waiting_on_you_count": 0,
+      "note": null,
+      "possibly_moot": {
+        "flagged": false
+      }
     }
   ],
   "your_asks": [],
   "answered_for_you": [
     {
-      "ref": "inbox:ask-88", "inbox_item_id": "ask-88", "title": "Ship nightly digest?",
-      "answer": "Hold a week", "outcome": "answered",
+      "ref": "inbox:ask-80",
+      "inbox_item_id": "ask-80",
+      "title": "Ship rig firmware 1.4?",
+      "answer": "Hold a week",
+      "outcome": "answered",
       "answered_at": "2026-10-14T18:00:00Z",
-      "answered_by": {"id": "human:operator", "display": "Operator", "kind": "human"},
+      "answered_by": {
+        "id": "human:operator",
+        "display": "Operator"
+      },
       "followed_recommendation": false
     }
-  ]
+  ],
+  "truncated": {
+    "decisions": false,
+    "initiatives": false,
+    "your_asks": false,
+    "answered_for_you": false
+  }
 }

@@ -19,6 +19,7 @@ const asText = (value) => String(value ?? "").trim();
  */
 const KINDS = Object.freeze({
   step_completed: { label: "step done", tone: "ok" },
+  initiative_past_promise: { label: "past promise", tone: "warn" },
   initiative_stale: { label: "stale", tone: "warn" },
   initiative_blocked: { label: "blocked", tone: "danger" },
   ask_answered: { label: "answered", tone: "ok" },
@@ -29,6 +30,7 @@ const KINDS = Object.freeze({
 
 /** Order the strip reads in: what needs attention first, then what progressed. */
 const ORDER = [
+  "initiative_past_promise",
   "initiative_blocked",
   "initiative_stale",
   "decision_created",
@@ -132,6 +134,9 @@ function summarize(counts) {
   const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
   if (counts.step_completed) {
     parts.push(plural(counts.step_completed, "step done", "steps done"));
+  }
+  if (counts.initiative_past_promise) {
+    parts.push(`${counts.initiative_past_promise} past promise`);
   }
   if (counts.initiative_blocked) {
     parts.push(`${counts.initiative_blocked} blocked`);

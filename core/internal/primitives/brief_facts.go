@@ -34,77 +34,16 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 	if err != nil || len(ids) == 0 {
 		return len(ids) == 0, err
 	}
+	inputs, err := briefPromiseInputs(ctx, tx, ids, func(ids []string) (map[string][]plans.PromiseNote, error) { return promiseNotesFor(ctx, tx, ids) })
+	if err != nil {
+		return false, err
+	}
 	encoded, _ := json.Marshal(ids)
-	rows, err := tx.QueryContext(ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key,COALESCE(c.archived_at,''),COALESCE(c.trashed_at,''),`+effectiveCardDueSQL+`,
-		COALESCE(json_extract(m.metadata_json,'$.wake_condition'),''),COALESCE(p.body_json,''),COALESCE(p.updated_at,''),
-		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'')
-		FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id
-		LEFT JOIN work_observations o ON o.id=m.latest_observation_id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
-		WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
-	if err != nil {
-		return false, err
-	}
-	type cardFacts struct {
-		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sig, stepChangeAt string
-	}
-	facts := []cardFacts{}
-	for rows.Next() {
-		var f cardFacts
-		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sig, &f.stepChangeAt); err != nil {
-			rows.Close()
-			return false, err
-		}
-		facts = append(facts, f)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return false, err
-	}
-	notes, err := promiseNotesFor(ctx, tx, ids)
-	if err != nil {
-		return false, err
-	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, f := range facts {
-		ref := "card:" + firstNonEmptyString(f.handle, f.id)
-		in := plans.PromiseInput{Ref: ref, Notes: notes[f.id], CardDue: plans.ParseDue(f.due), Wake: plans.WakeTime(f.wake)}
-		in.Done = plans.Status(f.phase) == "done" || f.phase == "cancelled"
-		open := 1
-		if in.Done {
-			open = 0
-		}
-		if f.archived != "" || f.trashed != "" {
-			open = -1
-		}
-		sig := ""
-		if f.planRaw != "" {
-			var p plans.Plan
-			if json.Unmarshal([]byte(f.planRaw), &p) == nil {
-				parts := make([]string, 0, len(p.Steps))
-				for _, step := range p.Steps {
-					parts = append(parts, step.ID+"="+step.Status)
-					if step.Status != "done" {
-						if due := plans.ParseDue(step.Due); !due.IsZero() {
-							in.Steps = append(in.Steps, plans.PromiseStep{ID: step.ID, Title: step.Title, Due: due})
-						}
-					}
-				}
-				sig = strings.Join(parts, ";")
-			}
-		}
-		// A plan-step state change is a reset: the plan's update time when
-		// its step statuses differ from the last fold.
-		stepChangeAt := f.stepChangeAt
-		if sig != f.sig && f.planAt != "" && (f.sig != "" || strings.Contains(sig, "=done")) {
-			stepChangeAt = f.planAt
-		}
-		if at, e := time.Parse(time.RFC3339Nano, stepChangeAt); e == nil {
-			in.StepChanges = []time.Time{at}
-		}
-		if at, e := time.Parse(time.RFC3339Nano, f.progressAt); e == nil {
-			in.Observations = []time.Time{at}
-		}
-		fold := plans.FoldPromise(in)
+	for _, c := range inputs {
+		f := struct{ id string }{c.id}
+		open, sig, stepChangeAt := c.open, c.sig, c.stepChangeAt
+		fold := plans.FoldPromise(c.in)
 		var promiseAt, lastEvidence any
 		what, source, sourceRef, author := "", "", "", ""
 		if fold.Promise != nil {
@@ -231,7 +170,7 @@ func (s *Store) PromiseFolds(ctx context.Context, cardIDs []string) (map[string]
 
 type briefInitiativeRow struct {
 	cardID, promiseAt, what, source, sourceRef, author, lastEvidence string
-	open, moves                                                     int
+	open, moves                                                      int
 }
 
 func (r briefInitiativeRow) fold() plans.PromiseFold {
@@ -246,10 +185,10 @@ func (r briefInitiativeRow) fold() plans.PromiseFold {
 // BriefAsk is one materialized ask fact.
 type BriefAsk struct {
 	AskID, InboxItemID, Kind, Requester, Recipient, SubjectRef, Title, Priority, State string
-	CreatedAt                                                                        time.Time
-	DecideBy                                                                         *time.Time
-	Blocks                                                                           []string
-	BlocksCount                                                                      int
+	CreatedAt                                                                          time.Time
+	DecideBy                                                                           *time.Time
+	Blocks                                                                             []string
+	BlocksCount                                                                        int
 }
 
 // OpenAsksDueBefore seeks open asks whose decide_by is at or before `before`,
@@ -359,4 +298,196 @@ func SortBriefDecisions(items []map[string]any) {
 		rb, _ := b["ref"].(string)
 		return ra < rb
 	})
+}
+
+type briefCardInput struct {
+	id                string
+	open              int
+	in                plans.PromiseInput
+	sig, stepChangeAt string
+}
+
+// briefPromiseInputs loads the fold inputs for at most 200 cards: one
+// statement for card, plan, metadata and observation facts, plus notes.
+func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notesFor func([]string) (map[string][]plans.PromiseNote, error)) ([]briefCardInput, error) {
+	encoded, _ := json.Marshal(ids)
+	rows, err := q.QueryContext(ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key,COALESCE(c.archived_at,''),COALESCE(c.trashed_at,''),`+effectiveCardDueSQL+`,
+		COALESCE(json_extract(m.metadata_json,'$.wake_condition'),''),COALESCE(p.body_json,''),COALESCE(p.updated_at,''),
+		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'')
+		FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id
+		LEFT JOIN work_observations o ON o.id=m.latest_observation_id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
+		WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	if err != nil {
+		return nil, err
+	}
+	type cardFacts struct {
+		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sig, stepChangeAt string
+	}
+	facts := []cardFacts{}
+	for rows.Next() {
+		var f cardFacts
+		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sig, &f.stepChangeAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		facts = append(facts, f)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	notes, err := notesFor(ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]briefCardInput, 0, len(facts))
+	for _, f := range facts {
+		ref := "card:" + firstNonEmptyString(f.handle, f.id)
+		in := plans.PromiseInput{Ref: ref, Notes: notes[f.id], CardDue: plans.ParseDue(f.due), Wake: plans.WakeTime(f.wake)}
+		in.Done = plans.Status(f.phase) == "done" || f.phase == "cancelled"
+		open := 1
+		if in.Done {
+			open = 0
+		}
+		if f.archived != "" || f.trashed != "" {
+			open = -1
+		}
+		sig := ""
+		if f.planRaw != "" {
+			var p plans.Plan
+			if json.Unmarshal([]byte(f.planRaw), &p) == nil {
+				parts := make([]string, 0, len(p.Steps))
+				for _, step := range p.Steps {
+					parts = append(parts, step.ID+"="+step.Status)
+					if step.Status != "done" {
+						if due := plans.ParseDue(step.Due); !due.IsZero() {
+							in.Steps = append(in.Steps, plans.PromiseStep{ID: step.ID, Title: step.Title, Due: due})
+						}
+					}
+				}
+				sig = strings.Join(parts, ";")
+			}
+		}
+		// A plan-step state change is a reset: the plan's update time when
+		// its step statuses differ from the last fold.
+		stepChangeAt := f.stepChangeAt
+		if sig != f.sig && f.planAt != "" && (f.sig != "" || strings.Contains(sig, "=done")) {
+			stepChangeAt = f.planAt
+		}
+		if at, e := time.Parse(time.RFC3339Nano, stepChangeAt); e == nil {
+			in.StepChanges = []time.Time{at}
+		}
+		if at, e := time.Parse(time.RFC3339Nano, f.progressAt); e == nil {
+			in.Observations = []time.Time{at}
+		}
+		out = append(out, briefCardInput{id: f.id, open: open, in: in, sig: sig, stepChangeAt: stepChangeAt})
+	}
+	return out, nil
+}
+
+// FoldPromisesFromEvents derives the same folds as the materialized path, per
+// request, straight from message_posted events (at most plans.MaxPromiseNotes
+// per card, through idx_events_thread_ts_id) instead of brief_notes. It is the
+// reference the materialized projection is tested against.
+func (s *Store) FoldPromisesFromEvents(ctx context.Context, cardIDs []string) (map[string]plans.PromiseFold, error) {
+	if len(cardIDs) > briefRefreshBatch {
+		cardIDs = cardIDs[:briefRefreshBatch]
+	}
+	inputs, err := briefPromiseInputs(ctx, s.db, cardIDs, func(ids []string) (map[string][]plans.PromiseNote, error) {
+		return s.promiseNotesFromEvents(ctx, ids)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]plans.PromiseFold{}
+	for _, c := range inputs {
+		if c.open < 0 {
+			continue
+		}
+		out[c.id] = plans.FoldPromise(c.in)
+	}
+	return out, nil
+}
+
+func (s *Store) promiseNotesFromEvents(ctx context.Context, cardIDs []string) (map[string][]plans.PromiseNote, error) {
+	out := map[string][]plans.PromiseNote{}
+	for _, id := range cardIDs {
+		rows, err := s.db.QueryContext(ctx, `SELECT e.id,COALESCE(e.actor_id,''),e.ts,e.payload_json FROM cards c JOIN events e ON e.thread_id=c.thread_id
+			WHERE c.id=? AND e.type='message_posted' ORDER BY e.ts DESC LIMIT ?`, id, plans.MaxPromiseNotes)
+		if err != nil {
+			return nil, err
+		}
+		type raw struct{ id, actor, ts, payload string }
+		events := []raw{}
+		for rows.Next() {
+			var r raw
+			if err = rows.Scan(&r.id, &r.actor, &r.ts, &r.payload); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			events = append(events, r)
+		}
+		rows.Close()
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+		for _, r := range events {
+			var event map[string]any
+			_ = json.Unmarshal([]byte(r.payload), &event)
+			payload, _ := event["payload"].(map[string]any)
+			n := plans.PromiseNote{EventID: r.id, Author: r.actor}
+			n.At, _ = time.Parse(time.RFC3339Nano, r.ts)
+			if next, ok := payload["next"].(map[string]any); ok {
+				if at, ok := plans.ParseWhen(anyStringValue(next["at"]), n.At); ok {
+					n.NextAt = at.Truncate(time.Second)
+				}
+				what := []rune(anyStringValue(next["what"]))
+				if len(what) > 160 {
+					what = what[:160]
+				}
+				n.NextWhat = string(what)
+			}
+			if n.Evidence, err = s.evidenceResolves(ctx, payload["evidence_refs"]); err != nil {
+				return nil, err
+			}
+			out[id] = append(out[id], n)
+		}
+	}
+	return out, nil
+}
+
+// evidenceResolves mirrors the brief_notes trigger: the first 8 refs, any
+// http(s) URL or an existing event, card, artifact or document.
+func (s *Store) evidenceResolves(ctx context.Context, raw any) (bool, error) {
+	refs, _ := raw.([]any)
+	if len(refs) > 8 {
+		refs = refs[:8]
+	}
+	for _, r := range refs {
+		ref, ok := r.(string)
+		if !ok {
+			continue
+		}
+		if (strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://")) && len(ref) > len("https://") {
+			return true, nil
+		}
+		kind, key, _ := strings.Cut(ref, ":")
+		query := map[string]string{
+			"event":    `SELECT EXISTS(SELECT 1 FROM events WHERE id=?1 OR handle=?1)`,
+			"card":     `SELECT EXISTS(SELECT 1 FROM cards WHERE id=?1 OR handle=?1)`,
+			"artifact": `SELECT EXISTS(SELECT 1 FROM artifacts WHERE id=?1)`,
+			"document": `SELECT EXISTS(SELECT 1 FROM documents WHERE id=?1 OR handle=?1)`,
+		}[kind]
+		if query == "" || key == "" {
+			continue
+		}
+		var found bool
+		if err := s.db.QueryRowContext(CanonicalMaintenanceContext(ctx), query, key).Scan(&found); err != nil {
+			return false, err
+		}
+		if found {
+			return true, nil
+		}
+	}
+	return false, nil
 }

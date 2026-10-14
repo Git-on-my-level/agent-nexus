@@ -424,7 +424,7 @@ func main() {
 		effectiveBlobRoot,
 		primitives.WithWorkspaceQuota(workspaceQuota),
 		primitives.WithAskWebhookEncryption(secretsEncryptor),
-		primitives.WithAskDeliveryPolicy(strings.Split(os.Getenv("ANX_ASK_NEXT_ACTOR_ORDER"), ","), ),
+		primitives.WithAskDeliveryPolicy(strings.Split(os.Getenv("ANX_ASK_NEXT_ACTOR_ORDER"), ",")),
 		primitives.WithAskWebhookAllowHosts(strings.FieldsFunc(os.Getenv("ANX_WEBHOOK_ALLOW_HOSTS"), func(r rune) bool { return r == ',' })),
 		primitives.WithScopedInboxReader(scopedInboxReader),
 		primitives.WithDatabasePath(workspace.Layout().DatabasePath),
@@ -1111,4 +1111,3 @@ func configuredPMActor(stderr io.Writer) string {
 	}
 	return actor
 }
-

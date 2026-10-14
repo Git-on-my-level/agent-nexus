@@ -279,7 +279,7 @@ func TestBriefSinceLastLookGroupsAndSeparatesFirstVisit(t *testing.T) {
 		changes: []primitives.OverviewChange{
 			{Kind: "step_completed", Ref: "card:init", Title: "Draft the plan", StepID: "a"},
 			{Kind: "ask_answered", Ref: "event:1", Title: "Ask answered", TS: briefAt(time.Hour)},
-			{Kind: "initiative_stalled", Ref: "card:init", Title: "Initiative"},
+			{Kind: "initiative_past_promise", Ref: "card:init", Title: "Initiative"},
 		},
 		newAsks: []map[string]any{
 			{"id": "ask-1", "title": "Approve the budget", "created_at": briefAt(90 * time.Minute)},

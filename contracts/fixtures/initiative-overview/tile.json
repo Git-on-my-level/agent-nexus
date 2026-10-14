@@ -56,7 +56,7 @@
     "status": {
       "state": "no_promise",
       "label": "No promise",
-      "reason": "No promise; last evidence 0m ago.",
+      "reason": "No promise.",
       "since": "2026-10-04T12:00:00Z"
     },
     "progress": {
@@ -103,7 +103,7 @@
   "updated_at": "2026-10-04T12:00:00Z",
   "plan_health": {
     "state": "no_promise",
-    "reason": "No promise; last evidence 0m ago.",
+    "reason": "No promise.",
     "since": "2026-10-04T12:00:00Z",
     "last_evidence_at": "2026-10-04T12:00:00Z"
   },
@@ -144,7 +144,7 @@
     "status": {
       "state": "no_promise",
       "label": "No promise",
-      "reason": "No promise; last evidence 0m ago.",
+      "reason": "No promise.",
       "since": "2026-10-04T12:00:00Z"
     },
     "progress": {

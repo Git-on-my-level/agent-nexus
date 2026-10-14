@@ -204,7 +204,7 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if asString(cardItem.Backing.PinnedDocument["id"]) != memberDocumentID {
 		t.Fatalf("expected pinned document %q, got %#v", memberDocumentID, cardItem.Backing.PinnedDocument)
 	}
-	if asString(cardItem.Derived.Summary["risk_state"]) != "due_soon" || intFromAny(cardItem.Derived.Summary["document_count"]) != 0 || intFromAny(cardItem.Derived.Summary["inbox_count"]) != 0 {
+	if _, ok := cardItem.Derived.Summary["risk_state"]; ok || intFromAny(cardItem.Derived.Summary["document_count"]) != 0 || intFromAny(cardItem.Derived.Summary["inbox_count"]) != 0 {
 		t.Fatalf("unexpected board card summary: %#v", cardItem.Derived.Summary)
 	}
 	if got := asString(cardItem.Derived.Freshness["status"]); got != "current" {
