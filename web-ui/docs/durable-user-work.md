@@ -362,8 +362,10 @@ principal replacement with late-send fencing. Existing lifecycle layout checks
 cover four viewports. The AST guard rejects new direct document lifecycle calls
 in Svelte surfaces and requires both routes to mount the durable composer.
 
-The shared workspace-trash helper still restores documents directly; it is a
-remaining lifecycle surface, alongside permanent purge. Legacy knowledge PUT and
+The shared workspace-trash helper still contains a direct document restore call,
+but has no current callers and there is no workspace-trash route. Retire or guard
+this unused legacy adapter during whole-UI enforcement. Permanent purge remains
+a separate server replay gap. Legacy knowledge PUT and
 purge remain separate replay audits; purge includes post-commit physical blob
 deletion and needs a tombstone/access recovery design. Remaining settings and
 lifecycle surfaces, original PM chat HTTP receipts and whole-UI enforcement stay
@@ -392,7 +394,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                          |
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                              | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
-| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Detail and list/bulk drafts/outbox covered; workspace-trash helper restore and purge remain open                                                      |
+| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Current detail/list/bulk lifecycle UI covered; unused legacy trash helper needs retirement/guarding, and purge remains open                           |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                             | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules
