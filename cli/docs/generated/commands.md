@@ -1431,8 +1431,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.
 - Concepts: `home`, `events`
-- Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ groups, unread_count, group_count, generated_at }`.
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`
+- Output: Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history.
 
 ## `hosts.bridge.check_in`
 

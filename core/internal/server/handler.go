@@ -74,7 +74,7 @@ type PrimitiveStore interface {
 	ReadInbox(ctx context.Context, options primitives.InboxReadOptions) ([]primitives.DerivedInboxItem, int, error)
 	ListInboxThreadIDs(ctx context.Context) ([]string, error)
 	GetDerivedInboxItem(ctx context.Context, id string) (primitives.DerivedInboxItem, error)
-	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem) error
+	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem, expectedGeneration ...int64) error
 	GetDerivedTopicProjection(ctx context.Context, threadID string) (primitives.DerivedTopicProjection, error)
 	ListDerivedTopicProjections(ctx context.Context, threadIDs []string) (map[string]primitives.DerivedTopicProjection, error)
 	PutDerivedTopicProjection(ctx context.Context, projection primitives.DerivedTopicProjection) error
@@ -177,6 +177,7 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
+	readAdmission                  *readAdmission
 	routeObserver                  func(string, routeAccessClassifier)
 	readVisibility                 func(string, string) bool // Request-scoped access for composed resource reads.
 	summaryFormat                  bool                      // Explicit summary=1 migration for composed card collections.
@@ -688,6 +689,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	admission := newReadAdmission()
+	opts.readAdmission = admission
 	registerRoute := func(pattern string, classify routeAccessClassifier, handler http.HandlerFunc) {
 		if opts.routeObserver != nil {
 			opts.routeObserver(pattern, classify)
@@ -732,6 +735,29 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			if timed {
 				addServerTiming(w, "auth", started)
+			}
+			path := r.URL.Path
+			if hotProjectionRead(r) {
+				release, err := admission.read(r.Context())
+				if err != nil {
+					writeError(w, 503, "unavailable", "request was cancelled while waiting for resource data")
+					return
+				}
+				defer release()
+			}
+
+			// These routes are finite read-only projections. Admit their complete
+			// reads to one immutable, authorized SQLite snapshot. Mutations and
+			// stream lifetimes must never borrow it.
+			readProjection := r.Method == http.MethodGet && (path == "/events" || path == "/home/unread" || strings.HasPrefix(path, "/topics/") && strings.HasSuffix(path, "/workspace"))
+			if canonical, ok := opts.primitiveStore.(*primitives.Store); ok && readProjection {
+				ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
+				if err != nil {
+					writeError(w, http.StatusServiceUnavailable, "unavailable", "resource data is unavailable")
+					return
+				}
+				defer closeRead()
+				r = r.WithContext(ctx)
 			}
 			handler(w, r)
 		})

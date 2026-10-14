@@ -403,6 +403,8 @@ type DispatchRequest struct {
 // Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
+	// Read-only page-local delivery routing; never used by dispatch/mutations.
+	BeginDeliveryRead func(context.Context, []string) (context.Context, error)
 	// AuthorizeReadBatch checks a bounded read operation against fresh principal
 	// authority and canonical resource visibility. It is never used for writes.
 	// Missing entries deny access; nil retains the per-record authorizer.

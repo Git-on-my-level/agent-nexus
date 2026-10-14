@@ -43,6 +43,8 @@ type PMRuntimeConfig struct {
 
 // PMRuntime is the mounted PM HTTP surface plus the durable service used by
 // native event follow-through and channel ingress.
+type pmDeliverySourcesKey struct{}
+
 type PMRuntime struct {
 	Handler http.Handler
 	Service *pm.Service
@@ -458,12 +460,28 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			return executeNativeAnnotation(ctx, store, a)
 		},
 	}
+	deps.BeginDeliveryRead = func(ctx context.Context, refs []string) (context.Context, error) {
+		snapshots, err := store.WorkRoutingSnapshots(ctx, uniqueServerStrings(refs))
+		if err != nil {
+			return ctx, err
+		}
+		return context.WithValue(ctx, pmDeliverySourcesKey{}, snapshots), nil
+	}
 	deps.DeliveryPath = func(ctx context.Context, a pm.Action) (string, error) {
 		authority := a.SourceAuthority
 		if authority == "" {
 			// Legacy records lack the trusted routing snapshot. Resolve it from
 			// live or trashed work where possible; never infer it from a scope.
-			w, err := store.GetWork(ctx, a.WorkRef)
+			var w map[string]any
+			var err error
+			if snapshots, ok := ctx.Value(pmDeliverySourcesKey{}).(map[string]map[string]any); ok {
+				w = snapshots[a.WorkRef]
+				if w == nil {
+					err = primitives.ErrNotFound
+				}
+			} else {
+				w, err = store.GetWork(ctx, a.WorkRef)
+			}
 			if errors.Is(err, primitives.ErrNotFound) {
 				return "unknown", pm.ErrNotFound
 			}
@@ -555,6 +573,15 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 		if !authorizeResourceSelectors(w, r) {
 			return
+		}
+		if r.Method == http.MethodGet && (r.URL.Path == "/pm/actions" || r.URL.Path == "/pm/decisions") {
+			ctx, closeRead, err := store.BeginResourceRead(r.Context())
+			if err != nil {
+				writeError(w, http.StatusServiceUnavailable, "unavailable", "PM data is unavailable")
+				return
+			}
+			defer closeRead()
+			r = r.WithContext(ctx)
 		}
 		handler.ServeHTTP(w, r)
 	})

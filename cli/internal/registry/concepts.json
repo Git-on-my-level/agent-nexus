@@ -13048,10 +13048,11 @@
           "streaming": {
             "mode": "none"
           },
-          "output_envelope": "Returns `{ groups, unread_count, group_count, generated_at }`.",
+          "output_envelope": "Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history.",
           "error_codes": [
             "auth_required",
-            "invalid_token"
+            "invalid_token",
+            "invalid_request"
           ],
           "concepts": [
             "home",
@@ -16384,10 +16385,11 @@
           "streaming": {
             "mode": "none"
           },
-          "output_envelope": "Returns `{ groups, unread_count, group_count, generated_at }`.",
+          "output_envelope": "Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history.",
           "error_codes": [
             "auth_required",
-            "invalid_token"
+            "invalid_token",
+            "invalid_request"
           ],
           "concepts": [
             "home",

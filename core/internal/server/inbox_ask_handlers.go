@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -22,8 +21,7 @@ type humanAttentionResponseStore interface {
 	HumanAttentionResponseRequest(context.Context, string) (map[string]any, error)
 	HumanAttentionResponseReplay(context.Context, string, string, string) (map[string]any, error)
 	HumanAttentionResponseClaimed(context.Context, string) (bool, error)
-	AppendHumanAttentionResponse(context.Context, string, string, string, string, string, map[string]any, map[string]any) (map[string]any, bool, error)
-	SaveHumanAttentionResponseResult(context.Context, string, map[string]any) error
+	AppendHumanAttentionResponse(context.Context, string, string, string, string, string, map[string]any, map[string]any, ...map[string]any) (map[string]any, bool, error)
 }
 
 type inboxRespondAnswer struct {
@@ -118,6 +116,12 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
+	// Decode and validate the body before reserving answer priority. A stalled
+	// upload must never hold the finite-read lane away from other readers.
+	if opts.readAdmission != nil {
+		release := opts.readAdmission.answer()
+		defer release()
+	}
 	// A batch item answers every member in one atomic pass. Intercept before
 	// the single-ask validations, which require flat response fields.
 	if respondInboxBatchIfNeeded(w, r, opts, effectiveItemID, actorID, req) {
@@ -367,7 +371,14 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			initialNotify["related_refs"] = []string{"access-request:" + request.ID}
 		}
 	}
-	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
+	// Persist the exact HTTP replay together with the answer. Projection refresh
+	// and wake delivery are driven by durable queues, never the request lifetime.
+	responseFields := hygiene.attach(map[string]any{"notify": map[string]any{
+		"requested": notifyRequested, "queued": notifyRequested,
+		"message": initialNotify["message"], "target_actor_id": target.ActorID,
+		"target_agent_id": target.AgentID, "target_handle": target.Handle, "mode": target.Mode,
+	}})
+	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify, responseFields)
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -395,49 +406,8 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		writeAuthorizedInboxResponseReplay(w, r, opts, storedResponse)
 		return
 	}
-	responseStored := storedResponse["event"].(map[string]any)
-	_ = refreshDerivedTopicProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID)
-
-	notifyQueued := notifyRequested
-	notifyMessage := anyString(initialNotify["message"])
-	if notifyRequested && opts.answerWakeFlushWhenNoOpenAsks {
-		if batchStore, ok := opts.primitiveStore.(interface {
-			CountOpenHumanAttentionAsks(context.Context, string) (int, error)
-		}); ok {
-			if openAsks, countErr := batchStore.CountOpenHumanAttentionAsks(r.Context(), requesterActorID); countErr == nil && openAsks == 0 {
-				maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
-					PrimitiveStore:      opts.primitiveStore,
-					WorkspaceID:         opts.workspaceID,
-					QuietWindow:         opts.answerWakeQuietWindow,
-					FlushWhenNoOpenAsks: true,
-					RecipientIsActive:   answerWakeRecipientIsActive(opts.authStore),
-				})
-				if flushErr := maintainer.FlushTarget(r.Context(), target.ActorID); flushErr == nil {
-					notifyMessage = "All of your open asks are answered; the answer batch is queued now."
-				}
-			}
-		}
-	}
-
-	response := map[string]any{
-		"event":        responseStored,
-		"task_outcome": storedResponse["task_outcome"],
-		"notify": map[string]any{
-			"requested":       notifyRequested,
-			"queued":          notifyQueued,
-			"message":         notifyMessage,
-			"target_actor_id": target.ActorID,
-			"target_agent_id": target.AgentID,
-			"target_handle":   target.Handle,
-			"mode":            target.Mode,
-		},
-	}
-
-	response = hygiene.attach(response)
-	if err := responseStore.SaveHumanAttentionResponseResult(r.Context(), sourceEventID, response); err != nil {
-		log.Printf("save human attention response replay: %v", err)
-	}
-	writeJSON(w, http.StatusCreated, response)
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, http.StatusCreated, storedResponse)
 }
 
 // Authorization precedes replay and claim lookups so an inaccessible request
@@ -745,7 +715,7 @@ func findAgentPrincipalByAgentID(ctx context.Context, authStore *auth.Store, age
 
 // askBatchRespondStore is the store surface the atomic batch respond path needs.
 type askBatchRespondStore interface {
-	AppendHumanAttentionBatchResponse(context.Context, string, string, string, string, string, []primitives.HumanAttentionBatchResponseMember) (map[string]any, bool, error)
+	AppendHumanAttentionBatchResponse(context.Context, string, string, string, string, string, []primitives.HumanAttentionBatchResponseMember, ...map[string]any) (map[string]any, bool, error)
 	HumanAttentionBatchResponseReplay(context.Context, string, string, string) (map[string]any, error)
 	HumanAttentionBatchResponseClaimed(context.Context, string) (bool, error)
 	HumanAttentionBatchResponseRequest(context.Context, string) (map[string]any, error)
@@ -1069,7 +1039,22 @@ func handleRespondInboxBatch(
 		return
 	}
 
-	stored, replayed, err := batchStore.AppendHumanAttentionBatchResponse(r.Context(), actorID, batchID, effectiveItemID, req.IdempotencyKey, hash, members)
+	notifyMessageText := "All batch answers recorded; wakes queue per ask delivery."
+	if !anyNotify {
+		notifyMessageText = "Every ask in this batch requested no delivery (mode none); answers recorded without waking the requester."
+	}
+	notify := map[string]any{
+		"requested":       anyNotify,
+		"queued":          anyNotify,
+		"message":         notifyMessageText,
+		"target_actor_id": target.ActorID,
+		"target_agent_id": target.AgentID,
+		"target_handle":   target.Handle,
+		"mode":            target.Mode,
+		"batch_id":        batchID,
+	}
+	responseFields := hygiene.attach(map[string]any{"notify": notify})
+	stored, replayed, err := batchStore.AppendHumanAttentionBatchResponse(r.Context(), actorID, batchID, effectiveItemID, req.IdempotencyKey, hash, members, responseFields)
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -1103,61 +1088,9 @@ func handleRespondInboxBatch(
 		writeAuthorizedInboxBatchReplay(w, r, opts, stored)
 		return
 	}
-	_ = refreshDerivedTopicProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID)
 
-	notifyMessageText := "All batch answers recorded; wakes queue per ask delivery."
-	if !anyNotify {
-		notifyMessageText = "Every ask in this batch requested no delivery (mode none); answers recorded without waking the requester."
-	}
-	notify := map[string]any{
-		"requested":       anyNotify,
-		"queued":          anyNotify,
-		"message":         notifyMessageText,
-		"target_actor_id": target.ActorID,
-		"target_agent_id": target.AgentID,
-		"target_handle":   target.Handle,
-		"mode":            target.Mode,
-		"batch_id":        batchID,
-	}
-	if anyNotify && opts.answerWakeFlushWhenNoOpenAsks {
-		if flushStore, ok := opts.primitiveStore.(interface {
-			CountOpenHumanAttentionAsks(context.Context, string) (int, error)
-		}); ok {
-			if openAsks, countErr := flushStore.CountOpenHumanAttentionAsks(r.Context(), requesterActorID); countErr == nil && openAsks == 0 {
-				maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
-					PrimitiveStore:      opts.primitiveStore,
-					WorkspaceID:         opts.workspaceID,
-					QuietWindow:         opts.answerWakeQuietWindow,
-					FlushWhenNoOpenAsks: true,
-					RecipientIsActive:   answerWakeRecipientIsActive(opts.authStore),
-				})
-				if flushErr := maintainer.FlushTarget(r.Context(), target.ActorID); flushErr == nil {
-					notify["message"] = "All of your open asks are answered; the answer batch is queued now."
-				}
-			}
-		}
-	}
-
-	storedAnswers, _ := stored["answers"].([]any)
-	response := map[string]any{
-		"batch_id": batchID,
-		"answers":  storedAnswers,
-		"notify":   notify,
-	}
-	response = hygiene.attach(response)
-	if saveErr := batchStoreSave(opts, batchID, response); saveErr != nil {
-		log.Printf("save batch response replay: %v", saveErr)
-	}
-	writeJSON(w, http.StatusCreated, response)
-}
-
-func batchStoreSave(opts handlerOptions, batchID string, response map[string]any) error {
-	if store, ok := opts.primitiveStore.(interface {
-		SaveHumanAttentionBatchResponseResult(context.Context, string, map[string]any) error
-	}); ok {
-		return store.SaveHumanAttentionBatchResponseResult(context.Background(), batchID, response)
-	}
-	return nil
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, http.StatusCreated, stored)
 }
 
 // writeAuthorizedInboxBatchReplay returns a stored batch response under

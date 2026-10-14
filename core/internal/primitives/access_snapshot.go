@@ -16,6 +16,7 @@ import (
 type denialTarget struct{ kind, id string }
 
 type denialSnapshot struct {
+	mutation    bool
 	pointOnce   sync.Once
 	pointIndex  map[denialTarget]struct{}
 	pointToken  int64

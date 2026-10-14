@@ -86,7 +86,10 @@ func (s TopicProjectionRefreshStatus) InProgress() bool {
 	return s.InProgressGeneration != nil
 }
 
-func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []DerivedInboxItem) error {
+// ErrProjectionGenerationChanged means a snapshot was superseded before publication.
+var ErrProjectionGenerationChanged = errors.New("projection generation changed")
+
+func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []DerivedInboxItem, expectedGeneration ...int64) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("primitives store database is not initialized")
 	}
@@ -105,6 +108,19 @@ func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, i
 			log.Printf("tx rollback failed: %v", err)
 		}
 	}()
+
+	// Check under the same transaction as replacement: a separate read permits
+	// an answer to commit between the generation check and the inserts.
+	if len(expectedGeneration) > 0 {
+		var generation int64
+		err := tx.QueryRowContext(ctx, `SELECT desired_generation FROM topic_projection_refresh_status WHERE thread_id=?`, threadID).Scan(&generation)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("check inbox projection generation: %w", err)
+		}
+		if generation != expectedGeneration[0] {
+			return ErrProjectionGenerationChanged
+		}
+	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE thread_id = ? AND COALESCE(json_extract(data_json,'$.subtype'),'') <> 'report_review_due'`, threadID); err != nil {
 		return fmt.Errorf("delete derived inbox items: %w", err)
@@ -148,7 +164,8 @@ func insertDerivedInboxItem(ctx context.Context, exec eventExec, threadID string
 	if _, err := exec.ExecContext(
 		ctx,
 		`INSERT INTO derived_inbox_items(id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 SELECT * FROM (VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?))
+		 WHERE NOT EXISTS (SELECT 1 FROM human_attention_request_resolutions WHERE request_event_id=?)`,
 		item.ID,
 		item.ThreadID,
 		item.Category,
@@ -160,6 +177,7 @@ func insertDerivedInboxItem(ctx context.Context, exec eventExec, threadID string
 		firstNonEmptyDerivedString(item.GeneratedAt, time.Now().UTC().Format(time.RFC3339Nano)),
 		dataJSON,
 		sourceHash,
+		strings.TrimSpace(item.SourceEventID),
 	); err != nil {
 		return fmt.Errorf("insert derived inbox item %s: %w", item.ID, err)
 	}

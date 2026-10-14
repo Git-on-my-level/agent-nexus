@@ -874,6 +874,7 @@
     clearTimeout(liveTimer);
     liveTimer = setTimeout(() => {
       liveTimer = null;
+      if (document.hidden) return;
       if (busy) {
         scheduleLiveRefresh();
         return;
@@ -1646,7 +1647,10 @@
       refreshIfInFlight();
     }, 15_000);
     const onVisible = () => {
-      if (!document.hidden) refreshIfInFlight();
+      if (!document.hidden) {
+        refreshIfInFlight();
+        scheduleLiveRefresh();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {

@@ -74,8 +74,10 @@ export function startAgentRoster(workspace) {
     let stopped = false;
     let inflight = null;
     let again = false;
+    let followup;
     const run = async () => {
-      if (stopped) return;
+      if (stopped || (typeof document !== "undefined" && document.hidden))
+        return;
       if (inflight) {
         again = true;
         return inflight;
@@ -103,7 +105,8 @@ export function startAgentRoster(workspace) {
           inflight = null;
           if (again && !stopped) {
             again = false;
-            void run();
+            clearTimeout(followup);
+            followup = setTimeout(() => void run(), EVENT_DELAY_MS);
           }
         }
       })();
@@ -136,6 +139,7 @@ export function startAgentRoster(workspace) {
       stop: () => {
         stopped = true;
         clearInterval(timer);
+        clearTimeout(followup);
         stopRosterStream();
         stopAskEvents();
         if (typeof document !== "undefined") {

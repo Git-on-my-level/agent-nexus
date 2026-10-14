@@ -19,6 +19,7 @@ import (
 
 type topicResourceBundle struct {
 	CardsTruncated      bool
+	ResourcesTruncated  bool
 	PrimaryThread       map[string]any
 	Boards              []map[string]any
 	Cards               []map[string]any
@@ -492,7 +493,39 @@ func buildTopicWorkspacePayload(ctx context.Context, opts handlerOptions, topicI
 		return nil, err
 	}
 
-	bundle, err := buildTopicResourceBundle(ctx, opts, topic)
+	var bundle topicResourceBundle
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		var page primitives.TopicWorkspacePage
+		primary := topicPrimaryThreadID(topic)
+		page, err = canonical.TopicWorkspaceResources(ctx, anyString(topic["id"]), primary)
+		if err == nil {
+			bundle = topicResourceBundle{Boards: page.Boards, Cards: page.Cards, Documents: page.Documents, Threads: page.Threads, CardsTruncated: page.CardsTruncated, ResourcesTruncated: page.Truncated}
+			var state topicProjectionState
+			state, err = loadTopicProjectionState(ctx, opts, primary)
+			bundle.ProjectionFreshness = state.Freshness
+			if err == nil {
+				var inbox []primitives.DerivedInboxItem
+				inbox, err = canonical.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: primary, Limit: 51})
+				if len(inbox) > 50 {
+					inbox = inbox[:50]
+					bundle.ResourcesTruncated = true
+				}
+				bundle.Inbox = []map[string]any{}
+				for _, item := range inbox {
+					bundle.Inbox = append(bundle.Inbox, payloadFromDerivedInboxItem(item))
+				}
+			}
+			if opts.summaryFormat && err == nil {
+				err = canonical.EnrichCardPlans(ctx, bundle.Cards, opts.readVisibility, time.Now().UTC(), planStalledAfter())
+			}
+			for _, thread := range bundle.Threads {
+				primitives.StripThreadPlanningFieldsForAPI(thread)
+			}
+			bundle.Cards = publicCardsView(bundle.Cards)
+		}
+	} else {
+		bundle, err = buildTopicResourceBundle(ctx, opts, topic)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -506,6 +539,7 @@ func buildTopicWorkspacePayload(ctx context.Context, opts handlerOptions, topicI
 		"inbox":                bundle.Inbox,
 		"projection_freshness": bundle.ProjectionFreshness,
 		"generated_at":         time.Now().UTC().Format(time.RFC3339Nano),
+		"cards_truncated":      bundle.CardsTruncated, "resources_truncated": bundle.ResourcesTruncated,
 	}
 	if opts.summaryFormat {
 		response["cards_truncated"] = bundle.CardsTruncated

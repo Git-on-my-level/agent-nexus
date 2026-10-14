@@ -163,6 +163,7 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 	key string,
 	hash string,
 	members []HumanAttentionBatchResponseMember,
+	responseFields ...map[string]any,
 ) (map[string]any, bool, error) {
 	if strings.TrimSpace(batchID) == "" || len(members) == 0 {
 		return nil, false, fmt.Errorf("batch id and members are required")
@@ -188,6 +189,8 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(dbBytes)}, blobLedgerWritePlan{}); err != nil {
 		return nil, false, err
 	}
+	ctx, closeAdmission := withResponseMutationReads(ctx)
+	defer closeAdmission()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, false, err
@@ -270,7 +273,13 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 	if err := json.Unmarshal(raw, &answersAny); err != nil {
 		return nil, false, err
 	}
-	response := map[string]any{"batch_id": batchID, "answers": answersAny}
+	response := map[string]any{}
+	if len(responseFields) > 0 {
+		for k, v := range responseFields[0] {
+			response[k] = v
+		}
+	}
+	response["batch_id"], response["answers"] = batchID, answersAny
 	raw, err = json.Marshal(response)
 	if err != nil {
 		return nil, false, err
@@ -298,6 +307,9 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 			}
 		}
 		return nil, false, ErrHumanAttentionAlreadyResponded
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE id=?`, inboxItemID); err != nil {
+		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, false, err
