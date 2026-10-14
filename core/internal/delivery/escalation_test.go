@@ -324,3 +324,24 @@ func TestHotReadQueryPlans(t *testing.T) {
 		})
 	}
 }
+
+func TestEscalatorTerminalCardBlocksDoNotCount(t *testing.T) {
+	e := newEnv(t)
+	esc, _ := newEscalator(e, nil)
+	e.setChannel(t, "alice", "email", "a@example.com", true, false)
+	// Three card refs that do not resolve to an open card: missing cards
+	// count as terminal, so the ask falls back to the digest.
+	payload, _ := json.Marshal(map[string]any{"payload": map[string]any{"title": "Stale blocks", "requester_actor_id": "actor-a", "by": "2d", "blocks": []string{"card:gone-1", "card:gone-2", "card:gone-3"}}})
+	if _, err := e.db.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('ask-t','human_attention_requested',?,'actor-a','thread-1','[]',?)`, rfc(baseNow.Add(-3*24*time.Hour)), string(payload)); err != nil {
+		t.Fatal(err)
+	}
+	if err := esc.Step(context.Background(), baseNow); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM deliveries WHERE kind='push'`); n != 0 {
+		t.Fatalf("terminal blocks must not force a push, got %d", n)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM ask_deadlines WHERE request_event_id='ask-t' AND escalation='digest'`); n != 1 {
+		t.Fatalf("ask should escalate to the digest")
+	}
+}

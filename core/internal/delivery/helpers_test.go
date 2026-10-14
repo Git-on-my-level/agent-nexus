@@ -34,13 +34,13 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) advance(d time.Duration) { *e.now = e.now.Add(d) }
 
-func rfc(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+func rfc(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000000000Z") }
 
 func (e *env) addAsk(t *testing.T, id string, ts time.Time, by string, blocks int, title string) {
 	t.Helper()
 	bl := make([]string, blocks)
 	for i := range bl {
-		bl[i] = "card:" + string(rune('a'+i))
+		bl[i] = "thread:" + string(rune('a'+i))
 	}
 	payload, _ := json.Marshal(map[string]any{"payload": map[string]any{"title": title, "requester_actor_id": "actor-a", "by": by, "blocks": bl}})
 	if _, err := e.db.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?, 'human_attention_requested', ?, 'actor-a', 'thread-1', '[]', ?)`, id, rfc(ts), string(payload)); err != nil {

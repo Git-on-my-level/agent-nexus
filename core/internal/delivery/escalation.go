@@ -206,6 +206,12 @@ func (e *Escalator) escalate(ctx context.Context, now time.Time) error {
 	}
 	var pushRecipients []recipient
 	for _, a := range due {
+		if a.blocks >= ImmediateBlocks {
+			// Blocks refs that reached a terminal state clear automatically.
+			if a.blocks, err = e.openBlocks(ctx, a.id); err != nil {
+				return err
+			}
+		}
 		mode := EscalationMode(a.askTS, a.decideBy, a.blocks)
 		if mode == EscalationPush {
 			if pushRecipients == nil {
@@ -403,4 +409,48 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 		"principals":         principals,
 		"generated_at":       stamp(now),
 	}, nil
+}
+
+const maxBlocksChecked = 20
+
+// openBlocks counts the ask's blocks refs that are still open: card refs whose
+// card is done, cancelled, archived, trashed or missing are dropped; other refs
+// count as open. It reads only the ask (primary key) and at most
+// maxBlocksChecked cards, and returns a count, never content.
+func (e *Escalator) openBlocks(ctx context.Context, askID string) (int, error) {
+	rows, err := e.Store.DB.QueryContext(ctx, `SELECT value FROM events, json_each(events.payload_json,'$.payload.blocks') WHERE events.id=? AND json_type(events.payload_json,'$.payload.blocks')='array' LIMIT ?`, askID, maxBlocksChecked)
+	if err != nil {
+		return 0, err
+	}
+	refs := []string{}
+	for rows.Next() {
+		var ref sql.NullString
+		if err := rows.Scan(&ref); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if r := strings.TrimSpace(ref.String); r != "" {
+			refs = append(refs, r)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	open := 0
+	for _, ref := range refs {
+		key := strings.TrimPrefix(ref, "card:")
+		if key == ref {
+			open++
+			continue
+		}
+		var live int
+		if err := e.Store.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cards WHERE (id=? OR handle=?) AND column_key NOT IN ('done','cancelled') AND COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')=''`, key, key).Scan(&live); err != nil {
+			return 0, err
+		}
+		if live > 0 {
+			open++
+		}
+	}
+	return open, nil
 }
