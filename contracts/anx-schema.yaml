@@ -149,6 +149,7 @@ ref_format:
     "inbox:<handle>": "References a derived inbox item by public handle"
     "host:<handle>": "References an enrolled workspace host by slug"
     "run:<handle>": "References a launcher run by public handle"
+    "series:<name>[?<label>=<value>&_range=30d&_baseline=<number>]": "Workspace series metric; URL-encoded label selectors, range 1s..90d (default 30d), optional finite numeric baseline. Reserved options begin with underscore. Ambiguous streams return no value. Visibility follows series/report reads."
     "url:<url>": "References an external URL"
   rules:
     - "All refs MUST start with a typed prefix followed by a colon and value."
@@ -1129,7 +1130,7 @@ initiative_plan:
     fields:
       id: {type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', max_length: 64}
       title: {type: string, max_length: 500}
-      ref: {type: string, description: 'card:, doc:, document: or topic: ref, or absolute HTTP(S) URL. External GitHub refs/URLs and opaque adapter-published identifier aliases use ingested observations or generic structured source_refs; no network fetch.'}
+      ref: {type: string, description: 'card:, doc:, document:, topic: or series: ref, or absolute HTTP(S) URL. External GitHub refs/URLs and opaque adapter-published identifier aliases use ingested observations or generic structured source_refs; no network fetch.'}
       after: {type: 'list<string>', description: Existing step ids; unique; graph must be acyclic.}
       due: {type: datetime, description: RFC3339 instant or YYYY-MM-DD date.}
       status: {type: string, values: [done, active, blocked, not_started], description: Fallback only when ref has no known workflow state.}
@@ -1142,7 +1143,7 @@ initiative_plan:
       - Critical path maximizes unfinished steps through sink nodes; done steps have zero weight. Ties use lexicographic step ids.
       - plan_state carries no health; plan_health.state is the one promise vocabulary (see promises).
       - Next steps are unfinished, unblocked steps whose dependencies are all done.
-      - Known card/source workflow states override fallback status; context refs (docs/topics) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/in_review/active/review/open to active; other states map to not_started.
+      - Known card/source workflow states override fallback status; context refs (docs/topics/series) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/in_review/active/review/open to active; other states map to not_started.
       - Source activity and meaningful progress reset recency; unchanged observation timestamps do not. Plan edits reset recency.
       - Plan writes require if_updated_at from cards get or plan show; edits and before/after plans are atomic card_updated events, visible in the card timeline.
       - Live initiatives keep the existing progress and needs array; a plan supplies computed progress, blocked step titles in needs, plan_state and health. Cards without plans keep the existing summary projection.
@@ -1153,11 +1154,12 @@ batch_ref_resolve:
   evidence_candidates_per_key: 33
   input: {refs: 'list<string>'}
   output: {items: 'list<object>'}
-  fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable, authority, native_id, connection_id, observed_at, source, plan_health, plan_resolution_truncated, status_mismatch, possibly_moot]
+  fields: [ref, kind, title, metric, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable, authority, native_id, connection_id, observed_at, source, plan_health, plan_resolution_truncated, status_mismatch, possibly_moot]
   semantics:
     - Preserve input order and duplicates. Unknown, ambiguous or inaccessible refs remain resolvable false without metadata.
     - Read-side batches authorize candidates, not the request's ref strings. A key shared with an inaccessible publisher still returns its visible evidence; hidden and unknown entries do not reject the batch. Ownership checks remain mandatory when writing refs.
     - Resolve card, doc/document, topic, and board refs by exact handle or internal id. External keys resolve only from visible source observations or generic structured source_refs by their exact published native_id, authority-prefixed native_id, URL, identifier or aliases. Core never parses provider spellings, generates provider URLs or infers authority; adapters publish any desired variants.
+    - Series refs use URL-encoded label selectors plus reserved _range (default 30d, maximum 90d) and _baseline options. The metric contains exact latest and baseline observations, delta and freshness; unknown, inaccessible or ambiguous stream selectors stay unresolved without metadata.
     - URLs for native card/document entities are workspace-relative paths; topics and boards have no current UI detail surface and omit url. No caller-supplied origin is trusted.
     - Read access is checked for every resource and referenced plan step. Published evidence keys carry their containing card ownership to referencing plans and work through the central graph before projections, limits or counts; numeric evidence projection IDs are internal. Publishing a key does not itself reference another publisher of that key. Unavailable refs never expose hidden state.
 
@@ -1322,6 +1324,8 @@ work_summary:
     - Agent detail opts in with summary=1 to at most 50 recent-card candidates, selected through indexed assignment and current/recent-run refs before hydration and batch enrichment; cards_truncated marks the bounded preview and is always true for scoped readers so hidden candidate counts cannot be inferred.
     - Progress appears for a nonempty plan or explicit child relations; next and steps appear only for a plan. Owner, due, age, last_movement_at and external source appear only when known.
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
+    - Series refs in card refs, related_refs and plan step refs expose at most eight metrics per card, under a shared 200-ref budget. Metrics compare the exact latest raw point to the first point in the selected range (up to 90 days) or a declared numeric baseline; state values compare without numeric delta. Missing, denied or ambiguous streams expose no value.
+    - Attention links through subject_ref and related_refs, deduplicates asks and exposes oldest waiting age in seconds; needs_you rows sort oldest wait first.
     - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.
     - Inbox stream identity uses canonical summary inputs, creation and oldest-ask timestamps. Elapsed age, oldest_age, rolling digest windows and timer-only health changes never change event IDs; underlying plan, progress, ownership, due, movement, source and attention changes do.
 

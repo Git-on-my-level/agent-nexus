@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/plans"
+	series "agent-nexus-core/internal/seriesref"
 )
 
 type PreviewBoard struct {
@@ -22,6 +23,7 @@ type PreviewStep = plans.NextStep
 // RefPreview contains only the bounded data needed by chips and plan derivation.
 // Internal fields support principal-scoped reads and never appear on the wire.
 type RefPreview struct {
+	Metric                  *series.Metric  `json:"metric,omitempty"`
 	Ref                     string          `json:"ref"`
 	Kind                    string          `json:"kind,omitempty"`
 	Title                   string          `json:"title,omitempty"`
@@ -223,6 +225,9 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 			}
 		}
 	}
+	if err := s.readSeriesRefFacts(ctx, refs, out); err != nil {
+		return nil, err
+	}
 	if err := s.readExternalRefFacts(ctx, refs, out, visible); err != nil {
 		return nil, err
 	}
@@ -264,14 +269,14 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,c.refs_json FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw string
-		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw); err != nil {
+		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw, cardRefsRaw string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw, &cardRefsRaw); err != nil {
 			return nil, nil, nil, err
 		}
 		var entries []any
@@ -294,6 +299,9 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 			}
 		}
 		input.Related = related
+		if err = json.Unmarshal([]byte(cardRefsRaw), &input.Refs); err != nil {
+			return nil, nil, nil, err
+		}
 		var m, o map[string]any
 		if err = json.Unmarshal([]byte(metadata), &m); err != nil {
 			return nil, nil, nil, err
@@ -441,6 +449,9 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	if err != nil {
 		return nil, err
 	}
+	if err = s.resolveSeriesPreviews(ctx, out, now); err != nil {
+		return nil, err
+	}
 	ids := []string{}
 	for _, row := range out {
 		if row.Resolvable && row.Kind == "card" {
@@ -489,6 +500,9 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	}
 
 	if err = s.enrichSummaryAttention(ctx, movement, summaries, now); err != nil {
+		return nil, err
+	}
+	if err = s.enrichSummaryMetrics(ctx, movement, ps, summaries, now); err != nil {
 		return nil, err
 	}
 	for i := range out {
@@ -578,7 +592,10 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 		}
 	}
 
-	return s.enrichSummaryAttention(ctx, movement, summaries, now)
+	if err = s.enrichSummaryAttention(ctx, movement, summaries, now); err != nil {
+		return err
+	}
+	return s.enrichSummaryMetrics(ctx, movement, ps, summaries, now)
 }
 
 func summaryFactPlans(ps map[string]plans.Plan, inputs map[string]cardHealthInput) map[string]plans.Plan {

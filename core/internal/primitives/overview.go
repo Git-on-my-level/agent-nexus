@@ -401,7 +401,11 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 			humanCount++
 		}
 		if human || phase == "blocked" {
-			needs = append(needs, map[string]any{"id": "task:" + ref, "title": w["title"], "source": firstNonEmptyString(ask, anyStringValue(w["next_action"]), "Waiting on you"), "href": href, "badge": map[string]any{"label": firstNonEmptyString(ask, "Needs you"), "tone": "warn"}})
+			waitingAt := ""
+			if summary, ok := w["work_summary"].(*WorkSummary); ok && summary.Attention != nil {
+				waitingAt = summary.Attention.OldestAt
+			}
+			needs = append(needs, map[string]any{"waiting_since": waitingAt, "id": "task:" + ref, "title": w["title"], "source": firstNonEmptyString(ask, anyStringValue(w["next_action"]), "Waiting on you"), "href": href, "badge": map[string]any{"label": firstNonEmptyString(ask, "Needs you"), "tone": "warn"}})
 		}
 	}
 	result["work"] = map[string]any{"status": "ok", "total": len(activeWork), "human_count": humanCount, "items": activeWork, "truncated": truncated}

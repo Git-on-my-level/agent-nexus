@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/plans"
+	series "agent-nexus-core/internal/seriesref"
 )
 
 // WorkSummary is the shared card presentation. Prose stays in the canonical
 // card's summary until the HTTP boundary, so search and narrative derivation
 // cannot accidentally treat presentation data as card content.
 type WorkSummary struct {
+	Metrics             []series.Metric   `json:"metrics,omitempty"`
+	MetricsTruncated    bool              `json:"metrics_truncated,omitempty"`
 	Hints               []string          `json:"hints,omitempty"`
 	Steps               *plans.StepDigest `json:"steps,omitempty"`
 	Status              SummaryStatus     `json:"status"`
@@ -76,13 +79,23 @@ func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]pla
 		copy.OldestAge = 0
 		attention = &copy
 	}
+	metrics := append([]series.Metric{}, summary.Metrics...)
+	for i := range metrics {
+		metrics[i].Age = 0
+		metrics[i].Stale = false
+		if metrics[i].Status == "stale" {
+			metrics[i].Status = "ok"
+		}
+	}
 	raw, _ := json.Marshal(struct {
+		Metrics            []series.Metric
+		MetricsTruncated   bool
 		Input              cardHealthInput
 		Plan               *plans.Plan
 		Facts              map[string]plans.Fact
 		Attention          *SummaryAttention
 		AttentionTruncated bool
-	}{input, p, selected, attention, summary.AttentionTruncated})
+	}{metrics, summary.MetricsTruncated, input, p, selected, attention, summary.AttentionTruncated})
 	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
 

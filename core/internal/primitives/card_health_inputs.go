@@ -14,6 +14,7 @@ type cardHealthInput struct {
 	Phase, Owner, Handle string
 	Source               map[string]any
 	Children             []string
+	Refs                 []string
 	// Wake is the raw wake_condition annotation; Related holds the card's
 	// related_refs linked sources.
 	Wake    string
