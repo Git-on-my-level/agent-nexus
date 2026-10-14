@@ -99,6 +99,15 @@ async function send(entry) {
     }
     return entry.receipt;
   }
+  if (entry.operation === "topics.patch") {
+    const result = await client.updateTopic(
+      entry.request.id,
+      entry.request.body,
+    );
+    if (result.topic?.id !== entry.request.id || !result.topic?.updated_at)
+      throw new Error("Topic receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "cards.move") {
     const result = await client.moveBoardCard(
       entry.request.board,
@@ -236,6 +245,7 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
       "docs.patch",
       "docs.revise",
       "cards.patch",
+      "topics.patch",
     ].includes(operation)
   )
     throw new Error("This authoring operation has not been audited.");
@@ -615,7 +625,9 @@ async function attempt(entry) {
             ? "assignment"
             : entry.operation === "docs.lifecycle"
               ? "document action"
-              : "response",
+              : entry.operation === "topics.patch"
+                ? "topic edit"
+                : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =
@@ -827,14 +839,15 @@ export async function editMutation(key) {
   }
   // Transfer to a durable composer before superseding; retain the old exact
   // request for recovery history rather than silently discarding it.
-  const currentDraft =
-    entry.operation === "docs.lifecycle"
-      ? await loadLocalWork(
-          entry.scope,
-          "draft",
-          entry.draftTarget || entry.target,
-        )
-      : null;
+  const currentDraft = ["docs.lifecycle", "topics.patch"].includes(
+    entry.operation,
+  )
+    ? await loadLocalWork(
+        entry.scope,
+        "draft",
+        entry.draftTarget || entry.target,
+      )
+    : null;
   const lifecycleDraft =
     currentDraft &&
     currentDraft.action === entry.draft?.action &&
@@ -843,21 +856,23 @@ export async function editMutation(key) {
       ? currentDraft
       : entry.draft;
   const draft =
-    entry.operation === "docs.lifecycle"
-      ? {
-          ...lifecycleDraft,
-          documents: lifecycleDraft.documents.filter(
-            (doc) =>
-              !entry.receipt?.documents?.some((done) => done.id === doc.id),
-          ),
-          confirmed: [
-            ...(entry.draft.confirmed || []),
-            ...(entry.receipt?.documents || []),
-          ],
-        }
-      : entry.receipt?.conversationId
-        ? { ...entry.draft, conversationId: entry.receipt.conversationId }
-        : entry.draft;
+    entry.operation === "topics.patch"
+      ? currentDraft || entry.draft
+      : entry.operation === "docs.lifecycle"
+        ? {
+            ...lifecycleDraft,
+            documents: lifecycleDraft.documents.filter(
+              (doc) =>
+                !entry.receipt?.documents?.some((done) => done.id === doc.id),
+            ),
+            confirmed: [
+              ...(entry.draft.confirmed || []),
+              ...(entry.receipt?.documents || []),
+            ],
+          }
+        : entry.receipt?.conversationId
+          ? { ...entry.draft, conversationId: entry.receipt.conversationId }
+          : entry.draft;
   // Start the synchronous draft journal, then restore the visible composer
   // before yielding. A late restore after persistence could replace text the
   // reader typed while the transfer was in flight. Supersede only after both

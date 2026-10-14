@@ -104,7 +104,9 @@
                     ? "Edit assignment"
                     : entry.operation === "docs.lifecycle"
                       ? "Edit request"
-                      : "Edit message"}</button
+                      : entry.operation === "topics.patch"
+                        ? "Edit topic"
+                        : "Edit message"}</button
             >
           {/if}
           <button

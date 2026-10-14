@@ -48,6 +48,16 @@ export function mutationFailure(error, subject = "response") {
       422: "Check the saved document request before sending it.",
     });
   }
+  if (subject === "topic edit") {
+    Object.assign(messages, {
+      400: "These topic edits need a correction before they can be saved.",
+      401: "Sign in again to save these topic edits.",
+      403: "You do not have permission to edit this topic.",
+      404: "This topic is no longer available. Your edits are saved here.",
+      409: "This topic changed. Your edits are saved. Use latest version to review and save them.",
+      422: "Check the title and summary before saving these topic edits.",
+    });
+  }
   if (subject === "assignment") {
     Object.assign(messages, {
       400: "This assignment needs a correction before it can be sent.",
@@ -68,7 +78,9 @@ export function mutationFailure(error, subject = "response") {
             ? "The service could not confirm the assignment. Your selection is kept on this device."
             : subject === "document action"
               ? "The service could not confirm the document request. Its original actions and versions are kept on this device."
-              : "The service could not confirm your response. Your text is kept on this device."
+              : subject === "topic edit"
+                ? "The service could not confirm the topic edits. Your title and summary are kept on this device."
+                : "The service could not confirm your response. Your text is kept on this device."
       : messages[status] ||
         "This response needs your attention. Your text is kept on this device.",
     // A bounded diagnostic, rendered only behind a disclosure as plain text.

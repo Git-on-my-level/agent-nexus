@@ -53,6 +53,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
       if (
         node.type === "MemberExpression" &&
         [
+          "updateTopic",
           "respondInboxItem",
           "createEvent",
           "createPmConversation",
@@ -236,4 +237,18 @@ it("document lifecycle requests checkpoint complete drafts", () => {
       "<DocumentLifecycleWork",
     );
   }
+});
+
+it("topic metadata checkpoints its complete editor snapshot", () => {
+  const ast = parse(
+    readFileSync(
+      `${root}/lib/components/topic-detail/TopicOverviewTab.svelte`,
+      "utf8",
+    ),
+  );
+  let actions = 0;
+  walk(ast.html, (node) => {
+    if (node.type === "Action" && node.name === "durableForm") actions++;
+  });
+  expect(actions).toBe(1);
 });

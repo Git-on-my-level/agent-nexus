@@ -6,13 +6,10 @@ not a second workspace database. See the hard rule in root `AGENTS.md`.
 
 ## Rollout and acceptance
 
-PR #390 is frozen for stage-1 review by the coordinator's 2026-10-14 scope
-instruction. Do not add further mutation surfaces to that branch or queue
-self-continuation work. The existing completed stages and server prerequisites
-are retained for review; the topic editor migration has not started. SCA-781
-is handed off in review at the published head, without claiming whole-UI
-acceptance. The coordinator will file stage 2 after #390 merges; see
-[Stage 2 handoff](#stage-2-handoff).
+Stage 1 (SCA-781, PR #390) is merged. Stage 2 is tracked by SCA-786 and
+ships in separate reviewable PRs grouped by surface. Topic metadata recovery is
+the first Stage 2 surface; the remaining audit below is still open. Stage 1 and
+this topic migration do not claim whole-UI acceptance.
 
 SCA-781 permits reviewable stages. The existing changes cover the human-attention
 response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat attachment uploads, task creation and document authoring. It does not claim that every UI
@@ -414,6 +411,44 @@ replay audit: physical blob deletion occurs after the database commit and needs
 an authorization/tombstone recovery design. Legacy knowledge PUT also remains an
 API audit; it has no current authoring form.
 
+## Topic metadata recovery
+
+The About editor checkpoints the complete title, summary and canonical topic
+base under `topic:<id>:metadata`. Opening the editor loads `GET /topics/{id}`;
+the backing thread projection's timestamp is never used as the topic base.
+Initialization waits for device hydration; opening/closing clicks cannot replace
+an unread authored draft.
+Drafts restore on navigation/reload, including an explicitly empty summary.
+Closing the editor keeps its saved work; **Discard draft** is the explicit
+removal action. Storage denial is visible and prevents unpersisted sends.
+
+`topics.patch` joins the scope-wide mutation outbox. It freezes the original
+actor, canonical id, complete patch, concurrency token and UUID before sending.
+Timeouts, offline closure and lost acknowledgements recover through the already
+audited atomic PATCH receipt. Confirmation clears only the exact submitted
+draft and refreshes display separately; newer edits survive. Version conflicts
+stay in Needs attention with Copy/Edit/Retry. **Use latest version** fetches the
+canonical topic before retiring the failed request, keeps current authored text,
+and explicitly replaces its base; resubmission uses a new key. Failed reads
+keep the original request recoverable. Identity epochs fence late topic loads
+and the shared store/outbox enforce principal privacy and the 25-day cutoff.
+
+`durable-topic.spec.js` covers canonical topic/thread timestamp separation,
+complete draft navigation/reload/discard, offline tab closure, 524/network lost
+confirmation and cross-tab exact-key replay, retained conflicts and explicit
+rebase and failed-read recovery, newer empty-summary preservation, delayed device
+hydration, cross-tab principal replacement/late sends and total storage denial.
+The AST guard now forbids direct topic PATCH in all Svelte surfaces and requires a durable
+snapshot on the About editor; its old callsite exception is removed. Core's
+`TestTopicPatchAtomicOriginalReceiptAndAuthority` remains the replay prerequisite,
+covering concurrency, quota/receipt rollback, changed-body rejection and revoked
+authority.
+
+No HTTP route or API shape changes. The additional read is one canonical topic
+lookup by primary key, O(1) in workspace size, with existing scoped authorization;
+no new list/stream queries or server polling. Device recovery remains O(records
+in the current device scope) through the existing scope index.
+
 ## Remaining live UI mutation audit
 
 The following are actual direct SDK calls found in current browser code. Each
@@ -432,7 +467,6 @@ need protocol-specific review before persistence, not blind generic retries.
 | Access administrator grants     | Grant/revoke mutations in `AuthAdminGrants`                                                                        |
 | Setup prompt and workspace tour | Enrollment token issuance/revocation; audit their cleanup and authentication boundaries                            |
 | Secrets                         | Creation/deletion; preserve complete owner-scoped authored work and audit original receipt/private result handling |
-| Topic detail                    | `updateTopic` in `WorkspaceTopicThreadDetailPage`; the edit snapshot and conflict recovery remain open             |
 | Timeline and messages           | Event archive/unarchive/trash, including bulk actions                                                              |
 | Inbox lifecycle and PM delivery | Card archive, decision dispatch, action reconcile and acknowledgement                                              |
 | Task refresh                    | `requestWorkRefresh`; preserve the requested target and original intent                                            |
@@ -440,15 +474,13 @@ need protocol-specific review before persistence, not blind generic retries.
 
 ## Stage 2 handoff
 
-The follow-up owner is the coordinator, who will file a new issue after #390
-merges. This section is the follow-up pointer for every remaining exception in
-`durable-mutation-allowlist.json`; no follow-up issue number exists yet. Do not
-expand #390 to implement these TODOs.
+SCA-786 owns the remaining rollout. This section is the follow-up pointer for
+every remaining exception in `durable-mutation-allowlist.json`. Keep surface
+groups in separate reviewable PRs; do not expand the merged Stage 1 PR.
 
-- Topic title/summary editor: complete snapshot, canonical topic timestamp,
-  retained conflicts, explicit latest-version action and outbox recovery. Atomic
-  PATCH receipts are present, but the current UI still catches 409 and closes
-  the form; this is a known input-loss gap outside frozen stage 1.
+- Topic title/summary editor: migrated in the first SCA-786 surface PR; see
+  [Topic metadata recovery](#topic-metadata-recovery). Topic creation and
+  lifecycle are separate server prerequisites below.
 - Event single/bulk lifecycle, remaining Inbox card archive and explicit PM
   dispatch/reconcile/acknowledgement, task refresh, dashboard selection and dev
   actor creation: audit receipts and migrate full intents before automatic retry.

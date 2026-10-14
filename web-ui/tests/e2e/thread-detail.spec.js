@@ -521,6 +521,29 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     provenance: { sources: ["event:event-1001"] },
   };
 
+  await page.context().addCookies([
+    {
+      name: "anx_ui_session_local",
+      value: "test-refresh-token",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+    },
+  ]);
+  await page.route("**/auth/session", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: true,
+        agent: {
+          agent_id: "thread-editor",
+          actor_id: actorId,
+          username: "reader",
+        },
+      }),
+    }),
+  );
   await page.addInitScript((selectedActorId) => {
     window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
     window.localStorage.setItem("workspaceTourSeen.local", "1");
@@ -577,7 +600,11 @@ test("thread detail handles snapshot update conflict and retries after reload", 
 
   await page.route(/\/topics\/thread-onboarding$/, async (route) => {
     if (route.request().method() !== "PATCH") {
-      await route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ topic: topicPayloadFromThreadSnapshot() }),
+      });
       return;
     }
     const payload = JSON.parse(route.request().postData() ?? "{}");
@@ -685,16 +712,20 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   await page.getByLabel("Title", { exact: true }).fill("Edited after conflict");
   await page.getByRole("button", { name: "Save changes" }).click();
 
-  await expect(
-    page.getByText("Topic was updated elsewhere.", { exact: false }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Server updated title" }),
-  ).toBeVisible();
-  await expect(page).toHaveTitle("Server updated title · Agent Nexus");
-
-  await page.getByRole("tab", { name: "About" }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+    "Edited after conflict",
+  );
+  await page.reload();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+    "Edited after conflict",
+  );
+  await page
+    .getByRole("button", { name: "Use latest version", exact: true })
+    .click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toHaveCount(
+    0,
+  );
   await page.getByLabel("Title", { exact: true }).fill("Final merged title");
   await page.getByLabel("Summary", { exact: true }).fill("Final summary body");
   await page.getByRole("button", { name: "Save changes" }).click();
@@ -710,6 +741,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
 
   expect(patchRequests).toHaveLength(2);
   expect(patchRequests[0]).toEqual({
+    request_key: expect.any(String),
     actor_id: actorId,
     patch: {
       title: "Edited after conflict",
@@ -718,6 +750,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     if_updated_at: "2026-03-04T00:00:00.000Z",
   });
   expect(patchRequests[1]).toEqual({
+    request_key: expect.any(String),
     actor_id: actorId,
     patch: {
       title: "Final merged title",
