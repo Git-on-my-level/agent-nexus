@@ -39,6 +39,7 @@ hosted_default_commands:
   - "events.get"
   - "events.list"
   - "home.unread"
+  - "brief.get"
   - "overview.get"
   - "overview.changes"
   - "workspace.dashboard.list"
@@ -717,6 +718,9 @@ commands:
   "overview.changes":
     classification: exposed_read
     reason: "Principal-scoped bounded visit digest; reads without advancing the baseline."
+  "brief.get":
+    classification: exposed_read
+    reason: "brief.v1: the caller's decisions, initiatives against promises, own asks and answers."
   "overview.get":
     classification: exposed_read
     reason: "Executive Overview projection shared with the web UI and CLI."
