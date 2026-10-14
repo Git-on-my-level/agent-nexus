@@ -13511,7 +13511,7 @@ components:
         curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts. Omitted entirely, with the decision, when the reader cannot read every target." }
         batch:
           type: object
-          description: Present when a human accepted a batch proposal over these asks. The decision stands for every member; answer each member by its own inbox_item_id. Members the reader cannot see are not listed or counted.
+          description: "Present when these asks were filed together through POST /asks/batch (key filed:<batch_id>) or a human accepted a curation batch proposal over them. The decision stands for every member; answer each member by its own inbox_item_id. Members the reader cannot see are not listed or counted."
           required: [key, count, members]
           properties:
             key: { type: string }
