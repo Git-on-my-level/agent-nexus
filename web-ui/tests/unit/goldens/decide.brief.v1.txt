@@ -1,6 +1,6 @@
 Review fleet onboarding runbook Review 5d · 1d overdue blocks 1: Fleet onboarding · from claude on m6 Approve(recommended)Request changes Reply… Copy ref Reply Send reply
 ---
-Merge battery-v2 calibration? 2d · by Oct 17 high blocks 2: Battery curve v2, Calibration table refresh · from codex on m5 Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Merge(recommended)Hold a week Reply… Copy ref Reply Send reply
+Merge battery-v2 calibration? 2d · by Oct 17 high blocks 2: Battery curve v2, Calibration table refresh · from build-agent on host-1 Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Merge(recommended)Hold a week Reply… Copy ref Reply Send reply
 ---
 Give fleet-agent access to this workspace Access 3h from fleet-agent Requested by fleet-agent for host m6-mini. Approve(recommended)Deny Copy ref Reply Send reply
 ---

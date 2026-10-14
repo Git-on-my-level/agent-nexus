@@ -15,7 +15,7 @@
       "body": "Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below.",
       "requested_by": {
         "id": "agent:codex",
-        "display": "codex on m5"
+        "display": "build-agent on host-1"
       },
       "created_at": "2026-10-13T09:00:00Z",
       "decide_by": "2026-10-17T17:00:00Z",
@@ -35,7 +35,10 @@
         "ref": "card:battery-measurement",
         "title": "Battery measurement"
       },
-      "proposals": ["Merge", "Hold a week"],
+      "proposals": [
+        "Merge",
+        "Hold a week"
+      ],
       "blocks_count": 2,
       "age_seconds": 172800
     },
@@ -57,10 +60,15 @@
         "ref": "card:labels",
         "title": "Label scheme"
       },
-      "proposals": ["Withdraw", "Keep"],
+      "proposals": [
+        "Withdraw",
+        "Keep"
+      ],
       "curation": {
         "action": "withdraw",
-        "targets": ["card:labels"],
+        "targets": [
+          "card:labels"
+        ],
         "source": "pm"
       },
       "blocks_count": 0,
@@ -89,7 +97,10 @@
         "ref": "card:fleet-onboarding",
         "title": "Fleet onboarding"
       },
-      "proposals": ["Approve", "Request changes"],
+      "proposals": [
+        "Approve",
+        "Request changes"
+      ],
       "blocks_count": 1,
       "age_seconds": 432000
     },
@@ -108,7 +119,10 @@
       "overdue_for_seconds": null,
       "blocks": [],
       "subject": null,
-      "proposals": ["Approve", "Deny"],
+      "proposals": [
+        "Approve",
+        "Deny"
+      ],
       "blocks_count": 0,
       "age_seconds": 10800
     },
@@ -131,7 +145,10 @@
       "subject": {
         "ref": "card:ble-reliability"
       },
-      "proposals": ["Approve", "Reject"],
+      "proposals": [
+        "Approve",
+        "Reject"
+      ],
       "pm_decision": {
         "id": "pm_7",
         "revision": 3
@@ -162,7 +179,7 @@
         "text": "Rig 4 is drifting; re-running overnight.",
         "author": {
           "id": "agent:codex",
-          "display": "codex on m5"
+          "display": "build-agent on host-1"
         },
         "at": "2026-10-04T12:00:00Z"
       },
