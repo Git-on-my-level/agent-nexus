@@ -429,7 +429,7 @@ export function titleFromCardRef(ref, titles = new Map()) {
 
 /**
  * Progress notes and messages the agent wrote, newest first, as one list.
- * Notes come from presence (`anx work note`); messages are its posts on
+ * Notes come from presence (`anx note`); messages are its posts on
  * tasks and threads.
  */
 export function agentActivity({ notes = [], messages = [], limit = 20 } = {}) {
