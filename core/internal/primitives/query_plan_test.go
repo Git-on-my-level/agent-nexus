@@ -60,7 +60,8 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 
 	cardsQuery := `SELECT id FROM cards WHERE parent_thread_id = ? AND archived_at IS NULL`
 	cardsPlan := explainQueryPlan(t, workspace.DB(), cardsQuery, threadID)
-	assertPlanUsesIndex(t, "cards", cardsPlan, "idx_cards_parent_thread_id")
+	// The ordered composite replaces the single-column seek for this lookup.
+	assertPlanUsesIndex(t, "cards", cardsPlan, "idx_cards_parent_thread_page")
 
 	artifactQuery, artifactArgs := buildListArtifactsQuery(ArtifactListFilter{
 		ThreadID: threadID,

@@ -51,7 +51,7 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 	}
 	out.Truncated = count > 100
 	// A topic's primary thread may itself be a card backing thread.
-	rows, err = s.db.QueryContext(ctx, `SELECT id,board_id FROM cards WHERE parent_thread_id=? AND archived_at IS NULL AND trashed_at IS NULL ORDER BY id LIMIT 11`, primaryThread)
+	rows, err = s.db.QueryContext(ctx, `SELECT id,board_id FROM cards WHERE parent_thread_id=? AND COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')='' ORDER BY id LIMIT 51`, primaryThread)
 	if err != nil {
 		return out, err
 	}
@@ -94,6 +94,30 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 		boards = boards[:10]
 	}
 	boardJSON, _ := json.Marshal(boards)
+	// Canonical associations win over the legacy JSON copy, just as GetBoard
+	// does. Bound each board's association keys before hydration or sorting.
+	typedByBoard := map[string][]string{}
+	rows, err = s.db.QueryContext(ctx, `SELECT board.value,placement.target_type,placement.target_id FROM json_each(?) board CROSS JOIN ref_edges placement
+ WHERE placement.id IN (SELECT selected.id FROM ref_edges selected WHERE selected.source_type='board' AND selected.source_id=board.value AND selected.edge_type='ref' ORDER BY selected.id LIMIT 51)`, string(boardJSON))
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var board, kind, id string
+		if err = rows.Scan(&board, &kind, &id); err != nil {
+			rows.Close()
+			return out, err
+		}
+		typedByBoard[board] = append(typedByBoard[board], kind+":"+id)
+		if len(typedByBoard[board]) > 50 {
+			out.Truncated = true
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return out, err
+	}
 	rows, err = s.db.QueryContext(ctx, `SELECT id,handle,title,summary,role,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by,archived_at,archived_by,trashed_at,trashed_by,trash_reason FROM boards WHERE id IN (SELECT value FROM json_each(?))`, string(boardJSON))
 	if err != nil {
 		return out, err
@@ -108,6 +132,9 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 		if e = json.Unmarshal([]byte(row.RefsJSON), &refs); e != nil {
 			rows.Close()
 			return out, e
+		}
+		if canonical := typedByBoard[row.ID]; len(canonical) > 0 {
+			refs = canonical[:min(50, len(canonical))]
 		}
 		body, e := row.boardToMapWithRefData(refs, nil)
 		if e != nil {
@@ -215,6 +242,9 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 	threads = uniqueSortedStrings(threads)
 	if len(threads) > 100 {
 		threads = threads[:100]
+		if !containsString(threads, primaryThread) {
+			threads[len(threads)-1] = primaryThread
+		}
 		out.Truncated = true
 	}
 	threadJSON, _ = json.Marshal(threads)
