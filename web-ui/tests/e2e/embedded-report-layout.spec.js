@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
+import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
 import {
   expectNoClippedContent,
@@ -26,7 +27,7 @@ import {
  */
 
 const WORKSPACE = "/o/local/w/local";
-const OVERVIEW = `${WORKSPACE}/overview`;
+const WATCH = `${WORKSPACE}/watch`;
 const DOC_ID = "wide-dashboard";
 const NOW = "2026-10-06T12:00:00Z";
 
@@ -253,8 +254,11 @@ async function installEmbeddedReport(page) {
         body: JSON.stringify(body),
       });
 
-    if (path === "/overview" || path === "/workspace/dashboard") {
-      return json(SNAPSHOT);
+    if (path === "/workspace/dashboard/reports") {
+      return json(SNAPSHOT.dashboard);
+    }
+    if (path === "/brief") {
+      return json({ ...brief, generated_at: NOW, initiatives: [] });
     }
     if (path === `/docs/${DOC_ID}/report`) {
       return json({
@@ -283,7 +287,7 @@ async function installEmbeddedReport(page) {
 async function openOverview(page, width, height) {
   await installEmbeddedReport(page);
   await page.setViewportSize({ width, height });
-  await page.goto(OVERVIEW);
+  await page.goto(WATCH);
   // The live panel arrives after the snapshot, so wait for the plan itself.
   await expect(page.locator("[data-report-initiative]")).toBeVisible({
     timeout: 60_000,
