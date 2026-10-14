@@ -4658,6 +4658,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "if_updated_at",
           "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -5651,7 +5655,15 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "if_updated_at",
+          "type": "datetime"
+        },
+        {
           "name": "reason",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -6003,6 +6015,14 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "actor_id",
           "type": "string"
+        },
+        {
+          "name": "if_updated_at",
+          "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -6075,6 +6095,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "if_updated_at",
           "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },

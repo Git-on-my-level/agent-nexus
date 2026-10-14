@@ -4613,6 +4613,10 @@
           {
             "name": "if_updated_at",
             "type": "datetime"
+          },
+          {
+            "name": "request_key",
+            "type": "string"
           }
         ]
       },
@@ -5606,7 +5610,15 @@
             "type": "string"
           },
           {
+            "name": "if_updated_at",
+            "type": "datetime"
+          },
+          {
             "name": "reason",
+            "type": "string"
+          },
+          {
+            "name": "request_key",
             "type": "string"
           }
         ]
@@ -5958,6 +5970,14 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
+          },
+          {
+            "name": "request_key",
+            "type": "string"
           }
         ]
       },
@@ -6030,6 +6050,10 @@
           {
             "name": "if_updated_at",
             "type": "datetime"
+          },
+          {
+            "name": "request_key",
+            "type": "string"
           }
         ]
       },

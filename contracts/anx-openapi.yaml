@@ -3421,7 +3421,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTrashRequest'
+              $ref: '#/components/schemas/DocumentTrashRequest'
       responses:
         '200':
           description: Document moved to trash
@@ -12097,18 +12097,37 @@ components:
       required: [purged, board_ref, board_handle]
 
     DocumentLifecycleMutationRequest:
+      description: Optional request_key recovers the original actor-bound HTTP receipt atomically. Keyed requests require if_updated_at; actual lifecycle changes advance updated_at and updated_by.
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
+        if_updated_at:
+          type: string
+          format: date-time
+
+    DocumentTrashRequest:
+      description: Optional request_key recovers the original actor-bound HTTP receipt atomically. Keyed requests require if_updated_at; actual lifecycle changes advance updated_at and updated_by.
+      type: object
+      required: [reason]
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
+        reason: { type: string }
         if_updated_at:
           type: string
           format: date-time
 
     DocumentRestoreFromTrashRequest:
+      description: Optional request_key recovers the original actor-bound HTTP receipt atomically. Keyed requests require if_updated_at; actual lifecycle changes advance updated_at and updated_by.
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string, maxLength: 256 }
         reason: { type: string }
+        if_updated_at:
+          type: string
+          format: date-time
 
     PurgeDocumentRequest:
       type: object

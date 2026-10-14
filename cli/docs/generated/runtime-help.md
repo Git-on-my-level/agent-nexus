@@ -2398,6 +2398,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2432,6 +2433,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2465,7 +2467,9 @@ Inputs:
   - path `document_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -8269,6 +8273,8 @@ Inputs:
   - body `reason` (string)
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.

@@ -315,6 +315,42 @@ revision sends. The move browser suite additionally covers network timeouts,
 journal fallback, total storage failure preventing sends, and authenticated
 principal replacement clearing other tabs and fencing late failures.
 
+## Document lifecycle replay prerequisite
+
+Archive, unarchive, trash and restore now accept an optional `request_key` and
+`if_updated_at`. Keyed requests require the original metadata base and bind the
+original actor, canonical document, action and complete decoded body to the
+original HTTP status/body. Recovery checks current document visibility before
+exposing the receipt; the receipt itself remains scoped. Later metadata or
+lifecycle changes cannot replace a confirmed receipt.
+
+The common lifecycle writer owns the quota lock, establishes the SQLite writer
+before reading the base, and lends its scoped transaction to nested lifecycle,
+event, ownership and projection writes. Token-aware unkeyed calls use the same
+base check under the writer; legacy entrypoints also use it without storing a
+receipt. Trash/restore event storage is quota checked inside the transaction.
+There are no staged blob writes or physical blob deletions in these four paths.
+Actual lifecycle changes advance `updated_at`/`updated_by`; idempotent legacy
+archive/trash no-ops preserve them. Archive conflicts now return 409.
+
+Real-core tests with quotas and one connection cover all four actions, eight
+concurrent retries, original results after later lifecycle/metadata edits,
+changed reasons/bases/targets, invalid keys/actors, missing and stale bases,
+unkeyed stale-base rejection, no-op timestamps, rollback on document/event/dirty
+projection/receipt writes, cold quota-ledger initialization/rollback, quota rejection/recovery and revoked ownership.
+Knowledge metadata (`source`, `summary`, `tags`, `hosts`, `verified_at`) already
+uses atomic document PATCH; new tests cover complete original metadata,
+concurrent replay, receipt failure, explicit clearing, changed-body rejection and
+revoked access. The current UI has no separate knowledge editor.
+
+**This is a server prerequisite.** Detail and list/bulk lifecycle controls still
+send directly and must migrate to complete durable intents and the shared outbox.
+Bulk selection must be checkpointed in full before any first network send, with
+per-document original bases/keys and persisted partial confirmations. Legacy
+knowledge PUT and permanent purge remain separate replay audits; purge includes
+post-commit physical blob deletion and needs a tombstone/access recovery design.
+Settings, original PM chat HTTP receipts and whole-UI enforcement remain open.
+
 ## Replay audit
 
 No HTTP routes or database migrations are added. PM request contracts now accept
@@ -338,6 +374,7 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                          |
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
 | `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                              | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
+| `POST /docs/{id}/{archive,unarchive,trash,restore}`                               | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                 | Server prerequisite covered; detail and list/bulk durable snapshots/outbox migration remains open                                                     |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                             | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules

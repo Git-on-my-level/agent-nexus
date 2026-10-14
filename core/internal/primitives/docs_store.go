@@ -1538,7 +1538,53 @@ func (s *Store) GetDocumentRevisionByID(ctx context.Context, revisionID string) 
 	return s.loadDocumentRevision(ctx, documentID, revisionID, false)
 }
 
+// ApplyDocumentLifecycle checks the metadata base under the same writer as the
+// lifecycle change. Replay callers borrow the writer and quota lock; unkeyed
+// token-aware callers get the same serialization without creating a receipt.
+func (s *Store) ApplyDocumentLifecycle(ctx context.Context, actorID, documentID, action, reason string, ifUpdatedAt *string) (map[string]any, map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+		ctx = context.WithValue(ctx, replayQuotaKey{}, s)
+	}
+	var document, revision map[string]any
+	err := s.db.WriteTransaction(ctx, func(ctx context.Context, tx *resourceaccess.Tx) error {
+		// Acquire the writer before reading the base, avoiding deferred read upgrades.
+		if _, err := tx.ExecContext(ctx, `UPDATE documents SET updated_at=updated_at WHERE id=?`, documentID); err != nil {
+			return err
+		}
+		current, err := s.loadDocumentRow(ctx, documentID)
+		if err != nil {
+			return err
+		}
+		if err := ensureUpdatedAtMatches(current.UpdatedAt, ifUpdatedAt); err != nil {
+			return err
+		}
+		switch action {
+		case "archive":
+			document, revision, err = s.archiveDocumentIfUpdatedAt(ctx, actorID, documentID, ifUpdatedAt)
+		case "unarchive":
+			document, revision, err = s.unarchiveDocument(ctx, actorID, documentID)
+		case "trash":
+			document, revision, err = s.trashDocument(ctx, actorID, documentID, reason)
+		case "restore":
+			document, revision, err = s.restoreDocument(ctx, actorID, documentID, reason)
+		default:
+			return invalidDocumentRequest("unsupported lifecycle action")
+		}
+		return err
+	})
+	return document, revision, err
+}
+
 func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
+	return s.ApplyDocumentLifecycle(ctx, actorID, documentID, "trash", reason, nil)
+}
+
+func (s *Store) trashDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1578,8 +1624,8 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 		return nil, nil, fmt.Errorf("begin document trash transaction: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
-		now, actorID, strings.TrimSpace(reason), documentID,
+		`UPDATE documents SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, updated_at = ?, updated_by = ? WHERE id = ?`,
+		now, actorID, strings.TrimSpace(reason), now, actorID, documentID,
 	)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -1606,6 +1652,10 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 		}
 		return nil, nil, err
 	}
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(lifecycleEvent.PayloadJSON) + len(lifecycleEvent.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1619,6 +1669,7 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 		return nil, nil, fmt.Errorf("commit document trash transaction: %w", err)
 	}
 
+	doc.UpdatedAt, doc.UpdatedBy = now, actorID
 	doc.TrashedAt = nullableString(now)
 	doc.TrashedBy = nullableString(actorID)
 	doc.TrashReason = nullableString(reason)
@@ -1637,6 +1688,10 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 }
 
 func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documentID string, ifUpdatedAt *string) (map[string]any, map[string]any, error) {
+	return s.ApplyDocumentLifecycle(ctx, actorID, documentID, "archive", "", ifUpdatedAt)
+}
+
+func (s *Store) archiveDocumentIfUpdatedAt(ctx context.Context, actorID, documentID string, ifUpdatedAt *string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1682,8 +1737,8 @@ func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documen
 	}
 	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	query := `UPDATE documents SET archived_at = ?, archived_by = ? WHERE id = ?`
-	args := []any{now, actorID, documentID}
+	query := `UPDATE documents SET archived_at = ?, archived_by = ?, updated_at = ?, updated_by = ? WHERE id = ?`
+	args := []any{now, actorID, now, actorID, documentID}
 	if ifUpdatedAt != nil {
 		query += ` AND updated_at = ?`
 		args = append(args, *ifUpdatedAt)
@@ -1710,6 +1765,7 @@ func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documen
 		return nil, nil, err
 	}
 
+	doc.UpdatedAt, doc.UpdatedBy = now, actorID
 	doc.ArchivedAt = nullableString(now)
 	doc.ArchivedBy = nullableString(actorID)
 	docMap, err := doc.toMap()
@@ -1720,6 +1776,10 @@ func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documen
 }
 
 func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID string) (map[string]any, map[string]any, error) {
+	return s.ApplyDocumentLifecycle(ctx, actorID, documentID, "unarchive", "", nil)
+}
+
+func (s *Store) unarchiveDocument(ctx context.Context, actorID, documentID string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1750,9 +1810,10 @@ func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID strin
 		return nil, nil, err
 	}
 	defer tx.Rollback()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
-		documentID,
+		`UPDATE documents SET archived_at = NULL, archived_by = NULL, updated_at = ?, updated_by = ? WHERE id = ?`,
+		now, actorID, documentID,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unarchive document: %w", err)
@@ -1765,6 +1826,7 @@ func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID strin
 		return nil, nil, err
 	}
 
+	doc.UpdatedAt, doc.UpdatedBy = now, actorID
 	doc.ArchivedAt = sql.NullString{}
 	doc.ArchivedBy = sql.NullString{}
 	docMap, err := doc.toMap()
@@ -1775,6 +1837,10 @@ func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID strin
 }
 
 func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string, reason string) (map[string]any, map[string]any, error) {
+	return s.ApplyDocumentLifecycle(ctx, actorID, documentID, "restore", reason, nil)
+}
+
+func (s *Store) restoreDocument(ctx context.Context, actorID, documentID string, reason string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1804,9 +1870,10 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin document restore transaction: %w", err)
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
-		documentID,
+		`UPDATE documents SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, updated_at = ?, updated_by = ? WHERE id = ?`,
+		now, actorID, documentID,
 	)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -1833,6 +1900,10 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		}
 		return nil, nil, err
 	}
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(lifecycleEvent.PayloadJSON) + len(lifecycleEvent.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1846,6 +1917,7 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		return nil, nil, fmt.Errorf("commit document restore transaction: %w", err)
 	}
 
+	doc.UpdatedAt, doc.UpdatedBy = now, actorID
 	doc.TrashedAt = sql.NullString{}
 	doc.TrashedBy = sql.NullString{}
 	doc.TrashReason = sql.NullString{}

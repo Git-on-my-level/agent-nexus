@@ -4607,6 +4607,10 @@ export const commandRegistry = [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -5600,7 +5604,15 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "if_updated_at",
+                    "type": "datetime"
+                },
+                {
                     "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "request_key",
                     "type": "string"
                 }
             ]
@@ -5952,6 +5964,14 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
@@ -6024,6 +6044,10 @@ export const commandRegistry = [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
                 }
             ]
         },
