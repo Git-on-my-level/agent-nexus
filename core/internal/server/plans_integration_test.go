@@ -124,14 +124,14 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	ref := anyString(work["ref"])
 	endpoint := h.baseURL + "/cards/" + ref + "/plan"
 	initial := workGetJSON(t, endpoint, 200)
-	if initial["plan_health"].(map[string]any)["state"] != "no_plan" || initial["next_step"] != nil {
+	if initial["plan_health"].(map[string]any)["state"] != "no_promise" || initial["next_step"] != nil {
 		t.Fatal(initial)
 	}
 	token := initial["if_updated_at"]
 	p := map[string]any{"steps": []any{map[string]any{"id": "build", "title": "Build", "status": "done"}, map[string]any{"id": "ship", "title": "Ship", "status": "blocked", "after": []string{"build"}}}}
 	result := planRequest(t, "PUT", endpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": token, "plan": p}, 200)
 	state := result["plan_state"].(map[string]any)
-	if result["plan_health"].(map[string]any)["state"] != "blocked" || result["status_mismatch"] != true || state["health"] != "blocked" || state["progress"].(map[string]any)["done"] != float64(1) {
+	if result["plan_health"].(map[string]any)["state"] != "no_promise" || result["status_mismatch"] != true || state["health"] != nil || state["progress"].(map[string]any)["done"] != float64(1) {
 		t.Fatal(result)
 	}
 	for _, path := range []string{"/cards/" + ref, "/work/" + ref} {
@@ -141,7 +141,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 			key = "work"
 		}
 		card := read[key].(map[string]any)
-		if card["plan_health"].(map[string]any)["state"] != "blocked" || card["status_mismatch"] != true || card["column_key"] != "backlog" && key == "card" || card["plan"] == nil || card["plan_state"].(map[string]any)["health"] != "blocked" {
+		if card["plan_health"].(map[string]any)["state"] != "no_promise" || card["status_mismatch"] != true || card["column_key"] != "backlog" && key == "card" || card["plan"] == nil || card["plan_state"].(map[string]any)["health"] != nil {
 			t.Fatal(read)
 		}
 	}
@@ -159,7 +159,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	report := workGetJSON(t, h.baseURL+"/docs/"+doc+"/report", 200)
 	items := reportPanelByType(t, report, "live-initiatives")["data"].(map[string]any)["items"].([]any)
 	item := items[0].(map[string]any)
-	if item["progress"].(map[string]any)["total"] != float64(2) || item["health"] != "blocked" || item["needs"].([]any)[0] != "Ship" {
+	if item["progress"].(map[string]any)["total"] != float64(2) || item["health"] != "no_promise" || item["needs"].([]any)[0] != "Ship" {
 		t.Fatal(item)
 	}
 	planSteps := item["plan"].(map[string]any)["steps"].([]any)

@@ -615,7 +615,7 @@ func formatWorkCommandText(name string, body any) string {
 			}
 			lines = append(lines, line)
 		}
-		for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition", "dark_after"} {
+		for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition"} {
 			if value := anyString(work[key]); value != "" {
 				lines = append(lines, key+": "+value)
 			}

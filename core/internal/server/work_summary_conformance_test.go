@@ -59,7 +59,7 @@ func TestWorkSummaryCardReadConformanceAndLegacyProse(t *testing.T) {
 						t.Fatal("missing work_summary", card)
 					}
 					status, ok := summary["status"].(map[string]any)
-					if !ok || status["state"] != "blocked" || status["label"] != "Blocked" || anyString(status["reason"]) == "" {
+					if !ok || status["state"] != "no_promise" || status["label"] != "No promise" || anyString(status["reason"]) == "" {
 						t.Fatal("status disagrees", summary)
 					}
 					progress, ok := summary["progress"].(map[string]any)
@@ -83,7 +83,7 @@ func TestWorkSummaryCardReadConformanceAndLegacyProse(t *testing.T) {
 	refs := planRequest(t, "POST", h.baseURL+"/refs/resolve", map[string]any{"refs": []string{anyString(w["ref"]), "card:" + anyString(w["id"])}}, 200)
 	for _, raw := range refs["items"].([]any) {
 		row := raw.(map[string]any)
-		if row["summary"].(map[string]any)["status"].(map[string]any)["state"] != "blocked" {
+		if row["summary"].(map[string]any)["status"].(map[string]any)["state"] != "no_promise" {
 			t.Fatal(row)
 		}
 	}
@@ -135,7 +135,7 @@ func TestInboxRelatedCardsCarryComputedSummaryAndPrivacy(t *testing.T) {
 		t.Fatal("private related title leaked", string(raw))
 	}
 	related := items[0]["related_cards"].([]primitives.RefPreview)
-	if len(related) != 1 || related[0].Summary == nil || related[0].Summary.Status.State != "blocked" {
+	if len(related) != 1 || related[0].Summary == nil || related[0].Summary.Status.State != "no_promise" {
 		t.Fatal(items)
 	}
 }
