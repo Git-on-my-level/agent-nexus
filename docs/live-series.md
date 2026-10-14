@@ -208,6 +208,7 @@ bounded maintenance chunks; reads never scan or repair inbox history.
 An incomplete sample with no visible asks shows “Waiting status unknown”,
 including a full denied prefix; it never claims there are no open asks.
 Denied metric streams are omitted from card metrics as well as ref previews.
+
 ### Pivoted tables: one row per label set
 
 A `live-table` panel pivots several series into one readable row per label set:

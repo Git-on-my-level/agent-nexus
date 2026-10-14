@@ -255,12 +255,14 @@ func (reader *reportReader) materializeLiveTable(panel reports.Panel) map[string
 	}
 	source := panel.Source
 	if len(source.Columns) == 0 || len(source.Columns) > reports.MaxPivotColumns || len(source.RowKeys) == 0 || len(source.RowKeys) > reports.MaxPivotRowKeys {
+		out["message"] = "This live table binding is invalid."
 		return out
 	}
 	window := 24 * time.Hour
 	var err error
 	if source.Range != "" {
 		if window, err = reports.SeriesRange(source.Range); err != nil {
+			out["message"] = "This live table binding has an invalid range."
 			return out
 		}
 	}
@@ -272,6 +274,8 @@ func (reader *reportReader) materializeLiveTable(panel reports.Panel) map[string
 	}
 	results := make([]series.Result, 0, len(source.Columns))
 	byLabels := make([]map[string]series.Stream, 0, len(source.Columns))
+	anyStale := false
+	staleSince := time.Time{}
 	for _, column := range source.Columns {
 		agg := column.Agg
 		if agg == "" {
@@ -290,6 +294,17 @@ func (reader *reportReader) materializeLiveTable(panel reports.Panel) map[string
 			return out
 		}
 		results = append(results, result)
+		// A label set that went quiet before the requested window still answers
+		// the freshness question: fold its staleness in even though it
+		// contributes no rows, the way single-series panels do.
+		for _, stream := range result.Streams {
+			if stream.Stale {
+				anyStale = true
+				if since, err := time.Parse(time.RFC3339Nano, stream.StaleSince); err == nil && (staleSince.IsZero() || since.Before(staleSince)) {
+					staleSince = since
+				}
+			}
+		}
 		streams := map[string]series.Stream{}
 		for _, stream := range result.Streams {
 			if len(stream.Points) == 0 {
@@ -354,9 +369,7 @@ func (reader *reportReader) materializeLiveTable(panel reports.Panel) map[string
 		columns = append(columns, map[string]any{"label": label, "kind": "series", "series": column.Series, "agg": agg, "unit": results[ci].Unit})
 	}
 	latest := time.Time{}
-	staleSince := time.Time{}
 	freshUntil := time.Time{}
-	anyStale := false
 	fresh, stale := 0, 0
 	tableRows := make([]map[string]any, 0, min(len(order), pivotMaxRows))
 	more := 0
@@ -376,18 +389,12 @@ func (reader *reportReader) materializeLiveTable(panel reports.Panel) map[string
 				continue
 			}
 			stream := row.streams[ci]
-			if stream.Stale {
-				anyStale = true
-			}
 			observed, _ := time.Parse(time.RFC3339Nano, stream.LastPoint)
 			if observed.After(latest) {
 				latest = observed
 			}
 			if stream.Stale {
 				stale++
-				if since, err := time.Parse(time.RFC3339Nano, stream.StaleSince); err == nil && (staleSince.IsZero() || since.Before(staleSince)) {
-					staleSince = since
-				}
 			} else {
 				fresh++
 				if !observed.IsZero() {

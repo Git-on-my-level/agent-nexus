@@ -2706,7 +2706,7 @@
     "../server/report_handlers.go:handleRenderReport": "de895509a9ca56fd9d45ba89dfdc35d7abc58d0584d13f0e48ff5625ba3927be",
     "../server/report_handlers.go:materializeReportPanels": "3a6d20eaa04918022713bb8b9e10667fa51158c726ef2326748f82e1a235b55f",
     "../server/report_reviews.go:checkReportReviews": "cacc23061d9a78b0fdc52c5b6f7590765ac0cb015b96f7c28d690004f89b4823",
-    "../server/report_series.go:*reportReader:materializeLiveTable": "47ea3200b1f404609a665a41e5a2ba779fd283db4469e38ae3a97b40afd64f21",
+    "../server/report_series.go:*reportReader:materializeLiveTable": "d459814fdeb4d3088edcd1eb2ead34e3e1afe2120f9c67f63a8222155756314b",
     "../server/report_series.go:*reportReader:materializeSeries": "43cb4290db0944b8d05ae7272b1f93600f05649b49728fcb96be784901c88801",
     "../server/request_controls.go:decodeJSONBody": "f6c4b5d93d134df21a2af0ec5707321743fd484ad6f374754c453249dc78e245",
     "../server/request_controls.go:decodeJSONBodyAllowEmpty": "e51879c1d50bdc152998b397f1ce6c6b95e4023d9943b917faa3957819fd44f4",

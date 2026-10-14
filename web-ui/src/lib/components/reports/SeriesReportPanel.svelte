@@ -35,15 +35,23 @@
   /**
    * The pivoted table: one row per label set, one column per series, each
    * series cell carrying its own observation time and staleness. Rows arrive
-   * sorted by their row keys; the reader can re-sort any column.
+   * sorted by their row keys; the reader can re-sort any column. A fully
+   * stale read keeps its last-known values on screen, exactly as a timeline
+   * keeps its events between releases — the stale banner sits above and each
+   * cell carries its own marker.
    */
   let isPivot = $derived(panel.type === "live-table");
-  let pivotColumns = $derived(isPivot ? (panel.data?.columns ?? []) : []);
-  let pivotMore = $derived(isPivot ? (panel.data?.more ?? 0) : 0);
+  let pivotData = $derived.by(() => {
+    if (!isPivot) return {};
+    if (observation?.status === "stale") return observation.data ?? {};
+    return panel.data ?? {};
+  });
+  let pivotColumns = $derived(pivotData.columns ?? []);
+  let pivotMore = $derived(pivotData.more ?? 0);
   let sortColumn = $state(null);
   let sortDirection = $state("asc");
   let sortedRows = $derived.by(() => {
-    const rows = panel.data?.rows ?? [];
+    const rows = pivotData.rows ?? [];
     if (!isPivot || sortColumn === null) return rows;
     const direction = sortDirection === "desc" ? -1 : 1;
     return [...rows].sort((a, b) => {
@@ -88,12 +96,15 @@
     const entries = Array.isArray(provenance) ? provenance : [];
     if (!entries.length)
       return "This panel reads published series. Their adapters and hosts appear after the first successful read.";
-    return entries
-      .map(
-        (entry) =>
-          `${entry.series || "A series"} is pushed by ${entry.adapter || "an adapter"} on ${entry.host || "an unnamed host"}, ${entry.resolution || "raw"} resolution. Last point ${formatTime(entry.last_push, { now, style: "exact" }) || "not received yet"}.`,
-      )
-      .join("\n");
+    const sentence = (entry) =>
+      `Pushed by ${entry.adapter || "an adapter"} on ${entry.host || "an unnamed host"}, ${entry.resolution || "raw"} resolution. Last point ${formatTime(entry.last_push, { now, style: "exact" }) || "not received yet"}.`;
+    const first = sentence(entries[0]);
+    // InfoTip keeps to a sentence or two; one sentence per column would turn
+    // an eight-column table's fold into a wall.
+    const rest = entries.length - 1;
+    return rest > 0
+      ? `${first} ${rest} more ${rest === 1 ? "series shares" : "series share"} this panel.`
+      : first;
   });
 </script>
 
@@ -113,7 +124,7 @@
       : observation?.message || "Live series unavailable"}
   </p>
 {/if}
-{#if showData || (panel.type === "live-timeline" && timeline.length)}
+{#if showData || (panel.type === "live-timeline" && timeline.length) || (isPivot && observation?.status === "stale")}
   {#if panel.type === "live-timeline"}
     <!--
       Every observation an adapter published, newest first — a release, a

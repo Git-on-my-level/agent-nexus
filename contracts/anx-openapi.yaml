@@ -8570,7 +8570,7 @@ components:
         limit. live-fleet-health accepts an empty query and reads declared fleet.*
         series plus native host and authorized enrollment inventory. card_ref filters initiative rows and asks to one visible card.
         answered_only returns answered asks only and implies include_answered.
-        live-cards allows board_refs, project_ref, card_ref, label, role, status, limit and sort (priority, updated, title). Its items use the initiative card shape without plan enrichment. live-timeline uses a series source binding with a range of at most 90d and no agg or fallback; it returns individual items (at, label, value), newest first, capped at 100. live-table uses a pivoted series source binding (columns plus row_keys) and returns one row per distinct row-key label combination, capped at 50 rows with the remainder counted in more. Authored panels are also returned with review metadata and their static data. No other field is allowed for that panel type.
+        live-cards allows board_refs, project_ref, card_ref, label, role, status, limit and sort (priority, updated, title). Its items use the initiative card shape without plan enrichment. live-timeline uses a series source binding with a range of at most 90d and no agg or fallback; it returns individual items (at, label, value), newest first, capped at 100. live-table uses a pivoted series source binding (columns plus row_keys) and returns one row per label set, capped at 50 rows with the remainder counted in more. Authored panels are also returned with review metadata and their static data. No other field is allowed for that panel type.
       properties:
         board_refs:
           type: array

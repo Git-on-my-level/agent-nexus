@@ -180,7 +180,22 @@ describe("live-table observations", () => {
       screen
         .getByRole("button", { name: /Where this number comes from/ })
         .getAttribute("data-tooltip"),
-    ).toMatch(/loops\.state is pushed by collector on m5-mbp/);
+    ).toMatch(/Pushed by collector on m5-mbp/);
+  });
+  it("keeps the last-known table on screen when the read is stale", () => {
+    const panel = withLiveObservation(pivotPanel(), {
+      ...pivotObservation(),
+      status: "stale",
+      stale_since: "2026-10-05T00:02:00Z",
+    });
+    // A stale read without a fallback blanks `panel.data`; the pivot keeps
+    // rendering from the observation so the reader still sees the last-known
+    // values and their per-cell markers.
+    render(SeriesReportPanel, { panel, freshness: "stale" });
+    expect(screen.getByText(/Stale since 2026-10-05T00:02:00Z/)).toBeTruthy();
+    expect(screen.getByText("running")).toBeTruthy();
+    expect(screen.getByText("stale")).toBeTruthy();
+    expect(screen.getByText(/3 more rows not shown/)).toBeTruthy();
   });
   it("shows the materializer's reason when the read fails", () => {
     const panel = withLiveObservation(pivotPanel(), {

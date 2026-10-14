@@ -233,6 +233,28 @@ func TestLiveTablePivotStaleCellsAndPanelStatus(t *testing.T) {
 	if got["fresh_until"] == nil {
 		t.Fatalf("fresh cells feed the panel freshness deadline: %#v", got)
 	}
+	// A publisher that went quiet before the requested window contributes no
+	// rows, but the panel still answers stale rather than unavailable, naming
+	// when it went quiet — the same verdict a metric on the series would give.
+	raw, err := json.Marshal(map[string]any{
+		"columns":  []any{map[string]any{"series": "slow.state", "label": "State"}},
+		"row_keys": []any{map[string]any{"key": "loop"}, map[string]any{"key": "host", "label": "Host"}},
+		"range":    "5s",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shortRange reports.SeriesSource
+	if err := json.Unmarshal(raw, &shortRange); err != nil {
+		t.Fatal(err)
+	}
+	got = reader.materializeSeries(reports.Panel{ID: "slow", Type: "live-table", Source: &shortRange})
+	if got["status"] != "stale" || got["stale_since"] == "" {
+		t.Fatalf("quiet publisher out of range must read stale: %#v", got)
+	}
+	if rows := got["data"].(map[string]any)["rows"].([]map[string]any); len(rows) != 0 {
+		t.Fatalf("out-of-range label sets must not invent rows: %#v", rows)
+	}
 }
 
 func TestLiveTablePivotUndeclaredSeriesColumnFailsWithMessage(t *testing.T) {
@@ -260,6 +282,46 @@ func TestLiveTablePivotUndeclaredSeriesColumnFailsWithMessage(t *testing.T) {
 	})})
 	if got["status"] != "unavailable" || !strings.Contains(got["message"].(string), "does not support the sum aggregation") {
 		t.Fatalf("state aggregation reason: %#v", got)
+	}
+}
+
+func TestLiveTablePivotRendersThroughDocumentReportRoute(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareLoopSeries(t, env)
+	now := time.Now().UTC()
+	pushLoopPoint(t, env, token, "loops.state", map[string]any{"state": "running", "labels": map[string]string{"loop": "alpha", "host": "series-host"}, "ts": now.Add(-time.Minute).Format(time.RFC3339Nano)})
+	pushLoopPoint(t, env, token, "loops.runs_7d", map[string]any{"value": 5, "labels": map[string]string{"loop": "alpha", "host": "series-host"}, "ts": now.Add(-time.Minute).Format(time.RFC3339Nano)})
+	panel := map[string]any{
+		"id": "loops", "project_id": "workspace", "type": "live-table", "title": "Loop status",
+		"author": "collector", "provenance": "reported", "observed_at": nil, "freshness": "unknown",
+		"source_ids": []string{}, "data": map[string]any{},
+		"source": map[string]any{
+			"columns":  []any{map[string]any{"series": "loops.state", "label": "State"}, map[string]any{"series": "loops.runs_7d", "label": "Runs", "agg": "sum"}},
+			"row_keys": []any{map[string]any{"key": "loop"}, map[string]any{"key": "host", "label": "Host"}},
+			"range":    "24h",
+		},
+	}
+	report := map[string]any{"kind": "anx.visual-report", "schema_version": 1, "title": "Loops", "summary": "Pivoted loop status", "generated_at": now.Format(time.RFC3339Nano), "projects": []map[string]any{{"id": "workspace", "title": "Workspace", "summary": "Ship", "outcome": "Loop"}}, "sources": []any{}, "panels": []map[string]any{panel}}
+	status, out := hostHTTP(t, "POST", env.server.URL+"/docs", "owner-token", map[string]any{"document": map[string]any{"title": "Loops"}, "content": report, "content_type": "structured"})
+	hostStatus(t, status, 201, out)
+	ref := out["document"].(map[string]any)["ref"].(string)
+	status, out = hostHTTP(t, "GET", env.server.URL+"/docs/"+ref+"/report", "owner-token", nil)
+	hostStatus(t, status, 200, out)
+	observation := out["panels"].([]any)[0].(map[string]any)
+	if observation["type"] != "live-table" || observation["status"] != "ok" {
+		t.Fatalf("live-table render: %#v", observation)
+	}
+	data := observation["data"].(map[string]any)
+	rows := data["rows"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("expected one pivoted row: %#v", data)
+	}
+	cells := rows[0].(map[string]any)["cells"].([]any)
+	if len(cells) != 4 || cells[0].(map[string]any)["text"] != "alpha" || cells[3].(map[string]any)["text"] != "5" {
+		t.Fatalf("rendered pivot cells: %#v", cells)
 	}
 }
 

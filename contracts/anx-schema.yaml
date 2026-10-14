@@ -1300,7 +1300,7 @@ visual_report_review:
     - report_review reminders are informational, with no reply, acknowledge or dismiss mutation; clients may open the dashboard. Revising or unpinning the dashboard hides obsolete reminders.
     - live-cards filters bounded card candidates by board_refs, label, role and status; closed phases are included only for this panel type.
     - live-timeline binds an existing state or numeric series through source; core never fetches external events.
-    - live-table pivots series bindings into one row per row-key label combination with per-cell staleness, capped at 50 rows; cells hold the value each column's aggregation last observed in range.
+    - live-table pivots series bindings into one row per label set with per-cell staleness, capped at 50 rows; cells hold the value each column's aggregation last observed in range.
 
 work_summary:
   schema: WorkSummary
