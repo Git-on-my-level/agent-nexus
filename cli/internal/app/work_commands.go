@@ -13,6 +13,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/internal/registry"
 )
 
@@ -307,7 +308,15 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if parsed.name == "pm decisions dispatch" {
 		started = time.Now().UTC()
 	}
+	var createWarnings []output.Warning
+	if parsed.name == "work create" {
+		// Warnings only: one bounded read before the write, never a rejection.
+		createWarnings = a.workCreateWarnings(ctx, cfg, anyString(asMap(body)["title"]))
+	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
+	if err == nil && result != nil && len(createWarnings) > 0 {
+		result.Warnings = append(result.Warnings, createWarnings...)
+	}
 	if parsed.name == "pm turns claim" {
 		if cap, ok := parsePMClaimCapacity(result, err); ok {
 			return applyPMClaimCapacityResult(result, cap), parsed.name, nil

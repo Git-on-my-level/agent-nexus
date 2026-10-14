@@ -763,6 +763,11 @@
   },
   {
     "method": "GET",
+    "path": "/brief",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
     "path": "/overview",
     "policy": "collection"
   },

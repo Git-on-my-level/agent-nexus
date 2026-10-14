@@ -2,6 +2,7 @@
 import { cleanup, render } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { ageTitle } from "../../src/lib/ageBadge.js";
 import WorkSummary from "../../src/lib/components/WorkSummary.svelte";
 import { workSummaryModel } from "../../src/lib/workSummary.js";
 
@@ -267,4 +268,90 @@ describe("parts core omitted are not invented", () => {
       "at least 1 of 4 cards done",
     );
   });
+});
+
+it.each(["row", "card", "header"])(
+  "%s shows oldest waiting age and metric baseline",
+  (density) => {
+    const el = at(density, {
+      work_summary: {
+        ...row.work_summary,
+        attention: {
+          count: 10,
+          oldest_age: 47 * 86400,
+          oldest_at: ago(47 * 86400000),
+        },
+        metrics: [
+          {
+            ref: "series:cost",
+            name: "cost",
+            unit: "USD",
+            status: "stale",
+            latest: { value: 80 },
+            baseline: { value: 100 },
+            change: -20,
+            observed_at: ago(3600000),
+            stale: true,
+          },
+        ],
+      },
+    });
+    expect(el.querySelector("[data-summary-attention]").textContent).toContain(
+      "waiting on you 47d",
+    );
+    const metric = el.querySelector("[data-summary-metric]");
+    expect(metric.textContent).toContain("80 USD");
+    expect(metric.textContent).toContain("vs 100");
+    expect(metric.textContent).toContain("(-20)");
+    expect(metric.textContent).toContain("stale");
+    expect(metric.getAttribute("title")).toBe(
+      ageTitle(ago(3600000), "observed", NOW),
+    );
+  },
+);
+
+it.each(["row", "card", "header"])(
+  "%s shows compact wait duration for a recent ask",
+  (density) => {
+    const el = at(density, {
+      work_summary: {
+        ...row.work_summary,
+        attention: {
+          count: 1,
+          oldest_age: 15 * 60,
+          oldest_at: ago(15 * 60_000),
+        },
+      },
+    });
+    expect(el.querySelector("[data-summary-attention]").textContent).toContain(
+      "waiting on you 15m",
+    );
+  },
+);
+
+it.each(["row", "card", "header"])(
+  "%s does not present an incomplete zero-visible ask sample as no wait",
+  (density) => {
+    const el = at(density, {
+      work_summary: {
+        ...row.work_summary,
+        attention: undefined,
+        attention_truncated: true,
+      },
+    });
+    expect(el.querySelector("[data-summary-attention]")).toBeNull();
+    expect(
+      el.querySelector("[data-summary-attention-unknown]").textContent,
+    ).toBe("Waiting status unknown");
+  },
+);
+it("complete zero-ask summaries omit the uncertainty marker", () => {
+  const el = at("row", {
+    work_summary: {
+      ...row.work_summary,
+      attention: undefined,
+      attention_truncated: false,
+    },
+  });
+  expect(el.querySelector("[data-summary-attention-unknown]")).toBeNull();
 });

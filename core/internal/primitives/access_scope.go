@@ -100,10 +100,10 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 			return
 		}
 		materialization := ""
-		if table == "document_search_postings" {
-			// Parent AND probes this shadow once per query term. Keep each
-			// authority-filtered probe inlined into its (term,doc_n) seek;
-			// copying the workspace's postings would defeat the page budget.
+		if table == "document_search_postings" || table == "series_points" {
+			// Repeated posting/series endpoint probes must retain their indexed
+			// seeks through the privacy predicate. Materializing either
+			// shadow copies the whole workspace relation before selection.
 			materialization = "NOT MATERIALIZED "
 		}
 		graph += ", " + table + " AS " + materialization + "(SELECT * FROM main." + table + " AS _row WHERE " + where + ")"

@@ -423,7 +423,7 @@ func main() {
 		effectiveBlobRoot,
 		primitives.WithWorkspaceQuota(workspaceQuota),
 		primitives.WithAskWebhookEncryption(secretsEncryptor),
-		primitives.WithAskDeliveryPolicy(strings.Split(os.Getenv("ANX_ASK_NEXT_ACTOR_ORDER"), ","), askStaleDuration()),
+		primitives.WithAskDeliveryPolicy(strings.Split(os.Getenv("ANX_ASK_NEXT_ACTOR_ORDER"), ","), ),
 		primitives.WithAskWebhookAllowHosts(strings.FieldsFunc(os.Getenv("ANX_WEBHOOK_ALLOW_HOSTS"), func(r rune) bool { return r == ',' })),
 		primitives.WithScopedInboxReader(scopedInboxReader),
 		primitives.WithDatabasePath(workspace.Layout().DatabasePath),
@@ -648,6 +648,7 @@ func main() {
 		return err == nil && !p.Revoked && p.PrincipalKind == string(auth.PrincipalKindAgent)
 	})
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
+	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
 	go workspace.RunAskSubjectsMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask subject maintenance: retrying bounded batch") })
 	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
 	go server.RunCurationFormulaLoop(maintenanceCtx, primitiveStore, func(err error) { fmt.Fprintf(os.Stderr, "curation formula pass: %v\n", err) })
@@ -1092,10 +1093,3 @@ func configuredPMActor(stderr io.Writer) string {
 	return actor
 }
 
-func askStaleDuration() time.Duration {
-	d, err := time.ParseDuration(os.Getenv("ANX_ASK_STALE_AFTER"))
-	if err != nil || d <= 0 {
-		return 7 * 24 * time.Hour
-	}
-	return d
-}
