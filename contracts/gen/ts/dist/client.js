@@ -9136,6 +9136,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "replay_key",
+                    "type": "string"
                 }
             ]
         },

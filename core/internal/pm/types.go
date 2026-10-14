@@ -161,6 +161,7 @@ type CreateConversation struct {
 	WorkRef     string   `json:"work_ref,omitempty"`
 }
 type MessageInput struct {
+	ReplayKey  string `json:"replay_key,omitempty"`
 	ActorID    string `json:"actor_id,omitempty"`
 	RequestKey string `json:"request_key"`
 	Text       string `json:"text"`
@@ -168,32 +169,33 @@ type MessageInput struct {
 
 // Turn is the durable record; HTTP responses use turnResponse to hide lease credentials.
 type Turn struct {
-	ContextRefs     []string       `json:"context_refs,omitempty"`
-	Activity        []TurnActivity `json:"activity,omitempty"`
-	PartialSequence int            `json:"partial_sequence,omitempty"`
-	PartialResponse string         `json:"partial_response,omitempty"`
-	DecisionIDs     []string       `json:"decision_ids,omitempty"`
-	ID              string         `json:"id"`
-	ConversationID  string         `json:"conversation_id"`
-	WorkspaceID     string         `json:"workspace_id"`
-	ActorID         string         `json:"actor_id"`
-	Text            string         `json:"text"`
-	Response        string         `json:"response,omitempty"`
-	Status          Status         `json:"status"`
-	WakeupID        string         `json:"wakeup_id"`
-	AgentActorID    string         `json:"agent_actor_id"`
-	EvidenceRefs    []string       `json:"evidence_refs,omitempty"`
-	Failure         string         `json:"failure,omitempty"`
-	FailureKind     string         `json:"failure_kind,omitempty"`
-	ClaimedAt       *time.Time     `json:"claimed_at,omitempty"`
-	LeaseToken      string         `json:"lease_token,omitempty"`
-	LeaseOwner      string         `json:"lease_owner,omitempty"`
-	LeaseExpiresAt  time.Time      `json:"lease_expires_at,omitempty"`
-	MaxOutputBytes  int            `json:"max_output_bytes,omitempty"`
-	Origin          *Origin        `json:"origin,omitempty"`
-	CreatedAt       time.Time      `json:"created_at"`
-	Deadline        time.Time      `json:"deadline"`
-	Revision        int            `json:"revision"`
+	ReplayJSON      json.RawMessage `json:"-"`
+	ContextRefs     []string        `json:"context_refs,omitempty"`
+	Activity        []TurnActivity  `json:"activity,omitempty"`
+	PartialSequence int             `json:"partial_sequence,omitempty"`
+	PartialResponse string          `json:"partial_response,omitempty"`
+	DecisionIDs     []string        `json:"decision_ids,omitempty"`
+	ID              string          `json:"id"`
+	ConversationID  string          `json:"conversation_id"`
+	WorkspaceID     string          `json:"workspace_id"`
+	ActorID         string          `json:"actor_id"`
+	Text            string          `json:"text"`
+	Response        string          `json:"response,omitempty"`
+	Status          Status          `json:"status"`
+	WakeupID        string          `json:"wakeup_id"`
+	AgentActorID    string          `json:"agent_actor_id"`
+	EvidenceRefs    []string        `json:"evidence_refs,omitempty"`
+	Failure         string          `json:"failure,omitempty"`
+	FailureKind     string          `json:"failure_kind,omitempty"`
+	ClaimedAt       *time.Time      `json:"claimed_at,omitempty"`
+	LeaseToken      string          `json:"lease_token,omitempty"`
+	LeaseOwner      string          `json:"lease_owner,omitempty"`
+	LeaseExpiresAt  time.Time       `json:"lease_expires_at,omitempty"`
+	MaxOutputBytes  int             `json:"max_output_bytes,omitempty"`
+	Origin          *Origin         `json:"origin,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	Deadline        time.Time       `json:"deadline"`
+	Revision        int             `json:"revision"`
 
 	// Private durable replay credential; stripped by turnResponse.
 	TerminalLeaseHash string `json:"terminal_lease_hash,omitempty"`
@@ -429,7 +431,13 @@ type Dependencies struct {
 	ReadContext              func(context.Context, Principal, string, string, int) (ContextPage, error)
 	ReadContextPage          func(context.Context, Principal, string, string, string, int) (ContextPage, error)
 	Dispatch                 func(context.Context, DispatchRequest) error
-	CurrentRevision          func(context.Context, Principal, string) (string, error)
+	// Receipt mode requires an audited quota-owning scoped writer. Dispatch
+	// authentication/readiness runs before it; persistence has only local
+	// transactional effects and rejects legacy ID collisions.
+	ReplayMessage     func(context.Context, string, string, string, string, func(context.Context) (Turn, error)) (Turn, error)
+	PreflightDispatch func(context.Context, DispatchRequest) error
+	PersistDispatch   func(context.Context, DispatchRequest) error
+	CurrentRevision   func(context.Context, Principal, string) (string, error)
 	// DeliveryPath is the named preflight, using the same registry as Execute.
 	// CheckDelivery supports older integrations without a named route.
 	DeliveryPath  func(context.Context, Action) (string, error)

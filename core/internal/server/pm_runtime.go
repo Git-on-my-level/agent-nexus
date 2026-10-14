@@ -252,6 +252,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 	}
 	deps := pm.Dependencies{Authorize: authorize, EnsureThread: bridge.EnsureThread, CreateConversationThread: bridge.CreateConversationThread}
+	deps.ReplayMessage = bridge.ReplayMessage
 	deps.AuthorizeReadBatch = func(ctx context.Context, p pm.Principal, permission string, refs []string) (map[string]bool, error) {
 		if permission != "pm.read" && permission != "pm.approve" {
 			return nil, pm.ErrForbidden
@@ -292,6 +293,8 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	}
 	if cfg.BridgeEnabled {
 		deps.Dispatch = bridge.Dispatch
+		deps.PreflightDispatch = bridge.PreflightDispatch
+		deps.PersistDispatch = bridge.PersistDispatch
 	}
 	deps.ReadContextPage = func(ctx context.Context, p pm.Principal, ref, query, cursor string, limit int) (pm.ContextPage, error) {
 		ctx = primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID})

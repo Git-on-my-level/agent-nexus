@@ -9443,6 +9443,10 @@ components:
           description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
         request_key:
           type: string
+        replay_key:
+          type: string
+          maxLength: 256
+          description: Opt in to the original 202 receipt. Atomically commits the turn and durable dispatch intent; binds actor, conversation and complete decoded body. Existing turns without a receipt cannot be adopted. Recovery checks current access and works after PM disconnect. Legacy callers replay current turn state.
         text:
           type: string
       required:

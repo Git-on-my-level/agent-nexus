@@ -107,7 +107,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 3 && path[0] == "conversations" && path[2] == "messages" && r.Method == http.MethodPost:
 		var in MessageInput
 		if err = decode(&in); err == nil {
-			err = s.requireChatReplayOrSetup(ctx, p, "turn", stableID("turn", path[1], in.RequestKey), in.RequestKey)
+			if in.ReplayKey == "" {
+				err = s.requireChatReplayOrSetup(ctx, p, "turn", stableID("turn", path[1], in.RequestKey), in.RequestKey)
+			}
 			if err == nil {
 				out, err = s.PostMessage(ctx, p, path[1], in)
 			}
@@ -279,6 +281,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		out = Page[any]{Items: items, HasMore: value.HasMore, NextCursor: value.NextCursor}
 	case Turn:
+		if len(value.ReplayJSON) > 0 {
+			out = value.ReplayJSON
+			break
+		}
 		view := turnResponse(value, r.Method == http.MethodPost && len(path) == 2 && path[0] == "turns" && path[1] == "claim")
 		if len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" {
 			view.LeaseExpiresAt = &value.LeaseExpiresAt

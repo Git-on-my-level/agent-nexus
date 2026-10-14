@@ -599,6 +599,28 @@ continues. Cursors belong to the authenticated principal and inbox status.
 Workspace projection freshness retains the complete status and `thread_count`,
 with at most 100 thread details and `truncated` for additional threads.
 
+### PM chat original receipts
+
+Conversation creation and message POSTs accept optional `replay_key` alongside
+their existing `request_key`. The replay key binds the authenticated actor,
+workspace and complete decoded body; message keys also bind the conversation.
+Conversation receipts atomically commit a new backing thread and conversation
+with the original 201 body. Message receipts commit the turn and its send state
+with the original public 202 body; when the bridge is enabled, the trigger event,
+wake artifact/ownership refs, blob ledger and queue row join the same transaction.
+Runtime/auth readiness checks run before the writer. Runners see no new dispatch
+intent until commit. Failed promotion or receipt storage rolls back canonical
+state; an already promoted content-addressed blob may remain unreferenced.
+
+Exact recovery checks current ownership and pinned-resource access, works after
+disconnect/restart, and returns the original response after later turn progress.
+Fresh requests retain the PM setup and queue admission guards. Changed bodies
+or targets and legacy IDs without a matching receipt return conflicts. Legacy
+callers without `replay_key` retain current-state replay. An original message
+receipt contains no later lease credentials; read current conversation/turn state
+separately when refreshing the display. Clients must not add keys to previously
+persisted uncertain requests: their original bodies must remain unchanged.
+
 ### PM read authority inventory
 
 Designation grants no new private-resource permissions. Direct PM reads use the

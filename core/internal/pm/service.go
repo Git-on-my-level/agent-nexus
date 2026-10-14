@@ -261,6 +261,9 @@ func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, qu
 	return page, nil
 }
 func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID string, in MessageInput) (Turn, error) {
+	if in.ReplayKey != "" {
+		return s.postMessageWithReplay(ctx, p, conversationID, in)
+	}
 	if in.ActorID != "" && in.ActorID != p.ActorID {
 		return Turn{}, ErrForbidden
 	}

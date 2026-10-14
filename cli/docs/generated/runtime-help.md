@@ -4146,6 +4146,7 @@ Inputs:
   - body `text` (string)
   Optional:
   - body `actor_id` (string)
+  - body `replay_key` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 

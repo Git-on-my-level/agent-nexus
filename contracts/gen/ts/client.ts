@@ -9187,6 +9187,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "actor_id",
           "type": "string"
+        },
+        {
+          "name": "replay_key",
+          "type": "string"
         }
       ]
     },
