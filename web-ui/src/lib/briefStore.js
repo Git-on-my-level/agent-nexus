@@ -1,6 +1,7 @@
 import { get } from "svelte/store";
 import { coreClient } from "$lib/coreClient";
 import { normalizeBrief } from "$lib/brief.js";
+import { recoverInboxResponses } from "$lib/inboxResponseQueue.js";
 import { liveInboxChanges, liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
 import { readerScopeKey } from "$lib/readerScope.js";
 import { staleWhileRevalidate } from "$lib/staleWhileRevalidate.js";
@@ -45,6 +46,8 @@ export function briefStore() {
  */
 export function mountBrief() {
   const store = briefStore();
+  // Answers persisted before a reload or crash resume sending from here.
+  void recoverInboxResponses().catch(() => {});
   return store.mount({
     connect: (refresh) => {
       const stopInbox = liveInboxChanges({ client: coreClient, onChange: refresh });

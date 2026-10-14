@@ -1,0 +1,7 @@
+Review fleet onboarding runbook Review 5d · 1d overdue blocks 1: Fleet onboarding · from claude on m6 Approve(recommended)Request changes Reply… Copy ref Reply Send reply
+---
+Merge battery-v2 calibration? 2d · by Oct 17 high blocks 2: Battery curve v2, Calibration table refresh · from codex on m5 Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Merge(recommended)Hold a week Reply… Copy ref Reply Send reply
+---
+Enroll host m6-mini Host 3h from fleet-agent Token by fleet-agent · key 3a:9c… Approve(recommended)Deny Copy ref Reply Send reply
+---
+Withdraw "pick label scheme"? PM proposal 2m from PM Overtaken: PR #212 and #214 merged since the initiative last moved. Withdraw(recommended)Keep Reply… Copy ref Reply Send reply
