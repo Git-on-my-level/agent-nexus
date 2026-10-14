@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `230`
+- Commands: `234`
 
 ## `actors.create`
 
@@ -1042,6 +1042,58 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board, card }`.
+
+## `curation.candidates`
+
+- CLI path: `curation candidates`
+- HTTP: `GET /curation/candidates`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Let a PM review the same candidates the formula would propose, with judgment.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Output: Returns `{ candidates, limitations }`.
+- Agent notes: Read only. Post the ones worth a human decision with `curation propose`.
+
+## `curation.metrics`
+
+- CLI path: `curation metrics`
+- HTTP: `GET /curation/metrics`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Watch whether asks, decisions and promises are getting better.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
+- Output: Returns `{ metrics }`.
+- Agent notes: Counts only; no titles or refs.
+
+## `curation.propose`
+
+- CLI path: `curation propose`
+- HTTP: `POST /curation/proposals`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Let a PM post a curation proposal with its rationale.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`, `not_found`, `conflict`
+- Output: Returns `{ proposal }` with `status` created, existing or dismissed.
+- Agent notes: Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.
+
+## `curation.run`
+
+- CLI path: `curation run`
+- HTTP: `POST /curation/run`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Run the no-PM formula fallback now.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Output: Returns `{ proposals, skipped }`.
+- Agent notes: Proposals only; nothing is withdrawn or merged until a human accepts.
 
 ## `deliveries.claim`
 

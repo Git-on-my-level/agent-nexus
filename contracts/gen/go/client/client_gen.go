@@ -1003,6 +1003,50 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline"},
 	},
 	{
+		CommandID: "curation.candidates",
+		CLIPath:   "curation candidates",
+		Group:     "curation",
+		Method:    "GET",
+		Path:      "/curation/candidates",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"curation.metrics", "curation.propose", "curation.run"},
+	},
+	{
+		CommandID: "curation.metrics",
+		CLIPath:   "curation metrics",
+		Group:     "curation",
+		Method:    "GET",
+		Path:      "/curation/metrics",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"curation.candidates", "curation.propose", "curation.run"},
+	},
+	{
+		CommandID: "curation.propose",
+		CLIPath:   "curation propose",
+		Group:     "curation",
+		Method:    "POST",
+		Path:      "/curation/proposals",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.run"},
+	},
+	{
+		CommandID: "curation.run",
+		CLIPath:   "curation run",
+		Group:     "curation",
+		Method:    "POST",
+		Path:      "/curation/run",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.propose"},
+	},
+	{
 		CommandID: "deliveries.claim",
 		CLIPath:   "deliveries claim",
 		Group:     "deliveries",
@@ -3277,6 +3321,22 @@ func (c *Client) CardsTimeline(ctx context.Context, pathParams map[string]string
 
 func (c *Client) CardsTrash(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "cards.trash", pathParams, opts)
+}
+
+func (c *Client) CurationCandidates(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.candidates", nil, opts)
+}
+
+func (c *Client) CurationMetrics(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.metrics", nil, opts)
+}
+
+func (c *Client) CurationPropose(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.propose", nil, opts)
+}
+
+func (c *Client) CurationRun(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.run", nil, opts)
 }
 
 func (c *Client) DeliveriesClaim(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

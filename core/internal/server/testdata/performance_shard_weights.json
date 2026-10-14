@@ -470,5 +470,13 @@
   {
     "key": "GET /notification-settings",
     "milliseconds": 4000
+  },
+  {
+    "key": "GET /curation/candidates",
+    "milliseconds": 20000
+  },
+  {
+    "key": "GET /curation/metrics",
+    "milliseconds": 20000
   }
 ]

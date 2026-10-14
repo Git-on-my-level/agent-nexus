@@ -2658,6 +2658,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleAskOutcome(w, r, opts, true)
 	})
 
+	registerRoute("/curation/candidates", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleCurationCandidates(w, r, opts) })
+	registerRoute("/curation/proposals", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationPropose(w, r, opts) })
+	registerRoute("/curation/run", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationRun(w, r, opts) })
+	registerRoute("/curation/metrics", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleCurationMetrics(w, r, opts) })
+
 	registerRoute("/inbox/summary", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, 405, "method_not_allowed", "only GET is supported")

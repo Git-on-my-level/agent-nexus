@@ -1075,9 +1075,22 @@ var migrations = []migration{
 	// card changes), with a one-time backfill. See brief_facts.go.
 	{Version: 90, AfterApply: installBriefFacts},
 	{Version: 91, AfterApply: installBriefAskBlocks},
+	// Curation proposals: one row per action+targets key, so the formula and
+	// the PM propose a key at most once while open and never after a dismissal.
+	{Version: 92, Statements: []string{`CREATE TABLE IF NOT EXISTS curation_proposals (
+		key TEXT PRIMARY KEY,
+		proposal_event_id TEXT NOT NULL,
+		action TEXT NOT NULL,
+		source TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'open',
+		targets_json TEXT NOT NULL DEFAULT '[]',
+		created_at TEXT NOT NULL,
+		resolved_at TEXT
+	)`,
+		`CREATE INDEX IF NOT EXISTS idx_curation_proposals_event ON curation_proposals(proposal_event_id)`},
+	},
 	// One durable delivery queue for wakes and human notifications, plus the
-	// indexed open-ask deadline ledger the escalation clock reads. Version 92
-	// is reserved for the curation lane's curation_proposals table.
+	// indexed open-ask deadline ledger the escalation clock reads.
 	{Version: 93, AfterApply: installDeliveryQueue},
 }
 

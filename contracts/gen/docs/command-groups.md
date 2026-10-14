@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `35`
+- Groups: `36`
 
 ## `topics`
 
@@ -161,6 +161,15 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list` (`cards history`)
   - `cards.timeline` (`cards timeline`)
   - `cards.trash` (`cards trash`)
+
+## `curation`
+
+- Commands: `4`
+- Command IDs:
+  - `curation.candidates` (`curation candidates`)
+  - `curation.metrics` (`curation metrics`)
+  - `curation.propose` (`curation propose`)
+  - `curation.run` (`curation run`)
 
 ## `deliveries`
 

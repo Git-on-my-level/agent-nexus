@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 236,
+  "route_count": 240,
   "routes": [
     {
       "method": "GET",
@@ -480,6 +480,26 @@
     {
       "method": "POST",
       "path": "/cards/{card_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/curation/candidates",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/curation/metrics",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/curation/proposals",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/curation/run",
       "access_class": "workspace_business_surface"
     },
     {

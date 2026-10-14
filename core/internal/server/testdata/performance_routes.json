@@ -1430,5 +1430,27 @@
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "authorized_as": "agent"
+  },
+  {
+    "method": "GET",
+    "path": "/curation/candidates",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Bounded formula review: one indexed page of 200 open asks, 200 open initiatives and one 200-ref resolution.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/curation/metrics",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Window fold over the (type, ts) index, capped at 2000 asks and 5000 notes; counts only.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

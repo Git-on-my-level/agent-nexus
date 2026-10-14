@@ -139,6 +139,10 @@ export declare class AnxClient {
     cardsRevisionsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    curationCandidates(options?: RequestOptions): Promise<InvokeResult>;
+    curationMetrics(options?: RequestOptions): Promise<InvokeResult>;
+    curationPropose(options?: RequestOptions): Promise<InvokeResult>;
+    curationRun(options?: RequestOptions): Promise<InvokeResult>;
     deliveriesClaim(options?: RequestOptions): Promise<InvokeResult>;
     deliveriesList(options?: RequestOptions): Promise<InvokeResult>;
     deliveriesReceipt(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

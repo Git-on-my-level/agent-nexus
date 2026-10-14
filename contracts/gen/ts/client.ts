@@ -4686,6 +4686,175 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "cardsTrash"
   },
   {
+    "command_id": "curation.candidates",
+    "cli_path": "curation candidates",
+    "group": "curation",
+    "method": "GET",
+    "path": "/curation/candidates",
+    "operation_id": "listCurationCandidates",
+    "summary": "List formula curation candidates",
+    "description": "Bounded formula review of open asks and initiatives: asks whose every observed linked source is terminal (withdraw as moot), near-duplicate initiatives (merge) and open asks sharing a subject or thread (batch). Candidates are suggestions, never actions. An unobserved source withholds a moot candidate, sources are never named, and restricted asks and initiatives are never candidates. Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.",
+    "why": "Let a PM review the same candidates the formula would propose, with judgment.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ candidates, limitations }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Read only. Post the ones worth a human decision with `curation propose`.",
+    "adjacent_commands": [
+      "curation.metrics",
+      "curation.propose",
+      "curation.run"
+    ],
+    "go_method": "CurationCandidates",
+    "ts_method": "curationCandidates"
+  },
+  {
+    "command_id": "curation.metrics",
+    "cli_path": "curation metrics",
+    "group": "curation",
+    "method": "GET",
+    "path": "/curation/metrics",
+    "operation_id": "getCurationMetrics",
+    "summary": "Decision and promise health metrics",
+    "description": "Scorecard metrics folded from events in a bounded window (default 30 days, at most 90): S17 median time-to-decision weighted by blocked refs, S18 ask quality (answered with the recommended proposal, needs context, withdrawn as moot after 24h) and S20 promise calibration (met, median slip, moved twice or more). Reads at most 2000 asks and 5000 notes; `truncated` reports when the window held more.",
+    "why": "Watch whether asks, decisions and promises are getting better.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ metrics }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Counts only; no titles or refs.",
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.propose",
+      "curation.run"
+    ],
+    "go_method": "CurationMetrics",
+    "ts_method": "curationMetrics"
+  },
+  {
+    "command_id": "curation.propose",
+    "cli_path": "curation propose",
+    "group": "curation",
+    "method": "POST",
+    "path": "/curation/proposals",
+    "operation_id": "createCurationProposal",
+    "summary": "Propose a curation action as a decision",
+    "description": "Files one curation proposal (withdraw an ask as moot, merge a duplicate initiative into another, or batch related asks) as a human decision. The proposal is an ask addressed to a human whose first response proposal accepts it; answering with it performs the action as the answering human, through normal authority, and records an undo trail in the proposal thread. Any other answer dismisses it. The same action over the same targets is proposed at most once while open, and not again after a dismissal.",
+    "why": "Let a PM post a curation proposal with its rationale.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ proposal }` with `status` created, existing or dismissed.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "forbidden",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "action",
+          "type": "string",
+          "enum_values": [
+            "batch",
+            "merge",
+            "withdraw"
+          ]
+        },
+        {
+          "name": "rationale",
+          "type": "string"
+        },
+        {
+          "name": "targets",
+          "type": "list\u003cstring\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "title",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.metrics",
+      "curation.run"
+    ],
+    "go_method": "CurationPropose",
+    "ts_method": "curationPropose"
+  },
+  {
+    "command_id": "curation.run",
+    "cli_path": "curation run",
+    "group": "curation",
+    "method": "POST",
+    "path": "/curation/run",
+    "operation_id": "runCurationFormula",
+    "summary": "Run the formula curation pass",
+    "description": "Files every current formula candidate as a proposal from the system principal. Bounded like the candidate list; already proposed and dismissed keys are skipped. Core also runs this pass on its own schedule, so a workspace with no PM still gets proposals.",
+    "why": "Run the no-PM formula fallback now.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ proposals, skipped }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Proposals only; nothing is withdrawn or merged until a human accepts.",
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.metrics",
+      "curation.propose"
+    ],
+    "go_method": "CurationRun",
+    "ts_method": "curationRun"
+  },
+  {
     "command_id": "deliveries.claim",
     "cli_path": "deliveries claim",
     "group": "deliveries",
@@ -14165,6 +14334,22 @@ export class AnxClient {
 
   cardsTrash(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("cards.trash", pathParams, options);
+  }
+
+  curationCandidates(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.candidates", {}, options);
+  }
+
+  curationMetrics(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.metrics", {}, options);
+  }
+
+  curationPropose(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.propose", {}, options);
+  }
+
+  curationRun(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.run", {}, options);
   }
 
   deliveriesClaim(options: RequestOptions = {}): Promise<InvokeResult> {

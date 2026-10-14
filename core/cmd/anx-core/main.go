@@ -653,6 +653,7 @@ func main() {
 	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
 	go workspace.RunAskSubjectsMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask subject maintenance: retrying bounded batch") })
 	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
+	go server.RunCurationFormulaLoop(maintenanceCtx, primitiveStore, func(err error) { fmt.Fprintf(os.Stderr, "curation formula pass: %v\n", err) })
 
 	replayGCDone := make(chan struct{})
 	go func() {

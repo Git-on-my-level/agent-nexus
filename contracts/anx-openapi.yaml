@@ -6080,6 +6080,156 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /curation/candidates:
+    get:
+      operationId: listCurationCandidates
+      summary: List formula curation candidates
+      description: >
+        Bounded formula review of open asks and initiatives: asks whose every observed linked
+        source is terminal (withdraw as moot), near-duplicate initiatives (merge) and open asks
+        sharing a subject or thread (batch). Candidates are suggestions, never actions. An
+        unobserved source withholds a moot candidate, sources are never named, and restricted
+        asks and initiatives are never candidates. Each pass reads at most 200 open asks,
+        200 open initiatives and 200 resolved refs.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: curation.candidates
+      x-anx-cli-path: curation candidates
+      x-anx-why: Let a PM review the same candidates the formula would propose, with judgment.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Read only. Post the ones worth a human decision with `curation propose`.
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ candidates, limitations }`."
+      x-anx-error-codes: [auth_required, invalid_token, forbidden]
+      responses:
+        '200':
+          description: Current candidates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurationCandidatesResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+  /curation/proposals:
+    post:
+      operationId: createCurationProposal
+      summary: Propose a curation action as a decision
+      description: >
+        Files one curation proposal (withdraw an ask as moot, merge a duplicate initiative into
+        another, or batch related asks) as a human decision. The proposal is an ask addressed to
+        a human whose first response proposal accepts it; answering with it performs the action
+        as the answering human, through normal authority, and records an undo trail in the
+        proposal thread. Any other answer dismisses it. The same action over the same targets is
+        proposed at most once while open, and not again after a dismissal.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: curation.propose
+      x-anx-cli-path: curation propose
+      x-anx-why: Let a PM post a curation proposal with its rationale.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ proposal }` with `status` created, existing or dismissed."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, forbidden, not_found, conflict]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurationProposalRequest'
+      responses:
+        '201':
+          description: Proposal filed, or the existing proposal for the same key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurationProposalResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /curation/run:
+    post:
+      operationId: runCurationFormula
+      summary: Run the formula curation pass
+      description: >
+        Files every current formula candidate as a proposal from the system principal. Bounded
+        like the candidate list; already proposed and dismissed keys are skipped. Core also runs
+        this pass on its own schedule, so a workspace with no PM still gets proposals.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: curation.run
+      x-anx-cli-path: curation run
+      x-anx-why: Run the no-PM formula fallback now.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Proposals only; nothing is withdrawn or merged until a human accepts.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ proposals, skipped }`."
+      x-anx-error-codes: [auth_required, invalid_token, forbidden]
+      responses:
+        '200':
+          description: Formula pass result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurationRunResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+  /curation/metrics:
+    get:
+      operationId: getCurationMetrics
+      summary: Decision and promise health metrics
+      description: >
+        Scorecard metrics folded from events in a bounded window (default 30 days, at most 90):
+        S17 median time-to-decision weighted by blocked refs, S18 ask quality (answered with the
+        recommended proposal, needs context, withdrawn as moot after 24h) and S20 promise
+        calibration (met, median slip, moved twice or more). Reads at most 2000 asks and 5000
+        notes; `truncated` reports when the window held more.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: curation.metrics
+      x-anx-cli-path: curation metrics
+      x-anx-why: Watch whether asks, decisions and promises are getting better.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Counts only; no titles or refs.
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ metrics }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, forbidden]
+      parameters:
+      - name: window_days
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 90}
+      responses:
+        '200':
+          description: Metrics for the window.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurationMetricsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
   /asks/batch:
     post:
       operationId: createAskBatch
@@ -12413,6 +12563,79 @@ components:
         explicit review Approve and Reject actions; acknowledged means the operator
         closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. The response text remains the audit note.
 
+    CurationCandidate:
+      type: object
+      required: [key, action, targets, title, rationale, response_proposals]
+      properties:
+        key: {type: string, description: Stable key over the action and its sorted targets.}
+        action: {type: string, enum: [withdraw, merge, batch]}
+        targets:
+          type: array
+          items: {type: string}
+          description: "withdraw: [ask event ref]; merge: [duplicate card ref, kept card ref]; batch: member ask event refs."
+        title: {type: string}
+        body: {type: string}
+        rationale: {type: string}
+        score: {type: number}
+        response_proposals:
+          type: array
+          items: {type: string}
+          description: Index 0 accepts the proposal.
+    CurationCandidatesResponse:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          items: {$ref: '#/components/schemas/CurationCandidate'}
+        limitations:
+          type: array
+          items: {type: string}
+    CurationProposalRequest:
+      type: object
+      required: [action, targets, rationale]
+      properties:
+        action: {type: string, enum: [withdraw, merge, batch]}
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: {type: string}
+        rationale: {type: string, maxLength: 2000, description: Why a human should accept; shown in the decision body.}
+        title: {type: string, maxLength: 160, description: Optional one-line decision; defaults to the formula title.}
+    CurationProposal:
+      type: object
+      required: [key, status, action, targets]
+      properties:
+        key: {type: string}
+        status: {type: string, enum: [created, existing, dismissed]}
+        action: {type: string, enum: [withdraw, merge, batch]}
+        targets:
+          type: array
+          items: {type: string}
+        event_id: {type: string, description: The proposal ask event id.}
+        source: {type: string, enum: [formula, pm]}
+    CurationProposalResponse:
+      type: object
+      required: [proposal]
+      properties:
+        proposal: {$ref: '#/components/schemas/CurationProposal'}
+    CurationRunResponse:
+      type: object
+      required: [proposals, skipped]
+      properties:
+        proposals:
+          type: array
+          items: {$ref: '#/components/schemas/CurationProposal'}
+        skipped: {type: integer}
+    CurationMetricsResponse:
+      type: object
+      required: [metrics]
+      properties:
+        metrics:
+          type: object
+          additionalProperties: true
+          description: "`{window_start, window_end, s17, s18, s20, truncated}`; see the curation section of anx-schema.yaml."
     CreateAskBatchRequest:
       type: object
       description: >
