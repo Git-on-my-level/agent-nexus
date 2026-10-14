@@ -185,7 +185,7 @@ for (const viewport of [
       exact: true,
     });
     await expect(
-      agentPanel.getByText("2 task participations · 2 currently active"),
+      agentPanel.getByText("2 initiative participations · 2 currently active"),
     ).toBeVisible();
     // The coverage bound is on the heading's tip now, not a paragraph under
     // it: a sentence a reader needs once should not be on screen every visit.
