@@ -1005,7 +1005,6 @@ function liveObservation() {
               progress: { done: 3, total: 7 },
               priority: "p1",
               phase: "in_progress",
-              health: "stale",
               plan: {
                 steps: [
                   {
@@ -1168,13 +1167,15 @@ for (const viewport of [
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs Alex: choose the launch date");
     /*
-     * The initiative's state, through the one `WorkSummary` the Overview and
-     * the Tasks table also render: a badge reading the label rather than this
+     * The initiative's state, through the one `WorkSummary` Watch and
+     * the initiatives table also render: a badge reading the label rather than this
      * panel's own lowercased copy of the raw state token.
      */
     await expect(
-      report.locator("[data-work-summary] [data-health='stale']"),
-    ).toContainText("Stale");
+      report
+        .locator('[data-report-initiative="card:launch"]')
+        .locator("[data-work-summary] [data-health='in_progress']"),
+    ).toContainText("In progress");
     const initiative = report.locator('[data-report-initiative="card:launch"]');
     const initiativePlan = initiative.locator("[data-initiative-plan]");
     await expect(
@@ -1188,11 +1189,8 @@ for (const viewport of [
     await expect(report).toContainText("2 h ago");
     await expect(
       report.getByRole("link", { name: "Which launch theme?" }),
-    ).toHaveAttribute(
-      "href",
-      /mailbox=handled&item=completed%3Aanswered-theme/,
-    );
-    await expect(report).toContainText("7 open tasks");
+    ).toHaveAttribute("href", /\/decide\/completed%3Aanswered-theme$/);
+    await expect(report).toContainText("7 open initiatives");
     await expect(report).toContainText("This note is an authored snapshot.");
     // The read time is a header chip now, in relative time: every live panel
     // says so where the reader looks before reading it.
@@ -1265,7 +1263,7 @@ test("Current filter retains RFC3339Nano live panels", async ({ page }) => {
     report.getByRole("link", { name: "Launch readiness" }),
   ).toBeVisible();
   await expect(report).toContainText("3/7");
-  await expect(report).toContainText("7 open tasks");
+  await expect(report).toContainText("7 open initiatives");
 });
 
 test("live panels refresh without changing the saved report and fail safely", async ({
