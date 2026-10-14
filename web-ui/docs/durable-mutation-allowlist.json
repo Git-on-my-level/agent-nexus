@@ -6,7 +6,7 @@
     "references": {
       "transport:baseFetchFn": 1,
       "transport:fetchFn": 1,
-      "transport:invokeCommand": 5,
+      "transport:invokeCommand": 6,
       "transport:invokeDirectRaw": 6
     }
   },

@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `223`
+- Command operations: `224`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `203`
+- Missing recommended examples: `204`
 
 ## Baseline gap counts
 
@@ -170,6 +170,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `artifacts.restore` `POST /artifacts/{artifact_id}/restore`
 - `artifacts.trash` `POST /artifacts/{artifact_id}/trash`
 - `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive`
+- `asks.batch.create` `POST /asks/batch`
 - `asks.delivery` `POST /asks/{ask_id}/delivery`
 - `asks.get` `GET /asks/{ask_id}`
 - `asks.stream` `GET /stream/asks/{ask_id}`

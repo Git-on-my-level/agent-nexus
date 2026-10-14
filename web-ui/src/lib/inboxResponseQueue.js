@@ -458,7 +458,20 @@ export function queueInboxResponse({
 }) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
-  if (!isInboxResponseOutcome(request?.outcome)) {
+  if (Array.isArray(request?.answers)) {
+    // A batch item answers every member in one request; core records all of
+    // them atomically. Outcomes are validated per answer instead.
+    if (!request.answers.length) {
+      throw new Error("queueInboxResponse requires a non-empty answers array");
+    }
+    for (const answer of request.answers) {
+      if (!isInboxResponseOutcome(answer?.outcome)) {
+        throw new Error(
+          "queueInboxResponse requires a valid outcome per answer",
+        );
+      }
+    }
+  } else if (!isInboxResponseOutcome(request?.outcome)) {
     throw new Error("queueInboxResponse requires a valid outcome");
   }
   const bound = binding ?? captureInboxResponseBinding();
@@ -576,12 +589,25 @@ export function undoInboxResponse() {
     .then(() => removePersistedResponse(entry, "undo"))
     .then(() => cancelledSends.delete(entry.request.idempotency_key))
     .catch(() => {});
-  void saveLocalWork(
-    entry.identity,
-    "draft",
-    `inbox:${entry.itemId}:reply`,
-    text,
-  ).catch(() => {});
+  if (entry.restore?.drafts && typeof entry.restore.drafts === "object") {
+    // A batch answer hands every section's text back to its own durable
+    // draft, so reopening the item restores each ask's reply in place.
+    for (const [ref, sectionText] of Object.entries(entry.restore.drafts)) {
+      void saveLocalWork(
+        entry.identity,
+        "draft",
+        `inbox:${entry.itemId}:reply:${ref}`,
+        String(sectionText ?? ""),
+      ).catch(() => {});
+    }
+  } else {
+    void saveLocalWork(
+      entry.identity,
+      "draft",
+      `inbox:${entry.itemId}:reply`,
+      text,
+    ).catch(() => {});
+  }
   setOverlay(entry.itemId, null);
   forgetFailure(entry.itemId);
   showToast(null);

@@ -131,6 +131,13 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusBadRequest, code, message)
 			return
 		}
+		// Batch membership is assigned by the dedicated ask-batch handler; a
+		// client-supplied id would let a single ask join (or forge) someone
+		// else's decision item.
+		if payload != nil && strings.TrimSpace(anyString(payload["batch_id"])) != "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "event.payload.batch_id is assigned by the ask batch handler; file through POST /asks/batch")
+			return
+		}
 	}
 	if err := validateEventReferenceConventions(opts.contract, req.Event, refs); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())

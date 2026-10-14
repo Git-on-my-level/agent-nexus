@@ -139,10 +139,23 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 	decidedIDs := decidedInboxItemIDs(events)
 	items := make([]derivedInboxItem, 0)
 
+	// Batch members collapse into one item per filed batch; the batch id is
+	// pinned server-side at filing, so membership never changes underneath it.
+	askBatchMembers := map[string][]map[string]any{}
+	var batchOrder []string
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
 		case humanAttentionRequestedEventType:
+			if payload, ok := event["payload"].(map[string]any); ok {
+				if batchID := strings.TrimSpace(anyString(payload["batch_id"])); batchID != "" {
+					if _, seen := askBatchMembers[batchID]; !seen {
+						batchOrder = append(batchOrder, batchID)
+					}
+					askBatchMembers[batchID] = append(askBatchMembers[batchID], event)
+					continue
+				}
+			}
 			item, ok := deriveHumanAttentionInboxItem(event)
 			if !ok {
 				continue
@@ -156,8 +169,61 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 		}
 	}
 
+	for _, batchID := range batchOrder {
+		members := askBatchMembers[batchID]
+		if len(members) < 2 {
+			// A lone member cannot form a batch item; fall back to its own item.
+			for _, event := range members {
+				item, ok := deriveHumanAttentionInboxItem(event)
+				if !ok {
+					continue
+				}
+				_, withdrawn := decidedIDs["event:"+strings.TrimSpace(anyString(event["id"]))]
+				if withdrawn {
+					continue
+				}
+				items = append(items, item)
+			}
+			continue
+		}
+		item, ok := deriveHumanAttentionBatchInboxItem(members)
+		if !ok {
+			continue
+		}
+		if _, decided := decidedIDs[item.ID]; decided {
+			continue
+		}
+		remaining := openBatchSections(members, decidedIDs)
+		if len(remaining) == 0 {
+			continue
+		}
+		item.Data["batch"] = map[string]any{"id": strings.TrimSpace(anyString(item.Data["batch"].(map[string]any)["id"])), "asks": remaining}
+		items = append(items, item)
+	}
+
 	sortInboxItems(items)
 	return items, nil
+}
+
+// openBatchSections rebuilds the batch item's decision sections from the
+// members that are neither withdrawn nor answered, keeping the filed order.
+func openBatchSections(members []map[string]any, decidedIDs map[string]struct{}) []map[string]any {
+	item, ok := deriveHumanAttentionBatchInboxItem(members)
+	if !ok {
+		return nil
+	}
+	batch, _ := item.Data["batch"].(map[string]any)
+	sections, _ := batch["asks"].([]map[string]any)
+	out := make([]map[string]any, 0, len(sections))
+	for _, section := range sections {
+		ref := strings.TrimSpace(anyString(section["request_event_ref"]))
+		memberID := strings.TrimPrefix(ref, "event:")
+		if _, withdrawn := decidedIDs["event:"+memberID]; withdrawn {
+			continue
+		}
+		out = append(out, section)
+	}
+	return out
 }
 
 func loadDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string) (primitives.DerivedTopicProjection, error) {

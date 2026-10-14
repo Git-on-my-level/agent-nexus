@@ -91,6 +91,14 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		}
 		return commandName, nil
 	}
+	if args[0] == "ask" && len(args) >= 2 && args[1] == "batch" {
+		return "ask batch", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{
+			"from-file": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
+			"on-answer": {kind: preflightFlagString}, "force": {kind: preflightFlagBool},
+			"reason": {kind: preflightFlagString}, "actor-id": {kind: preflightFlagString},
+			"dry-run": {kind: preflightFlagBool},
+		})
+	}
 	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
 		name := "work " + args[1]
 		return name, preflightFlagUsage(args[2:], preflightFlagSpecs()[name])

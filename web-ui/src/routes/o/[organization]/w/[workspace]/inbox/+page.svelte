@@ -121,6 +121,7 @@
   import InboxEvidence from "$lib/components/inbox/InboxEvidence.svelte";
   import InboxItemHeading from "$lib/components/inbox/InboxItemHeading.svelte";
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
+  import InboxBatchRespondPanel from "$lib/components/inbox/InboxBatchRespondPanel.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
 
   import { readerScope, readerScopeKey } from "$lib/readerScope.js";
@@ -1247,6 +1248,49 @@
     respondInbox(row, "Acknowledged from inbox", { acknowledge: true });
   }
 
+  /**
+   * Answers a filed ask batch: one request, every member, recorded atomically
+   * by core. The undo toast hands each section's draft back to its own key.
+   */
+  function respondInboxBatch(
+    row,
+    answers,
+    { binding = undefined, drafts = {} } = {},
+  ) {
+    const item = row?.item;
+    if (!item?.id || !Array.isArray(answers) || !answers.length) return;
+    if (
+      $inboxUnsentResponses.some(
+        (entry) =>
+          entry.itemId === item.id &&
+          entry.state !== "attention" &&
+          (!binding || entry.identity === binding.identity),
+      )
+    )
+      return;
+    const who = row.requester?.name || "";
+    const next = neighbourId(row.id);
+    queueInboxResponse({
+      itemId: item.id,
+      item,
+      binding,
+      request: { answers },
+      message: who
+        ? `Sent ${answers.length} answers to ${who}`
+        : `Sent ${answers.length} answers`,
+      restore: {
+        origin: "pane",
+        rowId: row.id,
+        mailbox,
+        drafts: { ...drafts },
+      },
+    });
+    if (row.id !== selected?.id) return;
+    reply = "";
+    chosen = "";
+    void select(next, { scroll: true });
+  }
+
   function undoLastResponse() {
     const entry = undoInboxResponse();
     if (!entry) return;
@@ -2160,7 +2204,19 @@
                   openDocRef={docPanelRef}
                 />
                 <InboxSendStatus itemId={selected.item?.id} />
-                {#if needsResponse}
+                {#if needsResponse && selected.item?.batch}
+                  <InboxBatchRespondPanel
+                    batch={selected.item.batch}
+                    itemKey={String(selected.item?.id || selected.id)}
+                    {busy}
+                    onSend={(answers, context) => {
+                      respondInboxBatch(selected, answers, {
+                        binding: captureInboxResponseBinding(),
+                        drafts: context?.drafts ?? {},
+                      });
+                    }}
+                  />
+                {:else if needsResponse}
                   <InboxRespondPanel
                     bind:this={respondPanel}
                     kind={selected.category}

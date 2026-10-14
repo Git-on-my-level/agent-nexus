@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `31`
+- Groups: `32`
 
 ## `topics`
 
@@ -83,6 +83,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `artifacts.restore` (`artifacts restore`)
   - `artifacts.trash` (`artifacts trash`)
   - `artifacts.unarchive` (`artifacts unarchive`)
+
+## `ask`
+
+- Commands: `1`
+- Command IDs:
+  - `asks.batch.create` (`ask batch`)
 
 ## `asks`
 

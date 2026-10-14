@@ -1051,6 +1051,24 @@ var migrations = []migration{
 	// the events table, so the index is conditional like the other event
 	// indexes (see the overview-answers migration).
 	{Version: 86, AfterApply: installAskRequesterIndex},
+	// Ask-batch responses replay through one durable claim row per filed batch
+	// so a retried submit returns the original combined result. Member answers
+	// still land in human_attention_response_claims; their request_key stays
+	// empty because the unique (actor_id, request_key) index there is per row.
+	{Version: 87, Statements: []string{`CREATE TABLE IF NOT EXISTS human_attention_batch_response_claims (
+		batch_id TEXT PRIMARY KEY,
+		inbox_item_id TEXT NOT NULL DEFAULT '',
+		actor_id TEXT NOT NULL,
+		request_key TEXT NOT NULL DEFAULT '',
+		request_hash TEXT NOT NULL DEFAULT '',
+		response_json TEXT NOT NULL,
+		created_at TEXT NOT NULL
+	)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_human_attention_batch_response_claims_key
+		ON human_attention_batch_response_claims(actor_id, request_key) WHERE request_key<>''`,
+		`CREATE INDEX IF NOT EXISTS idx_human_attention_batch_response_claims_inbox
+		ON human_attention_batch_response_claims(inbox_item_id)`},
+	},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

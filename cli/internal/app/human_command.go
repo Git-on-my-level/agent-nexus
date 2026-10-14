@@ -27,6 +27,7 @@ Subject defaults to the current card or creates a ready card on the default boar
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
+Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 `)
 }

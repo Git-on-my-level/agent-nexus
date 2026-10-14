@@ -5838,6 +5838,52 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /asks/batch:
+    post:
+      operationId: createAskBatch
+      summary: File related asks as one batch
+      description: >
+        Files 2 to 10 human_attention_requested events as one atomic batch. Every ask must be
+        addressed to the same backing thread; the server assigns the shared batch id and rejects
+        client-supplied batch ids. Either every ask commits or none does. The human inbox derives
+        one batch item for the group, and one response answers all of its members atomically.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.batch.create
+      x-anx-cli-path: ask batch
+      x-anx-why: Let an agent file N related asks that a human answers in one pass.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: >
+        Cost is bounded by the batch size (hard cap 10). Each ask passes the same validation as
+        POST /events for human_attention_requested, including requester identity, title rules,
+        markdown hygiene and reference conventions.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ batch_id, events }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict, quota_exceeded]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAskBatchRequest'
+      responses:
+        '201':
+          description: Batch filed; every ask event stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAskBatchResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /asks/{ask_id}/subscriptions:
     post:
       operationId: subscribeAsk
@@ -6092,11 +6138,13 @@ paths:
               $ref: '#/components/schemas/RespondInboxItemRequest'
       responses:
         '201':
-          description: Human response event appended
+          description: Human response event appended (batch items return RespondInboxBatchResponse)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RespondInboxItemResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/RespondInboxItemResponse'
+                  - $ref: '#/components/schemas/RespondInboxBatchResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -12012,6 +12060,9 @@ components:
         Server-linked access requests accept only approved or rejected; needs_context and other outcomes
         return 400 without mutation. Approval atomically grants the persisted requested
         grant to its persisted principal. Event-supplied correlation never grants authority.
+        Two modes on one route: a single-ask item requires response_text and outcome; a batch
+        item requires answers (matching its members) and rejects the flat fields and notify
+        overrides. The server enforces the split per item kind.
       properties:
         idempotency_key: {type: string, minLength: 1, maxLength: 128, description: Stable key for one intended response. Reuse the same key and body after an ambiguous failure to retrieve the original event and result.}
         actor_id: { type: string }
@@ -12029,7 +12080,48 @@ components:
           description: Defaults to original requester when resolvable.
         notify_target_actor_id: { type: string }
         notify_target_agent_id: { type: string }
-      required: [response_text, outcome]
+        answers:
+          type: array
+          items: { $ref: '#/components/schemas/RespondInboxItemAnswer' }
+          description: >
+            Required for a batch inbox item (one derived from POST /asks/batch): one entry per
+            batch member, each with its own response_text and outcome; the whole batch records
+            atomically and releases together. Flat response_text/outcome must then be empty.
+
+    RespondInboxItemAnswer:
+      type: object
+      description: One member answer inside a batch inbox response.
+      properties:
+        ask_ref:
+          type: string
+          description: The batch member's ask event ref (event:<id>) matching one entry of the batch item.
+        response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [ask_ref, response_text, outcome]
+
+    RespondInboxBatchResponse:
+      type: object
+      description: Response recorded for every member of a batch inbox item in one atomic pass.
+      properties:
+        batch_id: { type: string }
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              ask_ref:
+                type: string
+                description: The member's ask event ref, echoing the submitted ask_ref for correlation. The answer event id is answers[].event.id.
+              event: { $ref: '#/components/schemas/Event' }
+              task_outcome: {$ref: '#/components/schemas/AskTaskOutcome'}
+        notify:
+          type: object
+          additionalProperties: true
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+      required: [batch_id, answers, notify]
 
     HumanAttentionResponseOutcome:
       type: string
@@ -12038,6 +12130,30 @@ components:
         answered means a chosen proposal or free reply; approved and rejected mean the
         explicit review Approve and Reject actions; acknowledged means the operator
         closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. The response text remains the audit note.
+
+    CreateAskBatchRequest:
+      type: object
+      description: >
+        Files 2 to 10 human_attention_requested events as one atomic batch addressed to one
+        backing thread. Each ask must pass the same validation as POST /events; the server
+        assigns the shared batch id and rejects client-supplied batch ids.
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string, maxLength: 128, description: Stable key for one intended batch; replay returns the original batch result. }
+        asks:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+          description: 2 to 10 human_attention_requested events sharing one thread_id.
+      required: [asks]
+
+    CreateAskBatchResponse:
+      type: object
+      properties:
+        batch_id: { type: string, description: Shared id recorded in every member's payload; the human inbox derives one item from it. }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+      required: [batch_id, events]
 
     HumanAttentionRespondedPayload:
       type: object
