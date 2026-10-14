@@ -719,6 +719,28 @@ export function retryInboxResponse(itemId = "", { asNew = false } = {}) {
   return commit(entry);
 }
 
+/**
+ * Send a failed response again as a new request with some fields changed, such
+ * as `notify_mode: "none"` after core said the requester cannot be notified.
+ * The text is unchanged and goes through the same persisted, undoable queue;
+ * the old record is superseded, never dropped before the new one is saved.
+ */
+export function resendInboxResponse(itemId, overrides = {}) {
+  const want = String(itemId ?? "").trim();
+  const failed = failedByItem.get(want);
+  if (!failed) return null;
+  // queueInboxResponse assigns the new request its own idempotency key.
+  const id = queueInboxResponse({
+    itemId: failed.itemId,
+    item: failed.item,
+    request: { ...failed.request, ...overrides },
+    message: failed.message,
+    restore: failed.restore,
+  });
+  forgetFailure(want);
+  return id;
+}
+
 /** Give up on a failed response: the item stays unanswered, visibly so. */
 export function dismissInboxResponseFailure(itemId = "") {
   const want = String(itemId ?? "").trim();
@@ -902,6 +924,9 @@ async function commit(entry, recovered = false) {
     const failure = {
       ...classification,
       error: classification.message,
+      // Core's error code, so a row can offer the fix it names (for example
+      // answering without notifying an unreachable requester).
+      code: String(err?.body?.error?.code ?? ""),
       nextAt: classification.state === "retrying" ? entry.nextAt : null,
       outcome: String(entry.request?.outcome ?? ""),
       response_text: String(entry.request?.response_text ?? ""),

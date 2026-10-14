@@ -15,6 +15,7 @@
     inboxResponseOverlay,
     inboxUnsentResponses,
     queueInboxResponse,
+    resendInboxResponse,
     retryInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import {
@@ -80,6 +81,8 @@
   );
   let overlay = $derived($inboxResponseOverlay[itemId]);
   let failure = $derived($inboxResponseFailures[itemId]);
+  /** Core refused the default notify target: the requester is unreachable. */
+  let unnotifiable = $derived(failure?.code === "notification_target_required");
   let answered = $derived(
     Boolean(overlay && overlay.status !== "failed") || Boolean(unsent),
   );
@@ -398,12 +401,25 @@
       role="alert"
       data-decision-failed
     >
-      <span>Couldn’t send your answer. It is saved on this device.</span>
-      <button
-        type="button"
-        class="ui-prose-link"
-        onclick={() => retryInboxResponse(itemId)}>Retry</button
-      >
+      {#if unnotifiable}
+        <span data-decision-unnotifiable
+          >The requester can’t be notified. Your answer is saved on this device.</span
+        >
+        <button
+          type="button"
+          class="ui-prose-link"
+          data-decision-answer-silently
+          onclick={() => resendInboxResponse(itemId, { notify_mode: "none" })}
+          >Answer without notifying</button
+        >
+      {:else}
+        <span>Couldn’t send your answer. It is saved on this device.</span>
+        <button
+          type="button"
+          class="ui-prose-link"
+          onclick={() => retryInboxResponse(itemId)}>Retry</button
+        >
+      {/if}
       <button
         type="button"
         class="ui-prose-link"

@@ -592,7 +592,28 @@ async function runGoldenPath(page, request) {
     await page.locator("form textarea").first().fill("Acknowledged");
     await page.getByRole("button", { name: "Send reply" }).click();
   }
-  expect((await acknowledgeResponsePromise).ok()).toBeTruthy();
+  const acknowledgeResponse = await acknowledgeResponsePromise;
+  if (acknowledgeResponse.status() === 409) {
+    // The requester has no notification route: core refuses the default
+    // target. Decide keeps the answer and offers to send it without notifying.
+    expect((await acknowledgeResponse.json()).error?.code).toBe(
+      "notification_target_required",
+    );
+    await expect(
+      page.locator("[data-decision-unnotifiable]").first(),
+    ).toBeVisible();
+    const silentResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/respond"),
+    );
+    await page.locator("[data-decision-answer-silently]").first().click();
+    const silentResponse = await silentResponsePromise;
+    expect(silentResponse.request().postDataJSON()?.notify_mode).toBe("none");
+    expect(silentResponse.ok()).toBeTruthy();
+  } else {
+    expect(acknowledgeResponse.ok()).toBeTruthy();
+  }
   await expect
     .poll(
       async () => {

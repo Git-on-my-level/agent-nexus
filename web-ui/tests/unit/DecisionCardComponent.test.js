@@ -10,15 +10,20 @@ vi.mock("$app/stores", () => ({
   }),
 }));
 
-const queue = vi.hoisted(() => ({
-  queueInboxResponse: vi.fn(() => 1),
-  captureInboxResponseBinding: vi.fn(() => ({ scope: "s", identity: "i" })),
-}));
+const queue = await vi.hoisted(async () => {
+  const { writable } = await import("svelte/store");
+  return {
+    queueInboxResponse: vi.fn(() => 1),
+    captureInboxResponseBinding: vi.fn(() => ({ scope: "s", identity: "i" })),
+    resendInboxResponse: vi.fn(),
+    failures: writable({}),
+  };
+});
 vi.mock("$lib/inboxResponseQueue.js", () => ({
   ...queue,
   editInboxResponse: vi.fn(),
   retryInboxResponse: vi.fn(),
-  inboxResponseFailures: writable({}),
+  inboxResponseFailures: queue.failures,
   inboxResponseOverlay: writable({}),
   inboxUnsentResponses: writable([]),
 }));
@@ -50,6 +55,8 @@ const merge = brief.decisions.find((d) => d.ref === "inbox:ask-91");
 
 beforeEach(() => {
   queue.queueInboxResponse.mockClear();
+  queue.resendInboxResponse.mockClear();
+  queue.failures.set({});
   clipboard.copyText.mockClear();
 });
 afterEach(cleanup);
@@ -201,6 +208,26 @@ describe("DecisionCard", () => {
     expect(queue.queueInboxResponse.mock.calls.at(-1)[0].request).toMatchObject(
       { response_text: "Dismiss", outcome: "answered" },
     );
+  });
+
+  it("offers to answer without notifying when the requester is unreachable", async () => {
+    queue.failures.set({
+      "ask-91": {
+        error: "x",
+        code: "notification_target_required",
+        response_text: "Merge",
+      },
+    });
+    const { container } = render(DecisionCard, { decision: merge, now: NOW });
+    expect(
+      container.querySelector("[data-decision-unnotifiable]").textContent,
+    ).toContain("can’t be notified");
+    await fireEvent.click(
+      container.querySelector("[data-decision-answer-silently]"),
+    );
+    expect(queue.resendInboxResponse).toHaveBeenCalledWith("ask-91", {
+      notify_mode: "none",
+    });
   });
 
   it("copies the ref from the button and from the c key", async () => {

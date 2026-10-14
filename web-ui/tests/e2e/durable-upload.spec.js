@@ -29,7 +29,16 @@ test("principal replacement erases private file bytes and fences late upload rec
   await attach(page);
   await expect.poll(() => attempts).toBe(1);
   await page.evaluate(async () => {
-    const auth = await import("/src/lib/authSession.js");
+    // Import the exact URL the app loaded (Vite adds ?t= after hot updates), so the
+    // test drives the app's store rather than a duplicate module instance.
+    const appModule = (path) =>
+      import(
+        performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .find((name) => new URL(name).pathname === path) || path
+      );
+    const auth = await appModule("/src/lib/authSession.js");
     auth.authenticatedAgent.set({
       agent_id: "replacement-owner",
       actor_id: "replacement-actor",
@@ -40,7 +49,16 @@ test("principal replacement erases private file bytes and fences late upload rec
   await expect
     .poll(async () =>
       page.evaluate(async () => {
-        const local = await import("/src/lib/localWorkStore.js");
+        // Import the exact URL the app loaded (Vite adds ?t= after hot updates), so the
+        // test drives the app's store rather than a duplicate module instance.
+        const appModule = (path) =>
+          import(
+            performance
+              .getEntriesByType("resource")
+              .map((entry) => entry.name)
+              .find((name) => new URL(name).pathname === path) || path
+          );
+        const local = await appModule("/src/lib/localWorkStore.js");
         const old = JSON.stringify([
           "local",
           "local",

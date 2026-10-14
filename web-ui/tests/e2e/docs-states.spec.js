@@ -933,7 +933,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
       await page.getByRole("tab", { name: "Versions" }).click();
       await expect(page.getByText("Current version")).toBeVisible();
-      await expectCleanLayout(page, "rail revisions tab", bothEnds);
+      await expectCleanLayout(page, "rail versions tab", bothEnds);
 
       await page.getByRole("tab", { name: /^Discussion/ }).click();
       await expectCleanLayout(page, "rail discussion tab", bothEnds);

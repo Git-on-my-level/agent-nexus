@@ -358,7 +358,16 @@ test("principal replacement clears topic drafts across tabs and fences a late se
   await expect(summary(other)).toHaveValue("Complete authored summary");
   await summary(other).fill("PRIVATE newer topic draft");
   await page.evaluate(async () => {
-    const auth = await import("/src/lib/authSession.js");
+    // Import the exact URL the app loaded (Vite adds ?t= after hot updates), so the
+    // test drives the app's store rather than a duplicate module instance.
+    const appModule = (path) =>
+      import(
+        performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .find((name) => new URL(name).pathname === path) || path
+      );
+    const auth = await appModule("/src/lib/authSession.js");
     auth.authenticatedAgent.set({
       agent_id: "replacement-owner",
       actor_id: "replacement-actor",
