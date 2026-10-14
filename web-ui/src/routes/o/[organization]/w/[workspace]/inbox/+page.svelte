@@ -140,7 +140,6 @@
     handleReadAccessDenied,
     isReadAccessDenied,
   } from "$lib/reliableRead.js";
-  import { commitInboxView } from "$lib/inboxViewCache.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
 
   let reconnecting = $state(false);
@@ -654,10 +653,7 @@
         );
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
-        actions = [
-          ...actions.filter((entry) => entry.id !== receipt.id),
-          receipt,
-        ];
+        applyAction(receipt);
       }
     } catch (err) {
       if (ticket === selectionRequest) actionError = errorMessage(err);
@@ -729,11 +725,7 @@
                 Boolean(result.value?.next_cursor))),
         );
         if (results[1].status === "fulfilled") {
-          actions = mergeInboxSnapshot(
-            actions,
-            results[1].value.items || [],
-            results[1].complete,
-          );
+          mergeActions(results[1].value.items || [], results[1].complete);
           receiptsUnavailable = !results[1].complete;
         } else if (results[1].status === "pending") {
           receiptsUnavailable = true;
@@ -953,24 +945,29 @@
         entry?.operation === "inbox.controls" &&
         entry.scope === readerScopeKey()
       ) {
-        for (const done of entry.result?.controls ||
-          entry.receipt?.controls ||
-          []) {
+        const controls =
+          entry.result?.controls || entry.receipt?.controls || [];
+        const archivedRefs = controls
+          .filter((done) => done.action === "archive")
+          .map(
+            (done) =>
+              entry.request.items.find(
+                (item) => item.body.request_key === done.key,
+              )?.ref,
+          )
+          .filter(Boolean);
+        confirmArchivedSelection(archivedRefs);
+        for (const done of controls) {
           if (done.action === "archive") {
             const item = entry.request.items.find(
               (item) => item.body.request_key === done.key,
             );
             if (item?.ref) {
-              commitInboxView(entry.scope, { archivedRef: item.ref });
               archivedWorkRefs.add(item.ref);
             }
           } else if (done.action === "read")
             updates = updates.filter((group) => group.group_ref !== done.id);
-          else
-            actions = [
-              ...actions.filter((row) => row.id !== done.result.id),
-              done.result,
-            ];
+          else applyAction(done.result);
         }
         // Cancel both list and selected-detail reads begun before confirmation.
         // The respond queue independently invalidates these same read tickets.
@@ -983,7 +980,9 @@
         invalidateInboxContext();
         invalidateAskDetail();
         contextEpoch += 1;
-        notice = "Inbox request confirmed.";
+        notice = archivedRefs.length
+          ? archiveNotice
+          : "Inbox request confirmed.";
         await load({ quiet: true });
         if (
           entry.scope === readerScopeKey() &&
@@ -1029,11 +1028,7 @@
             ? "Approved. Applying it needs your attention."
             : "Approved."
         : "Declined.";
-      if (applied)
-        actions = [
-          ...actions.filter((item) => item.id !== applied.id),
-          applied,
-        ];
+      if (applied) applyAction(applied);
       try {
         if (wasUnpinned) {
           const moved = rows.find((row) => row.id === pinId);
@@ -1047,10 +1042,7 @@
         if (result.action_id && !applied) {
           const receipt = await coreClient.getPmAction(result.action_id);
           if (entry.scope !== readerScopeKey()) return;
-          actions = [
-            ...actions.filter((item) => item.id !== receipt.id),
-            receipt,
-          ];
+          applyAction(receipt);
         }
       } catch {
         /* A receipt read failure does not reverse a confirmed answer. */
@@ -1101,15 +1093,79 @@
     });
   }
 
+  function mergeActions(incoming, complete = false) {
+    const current = new Map(actions.map((item) => [item.id, item]));
+    actions = mergeInboxSnapshot(actions, incoming, complete).map((item) => {
+      const known = current.get(item.id);
+      // Lists and original admission receipts can predate a delivery outcome.
+      return Number.isInteger(known?.revision) &&
+        Number.isInteger(item.revision) &&
+        known.revision > item.revision
+        ? known
+        : item;
+    });
+  }
+  function applyAction(result) {
+    mergeActions([result]);
+  }
+  const receiptReads = { ticket: 0 };
   async function refreshReceipt() {
-    if (!selectedDecision?.action_id) return;
+    const id = selectedDecision?.action_id;
+    if (!id) return;
+    const scope = readerScopeKey(),
+      selection = selectionRequest,
+      ticket = ++receiptReads.ticket;
     try {
-      const result = await coreClient.getPmAction(selectedDecision.action_id);
-      actions = [...actions.filter((item) => item.id !== result.id), result];
+      const result = await coreClient.getPmAction(id);
+      if (
+        scope !== readerScopeKey() ||
+        selection !== selectionRequest ||
+        ticket !== receiptReads.ticket ||
+        result.id !== id
+      )
+        return;
+      applyAction(result);
     } catch (err) {
-      actionError = errorMessage(err);
+      if (
+        scope === readerScopeKey() &&
+        selection === selectionRequest &&
+        ticket === receiptReads.ticket
+      )
+        actionError = errorMessage(err);
     }
   }
+  let failedReceiptRefresh = $state("");
+  $effect(() => {
+    const scope = readerScopeKey(),
+      decisionId = selectedDecision?.id,
+      actionId = selectedDecision?.action_id;
+    if (!actionId) return;
+    const failed = $mutationOutbox.find(
+      (entry) =>
+        entry.scope === scope &&
+        entry.operation === "inbox.controls" &&
+        entry.attempts > 0 &&
+        ["retrying", "attention"].includes(entry.state) &&
+        entry.request.items.some((item) =>
+          item.action === "dispatch"
+            ? item.id === decisionId
+            : ["reconcile", "acknowledge"].includes(item.action) &&
+              item.id === actionId,
+        ),
+    );
+    if (!failed) return;
+    const token = `${scope}:${failed.key}:${failed.attempts}:${actionId}`;
+    if (token === failedReceiptRefresh) return;
+    failedReceiptRefresh = token;
+    // A failed HTTP confirmation says nothing about the server's recorded
+    // action. Read only the selected receipt once per failed attempt, retaining
+    // the saved request and its original key. Keep unrelated feeds loading;
+    // revision checks prevent their older action snapshots from replacing it.
+    selectionRequest++;
+    selectedController?.abort();
+    decisionResolvedFor = `decision:${decisionId}`;
+    void refreshReceipt();
+  });
 
   async function acknowledge() {
     if (!action || busy) return;
@@ -1160,7 +1216,45 @@
     );
   }
 
+  const archiveNotice = "Task archived. You can restore it from Archive.";
+  const archiveSelection = { intent: 0, pending: "" };
+
+  function confirmArchivedSelection(refs) {
+    const excluded = new Set(refs);
+    if (
+      !selected ||
+      !excluded.has(selected.ref) ||
+      archiveSelection.pending === selectedId
+    )
+      return;
+    const id = selectedId;
+    const scope = readerScopeKey();
+    const index = visible.findIndex((row) => row.id === id);
+    const survives = (row) => !excluded.has(row.ref);
+    const next =
+      visible.slice(index + 1).find(survives)?.id ||
+      visible.slice(0, index).reverse().find(survives)?.id ||
+      "";
+    archiveSelection.pending = id;
+    heldItem = "";
+    const intent = archiveSelection.intent + 1;
+    void select(next)
+      .then(async () => {
+        await tick();
+        if (
+          scope === readerScopeKey() &&
+          archiveSelection.intent === intent &&
+          selectedId === next
+        )
+          notice = archiveNotice;
+      })
+      .finally(() => {
+        if (archiveSelection.pending === id) archiveSelection.pending = "";
+      });
+  }
+
   async function select(id, { scroll = false } = {}) {
+    archiveSelection.intent++;
     await goto(href({ item: id || "" }), {
       replaceState: true,
       keepFocus: true,
@@ -1558,6 +1652,7 @@
         // A denial or sign-out may have purged it since the notification.
         const latest = readWorkspaceView(key);
         if (!latest) return;
+        confirmArchivedSelection(latest[2].value?.archived_refs || []);
         requestId++;
         loadController?.abort();
         selectionRequest++;
@@ -1565,7 +1660,7 @@
         loading = false;
         refreshPending = false;
         decisions = latest[0].value?.items || [];
-        actions = latest[1].value?.items || [];
+        mergeActions(latest[1].value?.items || [], latest[1].complete);
         work = latest[2].value?.work || [];
         openInboxItems = latest[3].value?.items || [];
         completedInboxItems = latest[4].value?.items || [];

@@ -134,6 +134,8 @@ import {
   startInboxCount,
 } from "../../src/lib/inboxCount.js";
 import { readerScopeKey } from "../../src/lib/readerScope.js";
+import { mutationOutbox } from "../../src/lib/mutationOutbox.js";
+import { commitInboxView } from "../../src/lib/inboxViewCache.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -820,8 +822,95 @@ describe("PM operator interactions", () => {
         if_action_revision: 1,
       }),
     );
+    await within(screen.getByLabelText("Selected inbox item")).findByText(
+      "Failed",
+      { exact: true },
+    );
+    expect(
+      screen.getByRole("button", { name: "Retry confirmation", exact: true }),
+    ).toBeTruthy();
     expect(screen.getByText("Within the stated scope")).toBeTruthy();
     expect(screen.queryByText("Outcome verified")).toBeNull();
+  });
+  it("a restored failed control keeps delayed feeds loading without downgrading its receipt", async () => {
+    state.route("/inbox?item=decision:restored-control");
+    const decision = {
+      id: "restored-control",
+      work_ref: "card:one",
+      instruction: "Restored approval",
+      status: "answered",
+      revision: 3,
+      action_id: "restored-action",
+      answer: "Keep this note",
+    };
+    const pending = {
+      id: "restored-action",
+      decision_id: decision.id,
+      status: "pending_delivery",
+      revision: 1,
+    };
+    const list = deferred(),
+      tasks = deferred();
+    client.listPmDecisions.mockResolvedValue({ items: [decision] });
+    client.listPmActions.mockReturnValue(list.promise);
+    client.listWork.mockReturnValue(tasks.promise);
+    client.getPmAction.mockResolvedValue({
+      ...pending,
+      status: "failed",
+      revision: 3,
+    });
+    render(InboxPage);
+    await waitFor(() => expect(client.getPmAction).toHaveBeenCalled());
+    const previous = getStore(mutationOutbox);
+    try {
+      mutationOutbox.set([
+        {
+          key: "restored-control",
+          scope: readerScopeKey(),
+          operation: "inbox.controls",
+          target: "inbox:controls",
+          state: "attention",
+          attempts: 1,
+          request: {
+            items: [
+              {
+                action: "dispatch",
+                id: decision.id,
+                body: {
+                  request_key: "original",
+                  if_revision: 3,
+                  if_action_revision: 1,
+                },
+              },
+            ],
+          },
+        },
+      ]);
+      await waitFor(() =>
+        expect(client.getPmAction.mock.calls.length).toBeGreaterThan(1),
+      );
+      list.resolve({ items: [pending] });
+      tasks.resolve({ work: [work("card:one", "Loaded delayed task")] });
+      await screen.findByRole("heading", { name: "Loaded delayed task" });
+      await within(screen.getByLabelText("Selected inbox item")).findByText(
+        "Failed",
+        { exact: true },
+      );
+      expect(client.listWork).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(
+          readWorkspaceView(`${readerScopeKey()}:inbox`)?.[1]?.value?.items[0]
+            ?.revision,
+        ).toBe(1),
+      );
+      commitInboxView(readerScopeKey(), { decision });
+      await within(screen.getByLabelText("Selected inbox item")).findByText(
+        "Failed",
+        { exact: true },
+      );
+    } finally {
+      mutationOutbox.set(previous);
+    }
   });
   it("confirmation cancels a selected getter before it can restore an unanswered decision", async () => {
     state.route("/inbox?item=decision:pending-getter");

@@ -1340,12 +1340,12 @@
       retryLabel={sessionExpired ? "Sign in again" : "Retry"}
       retrying={loading}
     />
-    {#if records.length}
-      <p class="text-micro text-warn-text">
-        Showing the previously loaded records. They may no longer match current
-        filters or source state.
-      </p>
-    {/if}
+  {/if}
+  {#if records.length && (error || reconnecting)}
+    <p class="text-micro text-warn-text">
+      Showing the previously loaded records. They may no longer match current
+      filters or source state.
+    </p>
   {/if}
 
   {#if (loading && !records.length) || initiativesPending}

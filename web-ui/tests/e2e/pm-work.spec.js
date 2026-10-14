@@ -299,13 +299,14 @@ test("PM retains failed draft and retries the same message intent without claimi
 
 test("answer and failed delivery remain separately inspectable", async ({
   page,
-}) => {
+}, testInfo) => {
   const { calls } = await setup(page, {
     handle: async ({ path, reply, actions }) => {
       if (path.endsWith("/dispatch")) {
         actions[0] = {
           ...actions[0],
           status: "failed",
+          revision: 2,
           receipt: { detail: "Source delivery failed" },
         };
         await reply({ error: { message: "Source delivery failed" } }, 503);
@@ -327,6 +328,12 @@ test("answer and failed delivery remain separately inspectable", async ({
   await page
     .getByRole("button", { name: "Deliver approved instruction" })
     .click();
+  await expect
+    .poll(() => calls.filter((call) => call.path.endsWith("/dispatch")).length)
+    .toBeGreaterThan(0);
+  await expect(
+    page.getByRole("button", { name: "Retry confirmation", exact: true }),
+  ).toBeVisible();
   // The receipt shows on the row badge and in the pane; assert the pane.
   await expect(
     page.getByLabel("Selected inbox item").getByText("Failed", { exact: true }),
@@ -337,6 +344,65 @@ test("answer and failed delivery remain separately inspectable", async ({
   await expect(page.getByText("Outcome verified", { exact: true })).toHaveCount(
     0,
   );
+  await page.screenshot({
+    path: testInfo.outputPath("failed-delivery.png"),
+    fullPage: true,
+  });
+});
+
+test("replaying an older delivery admission keeps the newer failed receipt visible", async ({
+  page,
+}) => {
+  let sends = 0;
+  const { calls } = await setup(page, {
+    handle: async ({ path, reply, actions }) => {
+      if (!path.endsWith("/dispatch")) return;
+      if (++sends === 1) {
+        actions[0] = {
+          ...actions[0],
+          status: "failed",
+          revision: 3,
+          receipt: { detail: "Source delivery failed" },
+        };
+        await reply({ error: { message: "Confirmation unavailable" } }, 503);
+      } else
+        await reply({
+          ...actions[0],
+          status: "sending",
+          revision: 2,
+          receipt: {},
+        });
+      return true;
+    },
+  });
+  await page.goto(`${root}/inbox?item=decision:decision-sample`);
+  await page
+    .getByLabel("Your note (recorded with the decision)")
+    .fill("Keep my approved note");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Deliver approved instruction" })
+    .click();
+  const pane = page.getByLabel("Selected inbox item");
+  await expect(pane.getByText("Failed", { exact: true })).toBeVisible();
+  const first = calls.find((call) => call.path.endsWith("/dispatch"));
+  await page
+    .getByRole("button", { name: "Retry confirmation", exact: true })
+    .click();
+  await expect(
+    page.locator('[data-inbox-control-work] [data-mutation-state="sent"]'),
+  ).toBeVisible();
+  const attempts = calls.filter((call) => call.path.endsWith("/dispatch"));
+  expect(attempts.length).toBeGreaterThanOrEqual(2);
+  expect(
+    attempts.every(
+      (call) => JSON.stringify(call.body) === JSON.stringify(first.body),
+    ),
+  ).toBe(true);
+  await expect(pane.getByText("Failed", { exact: true })).toBeVisible();
+  await expect(
+    pane.getByText("Keep my approved note", { exact: true }),
+  ).toBeVisible();
 });
 
 for (const viewport of [

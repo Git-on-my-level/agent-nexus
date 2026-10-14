@@ -125,12 +125,18 @@
                         : "Edit message"}</button
             >
           {/if}
+        {/if}
+        {#if entry.state === "attention" || (entry.operation === "inbox.controls" && entry.state === "retrying")}
           <button
             type="button"
             class="rounded border border-line px-2 py-1 text-fg"
             onclick={() =>
               retryMutation(entry.key, { asNew: !!entry.failure?.expired })}
-            >{entry.failure?.expired ? "Retry as new" : "Retry send"}</button
+            >{entry.failure?.expired
+              ? "Retry as new"
+              : entry.state === "retrying"
+                ? "Retry confirmation"
+                : "Retry send"}</button
           >
         {/if}
       </div>

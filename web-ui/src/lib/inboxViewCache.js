@@ -35,7 +35,23 @@ export function commitInboxView(
           ...items.filter((item) => item.id !== completed.id),
           completed,
         ];
-      return { ...source, value: { ...source.value, [key]: items } };
+      return {
+        ...source,
+        value: {
+          ...source.value,
+          [key]: items,
+          ...(archivedRef && index === 2
+            ? {
+                archived_refs: [
+                  ...new Set([
+                    ...(source.value.archived_refs || []),
+                    archivedRef,
+                  ]),
+                ],
+              }
+            : {}),
+        },
+      };
     });
   });
 }
