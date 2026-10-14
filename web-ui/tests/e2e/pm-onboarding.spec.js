@@ -99,9 +99,11 @@ test.describe("no PM agent onboarded", () => {
      * still waits for a yes whether or not a PM is running, and the Inbox is
      * the only place to answer it. What is gated is the affordances.
      */
-    expect(
-      api.calls.filter((call) => call.path === "/pm/decisions"),
-    ).not.toEqual([]);
+    await expect
+      .poll(
+        () => api.calls.filter((call) => call.path === "/pm/decisions").length,
+      )
+      .toBeGreaterThan(0);
 
     await page.goto(`${ROOT}/decide`);
     await waitForAppReady(page);
