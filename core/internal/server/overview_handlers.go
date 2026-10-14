@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -202,7 +203,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		for _, item := range inbox {
 			id := "inbox:" + anyString(item["id"])
 			brief.signals[id] = briefSignal{Kind: "ask", At: firstNonEmptyString(item["created_at"], item["updated_at"]), Priority: anyString(item["severity"])}
-			rows = append([]map[string]any{{"id": id, "title": firstNonEmptyString(anyString(item["title"]), "Request"), "source": anyString(item["requester_label"]), "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape(id)}}, rows...)
+			rows = append([]map[string]any{{"id": id, "title": firstNonEmptyString(anyString(item["title"]), "Request"), "source": anyString(item["requester_label"]), "waiting_since": firstNonEmptyString(item["trigger_at"], item["created_at"]), "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape(id)}}, rows...)
 		}
 	}
 	stage = time.Now()
@@ -271,13 +272,14 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					if actionable {
 						id := "decision:" + d.ID
 						brief.signals[id] = briefSignal{Kind: "decision", At: d.CreatedAt.Format(time.RFC3339Nano), Blocks: brief.dependents[d.WorkRef]}
-						rows = append(rows, map[string]any{"id": id, "title": firstNonEmptyString(d.Instruction, "Decision"), "source": "Decision", "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape(id)})
+						rows = append(rows, map[string]any{"id": id, "title": firstNonEmptyString(d.Instruction, "Decision"), "source": "Decision", "waiting_since": d.CreatedAt.UTC().Format(time.RFC3339Nano), "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape(id)})
 					}
 				}
 			}
 		}
 	}
 	addServerTiming(w, "decisions", stage)
+	sortNeedsByWaiting(rows)
 	needs["rows"] = rows
 	needs["count"] = len(rows)
 	brief.needsRows, brief.needsOK, brief.needsTruncated = rows, needs["status"] == "ok", needs["truncated"] == true
@@ -311,4 +313,20 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		}
 	}
 	writeJSON(w, 200, payload)
+}
+
+// Rows without a waiting anchor follow actual waits. Dates are parsed so
+// offsets and fractional seconds do not reverse chronological order.
+func sortNeedsByWaiting(rows []map[string]any) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, _ := time.Parse(time.RFC3339Nano, anyString(rows[i]["waiting_since"]))
+		b, _ := time.Parse(time.RFC3339Nano, anyString(rows[j]["waiting_since"]))
+		if a.IsZero() {
+			return false
+		}
+		if b.IsZero() {
+			return true
+		}
+		return a.Before(b)
+	})
 }

@@ -1070,9 +1070,10 @@ var migrations = []migration{
 		ON human_attention_batch_response_claims(inbox_item_id)`},
 	},
 	{Version: 88, AfterApply: installTopicWorkspacePageIndexes},
+	{Version: 89, AfterApply: upgradeWorkSummaryAskLinks},
 	// brief.v1 facts materialized on write events (asks, notes, plan and
 	// card changes), with a one-time backfill. See brief_facts.go.
-	{Version: 89, AfterApply: installBriefFacts},
+	{Version: 90, AfterApply: installBriefFacts},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

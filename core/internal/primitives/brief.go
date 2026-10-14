@@ -625,19 +625,29 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	return out, nil
 }
 
-// latestNotes reads the newest note per card: one indexed seek each.
+// latestNotes reads the newest live note per card in one statement: one
+// indexed seek per card id through idx_brief_notes_card_ts.
 func (b *briefBuild) latestNotes(cardIDs []string) (map[string]map[string]any, error) {
 	out := map[string]map[string]any{}
-	for _, id := range cardIDs {
-		var author, ts, excerpt string
-		err := b.s.db.QueryRowContext(b.ctx, `SELECT n.author,n.ts,n.excerpt FROM brief_notes n JOIN events e ON e.id=n.event_id WHERE n.card_id=? AND COALESCE(e.trashed_at,'')='' ORDER BY n.ts DESC LIMIT 1`, id).Scan(&author, &ts, &excerpt)
-		if err != nil {
-			continue
+	if len(cardIDs) == 0 {
+		return out, nil
+	}
+	encoded, _ := json.Marshal(cardIDs)
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT n.card_id,n.author,n.ts,n.excerpt FROM json_each(?) j JOIN brief_notes n ON n.event_id=(
+		SELECT x.event_id FROM brief_notes x JOIN events e ON e.id=x.event_id WHERE x.card_id=j.value AND COALESCE(e.trashed_at,'')='' ORDER BY x.ts DESC LIMIT 1)`, string(encoded))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, author, ts, excerpt string
+		if err = rows.Scan(&id, &author, &ts, &excerpt); err != nil {
+			return nil, err
 		}
 		at, _ := time.Parse(time.RFC3339Nano, ts)
 		out[id] = map[string]any{"text": excerpt, "author": stripActor(author), "at": at.UTC().Format(time.RFC3339)}
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 func (b *briefBuild) resolveActors() error {

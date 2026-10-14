@@ -876,7 +876,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `brief.get`
 
-- CLI path: `brief`
+- CLI path: `orient`
 - HTTP: `GET /brief`
 - Stability: `stable`
 - Surface: `projection`
@@ -1872,7 +1872,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `plan set`
 - HTTP: `PUT /cards/{card_id}/plan`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `json-body`
 - Why: Add linked steps rather than writing progress prose. Never select a view.
@@ -1885,7 +1885,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `plan show`
 - HTTP: `GET /cards/{card_id}/plan`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `flags`
 - Why: Read live initiative steps, progress and health.
@@ -2429,7 +2429,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `series push`
 - HTTP: `POST /series/{name}/points`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `flags`
 - Why: Push one declared series point.

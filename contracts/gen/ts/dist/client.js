@@ -3629,8 +3629,8 @@ export const commandRegistry = [
     },
     {
         "command_id": "brief.get",
-        "cli_path": "brief",
-        "group": "brief",
+        "cli_path": "orient",
+        "group": "orient",
         "method": "GET",
         "path": "/brief",
         "operation_id": "getBrief",
@@ -8389,7 +8389,7 @@ export const commandRegistry = [
             "cards",
             "write"
         ],
-        "stability": "beta",
+        "stability": "stable",
         "surface": "canonical",
         "agent_notes": "One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.",
         "body_schema": {
@@ -8448,7 +8448,7 @@ export const commandRegistry = [
             "cards",
             "read"
         ],
-        "stability": "beta",
+        "stability": "stable",
         "surface": "canonical",
         "agent_notes": "Read plan_state for effective status, progress, shape, critical path and health. An unset plan returns null plan and plan_state.",
         "path_params": [
@@ -11347,7 +11347,7 @@ export const commandRegistry = [
         "concepts": [
             "documents"
         ],
-        "stability": "beta",
+        "stability": "stable",
         "surface": "canonical",
         "agent_notes": "Explicit declared push source; core never fetches external data.",
         "examples": [

@@ -23,6 +23,7 @@ func humanUsageText() string {
 Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
 anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
 ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
+Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
 Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
@@ -108,8 +109,13 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag trackedString
 		deliveryFlag                                          trackedString
 		evidenceFlags                                         trackedStrings
+		byFlag, priorityFlag                                  trackedString
+		blocksFlags                                           trackedStrings
 	)
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
+	fs.Var(&byFlag, "by", "When the human should decide: YYYY-MM-DD, RFC3339, or a duration like 2d")
+	fs.Var(&blocksFlags, "blocks", "Typed ref this decision blocks (repeatable, at most 20)")
+	fs.Var(&priorityFlag, "priority", "Optional badge: p0..p3 or critical/high/medium/low")
 	fs.Var(&subjectRefFlag, "subject-ref", "Subject typed ref")
 	fs.Var(&bodyFlag, "body", "Detailed body text")
 	fs.Var(&bodyFileFlag, "body-file", "Read detailed body from file")
@@ -239,6 +245,10 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if utf8.RuneCountInString(title) > 160 {
 		return nil, errnorm.Usage("ask_title_too_long", "ask title exceeds the hard maximum of 160 characters; move detail into --body or --body-file ask.md")
 	}
+	decision, err := parseAskDecisionFlags(byFlag, blocksFlags.values, priorityFlag, a.clockNow())
+	if err != nil {
+		return nil, err
+	}
 	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links, a.workspaceForges(cfg))
 	if titleErr := lintAskTitle(title); titleErr != nil {
 		lintErr = titleErr
@@ -249,6 +259,11 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if lintErr != nil && !forceFlag.value {
 		return nil, errnorm.Usage("ask_authoring", lintErr.Error()+"; or use --force --reason <explanation>")
 	}
+	var loopWarnings []output.Warning
+	if kind == "ask" && decision.empty() {
+		loopWarnings = append(loopWarnings, askWarning("ask_no_deadline", "no --by or --blocks; this sorts below every decision with a deadline or blocked work", nil))
+	}
+	autoSubject := false
 	if subjectRef == "" {
 		var err error
 		subjectRef, err = a.currentCardRef(ctx, cfg)
@@ -273,6 +288,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			if subjectRef == "" {
 				return nil, errnorm.Local("invalid_response", "created subject has no card ref")
 			}
+			autoSubject = true
+			loopWarnings = append(loopWarnings, askWarning("ask_auto_subject", "created a subject card "+subjectRef+" for this ask; pass --subject-ref <card> to ask about existing work", nil))
 		}
 	}
 	if !strings.HasPrefix(subjectRef, "card:") {
@@ -284,12 +301,21 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if prefix, id, splitErr := splitTypedRef(subjectRef); splitErr == nil && prefix == "thread" && threadID == "" {
 		threadID = strings.TrimSpace(id)
 	}
+	var subjectBody map[string]any
 	if threadID == "" {
-		resolvedThreadID, err := a.resolveHumanAttentionThreadIDFromSubjectRef(ctx, cfg, subjectRef)
+		resolvedThreadID, body, err := a.resolveHumanAttentionSubject(ctx, cfg, subjectRef)
 		if err != nil {
 			return nil, err
 		}
-		threadID = resolvedThreadID
+		threadID, subjectBody = resolvedThreadID, body
+	}
+	if !autoSubject && kind == "ask" {
+		// Reuse the subject read that grounded the thread; an explicit
+		// --thread-id skips it rather than adding a request.
+		if moot := asMap(subjectBody["possibly_moot"]); moot["flagged"] == true {
+			reason := firstNonEmpty(strings.TrimSpace(anyString(moot["reason"])), "its linked sources moved")
+			loopWarnings = append(loopWarnings, askWarning("ask_overtaken_subject", reason+" since the subject last moved; if this decision is overtaken, run anx ask withdraw <ask-id> --reason overtaken", []string{"anx", "ask", "withdraw", "<ask-id>", "--reason", "overtaken"}))
+		}
 	}
 	if err := validateID(threadID, "thread id"); err != nil {
 		return nil, err
@@ -327,6 +353,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if body != "" {
 		payload["body"] = body
 	}
+	decision.apply(payload)
 	if requestID != "" {
 		if err := validateID(requestID, "request id"); err != nil {
 			return nil, err
@@ -399,6 +426,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if dryRunFlag.set && dryRunFlag.value {
 		result := dryRunResult(kind, "events.create", nil, nil, bodyMap)
 		result.Warnings = append(result.Warnings, askAuthoringWarnings(warnings)...)
+		result.Warnings = append(result.Warnings, loopWarnings...)
 		result.Warnings = append(result.Warnings, askDeliveryWarnings(delivery)...)
 		if data, ok := result.Data.(map[string]any); ok {
 			data["delivery"] = askDeliveryResultView(delivery, "event:"+localAskID)
@@ -449,17 +477,39 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		}
 		asMap(asMap(result.Data)["body"])["webhook"] = commandResultBody(sub)
 	}
+	for i := range loopWarnings {
+		if askRef := anyString(asMap(asMap(result.Data)["body"])["ask_id"]); askRef != "" {
+			loopWarnings[i].Message = strings.ReplaceAll(loopWarnings[i].Message, "<ask-id>", askRef)
+			if details := asMap(loopWarnings[i].Details); details != nil {
+				argv := stringList(details["suggest"])
+				for j := range argv {
+					if argv[j] == "<ask-id>" {
+						argv[j] = askRef
+					}
+				}
+				details["suggest"] = argv
+			}
+		}
+	}
 	for _, warning := range warnings {
 		result.Warnings = append(result.Warnings, output.Warning{Code: "ask_authoring", Message: warning})
 	}
+	result.Warnings = append(result.Warnings, loopWarnings...)
 	result.Warnings = append(result.Warnings, askDeliveryWarnings(delivery)...)
 	return result, nil
 }
 
 func (a *App) resolveHumanAttentionThreadIDFromSubjectRef(ctx context.Context, cfg config.Resolved, subjectRef string) (string, error) {
+	threadID, _, err := a.resolveHumanAttentionSubject(ctx, cfg, subjectRef)
+	return threadID, err
+}
+
+// resolveHumanAttentionSubject returns the subject's grounding thread and the
+// subject body it read, so callers can reuse it (for example possibly_moot).
+func (a *App) resolveHumanAttentionSubject(ctx context.Context, cfg config.Resolved, subjectRef string) (string, map[string]any, error) {
 	prefix, _, err := splitTypedRef(subjectRef)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	// Every thread-backed subject resolves its own grounding thread. Asking an
 	// agent to discover a thread id in order to ask a human about a Task or a
@@ -475,16 +525,16 @@ func (a *App) resolveHumanAttentionThreadIDFromSubjectRef(ctx context.Context, c
 	case "document":
 		body, err = a.fetchDocumentBody(ctx, cfg, subjectRef)
 	default:
-		return "", nil
+		return "", nil, nil
 	}
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	threadID := strings.TrimSpace(anyString(body["thread_id"]))
 	if threadID == "" {
-		return "", errnorm.Usage("invalid_request", fmt.Sprintf("%s does not expose a backing thread_id; pass --thread-id explicitly", subjectRef))
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("%s does not expose a backing thread_id; pass --thread-id explicitly", subjectRef))
 	}
-	return threadID, nil
+	return threadID, body, nil
 }
 
 func isHumanEscalationSeverity(value string) bool {

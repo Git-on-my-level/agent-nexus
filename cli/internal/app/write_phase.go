@@ -3,7 +3,6 @@ package app
 import (
 	"net/http"
 	"strings"
-	"sync"
 )
 
 // writeTracker records whether this invocation sent a mutating request, so
@@ -11,8 +10,10 @@ import (
 // mutating left the process), write (the mutating request failed or its
 // outcome is unknown) or postflight (a write succeeded and a later step,
 // such as a readback or follow-up read, failed).
+//
+// A command runs its requests sequentially, so plain fields suffice; App is
+// copied by value in tests, which a mutex would forbid.
 type writeTracker struct {
-	mu        sync.Mutex
 	succeeded int
 	failed    bool
 }
@@ -32,8 +33,6 @@ func (t *writeTracker) record(method string, err error) {
 	if !isMutatingMethod(method) {
 		return
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	if err != nil {
 		t.failed = true
 		return
@@ -42,8 +41,6 @@ func (t *writeTracker) record(method string, err error) {
 }
 
 func (t *writeTracker) phase() (string, bool) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	switch {
 	case t.failed:
 		return "write", true

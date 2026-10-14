@@ -17,7 +17,7 @@ type briefStore interface {
 
 // briefFreshnessBatch folds a few queued cards before the read so a write is
 // visible on the next brief without waiting for the maintenance tick.
-const briefFreshnessBatch = 50
+const briefFreshnessBatch = 10
 
 // handleGetBriefV1 serves brief.v1: the caller's decisions, initiatives
 // against their promises, own asks and answers, for this workspace only.
