@@ -148,6 +148,16 @@ var deliveryQueueWakeTriggers = []string{
 	END`,
 	`CREATE TRIGGER IF NOT EXISTS deliveries_wake_status AFTER UPDATE OF status ON agent_wakeups
 	WHEN NEW.status<>OLD.status BEGIN
+		INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, next_attempt_at, claimed_by, created_at, updated_at, delivered_at, failed_at)
+		SELECT 'dlv_wake_'||NEW.wakeup_id, 'wake:'||NEW.wakeup_id, NEW.target_actor_id, 'bridge', 'wake',
+			CASE OLD.status WHEN 'claimed' THEN 'claimed' WHEN 'completed' THEN 'delivered' WHEN 'failed' THEN 'failed' ELSE 'pending' END,
+			json_object('wakeup_id', NEW.wakeup_id, 'thread_id', NEW.thread_id),
+			CASE WHEN NEW.trigger_event_id<>'' THEN 'event:'||NEW.trigger_event_id ELSE '' END,
+			CASE WHEN OLD.status IN ('claimed','completed','failed') THEN 1 ELSE 0 END,
+			OLD.created_at, OLD.bridge_instance_id, OLD.created_at, OLD.updated_at,
+			CASE WHEN OLD.status='completed' THEN COALESCE(OLD.completed_at,OLD.updated_at) ELSE '' END,
+			CASE WHEN OLD.status='failed' THEN COALESCE(OLD.failed_at,OLD.updated_at) ELSE '' END
+		WHERE NOT EXISTS (SELECT 1 FROM deliveries WHERE idempotency_key='wake:'||NEW.wakeup_id);
 		UPDATE deliveries SET
 			status=CASE NEW.status WHEN 'claimed' THEN 'claimed' WHEN 'completed' THEN 'delivered' WHEN 'failed' THEN 'failed' ELSE 'pending' END,
 			attempts=attempts+CASE WHEN NEW.status='claimed' THEN 1 ELSE 0 END,
@@ -248,18 +258,10 @@ func installDeliveryQueue(ctx context.Context, tx *sql.Tx) error {
 				return fmt.Errorf("install wake delivery triggers: %w", err)
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, attempts, next_attempt_at, claimed_by, created_at, updated_at, delivered_at, failed_at)
-			SELECT 'dlv_wake_'||wakeup_id, 'wake:'||wakeup_id, target_actor_id, 'bridge', 'wake',
-				CASE status WHEN 'claimed' THEN 'claimed' WHEN 'completed' THEN 'delivered' WHEN 'failed' THEN 'failed' ELSE 'pending' END,
-				json_object('wakeup_id', wakeup_id, 'thread_id', thread_id),
-				CASE WHEN trigger_event_id<>'' THEN 'event:'||trigger_event_id ELSE '' END,
-				CASE WHEN status IN ('claimed','completed','failed') THEN 1 ELSE 0 END,
-				created_at, bridge_instance_id, created_at, updated_at,
-				CASE WHEN status='completed' THEN COALESCE(completed_at,updated_at) ELSE '' END,
-				CASE WHEN status='failed' THEN COALESCE(failed_at,updated_at) ELSE '' END
-			FROM agent_wakeups`); err != nil {
-			return fmt.Errorf("backfill wake deliveries: %w", err)
-		}
+		// Do not copy historical wakeups. That insert is one row per receipt
+		// and makes startup grow with history. The bridge still claims wakes
+		// from agent_wakeups. Triggers mirror inserts after this migration,
+		// and a later status change inserts the missing mirror row.
 	}
 	return nil
 }
