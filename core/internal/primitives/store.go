@@ -59,7 +59,9 @@ type ArtifactListFilter struct {
 }
 
 type DocumentListFilter struct {
-	States []string
+	ids          []string
+	metadataOnly bool
+	States       []string
 
 	ThreadID  string
 	Query     string
@@ -3006,24 +3008,29 @@ type homeGroupLookup struct {
 	threadToGroupRef map[string]string
 }
 
-func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
+func (s *Store) homeGroupLookup(ctx context.Context, candidates ...homeGroupCandidates) (*homeGroupLookup, error) {
 	lookup := &homeGroupLookup{
 		groupByRef:       map[string]*homeGroupMeta{},
 		aliasToGroupRef:  map[string]string{},
 		threadToGroupRef: map[string]string{},
 	}
 
-	if err := s.loadTopicGroups(ctx, lookup); err != nil {
+	if err := s.loadTopicGroups(ctx, lookup, candidates...); err != nil {
 		return nil, err
 	}
-	if err := s.loadBoardGroups(ctx, lookup); err != nil {
+	if err := s.loadBoardGroups(ctx, lookup, candidates...); err != nil {
 		return nil, err
 	}
 	return lookup, nil
 }
 
-func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`)
+func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup, candidates ...homeGroupCandidates) error {
+	query := `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`
+	args := []any{}
+	if len(candidates) > 0 {
+		query += homeGroupCandidateSQL(candidates[0].Topics, candidates[0].Threads, &args)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query home topics: %w", err)
 	}
@@ -3061,8 +3068,13 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 	return nil
 }
 
-func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`)
+func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup, candidates ...homeGroupCandidates) error {
+	query := `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`
+	args := []any{}
+	if len(candidates) > 0 {
+		query += homeGroupCandidateSQL(candidates[0].Boards, candidates[0].Threads, &args)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query home boards: %w", err)
 	}

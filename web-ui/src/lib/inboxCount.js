@@ -222,7 +222,12 @@ export function startInboxCount(workspace) {
       else publishInboxCount(key, null);
     });
     const run = async () => {
-      if (stopped || pageClaims) return;
+      if (
+        stopped ||
+        pageClaims ||
+        (typeof document !== "undefined" && document.hidden)
+      )
+        return;
       if (inflight) {
         again = true;
         return;
@@ -238,15 +243,24 @@ export function startInboxCount(workspace) {
         inflight = false;
         if (again && !stopped) {
           again = false;
-          void run();
+          schedule();
         }
       }
     };
     const schedule = () => {
-      if (stopped || pageClaims) return;
+      if (
+        stopped ||
+        pageClaims ||
+        (typeof document !== "undefined" && document.hidden)
+      )
+        return;
       clearTimeout(timer);
       timer = setTimeout(() => void run(), REFRESH_DELAY_MS);
     };
+    const onVisible = () => {
+      if (!document.hidden) schedule();
+    };
+    globalThis.document?.addEventListener("visibilitychange", onVisible);
     const unsubscribeLive = liveWorkspaceEvents({
       client: coreClient,
       onChange: schedule,
@@ -271,6 +285,7 @@ export function startInboxCount(workspace) {
       stop: () => {
         stopped = true;
         clearTimeout(timer);
+        globalThis.document?.removeEventListener("visibilitychange", onVisible);
         unsubscribeLive();
         unsubscribeInbox();
         unsubscribeOverlay();

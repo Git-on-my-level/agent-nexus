@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -22,8 +21,7 @@ type humanAttentionResponseStore interface {
 	HumanAttentionResponseRequest(context.Context, string) (map[string]any, error)
 	HumanAttentionResponseReplay(context.Context, string, string, string) (map[string]any, error)
 	HumanAttentionResponseClaimed(context.Context, string) (bool, error)
-	AppendHumanAttentionResponse(context.Context, string, string, string, string, string, map[string]any, map[string]any) (map[string]any, bool, error)
-	SaveHumanAttentionResponseResult(context.Context, string, map[string]any) error
+	AppendHumanAttentionResponse(context.Context, string, string, string, string, string, map[string]any, map[string]any, ...map[string]any) (map[string]any, bool, error)
 }
 
 type inboxRespondAnswer struct {
@@ -154,6 +152,12 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	digest := sha256.Sum256(hashInput)
 	requestHash := hex.EncodeToString(digest[:])
+	// Decode and validate the body before reserving answer priority. A stalled
+	// upload must never hold the finite-read lane away from other readers.
+	if opts.readAdmission != nil {
+		release := opts.readAdmission.answer()
+		defer release()
+	}
 	if !authorizeInboxResponseAccess(w, r, opts, responseStore, effectiveItemID) {
 		return
 	}
@@ -367,7 +371,14 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			initialNotify["related_refs"] = []string{"access-request:" + request.ID}
 		}
 	}
-	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
+	// Persist the exact HTTP replay together with the answer. Projection refresh
+	// and wake delivery are driven by durable queues, never the request lifetime.
+	responseFields := hygiene.attach(map[string]any{"notify": map[string]any{
+		"requested": notifyRequested, "queued": notifyRequested,
+		"message": initialNotify["message"], "target_actor_id": target.ActorID,
+		"target_agent_id": target.AgentID, "target_handle": target.Handle, "mode": target.Mode,
+	}})
+	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify, responseFields)
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -395,49 +406,8 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		writeAuthorizedInboxResponseReplay(w, r, opts, storedResponse)
 		return
 	}
-	responseStored := storedResponse["event"].(map[string]any)
-	_ = refreshDerivedTopicProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID)
-
-	notifyQueued := notifyRequested
-	notifyMessage := anyString(initialNotify["message"])
-	if notifyRequested && opts.answerWakeFlushWhenNoOpenAsks {
-		if batchStore, ok := opts.primitiveStore.(interface {
-			CountOpenHumanAttentionAsks(context.Context, string) (int, error)
-		}); ok {
-			if openAsks, countErr := batchStore.CountOpenHumanAttentionAsks(r.Context(), requesterActorID); countErr == nil && openAsks == 0 {
-				maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
-					PrimitiveStore:      opts.primitiveStore,
-					WorkspaceID:         opts.workspaceID,
-					QuietWindow:         opts.answerWakeQuietWindow,
-					FlushWhenNoOpenAsks: true,
-					RecipientIsActive:   answerWakeRecipientIsActive(opts.authStore),
-				})
-				if flushErr := maintainer.FlushTarget(r.Context(), target.ActorID); flushErr == nil {
-					notifyMessage = "All of your open asks are answered; the answer batch is queued now."
-				}
-			}
-		}
-	}
-
-	response := map[string]any{
-		"event":        responseStored,
-		"task_outcome": storedResponse["task_outcome"],
-		"notify": map[string]any{
-			"requested":       notifyRequested,
-			"queued":          notifyQueued,
-			"message":         notifyMessage,
-			"target_actor_id": target.ActorID,
-			"target_agent_id": target.AgentID,
-			"target_handle":   target.Handle,
-			"mode":            target.Mode,
-		},
-	}
-
-	response = hygiene.attach(response)
-	if err := responseStore.SaveHumanAttentionResponseResult(r.Context(), sourceEventID, response); err != nil {
-		log.Printf("save human attention response replay: %v", err)
-	}
-	writeJSON(w, http.StatusCreated, response)
+	notifyProjectionMaintainer(opts)
+	writeJSON(w, http.StatusCreated, storedResponse)
 }
 
 // Authorization precedes replay and claim lookups so an inaccessible request

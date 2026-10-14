@@ -13,9 +13,13 @@ type QueryRower interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 type Policy struct {
-	Read     func(string) string
-	ReadOnDB func(context.Context, QueryRower, string, []any) (string, []any)
-	Check    func(context.Context, QueryRower, any) error
+	// Optional transaction-local admission. Implementations must refresh their
+	// canonical proof after every authority epoch change and fail closed on a
+	// consuming-statement mismatch. Never share a proof with another transaction.
+	TransactionRead func(context.Context, QueryRower, string, []any) (string, []any)
+	Read            func(string) string
+	ReadOnDB        func(context.Context, QueryRower, string, []any) (string, []any)
+	Check           func(context.Context, QueryRower, any) error
 }
 type policyKey struct{}
 
@@ -182,10 +186,20 @@ func (d *DB) BeginTx(ctx context.Context, o *sql.TxOptions) (*Tx, error) {
 	return &Tx{raw: tx, afterWrite: d.afterWrite}, nil
 }
 func (t *Tx) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
-	return t.raw.QueryContext(ctx, ReadQuery(ctx, q), args...)
+	if p, ok := PolicyFrom(ctx); ok && p.TransactionRead != nil {
+		q, args = p.TransactionRead(ctx, t.raw, q, args)
+	} else {
+		q = ReadQuery(ctx, q)
+	}
+	return t.raw.QueryContext(ctx, q, args...)
 }
 func (t *Tx) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
-	return t.raw.QueryRowContext(ctx, ReadQuery(ctx, q), args...)
+	if p, ok := PolicyFrom(ctx); ok && p.TransactionRead != nil {
+		q, args = p.TransactionRead(ctx, t.raw, q, args)
+	} else {
+		q = ReadQuery(ctx, q)
+	}
+	return t.raw.QueryRowContext(ctx, q, args...)
 }
 
 // PrepareReadContext binds visibility at preparation for request-local repeated

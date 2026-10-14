@@ -116,6 +116,16 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
   advances one topic cursor (`topic_id`) or every currently visible topic cursor
   (`topic_ids`). Opening a topic may mark that topic read from the UI after a
   successful topic load; cursor writes do not emit synthetic events.
+  The response pages authorized events before grouping: `limit` is 1–200
+  (default 200), and `next_cursor`/`has_more` advance history. Counts and groups
+  describe this page; a group can recur and an empty page can still advance.
+  Clients accumulating history must merge events by identity and continue until
+  the cursor ends or expose that their displayed history is partial.
+- **Topic workspace preview**: `GET /topics/{topic_id}/workspace` returns bounded
+  previews of related boards, cards, documents, threads and inbox items.
+  `cards_truncated` and `resources_truncated` indicate omitted preview rows;
+  use collection/detail APIs for complete resources. Documents include metadata,
+  without scanning revision content or generating whole-history metrics.
 - **Events history**: `GET /events` is the complete event browser API. It
   supports the shared `preset=home_feed`, `event_group`, `backing_scope`,
   type/topic/thread/actor/search/time filters, and cursor pagination. Event

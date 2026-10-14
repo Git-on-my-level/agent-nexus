@@ -79,9 +79,17 @@
     "reason": "Scoped sender construction, frozen Inbox sender binding and fetch plumbing.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
-      "raw-fetch": 5,
+      "raw-fetch": 3,
       "respondInboxItem": 1,
       "transport:fetchFn": 1
+    }
+  },
+  "lib/sharedReadFetch.js": {
+    "classification": "transport",
+    "reason": "Finite GET sharing and cancellation transport; mutations pass through unchanged to existing durable senders.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "transport:fetchFn": 2
     }
   },
   "lib/dev/fetchLoopGuard.js": {

@@ -77,6 +77,24 @@ func handlePreviewReport(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	// A slow upload must not occupy a read lane or SQLite snapshot.
+	if opts.readAdmission != nil {
+		release, err := opts.readAdmission.read(r.Context())
+		if err != nil {
+			writeError(w, 503, "unavailable", "report data is unavailable")
+			return
+		}
+		defer release()
+	}
+	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
+		ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
+		if err != nil {
+			writeError(w, 503, "unavailable", "report data is unavailable")
+			return
+		}
+		defer closeRead()
+		r = r.WithContext(ctx)
+	}
 	observedAt, results := materializeReportPanels(r, opts, panels)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"observed_at": observedAt, "panels": results})

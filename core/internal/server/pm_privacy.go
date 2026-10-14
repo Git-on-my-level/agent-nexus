@@ -193,6 +193,8 @@ func filterAccessibleEvents(r *http.Request, opts handlerOptions, events []map[s
 		return events
 	}
 	out := make([]map[string]any, 0, len(events))
+	_, canonical := opts.primitiveStore.(*primitives.Store)
+	_, scoped := resourceaccess.PolicyFrom(r.Context())
 	allowed := map[string]bool{}
 	denied := map[string]bool{}
 	for _, event := range events {
@@ -201,6 +203,13 @@ func filterAccessibleEvents(r *http.Request, opts handlerOptions, events []map[s
 			if resourceLooksLikePM(event) && !canAccessPMThread(r, opts, map[string]any{"pm_actor_id": anyString(event["actor_id"])}) {
 				continue
 			}
+			out = append(out, event)
+			continue
+		}
+		// The canonical events relation already inherits its backing thread.
+		// Retain the special legacy rule above for ungrounded PM events, but
+		// never reload each already-authorized thread in a bounded SQL page.
+		if canonical && scoped {
 			out = append(out, event)
 			continue
 		}

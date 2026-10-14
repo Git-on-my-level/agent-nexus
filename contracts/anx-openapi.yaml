@@ -2502,7 +2502,7 @@ paths:
       x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/TopicID'
-        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Opt in to at most 50 computed card previews with cards_truncated. Omit for the complete legacy bundle.}
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Opt in to computed plans on the bounded workspace preview (50 cards/documents, 10 boards, 100 threads). Use collection/detail routes for further resources; resources_truncated marks an incomplete bundle.}
       responses:
         '200':
           description: Topic workspace payload
@@ -5189,16 +5189,26 @@ paths:
       x-anx-why: Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ groups, unread_count, group_count, generated_at }`."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-output-envelope: "Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history."
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request]
       x-anx-concepts: [home, events]
       x-anx-stability: beta
       parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 200 }
+          description: Maximum eligible events inspected on this page, before unread/group filtering. Pages may be empty while next_cursor still advances.
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque keyset cursor returned by the previous page.
         - name: reader_id
           in: query
           schema: { type: string }
           description: Development legacy actor-mode reader id. Authenticated deployments derive the reader from the bearer token principal.
       responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Home unread feed
           content:
@@ -12404,7 +12414,8 @@ components:
     TopicWorkspaceResponse:
       type: object
       properties:
-        cards_truncated: {type: boolean, description: Present only with summary=1; computed card preview was capped at 50.}
+        cards_truncated: {type: boolean, description: Workspace card preview is bounded to 50 cards.}
+        resources_truncated: {type: boolean, description: Some resource collections are candidate limited; use collection/detail routes to read more.}
         topic: { $ref: '#/components/schemas/Topic' }
         cards:
           type: array
@@ -13176,8 +13187,10 @@ components:
         groups:
           type: array
           items: { $ref: '#/components/schemas/HomeUnreadGroup' }
-        unread_count: { type: integer, minimum: 0 }
-        group_count: { type: integer, minimum: 0 }
+        unread_count: { type: integer, minimum: 0, description: "Unread events represented by this page, not a workspace total." }
+        group_count: { type: integer, minimum: 0, description: "Groups represented by this page; a group may recur on later pages." }
+        next_cursor: { type: string }
+        has_more: { type: boolean }
         generated_at: { type: string, format: date-time }
       required: [groups, unread_count, group_count, generated_at]
 

@@ -77,6 +77,20 @@ func TestResourceAccessExactValueCheckMatchesFullSpellingGraph(t *testing.T) {
 			if err := s.db.QueryRowContext(pin, query, atoms, atoms, atoms, atoms, atoms, atoms).Scan(&got); err != nil || got != want {
 				t.Fatalf("admitted exact check=%v want=%v err=%v", got, want, err)
 			}
+			tx, err := ws.DB().BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			mutation, release := withResponseMutationReads(request)
+			defer release()
+			prepared, bound, ok := responseMutationRead(mutation, tx, query, []any{atoms, atoms, atoms, atoms, atoms, atoms})
+			if !ok {
+				t.Fatal("answer transaction was not admitted")
+			}
+			if err := tx.QueryRowContext(mutation, prepared, bound...).Scan(&got); err != nil || got != want {
+				t.Fatalf("answer exact check=%v want=%v err=%v", got, want, err)
+			}
 		})
 	}
 }

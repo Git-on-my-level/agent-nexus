@@ -84,6 +84,12 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 		return "CASE WHEN EXISTS (SELECT 1 FROM _anx_denied) THEN NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")) ELSE 1 END"
 	}
 	add := func(table, where string) {
+		if snapshot != nil && snapshot.mutation {
+			// A mutable transaction admits each operation afresh. If a caller's
+			// concurrent operation changes it during preparation, hide the entire
+			// relation rather than treating an empty denial set as a read grant.
+			where = "COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=" + fmt.Sprint(snapshot.epoch) + " AND (" + where + ")"
+		}
 		if !needed[table] {
 			return
 		}
@@ -361,6 +367,17 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	if !strings.Contains(atoms, `"$anx-ref-text$`) {
 		query = exactValueCheckSQL()
 		args = []any{atoms, atoms, atoms, atoms, atoms, atoms}
+	}
+	if mutation {
+		if query, args, ok := responseMutationRead(ctx, q, query, args); ok {
+			if err = q.QueryRowContext(ctx, query, args...).Scan(&denied); err != nil {
+				return err
+			}
+			if denied {
+				return ErrNotFound
+			}
+			return nil
+		}
 	}
 	visit, _ := ctx.Value(overviewVisitValidationKey{}).(bool)
 	useSnapshot := !mutation || visit && denialSnapshotFrom(ctx) != nil

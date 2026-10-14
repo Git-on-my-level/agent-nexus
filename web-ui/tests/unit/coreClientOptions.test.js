@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("$lib/authSession.js", () => ({
+  getSessionEpoch: vi.fn(() => 0),
   getAuthenticatedActorId: vi.fn(() => "actor-1"),
   getAuthenticatedAgent: vi.fn(() => ({
     agent_id: "ag-1",
@@ -122,8 +123,9 @@ it("aborts every outstanding Inbox feed request through the browser transport", 
       client.getHomeUnread(),
     ]);
     await vi.waitFor(() => expect(seen).toHaveLength(6));
-    expect(seen.every((signal) => signal === controller.signal)).toBe(true);
+    expect(seen.every((signal) => !signal.aborted)).toBe(true);
     controller.abort();
+    expect(seen.every((signal) => signal.aborted)).toBe(true);
     expect((await reads).every((result) => result.status === "rejected")).toBe(
       true,
     );
