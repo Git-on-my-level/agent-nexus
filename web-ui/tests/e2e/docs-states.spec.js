@@ -778,7 +778,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "more actions menu");
 
       api.hold.getDocumentHistory = deferred();
-      await page.getByRole("menuitem", { name: "Revision history" }).click();
+      await page.getByRole("menuitem", { name: "Version history" }).click();
       await expect(page.getByText("Loading revision history...")).toBeVisible();
       await expectCleanLayout(page, "revision history loading", bothEnds);
       api.hold.getDocumentHistory.resolve();
@@ -788,11 +788,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "revision history open", bothEnds);
 
       await page.getByRole("button", { name: /Version 1/ }).click();
-      await expect(page.getByText(/Viewing revision 1/)).toBeVisible();
+      await expect(page.getByText(/Viewing version 1/)).toBeVisible();
       await expectCleanLayout(page, "old revision", bothEnds);
 
       await page.getByRole("button", { name: "Return to current" }).click();
-      await expect(page.getByText(/Viewing revision 1/)).toHaveCount(0);
+      await expect(page.getByText(/Viewing version 1/)).toHaveCount(0);
       await page.getByRole("button", { name: "Close history" }).click();
       await expectCleanLayout(page, "history closed", bothEnds);
     });
@@ -828,7 +828,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         status: 409,
         message: `revision conflict: base ${LONG_HASH} is stale `.repeat(3),
       };
-      await page.getByRole("button", { name: "Save revision" }).click();
+      await page.getByRole("button", { name: "Save version" }).click();
       const saved = page.locator('[data-mutation-state="attention"]');
       await expect(saved.getByLabel("Saved message")).toHaveValue(DOC_BODY);
       await expect(
@@ -894,7 +894,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "structured doc", bothEnds);
 
       await page.getByRole("button", { name: "More actions" }).click();
-      await page.getByRole("menuitem", { name: "Revision history" }).click();
+      await page.getByRole("menuitem", { name: "Version history" }).click();
       await expect(page.getByText("No earlier revisions found.")).toBeVisible();
       await expectCleanLayout(page, "empty revision history", bothEnds);
     });
@@ -1094,9 +1094,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const api = await installDocsApi(page);
       api.hold.listDocuments = deferred();
       await page.goto(`${DOCS_PATH}/revisions/rev-${LONG_HASH}`);
-      await expect(
-        page.getByText("Resolving document revision…"),
-      ).toBeVisible();
+      await expect(page.getByText("Resolving document version…")).toBeVisible();
       await expectCleanLayout(page, "resolver loading");
       api.hold.listDocuments.resolve();
       api.hold = {};

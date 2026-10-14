@@ -1607,7 +1607,7 @@
                             void openRevisionHistoryNoThread();
                           }}
                         >
-                          Revision history
+                          Version history
                         </button>
                       {/if}
                       {#if !document.archived_at}

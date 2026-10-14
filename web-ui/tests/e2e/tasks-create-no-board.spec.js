@@ -82,7 +82,7 @@ test("fresh workspace with zero boards can create a Task from /initiatives/new",
       /\/work\/?$/.test(new URL(response.url()).pathname)
     );
   });
-  await page.getByRole("button", { name: "Create task" }).click();
+  await page.getByRole("button", { name: "Create initiative" }).click();
   const createResponse = await createResponsePromise;
   expect(
     createResponse.ok(),

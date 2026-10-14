@@ -181,7 +181,7 @@ for (const viewport of [
 
     await page.goto(`${ROOT}/agents/agent-one`);
     const agentPanel = page.getByRole("region", {
-      name: "Recent task participation",
+      name: "Recent initiative participation",
       exact: true,
     });
     await expect(

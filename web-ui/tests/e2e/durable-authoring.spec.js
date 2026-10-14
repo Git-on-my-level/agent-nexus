@@ -117,7 +117,9 @@ test("task fields restore and uncertain creation replays the original body acros
   await expect(
     page.getByLabel("Acceptance criteria", { exact: true }),
   ).toHaveValue("Evidence reviewed\nOwner confirms");
-  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create initiative", exact: true })
+    .click();
   await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("author-retrying.png"),
@@ -272,9 +274,7 @@ test("revision draft restores its original base after reload and an uncertain se
   await expect(
     page.getByRole("textbox", { name: "Content (Markdown)", exact: true }),
   ).toHaveValue("My new revision body");
-  await page
-    .getByRole("button", { name: "Save revision", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Save version", exact: true }).click();
   await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
   await page.reload();
   healthy = true;
