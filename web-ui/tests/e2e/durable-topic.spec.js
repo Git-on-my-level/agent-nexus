@@ -200,7 +200,7 @@ test("topic conflict preserves newer edits, hides diagnostics, and rebases only 
   await save(page).click();
   await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
   await expect(page.locator('[data-mutation-state="attention"]')).toContainText(
-    "This topic changed. Your edits are saved.",
+    "This project changed. Your edits are saved.",
   );
   await summary(page).fill("Newer summary written after conflict");
   await page.reload();
