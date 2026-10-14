@@ -294,7 +294,7 @@ async function runGoldenPath(page, request) {
     },
   ]);
   await page.goto("/o/local/w/local");
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview$/, {
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/decide$/, {
     timeout: 30_000,
   });
   const session = await getUiJson(page.request, "/auth/session");
