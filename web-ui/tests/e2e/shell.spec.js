@@ -373,20 +373,21 @@ test("sign-in purges closed public forms after reloading on the login route", as
   expect((await entries()).length).toBeGreaterThan(0);
   await page.goto(`${WS_HOME}/login`);
   await page.reload();
-  // Complete the same client session boundary used by passkey sign-in. The
-  // synthetic fixture carries no token, credential or browser challenge.
-  await page.evaluate(async () => {
-    const { completeAuthSession } = await import("/src/lib/authSession.js");
-    completeAuthSession(
-      {
-        agent_id: "verified-person",
-        actor_id: "verified-person",
-        principal_kind: "human",
-      },
-      "local",
-      { organizationSlug: "local" },
-    );
-  });
+  // Exercise the actual user session boundary after a fresh login-route load.
+  // No token, credential or browser challenge is stored by this fixture.
+  const agent = {
+    agent_id: "verified-person",
+    actor_id: "verified-person",
+    principal_kind: "human",
+  };
+  await page.route("**/auth/passkey/dev/login", (route) =>
+    route.fulfill({ json: { agent } }),
+  );
+  await page
+    .getByLabel("Principal username (optional)")
+    .fill("verified-person");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview$/);
   await expect.poll(entries).toEqual([]);
   await page.evaluate(async () => {
     const { clearAuthSession } = await import("/src/lib/authSession.js");

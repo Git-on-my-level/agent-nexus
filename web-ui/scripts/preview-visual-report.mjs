@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
@@ -60,13 +61,24 @@ async function waitUntilReady(child, url) {
 }
 
 async function stop(child) {
-  if (child.exitCode !== null) return;
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    new Promise((resolve) => setTimeout(resolve, 5_000)),
-  ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
+  let timer;
+  try {
+    await Promise.race([
+      exited,
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGKILL");
+    await exited;
+  }
 }
 
 export function isSandboxLaunchFailure(error) {
@@ -115,8 +127,9 @@ export async function main(
     throw error;
   }
 
-  let server;
+  let server, buildDir;
   try {
+    buildDir = await mkdtemp(path.join(tmpdir(), "anx-report-preview-"));
     const port = await freePort();
     server = spawn(
       process.execPath,
@@ -133,6 +146,7 @@ export async function main(
         cwd: webRoot,
         env: {
           ...process.env,
+          ANX_REPORT_PREVIEW_OUT_DIR: buildDir,
           ANX_REPORT_PREVIEW_REPORT: path.resolve(input.report),
           ANX_REPORT_PREVIEW_OBSERVATIONS: path.resolve(input.observations),
         },
@@ -174,8 +188,15 @@ export async function main(
     await reportSurface.screenshot({ path: output, animations: "disabled" });
     return { rendered: true };
   } finally {
-    if (server) await stop(server);
-    await browser.close();
+    try {
+      if (server) await stop(server);
+    } finally {
+      try {
+        await browser.close();
+      } finally {
+        if (buildDir) await rm(buildDir, { recursive: true, force: true });
+      }
+    }
   }
 }
 
