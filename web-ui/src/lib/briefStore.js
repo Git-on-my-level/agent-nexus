@@ -38,10 +38,16 @@ export function briefStore() {
   const scope = readerScopeKey();
   if (!instance || instanceScope !== scope) {
     // A reader switch drops the old reader's live subscription with it.
-    unmount?.();
+    // This runs from template/derived reads (the nav badge), where writing
+    // to a store is forbidden, so teardown is deferred past the read.
+    const stopLive = unmount;
+    const old = instance;
     unmount = null;
     mounts = 0;
-    instance?.destroy();
+    queueMicrotask(() => {
+      stopLive?.();
+      old?.destroy();
+    });
     instance = create(scope);
     instanceScope = scope;
   }
