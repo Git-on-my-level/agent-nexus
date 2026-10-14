@@ -914,6 +914,17 @@ for (const viewport of [
           },
         ],
       });
+      const resolution = deferred();
+      await page.route("**/refs/resolve", async (route) => {
+        await resolution.promise;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: { message: "Reference service unavailable" },
+          }),
+        });
+      });
       await page.goto(`${ROOT}/pm?conversation=conversation-1`);
       await expect(page.getByText("Two are blocked")).toBeVisible();
       await nextPaint(page);
@@ -924,6 +935,26 @@ for (const viewport of [
       expect(await lastSourceBottom(page)).toBeLessThanOrEqual(
         await readableBottom(page),
       );
+
+      // A late error notice grows the header and shrinks only the viewport.
+      // The content observer alone cannot keep the parked reader at the end.
+      const initialViewport = await page
+        .locator(".pm-thread")
+        .evaluate((el) => el.clientHeight);
+      resolution.resolve();
+      await expect(
+        page.getByText("Context titles could not be loaded.", { exact: true }),
+      ).toBeVisible();
+      await nextPaint(page);
+      expect(
+        await page.locator(".pm-thread").evaluate((el) => el.clientHeight),
+      ).toBeLessThan(initialViewport);
+      await expect
+        .poll(
+          async () =>
+            (await lastSourceBottom(page)) - (await readableBottom(page)),
+        )
+        .toBeLessThanOrEqual(0);
 
       // Opening the overflow grows the thread under a reader already at the
       // bottom. Without the re-pin the new rows land behind the composer.

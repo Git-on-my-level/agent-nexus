@@ -6,13 +6,16 @@ import {
 } from "$lib/localWorkStore.js";
 
 /** Checkpoint the entire composer, including reply/anchor/attachment context.
- * `value` must be plain JSON; File objects need a separate blob adapter. */
+ * `value` must be plain JSON; File objects need a separate blob adapter.
+ * `onReady` gates canonical initialization until device restoration settles.
+ * Editors whose clicks only open/close UI can opt out with checkpointClicks. */
 export function durableForm(node, options) {
   let scope = "";
   let generation = 0;
   let fingerprint = JSON.stringify(options.value);
   let disposed = false;
   let paused = false;
+  let restoreTicket = 0;
   function warn(error) {
     node.dispatchEvent(
       new CustomEvent("local-save-error", {
@@ -27,7 +30,8 @@ export function durableForm(node, options) {
       warn,
     );
   }
-  function checkpoint() {
+  function checkpoint(event) {
+    if (event?.type === "click" && options.checkpointClicks === false) return;
     paused = false;
     const value = options.read?.() ?? options.value;
     generation += 1;
@@ -36,20 +40,28 @@ export function durableForm(node, options) {
       void saveLocalWork(scope, "draft", options.target, value).catch(warn);
   }
   async function restore() {
+    const ticket = ++restoreTicket;
     const version = ++generation;
     const before = fingerprint;
-    if (!options.target || !canUseLocalWorkScope(scope)) return;
-    const value = await loadLocalWork(scope, "draft", options.target);
-    if (
-      disposed ||
-      version !== generation ||
-      fingerprint !== before ||
-      value === null
-    )
-      return;
-    paused = false;
-    fingerprint = JSON.stringify(value);
-    options.onRestore(value);
+    options.onReady?.(false);
+    try {
+      if (!options.target || !canUseLocalWorkScope(scope)) return;
+      const value = await loadLocalWork(scope, "draft", options.target);
+      if (
+        disposed ||
+        version !== generation ||
+        fingerprint !== before ||
+        value === null
+      )
+        return;
+      paused = false;
+      fingerprint = JSON.stringify(value);
+      options.onRestore(value);
+    } catch (error) {
+      warn(error);
+    } finally {
+      if (!disposed && ticket === restoreTicket) options.onReady?.(true);
+    }
   }
   function purge(event) {
     if (event.detail?.principal !== localWorkPrincipal(scope)) return;
