@@ -523,6 +523,21 @@ lookup by primary key, O(1) in workspace size, with existing scoped authorizatio
 no new list/stream queries or server polling. Device recovery remains O(records
 in the current device scope) through the existing scope index.
 
+## Notification settings
+
+`/o/<org>/w/<workspace>/notifications` edits the caller's per-workspace channels
+(`GET`/`PUT /notification-settings`, human principals only). The complete
+channel form is a device draft under `notifications:settings` in the existing
+organization/workspace/principal scope; it restores on reload and is reconciled
+with the latest available channels. Save freezes the body (only rows with an
+address) and a UUID into the `notifications.settings.set` outbox adapter before
+any send. The `PUT` replaces the whole list and carries no request key, so a
+timeout or lost acknowledgement is recovered by replaying the identical frozen
+body, which is idempotent. Failures show the closed technical-details
+disclosure only; Copy/Edit/Retry come from `MutationSendStatus`. Confirmation
+adopts the response and keeps newer typing. Raw upstream bodies are never page
+copy.
+
 ## Remaining live UI mutation audit
 
 The following are actual direct SDK calls found in current browser code. Each

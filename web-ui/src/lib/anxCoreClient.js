@@ -574,6 +574,12 @@ const adapterCommandTable = [
     "auth.access-requests.deny",
     (requestId) => pb(pathParams({ request_id: requestId }), {}),
   ],
+  ["getNotificationSettings", "notifications.settings.get"],
+  [
+    "setNotificationSettings",
+    "notifications.settings.set",
+    (payload) => ({ options: b(payload) }),
+  ],
   ["listSecrets", "secrets.list"],
   ["createSecret", "secrets.create", (payload) => ({ options: b(payload) })],
   [
