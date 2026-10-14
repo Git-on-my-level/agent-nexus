@@ -49,7 +49,10 @@ async function begin(scope, key, previouslyUncertain) {
   if (scope !== get(localWorkScope) || epoch !== localWorkEpoch(scope))
     throw new Error("Identity changed");
   if (rows.some((row) => row.state === "retired"))
-    throw new Error("This rejected request was edited in another tab");
+    throw Object.assign(
+      new Error("This rejected request was edited in another tab"),
+      { status: 409 },
+    );
   // Retain an older unknown send when adopting a journal without attempt rows.
   if (!rows.length && previouslyUncertain)
     await write(scope, {

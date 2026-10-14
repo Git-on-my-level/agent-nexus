@@ -567,3 +567,44 @@ test("a rejection in one tab cannot clear another tab's uncertain attempt", asyn
   await expect(b.getByLabel("Display name")).toHaveAttribute("readonly", "");
   release();
 });
+
+test("a retired request in a stale tab remains editable after resend and reload", async ({
+  context,
+}) => {
+  let sends = 0;
+  await context.route("**/actors", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    sends++;
+    return route.fulfill({
+      status: 400,
+      json: { error: { code: "invalid_request" } },
+    });
+  });
+  const a = await context.newPage(),
+    b = await context.newPage();
+  await a.goto(WS_HOME);
+  await a.getByLabel("Display name").fill("Retired identity");
+  await a.getByRole("button", { name: "Create and continue" }).click();
+  await expect(
+    a.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await b.goto(WS_HOME);
+  await b.getByRole("button", { name: "Review Retired identity" }).click();
+  await a.getByRole("button", { name: "Edit saved identity" }).click();
+  await expect(a.getByLabel("Display name")).not.toHaveAttribute(
+    "readonly",
+    "",
+  );
+  await b.getByRole("button", { name: "Create and continue" }).click();
+  await expect(b.getByRole("alert")).toBeVisible();
+  expect(sends).toBe(1);
+  await b.reload();
+  await expect(
+    b.getByRole("button", { name: "Edit saved identity" }),
+  ).toBeVisible();
+  await b.getByRole("button", { name: "Edit saved identity" }).click();
+  await expect(b.getByLabel("Display name")).not.toHaveAttribute(
+    "readonly",
+    "",
+  );
+});
