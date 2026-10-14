@@ -415,6 +415,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 	}
 	var req struct {
 		ActorID          string   `json:"actor_id"`
+		RequestKey       string   `json:"request_key"`
 		Title            *string  `json:"title"`
 		Summary          *string  `json:"summary"`
 		DefinitionOfDone []string `json:"definition_of_done"`
@@ -436,6 +437,25 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		writeError(w, http.StatusBadRequest, "invalid_request", "revision is required")
 		return
 	}
+	// Bind the decoded original body before flattening/normalizing its fields.
+	originalRequest := req
+	if strings.TrimSpace(req.RequestKey) != "" {
+		if req.IfBaseRevision == nil || strings.TrimSpace(*req.IfBaseRevision) == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "if_base_revision is required for a keyed card revision")
+			return
+		}
+		if _, err := opts.primitiveStore.GetBoardCard(r.Context(), "", cardID); err != nil {
+			if !writeStoreContentionError(w, r, err) {
+				if errors.Is(err, primitives.ErrNotFound) {
+					writeError(w, http.StatusNotFound, "not_found", "card not found")
+				} else {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card")
+				}
+			}
+			return
+		}
+	}
+
 	var dod *[]string
 	if req.Revision.Title != nil {
 		req.Title = req.Revision.Title
@@ -455,16 +475,26 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		summary = strings.TrimSpace(summary)
 		req.Summary = &summary
 	}
-	result, revision, err := opts.primitiveStore.CreateCardRevision(r.Context(), actorID, cardID, primitives.CreateCardRevisionInput{
-		Title:            req.Title,
-		Summary:          req.Summary,
-		DefinitionOfDone: dod,
-		IfBaseRevision:   req.IfBaseRevision,
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.revisions.create", actorID, req.RequestKey, struct {
+		CardID  string
+		Request any
+	}{cardID, originalRequest}, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
+		result, revision, err := opts.primitiveStore.CreateCardRevision(ctx, actorID, cardID, primitives.CreateCardRevisionInput{
+			Title:            req.Title,
+			Summary:          req.Summary,
+			DefinitionOfDone: dod,
+			IfBaseRevision:   req.IfBaseRevision,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision}), nil
 	})
 	if err != nil {
 		switch {
+		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
@@ -475,7 +505,8 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		}
 		return
 	}
-	writeJSON(w, http.StatusCreated, hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision}))
+	writeJSON(w, status, response)
+	notifyProjectionMaintainer(opts)
 }
 
 func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

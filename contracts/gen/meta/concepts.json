@@ -5901,6 +5901,10 @@
                 "type": "string"
               },
               {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
                 "name": "revision.definition_of_done",
                 "type": "list\u003cstring\u003e"
               },
@@ -19161,6 +19165,10 @@
                 "type": "string"
               },
               {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
                 "name": "revision.definition_of_done",
                 "type": "list\u003cstring\u003e"
               },
@@ -23197,6 +23205,10 @@
             "optional": [
               {
                 "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
                 "type": "string"
               },
               {

@@ -11717,6 +11717,7 @@ components:
           type: string
           description: Base card revision ref or handle for optimistic concurrency; must match the card head.
         actor_id: { type: string }
+        request_key: { type: string, maxLength: 256, description: "Optional actor-bound original-result replay key; retain the original revision body and base token until confirmed." }
         revision: { $ref: '#/components/schemas/CardRevisionCreateInput' }
       required: [if_base_revision, revision]
 

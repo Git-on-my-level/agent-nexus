@@ -398,3 +398,119 @@ test("another board drop cannot replace unfinished completion evidence", async (
     "event:unfinished-proof",
   );
 });
+
+test("timed-out move retries the exact actor, body and original key", async ({
+  page,
+  context,
+}) => {
+  let healthy = false;
+  const attempts = [];
+  await prepare(context, (route) => {
+    attempts.push(route.request().postDataJSON());
+    return healthy ? json(route, receipt()) : route.abort("timedout");
+  });
+  await page.goto(`${root}/tasks/card%3Amove`);
+  await choose(page);
+  await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
+  await page.reload();
+  healthy = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
+  expect(attempts.length).toBeGreaterThan(1);
+  expect(
+    attempts.every(
+      (body) => JSON.stringify(body) === JSON.stringify(attempts[0]),
+    ),
+  ).toBe(true);
+});
+
+test("storage denial retains completion evidence and prevents any send", async ({
+  page,
+  context,
+}) => {
+  const attempts = [];
+  await prepare(context, (route) => {
+    attempts.push(route.request().postDataJSON());
+    return json(route, receipt());
+  });
+  await context.addInitScript(() =>
+    Object.defineProperty(window, "indexedDB", { value: undefined }),
+  );
+  await evidence(page);
+  await page.getByLabel(/needs evidence/).fill("event:journal-proof");
+  await page.reload();
+  await expect(page.getByLabel(/needs evidence/)).toHaveValue(
+    "event:journal-proof",
+  );
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error("Storage denied");
+    };
+  });
+  await page.getByLabel(/needs evidence/).fill("event:keep-when-storage-fails");
+  await expect(page.locator("[data-local-save-warning]")).toBeVisible();
+  await page
+    .locator("[data-local-save-warning]")
+    .getByRole("button", { name: "Dismiss" })
+    .click();
+  await page.getByRole("button", { name: "Mark done", exact: true }).click();
+  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
+  await expect(page.getByLabel("Saved message")).toHaveValue(
+    /event:keep-when-storage-fails/,
+  );
+  expect(attempts).toHaveLength(0);
+});
+
+test("principal changes purge move work in other tabs and fence a late failure", async ({
+  page,
+  context,
+}) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const attempts = [];
+  await prepare(context, async (route) => {
+    attempts.push(route.request().postDataJSON());
+    await gate;
+    await route.abort("timedout");
+  });
+  await evidence(page);
+  await page.getByLabel(/needs evidence/).fill("artifact:private-owner-proof");
+  const oldScope = await page.evaluate(async () => {
+    const store = await import("/src/lib/readerScope.js");
+    return store.readerScopeKey();
+  });
+  const other = await context.newPage();
+  await other.goto(`${root}/tasks?view=board`);
+  await expect(other.getByLabel(/needs evidence/)).toHaveValue(
+    "artifact:private-owner-proof",
+  );
+  await page.getByRole("button", { name: "Mark done", exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(1);
+  await page.evaluate(async () => {
+    const auth = await import("/src/lib/authSession.js");
+    auth.authenticatedAgent.set({
+      agent_id: "replacement-owner",
+      actor_id: "replacement-actor",
+    });
+  });
+  await expect(other.getByLabel(/needs evidence/)).toHaveCount(0);
+  release();
+  await expect(other.locator("[data-unsent-indicator]")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      other.evaluate(async (scope) => {
+        const store = await import("/src/lib/localWorkStore.js");
+        return [
+          await store.listLocalWork(scope, "mutation"),
+          await store.listLocalWork(scope, "draft"),
+        ];
+      }, oldScope),
+    )
+    .toEqual([[], []]);
+  await expect(
+    other.getByText("artifact:private-owner-proof", { exact: true }),
+  ).toHaveCount(0);
+  expect(attempts).toHaveLength(1);
+});

@@ -289,11 +289,31 @@ while the composer can move on to other tasks.
 Board undo submits a new intent using explicitly refreshed current bases;
 pending moves never claim to have moved the task.
 
-Card content
-revisions are separate from metadata PATCH: `CreateCardRevision` holds the quota
-lock, may initialize the blob ledger, stages content, then updates the revision
-and card/board heads in its own transaction. Audit and adapt those nested writes
-before adding replay; there is no current UI card text editor to migrate.
+Card content revisions now have optional `request_key` original-result replay.
+The handler binds the original decoded body (including legacy flat fields), actor,
+canonical card and original base token. A keyed send requires a nonempty base;
+unkeyed callers retain their response/validation contract. The revision entrypoint
+also binds its own scoped writer for legacy calls, eliminating one-connection
+quota-read waits and rolling back failed promotion. Current card visibility is checked
+before exposing a receipt, and the original response survives later edits or quota
+changes. New revisions, artifacts, ownership refs, card/board heads, dirty
+projections, blob ledger writes and original receipts share the scoped writer.
+The revision writer recognizes the outer quota lock; first-use ledger rebuilds
+also join the transaction through canonical maintenance context and savepoints.
+Blob promotion completes before the keyed outer receipt commits; promotion failure
+cleans staging and rolls back canonical state. A later receipt failure can leave
+an unreferenced content-addressed object, consistent with the existing staging
+limitation. Projection maintenance is notified after commit.
+
+Real-core SQLite tests with quotas and one connection cover eight simultaneous
+retries producing one revision, identical original receipts after later edits,
+changed bodies/tokens/targets, stale bases with fresh keys, rollback at revision,
+head, board, ledger, promotion and receipt writes, initialization rollback, legacy
+unkeyed writes, quota changes and denied replay after ownership revocation.
+There is no current UI card content editor; the guard rejects future direct card
+revision sends. The move browser suite additionally covers network timeouts,
+journal fallback, total storage failure preventing sends, and authenticated
+principal replacement clearing other tabs and fencing late failures.
 
 ## Replay audit
 
@@ -314,9 +334,10 @@ are regenerated from the canonical OpenAPI contract.
 | `POST /work`                                                                      | New task, optional default board, backing threads/card and original response commit with replay. Quota-enabled concurrent/rollback and revoked-ownership tests pass                                                                              | Task creation covered; existing card edits and lifecycle remain rollout work                                                                          |
 | `POST /docs`, `PATCH /docs/{id}`, `POST /docs/{id}/revisions`                     | Document/revision/metadata writes and original response commit with replay; exact body/base-token retries and changed-key conflicts                                                                                                              | Creation, description, text revision and inline title adapters covered; legacy PUT and other lifecycle/knowledge forms remain gaps                    |
 | `PUT /cards/{id}/plan`                                                            | Graph, timestamps, work version, event and original response commit together; concurrent quota-enabled/single-connection replay, original projection, rollback and revocation tests                                                              | Keyed core API covered; CLI helpers currently send unkeyed requests, and the UI has no plan editor. Future composers still need durable drafts/outbox |
-| `PATCH /cards/{id}`                                                               | Card metadata, event, assignment wake packet/queue and original receipt commit together; quota-enabled single-connection concurrency, rollback at four writes, changed-body and revoked-access tests                                             | Command-palette assignment covered; card revisions and lifecycle remain rollout work                                                                  |
+| `PATCH /cards/{id}`                                                               | Card metadata, event, assignment wake packet/queue and original receipt commit together; quota-enabled single-connection concurrency, rollback at four writes, changed-body and revoked-access tests                                             | Command-palette assignment covered; card lifecycle remains open; revision replay covered below                                                        |
 | `POST /cards/{id}/move`                                                           | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests               | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                          |
 | `POST /pm/decisions`                                                              | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                      |
+| `POST /cards/{id}/revisions`                                                      | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                              | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                  |
 | Remaining card/settings/lifecycle forms                                           | Diverse create/patch/action commands                                                                                                                                                                                                             | Audit and migrate each remaining operation; extend whole-UI inventory                                                                                 |
 
 ## Checks and extension rules

@@ -4340,6 +4340,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
           "name": "revision.definition_of_done",
           "type": "list\u003cstring\u003e"
         },
