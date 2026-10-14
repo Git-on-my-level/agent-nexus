@@ -625,9 +625,14 @@ test("a move attempted before the PM state loads self-corrects", async ({
   await expect(saved.getByLabel("Saved message")).toHaveValue(
     "Release the sample workspace\nDestination: Backlog",
   );
+  // Setup is one hop down (palette), not a primary destination.
+  await page.keyboard.press("ControlOrMeta+k");
   await expect(
-    page.getByRole("link", { name: "Set up your PM" }).first(),
+    page
+      .getByRole("dialog", { name: "Command palette" })
+      .getByRole("option", { name: /PM setup/ }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   // And recorded, so the shell commits to hiding Ask.
   await expect(
     page.getByRole("link", { name: "Ask", exact: true }),
