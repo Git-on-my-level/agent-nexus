@@ -159,6 +159,10 @@ function normalizeBatch(raw) {
       ref: text(member.ref),
       inboxItemId: text(member.inbox_item_id),
       title: text(member.title),
+      subjectRef: text(member.subject_ref),
+      blocks: (Array.isArray(member.blocks) ? member.blocks : [])
+        .map(refTitle)
+        .filter(Boolean),
     }))
     .filter((member) => member.ref || member.title);
   return {
@@ -494,25 +498,70 @@ export function freshnessLabel(asOf, now = Date.now()) {
   return label ? `as of ${label}` : "";
 }
 
-/** Decisions whose subject or blocks name this initiative. */
+/** True when this decision, or any ask grouped into it, names the initiative. */
+function decisionTouchesInitiative(decision, wanted) {
+  if (decision.subject?.ref === wanted) return true;
+  if (decision.blocks?.some((block) => block.ref === wanted)) return true;
+  return (decision.batch?.members ?? []).some(
+    (member) =>
+      member.subjectRef === wanted ||
+      (member.blocks ?? []).some((block) => block.ref === wanted),
+  );
+}
+
+/** Decisions whose subject or blocks name this initiative, including any grouped ask. */
 export function decisionsForInitiative(brief, ref) {
   const wanted = text(ref);
   if (!wanted) return [];
   return sortDecisions(
-    (brief?.decisions ?? []).filter(
-      (decision) =>
-        decision.subject?.ref === wanted ||
-        decision.blocks.some((block) => block.ref === wanted),
+    (brief?.decisions ?? []).filter((decision) =>
+      decisionTouchesInitiative(decision, wanted),
     ),
   );
 }
 
-/** Find one decision by ref or inbox item id. */
+function decisionMatchesId(decision, wanted) {
+  if (decision.ref === wanted || decision.inboxItemId === wanted) return true;
+  return (decision.batch?.members ?? []).some(
+    (member) => member.ref === wanted || member.inboxItemId === wanted,
+  );
+}
+
+/**
+ * Find one decision by its ref or inbox item id, or by a grouped member's
+ * ref or inbox item id. A member permalink opens the group.
+ */
 export function findDecision(brief, id) {
   const wanted = text(id);
+  if (!wanted) return null;
   return (
-    (brief?.decisions ?? []).find(
-      (decision) => decision.ref === wanted || decision.inboxItemId === wanted,
+    (brief?.decisions ?? []).find((decision) =>
+      decisionMatchesId(decision, wanted),
     ) ?? null
   );
+}
+
+function overlayCoversDecision(decision, overlay) {
+  if (!decision || !overlay) return false;
+  if (
+    (decision.inboxItemId && overlay[decision.inboxItemId]) ||
+    (decision.ref && overlay[decision.ref])
+  ) {
+    return true;
+  }
+  return (decision.batch?.members ?? []).some(
+    (member) =>
+      (member.inboxItemId && overlay[member.inboxItemId]) ||
+      (member.ref && overlay[member.ref]),
+  );
+}
+
+/**
+ * How many decisions still wait. An answer recorded against the batch id, or
+ * against any member, drops the whole group.
+ */
+export function countWaitingDecisions(decisions, overlay = {}) {
+  return (decisions ?? []).filter(
+    (decision) => !overlayCoversDecision(decision, overlay),
+  ).length;
 }

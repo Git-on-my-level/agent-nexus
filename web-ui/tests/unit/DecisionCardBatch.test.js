@@ -36,6 +36,7 @@ vi.mock("$lib/actions/durableDraft.js", () => ({
 }));
 
 import DecisionCard from "../../src/lib/components/decide/DecisionCard.svelte";
+import { queueInboxResponse } from "$lib/inboxResponseQueue.js";
 import { normalizeBrief } from "../../src/lib/brief.js";
 
 const raw = {
@@ -59,6 +60,7 @@ const decide = (decision) =>
 afterEach(() => {
   cleanup();
   outbox.enqueueCurationUngroup.mockClear();
+  queueInboxResponse.mockClear();
 });
 
 describe("DecisionCard batch", () => {
@@ -106,6 +108,30 @@ describe("DecisionCard batch", () => {
     });
     await fireEvent.click(container.querySelector("[data-decision-ungroup]"));
     expect((await findByRole("alert")).textContent).toContain("not sent");
+  });
+
+  it("sends one answer to the batch inbox id, covering every member", async () => {
+    const decision = decide({
+      ...raw,
+      ref: "inbox:curation-batch:batch-key-1",
+      inbox_item_id: "inbox:curation-batch:batch-key-1",
+      proposals: ["Ship it", "Wait"],
+      requested_by: { id: "h1", display: "Dev", kind: "human" },
+    });
+    const { container } = render(DecisionCard, { decision });
+    await fireEvent.click(
+      container.querySelector("[data-decision-proposal='1']"),
+    );
+    expect(queueInboxResponse).toHaveBeenCalledTimes(1);
+    const call = queueInboxResponse.mock.calls[0][0];
+    expect(call.itemId).toBe("inbox:curation-batch:batch-key-1");
+    expect(call.itemId).not.toBe(decision.batch.members[0].inboxItemId);
+    expect(call.request).toMatchObject({
+      response_text: "Ship it",
+      outcome: "answered",
+      notify_mode: "none",
+    });
+    expect(call.request.answers).toBeUndefined();
   });
 
   it("refreshes the brief once the ungroup is confirmed", async () => {

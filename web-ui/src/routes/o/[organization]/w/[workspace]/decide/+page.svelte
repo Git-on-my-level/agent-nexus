@@ -2,7 +2,11 @@
   import { onMount, tick } from "svelte";
   import { page } from "$app/stores";
   import { briefStore, mountBrief } from "$lib/briefStore.js";
-  import { freshnessLabel, sortDecisions } from "$lib/brief.js";
+  import {
+    decisionsForInitiative,
+    freshnessLabel,
+    sortDecisions,
+  } from "$lib/brief.js";
   import { undoInboxResponse } from "$lib/inboxResponseQueue.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
@@ -27,14 +31,9 @@
 
   let initiative = $derived($page.url.searchParams.get("initiative") ?? "");
   let decisions = $derived(
-    sortDecisions(
-      ($brief.data?.decisions ?? []).filter(
-        (decision) =>
-          !initiative ||
-          decision.subject?.ref === initiative ||
-          decision.blocks.some((block) => block.ref === initiative),
-      ),
-    ),
+    initiative
+      ? decisionsForInitiative($brief.data, initiative)
+      : sortDecisions($brief.data?.decisions ?? []),
   );
   let freshness = $derived(freshnessLabel($brief.data?.asOf, now));
   let filterTitle = $derived(

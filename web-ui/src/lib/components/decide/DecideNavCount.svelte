@@ -1,5 +1,6 @@
 <script>
   import { briefStore, mountBrief } from "$lib/briefStore.js";
+  import { countWaitingDecisions } from "$lib/brief.js";
   import { readerScope } from "$lib/readerScope.js";
   import { inboxResponseOverlay } from "$lib/inboxResponseQueue.js";
 
@@ -23,9 +24,7 @@
   });
 
   let count = $derived(
-    ($brief?.data?.decisions ?? []).filter(
-      (decision) => !$inboxResponseOverlay[decision.inboxItemId],
-    ).length,
+    countWaitingDecisions($brief?.data?.decisions, $inboxResponseOverlay),
   );
   // The exact number, never "99+": a capped count hides how much waits.
   let text = $derived(enabled && count > 0 ? String(count) : "");
