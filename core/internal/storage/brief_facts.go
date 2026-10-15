@@ -95,6 +95,19 @@ func installBriefAskBatchID(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
+// requeueBriefPromiseFold dirties every card once so brief.v1 recomputes the
+// counted promise after a live note promise outranks plan-step dates. The
+// insert is one statement at migration time. Maintenance then drains
+// brief_dirty in its existing batches of 200.
+func requeueBriefPromiseFold(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "brief_dirty")
+	if err != nil || !exists {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO brief_dirty(card_id) SELECT id FROM cards`)
+	return err
+}
+
 // installBriefFacts materializes brief.v1 facts on write events (Move 2):
 // asks with resolved decide_by and blocks, card notes with resolved next and
 // evidence, and a dirty queue of cards whose promise fold must be refreshed.

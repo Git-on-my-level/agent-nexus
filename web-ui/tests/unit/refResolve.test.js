@@ -218,6 +218,23 @@ describe("collectPageRefs", () => {
 });
 
 describe("indexResolvedRefs", () => {
+  it("names a live note promise as the next step", () => {
+    const indexed = indexResolvedRefs({
+      items: [
+        {
+          ref: "card:loops",
+          kind: "card",
+          title: "Loop ledger",
+          next_step: { title: "Retire finished or dead loops" },
+          plan_health: {
+            promise: { source: "note", what: "Check the loop ledger" },
+          },
+        },
+      ],
+    });
+    expect(indexed.get("card:loops").nextStep).toBe("Check the loop ledger");
+  });
+
   it("indexes the fixture by ref", () => {
     expect(resolved.get("card:initiative-plans")).toMatchObject({
       kind: "card",

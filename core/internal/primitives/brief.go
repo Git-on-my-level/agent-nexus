@@ -800,11 +800,11 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	notes, err := b.latestNotes(ids)
+	notes, noteText, err := b.latestNotes(ids)
 	if err != nil {
 		return nil, false, err
 	}
-	moot, err := b.possiblyMoot(rows)
+	moot, err := b.possiblyMoot(rows, noteText)
 	if err != nil {
 		return nil, false, err
 	}
@@ -816,10 +816,7 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 			"ref": ref, "title": r.title, "state": state.State, "placement": briefPlacement(r.phase),
 			"promise": nil, "past_promise_for_seconds": nil, "promise_moves": state.Moves, "last_evidence_at": nil,
 			"progress": briefProgress(r.plan), "blocked_count": counts[r.cardID].blocked, "waiting_on_you_count": counts[r.cardID].waiting,
-			"note": nil, "possibly_moot": map[string]any{"flagged": false},
-		}
-		if m, ok := moot[r.cardID]; ok && m.Flagged {
-			item["possibly_moot"] = map[string]any{"flagged": true, "reason": m.Reason}
+			"note": nil, "possibly_moot": possiblyMootJSON(moot[r.cardID]),
 		}
 		if state.Promise != nil {
 			p := map[string]any{"at": state.Promise.At.UTC().Format(time.RFC3339), "what": state.Promise.What, "source": state.Promise.Source}
@@ -956,28 +953,50 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 }
 
 // latestNotes reads the newest live note per card in one statement: one
-// indexed seek per card id through idx_brief_notes_card_ts.
-func (b *briefBuild) latestNotes(cardIDs []string) (map[string]map[string]any, error) {
+// indexed seek per card id through idx_brief_notes_card_ts, plus that note's
+// payload so a cited event ref is visible without a second query. The second
+// result is the citation text (body and next step), keyed by card id.
+func (b *briefBuild) latestNotes(cardIDs []string) (map[string]map[string]any, map[string]string, error) {
 	out := map[string]map[string]any{}
+	texts := map[string]string{}
 	if len(cardIDs) == 0 {
-		return out, nil
+		return out, texts, nil
 	}
 	encoded, _ := json.Marshal(cardIDs)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT n.card_id,n.author,n.ts,n.excerpt FROM json_each(?) j JOIN brief_notes n ON n.event_id=(
-		SELECT x.event_id FROM brief_notes x JOIN events e ON e.id=x.event_id WHERE x.card_id=j.value AND COALESCE(e.trashed_at,'')='' ORDER BY x.ts DESC LIMIT 1)`, string(encoded))
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT n.card_id,n.author,n.ts,n.excerpt,e.payload_json FROM json_each(?) j JOIN brief_notes n ON n.event_id=(
+		SELECT x.event_id FROM brief_notes x JOIN events ev ON ev.id=x.event_id WHERE x.card_id=j.value AND COALESCE(ev.trashed_at,'')='' ORDER BY x.ts DESC LIMIT 1)
+		JOIN events e ON e.id=n.event_id`, string(encoded))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, author, ts, excerpt string
-		if err = rows.Scan(&id, &author, &ts, &excerpt); err != nil {
-			return nil, err
+		var id, author, ts, excerpt, payload string
+		if err = rows.Scan(&id, &author, &ts, &excerpt, &payload); err != nil {
+			return nil, nil, err
 		}
 		at, _ := time.Parse(time.RFC3339Nano, ts)
 		out[id] = map[string]any{"text": excerpt, "author": stripActor(author), "at": at.UTC().Format(time.RFC3339)}
+		texts[id] = noteCitationText(payload)
 	}
-	return out, rows.Err()
+	return out, texts, rows.Err()
+}
+
+func possiblyMootJSON(m PossiblyMoot) map[string]any {
+	out := map[string]any{"flagged": m.Flagged}
+	if m.Reason != "" {
+		out["reason"] = m.Reason
+	}
+	if m.Code != "" {
+		out["code"] = m.Code
+	}
+	if m.AskRef != "" {
+		out["ask_ref"] = m.AskRef
+	}
+	if m.DecidedAt != "" {
+		out["decided_at"] = m.DecidedAt
+	}
+	return out
 }
 
 func (b *briefBuild) resolveActors() error {
@@ -1029,71 +1048,91 @@ func (b *briefBuild) fillPrincipals(items []map[string]any, field string) {
 // briefMootRefBudget bounds the linked sources resolved for possibly_moot.
 const briefMootRefBudget = 400
 
-// possiblyMoot evaluates the overtaken flag for parked initiatives with the
-// same rule as plan reads (moot.go): plan step refs and related_refs, resolved
-// through the batched, reader-scoped ref facts. One metadata read plus at most
-// two ref-fact batches.
-func (b *briefBuild) possiblyMoot(rows []briefCardRow) (map[string]PossiblyMoot, error) {
+// possiblyMoot evaluates the overtaken flag with the same rule as plan reads
+// (moot.go). Linked-source terminal state applies to parked cards (backlog
+// and ready): plan step refs and related_refs, resolved through the batched,
+// reader-scoped ref facts. The latest-note ask rule applies to every open
+// phase. One metadata read plus at most two ref-fact batches, and only when
+// a parked card is on the page. Ask resolution is a further batched
+// primary-key lookup, and only when a latest note cites an event ref.
+func (b *briefBuild) possiblyMoot(rows []briefCardRow, noteText map[string]string) (map[string]PossiblyMoot, error) {
 	out := map[string]PossiblyMoot{}
 	parked := []string{}
 	planRefs := map[string][]string{}
+	texts := map[string]string{}
 	for _, r := range rows {
-		if r.open != 1 || !possiblyMootPhases[r.phase] {
+		if r.open != 1 {
 			continue
 		}
-		parked = append(parked, r.cardID)
-		var p plans.Plan
-		if r.plan != "" && json.Unmarshal([]byte(r.plan), &p) == nil {
-			planRefs[r.cardID] = planStepRefs(p)
-		}
-	}
-	if len(parked) == 0 {
-		return out, nil
-	}
-	encoded, _ := json.Marshal(parked)
-	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT card_id,COALESCE(json_extract(metadata_json,'$.related_refs'),'[]') FROM work_metadata WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
-	if err != nil {
-		return nil, err
-	}
-	related := map[string][]string{}
-	for rows2.Next() {
-		var id, raw string
-		if err = rows2.Scan(&id, &raw); err != nil {
-			rows2.Close()
-			return nil, err
-		}
-		var refs []string
-		_ = json.Unmarshal([]byte(raw), &refs)
-		related[id] = refs
-	}
-	rows2.Close()
-	if err = rows2.Err(); err != nil {
-		return nil, err
-	}
-	refs, seen := []string{}, map[string]bool{}
-	linked := map[string][]string{}
-	for _, id := range parked {
-		linked[id] = possiblyMootLinked(append(append([]string{}, planRefs[id]...), related[id]...))
-		for _, ref := range linked[id] {
-			if !seen[ref] && len(refs) < briefMootRefBudget {
-				seen[ref] = true
-				refs = append(refs, ref)
+		if possiblyMootPhases[r.phase] {
+			parked = append(parked, r.cardID)
+			var p plans.Plan
+			if r.plan != "" && json.Unmarshal([]byte(r.plan), &p) == nil {
+				planRefs[r.cardID] = planStepRefs(p)
 			}
 		}
+		if nextAskOpenPhase(r.phase) && noteText[r.cardID] != "" {
+			texts[r.cardID] = noteText[r.cardID]
+		}
 	}
+	if len(parked) == 0 && len(texts) == 0 {
+		return out, nil
+	}
+	linked := map[string][]string{}
 	facts := map[string]plans.Fact{}
-	for start := 0; start < len(refs); start += 200 {
-		end := min(start+200, len(refs))
-		previews, err := b.s.readRefFacts(b.ctx, refs[start:end], b.reader.Visible)
+	if len(parked) > 0 {
+		encoded, _ := json.Marshal(parked)
+		rows2, err := b.s.db.QueryContext(b.ctx, `SELECT card_id,COALESCE(json_extract(metadata_json,'$.related_refs'),'[]') FROM work_metadata WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
 		if err != nil {
 			return nil, err
 		}
-		for _, row := range previews {
-			facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
+		related := map[string][]string{}
+		for rows2.Next() {
+			var id, raw string
+			if err = rows2.Scan(&id, &raw); err != nil {
+				rows2.Close()
+				return nil, err
+			}
+			var refs []string
+			_ = json.Unmarshal([]byte(raw), &refs)
+			related[id] = refs
+		}
+		rows2.Close()
+		if err = rows2.Err(); err != nil {
+			return nil, err
+		}
+		refs, seen := []string{}, map[string]bool{}
+		for _, id := range parked {
+			linked[id] = possiblyMootLinked(append(append([]string{}, planRefs[id]...), related[id]...))
+			for _, ref := range linked[id] {
+				if !seen[ref] && len(refs) < briefMootRefBudget {
+					seen[ref] = true
+					refs = append(refs, ref)
+				}
+			}
+		}
+		for start := 0; start < len(refs); start += 200 {
+			end := min(start+200, len(refs))
+			previews, err := b.s.readRefFacts(b.ctx, refs[start:end], b.reader.Visible)
+			if err != nil {
+				return nil, err
+			}
+			for _, row := range previews {
+				facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
+			}
 		}
 	}
+	askMoot, err := b.s.nextAskMootFromNotes(b.ctx, texts, b.reader.Visible, b.now)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range parked {
-		out[id] = PossiblyMootFromFacts(linked[id], facts)
+		out[id] = mergeNextAsk(PossiblyMootFromFacts(linked[id], facts), askMoot[id])
+	}
+	for id, moot := range askMoot {
+		if _, seen := out[id]; !seen {
+			out[id] = moot
+		}
 	}
 	return out, nil
 }

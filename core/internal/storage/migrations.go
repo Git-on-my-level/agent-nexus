@@ -1112,6 +1112,9 @@ var migrations = []migration{
 	// Filed-batch respond ids follow the oldest member of the whole batch.
 	// brief_asks.batch_id plus idx_brief_asks_batch is that seek.
 	{Version: 97, AfterApply: installBriefAskBatchID},
+	// A live note promise is the stated next. Existing briefs were folded
+	// when an earlier plan-step date could win, so requeue them once.
+	{Version: 98, AfterApply: requeueBriefPromiseFold},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

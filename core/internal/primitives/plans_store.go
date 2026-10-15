@@ -353,13 +353,14 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 		return nil, nil, nil, err
 	}
 	// Note promises: one bounded statement per batch (ids <= summaryBatchSize).
-	notes, err := s.promiseNotesBatch(ctx, ids)
+	notes, texts, err := s.promiseNotesBatch(ctx, ids)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	for id, list := range notes {
 		if input, ok := movement[id]; ok {
 			input.Notes = list
+			input.NextNote = texts[id]
 			movement[id] = input
 		}
 	}
@@ -466,6 +467,16 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	if err != nil {
 		return nil, err
 	}
+	noteTexts := map[string]string{}
+	for _, row := range out {
+		if row.Resolvable && row.Kind == "card" && nextAskOpenPhase(row.Phase) && movement[row.ID].NextNote != "" {
+			noteTexts[row.ID] = movement[row.ID].NextNote
+		}
+	}
+	askMoot, err := s.nextAskMootFromNotes(ctx, noteTexts, visible, now)
+	if err != nil {
+		return nil, err
+	}
 	summaries := map[string]*WorkSummary{}
 	for i, row := range out {
 		if row.Kind != "card" || !row.Resolvable {
@@ -489,7 +500,7 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			out[i].NextStep = plans.ReadyStep(value, state, func(step plans.Step) bool { return step.Ref == "" || facts[step.Ref].Known })
 			out[i].StatusMismatch = row.Phase == "backlog" && state.Progress.Done > 0
 		}
-		moot := cardPossiblyMoot(input, p, facts)
+		moot := mergeNextAsk(cardPossiblyMoot(input, p, facts), askMoot[row.ID])
 		out[i].PossiblyMoot = &moot
 		health := input.health("", p, state, facts, now)
 		out[i].PlanHealth = &health
@@ -559,6 +570,18 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 	if err != nil {
 		return err
 	}
+	noteTexts := map[string]string{}
+	for _, card := range cards {
+		id := workString(card["id"])
+		input := movement[id]
+		if nextAskOpenPhase(input.Phase) && input.NextNote != "" {
+			noteTexts[id] = input.NextNote
+		}
+	}
+	askMoot, err := s.nextAskMootFromNotes(ctx, noteTexts, visible, now)
+	if err != nil {
+		return err
+	}
 	summaries := map[string]*WorkSummary{}
 	for _, card := range cards {
 		id := workString(card["id"])
@@ -584,8 +607,12 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 			card["plan_step_digest"] = plans.Digest(value, state, facts, now, plans.StepDigestWindow, plans.StepDigestLimit)
 			card["status_mismatch"] = firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])) == "backlog" && state.Progress.Done > 0
 		}
-		card["possibly_moot"] = cardPossiblyMoot(input, p, facts)
-		card["plan_health"] = input.health("", p, state, facts, now)
+		card["possibly_moot"] = mergeNextAsk(cardPossiblyMoot(input, p, facts), askMoot[id])
+		health := input.health("", p, state, facts, now)
+		card["plan_health"] = health
+		if next := displayedNextAction(workString(card["next_action"]), workString(card["next_action_at"]), input.Notes, health.Promise); next != workString(card["next_action"]) {
+			card["next_action"] = next
+		}
 		if !legacy {
 			summaries[id] = buildWorkSummary(input, p, state, facts, now)
 			card["work_summary"] = summaries[id]

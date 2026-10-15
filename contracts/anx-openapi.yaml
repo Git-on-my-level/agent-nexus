@@ -11491,7 +11491,7 @@ components:
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "Computed on read from one clock, promise versus evidence (anx-schema promises). The counted promise is the earliest unmet at among open plan-step due dates, the latest note next per author, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition. Resets are a note carrying resolved evidence, a plan-step state change (a linked step resource moving, or a plan edit) and a changed source observation; last_evidence_at is the newest reset. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (open, nothing promised). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
+      description: "Computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (open, nothing promised). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
       properties:
         state: {type: string, enum: [past_promise, moving, no_promise, done]}
         reason: {type: string}
@@ -11503,11 +11503,14 @@ components:
     PossiblyMoot:
       type: object
       required: [flagged, sources]
-      description: "Overtaken by events. Only sources ANX has actually observed count as terminal — a done card, or a PR observed merged or closed through the observation cache. A backlog or ready card, or an open ask, is flagged when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published, resolved). Linked sources are plan step refs and related_refs, resolved through the batched evidence-backed ref resolution; PR URLs read merged from ingested observations, never a read-time fetch. Context-only refs (documents, topics, boards, threads) neither contribute nor block; any other ref that is unresolved, invisible to the reader or of unknown workflow state withholds the flag entirely. Never closes anything: the flag only carries evidence so a human or agent can close the card or ask."
+      description: "Overtaken by events. Only sources ANX has actually observed count as terminal — a done card, or a PR observed merged or closed through the observation cache. A backlog or ready card, or an open ask, is flagged when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published, resolved). Linked sources are plan step refs and related_refs, resolved through the batched evidence-backed ref resolution; PR URLs read merged from ingested observations, never a read-time fetch. Context-only refs (documents, topics, boards, threads) neither contribute nor block; any other ref that is unresolved, invisible to the reader or of unknown workflow state withholds the flag entirely. The ask rule uses the phase the brief shows. A card placed in backlog, ready, in_progress, or review is also flagged when its latest live note — the note brief.v1 shows — cites an explicit event ref to an inbox ask or review the reader can see that is already answered, resolved, withdrawn, or expired, including a needs_context answer whose expires_at has passed. Stored blocked is placed in in_progress and stored in_review is placed in review, so both are eligible. done and cancelled stay closed. The linked-source rule stays on stored backlog and ready. The ask rule can flag with sources still zero. Prose without that ref is ignored. An ask the reader cannot see does not flag and is not named. Never closes anything: the flag only carries evidence so a human or agent can close the card or ask."
       properties:
         flagged: {type: boolean}
-        reason: {type: string, description: Evidence sentence over observed sources only, for example "all 2 linked sources are merged".}
-        sources: {type: integer, description: Number of known linked sources; zero when any linked source is unobserved or of unknown state, which withholds the flag.}
+        reason: {type: string, description: "Evidence sentence over observed sources only, for example \"all 2 linked sources are merged\", or the code next_ask_decided when that rule is what flagged the card."}
+        sources: {type: integer, description: Number of known linked sources; zero when any linked source is unobserved or of unknown state, which withholds the source rule. The next-ask rule can flag with sources still zero.}
+        code: {type: string, description: "Machine reason. next_ask_decided when the latest note cites a visible inbox ask or review that is already answered, resolved, withdrawn, or expired. Omitted for the linked-source rule."}
+        ask_ref: {type: string, description: "event ref of the decided ask. Omitted unless code is next_ask_decided. Never set for an ask the reader cannot see."}
+        decided_at: {type: string, format: date-time, description: "When that ask was answered, withdrawn, or expired. Omitted unless code is next_ask_decided."}
     PlanStepDigestList:
       type: object
       required: [items, more]
@@ -13603,7 +13606,10 @@ components:
           required: [flagged]
           properties:
             flagged: { type: boolean }
-            reason: { type: string }
+            reason: { type: string, description: "Linked-source evidence sentence, or next_ask_decided when the latest note cites a decided ask." }
+            code: { type: string, description: "next_ask_decided when that rule flags the initiative." }
+            ask_ref: { type: string, description: "event ref of the decided ask. Absent when the reader cannot see it; an invisible ask does not flag." }
+            decided_at: { type: string, format: date-time }
     BriefSeries:
       type: object
       required: [ref, name, labels, last_value, last_at]

@@ -456,12 +456,14 @@ Card reads/lists, work reads/lists, ref previews, initiative overview and live
 reports add `plan_health: {state, reason, since}`, `next_step: {id, title, ref}`
 (or null), `status_mismatch`, and `possibly_moot` alongside existing progress and `plan_state`.
 The state is one clock, promise versus evidence (`promises` in
-`contracts/anx-schema.yaml`). The counted promise is the earliest unmet `at`
-among open step due dates, the effective card `due_at`, the first RFC3339
-instant or YYYY-MM-DD date inside `wake_condition` (first 1024 bytes scanned)
-and each author's latest note `next`. Resets are a linked step resource moving,
-a plan edit, a changed source observation and a note carrying resolved
-evidence; card chatter without evidence is not a reset, and repeated source
+`contracts/anx-schema.yaml`). A live note promise is the stated next, so
+`reason` names that note's next step and date. Open step due dates, the
+effective card `due_at`, and the first RFC3339 instant or YYYY-MM-DD date
+inside `wake_condition` (first 1024 bytes scanned) are milestones and count
+only when no live note promise remains. Evidence, a step status change, a
+linked step moving, or a changed source observation meets a note promise. A
+plan edit meets a milestone inside the horizon and does not meet a note
+promise. Card chatter without evidence is not a reset, and repeated source
 polls do not count. States: `done` (card done or cancelled), `past_promise`
 (the counted promise is past and no reset landed since), `moving` (a counted
 promise is still ahead) and `no_promise`. There are no inactivity thresholds,
@@ -472,7 +474,8 @@ explain the state. `since` is `promise.at` for `past_promise` and
 critical path, then lexicographic id, skipping unreadable linked resources.
 `status_mismatch` is true for backlog cards with completed steps; computation
 never changes phase.
-`possibly_moot` is `{flagged, reason, sources}`: only sources ANX has actually
+`possibly_moot` is `{flagged, reason, sources}`, plus `code`, `ask_ref` and
+`decided_at` when the next-ask rule flags the card: only sources ANX has actually
 observed count as terminal — a done card, or a PR observed merged or closed
 through the observation cache. A backlog or ready card — or an open inbox ask
 over its `subject_ref` and `related_refs` — is flagged when at least one linked
@@ -482,8 +485,17 @@ the ingested observation evidence, never a read-time fetch. Context-only refs
 (documents, topics, boards, threads) neither contribute nor block; any other
 ref that is unresolved, invisible to the reader, or of unknown workflow state
 withholds the flag entirely — an unobserved source never counts as terminal.
-`sources` counts the known sources and zero never flags. The flag only carries evidence ("all 2
-linked sources are merged"); it never auto-closes anything, and computation
+`sources` counts the known sources. Zero sources withholds the linked-source
+rule; the next-ask rule can flag with sources still zero. The ask rule uses
+the phase the brief shows. A card placed in backlog, ready, in_progress, or
+review is flagged (`code: next_ask_decided`) when its latest live note cites
+an explicit `event:<id>` of an inbox ask or review the reader can see that is
+already answered, resolved, withdrawn, or expired. Stored `blocked` is placed
+in `in_progress` and stored `in_review` is placed in `review`, so both are
+eligible. `done` and `cancelled` stay closed. The linked-source rule stays on
+stored backlog and ready. An ask the reader cannot see does not flag and is
+not named. The flag only carries evidence ("all 2
+linked sources are merged", or the code `next_ask_decided`); it never auto-closes anything, and computation
 never changes phase.
 
 ### Computed card summaries

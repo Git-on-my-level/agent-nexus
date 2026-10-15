@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit refs, scope
 
 # ANX participant
 
-Skill contract: anx.participant.v22.
+Skill contract: anx.participant.v23.
 
 ## Identity and workspace
 
@@ -29,7 +29,7 @@ Ask only for a decision a human must make. One-line title, Markdown body, two or
 
 ## Promises
 
-Say when you will next have news: `anx note <card> "<text>" --next <when> "<what>" --evidence <ref>`. Evidence resets the clock. Moving a promise without evidence is counted and visible. Keep promises within about 2 days, and renew them by noting.
+Say when you will next have news: `anx note <card> "<text>" --next <when> "<what>" --evidence <ref>`. Evidence resets the clock. Moving a promise without evidence is counted and visible. Keep promises within about 2 days, and renew them by noting. When the next step waits on an ask, cite it as `event:<ask-id>` in the note.
 
 ## Everything else
 

@@ -55,12 +55,16 @@ type PromiseInput struct {
 	Done  bool
 	Notes []PromiseNote // any order; the newest MaxPromiseNotes are used
 	Steps []PromiseStep // open steps only
-	// StepChanges and Observations are reset events (plan-step state changes
-	// and changed source observations), newest last or in any order.
+	// StepChanges and Observations are reset events (plan-step status changes,
+	// a linked step resource moving, and changed source observations).
 	StepChanges  []time.Time
 	Observations []time.Time
-	CardDue      time.Time
-	Wake         time.Time
+	// PlanEdits are plan-document writes. They meet milestone promises inside
+	// the horizon and count as last evidence. They do not meet a note promise:
+	// plan-step dates are milestones, not the stated next.
+	PlanEdits []time.Time
+	CardDue   time.Time
+	Wake      time.Time
 }
 
 // Promise is the counted promise.
@@ -94,12 +98,13 @@ type PromiseState struct {
 //   - Resets are a note with resolved evidence, a plan-step state change and a
 //     changed source observation. last_evidence_at is the newest reset.
 //   - A note promise counts for the author's latest note carrying next. It is
-//     met (and stops counting) when any reset lands after the note; a reset
-//     landing after its at ends the miss as well, so late evidence clears it.
-//   - Step, due_at and wake promises have no made-at in the fold. A past one
-//     is met when a reset landed within the horizon before its at, (at-2d, at];
-//     otherwise it counts while the step or card stays open.
-//   - The counted promise is the earliest unmet at.
+//     met when evidence, a step status change, a linked step moving, or a
+//     changed observation lands after the note. A plan edit does not meet it.
+//   - Step, due_at and wake promises are milestones. A past one is met when a
+//     reset or plan edit landed within the horizon before its at, (at-2d, at].
+//   - A live note promise is the stated next (the earliest, if several
+//     principals have one). Milestones count only when no live note remains,
+//     and then the earliest unmet at wins.
 //   - A move is a note without evidence that changes its author's previous
 //     next.at; moves count since the last reset.
 func FoldPromise(in PromiseInput) PromiseFold {
@@ -117,7 +122,7 @@ func FoldPromise(in PromiseInput) PromiseFold {
 			resets = append(resets, n.At)
 		}
 	}
-	for _, r := range resets {
+	for _, r := range append(append([]time.Time{}, resets...), in.PlanEdits...) {
 		if r.After(out.LastEvidenceAt) {
 			out.LastEvidenceAt = r
 		}
@@ -125,15 +130,16 @@ func FoldPromise(in PromiseInput) PromiseFold {
 	if in.Done {
 		return out
 	}
-	resetIn := func(from, to time.Time) bool { // (from, to]
-		for _, r := range resets {
+	landed := func(times []time.Time, from, to time.Time) bool { // (from, to]
+		for _, r := range times {
 			if r.After(from) && !r.After(to) {
 				return true
 			}
 		}
 		return false
 	}
-	var candidates []Promise
+	var notesLive []Promise
+	var milestones []Promise
 	latest := map[string]PromiseNote{}
 	previous := map[string]time.Time{}
 	for _, n := range notes {
@@ -148,16 +154,17 @@ func FoldPromise(in PromiseInput) PromiseFold {
 		latest[n.Author] = n
 	}
 	for author, n := range latest {
-		if resetIn(n.At, farFuture) {
+		if landed(resets, n.At, farFuture) {
 			continue
 		}
-		candidates = append(candidates, Promise{At: n.NextAt, What: clipWhat(n.NextWhat), Source: "note", SourceRef: eventRef(n.EventID), Author: author})
+		notesLive = append(notesLive, Promise{At: n.NextAt, What: clipWhat(n.NextWhat), Source: "note", SourceRef: eventRef(n.EventID), Author: author})
 	}
+	milestoneReset := append(append([]time.Time{}, resets...), in.PlanEdits...)
 	fixed := func(at time.Time, what, source, ref string) {
-		if at.IsZero() || resetIn(at.Add(-PromiseHorizon), at) {
+		if at.IsZero() || landed(milestoneReset, at.Add(-PromiseHorizon), at) {
 			return
 		}
-		candidates = append(candidates, Promise{At: at, What: clipWhat(what), Source: source, SourceRef: ref})
+		milestones = append(milestones, Promise{At: at, What: clipWhat(what), Source: source, SourceRef: ref})
 	}
 	for _, s := range in.Steps {
 		ref := ""
@@ -168,14 +175,18 @@ func FoldPromise(in PromiseInput) PromiseFold {
 	}
 	fixed(in.CardDue, "due", "due_at", in.Ref)
 	fixed(in.Wake, "wake", "wake_condition", in.Ref)
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if !candidates[i].At.Equal(candidates[j].At) {
-			return candidates[i].At.Before(candidates[j].At)
+	chosen := milestones
+	if len(notesLive) > 0 {
+		chosen = notesLive
+	}
+	sort.SliceStable(chosen, func(i, j int) bool {
+		if !chosen[i].At.Equal(chosen[j].At) {
+			return chosen[i].At.Before(chosen[j].At)
 		}
-		return candidates[i].Source+candidates[i].SourceRef < candidates[j].Source+candidates[j].SourceRef
+		return chosen[i].Source+chosen[i].SourceRef < chosen[j].Source+chosen[j].SourceRef
 	})
-	if len(candidates) > 0 {
-		p := candidates[0]
+	if len(chosen) > 0 {
+		p := chosen[0]
 		out.Promise = &p
 	}
 	return out
