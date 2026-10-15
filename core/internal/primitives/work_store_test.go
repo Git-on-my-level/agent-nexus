@@ -600,6 +600,68 @@ func TestBoardMoveBindsAndAdvancesWorkRevision(t *testing.T) {
 	}
 }
 
+func TestMoveAcceptsNexusCardWithoutWorkMetadata(t *testing.T) {
+	t.Parallel()
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	created, err := s.CreateBoardCard(ctx, "actor-1", b, primitives.AddBoardCardInput{
+		Title:     "Backlog initiative",
+		ColumnKey: "backlog",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := fmt.Sprint(created.Card["id"])
+	work, err := s.GetWork(ctx, fmt.Sprint(created.Card["ref"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, _ := work["source"].(map[string]any)
+	if work["version"] != int64(0) || work["phase"] != "backlog" || source["authority"] != "nexus" {
+		t.Fatalf("unversioned nexus card: %#v", work)
+	}
+	board, err := s.GetBoard(ctx, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _ := board["updated_at"].(string)
+	version := int64(0)
+	empty := []string{}
+	for _, column := range []string{"ready", "in_progress", "review"} {
+		result, err := s.MoveBoardCard(ctx, "actor-1", b, id, primitives.MoveBoardCardInput{
+			ColumnKey:        column,
+			BeforeCardID:     "",
+			IfBoardUpdatedAt: &token,
+			IfWorkVersion:    &version,
+			ResolutionRefs:   &empty,
+		})
+		if err != nil {
+			t.Fatalf("move to %s: %v", column, err)
+		}
+		if result.Card["column_key"] != column {
+			t.Fatalf("column %s: %#v", column, result.Card["column_key"])
+		}
+		token, _ = result.Board["updated_at"].(string)
+		version++
+	}
+	moved, err := s.GetWork(ctx, id)
+	if err != nil || moved["phase"] != "review" || moved["version"] != version {
+		t.Fatalf("after moves %#v %v", moved, err)
+	}
+	_, err = s.MoveBoardCard(ctx, "actor-1", b, id, primitives.MoveBoardCardInput{
+		ColumnKey:        "done",
+		IfBoardUpdatedAt: &token,
+		IfWorkVersion:    &version,
+	})
+	if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("done without evidence: %v", err)
+	}
+	after, err := s.GetWork(ctx, id)
+	if err != nil || after["phase"] != "review" || after["version"] != version {
+		t.Fatalf("rejected done mutated work %#v %v", after, err)
+	}
+}
+
 func TestCreateWorkWithoutBoardRefCreatesDefaultBoard(t *testing.T) {
 	t.Parallel()
 	s := newEmptyWorkTestStore(t)

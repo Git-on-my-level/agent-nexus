@@ -47,7 +47,10 @@ export function taskMoveRequest(draft, actor, key) {
     throw new Error(
       "This initiative changed. Use the latest version before moving it.",
     );
-  if (!Number.isSafeInteger(Number(work.version)) || Number(work.version) < 1)
+  // A card with no work_metadata row is still Nexus-owned. GetWork reports
+  // version 0, and the move endpoint accepts that fence.
+  const version = Number(work.version);
+  if (!Number.isSafeInteger(version) || version < 0)
     throw new Error(
       "This initiative changed. Use the latest version before moving it.",
     );
@@ -61,7 +64,7 @@ export function taskMoveRequest(draft, actor, key) {
         request_key: key,
         column_key: phase,
         if_board_updated_at: boardToken,
-        if_version: Number(work.version),
+        if_version: version,
         ...(Object.hasOwn(draft, "beforeCardId")
           ? { before_card_id: draft.beforeCardId }
           : {}),
@@ -71,6 +74,13 @@ export function taskMoveRequest(draft, actor, key) {
       },
     },
   };
+}
+
+export function taskMoveError(error) {
+  const reason = error instanceof Error ? error.message.trim() : "";
+  return reason
+    ? `Couldn't save that move. ${reason}`
+    : "Couldn't save that move. Try again.";
 }
 
 export function enqueueTaskMove(draft, options = {}) {

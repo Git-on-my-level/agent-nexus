@@ -19,6 +19,7 @@
   import {
     enqueueTaskMove,
     taskMoveDraft,
+    taskMoveError,
     taskMoveTarget,
     isTaskMove,
   } from "$lib/taskMoveWork.js";
@@ -137,11 +138,11 @@
       });
       // The confirmation effect above re-reads the brief once core accepts it.
       notice = { text: "Saved. Waiting for confirmation." };
-    } catch {
+    } catch (err) {
       const rest = { ...placed };
       delete rest[row.ref];
       placed = rest;
-      moveError = "Couldn't save that move. Try again.";
+      moveError = taskMoveError(err);
     }
   }
 
