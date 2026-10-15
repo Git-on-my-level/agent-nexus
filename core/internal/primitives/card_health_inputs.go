@@ -25,6 +25,9 @@ type cardHealthInput struct {
 	// Notes are the card's promise notes, loaded once per loadPlans batch
 	// through Store.PromiseNotesFor; nil for lightweight summaries.
 	Notes []plans.PromiseNote
+	// NextNote is the citation text of the newest live note, the same note
+	// brief.v1 shows. Empty when the card has no live note.
+	NextNote string
 }
 
 // health folds this card's promise facts (contracts promises/plan_health).
@@ -64,30 +67,46 @@ func latestCardActivity(values ...string) time.Time {
 // promiseNotesBatch loads the newest plans.MaxPromiseNotes promise notes per
 // card for one loadPlans batch (at most summaryBatchSize ids) in a single
 // statement over idx_brief_notes_card_ts: the bound grows with the batch,
-// never with workspace size or note history.
-func (s *Store) promiseNotesBatch(ctx context.Context, ids []string) (map[string][]plans.PromiseNote, error) {
+// never with workspace size or note history. The same statement also reads
+// the newest live note's payload, one indexed seek per card id, so the
+// next-ask moot rule can see event refs without a second query.
+func (s *Store) promiseNotesBatch(ctx context.Context, ids []string) (map[string][]plans.PromiseNote, map[string]string, error) {
 	out := map[string][]plans.PromiseNote{}
+	texts := map[string]string{}
 	if len(ids) == 0 {
-		return out, nil
+		return out, texts, nil
 	}
 	encoded, err := json.Marshal(ids)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT page.value,n.event_id,n.author,n.ts,COALESCE(n.next_at,''),n.next_what,n.evidence FROM json_each(?) page JOIN brief_notes n ON n.event_id IN (SELECT event_id FROM brief_notes WHERE card_id=page.value ORDER BY ts DESC LIMIT ?)`, string(encoded), plans.MaxPromiseNotes)
+	rows, err := s.db.QueryContext(ctx, `SELECT page.value,n.event_id,n.author,n.ts,COALESCE(n.next_at,''),n.next_what,n.evidence,COALESCE(latest.payload_json,'')
+		FROM json_each(?) page
+		JOIN brief_notes n ON n.event_id IN (SELECT event_id FROM brief_notes WHERE card_id=page.value ORDER BY ts DESC LIMIT ?)
+		LEFT JOIN (
+			SELECT x.card_id, e.payload_json
+			FROM json_each(?) ids
+			JOIN brief_notes x ON x.event_id=(
+				SELECT y.event_id FROM brief_notes y JOIN events ev ON ev.id=y.event_id
+				WHERE y.card_id=ids.value AND COALESCE(ev.trashed_at,'')='' ORDER BY y.ts DESC LIMIT 1)
+			JOIN events e ON e.id=x.event_id
+		) latest ON latest.card_id=page.value`, string(encoded), plans.MaxPromiseNotes, string(encoded))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, ts, next string
+		var id, ts, next, payload string
 		var n plans.PromiseNote
-		if err = rows.Scan(&id, &n.EventID, &n.Author, &ts, &next, &n.NextWhat, &n.Evidence); err != nil {
-			return nil, err
+		if err = rows.Scan(&id, &n.EventID, &n.Author, &ts, &next, &n.NextWhat, &n.Evidence, &payload); err != nil {
+			return nil, nil, err
 		}
 		n.At, _ = time.Parse(time.RFC3339Nano, ts)
 		n.NextAt, _ = time.Parse(time.RFC3339Nano, next)
 		out[id] = append(out[id], n)
+		if payload != "" && texts[id] == "" {
+			texts[id] = noteCitationText(payload)
+		}
 	}
-	return out, rows.Err()
+	return out, texts, rows.Err()
 }

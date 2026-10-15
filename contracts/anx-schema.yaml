@@ -1262,14 +1262,17 @@ plan_health:
     - status_mismatch is true only for backlog cards with completed plan steps. Computation never changes phase.
 
 possibly_moot:
-  fields: [flagged, reason, sources]
-  shape: {flagged: boolean, reason: string, sources: integer}
+  fields: [flagged, reason, sources, code, ask_ref, decided_at]
+  shape: {flagged: boolean, reason: string, sources: integer, code: string, ask_ref: string, decided_at: timestamp}
   semantics:
     - Emitted beside status_mismatch on card reads, lists, refs resolve, the plan response and the initiative overview, always present there as flagged false when not flagged. On inbox items the field appears only on an open ask-shaped item whose linked sources the page's resolver actually evaluated; anything else omits the key, so the scoped readmodel hydration mirrors the HTTP payload byte for byte.
     - Only sources ANX has actually observed count as terminal: a done card, or a PR observed merged or closed through the observation cache. A card stored in backlog or ready is flagged possibly moot when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published or resolved). An open ask is flagged on the same rule over its subject_ref and related_refs.
     - Linked sources are the card's plan step refs and its related_refs annotation, resolved through the same batched evidence-backed resolution as plan facts; a PR URL resolves merged through the ingested observation that published it, never through a network fetch at read time.
     - Context-only refs (document, topic, board, thread) neither contribute to nor block the set. Every other linked source must be observed: a ref with no fact, an unresolved one (including a card invisible to the reader, or a ref dropped by the shared ref budget), or one whose workflow state is unknown withholds the flag entirely — an unobserved or unknown source never counts as terminal, and the evidence never names it. sources counts the known sources, and zero sources never flags.
-    - reason is evidence, not advice; "all 2 linked sources are merged" uses the common source status when uniform, otherwise "all N linked sources are done".
+    - reason is evidence, not advice; "all 2 linked sources are merged" uses the common source status when uniform, otherwise "all N linked sources are done". When the next-ask rule is what flags the card, reason is the code next_ask_decided. If both rules flag, reason stays the linked-source sentence and code carries next_ask_decided.
+    - A backlog or ready card is also flagged when its newest live note (the note brief.v1 shows as note; the same note supplies a note promise when it carries next) contains an explicit event:<id> ref to an inbox ask or review. The ref must resolve to a human_attention_requested the reader can see whose state is answered (including outcome resolved, but not needs_context), withdrawn, or expired (resolution or expires_at in the past). At most 8 event refs are read from that note, in appearance order. Prose that does not cite event:<id> is ignored. A newer note that does not cite the ref clears the flag. ask_ref is event:<id> and decided_at is the answer, withdrawal, or expiry instant.
+    - An ask the reader cannot see — hidden by the scoped events relation or by the same PM-private filter as other brief rows — does not flag and is not named. The evidence never reveals that a withheld ask was answered.
+    - The ask lookup is skipped unless the latest note cites an event ref. It is one indexed seek per batch of at most 200 refs (brief_asks primary key, plus idx_events_handle_unique for a handle spelling), bounded by the page, never by workspace size.
     - Computation never mutates phase or closes anything. The flag only surfaces evidence so a human or agent can close the card or ask itself; it may be stale the moment it is computed and never suppresses asks or notifications on its own.
 
 inbox_summary:

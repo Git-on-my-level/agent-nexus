@@ -3,6 +3,7 @@ package primitives
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/plans"
 )
@@ -161,5 +162,115 @@ func TestCardPossiblyMootEligibility(t *testing.T) {
 	moot := cardPossiblyMoot(cardHealthInput{Phase: "ready", Related: []string{"https://example.test/pr/1"}}, nil, facts)
 	if !moot.Flagged || moot.Sources != 1 {
 		t.Fatal(moot)
+	}
+}
+
+func TestNextAskDecidedMoot(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	decided := time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	asks := func(state, outcome, reason string, visible bool) map[string]citedAsk {
+		return map[string]citedAsk{
+			"ask-1": {ID: "ask-1", Kind: "ask", State: state, Outcome: outcome, Reason: reason, AnsweredAt: decided, Visible: visible},
+		}
+	}
+	for _, tc := range []struct {
+		name        string
+		text        string
+		asks        map[string]citedAsk
+		wantFlagged bool
+		wantRef     string
+	}{
+		{
+			name:        "answered ask flags",
+			text:        "next step waits on event:ask-1",
+			asks:        asks("answered", "answered", "", true),
+			wantFlagged: true,
+			wantRef:     "event:ask-1",
+		},
+		{
+			name:        "resolved outcome flags",
+			text:        "blocked on event:ask-1",
+			asks:        asks("answered", "resolved", "", true),
+			wantFlagged: true,
+			wantRef:     "event:ask-1",
+		},
+		{
+			name:        "withdrawn ask flags",
+			text:        "still pointing at event:ask-1",
+			asks:        asks("withdrawn", "", "", true),
+			wantFlagged: true,
+			wantRef:     "event:ask-1",
+		},
+		{
+			name:        "expired open ask flags",
+			text:        "waiting on event:ask-1",
+			asks:        map[string]citedAsk{"ask-1": {ID: "ask-1", Kind: "ask", State: "open", ExpiresAt: "2026-10-01T00:00:00Z", Visible: true}},
+			wantFlagged: true,
+			wantRef:     "event:ask-1",
+		},
+		{
+			name: "review that was answered flags",
+			text: "review event:rev-1",
+			asks: map[string]citedAsk{
+				"rev-1": {ID: "rev-1", Kind: "review", State: "answered", Outcome: "approved", AnsweredAt: decided, Visible: true},
+			},
+			wantFlagged: true,
+			wantRef:     "event:rev-1",
+		},
+		{
+			name:        "open ask does not flag",
+			text:        "next step waits on event:ask-1",
+			asks:        asks("open", "", "", true),
+			wantFlagged: false,
+		},
+		{
+			name:        "needs_context is still waiting",
+			text:        "event:ask-1",
+			asks:        asks("answered", "needs_context", "", true),
+			wantFlagged: false,
+		},
+		{
+			name:        "prose without a ref does not flag",
+			text:        "waiting on the budget ask David already answered",
+			asks:        asks("answered", "answered", "", true),
+			wantFlagged: false,
+		},
+		{
+			name:        "invisible ask does not flag and is not named",
+			text:        "next step waits on event:ask-1",
+			asks:        asks("answered", "answered", "", false),
+			wantFlagged: false,
+		},
+		{
+			name:        "a ref that is not an ask does not flag",
+			text:        "see event:note-9",
+			asks:        map[string]citedAsk{},
+			wantFlagged: false,
+		},
+		{
+			name: "newer note text without the ref does not flag",
+			text: "shipped the draft",
+			asks: asks("answered", "answered", "", true),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nextAskDecidedMoot(tc.text, tc.asks, now)
+			if got.Flagged != tc.wantFlagged {
+				t.Fatalf("flagged=%v want %v (%+v)", got.Flagged, tc.wantFlagged, got)
+			}
+			if !tc.wantFlagged {
+				if got.Reason != "" || got.Code != "" || got.AskRef != "" || got.DecidedAt != "" {
+					t.Fatalf("unflagged result carries evidence: %+v", got)
+				}
+				return
+			}
+			if got.Code != nextAskDecidedCode || got.Reason != nextAskDecidedCode || got.AskRef != tc.wantRef || got.DecidedAt == "" {
+				t.Fatalf("got %+v want code %s ref %s", got, nextAskDecidedCode, tc.wantRef)
+			}
+			if _, err := time.Parse(time.RFC3339, got.DecidedAt); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
