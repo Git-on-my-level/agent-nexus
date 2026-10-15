@@ -407,8 +407,9 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	notifyProjectionMaintainer(opts)
-	// A fresh answer to a curation proposal applies or dismisses it; replays
-	// returned above, so the action runs at most once per answer.
+	// A fresh answer to a curation proposal applies or dismisses it. A replay
+	// (including the early returns above) reapplies when the proposal was
+	// accepted and the trail never landed.
 	applyCurationAnswer(context.WithoutCancel(r.Context()), opts, actorID, true, sourceEventID, threadID, itemPayload, responseText, req.Outcome)
 	writeJSON(w, http.StatusCreated, storedResponse)
 }
@@ -456,6 +457,9 @@ func writeAuthorizedInboxResponseReplay(w http.ResponseWriter, r *http.Request, 
 		denyPMNotFound(w, "inbox item")
 		return
 	}
+	// The answer is already durable. Finish a curation action that did not
+	// land with it, then return the original response.
+	reapplyCurationFromReplay(context.WithoutCancel(r.Context()), opts, replay)
 	writeJSON(w, http.StatusCreated, replay)
 }
 

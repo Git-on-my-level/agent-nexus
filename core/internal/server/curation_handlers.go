@@ -334,6 +334,39 @@ func handleCurationMetrics(w http.ResponseWriter, r *http.Request, opts handlerO
 	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics})
 }
 
+// reapplyCurationFromReplay finishes a curation action when the stored answer
+// is replayed. The proposal ask is loaded by its canonical id so a public
+// handle in the stored response still finds response_proposals.
+func reapplyCurationFromReplay(ctx context.Context, opts handlerOptions, replay map[string]any) {
+	store, ok := opts.primitiveStore.(*primitives.Store)
+	if !ok || store == nil {
+		return
+	}
+	event, _ := replay["event"].(map[string]any)
+	payload, _ := event["payload"].(map[string]any)
+	if event == nil || payload == nil {
+		return
+	}
+	requestRef := strings.TrimSpace(anyString(payload["request_event_ref"]))
+	if requestRef == "" {
+		return
+	}
+	resolved, err := store.ResolveResourceRef(ctx, primitives.ResourceRefInput{Type: "event", Ref: requestRef})
+	if err != nil {
+		return
+	}
+	source, err := store.GetEvent(ctx, resolved.ID)
+	if err != nil {
+		return
+	}
+	sourcePayload, _ := source["payload"].(map[string]any)
+	threadID := eventThreadID(source)
+	if threadID == "" {
+		threadID = eventThreadID(event)
+	}
+	applyCurationAnswer(ctx, opts, strings.TrimSpace(anyString(payload["responding_actor_id"])), true, resolved.ID, threadID, sourcePayload, anyString(payload["response_text"]), anyString(payload["outcome"]))
+}
+
 // applyCurationAnswer runs after a human answer to a proposal ask commits.
 // The first response proposal accepts and performs the action as the
 // answering human; anything else dismisses. The outcome, including a failure,
@@ -350,14 +383,29 @@ func applyCurationAnswer(ctx context.Context, opts handlerOptions, responder str
 	proposals := stringSliceAny(payload["response_proposals"])
 	accepted := len(proposals) > 0 && outcome != "needs_context" && strings.EqualFold(strings.TrimSpace(responseText), strings.TrimSpace(proposals[0]))
 	if !accepted {
-		if _, err := store.ResolveCurationProposal(ctx, rec.Key, primitives.CurationProposalDismissed); err != nil {
-			log.Printf("curation dismiss %s: %v", rec.Key, err)
+		// A replay of a dismissal is a no-op once the row has left open.
+		if rec.Status == primitives.CurationProposalOpen {
+			if _, err := store.ResolveCurationProposal(ctx, rec.Key, primitives.CurationProposalDismissed); err != nil {
+				log.Printf("curation dismiss %s: %v", rec.Key, err)
+			}
 		}
 		return
 	}
-	moved, err := store.ResolveCurationProposal(ctx, rec.Key, primitives.CurationProposalAccepted)
-	if err != nil || !moved {
+	if rec.Status == primitives.CurationProposalDismissed {
 		return
+	}
+	if rec.Status == primitives.CurationProposalAccepted {
+		// The answer committed and the row was accepted, but the action or
+		// its trail never landed. Apply again; the actions are idempotent.
+		applied, err := store.CurationActionApplied(ctx, threadID, proposalEventID)
+		if err != nil || applied {
+			return
+		}
+	} else {
+		moved, err := store.ResolveCurationProposal(ctx, rec.Key, primitives.CurationProposalAccepted)
+		if err != nil || !moved {
+			return
+		}
 	}
 	trail := map[string]any{"proposal_event_id": proposalEventID, "action": rec.Action, "targets": rec.Targets, "applied_by": responder}
 	text := ""
