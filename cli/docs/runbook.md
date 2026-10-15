@@ -964,3 +964,22 @@ Use `step rm <card> <step-id>` after updating any dependent `--after` lists. Emp
 ## Live dashboard series
 
 Prefer native live queries. Declare external-data adapters before pushing, and keep third-party credentials on the enrolled owner host. See `../../docs/live-series.md` and `../../adapters/series/README.md` for commands, scripts, grants and schedules.
+
+### Optional harness task mirroring
+
+Use `anx integrations list`, then `anx integrations enable
+claude-code-suggested-tasks --board <board-ref> --dry-run` to inspect setup before
+opting in. Hooks are disabled by default. See [Harness integrations](../README.md#harness-integrations)
+for scopes, cwd routing, agent identity, bounded spool retention, and disabling.
+For pending `no_board` events, enable the integration with a board in that mapped
+directory (or pin `--workspace`). For `delivery_failed`, check ordinary host
+enrollment, authorization, connectivity and the configured board. A later hook
+invocation retries up to four persisted events using their original replay keys.
+Missing or corrupt installation config preserves incoming events with
+`missing_config` or `config_invalid`; repair the config and re-enable to resume.
+Card-create HTTP 400/422 is retained as a dead letter and excluded from automatic
+drain. HTTP 401/403/404 stays pending as `auth`/`forbidden`/`board_not_found` and
+replays after access or the board is repaired. Inspect `dead_letter_count` and
+`dead_letter_reasons` in status. Pending and dead-letter text share the 100-event,
+30-day retention budget. Status is offline and read-only; disable retains the
+spool and receipts.

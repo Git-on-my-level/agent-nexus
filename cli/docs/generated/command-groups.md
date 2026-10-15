@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `36`
+- Groups: `37`
 
 ## `topics`
 
@@ -252,6 +252,16 @@ Generated from `contracts/anx-openapi.yaml`.
   - `inbox.respond` (`inbox respond`)
   - `inbox.stream` (`inbox stream`)
   - `inbox.summary` (`inbox summary`)
+
+## `integrations`
+
+- Commands: `5`
+- Command IDs:
+  - `integrations.disable` (`integrations disable`)
+  - `integrations.enable` (`integrations enable`)
+  - `integrations.list` (`integrations list`)
+  - `integrations.run` (`integrations run`)
+  - `integrations.status` (`integrations status`)
 
 ## `meta`
 

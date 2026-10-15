@@ -8321,6 +8321,206 @@ export const commandRegistry = [
         "ts_method": "inboxSummary"
     },
     {
+        "command_id": "integrations.disable",
+        "cli_path": "integrations disable",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Remove only an ANX-owned integration hook and config.",
+        "why": "Remove only an ANX-owned integration hook and config.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+        "error_codes": [
+            "invalid_flags",
+            "unknown_integration",
+            "integration_config_invalid"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+        "examples": [
+            {
+                "title": "Remove the managed hook",
+                "command": "anx integrations disable claude-code-suggested-tasks"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.enable",
+            "integrations.list",
+            "integrations.run",
+            "integrations.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "integrations.enable",
+        "cli_path": "integrations enable",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Opt into an optional harness integration.",
+        "why": "Opt into an optional harness integration.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+        "error_codes": [
+            "invalid_flags",
+            "unknown_integration",
+            "integration_config_invalid"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+        "examples": [
+            {
+                "title": "Opt into suggested task mirroring",
+                "command": "anx integrations enable claude-code-suggested-tasks --board follow-ups"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.disable",
+            "integrations.list",
+            "integrations.run",
+            "integrations.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "integrations.list",
+        "cli_path": "integrations list",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "List optional harness integrations and local state.",
+        "why": "List optional harness integrations and local state.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+        "error_codes": [
+            "invalid_flags",
+            "unknown_integration",
+            "integration_config_invalid"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+        "examples": [
+            {
+                "title": "Discover integrations",
+                "command": "anx integrations list"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.disable",
+            "integrations.enable",
+            "integrations.run",
+            "integrations.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "integrations.run",
+        "cli_path": "integrations run",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Silent bounded harness event handler; always exits zero.",
+        "why": "Silent bounded harness event handler; always exits zero.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Hook-only; no stdout, at most one stderr line.",
+        "error_codes": [
+            "invalid_flags",
+            "unknown_integration",
+            "integration_config_invalid"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+        "examples": [
+            {
+                "title": "Harness supplies the PostToolUse payload on stdin",
+                "command": "anx integrations run claude-code-suggested-tasks \u003c hook-event.json"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.disable",
+            "integrations.enable",
+            "integrations.list",
+            "integrations.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "integrations.status",
+        "cli_path": "integrations status",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Inspect harness settings, integration config and spool counts.",
+        "why": "Inspect harness settings, integration config and spool counts.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+        "error_codes": [
+            "invalid_flags",
+            "unknown_integration",
+            "integration_config_invalid"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+        "examples": [
+            {
+                "title": "Inspect the installed hook and local spool",
+                "command": "anx integrations status claude-code-suggested-tasks"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.disable",
+            "integrations.enable",
+            "integrations.list",
+            "integrations.run"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
         "command_id": "meta.commands.get",
         "cli_path": "meta commands get",
         "group": "meta",
@@ -13973,6 +14173,8 @@ export class AnxClient {
         if (!command) {
             throw new Error(`unknown command id: ${commandId}`);
         }
+        if (command.method === "LOCAL")
+            throw new Error(`local CLI command cannot be invoked over HTTP: ${commandId}`);
         const path = withQuery(renderPath(command.path, pathParams), options.query);
         const response = await this.fetchFn(`${this.baseUrl}${path}`, {
             method: command.method,

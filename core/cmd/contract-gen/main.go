@@ -16,10 +16,11 @@ import (
 )
 
 type openAPIDocument struct {
-	OpenAPI    string              `yaml:"openapi"`
-	Info       openAPIInfo         `yaml:"info"`
-	Paths      map[string]pathItem `yaml:"paths"`
-	Components openAPIComponents   `yaml:"components"`
+	LocalCommands []operation         `yaml:"x-anx-local-commands"`
+	OpenAPI       string              `yaml:"openapi"`
+	Info          openAPIInfo         `yaml:"info"`
+	Paths         map[string]pathItem `yaml:"paths"`
+	Components    openAPIComponents   `yaml:"components"`
 }
 
 type openAPIInfo struct {
@@ -528,6 +529,10 @@ func forEachCommandOperation(doc openAPIDocument, fn func(path, method string, o
 			fn(path, pair.method, pair.op)
 		}
 	}
+	for i := range doc.LocalCommands {
+		fn("", "LOCAL", &doc.LocalCommands[i])
+	}
+
 }
 
 func requiredXAnxFields() []string {
@@ -799,6 +804,16 @@ func collectCommands(doc openAPIDocument, schemaDoc anxSchemaDocument) []command
 				GoMethod:      toPascalCase(commandID),
 				TSMethod:      toCamelCase(commandID),
 			}
+			commands = append(commands, cmd)
+		}
+	}
+
+	for _, op := range doc.LocalCommands {
+		local := collectCommands(openAPIDocument{Paths: map[string]pathItem{"": {Post: &op}}}, schemaDoc)
+		for _, cmd := range local {
+			cmd.Method = "LOCAL"
+			cmd.GoMethod = ""
+			cmd.TSMethod = ""
 			commands = append(commands, cmd)
 		}
 	}
@@ -1528,7 +1543,11 @@ func writeMarkdown(path string, doc openAPIDocument, commands []command, sourceL
 	for _, cmd := range commands {
 		b.WriteString(fmt.Sprintf("## `%s`\n\n", cmd.CommandID))
 		b.WriteString(fmt.Sprintf("- CLI path: `%s`\n", cmd.CLIPath))
-		b.WriteString(fmt.Sprintf("- HTTP: `%s %s`\n", cmd.Method, cmd.Path))
+		if cmd.Method == "LOCAL" {
+			b.WriteString("- Execution: local CLI handler (no HTTP route)\n")
+		} else {
+			b.WriteString(fmt.Sprintf("- HTTP: `%s %s`\n", cmd.Method, cmd.Path))
+		}
 		if cmd.Stability != "" {
 			b.WriteString(fmt.Sprintf("- Stability: `%s`\n", cmd.Stability))
 		}
@@ -1879,6 +1898,7 @@ func writeGoClient(goOutDir string, commands []command, modulePath string) error
 	src.WriteString("\tif !ok {\n")
 	src.WriteString("\t\treturn nil, nil, fmt.Errorf(\"unknown command id: %s\", commandID)\n")
 	src.WriteString("\t}\n")
+	src.WriteString("\tif cmd.Method == \"LOCAL\" { return nil, nil, fmt.Errorf(\"local CLI command cannot be invoked over HTTP: %s\", commandID) }\n")
 	src.WriteString("\tpath, err := renderPath(cmd.Path, pathParams)\n")
 	src.WriteString("\tif err != nil {\n")
 	src.WriteString("\t\treturn nil, nil, err\n")
@@ -1963,6 +1983,9 @@ func writeGoClient(goOutDir string, commands []command, modulePath string) error
 	src.WriteString("}\n\n")
 
 	for _, cmd := range commands {
+		if cmd.Method == "LOCAL" {
+			continue
+		}
 		if len(cmd.PathParams) == 0 {
 			src.WriteString(fmt.Sprintf("func (c *Client) %s(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {\n", cmd.GoMethod))
 			src.WriteString(fmt.Sprintf("\treturn c.Invoke(ctx, %q, nil, opts)\n", cmd.CommandID))
@@ -2002,7 +2025,7 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
 	b.WriteString("export interface CommandSpec {\n")
 	b.WriteString("  command_id: string;\n")
 	b.WriteString("  cli_path: string;\n")
-	b.WriteString("  method: HttpMethod;\n")
+	b.WriteString("  method: HttpMethod | \"LOCAL\";\n")
 	b.WriteString("  path: string;\n")
 	b.WriteString("  operation_id: string;\n")
 	b.WriteString("  summary?: string;\n")
@@ -2095,6 +2118,7 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
 	b.WriteString("    if (!command) {\n")
 	b.WriteString("      throw new Error(`unknown command id: ${commandId}`);\n")
 	b.WriteString("    }\n")
+	b.WriteString("    if (command.method === \"LOCAL\") throw new Error(`local CLI command cannot be invoked over HTTP: ${commandId}`);\n")
 	b.WriteString("    const path = withQuery(renderPath(command.path, pathParams), options.query);\n")
 	b.WriteString("    const response = await this.fetchFn(`${this.baseUrl}${path}`, {\n")
 	b.WriteString("      method: command.method,\n")
@@ -2113,6 +2137,9 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
 	b.WriteString("  }\n\n")
 
 	for _, cmd := range commands {
+		if cmd.Method == "LOCAL" {
+			continue
+		}
 		if len(cmd.PathParams) == 0 {
 			b.WriteString(fmt.Sprintf("  %s(options: RequestOptions = {}): Promise<InvokeResult> {\n", cmd.TSMethod))
 			b.WriteString(fmt.Sprintf("    return this.invoke(%q, {}, options);\n", cmd.CommandID))

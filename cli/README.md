@@ -54,3 +54,92 @@ runs remain offline. `ANX_UPDATE_POLICY=off` disables automatic checks in CI.
 Existing installs need one rerun of `scripts/install-anx.sh` to obtain
 a digest-bound ownership receipt. See [self-update policy](docs/self-update.md) for
 rollback, skill sync, compatibility, and the agentctl ergonomics audit.
+
+## Harness integrations
+
+Harness hooks are **off by default**, separate from `anx install skill` and skill
+sync. Opt in once to mirror Claude Code's suggested follow-up tasks as cards:
+
+```bash
+anx integrations list
+anx integrations enable claude-code-suggested-tasks --board follow-ups --dry-run
+anx integrations enable claude-code-suggested-tasks --board follow-ups
+anx integrations status claude-code-suggested-tasks
+anx integrations disable claude-code-suggested-tasks
+```
+
+The default scope edits `~/.claude/settings.json`. `--scope project` edits
+`./.claude/settings.json`; `--scope local` edits `./.claude/settings.local.json`.
+Run project/local setup from the project root. Settings must contain a JSON object
+(an existing empty file is refused). ANX identifies ownership by the complete generated invocation namespace (quoted
+absolute binary, exact config directory, recipe, and installation ID), so a
+changed executable path can be repaired after an interrupted setup. It preserves unrelated keys and hooks,
+keeps a one-time `.anx-backup` before changing an existing file, and uses locked,
+atomic replacements. Before renaming, ANX checks file identity and contents,
+re-merging up to three times if the harness wrote concurrently; continued edits
+refuse setup. This check narrows the filesystem check/rename race; harness writers
+do not share ANX's lock. New parent directories are explicitly chmodded to 0700;
+existing directory modes remain unchanged. Object formatting/key order can
+change; hook order is kept. Disable removes the ANX handler and drops its group,
+including group metadata, when no handlers remain. Groups with other handlers
+retain their metadata. Config is removed only after verifying the owned hook is
+absent from settings.
+Dry-run reports the exact prospective settings/config JSON without writing files.
+
+Workspace selection uses the hook event's `cwd` and the normal `anx config map`
+rules, even when the invoking shell exports `ANX_BASE_URL`. Ordinary commands
+retain their usual environment precedence. `--workspace <alias>` pins a workspace instead. Board/column choices are
+stored per resolved workspace; rerun enable from another mapped directory to
+record its board. Missing boards stay queued as `no_board`; no board is created
+implicitly. The derived host agent defaults to `claude-code`; `--as <name>`
+overrides it. Enroll the host normally before delivery.
+
+The hook uses the absolute running executable path from `os.Executable` without
+resolving symlinks again. This retains a stable launcher path where the OS
+provides one and avoids deliberately pinning Homebrew/mise symlink targets.
+Some platforms return a versioned executable path; after moving/removing that
+binary, status reports drift and rerunning enable repairs the recorded command.
+The hook explicitly pins the ANX config directory and does not require PATH.
+
+`integrations run` is a hook-only stdin entrypoint. It writes no stdout, exits 0,
+and spends at most three seconds (the installed hook timeout is ten seconds).
+Every accepted event is persisted before delivery. Missing or corrupt installation
+config retains the event as `missing_config` or `config_invalid` and emits one
+short diagnostic; status remains available. Failed requests keep their
+original workspace, agent, request key, and complete card body for replay through
+the existing actor-scoped card-create API. A task ID determines the request key;
+when absent, session ID plus tool-use ID is required. Recent local receipts are
+only an optimization; the server's atomic replay receipt prevents duplicates.
+
+The spool retains at most 100 events total (pending plus dead letters) for 30
+days, drains at most four pending events per invocation, rotates retryable
+failures to avoid starvation, and keeps the last 1,000 local receipts. A definitive
+card-create HTTP 400 or 422 becomes a dead letter, preserving its text without
+retrying it. HTTP 401, 403 and 404 remain pending as `auth`, `forbidden` and
+`board_not_found` so later hooks can replay after access or the board is fixed.
+Other failures remain pending. Status reports `dead_letter_count`,
+`dead_letter_reasons` (such as `terminal_http_400`), pending reasons, ledger size,
+and retention/capacity drops. Input is limited to 64 KiB;
+card titles/bodies are defensively truncated, and the retained prompt is quoted.
+Malformed, oversized or unidentifiable input and storage failures produce one
+short stderr diagnostic. A storage failure prevents sending unpersisted work.
+The enrolled host and token principal are bound durably before the first card
+request. If either changes, pending events stay queued as `identity_changed` rather than
+replaying under a different actor; restore the original principal to retry.
+The owner-only spool contains task text: keep the ANX config directory private.
+Retention is enforced on hook invocations; status does not mutate the spool.
+Disable removes the hook and integration config but preserves pending work and
+receipts for inspection and later re-enablement. Disabling all installed scopes
+stops automatic delivery; it does not cancel an already-running invocation.
+
+The adapter schema follows the [Claude Code hooks reference](https://code.claude.com/docs/en/hooks).
+`PostToolUse` matches `mcp__ccd_session__spawn_task` exactly. Availability of that
+specific desktop MCP tool and activation of edited settings depend on the
+installed Claude Code version; ANX status checks configuration, not activation.
+
+Developers add recipes in `internal/integrations/registry.go` with an event parser,
+default agent, existing ANX action command ID and body builder; the recipe supplies
+the harness provenance stamp. Adapters own allowed/default scopes, project scope
+semantics, settings location, merge and inspection. Neither requires a new CLI command. The first
+adapter installs POSIX-shell commands; Windows hook-shell support is not yet
+qualified.

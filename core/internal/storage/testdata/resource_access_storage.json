@@ -1283,7 +1283,7 @@
     "../../cmd/contract-gen/main.go:type:taxonomyEnum": "fe5caaae929d678e49d5b717d22d35ece71925a9a0b8cef04f617e1b21f4fc8a",
     "../../cmd/contract-gen/main.go:type:taxonomyOutput": "a73c8b11e5372141138908921dfb53caf116acd4d5009a0440cd630c8d55642a",
     "../../cmd/contract-gen/main.go:writeEventRefRulesMeta": "df0efdeab54a4ae191fb93710f8ecc6bc90ddd31fed081791cad099a36a4ad33",
-    "../../cmd/contract-gen/main.go:writeTSClient": "b8e228769d93f9e534f35ed7fbd47d7f50f49b8fd6944ba046b79f6e0c369a99",
+    "../../cmd/contract-gen/main.go:writeTSClient": "63b1f3e57cc4d6acd04f39b8ca23a4635b1fc5f3af8dc1f0689c3282dfd1b299",
     "../../cmd/route-inventory/main.go:generate": "8ca7d67cccf0596f79189e64171eca912dfda6093830b647365fb3c9a0d39bc9",
     "../../cmd/route-inventory/main.go:main": "e336155cce441449cda2e11bd1d4b7c940909ead6addab8bc278ba4feafe2fa3",
     "../../cmd/scopedrepo-gen/main.go:main": "83f4525ba0c6eca6b10231f07546c695cac88eb976104e479d9198754a4382fa",

@@ -1,5 +1,10 @@
 import { commandRegistry } from "../../../contracts/gen/ts/dist/client.js";
 
+// Local CLI recipes share discovery metadata but never enter the HTTP catalog.
+const httpCommands = commandRegistry.filter(
+  (command) => command.method !== "LOCAL",
+);
+
 let catalogByPath;
 
 function matchPath(pattern, pathname) {
@@ -37,7 +42,7 @@ function catalogKey(method, pathname) {
 function getCatalogByPath() {
   if (!catalogByPath) {
     catalogByPath = new Map(
-      commandRegistry.map((command) => [
+      httpCommands.map((command) => [
         catalogKey(command.method, command.path),
         {
           commandId: command.command_id,
@@ -95,7 +100,7 @@ export function getCatalogEntries() {
 
 export const proxyOnlyCommands = [];
 
-/** Every command_id in the generated contract registry (minus {@link proxyOnlyCommands}). */
-export const catalogCommandIds = commandRegistry
+/** Every HTTP command_id in the generated contract registry (minus {@link proxyOnlyCommands}). */
+export const catalogCommandIds = httpCommands
   .map((c) => c.command_id)
   .filter((id) => !proxyOnlyCommands.includes(id));

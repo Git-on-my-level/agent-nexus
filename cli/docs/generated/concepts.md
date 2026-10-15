@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `35`
+- Concepts: `36`
 
 ## `actors`
 
@@ -393,6 +393,16 @@ Generated from `contracts/anx-openapi.yaml`.
   - `threads.context`
   - `threads.inspect`
   - `threads.list`
+
+## `integrations`
+
+- Commands: `5`
+- Command IDs:
+  - `integrations.disable`
+  - `integrations.enable`
+  - `integrations.list`
+  - `integrations.run`
+  - `integrations.status`
 
 ## `maintenance`
 

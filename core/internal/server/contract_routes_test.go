@@ -31,6 +31,12 @@ func TestDocumentedRoutesAreRegistered(t *testing.T) {
 	handler := NewHandler("0.2.2")
 
 	for _, command := range registry.Commands {
+		if command.Method == "LOCAL" {
+			if command.Path != "" {
+				t.Fatalf("local command %s has HTTP path %s", command.CommandID, command.Path)
+			}
+			continue
+		}
 		command := command
 		t.Run(command.CommandID, func(t *testing.T) {
 			t.Parallel()
