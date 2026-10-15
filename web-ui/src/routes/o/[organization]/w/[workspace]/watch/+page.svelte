@@ -293,7 +293,7 @@
         {#each [["list", "List"], ["board", "By stage"]] as [key, text] (key)}
           <button
             type="button"
-            class="rounded px-3 py-1 text-meta font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {view ===
+            class="rounded px-3 py-1 text-meta font-medium transition-colors max-md:min-h-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {view ===
             key
               ? 'bg-panel-hover text-fg shadow-sm'
               : 'text-fg-muted hover:text-fg'}"
