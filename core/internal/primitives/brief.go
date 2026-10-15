@@ -105,9 +105,16 @@ type briefAskRow struct {
 	responseText, outcome    string
 }
 
-const briefAskSelect = `SELECT ` + briefAskColumns + `,COALESCE(e.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=e.thread_id),''),e.payload_json,
+// briefAnswerableAskJoin is the eligibility inbox respond uses. The inbox
+// projection is built per thread and writes no derived_inbox_items row when
+// GetThread misses, so respond returns 404. Lifecycle leaves ask, review, and
+// escalate items visible, so a present threads row is the shared predicate.
+// threads.id is the primary key, so each candidate is one indexed lookup.
+const briefAnswerableAskJoin = `JOIN threads brief_ask_thread ON brief_ask_thread.id=e.thread_id`
+
+const briefAskSelect = `SELECT ` + briefAskColumns + `,COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),''),e.payload_json,
 	COALESCE(a.answered_at,''),a.responder,COALESCE(json_extract(r.payload_json,'$.payload.response_text'),''),COALESCE(json_extract(r.payload_json,'$.payload.outcome'),'')
-	FROM brief_asks a JOIN events e ON e.id=a.ask_id LEFT JOIN events r ON r.id=a.response_event_id AND a.response_event_id<>''`
+	FROM brief_asks a JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + ` LEFT JOIN events r ON r.id=a.response_event_id AND a.response_event_id<>''`
 
 // pmOwnerSQL keeps a PM-private thread out of a page or a count unless its
 // owner is this reader. It is applied before LIMIT so another owner's rows
@@ -121,8 +128,17 @@ func (b *briefBuild) pmOwnerSQL(threadExpr string) (string, []any) {
 	return `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=` + threadExpr + `),'') IN ('', ?)`, []any{stripActor(b.reader.ActorID)}
 }
 
+// askThreadOwnerSQL applies the PM-private rule to the thread row
+// briefAnswerableAskJoin already required. A missing thread is not public.
+func (b *briefBuild) askThreadOwnerSQL() (string, []any) {
+	if b.reader.Visible == nil {
+		return "1=1", nil
+	}
+	return `COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?)`, []any{stripActor(b.reader.ActorID)}
+}
+
 func (b *briefBuild) queryAsks(where string, args ...any) ([]briefAskRow, error) {
-	pred, predArgs := b.pmOwnerSQL("e.thread_id")
+	pred, predArgs := b.askThreadOwnerSQL()
 	rows, err := b.s.db.QueryContext(b.ctx, briefAskSelect+` WHERE COALESCE(e.trashed_at,'')='' AND `+pred+` AND `+where, append(predArgs, args...)...)
 	if err != nil {
 		return nil, err
@@ -162,7 +178,8 @@ func (b *briefBuild) readerIDs() (string, string) {
 
 // decisions are open asks addressed to the reader: recipient is the reader,
 // or unaddressed asks when the reader is a human. The reader's own asks are
-// your_asks, never decisions.
+// your_asks, never decisions. An ask whose thread row is missing is omitted:
+// the inbox projection never writes it, so respond would 404.
 func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 	id, prefixed := b.readerIDs()
 	addressed := `(a.recipient IN (?,?)`
@@ -885,7 +902,8 @@ type briefAskCounts struct{ blocked, waiting int }
 
 // initiativeAskCounts counts open asks about each card (subject) and open asks
 // whose blocks name it. Subject lookups use idx_brief_asks_subject; blocks
-// are read from at most 500 open asks that declare any.
+// are read from at most 500 open asks that declare any. Both counts use
+// briefAnswerableAskJoin, the same eligibility as the decision list.
 func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefAskCounts, error) {
 	out := map[string]briefAskCounts{}
 	if len(rows) == 0 {
@@ -907,8 +925,8 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	if b.reader.human() {
 		human = 1
 	}
-	pred, predArgs := b.pmOwnerSQL("e.thread_id")
-	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT a.subject_ref,a.recipient,a.requester FROM brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id
+	pred, predArgs := b.askThreadOwnerSQL()
+	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT a.subject_ref,a.recipient,a.requester FROM brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+`
 		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' AND `+pred+` LIMIT 1000`, append([]any{string(encoded)}, predArgs...)...)
 	if err != nil {
 		return nil, err
@@ -930,7 +948,7 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	if err = rows2.Err(); err != nil {
 		return nil, err
 	}
-	rows3, err := b.s.db.QueryContext(b.ctx, `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id
+	rows3, err := b.s.db.QueryContext(b.ctx, `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k INDEXED BY idx_brief_ask_blocks_ref JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+`
 		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' AND `+pred+` GROUP BY k.ref`, append([]any{string(encoded)}, predArgs...)...)
 	if err != nil {
 		return nil, err
