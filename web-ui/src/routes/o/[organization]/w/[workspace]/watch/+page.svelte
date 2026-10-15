@@ -28,6 +28,7 @@
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import Banner from "$lib/components/Banner.svelte";
   import Button from "$lib/components/Button.svelte";
+  import InlineAlert from "$lib/components/InlineAlert.svelte";
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import WatchList from "$lib/components/watch/WatchList.svelte";
@@ -226,7 +227,7 @@
       {/if}
       {#if refreshing}
         <span
-          class="ml-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-border border-t-fg-muted align-middle"
+          class="ml-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-line border-t-fg-muted align-middle"
           role="status"
           aria-label="Updating"
         ></span>
@@ -234,16 +235,18 @@
     {/snippet}
     {#snippet actions()}
       <div
-        class="inline-flex rounded-md border border-border"
+        class="inline-flex rounded-md border border-line bg-bg-soft p-0.5"
         role="group"
         aria-label="View"
+        data-watch-view-toggle
       >
         {#each [["list", "List"], ["board", "By stage"]] as [key, text] (key)}
           <button
             type="button"
-            class="px-3 py-1 text-meta {view === key
-              ? 'bg-panel-hover text-fg'
-              : 'text-fg-muted'}"
+            class="rounded px-3 py-1 text-meta font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {view ===
+            key
+              ? 'bg-panel-hover text-fg shadow-sm'
+              : 'text-fg-muted hover:text-fg'}"
             aria-pressed={view === key}
             onclick={() => setView(key)}>{text}</button
           >
@@ -274,7 +277,7 @@
     </p>
   {/if}
   {#if moveError}
-    <p class="text-meta text-danger-text" role="alert">{moveError}</p>
+    <InlineAlert>{moveError}</InlineAlert>
   {/if}
 
   {#if !brief && failed}
@@ -291,7 +294,19 @@
   {:else if !brief}
     <SkeletonList rows={4} />
   {:else if !initiatives.length}
-    <p class="text-meta text-fg-muted" data-watch-empty>No initiatives yet.</p>
+    <div
+      class="rounded-md border border-dashed border-line px-4 py-8 text-center"
+      data-watch-empty
+    >
+      <p class="text-meta text-fg">No initiatives yet.</p>
+      <p class="mt-1 text-micro text-fg-muted">
+        Initiatives appear here once an agent or a person files one.
+        <a
+          class="text-accent-text hover:underline"
+          href={workspaceHref("/initiatives/new")}>Create one</a
+        >
+      </p>
+    </div>
   {:else if view === "board"}
     <WatchBoard {initiatives} {now} onMove={moveInitiative} />
   {:else}
@@ -299,14 +314,11 @@
   {/if}
 
   {#if selectedReport}
-    <section
-      class="rounded-md border border-border bg-panel"
-      data-watch-dashboard
-    >
+    <section class="min-w-0 space-y-2 pt-2" data-watch-dashboard>
       <header
-        class="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2"
+        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
       >
-        <h2 class="text-subtitle text-fg">Dashboard</h2>
+        <h2 class="ui-label mb-0">Dashboard</h2>
         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <DashboardPicker
             {reports}
@@ -329,13 +341,10 @@
             >{/if}
         </div>
       </header>
-      {#if pinError}<p
-          class="px-3 py-2 text-meta text-danger-text"
-          role="alert"
-        >
+      {#if pinError}<p class="text-meta text-danger-text" role="alert">
           {pinError}
         </p>{/if}
-      <div class="px-1 py-2">
+      <div class="min-w-0">
         <VisualReport
           compact
           report={selectedReport.report}
