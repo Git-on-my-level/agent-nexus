@@ -254,6 +254,8 @@ function normalizeInitiative(raw) {
     blockedCount: Math.max(0, Number(raw.blocked_count) || 0),
     waitingOnYouCount: Math.max(0, Number(raw.waiting_on_you_count) || 0),
     note,
+    series: Array.isArray(raw.series) ? raw.series : [],
+    metricFlat: raw.metric_flat ?? null,
     possiblyMoot: raw.possibly_moot?.flagged
       ? { reason: text(raw.possibly_moot.reason) }
       : null,

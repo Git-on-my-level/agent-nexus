@@ -29,6 +29,47 @@ A LIMIT applied after loading, sorting, or enriching every record is not a bound
 For heap/native allocation, RSS and hot-route latency measurements on disposable
 local workspace copies, see [the resident memory probe](resident-memory.md).
 
+## Brief initiative series
+
+`GET /brief` admits at most 50 initiatives before enriching their canonical
+`cards.refs_json`. Each row admits its first two valid, distinct series refs
+before visibility filtering (no refill past hidden candidates). One scoped card
+primary-key batch and one `seriesref.LatestRefs` batch (100 refs)
+load metadata and latest values; each ref uses the ordinary series visibility,
+at most 100 registered label candidates and two matching streams. Explicit
+unmatched/hidden selectors are omitted; a visible definition without registered
+streams can still appear without values. Ambiguous selectors have null values.
+Latest values are limited to seven days, independent of authored `_range` and
+`_baseline` options. No related refs or plan refs are added to this list.
+
+The first returned series is primary. One additional scoped batch reads at most
+eight UTC daily buckets from each of `series_live_daily` and `series_daily` per
+primary, using their `(series,labels,day)` primary keys. Raw density and older
+history add no work; `LatestRefs` seeks raw endpoints through
+`(series,labels,ts)`. The added work is O(admitted rows _ 2 _ 100) with fixed
+bounds, at most three statements (zero with no initiatives), and no per-row
+queries. Existing `/brief` budgets remain unchanged.
+
+Flatness uses a seven-day lookback and a three-day threshold. Every daily low
+and high in a consecutive suffix must be within `max(1e-9, abs(latest)*1e-6)`
+of the latest numeric value. Whole edge buckets are included conservatively;
+`for_seconds` spans the oldest qualifying bucket's last observation to the latest
+observation, capped at seven days. Thus an intra-day excursion cannot disappear
+when endpoints agree. Missing buckets break the span. Missing, ambiguous,
+nonnumeric, future-contaminated or older-than-24h latest data yields false/zero,
+while no returned series yields null. This is an observed stability signal;
+it does not infer measurements between recorded observations.
+
+Run the populated maximum-page scale gate (50 cards, 250 attached refs, 100 admitted refs and over
+10,000 raw points) and functional privacy/normalization checks:
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series \
+  -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+go test -C core ./internal/series -run '^TestBriefSeries' -count=1
+pnpm -C web-ui exec vitest run tests/unit/briefSeries.test.js
+```
+
 ## Idle streaming
 
 Inbox, event and notification-receipt streams observe SQLite `data_version` on

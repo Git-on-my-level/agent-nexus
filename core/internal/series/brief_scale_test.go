@@ -1,0 +1,144 @@
+package series
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/testutil/perfguard"
+)
+
+// Exercise a full page with 100 admitted refs (250 attached refs), dense raw history and a real
+// denied contributor. Both principals retain the ordinary /brief route budget.
+func TestPerformanceBriefSeriesBudget(t *testing.T) {
+	if os.Getenv("ANX_PERFORMANCE_TEST") != "1" || testing.Short() {
+		t.Skip("set ANX_PERFORMANCE_TEST=1")
+	}
+	s, _, _, _ := fixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	store := primitives.NewTestStore(s.DB, t.TempDir())
+	private, err := store.CreateWork(ctx, "owner", "", map[string]any{"title": "Private contributor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PatchThread(ctx, "owner", fmt.Sprint(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{}
+	for i := 0; i < 50; i++ {
+		card, e := store.CreateWork(ctx, "owner", "", map[string]any{"title": fmt.Sprintf("Loop %02d", i)})
+		if e != nil {
+			t.Fatal(e)
+		}
+		ids = append(ids, fmt.Sprint(card["id"]))
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for i, id := range ids {
+		refs := []string{}
+		for j := 0; j < 5; j++ {
+			name := fmt.Sprintf("metric%03d", i*5+j)
+			refs = append(refs, "series:"+name)
+			if _, err = tx.Exec(`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES(?,'collector','count','gauge')`, name); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = tx.Exec(`INSERT INTO series_labels(series,labels) VALUES(?,'{}')`, name); err != nil {
+				t.Fatal(err)
+			}
+			for d := 0; d < 8; d++ {
+				stamp := now.Add(-time.Duration(d) * 24 * time.Hour).UnixNano()
+				if _, err = tx.Exec(`INSERT INTO series_points(series,labels,ts,value,received_day) VALUES(?,'{}',?,10,0)`, name, stamp); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		raw, _ := json.Marshal(refs)
+		if _, err = tx.Exec(`UPDATE cards SET refs_json=? WHERE id=?`, string(raw), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Unrelated dense raw history must not increase flatness work.
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+ INSERT INTO series_points SELECT 'metric000','{}',?-i,10,NULL,0 FROM n`, now.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for drained := false; !drained; {
+		drained, err = store.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var seq int
+	var dbname, path string
+	if err = s.DB.QueryRow(`PRAGMA database_list`).Scan(&seq, &dbname, &path); err != nil {
+		t.Fatal(err)
+	}
+	db, capture, err := perfguard.Open("file:" + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	measured := primitives.NewTestStore(db, "")
+	for _, actor := range []string{"owner", "human"} {
+		scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor})
+		scope, closeRead, e := measured.BeginResourceRead(scope)
+		if e != nil {
+			t.Fatal(e)
+		}
+		capture.Start()
+		body, e := measured.Brief(scope, primitives.BriefReader{ActorID: actor, Kind: "human"}, now)
+		statements, queries, rows := capture.Stop()
+		work := capture.Work()
+		closeRead()
+		if e != nil || capture.WorkError() != nil {
+			t.Fatalf("brief=%v capture=%v", e, capture.WorkError())
+		}
+		if queries > 100 || rows > 1024 || work.VMSteps > 50000 {
+			t.Errorf("actor=%s SQL=%d rows=%d VM=%d", actor, queries, rows, work.VMSteps)
+		}
+		initiatives := body["initiatives"].([]map[string]any)
+		if len(initiatives) != 50 {
+			t.Fatalf("got %d initiatives", len(initiatives))
+		}
+		raw, _ := json.Marshal(initiatives)
+		if !strings.Contains(string(raw), `"flat":true`) {
+			t.Fatal("populated flat control missing")
+		}
+		metricQueries := 0
+		for _, statement := range statements {
+			if !strings.Contains(statement.SQL, "FROM series_points") && !strings.Contains(statement.SQL, "JOIN series_live_daily") {
+				continue
+			}
+			metricQueries++
+			details, e := perfguard.Explain(ctx, s.DB, statement)
+			if e != nil {
+				t.Fatal(e)
+			}
+			plan := strings.Join(details, "\n")
+			for _, table := range []string{"series_points", "series_live_daily", "series_daily"} {
+				if strings.Contains(plan, "SCAN "+table) || strings.Contains(plan, "MATERIALIZE "+table) {
+					t.Fatalf("unbounded metric plan: %s", plan)
+				}
+			}
+			if !strings.Contains(plan, "USING INDEX sqlite_autoindex_series_points_1") && !strings.Contains(plan, "USING INDEX sqlite_autoindex_series_live_daily_1") {
+				t.Fatal("missing indexed metric seek:\n" + plan)
+			}
+		}
+		if metricQueries != 2 {
+			t.Fatalf("expected one ref batch + one daily batch, got %d", metricQueries)
+		}
+		t.Logf("actor=%s full 50-card/100-admitted-ref/12000-point brief SQL=%d rows=%d VM=%d metric batches=%d", actor, queries, rows, work.VMSteps, metricQueries)
+	}
+}
