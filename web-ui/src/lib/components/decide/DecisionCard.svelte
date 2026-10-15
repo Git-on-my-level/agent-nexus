@@ -10,6 +10,7 @@
   } from "$lib/brief.js";
   import {
     captureInboxResponseBinding,
+    discardInboxResponse,
     editInboxResponse,
     inboxResponseFailures,
     inboxResponseOverlay,
@@ -99,6 +100,8 @@
   let failure = $derived($inboxResponseFailures[itemId]);
   /** Core refused the default notify target: the requester is unreachable. */
   let unnotifiable = $derived(failure?.code === "notification_target_required");
+  // Core no longer has this item (404): no retry can succeed.
+  let gone = $derived(failure?.status === 404);
   let answered = $derived(
     Boolean(overlay && overlay.status !== "failed") || Boolean(unsent),
   );
@@ -650,6 +653,26 @@
           onclick={() => resendInboxResponse(itemId, { notify_mode: "none" })}
           >Answer without notifying</button
         >
+      {:else if gone}
+        <span data-decision-gone
+          >This question no longer exists, so your answer can’t be sent.</span
+        >
+        <button
+          type="button"
+          class="ui-prose-link"
+          data-decision-copy-answer
+          onclick={() => void copyText(failure.response_text || "")}
+          >Copy answer</button
+        >
+        <button
+          type="button"
+          class="ui-prose-link"
+          data-decision-discard
+          onclick={() => {
+            discardInboxResponse(itemId);
+            void refreshBrief();
+          }}>Discard</button
+        >
       {:else}
         <span>Couldn’t send your answer. It is saved on this device.</span>
         <button
@@ -658,14 +681,16 @@
           onclick={() => retryInboxResponse(itemId)}>Retry</button
         >
       {/if}
-      <button
-        type="button"
-        class="ui-prose-link"
-        onclick={() => {
-          replying = true;
-          editInboxResponse(itemId);
-        }}>Edit</button
-      >
+      {#if !gone}
+        <button
+          type="button"
+          class="ui-prose-link"
+          onclick={() => {
+            replying = true;
+            editInboxResponse(itemId);
+          }}>Edit</button
+        >
+      {/if}
     </div>
   {/if}
 

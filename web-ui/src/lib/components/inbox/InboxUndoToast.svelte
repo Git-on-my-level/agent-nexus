@@ -29,18 +29,22 @@
     >
       {#if toast.state === "failed"}
         <span class="min-w-0 [overflow-wrap:anywhere]"
-          ><span class="text-danger-text">Awaiting confirmation.</span>
+          ><span class="text-danger-text"
+            >{toast.retrying ? "Awaiting confirmation." : "Not sent."}</span
+          >
           {toast.error || "The response could not be recorded."}</span
         >
-        <button
-          class="shrink-0 text-micro font-medium text-accent-text hover:underline"
-          type="button"
-          onclick={() =>
-            toast.expired
-              ? editInboxResponse(toast.itemId)
-              : void retryInboxResponse(toast.itemId)}
-          >{toast.expired ? "Edit response" : "Retry"}</button
-        >
+        {#if !toast.gone}
+          <button
+            class="shrink-0 text-micro font-medium text-accent-text hover:underline"
+            type="button"
+            onclick={() =>
+              toast.expired
+                ? editInboxResponse(toast.itemId)
+                : void retryInboxResponse(toast.itemId)}
+            >{toast.expired ? "Edit response" : "Retry"}</button
+          >
+        {/if}
         <button
           class="shrink-0 text-micro text-fg-muted hover:text-fg"
           type="button"

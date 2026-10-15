@@ -6,6 +6,7 @@
     inboxResponseOverlay,
     retryInboxResponse,
     editInboxResponse,
+    discardInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   let { itemId } = $props();
   let record = $derived(
@@ -21,6 +22,8 @@
   let text = $derived(
     record?.request.response_text || failure?.response_text || "",
   );
+  // Core no longer has this item (404): no retry or edit can succeed.
+  let gone = $derived(failure?.status === 404);
   let copied = $state(false);
   let copyError = $state("");
   async function copy() {
@@ -72,18 +75,27 @@
         <button type="button" class="ui-btn-secondary" onclick={copy}
           >{copied ? "Copied" : "Copy text"}</button
         >
-        <button
-          type="button"
-          class="ui-btn-secondary"
-          onclick={() => editInboxResponse(itemId)}>Edit response</button
-        >
-        <button
-          type="button"
-          class="ui-btn-secondary"
-          onclick={() =>
-            void retryInboxResponse(itemId, { asNew: !!failure?.expired })}
-          >{failure?.expired ? "Retry as new" : "Retry send"}</button
-        >
+        {#if gone}
+          <button
+            type="button"
+            class="ui-btn-secondary"
+            data-inbox-discard
+            onclick={() => discardInboxResponse(itemId)}>Discard</button
+          >
+        {:else}
+          <button
+            type="button"
+            class="ui-btn-secondary"
+            onclick={() => editInboxResponse(itemId)}>Edit response</button
+          >
+          <button
+            type="button"
+            class="ui-btn-secondary"
+            onclick={() =>
+              void retryInboxResponse(itemId, { asNew: !!failure?.expired })}
+            >{failure?.expired ? "Retry as new" : "Retry send"}</button
+          >
+        {/if}
       </div>
       {#if copyError}<p class="text-micro text-fg-muted">{copyError}</p>{/if}
       {#if failure?.detail}

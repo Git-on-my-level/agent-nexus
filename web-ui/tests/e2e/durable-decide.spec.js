@@ -187,6 +187,44 @@ test("definitive failures keep editable text without automatic retry", async ({
   expect(attempts).toBe(1);
 });
 
+test("an answer to a question that no longer exists offers Copy and Discard, not Retry", async ({
+  page,
+  context,
+}) => {
+  let attempts = 0;
+  await setup(context, (route) => {
+    attempts += 1;
+    return json(
+      route,
+      { error: { code: "not_found", message: "inbox item not found" } },
+      404,
+    );
+  });
+  await begin(page);
+  await sendReply(page);
+  await flush(page);
+  const failed = page.locator(`${ROW} [data-decision-failed]`);
+  await expect(failed.locator("[data-decision-gone]")).toBeVisible();
+  await expect(failed.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  await expect(failed.getByRole("button", { name: "Edit" })).toHaveCount(0);
+  await expect(
+    failed.getByRole("button", { name: "Copy answer" }),
+  ).toBeVisible();
+  const toast = page.locator('[data-inbox-toast="failed"]');
+  await expect(toast).toContainText("Not sent.");
+  await expect(toast.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  expect((await records(page)).length).toBe(1);
+  const chip = page.locator("[data-unsent-indicator]");
+  await chip.locator("summary").click();
+  await expect(chip.getByRole("button", { name: "Retry send" })).toHaveCount(0);
+  await expect(chip.locator("[data-inbox-discard]")).toBeVisible();
+  await failed.getByRole("button", { name: "Discard" }).click();
+  await expect(page.locator(`${ROW} [data-decision-failed]`)).toHaveCount(0);
+  await expect(toast).toHaveCount(0);
+  await expect.poll(async () => (await records(page)).length).toBe(0);
+  expect(attempts).toBe(1);
+});
+
 test("IndexedDB denial uses the journal and total storage failure prevents sending", async ({
   page,
   context,
