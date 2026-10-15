@@ -384,6 +384,24 @@
     background: var(--panel);
     box-shadow: var(--shadow-menu);
   }
+  /*
+   * Phone: the trigger starts the header row, so a menu hung from its right
+   * edge runs off the left of the screen. Hang it from the left instead, and
+   * give the trigger and items a thumb-sized height.
+   */
+  @media (max-width: 767px) {
+    .picker-menu {
+      left: 0;
+      right: auto;
+    }
+    .picker-trigger {
+      min-height: 2.25rem;
+      padding: 4px 12px;
+    }
+    .picker-item {
+      min-height: 44px;
+    }
+  }
   .picker-list {
     /* Long lists scroll rather than running off the page. */
     max-height: 17rem;
