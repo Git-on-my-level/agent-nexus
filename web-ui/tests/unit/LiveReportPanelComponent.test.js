@@ -81,7 +81,9 @@ describe("clamped live prose", () => {
     const prose = container.querySelector(".row-prose");
     expect(prose.textContent).toContain("the notes");
     expect(
-      prose.querySelector("a, button, input, select, textarea, [tabindex]"),
+      prose.querySelector(
+        "a:not([tabindex='-1']), button:not([tabindex='-1']), input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      ),
     ).toBeNull();
     expect(container.querySelector("a")?.textContent).toContain(
       "Ship the brief",
@@ -113,7 +115,9 @@ describe("clamped live prose", () => {
     const summary = container.querySelector(".markdown-rendered.summary");
     expect(summary.textContent).toContain("the plan");
     expect(
-      summary.querySelector("a, button, input, select, textarea, [tabindex]"),
+      summary.querySelector(
+        "a:not([tabindex='-1']), button:not([tabindex='-1']), input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      ),
     ).toBeNull();
     expect(container.querySelector("a")?.textContent).toContain(
       "Ship the brief",

@@ -112,7 +112,7 @@ describe("WatchRow", () => {
     ).toBeNull();
   });
 
-  it("renders a clamped note without a focusable link", () => {
+  it("keeps a clamped note's link out of the tab order", () => {
     const { container } = render(WatchRow, {
       initiative: row({
         note: {
@@ -126,8 +126,12 @@ describe("WatchRow", () => {
     const note = container.querySelector("[data-watch-note]");
     expect(note.textContent).toContain("the rig log");
     expect(
-      note.querySelector("a, button, input, select, textarea, [tabindex]"),
+      note.querySelector(
+        "a:not([tabindex='-1']), button:not([tabindex='-1']), input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      ),
     ).toBeNull();
+    // The link is still there for a pointer; it just takes no tab stop.
+    expect(note.querySelector("a")?.getAttribute("tabindex")).toBe("-1");
     expect(
       container.querySelector("[data-watch-title]").getAttribute("href"),
     ).toContain("/initiatives/battery");

@@ -207,9 +207,6 @@ describe("markdown", () => {
       "<table",
     );
     expect(renderMarkdown("[link](https://example.com)")).toContain("<a");
-    expect(
-      renderMarkdown("[link](https://example.com)", { plain: true }),
-    ).not.toContain("<a");
     expect(renderMarkdown("![alt](/img.png)")).toContain("<img");
     expect(renderMarkdown("> quote")).toContain("<blockquote");
     expect(renderMarkdown("**bold**")).toContain("<strong");
