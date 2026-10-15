@@ -28,6 +28,8 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import { formatShortcut } from "$lib/keyboardHints.js";
 
   /**
    * The one rendering of a decision: Decide's list, its permalink and the
@@ -67,6 +69,8 @@
   let itemId = $derived(decision.inboxItemId);
   let draftKey = $derived(`inbox:${itemId}:reply`);
   let full = $derived(variant === "full");
+  /** Decide's detail pane: the old Inbox reading pane, no card chrome. */
+  let pane = $derived(variant === "pane");
   let replying = $state(false);
   let reply = $state("");
   let copied = $state(false);
@@ -219,6 +223,111 @@
     send(reply);
   }
 
+  /*
+   * Choosing a suggestion, as the old Inbox did. Nothing is highlighted on
+   * arrival; the recommendation wears a badge, not a selection. A click is a
+   * deliberate act on one option, so it sends after one short flash. A number
+   * key is one keystroke from its neighbour, so the first press arms and the
+   * same key again sends; Escape disarms.
+   */
+  const MAX_KEYED = 5;
+  const FLASH_MS = 220;
+  let armed = $state(-1);
+  let flashing = $state(-1);
+  let flashTimer;
+  let replyEl = $state(null);
+
+  // A different decision in the same pane starts with nothing armed.
+  // Effect bookkeeping, deliberately not reactive.
+  const armedFor = { ref: "" };
+  $effect(() => {
+    const key = decision.ref;
+    if (key !== armedFor.ref) {
+      armedFor.ref = key;
+      armed = -1;
+      flashing = -1;
+      clearTimeout(flashTimer);
+    }
+  });
+
+  let canChoose = $derived(
+    !answered &&
+      !elsewhere &&
+      !confirming &&
+      !(pmAnswer && (pmSent || pmQueued)),
+  );
+
+  function reducedMotion() {
+    // No matchMedia (a test DOM) also sends at once.
+    if (typeof window === "undefined" || !window.matchMedia) return true;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function commit(index) {
+    if (!canChoose || flashing !== -1) return;
+    const proposal = decision.proposals[index];
+    if (proposal === undefined) return;
+    armed = index;
+    if (reducedMotion()) {
+      void choose(proposal, index);
+      return;
+    }
+    flashing = index;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      flashing = -1;
+      void choose(proposal, index);
+    }, FLASH_MS);
+  }
+
+  // A send still flashing when the card goes away is dropped, not sent: the
+  // reader has moved on (J, another row) and must not answer the old one.
+  $effect(() => () => clearTimeout(flashTimer));
+
+  /** Number key `index` (zero-based): arm, or send when already armed. */
+  export function pressProposal(index) {
+    if (!canChoose || index < 0 || index >= decision.proposals.length)
+      return false;
+    if (armed === index) commit(index);
+    else armed = index;
+    return true;
+  }
+
+  /** Escape: true when there was a highlight to clear. */
+  export function clearChoice() {
+    if (confirming) {
+      confirming = "";
+      return true;
+    }
+    if (armed === -1) return false;
+    armed = -1;
+    return true;
+  }
+
+  /** `r`: open the composer and put the caret in it. */
+  export async function focusReply() {
+    if (structured || pmAnswer || elsewhere || answered) return false;
+    replying = true;
+    await Promise.resolve();
+    replyEl?.focus();
+    return true;
+  }
+
+  export function copy() {
+    void copyRef();
+  }
+
+  function onReplyKeydown(event) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      send(reply);
+    } else if (event.key === "Escape" && !reply.trim()) {
+      event.preventDefault();
+      replying = false;
+      event.currentTarget.blur();
+    }
+  }
+
   async function copyRef() {
     if (await copyText(decision.ref)) {
       copied = true;
@@ -251,22 +360,61 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <article
-  class="decision rounded-md border border-line bg-panel px-3 py-3 sm:px-4 {focused
-    ? 'ring-2 ring-accent'
-    : ''}"
+  class="decision min-w-0 {pane
+    ? 'space-y-4 p-4 sm:p-5'
+    : `rounded-md border bg-panel px-3 py-3 sm:px-4 ${focused ? 'border-accent' : 'border-line-subtle'}`}"
   data-decision-ref={decision.ref}
   data-decision-kind={decision.kind}
   data-variant={variant}
-  tabindex="0"
+  tabindex={pane ? -1 : 0}
   onkeydown={onKeydown}
   aria-label={decision.title}
 >
-  <header class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+  <header class="space-y-1.5">
+    <p
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-muted"
+    >
+      <span class="ui-label mb-0"
+        >{DECISION_KIND_LABELS[decision.kind] ?? decision.kind}</span
+      >
+      {#if decision.requestedBy}
+        <span aria-hidden="true">·</span>
+        <span data-author-chip title={decision.requestedBy.id}
+          >from <span class="text-fg">{decision.requestedBy.display}</span
+          ></span
+        >
+      {/if}
+      {#if workspace}<span aria-hidden="true">·</span><span>{workspace}</span
+        >{/if}
+      {#if age !== null}
+        <span aria-hidden="true">·</span>
+        <span class="tabular-nums">waiting {formatSpan(age)}</span>
+      {/if}
+      {#if deadline}
+        <span aria-hidden="true">·</span>
+        <span
+          class={deadline.overdue ? "font-medium text-danger-text" : ""}
+          data-source={`computed:${deadline.field}`}>{deadline.text}</span
+        >
+      {/if}
+      {#if decision.priority}
+        <SignalBadge
+          tone={decision.priority === "p0" || decision.priority === "p1"
+            ? "warn"
+            : "neutral"}
+          ><span data-source="computed:decisions.priority"
+            >{decision.priority.toUpperCase()}</span
+          ></SignalBadge
+        >
+      {/if}
+    </p>
     <h3
-      class="min-w-0 flex-1 text-body font-medium text-fg [overflow-wrap:anywhere]"
+      class="{pane || full
+        ? 'text-subtitle'
+        : 'text-body font-medium'} text-fg [overflow-wrap:anywhere]"
       data-decision-title
     >
-      {#if full}
+      {#if full || pane}
         {decision.title}
       {:else}
         <a
@@ -276,69 +424,44 @@
         >
       {/if}
     </h3>
-    <p class="flex flex-wrap items-center gap-x-1.5 text-meta text-fg-muted">
-      {#if decision.kind !== "ask"}
-        <span
-          class="rounded-sm bg-bg-soft px-1.5 text-micro uppercase tracking-wide"
-          >{DECISION_KIND_LABELS[decision.kind] ?? decision.kind}</span
-        >
-      {/if}
-      {#if workspace}<span>{workspace}</span><span aria-hidden="true">·</span
-        >{/if}
-      {#if age !== null}<span>{formatSpan(age)}</span>{/if}
-      {#if deadline}
-        <span aria-hidden="true">·</span>
-        <span
-          class={deadline.overdue ? "font-medium text-danger-text" : ""}
-          data-source={`computed:${deadline.field}`}>{deadline.text}</span
-        >
-      {/if}
-      {#if decision.priority}
-        <span
-          class="rounded-sm border border-line px-1 text-micro"
-          data-source="computed:decisions.priority">{decision.priority}</span
-        >
-      {/if}
-    </p>
+    {#if decision.blocksCount}
+      <p
+        class="text-meta text-fg-muted [overflow-wrap:anywhere]"
+        data-source="computed:decisions.blocks"
+      >
+        Blocks {decision.blocksCount}{#if decision.blocks.length}: {decision.blocks
+            .map((block) => block.title || block.ref)
+            .join(", ")}{/if}
+      </p>
+    {/if}
   </header>
-
-  {#if decision.blocksCount || decision.requestedBy}
-    <p class="mt-1 text-meta text-fg-muted [overflow-wrap:anywhere]">
-      {#if decision.blocksCount}
-        <span data-source="computed:decisions.blocks"
-          >blocks {decision.blocksCount}{#if decision.blocks.length}: {decision.blocks
-              .map((block) => block.title || block.ref)
-              .join(", ")}{/if}</span
-        >
-      {/if}
-      {#if decision.blocksCount && decision.requestedBy}<span
-          aria-hidden="true"
-        >
-          ·
-        </span>{/if}
-      {#if decision.requestedBy}
-        <span data-author-chip title={decision.requestedBy.id}
-          >from {decision.requestedBy.display}</span
-        >
-      {/if}
-    </p>
-  {/if}
 
   {#if decision.body}
     <div
-      class="mt-2 text-meta text-fg {full ? '' : 'line-clamp-3'}"
+      class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere] {pane ||
+      full
+        ? ''
+        : 'mt-2 line-clamp-3'}"
       data-decision-body
     >
-      {#if full}
-        <MarkdownRenderer content={decision.body} />
-      {:else}
-        {decision.body}
-      {/if}
+      <MarkdownRenderer
+        source={decision.body}
+        class="markdown-rendered--ask"
+        inline={!(pane || full)}
+        organizationSlug={organizationSlug || $page.params.organization}
+        workspaceSlug={workspaceSlug || $page.params.workspace}
+      />
     </div>
   {/if}
 
   {#if decision.curation}
-    <div class="mt-2 text-meta text-fg-muted" data-decision-curation>
+    <div
+      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {pane ||
+      full
+        ? ''
+        : 'mt-2'}"
+      data-decision-curation
+    >
       {#if decision.curation.action}<span class="font-medium text-fg"
           >Proposes: {decision.curation.action}</span
         >{/if}
@@ -360,17 +483,24 @@
   {/if}
 
   {#if decision.batch}
-    <div class="mt-2 text-meta text-fg-muted" data-decision-batch>
+    <div
+      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {pane ||
+      full
+        ? ''
+        : 'mt-2'}"
+      data-decision-batch
+    >
       <div class="flex flex-wrap items-center gap-2">
         <span class="font-medium text-fg" data-decision-batch-count
           >{decision.batch.count} grouped asks</span
         >
+        <span class="text-micro">One answer closes all of them.</span>
         {#if ungroupQueued}
           <MutationSendStatus target={batchTarget} />
         {:else if decision.batch.ungroupable !== false}
           <button
             type="button"
-            class="min-h-11 rounded-md border border-line px-2 py-1 text-meta text-fg hover:bg-panel-hover sm:min-h-0"
+            class="ml-auto text-micro text-fg-muted hover:text-fg hover:underline"
             data-decision-ungroup
             onclick={ungroup}>Ungroup</button
           >
@@ -392,12 +522,15 @@
   {/if}
 
   {#if saveError}
-    <p class="mt-2 text-meta text-danger-text" role="alert">{saveError}</p>
+    <p class="text-meta text-danger-text" role="alert">{saveError}</p>
   {/if}
 
   {#if failure}
     <div
-      class="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-danger bg-danger-soft px-2 py-1.5 text-meta"
+      class="flex flex-wrap items-center gap-2 rounded-md border border-danger bg-danger-soft px-2 py-1.5 text-meta {pane ||
+      full
+        ? ''
+        : 'mt-2'}"
       role="alert"
       data-decision-failed
     >
@@ -431,104 +564,185 @@
     </div>
   {/if}
 
-  <div class="mt-3 flex flex-wrap items-center gap-2">
+  <div class={pane || full ? "space-y-3" : "mt-3 space-y-2"}>
     {#if pmAnswer && (pmSent || pmQueued)}
       {#if pmQueued}
         <MutationSendStatus target={pmTarget} />
       {:else}
-        <span class="text-meta text-fg-muted" data-decision-answered
-          >Answer sent to your PM.</span
-        >
+        <p class="text-meta text-fg-muted" data-decision-answered>
+          Answer sent to your PM.
+        </p>
       {/if}
     {:else if elsewhere}
-      <a
-        class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg hover:bg-panel-hover sm:min-h-0"
-        href={elsewhereHref}
-        data-decision-open>Review in Access</a
+      <a class="ui-btn-secondary" href={elsewhereHref} data-decision-open
+        >Review in Access</a
       >
     {:else if confirming}
-      <span class="text-meta text-fg" role="status" data-decision-confirm
-        >Approving grants this access now.</span
+      <div
+        class="space-y-2 rounded-md border border-line bg-bg-soft px-3 py-2.5"
+        role="group"
+        aria-label="Confirm this grant"
       >
-      <button
-        type="button"
-        class="min-h-11 rounded-md border border-accent-solid bg-accent-solid px-3 py-1.5 text-meta font-medium text-white sm:min-h-0"
-        onclick={() => choose(confirming, 0)}>Approve access</button
-      >
-      <button
-        type="button"
-        class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta text-fg sm:min-h-0"
-        onclick={() => (confirming = "")}>Cancel</button
-      >
+        <p
+          class="text-meta font-medium text-fg"
+          role="status"
+          data-decision-confirm
+        >
+          Approving grants this access now.
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="ui-btn-primary"
+            onclick={() => choose(confirming, 0)}>Approve access</button
+          >
+          <button
+            type="button"
+            class="ui-btn-secondary"
+            onclick={() => (confirming = "")}>Cancel</button
+          >
+        </div>
+      </div>
     {:else if answered}
-      <span class="text-meta text-fg-muted" data-decision-answered
-        >{overlay?.status === "pending"
+      <p class="text-meta text-fg-muted" data-decision-answered>
+        {overlay?.status === "pending"
           ? "Answer waiting to send…"
-          : "Answered"}{#if overlay?.response_text}: “{overlay.response_text}”{/if}</span
+          : "Answered"}{#if overlay?.response_text}: “{overlay.response_text}”{/if}
+      </p>
+    {:else if decision.proposals.length}
+      <div role="group" aria-labelledby={`decide-suggested-${itemId}`}>
+        {#if pane || full}
+          <p class="ui-label" id={`decide-suggested-${itemId}`}>
+            Suggested responses
+          </p>
+        {:else}
+          <p class="sr-only" id={`decide-suggested-${itemId}`}>
+            Suggested responses
+          </p>
+        {/if}
+        <ul class="space-y-1.5">
+          {#each decision.proposals as proposal, index (index)}
+            {@const selected = armed === index}
+            <li>
+              <button
+                type="button"
+                class="proposal flex w-full items-start gap-2.5 rounded-md border px-3 py-2 text-left text-meta text-fg transition-colors disabled:opacity-60 {selected
+                  ? 'border-accent bg-accent-soft ring-1 ring-accent'
+                  : 'border-line-subtle bg-bg-soft hover:border-line hover:bg-panel-hover'}"
+                class:proposal--sending={flashing === index}
+                disabled={flashing !== -1 && flashing !== index}
+                data-decision-proposal={index + 1}
+                data-recommended={index === 0 ? "true" : undefined}
+                data-decision-armed={selected ? "true" : undefined}
+                aria-pressed={selected ? "true" : "false"}
+                aria-keyshortcuts={(pane || full) && index < MAX_KEYED
+                  ? String(index + 1)
+                  : undefined}
+                onclick={() => commit(index)}
+              >
+                {#if (pane || full) && index < MAX_KEYED}
+                  <kbd
+                    class="mt-px hidden w-4 shrink-0 rounded-sm border border-line text-center font-mono text-micro leading-4 text-fg-muted sm:inline-block"
+                    >{index + 1}</kbd
+                  >
+                {/if}
+                <span
+                  class="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]"
+                  >{proposal}</span
+                >
+                {#if index === 0 && decision.proposals.length > 1}
+                  <span
+                    class="shrink-0 rounded-sm bg-accent-soft px-1.5 text-micro font-medium text-accent-text"
+                    >Recommended</span
+                  >
+                {/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+
+    <!-- The composer stays mounted (hidden) so its durable draft restores and
+         keeps saving whether or not it is open. -->
+    <form
+      class="space-y-2"
+      class:hidden={!(replying || full || pane) ||
+        answered ||
+        structured ||
+        pmAnswer ||
+        elsewhere}
+      onsubmit={sendReply}
+      data-anx-save-scope
+    >
+      <label
+        class={pane || full ? "ui-label" : "sr-only"}
+        for={`decide-reply-${itemId}`}>Reply</label
       >
-    {:else}
-      {#each decision.proposals as proposal, index (index)}
+      <textarea
+        id={`decide-reply-${itemId}`}
+        class="ui-input {pane || full ? 'min-h-20' : 'min-h-16'}"
+        placeholder={pane || full ? "Write your own answer…" : "Reply…"}
+        bind:value={reply}
+        bind:this={replyEl}
+        use:durableDraft={draftKey}
+        onkeydown={onReplyKeydown}
+        aria-keyshortcuts="R"
+        data-decision-reply
+      ></textarea>
+      <div class="flex flex-wrap items-center gap-2">
         <button
-          type="button"
-          class="min-h-11 rounded-md border px-3 py-1.5 text-meta font-medium transition-colors sm:min-h-0 {index ===
-          0
-            ? 'border-accent-solid bg-accent-solid text-white hover:bg-accent-hover'
-            : 'border-line bg-panel text-fg hover:bg-panel-hover'}"
-          data-decision-proposal={index + 1}
-          data-recommended={index === 0 ? "true" : undefined}
-          onclick={() => choose(proposal, index)}
-          >{proposal}{#if index === 0 && decision.proposals.length > 1}<span
-              class="ml-1 font-normal opacity-80">(recommended)</span
-            >{/if}</button
+          type="submit"
+          class="ui-btn-primary"
+          title={`Send reply (${formatShortcut("Enter")})`}
+          disabled={!reply.trim()}>Send reply</button
         >
-      {/each}
-      {#if !structured && !pmAnswer}
-        <button
-          type="button"
-          class="min-h-11 rounded-md border border-line px-3 py-1.5 text-meta text-fg hover:bg-panel-hover sm:min-h-0"
-          aria-expanded={replying}
-          data-decision-reply-toggle
-          onclick={() => (replying = !replying)}>Reply…</button
-        >
-      {/if}
+      </div>
+    </form>
+  </div>
+  <div class="flex flex-wrap items-center gap-2 {pane || full ? '' : 'mt-2'}">
+    {#if !(pane || full) && !answered && !structured && !pmAnswer && !elsewhere && !confirming}
+      <button
+        type="button"
+        class="text-meta text-fg-muted hover:text-fg"
+        aria-expanded={replying}
+        data-decision-reply-toggle
+        onclick={() => (replying = !replying)}>Reply…</button
+      >
     {/if}
     <button
       type="button"
-      class="ml-auto min-h-11 rounded-md px-2 py-1.5 text-meta text-fg-muted hover:bg-panel-hover hover:text-fg sm:min-h-0"
+      class="ml-auto text-micro text-fg-muted hover:text-fg"
       title="Copy ref (c)"
       data-decision-copy-ref
       onclick={copyRef}>{copied ? "Copied" : "Copy ref"}</button
     >
   </div>
-
-  <!-- The composer stays mounted (hidden) so its durable draft restores and
-       keeps saving whether or not it is open. -->
-  <form
-    class="mt-2 space-y-2"
-    class:hidden={!(replying || full) ||
-      answered ||
-      structured ||
-      pmAnswer ||
-      elsewhere}
-    onsubmit={sendReply}
-    data-anx-save-scope
-  >
-    <label class="sr-only" for={`decide-reply-${itemId}`}>Reply</label>
-    <textarea
-      id={`decide-reply-${itemId}`}
-      class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-meta text-fg"
-      rows={full ? 4 : 2}
-      placeholder="Reply…"
-      bind:value={reply}
-      use:durableDraft={draftKey}
-      data-decision-reply
-    ></textarea>
-    <div class="flex justify-end">
-      <button
-        type="submit"
-        class="rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg hover:bg-panel-hover disabled:opacity-50"
-        disabled={!reply.trim()}>Send reply</button
-      >
-    </div>
-  </form>
 </article>
+
+<style>
+  /*
+   * One pulse, 220ms, so a click reads as "this one, going out" rather than a
+   * row that vanished. Reduced motion sends without it.
+   */
+  @keyframes proposal-send {
+    0% {
+      background: var(--accent-soft);
+    }
+    45% {
+      background: var(--accent-solid);
+      color: white;
+    }
+    100% {
+      background: var(--accent-soft);
+    }
+  }
+  .proposal--sending {
+    animation: proposal-send 220ms ease-out 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .proposal--sending {
+      animation: none;
+    }
+  }
+</style>

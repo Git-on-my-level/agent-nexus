@@ -67,7 +67,7 @@ describe("DecisionCard", () => {
     const buttons = container.querySelectorAll("[data-decision-proposal]");
     expect(buttons[0].textContent).toContain("Merge");
     expect(buttons[0].dataset.recommended).toBe("true");
-    expect(buttons[0].textContent).toContain("(recommended)");
+    expect(buttons[0].textContent).toContain("Recommended");
     await fireEvent.click(buttons[0]);
     expect(queue.queueInboxResponse).toHaveBeenCalledTimes(1);
     const call = queue.queueInboxResponse.mock.calls[0][0];
@@ -119,7 +119,7 @@ describe("DecisionCard", () => {
       '[data-source="computed:decisions.blocks"]',
     );
     expect(blocks.textContent).toContain("Battery curve v2");
-    expect(blocks.textContent).toContain("blocks 2");
+    expect(blocks.textContent).toContain("Blocks 2");
     expect(
       container.querySelector('[data-source="computed:decisions.decide_by"]')
         .textContent,
@@ -201,7 +201,7 @@ describe("DecisionCard", () => {
     const buttons = [
       ...container.querySelectorAll("[data-decision-proposal]"),
     ].map((b) => b.textContent.trim());
-    expect(buttons).toEqual(["Accept(recommended)", "Dismiss"]);
+    expect(buttons).toEqual(["Accept Recommended", "Dismiss"]);
     await fireEvent.click(
       container.querySelector('[data-decision-proposal="2"]'),
     );

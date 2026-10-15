@@ -101,10 +101,26 @@ export function inboxShortcutAction(
   return null;
 }
 
+function isShown(node) {
+  if (node.hidden || node.closest?.("[hidden], [inert]")) return false;
+  return typeof node.getClientRects === "function"
+    ? node.getClientRects().length > 0
+    : true;
+}
+
 /** True while some other dialog (palette, confirm) owns the keyboard. */
 export function otherDialogOpen(ownDialog = null) {
   if (typeof document === "undefined") return false;
-  return [...document.querySelectorAll('[aria-modal="true"]')].some(
-    (node) => node !== ownDialog,
-  );
+  if (
+    [...document.querySelectorAll('[aria-modal="true"]')].some(
+      (node) => node !== ownDialog,
+    )
+  )
+    return true;
+  // An open popup (account menu, workspace switcher) owns the keyboard too:
+  // a number key there must not answer anything. A listbox that is part of a
+  // page (the agents roster) is not a popup and does not count.
+  return [
+    ...document.querySelectorAll('[aria-haspopup][aria-expanded="true"]'),
+  ].some(isShown);
 }

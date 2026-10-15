@@ -1,9 +1,9 @@
-Review fleet onboarding runbook Review 5d · 1d overdue blocks 1: Fleet onboarding · from claude on m6 Approve(recommended)Request changes Reply… Copy ref Reply Send reply
+Review · from claude on m6 · waiting 5d · 1d overdue Review fleet onboarding runbook Blocks 1: Fleet onboarding Suggested responses Approve Recommended Request changes Reply Send reply Reply… Copy ref
 ---
-Merge battery-v2 calibration? 2d · by Oct 17 high blocks 2: Battery curve v2, Calibration table refresh · from build-agent on host-1 Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Merge(recommended)Hold a week Reply… Copy ref Reply Send reply
+Ask · from build-agent on host-1 · waiting 2d · by Oct 17 HIGH Merge battery-v2 calibration? Blocks 2: Battery curve v2, Calibration table refresh Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Suggested responses Merge Recommended Hold a week Reply Send reply Reply… Copy ref
 ---
-Give fleet-agent access to this workspace Access 3h from fleet-agent Requested by fleet-agent for host m6-mini. Approve(recommended)Deny Copy ref Reply Send reply
+Access · from fleet-agent · waiting 3h Give fleet-agent access to this workspace Requested by fleet-agent for host m6-mini. Suggested responses Approve Recommended Deny Reply Send reply Copy ref
 ---
-Move "BLE reliability" to In progress? PM proposal 2h from PM Requested from the initiative page; the source is outside this workspace. Approve(recommended)Reject Copy ref Reply Send reply
+PM proposal · from PM · waiting 2h Move "BLE reliability" to In progress? Requested from the initiative page; the source is outside this workspace. Suggested responses Approve Recommended Reject Reply Send reply Copy ref
 ---
-Withdraw "pick label scheme"? PM proposal 2m from PM Overtaken: PR #212 and #214 merged since the initiative last moved. Proposes: withdraw Label scheme Withdraw(recommended)Keep Reply… Copy ref Reply Send reply
+PM proposal · from PM · waiting 2m Withdraw "pick label scheme"? Overtaken: PR #212 and #214 merged since the initiative last moved. Proposes: withdraw Label scheme Suggested responses Withdraw Recommended Keep Reply Send reply Reply… Copy ref
