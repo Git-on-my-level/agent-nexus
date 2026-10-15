@@ -76,7 +76,7 @@ func TestFoldPromiseDone(t *testing.T) {
 }
 
 func TestParseWhen(t *testing.T) {
-	for raw, want := range map[string]time.Time{"2d": day(2), "36h": t0.Add(36 * time.Hour), "2026-10-12": day(2), "2026-10-12T00:00:00+00:00": day(2)} {
+	for raw, want := range map[string]time.Time{"2d": day(2), "36h": t0.Add(36 * time.Hour), "2026-10-12": day(2).Add(24*time.Hour - time.Second), "2026-10-12T00:00:00+00:00": day(2)} {
 		got, ok := ParseWhen(raw, t0)
 		if !ok || !got.Equal(want) {
 			t.Fatalf("%s = %v %v", raw, got, ok)

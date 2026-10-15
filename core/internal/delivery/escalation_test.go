@@ -28,6 +28,36 @@ func newEscalator(e *env, canRead func(principal, ask string) bool) (*delivery.E
 	}, pm
 }
 
+func TestDateOnlyByResolvesOnce(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.addAsk(t, "date-by", baseNow, "2026-10-15", 0, "Ship?")
+	var briefBy string
+	if err := e.db.QueryRow(`SELECT decide_by FROM brief_asks WHERE ask_id='date-by'`).Scan(&briefBy); err != nil {
+		t.Fatal(err)
+	}
+	esc, _ := newEscalator(e, nil)
+	if err := esc.Step(ctx, time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	var deadlineBy string
+	if err := e.db.QueryRow(`SELECT decide_by FROM ask_deadlines WHERE request_event_id='date-by'`).Scan(&deadlineBy); err != nil {
+		t.Fatal(err)
+	}
+	briefAt, err := time.Parse(time.RFC3339Nano, briefBy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadlineAt, err := time.Parse(time.RFC3339Nano, deadlineBy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 10, 15, 23, 59, 59, 0, time.UTC)
+	if !briefAt.Equal(want) || !deadlineAt.Equal(want) {
+		t.Fatalf("brief %s deadline %s", briefAt, deadlineAt)
+	}
+}
+
 func TestEscalatorPushOnce(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

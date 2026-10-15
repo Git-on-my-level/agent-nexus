@@ -1106,6 +1106,9 @@ var migrations = []migration{
 	// Trashing a message removes its brief note; restoring the message puts
 	// the note back and dirties the card so the promise fold is recomputed.
 	{Version: 95, AfterApply: installBriefNotesTrash},
+	// Date-only by and next.at were stored at midnight. End of that UTC day
+	// is the resolution brief_asks and ask_deadlines both use.
+	{Version: 96, AfterApply: installDateOnlyEndOfDay},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

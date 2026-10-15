@@ -253,8 +253,8 @@ func eventRef(id string) string {
 var promiseDurationPattern = regexp.MustCompile(`^([1-9][0-9]*)([smhd])$`)
 
 // ParseWhen resolves the review_by grammar against from: a UTC date
-// (YYYY-MM-DD, midnight UTC), a zoned RFC3339 timestamp, or a positive
-// s/m/h/d duration of at most 3650d. ok is false for anything else.
+// (YYYY-MM-DD, the end of that UTC day), a zoned RFC3339 timestamp, or a
+// positive s/m/h/d duration of at most 3650d. ok is false for anything else.
 func ParseWhen(raw string, from time.Time) (time.Time, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -267,7 +267,7 @@ func ParseWhen(raw string, from time.Time) (time.Time, bool) {
 		}
 		unit := map[string]time.Duration{"s": time.Second, "m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
 		d := time.Duration(n) * unit
-		if d <= 0 || d > 3650*24*time.Hour {
+		if d <= 0 || d > 3650*24*time.Hour || d/unit != time.Duration(n) {
 			return time.Time{}, false
 		}
 		return from.Add(d).UTC(), true
@@ -276,7 +276,9 @@ func ParseWhen(raw string, from time.Time) (time.Time, bool) {
 		return at.UTC(), true
 	}
 	if at, err := time.Parse("2006-01-02", raw); err == nil {
-		return at, true
+		// A calendar date is the whole day: "by Oct 15" is still open until
+		// 23:59:59 UTC. Escalation uses this same instant.
+		return at.Add(24*time.Hour - time.Second).UTC(), true
 	}
 	return time.Time{}, false
 }

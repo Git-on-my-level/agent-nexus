@@ -13,8 +13,9 @@ import (
 func init() {
 	// anx_resolve_when(raw, from) resolves the review_by grammar (date,
 	// RFC3339 or s/m/h/d duration) against an RFC3339 base and returns the
-	// RFC3339 UTC instant, or NULL. Brief fact triggers use it so decide_by and
-	// note promises are resolved once, at write time, on every write path.
+	// RFC3339 UTC instant, or NULL. A date-only value is the end of that UTC
+	// day, matching delivery.ResolveBy. Brief fact triggers use it so
+	// decide_by and note promises are resolved once, at write time.
 	sqlite.MustRegisterDeterministicScalarFunction("anx_resolve_when", 2, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
 		raw, _ := args[0].(string)
 		base, _ := args[1].(string)

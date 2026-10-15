@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
+
+	"agent-nexus-core/internal/plans"
 )
 
 const (
@@ -29,40 +29,16 @@ const (
 	// The walk continues until the ledger is exhausted, so unreadable rows
 	// cannot fill the page and hide a later readable ask from a count.
 	deadlinePage    = 500
-	maxByDuration   = 3650 * 24 * time.Hour
 	EscalationPush  = "push"
 	EscalationQueue = "digest"
 )
 
-var byDuration = regexp.MustCompile(`^([1-9][0-9]*)([smhd])$`)
-
 // ResolveBy resolves the review_by grammar (UTC date, zoned timestamp or a
 // positive s/m/h/d duration from the ask time). A bare date means the end of
-// that UTC day.
+// that UTC day, the same instant plans.ParseWhen and anx_resolve_when store
+// on brief_asks.decide_by.
 func ResolveBy(raw string, from time.Time) (time.Time, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}, false
-	}
-	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return t.UTC(), true
-	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		return t.Add(24*time.Hour - time.Second).UTC(), true
-	}
-	if m := byDuration.FindStringSubmatch(raw); m != nil {
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			return time.Time{}, false
-		}
-		unit := map[string]time.Duration{"s": time.Second, "m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
-		d := time.Duration(n) * unit
-		if d <= 0 || d > maxByDuration || d/unit != time.Duration(n) {
-			return time.Time{}, false
-		}
-		return from.Add(d).UTC(), true
-	}
-	return time.Time{}, false
+	return plans.ParseWhen(raw, from)
 }
 
 // EscalationMode applies the immediate-push rule to one overdue ask.
