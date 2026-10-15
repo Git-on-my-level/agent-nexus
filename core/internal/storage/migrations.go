@@ -1103,6 +1103,9 @@ var migrations = []migration{
 	{Version: 93, AfterApply: installDeliveryQueue},
 	// S20 seeks promised notes by due time instead of scanning brief_notes.
 	{Version: 94, AfterApply: installBriefNotesNextAtIndex},
+	// Trashing a message removes its brief note; restoring the message puts
+	// the note back and dirties the card so the promise fold is recomputed.
+	{Version: 95, AfterApply: installBriefNotesTrash},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {
