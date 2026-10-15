@@ -23,6 +23,12 @@ type RejectedDelivery struct{ Status int }
 
 func (e RejectedDelivery) Error() string { return fmt.Sprintf("terminal_http_%d", e.Status) }
 
+// DeferredDelivery retains a frozen request for replay after access or its
+// target is repaired, with a short reason suitable for local status output.
+type DeferredDelivery struct{ Reason string }
+
+func (e DeferredDelivery) Error() string { return e.Reason }
+
 type Delivery struct {
 	PrincipalID string         `json:"principal_id,omitempty"`
 	Key         string         `json:"key"`
@@ -229,6 +235,10 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 				}
 				if sendErr != nil {
 					current.Pending[i].Reason = "delivery_failed"
+					var deferred DeferredDelivery
+					if errors.As(sendErr, &deferred) {
+						current.Pending[i].Reason = deferred.Reason
+					}
 					if errors.Is(sendErr, ErrIdentityChanged) {
 						current.Pending[i].Reason = "identity_changed"
 					}

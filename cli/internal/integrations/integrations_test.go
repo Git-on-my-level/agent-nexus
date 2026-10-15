@@ -272,11 +272,11 @@ func TestSpoolPersistsAgeDrops(t *testing.T) {
 	}
 }
 
-func TestSettingsPreserveUnknownGroupMetadata(t *testing.T) {
+func TestSettingsDisableDropsOwnedGroupMetadata(t *testing.T) {
 	r := recipe(t)
 	raw := []byte(`{"hooks":{"PostToolUse":[{"matcher":"custom","user_metadata":{"keep":true},"hooks":[{"type":"command","command":"owned"}]}]}}`)
 	next, changed, err := (ClaudeCode{}).Merge(raw, r, "owned", "", false)
-	if err != nil || changed || !bytes.Equal(next, raw) {
+	if err != nil || !changed || bytes.Contains(next, []byte(`"owned"`)) || bytes.Contains(next, []byte(`"user_metadata"`)) {
 		t.Fatal(string(next), changed, err)
 	}
 }
@@ -368,7 +368,7 @@ func TestSettingsMetadataEnableAndDisableRemainValid(t *testing.T) {
 			t.Fatal(string(again), changed, err)
 		}
 		disabled, changed, err := (ClaudeCode{}).Merge(next, r, "new", "", false)
-		if err != nil || changed || !bytes.Equal(next, disabled) {
+		if err != nil || !changed || bytes.Contains(disabled, []byte(`"new"`)) || bytes.Contains(disabled, []byte(`"metadata"`)) {
 			t.Fatal(string(disabled), changed, err)
 		}
 		var root map[string]any
@@ -376,6 +376,9 @@ func TestSettingsMetadataEnableAndDisableRemainValid(t *testing.T) {
 			t.Fatal(err)
 		}
 		groups := root["hooks"].(map[string]any)["PostToolUse"].([]any)
+		if len(groups) != 0 {
+			t.Fatal("owned group remains", string(disabled))
+		}
 		for _, group := range groups {
 			if len(group.(map[string]any)["hooks"].([]any)) == 0 {
 				t.Fatal("empty handlers", string(disabled))

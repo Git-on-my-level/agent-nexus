@@ -117,22 +117,22 @@ func (ClaudeCode) Merge(raw []byte, r Recipe, command, previous string, enable b
 			found = true
 			removed = true
 		}
-		// Unknown group fields belong to the user. If removing our last
-		// handler would discard them, retain the complete group unchanged.
+		// Preserve metadata while repairing an owned group on enable. Disable
+		// drops an owned group when no handlers remain, including its metadata.
 		knownFields := 1 // hooks
 		if _, ok := group["matcher"]; ok {
 			knownFields++
 		}
-		if len(kept) == 0 && len(group) > knownFields {
-			if enable && removed {
+		if len(kept) == 0 {
+			if !removed {
+				out = append(out, g)
+			} else if enable && len(group) > knownFields {
 				group["matcher"] = encode(r.Matcher)
 				group["hooks"] = encode([]json.RawMessage{expectedHook(command)})
 				out = append(out, encode(group))
 				installed = true
-			} else {
-				out = append(out, g)
 			}
-		} else if len(kept) > 0 {
+		} else {
 			group["hooks"] = encode(kept)
 			out = append(out, encode(group))
 		}

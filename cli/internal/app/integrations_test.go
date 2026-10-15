@@ -633,6 +633,7 @@ func TestIntegrationsTerminalCardFailuresDeadLetter(t *testing.T) {
 			a, out, home := integrationTestApp(t)
 			var mu sync.Mutex
 			creates := 0
+			bodies := []string{}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path == "/auth/token" {
@@ -643,9 +644,20 @@ func TestIntegrationsTerminalCardFailuresDeadLetter(t *testing.T) {
 					http.NotFound(w, r)
 					return
 				}
+				var body json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
 				mu.Lock()
 				creates++
+				attempt := creates
+				bodies = append(bodies, string(body))
 				mu.Unlock()
+				if attempt >= 3 {
+					w.WriteHeader(201)
+					fmt.Fprint(w, `{"card":{"ref":"card:task"}}`)
+					return
+				}
 				w.WriteHeader(statusCode)
 				fmt.Fprint(w, `{"error":{"code":"rejected","message":"do not print upstream text"}}`)
 			}))
@@ -661,7 +673,7 @@ func TestIntegrationsTerminalCardFailuresDeadLetter(t *testing.T) {
 					t.Fatal(code, out.String(), stderr.String())
 				}
 			}
-			terminal := statusCode >= 400 && statusCode < 500 && statusCode != 408 && statusCode != 429
+			terminal := statusCode == 400 || statusCode == 422
 			status := integrationResult(t, a, out, "status", suggestedIntegration)
 			mu.Lock()
 			sent := creates
@@ -672,6 +684,29 @@ func TestIntegrationsTerminalCardFailuresDeadLetter(t *testing.T) {
 				}
 			} else if sent != 2 || status["dead_letter_count"] != float64(0) || status["spool_depth"] != float64(1) {
 				t.Fatal(sent, status)
+			}
+
+			if reason := map[int]string{401: "auth", 403: "forbidden", 404: "board_not_found"}[statusCode]; reason != "" {
+				if asMap(status["spool_reasons"])[reason] != float64(1) {
+					t.Fatal(status)
+				}
+				// Repair access/board availability, then replay the same frozen
+				// request to completion instead of abandoning the event.
+				a.Stdin = strings.NewReader(sampleHook(home))
+				out.Reset()
+				if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 {
+					t.Fatal(code, out.String())
+				}
+				status = integrationResult(t, a, out, "status", suggestedIntegration)
+				if status["spool_depth"] != float64(0) || status["dead_letter_count"] != float64(0) || status["ledger_count"] != float64(1) {
+					t.Fatal(status)
+				}
+				mu.Lock()
+				if creates != 3 || len(bodies) != 3 || bodies[0] != bodies[1] || bodies[1] != bodies[2] {
+					t.Error("replay body/key changed", creates, bodies)
+				}
+				mu.Unlock()
+
 			}
 		})
 	}
@@ -708,5 +743,107 @@ func TestIntegrationsRecipeOwnsAgentHarnessAndScopes(t *testing.T) {
 	summary := asMap(body["card"])["summary"].(string)
 	if !strings.Contains(summary, "Harness: other-harness") || strings.Contains(summary, "claude") {
 		t.Fatal(summary)
+	}
+}
+
+func TestIntegrationsDisableRemovesOwnedMetadataGroup(t *testing.T) {
+	for _, sibling := range []bool{false, true} {
+		t.Run(fmt.Sprint("sibling=", sibling), func(t *testing.T) {
+			a, out, _ := integrationTestApp(t)
+			enabled := integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+			configPath := enabled["config_path"].(string)
+			c, err := integrations.LoadConfig(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := integrations.ReadSettings(c.SettingsPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var settings map[string]any
+			if err = json.Unmarshal(raw, &settings); err != nil {
+				t.Fatal(err)
+			}
+			groups := settings["hooks"].(map[string]any)["PostToolUse"].([]any)
+			group := groups[0].(map[string]any)
+			group["user_metadata"] = map[string]any{"keep": "with surviving handlers"}
+			if sibling {
+				group["hooks"] = append(group["hooks"].([]any), map[string]any{"type": "command", "command": "user-handler"})
+			}
+			settings["permissions"] = map[string]any{"allow": []any{"Read"}}
+			if err = integrations.AtomicWrite(c.SettingsPath, integrations.JSON(settings)); err != nil {
+				t.Fatal(err)
+			}
+			disabled := integrationResult(t, a, out, "disable", suggestedIntegration)
+			if disabled["changed"] != true {
+				t.Fatal(disabled)
+			}
+			if _, err = os.Stat(configPath); !os.IsNotExist(err) {
+				t.Fatal("config remains", err)
+			}
+			raw, err = integrations.ReadSettings(c.SettingsPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, _ := integrations.Lookup(suggestedIntegration)
+			present, _, err := integrations.Adapters[r.Harness].Inspect(raw, r, c.Command)
+			if err != nil || present {
+				t.Fatal("owned handler remains after config removal", string(raw), err)
+			}
+			if err = json.Unmarshal(raw, &settings); err != nil {
+				t.Fatal(err)
+			}
+			groups = settings["hooks"].(map[string]any)["PostToolUse"].([]any)
+			if sibling {
+				if len(groups) != 1 {
+					t.Fatal(string(raw))
+				}
+				group = groups[0].(map[string]any)
+				if len(group["hooks"].([]any)) != 1 || asMap(group["user_metadata"])["keep"] != "with surviving handlers" || asMap(group["hooks"].([]any)[0])["command"] != "user-handler" {
+					t.Fatal(string(raw))
+				}
+			} else if len(groups) != 0 {
+				t.Fatal("empty owned group retained", string(raw))
+			}
+			if !strings.Contains(string(raw), `"permissions"`) {
+				t.Fatal("unrelated settings removed", string(raw))
+			}
+			if status := integrationResult(t, a, out, "status", suggestedIntegration); status["state"] != "disabled" || status["hook_present"] != false {
+				t.Fatal(status)
+			}
+			if again := integrationResult(t, a, out, "disable", suggestedIntegration); again["changed"] != false {
+				t.Fatal(again)
+			}
+		})
+	}
+}
+
+type integrationRetainedHookAdapter struct{ integrations.ClaudeCode }
+
+func (integrationRetainedHookAdapter) Merge(raw []byte, _ integrations.Recipe, _, _ string, _ bool) ([]byte, bool, error) {
+	return raw, false, nil
+}
+
+func TestIntegrationsDisableRetainsConfigIfOwnedHookRemains(t *testing.T) {
+	a, out, _ := integrationTestApp(t)
+	enabled := integrationResult(t, a, out, "enable", suggestedIntegration)
+	original := integrations.Adapters["claude-code"]
+	integrations.Adapters["claude-code"] = integrationRetainedHookAdapter{}
+	defer func() { integrations.Adapters["claude-code"] = original }()
+	out.Reset()
+	if code := a.Run([]string{"--json", "integrations", "disable", suggestedIntegration}); code == 0 {
+		t.Fatal("accepted incomplete hook removal", out.String())
+	}
+	c, err := integrations.LoadConfig(enabled["config_path"].(string))
+	if err != nil {
+		t.Fatal("deleted config while hook remains", err)
+	}
+	raw, err := integrations.ReadSettings(c.SettingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := integrations.Lookup(suggestedIntegration)
+	if present, _, err := original.Inspect(raw, r, c.Command); err != nil || !present {
+		t.Fatal(present, err)
 	}
 }

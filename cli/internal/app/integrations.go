@@ -370,6 +370,19 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 		result["changed"] = settingsChanged || configChanged
 	}
 	if o.verb == "disable" && exists {
+		// Inspect the file actually on disk before deleting setup state. If
+		// removal failed or an external writer restored the hook, retain config.
+		latest, readErr := integrations.ReadSettings(path)
+		if readErr != nil {
+			return nil, name, integrationError(readErr)
+		}
+		present, _, inspectErr := integrations.Adapters[r.Harness].Inspect(latest, r, command)
+		if inspectErr != nil {
+			return nil, name, integrationError(inspectErr)
+		}
+		if present {
+			return nil, name, integrationError(fmt.Errorf("owned hook remains; integration config retained"))
+		}
 		if err = os.Remove(configPath); err != nil {
 			return nil, name, integrationError(err)
 		}
@@ -499,8 +512,15 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 		if errors.As(err, &remote) && remote.Kind == errnorm.KindRemote {
 			details, _ := remote.Details.(map[string]any)
 			status, _ := details["status"].(int)
-			if status >= 400 && status < 500 && status != 408 && status != 429 {
+			switch status {
+			case 400, 422:
 				return integrations.RejectedDelivery{Status: status}
+			case 401:
+				return integrations.DeferredDelivery{Reason: "auth"}
+			case 403:
+				return integrations.DeferredDelivery{Reason: "forbidden"}
+			case 404:
+				return integrations.DeferredDelivery{Reason: "board_not_found"}
 			}
 		}
 		return err

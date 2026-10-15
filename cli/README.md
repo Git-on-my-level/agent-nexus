@@ -80,9 +80,10 @@ re-merging up to three times if the harness wrote concurrently; continued edits
 refuse setup. This check narrows the filesystem check/rename race; harness writers
 do not share ANX's lock. New parent directories are explicitly chmodded to 0700;
 existing directory modes remain unchanged. Object formatting/key order can
-change; hook order is kept. If removing the last handler would discard unknown
-group metadata, ANX leaves that group untouched (status reports drift after
-disable); remove that group manually once its metadata is no longer needed.
+change; hook order is kept. Disable removes the ANX handler and drops its group,
+including group metadata, when no handlers remain. Groups with other handlers
+retain their metadata. Config is removed only after verifying the owned hook is
+absent from settings.
 Dry-run reports the exact prospective settings/config JSON without writing files.
 
 Workspace selection uses the hook event's `cwd` and the normal `anx config map`
@@ -113,8 +114,10 @@ only an optimization; the server's atomic replay receipt prevents duplicates.
 The spool retains at most 100 events total (pending plus dead letters) for 30
 days, drains at most four pending events per invocation, rotates retryable
 failures to avoid starvation, and keeps the last 1,000 local receipts. A definitive
-card-create HTTP 4xx other than 408 or 429 becomes a dead letter, preserving its
-text without retrying it. Status reports `dead_letter_count`,
+card-create HTTP 400 or 422 becomes a dead letter, preserving its text without
+retrying it. HTTP 401, 403 and 404 remain pending as `auth`, `forbidden` and
+`board_not_found` so later hooks can replay after access or the board is fixed.
+Other failures remain pending. Status reports `dead_letter_count`,
 `dead_letter_reasons` (such as `terminal_http_400`), pending reasons, ledger size,
 and retention/capacity drops. Input is limited to 64 KiB;
 card titles/bodies are defensively truncated, and the retained prompt is quoted.
