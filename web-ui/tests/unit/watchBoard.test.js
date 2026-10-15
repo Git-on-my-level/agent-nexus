@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, expect, it, vi } from "vitest";
 
 import WatchBoard from "../../src/lib/components/watch/WatchBoard.svelte";
@@ -164,4 +165,106 @@ it("moves a focused card one stage with the arrow keys", async () => {
   await fireEvent.keyDown(slot, { key: "ArrowLeft" });
   // Already in the first stage: nothing to move to.
   expect(onMove).toHaveBeenCalledTimes(1);
+});
+
+it("ignores a repeated arrow key", async () => {
+  const onMove = vi.fn();
+  const { container } = render(WatchBoard, {
+    initiatives: [initiative],
+    onMove,
+  });
+  const slot = container.querySelector('[data-work-ref="card:ship"]');
+  await fireEvent.keyDown(slot, { key: "ArrowRight", repeat: true });
+  expect(onMove).not.toHaveBeenCalled();
+  await fireEvent.keyDown(slot, { key: "ArrowRight" });
+  expect(onMove).toHaveBeenCalledTimes(1);
+});
+
+it("does not send the card under the drop gap as an anchor", async () => {
+  const onMove = vi.fn();
+  const peer = {
+    ...initiative,
+    ref: "card:peer",
+    id: "peer",
+    title: "Peer on another board",
+    placement: "ready",
+  };
+  const { container } = render(WatchBoard, {
+    initiatives: [initiative, peer],
+    onMove,
+  });
+  layout(container);
+  for (const slot of container.querySelectorAll("[data-work-slot]")) {
+    const column = slot.closest("[data-watch-column]");
+    const index = ["backlog", "ready", "in_progress", "review", "done"].indexOf(
+      column.getAttribute("data-watch-column"),
+    );
+    slot.getBoundingClientRect = () => box(index * 280 + 8, 40, 240, 96);
+  }
+  await pan(container.querySelector('[data-work-ref="card:ship"]'), "mouse");
+  expect(onMove).toHaveBeenCalledTimes(1);
+  expect(onMove.mock.calls[0][1]).toBe("ready");
+  expect(onMove.mock.calls[0][2]).toBe("");
+});
+
+it("keeps the latest column when an older move settles", async () => {
+  let resolveFirst;
+  const onMove = vi.fn((row, placement) => {
+    if (placement === "ready")
+      return new Promise((resolve) => (resolveFirst = resolve));
+    return Promise.resolve(true);
+  });
+  const { container } = render(WatchBoard, {
+    initiatives: [initiative],
+    onMove,
+  });
+  const slot = container.querySelector('[data-work-ref="card:ship"]');
+  await fireEvent.keyDown(slot, { key: "ArrowRight" });
+  await tick();
+  const ready = container.querySelector(
+    '[data-watch-column="ready"] [data-work-ref="card:ship"]',
+  );
+  await fireEvent.keyDown(ready, { key: "ArrowRight" });
+  expect(onMove.mock.calls.map((call) => call[1])).toEqual([
+    "ready",
+    "in_progress",
+  ]);
+  await tick();
+  resolveFirst(false);
+  await tick();
+  expect(
+    container.querySelector(
+      '[data-watch-column="in_progress"] [data-work-ref="card:ship"]',
+    ),
+  ).not.toBeNull();
+});
+
+it("keeps a landed card when a brief refresh still shows the old column", async () => {
+  let resolve;
+  const onMove = vi.fn(() => new Promise((r) => (resolve = r)));
+  const { container, rerender } = render(WatchBoard, {
+    initiatives: [initiative],
+    onMove,
+  });
+  layout(container);
+  await pan(container.querySelector('[data-work-ref="card:ship"]'), "mouse");
+  expect(
+    container.querySelector(
+      '[data-watch-column="ready"] [data-work-ref="card:ship"]',
+    ),
+  ).not.toBeNull();
+  await rerender({ initiatives: [{ ...initiative }], onMove });
+  expect(
+    container.querySelector(
+      '[data-watch-column="ready"] [data-work-ref="card:ship"]',
+    ),
+  ).not.toBeNull();
+  resolve(true);
+  await tick();
+  await rerender({ initiatives: [{ ...initiative }], onMove });
+  expect(
+    container.querySelector(
+      '[data-watch-column="ready"] [data-work-ref="card:ship"]',
+    ),
+  ).not.toBeNull();
 });

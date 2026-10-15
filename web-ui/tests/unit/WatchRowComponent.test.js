@@ -112,6 +112,27 @@ describe("WatchRow", () => {
     ).toBeNull();
   });
 
+  it("renders a clamped note without a focusable link", () => {
+    const { container } = render(WatchRow, {
+      initiative: row({
+        note: {
+          text: "See [the rig log](https://example.com/rig) before the next run.",
+          author: { id: "a", display: "Ada" },
+          at: "2026-10-15T06:00:00Z",
+        },
+      }),
+      now: NOW,
+    });
+    const note = container.querySelector("[data-watch-note]");
+    expect(note.textContent).toContain("the rig log");
+    expect(
+      note.querySelector("a, button, input, select, textarea, [tabindex]"),
+    ).toBeNull();
+    expect(
+      container.querySelector("[data-watch-title]").getAttribute("href"),
+    ).toContain("/initiatives/battery");
+  });
+
   it("renders the note as markdown, never raw asterisks", () => {
     const { container } = render(WatchRow, {
       initiative: row({

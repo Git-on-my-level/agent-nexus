@@ -150,6 +150,8 @@ function refPlaceholder(value) {
  * flag is safe here the same way `activeHeadingSlugger` is.
  */
 let refChipsEnabled = false;
+/** Clamped previews render link text without a focusable anchor. */
+let plainLinks = false;
 /** Depth of the link currently being rendered; chips are off inside one. */
 let linkDepth = 0;
 
@@ -184,6 +186,16 @@ marked.use({
     link(token) {
       const href = String(token?.href ?? "");
       const text = String(token?.text ?? "");
+      // A clamped preview keeps the words and drops the anchor, so a link
+      // hidden by line-clamp cannot take a tab stop.
+      if (plainLinks) {
+        linkDepth += 1;
+        try {
+          return token?.tokens ? this.parser.parseInline(token.tokens) : text;
+        } finally {
+          linkDepth -= 1;
+        }
+      }
       // GFM turns a bare work URL into a link whose text is the URL. That is
       // the autolink case, and it becomes a chip; a link someone wrote with
       // their own label keeps the label they chose.
@@ -360,17 +372,19 @@ function sanitizeHtml(html) {
  * here, via `MarkdownRenderer`.
  *
  * @param {string} source
- * @param {{ inline?: boolean, refChips?: boolean }} [options]
+ * @param {{ inline?: boolean, refChips?: boolean, plain?: boolean }} [options]
  *   `inline` renders a single run with no block wrapper. `refChips` emits the
  *   chip placeholders `MarkdownRenderer` hydrates; turn it off for a surface
- *   that has no resolved refs to hydrate them with.
+ *   that has no resolved refs to hydrate them with. `plain` renders link text
+ *   without anchors, for a clamped preview that must not stay in tab order.
  */
 export function renderMarkdown(
   source,
-  { inline = false, refChips = true } = {},
+  { inline = false, refChips = true, plain = false } = {},
 ) {
   if (!source || typeof source !== "string") return "";
-  refChipsEnabled = refChips !== false;
+  refChipsEnabled = plain ? false : refChips !== false;
+  plainLinks = plain === true;
   linkDepth = 0;
   activeHeadingSlugger = inline ? null : createHeadingSlugger();
   let raw;
@@ -379,9 +393,11 @@ export function renderMarkdown(
   } finally {
     activeHeadingSlugger = null;
     refChipsEnabled = false;
+    plainLinks = false;
     linkDepth = 0;
   }
-  return sanitizeHtml(raw);
+  const html = sanitizeHtml(raw);
+  return plain ? html.replace(/<a\b[^>]*>/gi, "").replace(/<\/a>/gi, "") : html;
 }
 
 /**

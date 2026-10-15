@@ -11,18 +11,22 @@
   import { freshnessLabel } from "$lib/brief.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
-  import { isNexusOwned, workKey } from "$lib/pm/presentation.js";
+  import { isNexusOwned } from "$lib/pm/presentation.js";
   import {
     mutationOutbox,
     mutationConfirmations,
+    supersedeLocalMutation,
   } from "$lib/mutationOutbox.js";
   import {
     enqueueTaskMove,
-    taskMoveDraft,
     taskMoveError,
-    taskMoveTarget,
     isTaskMove,
   } from "$lib/taskMoveWork.js";
+  import {
+    createWatchMover,
+    displayedPlacement,
+    watchMoveAttention,
+  } from "$lib/watchMove.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
@@ -60,20 +64,95 @@
 
   let staleAge = $derived(formatAgo($store.updatedAt, now) || "earlier");
 
-  // Optimistic placements, dropped as soon as a fresh brief lands.
-  let placed = $state({});
-  $effect(() => {
-    void brief;
-    placed = {};
-  });
+  // Local column until the outbox entry is visible. A brief refresh does not
+  // clear it; confirmation and a rejected move do, via displayedPlacement.
+  let localPlacement = $state({});
   let initiatives = $derived(
-    (brief?.initiatives ?? []).map((row) =>
-      placed[row.ref] ? { ...row, placement: placed[row.ref] } : row,
-    ),
+    (brief?.initiatives ?? []).map((row) => {
+      const placement = displayedPlacement(
+        row,
+        $mutationOutbox,
+        $mutationConfirmations,
+        localPlacement[row.ref] || "",
+      );
+      return placement ? { ...row, placement } : row;
+    }),
   );
+  $effect(() => {
+    const rows = brief?.initiatives ?? [];
+    const outbox = $mutationOutbox;
+    const confirmations = $mutationConfirmations;
+    let changed = false;
+    const next = { ...localPlacement };
+    for (const ref of Object.keys(next)) {
+      const row = rows.find((item) => item.ref === ref);
+      if (brief && !row) {
+        delete next[ref];
+        changed = true;
+        continue;
+      }
+      if (!row) continue;
+      if (
+        displayedPlacement(row, outbox, confirmations, "") ||
+        watchMoveAttention(outbox, [ref]) ||
+        row.placement === next[ref]
+      ) {
+        delete next[ref];
+        changed = true;
+      }
+    }
+    if (changed) localPlacement = next;
+  });
 
   let notice = $state(null);
-  let moveError = $state("");
+  let localMoveError = $state("");
+  let attentionError = $derived(
+    watchMoveAttention(
+      $mutationOutbox,
+      (brief?.initiatives ?? []).map((row) => row.ref),
+    ),
+  );
+  let moveError = $derived(localMoveError || attentionError);
+  let held = $derived(
+    (brief?.initiatives ?? [])
+      .filter((row) =>
+        displayedPlacement(
+          row,
+          $mutationOutbox,
+          $mutationConfirmations,
+          localPlacement[row.ref] || "",
+        ),
+      )
+      .map((row) => row.ref),
+  );
+
+  const mover = createWatchMover({
+    async readWork(row) {
+      const work = (await coreClient.getWork(row.ref, { summary: 1 })).work;
+      let boardToken = "";
+      if (isNexusOwned(work)) {
+        const board = await coreClient.getBoard(
+          work.board_ref || work.board_id,
+        );
+        boardToken = (board?.board || board)?.updated_at || "";
+      }
+      return { work, boardToken };
+    },
+    enqueue(draft) {
+      return enqueueTaskMove(draft, {
+        draftTarget: "tasks:move",
+        href: workspaceHref("/watch?view=board"),
+      });
+    },
+    entries: () => get(mutationOutbox),
+    supersede: (key, replacementKey) =>
+      supersedeLocalMutation(key, { replacementKey }),
+    confirmExternal(work) {
+      return window.confirm(
+        `Ask the PM to request moving “${work.title}”? You approve the request in Decide.`,
+      );
+    },
+  });
 
   /** A confirmed move changes what core computes; read it again. */
   let confirmed = $derived(
@@ -87,64 +166,35 @@
     seen.confirmed = count;
   });
 
-  async function moveInitiative(row, placement, beforeRef = "") {
-    moveError = "";
+  async function moveInitiative(row, placement) {
+    localMoveError = "";
     notice = null;
-    if (placement === row.placement) return;
-    if (placement === "done") {
+    const result = await mover.move(row, placement);
+    if (result.status === "needs-evidence") {
       notice = {
         text: `Marking “${row.title}” done needs evidence.`,
         href: workspaceHref(`/initiatives/${encodeURIComponent(row.id)}`),
         link: "Open the initiative to add it",
       };
-      return;
+      return false;
     }
-    let work;
-    let boardToken = "";
-    try {
-      work = (await coreClient.getWork(row.ref, { summary: 1 })).work;
-      if (isNexusOwned(work)) {
-        const board = await coreClient.getBoard(
-          work.board_ref || work.board_id,
-        );
-        boardToken = (board?.board || board)?.updated_at || "";
-      }
-    } catch {
-      moveError = "Couldn't read that initiative. Nothing was moved.";
-      return;
+    if (result.status === "unreadable") {
+      localMoveError = "Couldn't read that initiative. Nothing was moved.";
+      return false;
     }
-    if (
-      get(mutationOutbox).some((entry) => entry.target === taskMoveTarget(work))
-    )
-      return;
-    if (
-      !isNexusOwned(work) &&
-      !window.confirm(
-        `Ask the PM to request moving “${row.title}”? You approve the request in Decide.`,
-      )
-    )
-      return;
-    const draft = taskMoveDraft(work, placement, {
-      key: workKey(work),
-      ref: "",
-      boardToken,
-      beforeCardId: beforeRef,
-      approved: true,
-    });
-    placed = { ...placed, [row.ref]: placement };
-    try {
-      await enqueueTaskMove(draft, {
-        draftTarget: "tasks:move",
-        href: workspaceHref("/watch?view=board"),
-      });
-      // The confirmation effect above re-reads the brief once core accepts it.
-      notice = { text: "Saved. Waiting for confirmation." };
-    } catch (err) {
-      const rest = { ...placed };
-      delete rest[row.ref];
-      placed = rest;
-      moveError = taskMoveError(err);
+    if (result.status === "busy") {
+      localMoveError = result.message;
+      return false;
     }
+    if (result.status === "failed") {
+      localMoveError = taskMoveError(result.error);
+      return false;
+    }
+    if (result.status !== "queued") return false;
+    localPlacement = { ...localPlacement, [row.ref]: result.placement };
+    // The confirmation effect above re-reads the brief once core accepts it.
+    notice = { text: "Saved. Waiting for confirmation." };
+    return true;
   }
 
   // Dashboards, kept from the old Overview below the initiatives.
@@ -308,7 +358,7 @@
       </p>
     </div>
   {:else if view === "board"}
-    <WatchBoard {initiatives} {now} onMove={moveInitiative} />
+    <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
   {:else}
     <WatchList {initiatives} {now} />
   {/if}

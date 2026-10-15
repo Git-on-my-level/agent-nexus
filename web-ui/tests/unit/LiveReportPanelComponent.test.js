@@ -52,3 +52,71 @@ describe("LiveReportPanel fleet enrollment expiry", () => {
     expect(text).not.toContain("expires expired");
   });
 });
+
+describe("clamped live prose", () => {
+  it("does not leave a link in the tab order", () => {
+    const { container } = render(LiveReportPanel, {
+      panel: {
+        type: "live-asks",
+        live: {
+          status: "ok",
+          data: {
+            items: [
+              {
+                id: "ask-1",
+                title: "Ship the brief",
+                status: "open",
+                age_seconds: 60,
+                response_text:
+                  "Details in [the notes](https://example.com/notes).",
+              },
+            ],
+          },
+        },
+      },
+      organizationSlug: "acme",
+      workspaceSlug: "ops",
+      now: NOW,
+    });
+    const prose = container.querySelector(".row-prose");
+    expect(prose.textContent).toContain("the notes");
+    expect(
+      prose.querySelector("a, button, input, select, textarea, [tabindex]"),
+    ).toBeNull();
+    expect(container.querySelector("a")?.textContent).toContain(
+      "Ship the brief",
+    );
+  });
+
+  it("does not leave an initiative summary link in the tab order", () => {
+    const { container } = render(LiveReportPanel, {
+      panel: {
+        type: "live-initiatives",
+        live: {
+          status: "ok",
+          data: {
+            items: [
+              {
+                ref: "card:ship",
+                title: "Ship the brief",
+                summary_text:
+                  "Read [the plan](https://example.com/plan) first.",
+              },
+            ],
+          },
+        },
+      },
+      organizationSlug: "acme",
+      workspaceSlug: "ops",
+      now: NOW,
+    });
+    const summary = container.querySelector(".markdown-rendered.summary");
+    expect(summary.textContent).toContain("the plan");
+    expect(
+      summary.querySelector("a, button, input, select, textarea, [tabindex]"),
+    ).toBeNull();
+    expect(container.querySelector("a")?.textContent).toContain(
+      "Ship the brief",
+    );
+  });
+});

@@ -101,6 +101,7 @@
     >
       <MarkdownRenderer
         inline
+        plain
         source={initiative.note.text}
         class="note-text"
         organizationSlug={$page.params.organization}

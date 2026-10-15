@@ -21,6 +21,11 @@
     source = "",
     class: className = "",
     inline = false,
+    /**
+     * Clamped previews: link text stays, anchors do not, so a line-clamp
+     * cannot leave a hidden link in the tab order.
+     */
+    plain = false,
     /** Page-level batch resolve result, from `indexResolvedRefs`. */
     resolved = new Map(),
     organizationSlug = "",
@@ -31,7 +36,13 @@
     refChips = true,
   } = $props();
 
-  let html = $derived(renderMarkdown(source, { inline, refChips }));
+  let html = $derived(
+    renderMarkdown(source, {
+      inline,
+      refChips: plain ? false : refChips,
+      plain,
+    }),
+  );
   let root = $state();
 
   $effect(() => {

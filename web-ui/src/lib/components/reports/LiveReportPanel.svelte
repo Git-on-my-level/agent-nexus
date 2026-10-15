@@ -68,6 +68,7 @@
        glance. The card itself is one click away. -->
   <MarkdownRenderer
     {source}
+    plain
     class="row-prose"
     {resolved}
     {organizationSlug}

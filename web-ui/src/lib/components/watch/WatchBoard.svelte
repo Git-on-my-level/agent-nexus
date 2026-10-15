@@ -23,18 +23,33 @@
   } from "$lib/workBoardDrag.js";
   import WatchRow from "./WatchRow.svelte";
 
-  let { initiatives = [], now = Date.now(), onMove = null } = $props();
+  let {
+    initiatives = [],
+    now = Date.now(),
+    onMove = null,
+    /** Refs whose column is still held by an unconfirmed move. */
+    held = undefined,
+  } = $props();
 
   /**
-   * Where a dropped card sits while its move is in flight, so the board
-   * never shows it back in its old column for the round trip. Kept until the
-   * next brief arrives: that is core's answer, and it wins.
-   * @type {{ ref: string, placement: string, before: string, initiatives: object[] } | null}
+   * Where a dropped card sits until the page's rows show that column.
+   * The page keeps the column from the outbox until core confirms or the
+   * move fails; a brief tick by itself does not put the card back.
+   * `token` is the attempt that may settle this landing.
+   * @type {{ ref: string, placement: string, before: string, token: number, pending: boolean } | null}
    */
   let landed = $state(null);
+  /** Latest attempt per card. An older settle must not clear a newer landing. */
+  const settleToken = new Map();
   $effect(() => {
-    if (landed && landed.initiatives !== initiatives && !landed.pending)
+    if (!landed || landed.pending) return;
+    const current = initiatives.find((row) => row.ref === landed.ref);
+    if (!current || current.placement === landed.placement) {
       landed = null;
+      return;
+    }
+    // The page dropped the hold: the move confirmed into the brief, or it failed.
+    if (Array.isArray(held) && !held.includes(landed.ref)) landed = null;
   });
 
   let columns = $derived.by(() => {
@@ -202,6 +217,8 @@
     const peers = (
       columns.find((c) => c.placement === target.placement)?.rows ?? []
     ).filter((r) => r.ref !== session.row.ref);
+    // The hole is visual only. Watch order inside a column is attention
+    // order, so the move itself always appends.
     const before = peers[target.index]?.ref ?? "";
     const from = columns.find((c) => c.placement === session.row.placement);
     const fromIndex = (from?.rows ?? []).findIndex(
@@ -220,26 +237,39 @@
    * Land the card where it was dropped, then send the move. The page owns
    * the move itself; if it declines (Done needs evidence, a confirm was
    * cancelled, the save failed) the card goes back where the brief has it.
+   * Only this attempt's settle may clear the landing — a slower, older
+   * request must not snap a newer drop back.
    */
   async function commit(row, placement, before) {
     // Order inside a column is attention order, computed; only the stage
-    // is a person's to set.
+    // is a person's to set. The move appends; `before` is the visual hole.
     if (!onMove || placement === row.placement) return;
-    landed = { ref: row.ref, placement, before, initiatives, pending: true };
+    const token = (settleToken.get(row.ref) ?? 0) + 1;
+    settleToken.set(row.ref, token);
+    landed = { ref: row.ref, placement, before, token, pending: true };
+    let accepted = false;
     try {
-      await onMove(row, placement, before);
-    } finally {
-      if (landed?.ref === row.ref) {
-        // The page applies an accepted move to its rows at once. If the row
-        // still sits where it was, the move was declined (Done needs
-        // evidence, a confirm was cancelled, the save failed): let it go back.
-        const current = initiatives.find((r) => r.ref === row.ref);
-        landed =
-          current?.placement === placement
-            ? { ...landed, initiatives, pending: false }
-            : null;
-      }
+      accepted = (await onMove(row, placement, "")) === true;
+    } catch {
+      accepted = false;
     }
+    if (settleToken.get(row.ref) !== token) return;
+    if (!accepted) {
+      if (landed?.token === token) landed = null;
+      return;
+    }
+    await tick();
+    if (settleToken.get(row.ref) !== token || landed?.token !== token) return;
+    const current = initiatives.find((item) => item.ref === row.ref);
+    if (current?.placement === placement) {
+      landed = null;
+      return;
+    }
+    if (Array.isArray(held) && !held.includes(row.ref)) {
+      landed = null;
+      return;
+    }
+    landed = { ...landed, pending: false };
   }
 
   function swallowClick(event) {
@@ -249,6 +279,11 @@
   }
 
   function onCardKey(event, row) {
+    if (event.repeat) {
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+        event.preventDefault();
+      return;
+    }
     if (event.target !== event.currentTarget) return;
     if (event.key === "Enter") {
       const link = event.currentTarget.querySelector("a[data-watch-title]");

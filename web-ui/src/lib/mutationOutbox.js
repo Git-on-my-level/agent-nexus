@@ -1089,6 +1089,31 @@ export async function recoverMutations() {
   }
 }
 
+/**
+ * Retire a saved mutation after its replacement is already persisted.
+ * The record stays as `superseded` so a crash cannot drop the only copy
+ * before the new intent is durable.
+ */
+export async function supersedeLocalMutation(
+  key,
+  { replacementKey = "" } = {},
+) {
+  const entry = get(mutationOutbox).find((row) => row.key === key);
+  if (!entry || !active(entry) || entry.state === "superseded") return false;
+  const saved = {
+    ...snapshot(entry),
+    state: "superseded",
+    ...(replacementKey ? { replacementKey } : {}),
+  };
+  await persist(saved);
+  volatile.delete(key);
+  mutationOutbox.update((rows) =>
+    rows.filter((row) => row.key !== key || row.scope !== entry.scope),
+  );
+  requestRecovery();
+  return true;
+}
+
 export async function retryMutation(key, { asNew = false } = {}) {
   const entry = get(mutationOutbox).find((row) => row.key === key);
   if (!entry || !active(entry)) return;
