@@ -143,6 +143,120 @@ test.describe("phone", () => {
   });
 });
 
+test.describe("phone composer", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  const LONG = {
+    ...brief,
+    decisions: brief.decisions.map((decision) =>
+      decision.inbox_item_id === MERGE.inbox_item_id
+        ? {
+            ...decision,
+            body: Array(24)
+              .fill("Calibration drift is under 2% on five of six rigs.")
+              .join("\n\n"),
+          }
+        : decision,
+    ),
+  };
+
+  /** True when the element's centre is the element (nothing on top of it). */
+  const uncovered = (locator) =>
+    locator.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.x + box.width / 2,
+        box.y + box.height / 2,
+      );
+      return Boolean(hit) && (hit === node || node.contains(hit));
+    });
+
+  test("a typed reply pins Send above the nav, then above the keyboard", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context, {
+      briefRoute: (route) =>
+        json(route, { ...LONG, generated_at: new Date().toISOString() }),
+    });
+    await page.goto(LIST);
+    const merge = page.locator(`[data-decide-card="${MERGE.inbox_item_id}"]`);
+    await merge.locator("[data-decision-more]").tap();
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    const field = merge.locator("[data-decision-reply]");
+    await expect(field).toBeFocused();
+    // The long body puts the composer far below the fold in flow.
+    await merge.evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await field.fill("Merge after the rig 4 rerun.");
+
+    const bar = merge.locator("[data-decision-composer]");
+    await expect(bar).toHaveAttribute("data-pinned", "true");
+    const send = merge.getByRole("button", { name: "Send reply" });
+    expect(await uncovered(send)).toBe(true);
+    expect(await uncovered(field)).toBe(true);
+    const nav = await page.locator(".shell-bottom-nav").boundingBox();
+    const sendBox = await send.boundingBox();
+    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(nav.y);
+
+    // An on-screen keyboard: the visual viewport loses its bottom 340px.
+    const KEYBOARD = 340;
+    await page.evaluate((keyboard) => {
+      const viewport = window.visualViewport;
+      Object.defineProperty(viewport, "height", {
+        configurable: true,
+        get: () => window.innerHeight - keyboard,
+      });
+      viewport.dispatchEvent(new Event("resize"));
+    }, KEYBOARD);
+    const top = 844 - KEYBOARD;
+    await expect
+      .poll(async () => {
+        const box = await send.boundingBox();
+        return box.y + box.height;
+      })
+      .toBeLessThanOrEqual(top);
+    const fieldBox = await field.boundingBox();
+    expect(fieldBox.y).toBeGreaterThanOrEqual(0);
+    expect(fieldBox.y + fieldBox.height).toBeLessThanOrEqual(top);
+    expect(await uncovered(send)).toBe(true);
+    expect(await uncovered(field)).toBe(true);
+
+    // Enter is a newline on a phone keyboard; Send is the way out.
+    await field.press("Enter");
+    await expect(field).toHaveValue("Merge after the rig 4 rerun.\n");
+    await expect(field).toBeFocused();
+    await send.tap();
+    await flush(page);
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0].response_text).toBe("Merge after the rig 4 rerun.");
+  });
+
+  test("the permalink's reply pins while it is in use", async ({
+    page,
+    context,
+  }) => {
+    await setup(context, {
+      briefRoute: (route) =>
+        json(route, { ...LONG, generated_at: new Date().toISOString() }),
+    });
+    await page.goto(`${LIST}/${MERGE.inbox_item_id}`);
+    const field = page.locator("[data-decision-reply]");
+    await expect(page.locator("[data-decision-composer]")).not.toHaveAttribute(
+      "data-pinned",
+      "true",
+    );
+    await field.focus();
+    await expect(page.locator("[data-decision-composer]")).toHaveAttribute(
+      "data-pinned",
+      "true",
+    );
+    await field.fill("Hold for rig 4.");
+    expect(
+      await uncovered(page.getByRole("button", { name: "Send reply" })),
+    ).toBe(true);
+  });
+});
+
 test("Undo takes an answer back before it is sent", async ({
   page,
   context,

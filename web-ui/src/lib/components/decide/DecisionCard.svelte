@@ -195,6 +195,7 @@
       restore: { origin: "decide", reply, chosen: body },
     });
     replying = false;
+    pinned = false;
     onAnswered?.(decision);
   }
 
@@ -341,34 +342,71 @@
     return () => observer.disconnect();
   });
 
-  /**
-   * On a phone the open composer pins to the bottom of the screen. The
-   * bottom nav sits at the layout viewport's bottom; an on-screen keyboard
-   * covers that edge without resizing the layout viewport, so measure how
-   * much of it the visual viewport has lost and pin above the larger of the
-   * two.
+  /*
+   * Phone: while the reader is typing a reply, the composer (field, Send,
+   * Cancel) is a bar fixed to the bottom of the screen, directly above the
+   * bottom nav or the on-screen keyboard, whichever reaches higher. Both are
+   * measured — the nav's real height, and the keyboard as the part of the
+   * layout viewport the visual viewport has lost — so nothing depends on how
+   * a browser treats a scroller's padding. The field being typed into is
+   * inside the bar, so the bar can never cover it. The form keeps the bar's
+   * height in flow, so the card does not jump when it pins.
    */
-  function keyboardAware(node) {
-    const viewport =
-      typeof window === "undefined" ? null : window.visualViewport;
-    if (!viewport) return;
-    const update = () => {
-      const inset = Math.max(
-        0,
-        window.innerHeight - viewport.height - viewport.offsetTop,
-      );
-      node.style.setProperty("--keyboard-inset", `${Math.round(inset)}px`);
-    };
-    update();
-    viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
-    return {
-      destroy() {
-        viewport.removeEventListener("resize", update);
-        viewport.removeEventListener("scroll", update);
-      },
-    };
+  const PHONE_QUERY = "(max-width: 1023px)";
+  let pinned = $state(false);
+  let pinBottom = $state(0);
+  let barSpace = $state(0);
+  let barEl = $state(null);
+
+  function onPhone() {
+    return (
+      typeof window !== "undefined" &&
+      Boolean(window.matchMedia?.(PHONE_QUERY).matches)
+    );
   }
+
+  function measurePin() {
+    const viewport = window.visualViewport;
+    const keyboard = viewport
+      ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      : 0;
+    const nav = document.querySelector(".shell-bottom-nav");
+    const navHeight =
+      nav && getComputedStyle(nav).display !== "none"
+        ? nav.getBoundingClientRect().height
+        : 0;
+    pinBottom = Math.round(Math.max(navHeight, keyboard));
+  }
+
+  function onComposerFocusIn() {
+    if (pinned || !(stack || full) || !onPhone()) return;
+    barSpace = barEl?.offsetHeight ?? 0;
+    measurePin();
+    pinned = true;
+  }
+
+  function onComposerFocusOut(event) {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    pinned = false;
+  }
+
+  /** A tap on Send or Cancel must not blur the field and unpin the bar. */
+  function keepFocus(event) {
+    if (pinned) event.preventDefault();
+  }
+
+  $effect(() => {
+    if (!pinned) return;
+    const viewport = window.visualViewport;
+    window.addEventListener("resize", measurePin);
+    viewport?.addEventListener("resize", measurePin);
+    viewport?.addEventListener("scroll", measurePin);
+    return () => {
+      window.removeEventListener("resize", measurePin);
+      viewport?.removeEventListener("resize", measurePin);
+      viewport?.removeEventListener("scroll", measurePin);
+    };
+  });
 
   function onReplyKeydown(event) {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -627,11 +665,7 @@
     </div>
   {/if}
 
-  <!-- A stacked card's composer pins against the whole card, so this
-       wrapper has no box of its own there. -->
-  <div
-    class="{rich ? 'space-y-3' : 'mt-3 space-y-2'} {stack ? 'contents' : ''}"
-  >
+  <div class={rich ? "space-y-3" : "mt-3 space-y-2"}>
     {#if pmAnswer && (pmSent || pmQueued)}
       {#if pmQueued}
         <MutationSendStatus target={pmTarget} />
@@ -735,48 +769,62 @@
     <!-- The composer stays mounted (hidden) so its durable draft restores and
          keeps saving whether or not it is open. -->
     <form
-      class="decide-composer space-y-2"
-      class:decide-composer--pinned={stack}
-      class:decide-composer--focus-pin={full}
+      class="space-y-2"
       class:hidden={!(replying || full || pane) ||
         answered ||
         structured ||
         pmAnswer ||
         elsewhere}
       onsubmit={sendReply}
-      use:keyboardAware
+      onfocusin={onComposerFocusIn}
+      onfocusout={onComposerFocusOut}
+      style:min-height={pinned ? `${barSpace}px` : undefined}
       data-anx-save-scope
     >
       <label
         class={pane || full ? "ui-label" : "sr-only"}
         for={`decide-reply-${itemId}`}>Reply</label
       >
-      <textarea
-        id={`decide-reply-${itemId}`}
-        class="ui-input {pane || full ? 'min-h-20' : 'min-h-16'}"
-        placeholder={pane || full ? "Write your own answer…" : "Reply…"}
-        bind:value={reply}
-        bind:this={replyEl}
-        use:durableDraft={draftKey}
-        onkeydown={onReplyKeydown}
-        aria-keyshortcuts="R"
-        data-decision-reply
-      ></textarea>
-      <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="submit"
-          class="ui-btn-primary max-lg:min-h-11"
-          title={`Send reply (${formatShortcut("Enter")})`}
-          disabled={!reply.trim()}>Send reply</button
-        >
-        {#if stack}
+      <div
+        class="space-y-2"
+        class:decide-composer-bar--pinned={pinned}
+        style:bottom={pinned ? `${pinBottom}px` : undefined}
+        bind:this={barEl}
+        data-decision-composer
+        data-pinned={pinned ? "true" : undefined}
+      >
+        <textarea
+          id={`decide-reply-${itemId}`}
+          class="ui-input {pane || full ? 'min-h-20' : 'min-h-16'}"
+          placeholder={pane || full ? "Write your own answer…" : "Reply…"}
+          bind:value={reply}
+          bind:this={replyEl}
+          use:durableDraft={draftKey}
+          onkeydown={onReplyKeydown}
+          aria-keyshortcuts="R"
+          data-decision-reply
+        ></textarea>
+        <div class="flex flex-wrap items-center gap-2">
           <button
-            type="button"
-            class="ui-btn-secondary max-lg:min-h-11"
-            data-decision-reply-cancel
-            onclick={() => (replying = false)}>Cancel</button
+            type="submit"
+            class="ui-btn-primary max-lg:min-h-11"
+            title={`Send reply (${formatShortcut("Enter")})`}
+            onpointerdown={keepFocus}
+            disabled={!reply.trim()}>Send reply</button
           >
-        {/if}
+          {#if stack}
+            <button
+              type="button"
+              class="ui-btn-secondary max-lg:min-h-11"
+              data-decision-reply-cancel
+              onpointerdown={keepFocus}
+              onclick={() => {
+                replying = false;
+                pinned = false;
+              }}>Cancel</button
+            >
+          {/if}
+        </div>
       </div>
     </form>
   </div>
@@ -814,35 +862,16 @@
   .decision-fold--faded {
     mask-image: linear-gradient(to bottom, black 70%, transparent);
   }
-  /*
-   * Phone: an open composer stays reachable while the decision above it is
-   * long. It pins to the bottom of the screen, above the bottom nav or the
-   * on-screen keyboard, whichever is taller, and never leaves its card.
-   * The permalink's always-open composer pins only while it is in use.
-   */
-  @media (max-width: 1023px) {
-    .decide-composer--pinned,
-    .decide-composer--focus-pin:focus-within {
-      position: sticky;
-      /*
-       * Sticky offsets count from inside the shell scroller's bottom
-       * padding, which already clears the bottom nav (5rem plus the home
-       * indicator). An open keyboard taller than that lifts it further.
-       */
-      bottom: max(
-        0px,
-        calc(
-          var(--keyboard-inset, 0px) + 0.25rem - 5rem -
-            env(safe-area-inset-bottom, 0px)
-        )
-      );
-      z-index: 5;
-      margin-inline: -0.5rem;
-      padding: 0.5rem;
-      border-radius: var(--radius-md);
-      background: var(--panel);
-      box-shadow: 0 -6px 12px -8px rgb(0 0 0 / 0.35);
-    }
+  /* Phone, while typing: the composer bar above the nav or keyboard. */
+  .decide-composer-bar--pinned {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 -8px 16px -10px rgb(0 0 0 / 0.45);
   }
   /*
    * One pulse, 220ms, so a click reads as "this one, going out" rather than a
