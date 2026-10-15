@@ -75,14 +75,13 @@
         .map((entry) => entry.itemId),
     ]),
   );
-  /** Answered here (PM answers have no overlay): kept off the list. */
-  let cleared = $state(new Set());
+  /*
+   * Only the response queue decides: a send that fails (or needs the reader,
+   * like an unreachable requester) drops back to `failed`/`attention` and the
+   * row returns with Retry, Answer without notifying and Edit.
+   */
   let decisions = $derived(
-    all.filter(
-      (decision) =>
-        !answeredIds.has(decision.inboxItemId) &&
-        !cleared.has(decision.inboxItemId),
-    ),
+    all.filter((decision) => !answeredIds.has(decision.inboxItemId)),
   );
 
   let selectedId = $state("");
@@ -90,8 +89,14 @@
     decisions.find((decision) => decision.inboxItemId === selectedId) ?? null,
   );
   let selectedIndex = $derived(selected ? decisions.indexOf(selected) : -1);
-  // Phone: the list and the reading pane are separate screens.
-  let showingDetail = $derived(Boolean(selectedParam && selected));
+  // Phone: the list and the reading pane are separate screens. A link to an
+  // item that is gone shows the list, never some other decision.
+  let showingDetail = $derived(
+    Boolean(selectedParam && selected?.inboxItemId === selectedParam),
+  );
+  /** Wide screens show both panes; a phone shows the pane only when open. */
+  let wide = $state(true);
+  let paneVisible = $derived(wide || showingDetail);
 
   let freshness = $derived(freshnessLabel($brief.data?.asOf, now));
   let filterTitle = $derived(
@@ -117,12 +122,33 @@
   });
 
   onMount(() => {
+    const query = window.matchMedia?.("(min-width: 1024px)");
+    const onWidth = () => (wide = query ? query.matches : true);
+    onWidth();
+    query?.addEventListener?.("change", onWidth);
     const stop = mountBrief();
     const clock = setInterval(() => (now = Date.now()), 30_000);
     return () => {
+      query?.removeEventListener?.("change", onWidth);
       stop();
       clearInterval(clock);
     };
+  });
+
+  /*
+   * Clearing the loaded page is not "you're clear" when core truncated the
+   * list: fetch the next page instead.
+   */
+  // Effect bookkeeping, deliberately not reactive: one refetch per brief.
+  const refetched = { asOf: "" };
+  let morePending = $derived(
+    Boolean($brief.data?.truncated?.decisions) && !decisions.length,
+  );
+  $effect(() => {
+    const asOf = $brief.data?.asOf ?? "";
+    if (!morePending || refetched.asOf === asOf) return;
+    refetched.asOf = asOf;
+    void brief.refresh({ force: true });
   });
 
   function itemHref(id) {
@@ -144,9 +170,13 @@
         noScroll: true,
       });
     await tick();
-    listEl
-      ?.querySelector(`[data-decide-row="${CSS.escape(selectedId)}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+    const row = listEl?.querySelector(
+      `[data-decide-row="${CSS.escape(selectedId)}"]`,
+    );
+    row?.scrollIntoView({ block: "nearest" });
+    // Focus follows the highlight, so Enter opens the row J/K landed on.
+    if (row && listEl?.contains(document.activeElement))
+      row.focus({ preventScroll: true });
   }
 
   /**
@@ -160,7 +190,6 @@
       (row) => row.inboxItemId === decision.inboxItemId,
     );
     const next = decisions[index + 1] ?? decisions[index - 1] ?? null;
-    cleared = new Set([...cleared, decision.inboxItemId]);
     selectedId = next?.inboxItemId ?? "";
     if (selectedParam)
       void goto(itemHref(next ? selectedId : ""), {
@@ -173,9 +202,6 @@
   function onUndo() {
     const restored = undoInboxResponse();
     if (!restored) return;
-    const rest = new Set(cleared);
-    rest.delete(restored.itemId);
-    cleared = rest;
     selectedId = restored.itemId;
   }
 
@@ -199,6 +225,8 @@
         !event.ctrlKey &&
         !event.altKey &&
         !helpOpen &&
+        paneVisible &&
+        !otherDialogOpen() &&
         !(
           event.target instanceof HTMLElement &&
           (event.target.isContentEditable ||
@@ -232,12 +260,15 @@
         void select(selectedIndex - 1);
         return;
       case "proposal":
-        if (detail?.pressProposal(action.index - 1)) event.preventDefault();
+        // A hidden pane (a phone on the list) must never answer.
+        if (paneVisible && detail?.pressProposal(action.index - 1))
+          event.preventDefault();
         return;
       case "clear-choice":
         if (detail?.clearChoice()) event.preventDefault();
         return;
       case "reply":
+        if (!paneVisible) return;
         event.preventDefault();
         void detail?.focusReply();
         return;
@@ -331,8 +362,15 @@
       class="flex flex-col items-center gap-1 rounded-md border border-line-subtle bg-panel px-5 py-12 text-center"
       data-decide-empty
     >
-      <p class="text-body font-medium text-fg">You’re clear.</p>
-      <p class="text-meta text-fg-muted">Nothing is waiting on you.</p>
+      {#if morePending}
+        <p class="text-body font-medium text-fg">Loading more…</p>
+        <p class="text-meta text-fg-muted">
+          You answered everything that was loaded.
+        </p>
+      {:else}
+        <p class="text-body font-medium text-fg">You’re clear.</p>
+        <p class="text-meta text-fg-muted">Nothing is waiting on you.</p>
+      {/if}
     </div>
   {:else}
     <div
@@ -416,7 +454,7 @@
           <p
             class="border-t border-line-subtle px-4 py-3 text-micro text-fg-muted"
           >
-            Showing the first {decisions.length}. Answer some to see the rest.
+            More are waiting. Answer these to load the rest.
           </p>
         {/if}
       </section>

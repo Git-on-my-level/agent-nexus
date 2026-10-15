@@ -280,6 +280,10 @@
     }, FLASH_MS);
   }
 
+  // A send still flashing when the card goes away is dropped, not sent: the
+  // reader has moved on (J, another row) and must not answer the old one.
+  $effect(() => () => clearTimeout(flashTimer));
+
   /** Number key `index` (zero-based): arm, or send when already armed. */
   export function pressProposal(index) {
     if (!canChoose || index < 0 || index >= decision.proposals.length)

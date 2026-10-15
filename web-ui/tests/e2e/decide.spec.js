@@ -107,7 +107,8 @@ test("Undo takes an answer back before it is sent", async ({
   await page.getByRole("button", { name: /undo/i }).click();
   // Undo puts the row back, selected, with its options.
   await expect(pane.locator('[data-decision-proposal="2"]')).toBeVisible();
-  await page.waitForTimeout(500);
+  // Past the 5s undo window: a send that was only delayed would land now.
+  await page.waitForTimeout(6_000);
   expect(bodies).toHaveLength(0);
 });
 
@@ -205,4 +206,70 @@ test("old Inbox links land on Decide", async ({ page, context }) => {
   await page.goto("/o/local/w/local/inbox/ask-91");
   await expect(page).toHaveURL(/\/decide\/ask-91$/);
   await expect(page.locator("[data-decision-ref]")).toHaveCount(1);
+});
+
+test("a refused answer comes back with its recovery controls", async ({
+  page,
+  context,
+}) => {
+  await setup(context, {
+    respond: (route) =>
+      json(
+        route,
+        {
+          error: {
+            code: "notification_target_required",
+            message: "The requester cannot be notified.",
+          },
+        },
+        409,
+      ),
+  });
+  await page.goto(LIST);
+  await page.locator(`[data-decide-row="${MERGE.inbox_item_id}"]`).click();
+  const pane = page.locator(
+    `[data-variant="pane"][data-decision-ref="${MERGE.ref}"]`,
+  );
+  await pane.locator('[data-decision-proposal="1"]').click();
+  await expect(
+    page.locator(`[data-decide-row="${MERGE.inbox_item_id}"]`),
+  ).toHaveCount(0);
+  await flush(page);
+  // The row returns, with a way to answer without notifying.
+  await expect(
+    page.locator(`[data-decide-row="${MERGE.inbox_item_id}"]`),
+  ).toBeVisible();
+  await page.locator(`[data-decide-row="${MERGE.inbox_item_id}"]`).click();
+  await expect(pane.locator("[data-decision-answer-silently]")).toBeVisible();
+});
+
+test.describe("phone keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("number keys on the list never answer a hidden decision", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context);
+    await page.goto(LIST);
+    await expect(page.locator("[data-decide-row]").first()).toBeVisible();
+    await page.keyboard.press("1");
+    await page.keyboard.press("1");
+    await page.waitForTimeout(300);
+    await expect(page.locator("[data-decide-row]")).toHaveCount(
+      brief.decisions.length,
+    );
+    await flush(page);
+    expect(bodies).toHaveLength(0);
+  });
+
+  test("a link to an item that is gone shows the list", async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    await page.goto(`${LIST}?item=ask-gone`);
+    await expect(page.locator("[data-decide-row]").first()).toBeVisible();
+    await expect(page.locator('[data-variant="pane"]')).toBeHidden();
+  });
 });
