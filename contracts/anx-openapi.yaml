@@ -13588,6 +13588,7 @@ components:
           maxItems: 2
           description: >
             First two valid, distinct series refs in canonical card refs order,
+            considering at most 200 authored refs within the first 64 KiB of refs JSON,
             filtered through the same scoped series relations as series reads.
             Hidden or unmatched explicit label selectors are omitted. Ambiguous
             selectors retain authored labels with null last_value/last_at.

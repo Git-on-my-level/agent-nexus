@@ -5,15 +5,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"math"
+	"strings"
 	"time"
 
 	"agent-nexus-core/internal/seriesref"
 )
 
 const (
-	briefSeriesLimit     = 2
-	briefMetricWindow    = 7 * 24 * time.Hour
-	briefMetricFlatAfter = 3 * 24 * time.Hour
+	briefSeriesLimit         = 2
+	briefSeriesRefCandidates = 200
+	briefSeriesRefBytes      = 64 << 10
+	briefMetricWindow        = 7 * 24 * time.Hour
+	briefMetricFlatAfter     = 3 * 24 * time.Hour
 )
 
 type briefSeries struct {
@@ -39,7 +42,7 @@ func (b *briefBuild) initiativeSeries(ids []string, items []map[string]any) erro
 		return nil
 	}
 	encoded, _ := json.Marshal(ids)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT id,refs_json FROM cards WHERE id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT id,CAST(substr(CAST(refs_json AS BLOB),1,?) AS TEXT) FROM cards WHERE id IN (SELECT value FROM json_each(?))`, briefSeriesRefBytes, string(encoded))
 	if err != nil {
 		return err
 	}
@@ -52,23 +55,8 @@ func (b *briefBuild) initiativeSeries(ids []string, items []map[string]any) erro
 			rows.Close()
 			return err
 		}
-		var candidates []string
-		if err = json.Unmarshal([]byte(raw), &candidates); err != nil {
-			rows.Close()
-			return err
-		}
-		admitted := map[string]bool{}
-		for _, candidate := range candidates {
-			if len(byCard[id]) == briefSeriesLimit {
-				break
-			}
-			r, e := seriesref.ParseRef(candidate)
-			if e != nil || admitted[candidate] {
-				continue
-			}
-			admitted[candidate] = true
-			r.Range = briefMetricWindow
-			r.Baseline = nil
+		for _, r := range briefCardSeriesRefs(raw) {
+			candidate := r.Ref
 			byCard[id] = append(byCard[id], r)
 			if !seen[candidate] {
 				seen[candidate] = true
@@ -124,6 +112,34 @@ func (b *briefBuild) initiativeSeries(ids []string, items []map[string]any) erro
 		}
 	}
 	return nil
+}
+
+// Bound decoding as well as returned metrics. The SQL prefix caps materialized
+// bytes; the streaming decoder stops at 200 authored atoms or two valid refs.
+// A truncated final atom contributes nothing; already decoded refs remain usable.
+func briefCardSeriesRefs(raw string) []seriesref.Ref {
+	out := []seriesref.Ref{}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('[') {
+		return out
+	}
+	seen := map[string]bool{}
+	for n := 0; n < briefSeriesRefCandidates && decoder.More() && len(out) < briefSeriesLimit; n++ {
+		var candidate string
+		if decoder.Decode(&candidate) != nil {
+			break
+		}
+		r, err := seriesref.ParseRef(candidate)
+		if err != nil || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		r.Range = briefMetricWindow
+		r.Baseline = nil
+		out = append(out, r)
+	}
+	return out
 }
 
 type briefMetricDay struct {

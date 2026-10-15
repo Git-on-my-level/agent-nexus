@@ -33,7 +33,9 @@ local workspace copies, see [the resident memory probe](resident-memory.md).
 
 `GET /brief` admits at most 50 initiatives before enriching their canonical
 `cards.refs_json`. Each row admits its first two valid, distinct series refs
-before visibility filtering (no refill past hidden candidates). One scoped card
+before visibility filtering (no refill past hidden candidates). Admission examines
+at most 200 authored refs within the first 64 KiB of each card's refs JSON; SQL
+caps returned bytes and a streaming decoder bounds Go allocation/work. One scoped card
 primary-key batch and one `seriesref.LatestRefs` batch (100 refs)
 load metadata and latest values; each ref uses the ordinary series visibility,
 at most 100 registered label candidates and two matching streams. Explicit

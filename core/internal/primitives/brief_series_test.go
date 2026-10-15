@@ -2,6 +2,8 @@ package primitives
 
 import (
 	"database/sql"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,5 +36,25 @@ func TestBriefFlatThresholdAndExcursions(t *testing.T) {
 	days[day] = d
 	if got := computeBriefMetricFlat(metric, days); got.Flat || got.ForSeconds != 0 {
 		t.Fatal("zero baseline excursion hidden", got)
+	}
+}
+
+func TestBriefSeriesRefInputBounds(t *testing.T) {
+	candidates := make([]string, briefSeriesRefCandidates)
+	for i := range candidates {
+		candidates[i] = "document:other"
+	}
+	candidates = append(candidates, "series:later")
+	raw, _ := json.Marshal(candidates)
+	if got := briefCardSeriesRefs(string(raw)); len(got) != 0 {
+		t.Fatal("read beyond candidate bound", got)
+	}
+	// A truncated final atom cannot discard an earlier complete series ref.
+	raw, _ = json.Marshal([]string{"series:first", strings.Repeat("x", briefSeriesRefBytes), "series:later"})
+	if got := briefCardSeriesRefs(string(raw[:briefSeriesRefBytes])); len(got) != 1 || got[0].Ref != "series:first" {
+		t.Fatal(got)
+	}
+	if got := briefCardSeriesRefs(`["series:first","series:first","invalid","series:second","series:third"]`); len(got) != 2 || got[1].Ref != "series:second" {
+		t.Fatal(got)
 	}
 }
