@@ -108,8 +108,21 @@ const briefAskSelect = `SELECT ` + briefAskColumns + `,COALESCE(e.thread_id,''),
 	COALESCE(a.answered_at,''),a.responder,COALESCE(json_extract(r.payload_json,'$.payload.response_text'),''),COALESCE(json_extract(r.payload_json,'$.payload.outcome'),'')
 	FROM brief_asks a JOIN events e ON e.id=a.ask_id LEFT JOIN events r ON r.id=a.response_event_id AND a.response_event_id<>''`
 
+// pmOwnerSQL keeps a PM-private thread out of a page or a count unless its
+// owner is this reader. It is applied before LIMIT so another owner's rows
+// cannot fill the window, and so counts cannot disclose those rows. The
+// threads lookup is the primary key. A nil Visible admits every scoped row,
+// matching the Go filter.
+func (b *briefBuild) pmOwnerSQL(threadExpr string) (string, []any) {
+	if b.reader.Visible == nil {
+		return "1=1", nil
+	}
+	return `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=` + threadExpr + `),'') IN ('', ?)`, []any{stripActor(b.reader.ActorID)}
+}
+
 func (b *briefBuild) queryAsks(where string, args ...any) ([]briefAskRow, error) {
-	rows, err := b.s.db.QueryContext(b.ctx, briefAskSelect+` WHERE COALESCE(e.trashed_at,'')='' AND `+where, args...)
+	pred, predArgs := b.pmOwnerSQL("e.thread_id")
+	rows, err := b.s.db.QueryContext(b.ctx, briefAskSelect+` WHERE COALESCE(e.trashed_at,'')='' AND `+pred+` AND `+where, append(predArgs, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +708,8 @@ const briefInitiativeSelect = `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,
 	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')) AND `
 
 func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow, error) {
-	rows, err := b.s.db.QueryContext(b.ctx, briefInitiativeSelect+where, args...)
+	pred, predArgs := b.pmOwnerSQL("c.thread_id")
+	rows, err := b.s.db.QueryContext(b.ctx, briefInitiativeSelect+pred+` AND `+where, append(predArgs, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -856,8 +870,9 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	if b.reader.human() {
 		human = 1
 	}
+	pred, predArgs := b.pmOwnerSQL("e.thread_id")
 	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT a.subject_ref,a.recipient,a.requester FROM brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id
-		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' LIMIT 1000`, string(encoded))
+		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' AND `+pred+` LIMIT 1000`, append([]any{string(encoded)}, predArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -879,7 +894,7 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 		return nil, err
 	}
 	rows3, err := b.s.db.QueryContext(b.ctx, `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id
-		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' GROUP BY k.ref`, string(encoded))
+		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' AND `+pred+` GROUP BY k.ref`, append([]any{string(encoded)}, predArgs...)...)
 	if err != nil {
 		return nil, err
 	}

@@ -91,7 +91,7 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 		t.Fatalf("decisions = %v", decisions)
 	}
 	d := decisions[0].(map[string]any)
-	if d["decide_by"] != "2026-01-01T00:00:00Z" || d["overdue_for_seconds"].(float64) <= 0 || d["priority"] != "p1" || d["kind"] != "ask" {
+	if d["decide_by"] != "2026-01-01T23:59:59Z" || d["overdue_for_seconds"].(float64) <= 0 || d["priority"] != "p1" || d["kind"] != "ask" {
 		t.Fatalf("decision = %v", d)
 	}
 	if d["proposals"].([]any)[0] != "Merge" || d["subject"].(map[string]any)["title"] != "Battery" {

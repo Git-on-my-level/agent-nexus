@@ -601,8 +601,13 @@ func (s *Store) ApplyCurationAction(ctx context.Context, humanActorID, proposalE
 		if len(rec.Targets) != 1 || !strings.HasPrefix(rec.Targets[0], "event:") {
 			return nil, "", ErrCurationTargetGone
 		}
-		if _, err := s.WithdrawAskByProposal(ctx, humanActorID, strings.TrimPrefix(rec.Targets[0], "event:"), proposalEventID, "moot: accepted curation proposal"); err != nil {
-			return nil, "", err
+		askID := strings.TrimPrefix(rec.Targets[0], "event:")
+		if _, err := s.WithdrawAskByProposal(ctx, humanActorID, askID, proposalEventID, "moot: accepted curation proposal"); err != nil {
+			// A replay after the withdrawal committed but before the trail was
+			// written finds the ask already withdrawn. That is the action.
+			if !errors.Is(err, ErrHumanAttentionAlreadyResponded) || !s.askResolutionIs(ctx, askID, "withdrawn") {
+				return nil, "", err
+			}
 		}
 		// A withdrawal resolves the ask for good; undo is re-asking, which the
 		// trail makes possible by naming the original ask.
@@ -632,24 +637,57 @@ func (s *Store) ApplyCurationAction(ctx context.Context, humanActorID, proposalE
 	return nil, "", ErrCurationTargetGone
 }
 
-// GroupCurationBatch records an accepted batch. A member already in another
-// batch moves to this one: the newest human decision wins.
+// GroupCurationBatch records an accepted batch in one transaction. A member
+// already in another batch moves to this one: the newest human decision wins.
+// A rejected member leaves no rows from this call.
 func (s *Store) GroupCurationBatch(ctx context.Context, rec CurationProposalRecord) error {
 	if len(rec.Targets) < 2 || len(rec.Targets) > curation.MaxBatchMembers {
 		return ErrCurationTargetGone
 	}
+	tx, err := s.db.BeginTx(curationInternal(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	ids := make([]string, 0, len(rec.Targets))
 	for _, target := range rec.Targets {
 		id := strings.TrimPrefix(target, "event:")
 		if id == target || id == "" {
 			return ErrCurationTargetGone
 		}
-		if _, err := s.db.ExecContext(curationInternal(ctx), `INSERT INTO curation_batch_members(ask_id,batch_key,proposal_event_id,created_at) VALUES(?,?,?,?)
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		if _, err := tx.ExecContext(curationInternal(ctx), `INSERT INTO curation_batch_members(ask_id,batch_key,proposal_event_id,created_at) VALUES(?,?,?,?)
  ON CONFLICT(ask_id) DO UPDATE SET batch_key=excluded.batch_key,proposal_event_id=excluded.proposal_event_id,created_at=excluded.created_at`, id, rec.Key, rec.ProposalEventID, now); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
+}
+
+// CurationActionApplied reports whether the proposal thread already has the
+// applied-action trail. The lookup is one seek on idx_ref_edges_target for
+// edges that name this proposal, then the trail payload on that event.
+func (s *Store) CurationActionApplied(ctx context.Context, threadID, proposalEventID string) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(curationInternal(ctx), `SELECT 1 FROM ref_edges INDEXED BY idx_ref_edges_target
+ JOIN events e ON e.id=ref_edges.source_id AND e.thread_id=?
+ WHERE ref_edges.target_type='event' AND ref_edges.target_id=? AND ref_edges.source_type='event'
+ AND e.type='message_posted'
+ AND json_extract(e.payload_json,'$.payload.curation_applied.proposal_event_id')=?
+ LIMIT 1`, threadID, proposalEventID, proposalEventID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (s *Store) askResolutionIs(ctx context.Context, askID, resolution string) bool {
+	var got string
+	err := s.db.QueryRowContext(ctx, `SELECT resolution_type FROM human_attention_request_resolutions WHERE request_event_id=?`, askID).Scan(&got)
+	return err == nil && got == resolution
 }
 
 // ReadableCurationProposal returns the proposal for key only when the

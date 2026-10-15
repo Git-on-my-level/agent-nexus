@@ -1271,13 +1271,13 @@
     "latency_ms": 1500,
     "max_queries": 100,
     "max_rows": 1024,
-    "max_vm_steps": 1695396,
+    "max_vm_steps": 1695403,
     "principal": "unauthorized",
     "cache_phase": "first_read",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
     "core_source_sha256": "c054d45324a2751997c7a589c311faa2fb8e1fc995bd4f4fa94ba448603a62da",
-    "reason": "brief.v1 adds no route-specific cold cost: measured 1694928 of 1695396 VM steps on this phase are the single shared canonical denial-snapshot acquisition statement in internal/primitives/access_snapshot.go (withRequestAccessEpoch), the same SCA-663 hazard every scoped route baselines for its unauthorized first_read and post_invalidation phases; the brief's own 10 statements are indexed, LIMITed seeks under 1000 VM steps in total, and its warm phase (snapshot reused) stays inside the standard 50000-step budget with no baseline. Exact measured ceilings; retire with the linked open P1 repair of shared denial acquisition."
+    "reason": "brief.v1 cold cost remains the shared canonical denial-snapshot acquisition statement in internal/primitives/access_snapshot.go (withRequestAccessEpoch), the same SCA-663 hazard every scoped route baselines for its unauthorized first_read. The PM-owner predicate (threads primary-key lookup of pm_actor_id before LIMIT and in both ask counts) remeasured this phase at 1695403 VM steps, 7 above the previous exact ceiling; the brief's own statements stay indexed, LIMITed seeks and its warm phase stays inside the standard 50000-step budget. Exact measured ceiling; retire with the linked open P1 repair of shared denial acquisition."
   },
   {
     "method": "GET",
@@ -1285,13 +1285,13 @@
     "latency_ms": 1500,
     "max_queries": 100,
     "max_rows": 1024,
-    "max_vm_steps": 1695784,
+    "max_vm_steps": 1695791,
     "principal": "unauthorized",
     "cache_phase": "post_invalidation",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
     "core_source_sha256": "c054d45324a2751997c7a589c311faa2fb8e1fc995bd4f4fa94ba448603a62da",
-    "reason": "brief.v1 adds no route-specific cold cost: measured 1695316 of 1695784 VM steps on this phase are the single shared canonical denial-snapshot acquisition statement in internal/primitives/access_snapshot.go (withRequestAccessEpoch), the same SCA-663 hazard every scoped route baselines for its unauthorized first_read and post_invalidation phases; the brief's own 10 statements are indexed, LIMITed seeks under 1000 VM steps in total, and its warm phase (snapshot reused) stays inside the standard 50000-step budget with no baseline. Exact measured ceilings; retire with the linked open P1 repair of shared denial acquisition."
+    "reason": "brief.v1 cold cost remains the shared canonical denial-snapshot acquisition statement in internal/primitives/access_snapshot.go (withRequestAccessEpoch), the same SCA-663 hazard every scoped route baselines for its unauthorized post_invalidation. The PM-owner predicate (threads primary-key lookup of pm_actor_id before LIMIT and in both ask counts) remeasured this phase at 1695791 VM steps, 7 above the previous exact ceiling; the brief's own statements stay indexed, LIMITed seeks and its warm phase stays inside the standard 50000-step budget. Exact measured ceiling; retire with the linked open P1 repair of shared denial acquisition."
   },
   {
     "method": "GET",

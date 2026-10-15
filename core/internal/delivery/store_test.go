@@ -280,9 +280,16 @@ func TestRecordReceipt(t *testing.T) {
 	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=? AND outcome='notification_delivered' AND attempt=1`, d.DeliveryID); n != 1 {
 		t.Fatal("missing delivered receipt")
 	}
-	// Closed claim cannot be reused.
-	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", true, "", false, "w"); !errors.Is(err, delivery.ErrConflict) {
-		t.Fatalf("double receipt want ErrConflict got %v", err)
+	// Retrying the receipt that closed this attempt returns the row.
+	again, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, "ignored", false, "w")
+	if err != nil || again.Status != delivery.StatusDelivered || again.ClaimToken != "" || again.DeliveryID != d.DeliveryID {
+		t.Fatalf("replayed receipt: %+v %v", again, err)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=?`, d.DeliveryID); n != 1 {
+		t.Fatalf("replay appended a receipt: %d", n)
+	}
+	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "bogus", "email", true, "", false, "w"); !errors.Is(err, delivery.ErrConflict) {
+		t.Fatalf("wrong token after delivery want ErrConflict got %v", err)
 	}
 
 	// Retryable failure then exhaustion.
@@ -324,6 +331,12 @@ func TestRecordReceipt(t *testing.T) {
 	got, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, "bad address", false, "w")
 	if err != nil || got.Status != delivery.StatusFailed {
 		t.Fatalf("fatal: %+v %v", got, err)
+	}
+	if again, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, "bad address", false, "w"); err != nil || again.Status != delivery.StatusFailed || again.FailedAt == "" {
+		t.Fatalf("replayed failure: %+v %v", again, err)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=?`, d.DeliveryID); n != 1 {
+		t.Fatalf("replayed failure appended a receipt: %d", n)
 	}
 
 	// ListForPrincipal hides claim tokens and includes receipts.

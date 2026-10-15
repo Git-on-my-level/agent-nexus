@@ -3,6 +3,7 @@ package delivery_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,36 @@ func newEscalator(e *env, canRead func(principal, ask string) bool) (*delivery.E
 		},
 		Logf: func(string, ...any) {},
 	}, pm
+}
+
+func TestDateOnlyByResolvesOnce(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.addAsk(t, "date-by", baseNow, "2026-10-15", 0, "Ship?")
+	var briefBy string
+	if err := e.db.QueryRow(`SELECT decide_by FROM brief_asks WHERE ask_id='date-by'`).Scan(&briefBy); err != nil {
+		t.Fatal(err)
+	}
+	esc, _ := newEscalator(e, nil)
+	if err := esc.Step(ctx, time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	var deadlineBy string
+	if err := e.db.QueryRow(`SELECT decide_by FROM ask_deadlines WHERE request_event_id='date-by'`).Scan(&deadlineBy); err != nil {
+		t.Fatal(err)
+	}
+	briefAt, err := time.Parse(time.RFC3339Nano, briefBy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadlineAt, err := time.Parse(time.RFC3339Nano, deadlineBy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 10, 15, 23, 59, 59, 0, time.UTC)
+	if !briefAt.Equal(want) || !deadlineAt.Equal(want) {
+		t.Fatalf("brief %s deadline %s", briefAt, deadlineAt)
+	}
 }
 
 func TestEscalatorPushOnce(t *testing.T) {
@@ -184,6 +215,76 @@ func TestEscalatorLongWindowGoesToDigest(t *testing.T) {
 	}
 }
 
+func TestDigestOpenCountExcludesUnreadable(t *testing.T) {
+	e := newEnv(t)
+	esc, _ := newEscalator(e, func(p, ask string) bool {
+		return p == "alice" || ask == "shared"
+	})
+	e.setChannel(t, "alice", "email", "a@example.com", false, true)
+	e.setChannel(t, "mallory", "email", "m@example.com", false, true)
+	e.addAsk(t, "shared", baseNow.Add(-4*24*time.Hour), "3d", 0, "Shared")
+	e.addAsk(t, "secret", baseNow.Add(-4*24*time.Hour), "3d", 0, "Secret layoff")
+	e.addAsk(t, "secret-later", baseNow, "10h", 0, "Secret later")
+	if err := esc.Step(context.Background(), baseNow); err != nil {
+		t.Fatal(err)
+	}
+	openOf := func(principal string) int {
+		t.Helper()
+		var payloadJSON string
+		if err := e.db.QueryRow(`SELECT payload_json FROM deliveries WHERE kind='digest' AND principal_id=?`, principal).Scan(&payloadJSON); err != nil {
+			t.Fatal(err)
+		}
+		var p struct {
+			Open int `json:"open"`
+		}
+		_ = json.Unmarshal([]byte(payloadJSON), &p)
+		if strings.Contains(payloadJSON, "layoff") && principal != "alice" {
+			t.Fatalf("title leaked to %s", principal)
+		}
+		return p.Open
+	}
+	if alice, mallory := openOf("alice"), openOf("mallory"); alice != 3 || mallory != 1 {
+		t.Fatalf("open counts alice=%d mallory=%d", alice, mallory)
+	}
+}
+
+func TestAttentionSummaryOmitsUnreadable(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.setChannel(t, "alice", "email", "a@example.com", true, false)
+	tx, err := e.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 500; i++ {
+		id := fmt.Sprintf("h%04d", i)
+		if _, err := tx.Exec(`INSERT INTO ask_deadlines(request_event_id, requester_actor_id, ask_ts, by_raw, decide_by, normalized) VALUES(?,?,?,?,?,1)`, id, "actor-a", rfc(baseNow), "1h", rfc(baseNow.Add(-time.Hour))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO ask_deadlines(request_event_id, requester_actor_id, ask_ts, by_raw, decide_by, normalized) VALUES('visible-ask','actor-a',?,?,?,1)`, rfc(baseNow), "10h", rfc(baseNow.Add(10*time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	e.store.CanRead = func(_ context.Context, _, ask string) bool { return ask == "visible-ask" }
+	sum, err := e.store.AttentionSummary(ctx, baseNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum["open_decisions"] != 501 || sum["overdue_decisions"] != 500 {
+		t.Fatalf("workspace totals must stay unfiltered: %v", sum)
+	}
+	principals := sum["principals"].([]map[string]any)
+	if len(principals) != 1 || principals[0]["due"] != 1 || principals[0]["overdue"] != 0 || principals[0]["earliest_decide_by"] != rfc(baseNow.Add(10*time.Hour)) {
+		t.Fatalf("principal saw unreadable asks: %v", principals)
+	}
+	if sum["earliest_decide_by"] == principals[0]["earliest_decide_by"] {
+		t.Fatal("principal earliest was the workspace earliest")
+	}
+}
+
 func TestDigestRespectsReadAndPreferences(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -267,6 +368,19 @@ func TestAttentionSummary(t *testing.T) {
 	if len(principals) != 1 || principals[0]["principal_id"] != "alice" {
 		t.Fatalf("principals %v", principals)
 	}
+	// No read check: the workspace totals stay, and the principal's copy is not those totals.
+	if principals[0]["due"] != 0 || principals[0]["overdue"] != 0 || principals[0]["earliest_decide_by"] != nil {
+		t.Fatalf("nil CanRead copied workspace counts onto the principal: %v", principals[0])
+	}
+	e.store.CanRead = func(context.Context, string, string) bool { return true }
+	sum, err = e.store.AttentionSummary(ctx, baseNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	principals = sum["principals"].([]map[string]any)
+	if principals[0]["due"] != 4 || principals[0]["overdue"] != 2 || principals[0]["earliest_decide_by"] != sum["earliest_decide_by"] {
+		t.Fatalf("readable principal counts %v", principals[0])
+	}
 	raw, _ := json.Marshal(sum)
 	if strings.Contains(string(raw), "SECRET") || strings.Contains(string(raw), "event:") || strings.Contains(string(raw), "a@example.com") {
 		t.Fatalf("summary leaks content: %s", raw)
@@ -295,6 +409,7 @@ func TestHotReadQueryPlans(t *testing.T) {
 		{"overdue list", `SELECT request_event_id, decide_by FROM ask_deadlines INDEXED BY idx_ask_deadlines_decide_by WHERE decide_by IS NOT NULL AND decide_by<=? ORDER BY decide_by LIMIT ?`, "idx_ask_deadlines_decide_by", []any{"x", 50}, "ask_deadlines"},
 		{"earliest MIN", `SELECT MIN(decide_by) FROM ask_deadlines INDEXED BY idx_ask_deadlines_due WHERE escalated_at IS NULL AND decide_by IS NOT NULL`, "idx_ask_deadlines_due", nil, "ask_deadlines"},
 		{"principal list", `SELECT * FROM deliveries WHERE principal_id=? ORDER BY created_at DESC, delivery_id DESC LIMIT ?`, "idx_deliveries_principal", []any{"p", 10}, "deliveries"},
+		{"deadline ledger page", `SELECT request_event_id, COALESCE(decide_by,''), COALESCE(escalated_at,'') FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?`, "sqlite_autoindex_ask_deadlines_1", []any{"", 500}, "ask_deadlines"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

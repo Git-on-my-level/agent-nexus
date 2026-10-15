@@ -159,6 +159,12 @@ func candidatesByAction(list []map[string]any, action string) []map[string]any {
 
 // respond answers the open inbox item whose source is eventID as the human.
 func (f *curationFixture) respond(thread, eventID, text, outcome string) {
+	f.respondOnce(thread, eventID, text, outcome, "")
+}
+
+// respondOnce is respond with a caller-chosen idempotency key so a replay
+// can return the same answer.
+func (f *curationFixture) respondOnce(thread, eventID, text, outcome, key string) {
 	f.t.Helper()
 	if err := refreshDerivedTopicProjection(f.ctx, handlerOptions{primitiveStore: f.env.primitiveStore}, thread, time.Now().UTC(), f.agent.ActorID); err != nil {
 		f.t.Fatal(err)
@@ -169,7 +175,11 @@ func (f *curationFixture) respond(thread, eventID, text, outcome string) {
 	}
 	for _, item := range items {
 		if item.SourceEventID == eventID {
-			f.call(http.MethodPost, "/inbox/"+url.PathEscape(item.ID)+"/respond", f.human.AccessToken, map[string]any{"response_text": text, "outcome": outcome, "notify_mode": "none"}, http.StatusCreated)
+			body := map[string]any{"response_text": text, "outcome": outcome, "notify_mode": "none"}
+			if key != "" {
+				body["idempotency_key"] = key
+			}
+			f.call(http.MethodPost, "/inbox/"+url.PathEscape(item.ID)+"/respond", f.human.AccessToken, body, http.StatusCreated)
 			return
 		}
 	}
@@ -267,6 +277,48 @@ func TestCurationMootWithdrawEndToEnd(t *testing.T) {
 	}
 	if f.proposalStatus(proposal["key"].(string)) != "accepted" {
 		t.Fatal("proposal row not accepted")
+	}
+}
+
+func TestCurationAcceptReplaysWhenTrailIsMissing(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	f := newCurationFixture(t, "replay")
+	doneRef, doneID := f.trackerCard("Landed work", "done-1")
+	prURL := f.mergedPR("123")
+	askID := f.fileAsk(f.thread, "Authorize the merge?", f.openCard("Decision subject replay"), []string{doneRef, prURL}, []string{"Yes", "No"})
+	f.observeDone(doneID, "done-1")
+	run := f.call(http.MethodPost, "/curation/run", f.human.AccessToken, map[string]any{}, http.StatusOK)
+	var proposalID string
+	for _, raw := range run["proposals"].([]any) {
+		if p := raw.(map[string]any); p["action"] == "withdraw" {
+			proposalID = anyString(p["event_id"])
+		}
+	}
+	if proposalID == "" {
+		t.Fatalf("no withdraw proposal: %#v", run)
+	}
+	f.respondOnce(f.thread, proposalID, "Withdraw", "answered", "curation-replay")
+	if _, err := f.env.workspace.DB().ExecContext(f.ctx, `DELETE FROM events WHERE type='message_posted' AND thread_id=? AND json_extract(payload_json,'$.payload.curation_applied.proposal_event_id')=?`, f.thread, proposalID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.trail(f.thread)) != 0 {
+		t.Fatal("trail delete did not land")
+	}
+	var inboxID string
+	if err := f.env.workspace.DB().QueryRowContext(f.ctx, `SELECT inbox_item_id FROM human_attention_response_claims WHERE request_key='curation-replay'`).Scan(&inboxID); err != nil {
+		t.Fatal(err)
+	}
+	// The open inbox row is gone. The same key must replay the answer and
+	// restore the missing trail.
+	f.call(http.MethodPost, "/inbox/"+url.PathEscape(inboxID)+"/respond", f.human.AccessToken, map[string]any{"idempotency_key": "curation-replay", "response_text": "Withdraw", "outcome": "answered", "notify_mode": "none"}, http.StatusCreated)
+	trail := f.trail(f.thread)
+	if len(trail) != 1 || trail[0]["result"] != "applied" {
+		t.Fatalf("replay did not restore the trail: %#v", trail)
+	}
+	outcome := f.call(http.MethodGet, "/asks/"+askID, f.agent.AccessToken, nil, http.StatusOK)
+	if !strings.Contains(fmt.Sprint(outcome), "withdrawn") {
+		t.Fatalf("replay changed the withdrawal: %#v", outcome)
 	}
 }
 

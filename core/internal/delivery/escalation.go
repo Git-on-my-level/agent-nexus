@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
+
+	"agent-nexus-core/internal/plans"
 )
 
 const (
@@ -20,45 +20,25 @@ const (
 	DefaultEscalationInterval = 30 * time.Second
 	DefaultDigestHourUTC      = 9
 
-	normalizeBatch  = 200
-	escalateBatch   = 50
-	recipientCap    = 200
-	digestItemCap   = 10
-	digestScanCap   = 50
-	maxByDuration   = 3650 * 24 * time.Hour
+	normalizeBatch = 200
+	escalateBatch  = 50
+	recipientCap   = 200
+	digestItemCap  = 10
+	digestScanCap  = 50
+	// deadlinePage is the primary-key page while walking the open-ask ledger.
+	// The walk continues until the ledger is exhausted, so unreadable rows
+	// cannot fill the page and hide a later readable ask from a count.
+	deadlinePage    = 500
 	EscalationPush  = "push"
 	EscalationQueue = "digest"
 )
 
-var byDuration = regexp.MustCompile(`^([1-9][0-9]*)([smhd])$`)
-
 // ResolveBy resolves the review_by grammar (UTC date, zoned timestamp or a
 // positive s/m/h/d duration from the ask time). A bare date means the end of
-// that UTC day.
+// that UTC day, the same instant plans.ParseWhen and anx_resolve_when store
+// on brief_asks.decide_by.
 func ResolveBy(raw string, from time.Time) (time.Time, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}, false
-	}
-	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return t.UTC(), true
-	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		return t.Add(24*time.Hour - time.Second).UTC(), true
-	}
-	if m := byDuration.FindStringSubmatch(raw); m != nil {
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			return time.Time{}, false
-		}
-		unit := map[string]time.Duration{"s": time.Second, "m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
-		d := time.Duration(n) * unit
-		if d <= 0 || d > maxByDuration || d/unit != time.Duration(n) {
-			return time.Time{}, false
-		}
-		return from.Add(d).UTC(), true
-	}
-	return time.Time{}, false
+	return plans.ParseWhen(raw, from)
 }
 
 // EscalationMode applies the immediate-push rule to one overdue ask.
@@ -271,8 +251,8 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 		return err
 	}
 	var overdue []dueAsk
+	var ledger []deadlineFact
 	loaded := false
-	var open int
 	for _, r := range recipients {
 		key := "digest:" + r.principal + ":" + r.channel + ":" + day
 		if _, err := e.Store.getByKey(ctx, key); err == nil {
@@ -284,7 +264,7 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			if overdue, err = e.overdue(ctx, now); err != nil {
 				return err
 			}
-			if err := e.Store.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM ask_deadlines`).Scan(&open); err != nil {
+			if ledger, err = loadDeadlineFacts(ctx, e.Store.DB); err != nil {
 				return err
 			}
 			loaded = true
@@ -304,6 +284,9 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			// Nothing overdue for this recipient today; no message.
 			continue
 		}
+		open, _, _ := readableDeadlineCounts(ledger, now, func(id string) bool {
+			return e.CanRead != nil && e.CanRead(ctx, r.principal, id)
+		})
 		if _, _, err := e.Store.Enqueue(ctx, Request{
 			IdempotencyKey: key,
 			PrincipalID:    r.principal,
@@ -365,10 +348,11 @@ func (e *Escalator) logf(format string, args ...any) {
 	log.Printf(format, args...)
 }
 
-// AttentionSummary is the heartbeat's per-principal due counts and earliest
-// decide_by: counts and times only, never titles or refs. The principals are
-// the humans who chose a notification channel; asks are addressed to the
-// workspace's humans, so each sees the workspace counts.
+// AttentionSummary is the heartbeat's due counts and earliest decide_by:
+// counts and times only, never titles or refs. The top-level totals are the
+// workspace ledger, for the control plane. Each principal's due, overdue and
+// earliest_decide_by count only asks that principal can read, and are never
+// a copy of the workspace totals.
 func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]any, error) {
 	var open, overdue int
 	var earliest sql.NullString
@@ -392,12 +376,27 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 	}
 	defer rows.Close()
 	principals := []map[string]any{}
+	var ledger []deadlineFact
+	ledgerLoaded := false
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		principals = append(principals, map[string]any{"principal_id": id, "due": open, "overdue": overdue, "earliest_decide_by": earliestValue})
+		due, principalOverdue := 0, 0
+		var principalEarliest any
+		if s.CanRead != nil {
+			if !ledgerLoaded {
+				if ledger, err = loadDeadlineFacts(ctx, s.DB); err != nil {
+					return nil, err
+				}
+				ledgerLoaded = true
+			}
+			due, principalOverdue, principalEarliest = readableDeadlineCounts(ledger, now, func(askID string) bool {
+				return s.CanRead(ctx, id, askID)
+			})
+		}
+		principals = append(principals, map[string]any{"principal_id": id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -409,6 +408,69 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 		"principals":         principals,
 		"generated_at":       stamp(now),
 	}, nil
+}
+
+type deadlineFact struct {
+	id        string
+	decideBy  string
+	escalated string
+}
+
+// loadDeadlineFacts reads the open-ask ledger in primary-key pages. It does
+// not stop after a fixed window of rows, so a run of unreadable asks cannot
+// hide a later readable one from a count.
+func loadDeadlineFacts(ctx context.Context, db *sql.DB) ([]deadlineFact, error) {
+	out := []deadlineFact{}
+	after := ""
+	for {
+		rows, err := db.QueryContext(ctx, `SELECT request_event_id, COALESCE(decide_by,''), COALESCE(escalated_at,'') FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?`, after, deadlinePage)
+		if err != nil {
+			return nil, err
+		}
+		n := 0
+		for rows.Next() {
+			var f deadlineFact
+			if err := rows.Scan(&f.id, &f.decideBy, &f.escalated); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out = append(out, f)
+			after = f.id
+			n++
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		if n < deadlinePage {
+			return out, nil
+		}
+	}
+}
+
+// readableDeadlineCounts counts asks readable reports. A nil-equivalent
+// readable that always returns false yields zeros: unknown access is not
+// the workspace total.
+func readableDeadlineCounts(ledger []deadlineFact, now time.Time, readable func(askID string) bool) (open, overdue int, earliest any) {
+	dueBy := stamp(now)
+	var earliestText string
+	for _, f := range ledger {
+		if readable == nil || !readable(f.id) {
+			continue
+		}
+		open++
+		if f.decideBy != "" && f.decideBy <= dueBy {
+			overdue++
+		}
+		if f.escalated == "" && f.decideBy != "" && (earliestText == "" || f.decideBy < earliestText) {
+			earliestText = f.decideBy
+		}
+	}
+	if earliestText != "" {
+		earliest = earliestText
+	}
+	return open, overdue, earliest
 }
 
 const maxBlocksChecked = 20
