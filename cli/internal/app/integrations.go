@@ -213,6 +213,15 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 		return nil, name, err
 	}
 	configPath := integrations.ConfigPath(dir, r.Name, id)
+	// Refuse an invalid existing file before even creating auxiliary locks.
+	// Re-read and validate again under the locks before the actual mutation.
+	probe, err := integrations.ReadSettings(path)
+	if err != nil {
+		return nil, name, integrationError(err)
+	}
+	if _, _, err = integrations.Adapters[r.Harness].Merge(probe, r, "", "", false); err != nil {
+		return nil, name, integrationError(err)
+	}
 	if !o.dry {
 		unlock, err := integrations.Lock(ctx, configPath+".lock")
 		if err != nil {

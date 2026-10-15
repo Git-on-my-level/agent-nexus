@@ -108,6 +108,12 @@ func TestIntegrationsInvalidSettingsRefuse(t *testing.T) {
 	if code := a.Run([]string{"--json", "integrations", "enable", suggestedIntegration, "--board", "tasks"}); code == 0 || !strings.Contains(out.String(), "integration_config_invalid") {
 		t.Fatal(code, out.String())
 	}
+	if _, err := os.Stat(path + ".anx-lock"); !os.IsNotExist(err) {
+		t.Fatal("created settings lock for invalid JSON", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "anx")); !os.IsNotExist(err) {
+		t.Fatal("created config state for invalid JSON", err)
+	}
 	b, _ := os.ReadFile(path)
 	if string(b) != "not json" {
 		t.Fatal("settings changed")
