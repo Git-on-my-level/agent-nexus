@@ -40,6 +40,17 @@ type PossiblyMoot struct {
 // everything around it done still needs somebody to land it.
 var possiblyMootPhases = map[string]bool{"backlog": true, "ready": true}
 
+// nextAskOpenPhase is every open phase where a stated next step can wait on
+// an ask that is already decided. blocked, done and cancelled are not open
+// work. Source-terminal possibly_moot stays on possiblyMootPhases.
+func nextAskOpenPhase(phase string) bool {
+	switch phase {
+	case "backlog", "ready", "in_progress", "review":
+		return true
+	}
+	return false
+}
+
 // mootSourceTerminal reports whether a resolved source status means the work
 // it tracks is over. Cancelled counts: a cancelled dependency cannot make the
 // card actionable again. Status maps done, published, closed, resolved and

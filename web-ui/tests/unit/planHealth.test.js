@@ -87,6 +87,25 @@ describe("planHealthModel", () => {
 });
 
 describe("nextStepModel", () => {
+  it("names a live note promise ahead of the ready plan step", () => {
+    const next = nextStepModel({
+      next_step: { id: "retire", title: "Retire finished or dead loops" },
+      plan_health: {
+        promise: {
+          source: "note",
+          what: "Check the loop ledger",
+          source_ref: "event:e1",
+        },
+      },
+    });
+    expect(next).toEqual({
+      id: "",
+      title: "Check the loop ledger",
+      ref: "event:e1",
+      extra: 0,
+    });
+  });
+
   it("reads the computed next_step field", () => {
     const next = nextStepModel({
       next_step: {

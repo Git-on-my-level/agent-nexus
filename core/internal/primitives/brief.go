@@ -1045,75 +1045,78 @@ func (b *briefBuild) fillPrincipals(items []map[string]any, field string) {
 // briefMootRefBudget bounds the linked sources resolved for possibly_moot.
 const briefMootRefBudget = 400
 
-// possiblyMoot evaluates the overtaken flag for parked initiatives with the
-// same rule as plan reads (moot.go): plan step refs and related_refs, resolved
-// through the batched, reader-scoped ref facts, plus the latest-note ask rule.
-// One metadata read plus at most two ref-fact batches. Ask resolution is a
-// further batched primary-key lookup, and only when a latest note cites an
-// event ref.
+// possiblyMoot evaluates the overtaken flag with the same rule as plan reads
+// (moot.go). Linked-source terminal state applies to parked cards (backlog
+// and ready): plan step refs and related_refs, resolved through the batched,
+// reader-scoped ref facts. The latest-note ask rule applies to every open
+// phase. One metadata read plus at most two ref-fact batches, and only when
+// a parked card is on the page. Ask resolution is a further batched
+// primary-key lookup, and only when a latest note cites an event ref.
 func (b *briefBuild) possiblyMoot(rows []briefCardRow, noteText map[string]string) (map[string]PossiblyMoot, error) {
 	out := map[string]PossiblyMoot{}
 	parked := []string{}
 	planRefs := map[string][]string{}
+	texts := map[string]string{}
 	for _, r := range rows {
-		if r.open != 1 || !possiblyMootPhases[r.phase] {
+		if r.open != 1 {
 			continue
 		}
-		parked = append(parked, r.cardID)
-		var p plans.Plan
-		if r.plan != "" && json.Unmarshal([]byte(r.plan), &p) == nil {
-			planRefs[r.cardID] = planStepRefs(p)
-		}
-	}
-	if len(parked) == 0 {
-		return out, nil
-	}
-	encoded, _ := json.Marshal(parked)
-	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT card_id,COALESCE(json_extract(metadata_json,'$.related_refs'),'[]') FROM work_metadata WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
-	if err != nil {
-		return nil, err
-	}
-	related := map[string][]string{}
-	for rows2.Next() {
-		var id, raw string
-		if err = rows2.Scan(&id, &raw); err != nil {
-			rows2.Close()
-			return nil, err
-		}
-		var refs []string
-		_ = json.Unmarshal([]byte(raw), &refs)
-		related[id] = refs
-	}
-	rows2.Close()
-	if err = rows2.Err(); err != nil {
-		return nil, err
-	}
-	refs, seen := []string{}, map[string]bool{}
-	linked := map[string][]string{}
-	for _, id := range parked {
-		linked[id] = possiblyMootLinked(append(append([]string{}, planRefs[id]...), related[id]...))
-		for _, ref := range linked[id] {
-			if !seen[ref] && len(refs) < briefMootRefBudget {
-				seen[ref] = true
-				refs = append(refs, ref)
+		if possiblyMootPhases[r.phase] {
+			parked = append(parked, r.cardID)
+			var p plans.Plan
+			if r.plan != "" && json.Unmarshal([]byte(r.plan), &p) == nil {
+				planRefs[r.cardID] = planStepRefs(p)
 			}
 		}
+		if nextAskOpenPhase(r.phase) && noteText[r.cardID] != "" {
+			texts[r.cardID] = noteText[r.cardID]
+		}
 	}
+	if len(parked) == 0 && len(texts) == 0 {
+		return out, nil
+	}
+	linked := map[string][]string{}
 	facts := map[string]plans.Fact{}
-	for start := 0; start < len(refs); start += 200 {
-		end := min(start+200, len(refs))
-		previews, err := b.s.readRefFacts(b.ctx, refs[start:end], b.reader.Visible)
+	if len(parked) > 0 {
+		encoded, _ := json.Marshal(parked)
+		rows2, err := b.s.db.QueryContext(b.ctx, `SELECT card_id,COALESCE(json_extract(metadata_json,'$.related_refs'),'[]') FROM work_metadata WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
 		if err != nil {
 			return nil, err
 		}
-		for _, row := range previews {
-			facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
+		related := map[string][]string{}
+		for rows2.Next() {
+			var id, raw string
+			if err = rows2.Scan(&id, &raw); err != nil {
+				rows2.Close()
+				return nil, err
+			}
+			var refs []string
+			_ = json.Unmarshal([]byte(raw), &refs)
+			related[id] = refs
 		}
-	}
-	texts := map[string]string{}
-	for _, id := range parked {
-		if noteText[id] != "" {
-			texts[id] = noteText[id]
+		rows2.Close()
+		if err = rows2.Err(); err != nil {
+			return nil, err
+		}
+		refs, seen := []string{}, map[string]bool{}
+		for _, id := range parked {
+			linked[id] = possiblyMootLinked(append(append([]string{}, planRefs[id]...), related[id]...))
+			for _, ref := range linked[id] {
+				if !seen[ref] && len(refs) < briefMootRefBudget {
+					seen[ref] = true
+					refs = append(refs, ref)
+				}
+			}
+		}
+		for start := 0; start < len(refs); start += 200 {
+			end := min(start+200, len(refs))
+			previews, err := b.s.readRefFacts(b.ctx, refs[start:end], b.reader.Visible)
+			if err != nil {
+				return nil, err
+			}
+			for _, row := range previews {
+				facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
+			}
 		}
 	}
 	askMoot, err := b.s.nextAskMootFromNotes(b.ctx, texts, b.reader.Visible, b.now)
@@ -1122,6 +1125,11 @@ func (b *briefBuild) possiblyMoot(rows []briefCardRow, noteText map[string]strin
 	}
 	for _, id := range parked {
 		out[id] = mergeNextAsk(PossiblyMootFromFacts(linked[id], facts), askMoot[id])
+	}
+	for id, moot := range askMoot {
+		if _, seen := out[id]; !seen {
+			out[id] = moot
+		}
 	}
 	return out, nil
 }

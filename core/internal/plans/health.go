@@ -53,7 +53,8 @@ type HealthInput struct {
 	CardDue string
 	// Wake is the raw wake_condition annotation; its first date is a promise.
 	Wake string
-	// PlanEditedAt is the last plan edit, a plan-step state change.
+	// PlanEditedAt is the last plan-document write. It meets milestone
+	// promises inside the horizon. It does not meet a note promise.
 	PlanEditedAt time.Time
 	// Observations are changed source observation times.
 	Observations []time.Time
@@ -97,7 +98,7 @@ func PromiseInputFor(in HealthInput) PromiseInput {
 	}
 	out := PromiseInput{Ref: in.Ref, Done: done, Notes: in.Notes, CardDue: ParseDue(in.CardDue), Wake: WakeTime(in.Wake), Observations: in.Observations}
 	if !in.PlanEditedAt.IsZero() {
-		out.StepChanges = append(out.StepChanges, in.PlanEditedAt)
+		out.PlanEdits = []time.Time{in.PlanEditedAt}
 	}
 	if in.Plan != nil {
 		for i, step := range in.Plan.Steps {

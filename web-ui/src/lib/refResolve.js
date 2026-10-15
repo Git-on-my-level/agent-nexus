@@ -183,7 +183,11 @@ export function indexResolvedRefs(response, requested = []) {
       boardRef: asText(row?.board?.ref),
       priority: asText(row?.priority),
       lastMovedAt: asText(row?.last_moved_at),
-      nextStep: asText(row?.next_step?.title ?? row?.next_step),
+      nextStep: asText(
+        row?.plan_health?.promise?.source === "note"
+          ? row.plan_health.promise.what
+          : (row?.next_step?.title ?? row?.next_step),
+      ),
     });
   }
   for (const ref of requested) {

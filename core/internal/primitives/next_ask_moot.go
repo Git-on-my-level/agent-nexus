@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// nextAskMootFromNotes evaluates the latest-note ask rule for parked cards.
+// nextAskMootFromNotes evaluates the latest-note ask rule for open cards.
 // notes maps card id to the citation text of that card's newest live note
 // (the note brief.v1 shows). The lookup runs only when a note cites an
 // event ref: one statement per 200 distinct refs, each an indexed seek on

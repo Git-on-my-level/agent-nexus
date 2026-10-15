@@ -469,7 +469,7 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	}
 	noteTexts := map[string]string{}
 	for _, row := range out {
-		if row.Resolvable && row.Kind == "card" && possiblyMootPhases[row.Phase] && movement[row.ID].NextNote != "" {
+		if row.Resolvable && row.Kind == "card" && nextAskOpenPhase(row.Phase) && movement[row.ID].NextNote != "" {
 			noteTexts[row.ID] = movement[row.ID].NextNote
 		}
 	}
@@ -574,7 +574,7 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 	for _, card := range cards {
 		id := workString(card["id"])
 		input := movement[id]
-		if possiblyMootPhases[input.Phase] && input.NextNote != "" {
+		if nextAskOpenPhase(input.Phase) && input.NextNote != "" {
 			noteTexts[id] = input.NextNote
 		}
 	}
@@ -608,7 +608,11 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 			card["status_mismatch"] = firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])) == "backlog" && state.Progress.Done > 0
 		}
 		card["possibly_moot"] = mergeNextAsk(cardPossiblyMoot(input, p, facts), askMoot[id])
-		card["plan_health"] = input.health("", p, state, facts, now)
+		health := input.health("", p, state, facts, now)
+		card["plan_health"] = health
+		if next := displayedNextAction(workString(card["next_action"]), workString(card["next_action_at"]), input.Notes, health.Promise); next != workString(card["next_action"]) {
+			card["next_action"] = next
+		}
 		if !legacy {
 			summaries[id] = buildWorkSummary(input, p, state, facts, now)
 			card["work_summary"] = summaries[id]

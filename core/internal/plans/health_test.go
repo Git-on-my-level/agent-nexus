@@ -48,6 +48,21 @@ func TestHealthForPromiseStates(t *testing.T) {
 	}
 }
 
+func TestHealthReasonPrefersLiveNotePromise(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	p := Plan{Steps: []Step{{ID: "retire", Title: "Retire finished or dead loops", Due: "2026-10-16"}}}
+	state := Compute(p, nil, now)
+	note := []PromiseNote{{EventID: "e1", At: now.Add(-2 * time.Hour), Author: "actor:a", NextAt: time.Date(2026, 10, 21, 23, 59, 59, 0, time.UTC), NextWhat: "Check the loop ledger"}}
+	h := HealthFor(HealthInput{Ref: "card:loops", Plan: &p, State: state, Phase: "in_progress", Notes: note, PlanEditedAt: now}, now)
+	if h.Promise == nil || h.Promise.Source != "note" || !strings.Contains(h.Reason, "Check the loop ledger") || !strings.Contains(h.Reason, "2026-10-21") || strings.Contains(h.Reason, "2026-10-16") || strings.Contains(h.Reason, "Retire") {
+		t.Fatalf("note promise: %+v", h)
+	}
+	h = HealthFor(HealthInput{Ref: "card:loops", Plan: &p, State: state, Phase: "in_progress"}, now)
+	if h.Promise == nil || h.Promise.Source != "plan_step" || !strings.Contains(h.Reason, "Retire finished or dead loops") || !strings.Contains(h.Reason, "2026-10-16") {
+		t.Fatalf("step fallback: %+v", h)
+	}
+}
+
 func TestHealthForStepMovementResets(t *testing.T) {
 	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
 	p := Plan{Steps: []Step{{ID: "a", Title: "a", Ref: "card:a", Due: "2026-10-14"}}}

@@ -166,6 +166,9 @@ func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, f
 			}
 		}
 	}
+	if health.Promise != nil && health.Promise.Source == "note" && strings.TrimSpace(health.Promise.What) != "" {
+		out.Next = &SummaryNext{Title: health.Promise.What, Ref: health.Promise.SourceRef}
+	}
 	return out
 }
 

@@ -57,14 +57,35 @@ func TestFoldPromiseEarliestAcrossSources(t *testing.T) {
 		Steps:   []PromiseStep{{ID: "s1", Title: "draft", Due: day(3)}},
 		CardDue: day(9), Wake: day(4)}
 	f := FoldPromise(in)
-	if f.Promise.Source != "plan_step" || f.Promise.SourceRef != "card:a#s1" || f.Promise.What != "draft" {
-		t.Fatalf("promise = %+v", f.Promise)
+	if f.Promise.Source != "note" || !f.Promise.At.Equal(day(5)) {
+		t.Fatalf("note promise outranks the earlier step: %+v", f.Promise)
 	}
-	// A step change inside the horizon before the step due meets it.
+	// A step change inside the horizon before the step due meets the step,
+	// and a status change after the note meets the note. The wake remains.
 	in.StepChanges = []time.Time{day(2)}
 	f = FoldPromise(in)
 	if f.Promise.Source != "wake_condition" {
 		t.Fatalf("expected wake after met step, got %+v", f.Promise)
+	}
+}
+
+func TestFoldPromisePlanEditLeavesTheNote(t *testing.T) {
+	in := PromiseInput{Ref: "card:a",
+		Notes:     []PromiseNote{{EventID: "e1", At: day(1), Author: "a", NextAt: day(8), NextWhat: "ledger"}},
+		Steps:     []PromiseStep{{ID: "s1", Title: "retire", Due: day(3)}},
+		PlanEdits: []time.Time{day(2)}}
+	f := FoldPromise(in)
+	if f.Promise == nil || f.Promise.Source != "note" || f.Promise.What != "ledger" || !f.Promise.At.Equal(day(8)) {
+		t.Fatalf("plan edit must not replace the note: %+v", f.Promise)
+	}
+	if !f.LastEvidenceAt.Equal(day(2)) {
+		t.Fatalf("plan edit is still last evidence: %s", f.LastEvidenceAt)
+	}
+	in.PlanEdits = nil
+	in.Notes = nil
+	f = FoldPromise(in)
+	if f.Promise == nil || f.Promise.Source != "plan_step" || f.Promise.What != "retire" {
+		t.Fatalf("no note falls back to the step: %+v", f.Promise)
 	}
 }
 

@@ -137,6 +137,10 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 	}
 	meta["next_actor"] = next
 	meta["next_action"] = anyStringValue(payload["response_text"])
+	if at == "" {
+		at = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	meta["next_action_at"] = at
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,?,?,1,?,?) ON CONFLICT(card_id) DO UPDATE SET metadata_json=excluded.metadata_json,version=work_metadata.version+1,updated_at=excluded.updated_at,updated_by=excluded.updated_by`, card.CardID, authority, workJSON(meta), at, actor); err != nil {
 		return nil, err
 	}

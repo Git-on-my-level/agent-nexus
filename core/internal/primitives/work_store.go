@@ -450,7 +450,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
+	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -1014,6 +1014,10 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	for k, val := range patch {
 		m[k] = val
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, ok := patch["next_action"]; ok {
+		m["next_action_at"] = now
+	}
 	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, err
@@ -1027,7 +1031,7 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 		}
 	}()
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actor, id, version)
+	res, err := tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), now, actor, id, version)
 	if err != nil {
 		return nil, err
 	}

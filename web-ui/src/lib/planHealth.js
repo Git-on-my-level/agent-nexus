@@ -95,16 +95,27 @@ export function planHealthModel(item) {
 /**
  * The next step a surface should name.
  *
- * `next_step {id, title, ref}` is the computed field. Without it, the plan
- * state's `next_steps` carries ids only, and a step id is a lowercase slug by
- * contract — readable enough to name, and the only thing available. A plan the
- * caller has in hand supplies the real title, which always wins.
+ * A live note promise is the stated next. Otherwise `next_step {id, title,
+ * ref}` is the computed field. Without it, the plan state's `next_steps`
+ * carries ids only, and a step id is a lowercase slug by contract — readable
+ * enough to name, and the only thing available. A plan the caller has in hand
+ * supplies the real title, which wins over that id.
  *
  * @param {object} item
  * @param {{ plan?: {steps?: object[]}|null }} [options]
  * @returns {{ id: string, title: string, ref: string, extra: number }|null}
  */
 export function nextStepModel(item, options = {}) {
+  const promise = item?.plan_health?.promise;
+  if (promise?.source === "note" && asText(promise.what)) {
+    return {
+      id: "",
+      title: asText(promise.what),
+      ref: asText(promise.source_ref),
+      extra: 0,
+    };
+  }
+
   const steps = Array.isArray(options.plan?.steps) ? options.plan.steps : [];
   const titleById = new Map();
   const refById = new Map();
