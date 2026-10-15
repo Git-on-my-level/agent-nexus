@@ -57,8 +57,31 @@
     if (focusTrigger) trigger?.focus();
   }
 
+  /**
+   * Phone: where the menu goes, in px from the trigger's left edge. The
+   * trigger can sit anywhere in a wrapping header row, so neither edge is
+   * safe; measure it and keep the menu inside the screen with a 1rem gutter.
+   * `null` wider than `md`, where the stylesheet anchors it right.
+   */
+  let menuLeft = $state(null);
+  function placeMenu() {
+    if (!root || !window.matchMedia?.("(max-width: 767px)").matches) {
+      menuLeft = null;
+      return;
+    }
+    const gutter = 16;
+    const width = Math.min(352, window.innerWidth - 2 * gutter);
+    const at = root.getBoundingClientRect().left;
+    const left = Math.max(
+      gutter,
+      Math.min(at, window.innerWidth - gutter - width),
+    );
+    menuLeft = Math.round(left - at);
+  }
+
   function openMenu(focus = "") {
     focusOnOpen = focus;
+    placeMenu();
     if (!open) {
       open = true;
       // Lazy, and only while the reader is looking: the read that broke the
@@ -250,6 +273,8 @@
     -->
     <div
       class="picker-menu ui-pop-in"
+      class:picker-menu--placed={menuLeft !== null}
+      style:left={menuLeft !== null ? `${menuLeft}px` : undefined}
       role="menu"
       aria-label="Report"
       tabindex="-1"
@@ -385,14 +410,15 @@
     box-shadow: var(--shadow-menu);
   }
   /*
-   * Phone: the trigger starts the header row, so a menu hung from its right
-   * edge runs off the left of the screen. Hang it from the left instead, and
-   * give the trigger and items a thumb-sized height.
+   * Phone: the menu is placed from a measurement of the trigger (see
+   * `placeMenu`), never hung from an edge that may be off screen. The
+   * trigger and items get a thumb-sized height.
    */
   @media (max-width: 767px) {
-    .picker-menu {
-      left: 0;
+    .picker-menu--placed {
       right: auto;
+      width: min(22rem, calc(100vw - 2rem));
+      min-width: 0;
     }
     .picker-trigger {
       min-height: 2.25rem;
