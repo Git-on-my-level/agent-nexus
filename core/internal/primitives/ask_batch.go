@@ -23,6 +23,19 @@ const MinAskBatchMembers = 2
 // batch. POST /inbox/{id}/respond with this id answers every open member.
 const CurationBatchInboxPrefix = "inbox:curation-batch:"
 
+// FiledBatchAnchorBefore reports whether member a is the older filed-batch
+// anchor. The inbox projection and the brief both pin the respond id to the
+// oldest member of the full batch, withdrawn or not and on the brief page or
+// not. An earlier event time wins; a missing timestamp does not take part in
+// that comparison. Equal times break the tie by event id. The brief lookup
+// orders brief_asks by created_at, ask_id, and created_at stores this event time.
+func FiledBatchAnchorBefore(aTime time.Time, aOK bool, aID string, bTime time.Time, bOK bool, bID string) bool {
+	if aOK && bOK && !aTime.Equal(bTime) {
+		return aTime.Before(bTime)
+	}
+	return aID < bID
+}
+
 // HumanAttentionInboxItemID is the derived inbox id. An empty subject or
 // source segment is "none", matching the inbox projection.
 func HumanAttentionInboxItemID(category, threadID, subjectID, sourceEventID string) string {

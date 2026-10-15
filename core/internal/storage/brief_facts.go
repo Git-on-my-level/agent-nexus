@@ -41,6 +41,60 @@ const briefEvidenceSQL = `(SELECT COUNT(*)>0 FROM (SELECT value FROM json_each(C
  OR (substr(v.value,1,9)='artifact:' AND EXISTS(SELECT 1 FROM artifacts x WHERE x.id=substr(v.value,10)))
  OR (substr(v.value,1,9)='document:' AND EXISTS(SELECT 1 FROM documents x WHERE x.id=substr(v.value,10) OR x.handle=substr(v.value,10)))))`
 
+// briefAsksInsertTrigger records batch_id with the ask so the brief can seek
+// the oldest member of a filed batch without scanning events. kind is the
+// same expression installBriefFacts uses for the kind column.
+func briefAsksInsertTrigger(kind string) string {
+	return `CREATE TRIGGER IF NOT EXISTS brief_asks_insert AFTER INSERT ON events WHEN NEW.type='human_attention_requested' BEGIN
+ INSERT INTO brief_asks(ask_id,inbox_item_id,kind,requester,recipient,subject_ref,title,created_at,decide_by,blocks_json,blocks_count,priority,batch_id)
+ VALUES(NEW.id,
+  'inbox:'||` + kind + `||':'||COALESCE(NEW.thread_id,'')||':'||COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.request_id')),''),NEW.id)||':'||NEW.id,
+  ` + kind + `,
+  COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.requester_actor_id')),''),NEW.actor_id,''),
+  COALESCE(trim(json_extract(NEW.payload_json,'$.payload.recipient_actor_id')),''),
+  COALESCE(trim(json_extract(NEW.payload_json,'$.payload.subject_ref')),''),
+  substr(COALESCE(json_extract(NEW.payload_json,'$.payload.title'),''),1,500),
+  NEW.ts,
+  anx_resolve_when(json_extract(NEW.payload_json,'$.payload.by'),NEW.ts),
+  CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN json_extract(NEW.payload_json,'$.payload.blocks') ELSE '[]' END,
+  CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN min(json_array_length(NEW.payload_json,'$.payload.blocks'),20) ELSE 0 END,
+  lower(COALESCE(trim(json_extract(NEW.payload_json,'$.payload.priority')),'')),
+  COALESCE(trim(json_extract(NEW.payload_json,'$.payload.batch_id')),'')) ON CONFLICT DO NOTHING;
+ INSERT INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),1,5)='card:' AND (c.id=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6) OR c.handle=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6)) ON CONFLICT DO NOTHING;
+ END`
+}
+
+// installBriefAskBatchID pins each filed ask's batch id on brief_asks and
+// indexes (batch_id, created_at, ask_id) so the brief can read the oldest
+// member of a batch — withdrawn or off the page — in one seek.
+func installBriefAskBatchID(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "brief_asks")
+	if err != nil || !exists {
+		return err
+	}
+	has, err := sqliteTableHasColumn(ctx, tx, "brief_asks", "batch_id")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err = tx.ExecContext(ctx, `ALTER TABLE brief_asks ADD COLUMN batch_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS brief_asks_insert`); err != nil {
+		return err
+	}
+	kind := `COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.kind')),''),'ask')`
+	if _, err = tx.ExecContext(ctx, briefAsksInsertTrigger(kind)); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE brief_asks SET batch_id=COALESCE((SELECT trim(json_extract(payload_json,'$.payload.batch_id')) FROM events WHERE id=brief_asks.ask_id),'') WHERE batch_id=''`); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_brief_asks_batch ON brief_asks(batch_id, created_at, ask_id) WHERE batch_id<>''`)
+	return err
+}
+
 // installBriefFacts materializes brief.v1 facts on write events (Move 2):
 // asks with resolved decide_by and blocks, card notes with resolved next and
 // evidence, and a dirty queue of cards whose promise fold must be refreshed.
@@ -70,7 +124,8 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
 			state TEXT NOT NULL DEFAULT 'open',
 			answered_at TEXT,
 			responder TEXT NOT NULL DEFAULT '',
-			response_event_id TEXT NOT NULL DEFAULT '')`,
+			response_event_id TEXT NOT NULL DEFAULT '',
+			batch_id TEXT NOT NULL DEFAULT '')`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_asks_open_decide_by ON brief_asks(state, decide_by)`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_asks_requester ON brief_asks(requester, state, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_asks_answered ON brief_asks(requester, state, answered_at)`,
@@ -101,22 +156,7 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
 		`CREATE INDEX IF NOT EXISTS idx_brief_initiatives_promise ON brief_initiatives(open, promise_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_initiatives_evidence ON brief_initiatives(open, last_evidence_at)`,
 		`CREATE TABLE IF NOT EXISTS brief_dirty(card_id TEXT PRIMARY KEY)`,
-		`CREATE TRIGGER IF NOT EXISTS brief_asks_insert AFTER INSERT ON events WHEN NEW.type='human_attention_requested' BEGIN
- INSERT INTO brief_asks(ask_id,inbox_item_id,kind,requester,recipient,subject_ref,title,created_at,decide_by,blocks_json,blocks_count,priority)
- VALUES(NEW.id,
-  'inbox:'||` + kind + `||':'||COALESCE(NEW.thread_id,'')||':'||COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.request_id')),''),NEW.id)||':'||NEW.id,
-  ` + kind + `,
-  COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.requester_actor_id')),''),NEW.actor_id,''),
-  COALESCE(trim(json_extract(NEW.payload_json,'$.payload.recipient_actor_id')),''),
-  COALESCE(trim(json_extract(NEW.payload_json,'$.payload.subject_ref')),''),
-  substr(COALESCE(json_extract(NEW.payload_json,'$.payload.title'),''),1,500),
-  NEW.ts,
-  anx_resolve_when(json_extract(NEW.payload_json,'$.payload.by'),NEW.ts),
-  CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN json_extract(NEW.payload_json,'$.payload.blocks') ELSE '[]' END,
-  CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN min(json_array_length(NEW.payload_json,'$.payload.blocks'),20) ELSE 0 END,
-  lower(COALESCE(trim(json_extract(NEW.payload_json,'$.payload.priority')),''))) ON CONFLICT DO NOTHING;
- INSERT INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),1,5)='card:' AND (c.id=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6) OR c.handle=substr(json_extract(NEW.payload_json,'$.payload.subject_ref'),6)) ON CONFLICT DO NOTHING;
- END`,
+		briefAsksInsertTrigger(kind),
 		`CREATE TRIGGER IF NOT EXISTS brief_asks_resolve AFTER INSERT ON human_attention_request_resolutions BEGIN
  UPDATE brief_asks SET state=NEW.resolution_type, answered_at=NEW.created_at, responder=COALESCE(NEW.actor_id,''), response_event_id=COALESCE(NEW.resolution_event_id,'') WHERE ask_id=NEW.request_event_id;
  END`,
@@ -146,7 +186,7 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	backfill := []string{
-		`INSERT OR IGNORE INTO brief_asks(ask_id,inbox_item_id,kind,requester,recipient,subject_ref,title,created_at,decide_by,blocks_json,blocks_count,priority)
+		`INSERT OR IGNORE INTO brief_asks(ask_id,inbox_item_id,kind,requester,recipient,subject_ref,title,created_at,decide_by,blocks_json,blocks_count,priority,batch_id)
  SELECT NEW.id,'inbox:'||` + kind + `||':'||COALESCE(NEW.thread_id,'')||':'||COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.request_id')),''),NEW.id)||':'||NEW.id,` + kind + `,
   COALESCE(NULLIF(trim(json_extract(NEW.payload_json,'$.payload.requester_actor_id')),''),NEW.actor_id,''),
   COALESCE(trim(json_extract(NEW.payload_json,'$.payload.recipient_actor_id')),''),
@@ -155,7 +195,8 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
   anx_resolve_when(json_extract(NEW.payload_json,'$.payload.by'),NEW.ts),
   CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN json_extract(NEW.payload_json,'$.payload.blocks') ELSE '[]' END,
   CASE WHEN json_type(NEW.payload_json,'$.payload.blocks')='array' THEN min(json_array_length(NEW.payload_json,'$.payload.blocks'),20) ELSE 0 END,
-  lower(COALESCE(trim(json_extract(NEW.payload_json,'$.payload.priority')),''))
+  lower(COALESCE(trim(json_extract(NEW.payload_json,'$.payload.priority')),'')),
+  COALESCE(trim(json_extract(NEW.payload_json,'$.payload.batch_id')),'')
  FROM events NEW WHERE NEW.type='human_attention_requested'`,
 		`UPDATE brief_asks SET (state,answered_at,responder,response_event_id)=(SELECT r.resolution_type,r.created_at,COALESCE(r.actor_id,''),COALESCE(r.resolution_event_id,'') FROM human_attention_request_resolutions r WHERE r.request_event_id=brief_asks.ask_id ORDER BY r.created_at LIMIT 1) WHERE EXISTS(SELECT 1 FROM human_attention_request_resolutions r WHERE r.request_event_id=brief_asks.ask_id)`,
 		`INSERT OR IGNORE INTO brief_notes(event_id,card_id,author,ts,next_at,next_what,evidence,excerpt)

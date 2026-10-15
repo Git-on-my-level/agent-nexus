@@ -151,6 +151,109 @@ func testBriefFiledBatchAnswer(t *testing.T) {
 	}
 }
 
+// Withdrawing the oldest member must not move the brief's respond id. The
+// inbox projection keeps that withdrawn member as the anchor; answering the
+// brief id closes the two members that stay open.
+func TestBriefFiledBatchAnswerAfterOldestWithdrawn(t *testing.T) {
+	t.Parallel()
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	ctx := context.Background()
+	agent := seedNotificationTestAgent(t, env, "filedwithdraw.agent")
+	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "filedwithdraw-human", "filedwithdraw-human-actor", "filedwithdraw-human", "filedwithdraw-human-token")
+	store := env.primitiveStore.(*primitives.Store)
+	board, err := store.CreateBoard(ctx, agent.ActorID, map[string]any{"title": "Filed withdraw board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := func(title string) string {
+		t.Helper()
+		work, err := store.CreateWork(ctx, agent.ActorID, anyString(board["id"]), map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return anyString(work["ref"])
+	}
+	cardA, cardB, cardC := card("Alpha"), card("Bravo"), card("Charlie")
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, agent.ActorID, map[string]any{
+		"title": "Filed withdraw thread", "type": "incident", "status": "active", "priority": "p2",
+		"tags": []any{}, "cadence": "daily", "current_summary": "summary", "next_actions": []any{}, "key_artifacts": []any{},
+		"provenance": map[string]any{"sources": []any{"inferred"}},
+	})
+	ask := func(title, subject string) map[string]any {
+		return map[string]any{
+			"type": "human_attention_requested", "thread_id": threadID, "summary": title,
+			"refs": []string{"thread:" + threadID, subject},
+			"payload": map[string]any{
+				"kind": "ask", "title": title, "subject_ref": subject,
+				"requester_actor_id": agent.ActorID, "requester_label": agent.Username,
+				"response_proposals": []any{"Ship it", "Wait"}, "delivery": "none",
+			},
+			"provenance": map[string]any{"sources": []any{"event:cli.ask"}},
+		}
+	}
+	status, result := hostHTTP(t, http.MethodPost, env.server.URL+"/asks/batch", agent.AccessToken, map[string]any{
+		"request_key": "brief-withdraw-batch",
+		"asks":        []map[string]any{ask("Filed one", cardA), ask("Filed two", cardB), ask("Filed three", cardC)},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("file ask batch: %d %#v", status, result)
+	}
+	batchID := anyString(result["batch_id"])
+	anchor, askIDs := oldestBatchEvent(t, result["events"])
+	wantID := primitives.HumanAttentionInboxItemID("ask", threadID, batchID, anchor)
+	status, withdrawn := hostHTTP(t, http.MethodPost, env.server.URL+"/events", agent.AccessToken, map[string]any{
+		"event": map[string]any{
+			"type": "human_attention_withdrawn", "thread_id": threadID, "summary": "Filed one",
+			"refs": []string{"event:" + anchor},
+			"payload": map[string]any{
+				"request_event_id": anchor, "request_event_ref": "event:" + anchor,
+				"withdrawn_by_actor_id": agent.ActorID, "reason": "Duplicate of the kept ask",
+			},
+			"provenance": map[string]any{"sources": []string{"event:cli.ask"}},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("withdraw oldest: %d %#v", status, withdrawn)
+	}
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: env.primitiveStore}, threadID, time.Now().UTC(), agent.ActorID); err != nil {
+		t.Fatal(err)
+	}
+	items, err := env.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
+	if err != nil || len(items) != 1 || items[0].ID != wantID {
+		t.Fatalf("inbox id after withdrawal = %#v, want %s (%v)", items, wantID, err)
+	}
+
+	briefStatus, brief := hostHTTP(t, http.MethodGet, env.server.URL+"/brief", human.AccessToken, nil)
+	if briefStatus != http.StatusOK {
+		t.Fatalf("brief: %d %#v", briefStatus, brief)
+	}
+	decision := oneBatchDecision(t, brief)
+	if anyString(decision["inbox_item_id"]) != wantID || anyString(decision["ref"]) != wantID {
+		t.Fatalf("brief respond id = %v %v, want %s", decision["inbox_item_id"], decision["ref"], wantID)
+	}
+	members, _ := decision["batch"].(map[string]any)["members"].([]any)
+	if len(members) != 2 {
+		t.Fatalf("open members = %d, want 2: %#v", len(members), decision["batch"])
+	}
+
+	remaining := make([]string, 0, 2)
+	for _, id := range askIDs {
+		if id != anchor {
+			remaining = append(remaining, id)
+		}
+	}
+	answerAndReplayBatch(t, env.server.URL, human.AccessToken, env.workspace.DB(), anyString(decision["inbox_item_id"]), remaining, map[string]any{
+		"idempotency_key": "filed-batch-answer-after-withdraw",
+		"response_text":   "Ship it",
+		"outcome":         "answered",
+		"notify_mode":     "none",
+	})
+	if state := askState(t, env.workspace.DB(), anchor); state != "withdrawn" {
+		t.Fatalf("oldest member state = %s, want withdrawn", state)
+	}
+}
+
 func testBriefCurationBatchAnswer(t *testing.T) {
 	t.Helper()
 	f := newCurationFixture(t, "batchanswer")

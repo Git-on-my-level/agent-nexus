@@ -863,10 +863,7 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 	sort.SliceStable(ordered, func(i, j int) bool {
 		leftTS, leftOK := parseTimestamp(ordered[i]["ts"])
 		rightTS, rightOK := parseTimestamp(ordered[j]["ts"])
-		if leftOK && rightOK && !leftTS.Equal(rightTS) {
-			return leftTS.Before(rightTS)
-		}
-		return strings.TrimSpace(anyString(ordered[i]["id"])) < strings.TrimSpace(anyString(ordered[j]["id"]))
+		return primitives.FiledBatchAnchorBefore(leftTS, leftOK, strings.TrimSpace(anyString(ordered[i]["id"])), rightTS, rightOK, strings.TrimSpace(anyString(ordered[j]["id"])))
 	})
 	// The anchor is the oldest member of the full set, withdrawn or not: it
 	// pins the stable item id across membership changes.

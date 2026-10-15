@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"time"
@@ -383,11 +384,13 @@ func (b *briefBuild) readableProposals(rows []briefAskRow) ([]briefAskRow, error
 // collapseBatches folds the open members of a batch into the first (most
 // urgent) member's decision. A batch is either asks filed together through
 // POST /asks/batch (their pinned batch_id) or an accepted curation batch
-// proposal. Membership only ever groups asks already on this page, so a batch
-// never reveals or counts a member the reader cannot see.
+// proposal. The member list only includes asks already on this page, so a
+// batch never reveals or counts a member the reader cannot see.
 //
-// The kept decision's inbox_item_id is the id that answers every member:
-// the derived batch inbox id for a filing, or inbox:curation-batch:<key>.
+// The kept decision's inbox_item_id is the id that answers every member.
+// A filed batch uses the inbox projection's id: the oldest member of the
+// full batch, withdrawn or off this page. A curation batch uses
+// inbox:curation-batch:<key>.
 func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisionMeta) ([]map[string]any, error) {
 	if len(metas) < 2 || len(metas) != len(items) {
 		return items, nil
@@ -427,6 +430,10 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 			groups[key] = append(groups[key], i)
 		}
 	}
+	anchors, err := b.filedBatchAnchors(groups)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(items))
 	for i, id := range ids {
 		key := keys[id]
@@ -443,11 +450,38 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 			list = append(list, briefBatchMember(items[mi], metas[mi]))
 		}
 		items[i]["batch"] = map[string]any{"key": key, "count": len(group), "members": list}
-		if respondID := batchRespondInboxID(key, group, metas); respondID != "" {
+		if respondID := batchRespondInboxID(key, group, metas, anchors); respondID != "" {
 			items[i]["ref"] = respondID
 			items[i]["inbox_item_id"] = respondID
 		}
 		out = append(out, items[i])
+	}
+	return out, nil
+}
+
+// filedBatchAnchors reads the oldest member of each filed batch that this
+// page collapses. One indexed seek per batch (idx_brief_asks_batch, LIMIT 1),
+// at most one per decision on the page. The row is the anchor even when it
+// is withdrawn or outside the page; the query returns only its id and kind.
+func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]briefDecisionMeta, error) {
+	out := map[string]briefDecisionMeta{}
+	for key, group := range groups {
+		batchID := strings.TrimPrefix(key, "filed:")
+		if batchID == key || batchID == "" || len(group) < 2 {
+			continue
+		}
+		var askID, kind, created string
+		err := b.s.db.QueryRowContext(b.ctx, `SELECT ask_id, kind, created_at FROM brief_asks INDEXED BY idx_brief_asks_batch WHERE batch_id=? AND batch_id<>'' ORDER BY created_at, ask_id LIMIT 1`, batchID).Scan(&askID, &kind, &created)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		at, _ := time.Parse(time.RFC3339Nano, created)
+		out[batchID] = briefDecisionMeta{
+			askID: askID, inboxKind: briefInboxKind(kind), batchID: batchID, created: at,
+		}
 	}
 	return out, nil
 }
@@ -478,34 +512,37 @@ func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]an
 }
 
 // batchRespondInboxID is the single inbox id that answers the group. A filed
-// batch uses the same id the inbox projection derives (oldest member anchors
-// it, matching deriveHumanAttentionBatchInboxItem). A curation batch uses a
-// stable id the respond handler fans out.
-func batchRespondInboxID(key string, group []int, metas []briefDecisionMeta) string {
+// batch uses the same id the inbox projection derives. anchors holds that
+// oldest full-batch member; without one, the oldest open member on the page
+// is the fallback. A curation batch uses a stable id the respond handler fans out.
+func batchRespondInboxID(key string, group []int, metas []briefDecisionMeta, anchors map[string]briefDecisionMeta) string {
 	if strings.HasPrefix(key, "filed:") {
 		batchID := strings.TrimPrefix(key, "filed:")
-		anchor := metas[group[0]]
-		for _, mi := range group[1:] {
-			if briefMemberBefore(metas[mi], anchor) {
-				anchor = metas[mi]
+		page := metas[group[0]]
+		anchor, ok := anchors[batchID]
+		if !ok {
+			anchor = page
+			for _, mi := range group[1:] {
+				if FiledBatchAnchorBefore(metas[mi].created, true, metas[mi].askID, anchor.created, true, anchor.askID) {
+					anchor = metas[mi]
+				}
 			}
 		}
-		if anchor.inboxKind == "" || anchor.thread == "" || anchor.askID == "" || batchID == "" {
+		kind := anchor.inboxKind
+		if kind == "" {
+			kind = page.inboxKind
+		}
+		// Filed batches share one thread and kind. The page member supplies
+		// the thread; the anchor supplies the event id the projection pins.
+		if kind == "" || page.thread == "" || anchor.askID == "" || batchID == "" {
 			return ""
 		}
-		return HumanAttentionInboxItemID(anchor.inboxKind, anchor.thread, batchID, anchor.askID)
+		return HumanAttentionInboxItemID(kind, page.thread, batchID, anchor.askID)
 	}
 	if strings.TrimSpace(key) == "" {
 		return ""
 	}
 	return CurationBatchInboxItemID(key)
-}
-
-func briefMemberBefore(a, b briefDecisionMeta) bool {
-	if !a.created.Equal(b.created) {
-		return a.created.Before(b.created)
-	}
-	return a.askID < b.askID
 }
 
 func (a BriefAsk) blocksJSON(titles map[string]string) []map[string]any {
