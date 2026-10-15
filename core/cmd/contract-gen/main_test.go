@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -262,5 +264,34 @@ func TestSharedAliasSchemaPreservesExistingSourceFields(t *testing.T) {
 	}
 	if !fields["source.authority"].required {
 		t.Fatal("shared schema lost the sibling authority requirement")
+	}
+}
+
+func TestLocalCommandMetadataHasNoHTTPRoute(t *testing.T) {
+	doc := openAPIDocument{LocalCommands: []operation{{CommandID: "integrations.enable", CLIPath: "integrations enable", InputMode: "flags"}}}
+	commands := collectCommands(doc, anxSchemaDocument{})
+	if len(commands) != 1 || commands[0].Method != "LOCAL" || commands[0].Path != "" || commands[0].GoMethod != "" || commands[0].TSMethod != "" {
+		t.Fatalf("local metadata: %#v", commands)
+	}
+	dir := t.TempDir()
+	if err := writeGoClient(dir, commands, "test-client"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "client", "client_gen.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `cmd.Method == "LOCAL"`) || strings.Contains(string(raw), "func (c *Client) IntegrationsEnable") {
+		t.Fatal("local command exposed as HTTP helper")
+	}
+	if err := writeTSClient(dir, commands, "test-client"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(filepath.Join(dir, "client.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `command.method === "LOCAL"`) || strings.Contains(string(raw), "  integrationsEnable(") {
+		t.Fatal("local command exposed as TS HTTP helper")
 	}
 }

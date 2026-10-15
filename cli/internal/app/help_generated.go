@@ -29,6 +29,7 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "integrations", Description: "Discover and opt into optional harness hooks"},
 	{Path: "series", Description: "Push and query declared live series with source provenance"},
 	{Path: "adapters", Description: "Declare and administer scoped host-local live data sources"},
 	{Path: "deliveries", Description: "List, claim and receipt durable notification and wake deliveries"},
@@ -1051,7 +1052,7 @@ Loop (stable):
   plan show|set|step <card>  Read or change an initiative's plan (remote_coordination_write)
   series push <name> <value>  Push one live data point (remote_coordination_write)
 
-Setup: anx help enroll|tokens|secrets|adapters|pm|bridge; anx doctor; anx install skill --path ./SKILL.md
+Setup: anx integrations list; anx help enroll|tokens|secrets|adapters|pm|bridge; anx doctor; anx install skill --path ./SKILL.md
 Scripts: anx api <operationId|command-id> [--param k=v] [--json-body <json>]
 Help: anx help onboarding; anx help <command>; anx help --all
 Global flags: --json, --base-url, --workspace, --as, --timeout`) + "\n"
@@ -1127,6 +1128,7 @@ Onboarding:
   `+"`anx help onboarding`"+` for the offline quick-start topic.
   `+"`anx debug meta doc agent-guide`"+` for the prescriptive bundled agent guide.
   `+"`anx install skill --path ./SKILL.md`"+` to export the portable ANX participant skill.
+  `+"`anx integrations list`"+` to discover optional harness hooks (off by default).
   `+"`anx skills configure --path ./anx-participant --role participant --dry-run`"+` for managed local setup.
   `+"`anx skills sync --dry-run`"+` to inspect cross-harness skill delivery.
 
@@ -1225,6 +1227,17 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	}
 	if topic == "import" {
 		return importUsageText() + "\n", true
+	}
+	if topic == "integrations" || strings.HasPrefix(topic, "integrations ") {
+		if topic == "integrations" {
+			return integrationsUsageText() + "\n", true
+		}
+		for _, sub := range integrationsSpec.valid {
+			if topic == "integrations "+sub {
+				return "Local Help: " + topic + "\n\n" + integrationsUsageText() + "\n", true
+			}
+		}
+		return "", false
 	}
 	if topic == "skills" || strings.HasPrefix(topic, "skills ") {
 		if topic == "skills" || topic == "skills configure" || topic == "skills status" || topic == "skills verify" || topic == "skills sync" || topic == "skills adopt" {
@@ -2064,6 +2077,7 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
+		integrationsSpec,
 		{command: "series", valid: []string{"list", "show", "query", "push"}},
 		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},
 		{command: "deliveries", valid: []string{"list", "claim", "receipt"}},

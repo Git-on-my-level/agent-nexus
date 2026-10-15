@@ -329,6 +329,15 @@ func sideEffectClass(cmd Command) string {
 		}
 		return "local_operational_write"
 	}
+	if strings.HasPrefix(cmd.CLIPath, "integrations ") {
+		switch cmd.CLIPath {
+		case "integrations enable", "integrations disable":
+			return "local_operational_write"
+		case "integrations run":
+			return "remote_coordination_write"
+		}
+		return "read_only"
+	}
 	if strings.HasPrefix(cmd.CLIPath, "skills ") {
 		if cmd.CLIPath == "skills configure" || cmd.CLIPath == "skills sync" || cmd.CLIPath == "skills adopt" {
 			return "local_operational_write"

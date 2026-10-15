@@ -7,7 +7,7 @@ export interface Example {
 export interface CommandSpec {
     command_id: string;
     cli_path: string;
-    method: HttpMethod;
+    method: HttpMethod | "LOCAL";
     path: string;
     operation_id: string;
     summary?: string;

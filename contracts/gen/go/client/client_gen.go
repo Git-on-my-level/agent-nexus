@@ -1787,6 +1787,91 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream"},
 	},
 	{
+		CommandID: "integrations.disable",
+		CLIPath:   "integrations disable",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.enable", "integrations.list", "integrations.run", "integrations.status"},
+		Examples: []Example{
+			{
+				Title:   "Discover integrations",
+				Command: "anx integrations list",
+			},
+		},
+	},
+	{
+		CommandID: "integrations.enable",
+		CLIPath:   "integrations enable",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.disable", "integrations.list", "integrations.run", "integrations.status"},
+		Examples: []Example{
+			{
+				Title:   "Discover integrations",
+				Command: "anx integrations list",
+			},
+		},
+	},
+	{
+		CommandID: "integrations.list",
+		CLIPath:   "integrations list",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.run", "integrations.status"},
+		Examples: []Example{
+			{
+				Title:   "Discover integrations",
+				Command: "anx integrations list",
+			},
+		},
+	},
+	{
+		CommandID: "integrations.run",
+		CLIPath:   "integrations run",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.status"},
+		Examples: []Example{
+			{
+				Title:   "Discover integrations",
+				Command: "anx integrations list",
+			},
+		},
+	},
+	{
+		CommandID: "integrations.status",
+		CLIPath:   "integrations status",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.run"},
+		Examples: []Example{
+			{
+				Title:   "Discover integrations",
+				Command: "anx integrations list",
+			},
+		},
+	},
+	{
 		CommandID:  "meta.commands.get",
 		CLIPath:    "meta commands get",
 		Group:      "meta",
@@ -2914,6 +2999,9 @@ func (c *Client) Invoke(ctx context.Context, commandID string, pathParams map[st
 	cmd, ok := commandIndex[commandID]
 	if !ok {
 		return nil, nil, fmt.Errorf("unknown command id: %s", commandID)
+	}
+	if cmd.Method == "LOCAL" {
+		return nil, nil, fmt.Errorf("local CLI command cannot be invoked over HTTP: %s", commandID)
 	}
 	path, err := renderPath(cmd.Path, pathParams)
 	if err != nil {

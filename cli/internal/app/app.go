@@ -127,6 +127,9 @@ func (a *App) writeOutput(w io.Writer, s string) {
 
 func (a *App) Run(args []string) int {
 	overrides, remaining, helpRequested, parseErr := parseGlobalFlags(args)
+	if len(remaining) >= 2 && remaining[0] == "integrations" && remaining[1] == "run" && !isTrailingHelpOnlyInvocation(remaining) {
+		return a.runIntegrationHook(overrides, remaining[2:])
+	}
 	if parseErr != nil {
 		return a.renderError(resolveMachineCommandIdentity("root"), overrides.JSON != nil && *overrides.JSON, parseErr)
 	}
@@ -187,6 +190,9 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
+	if cmdPeek == "integrations" && overrides.Workspace != nil {
+		resolved.Sources["integration_workspace"] = *overrides.Workspace
+	}
 	hasRunner := false
 	for _, arg := range remaining {
 		if arg == "--runner" || arg == "-runner" || strings.HasPrefix(arg, "--runner=") || strings.HasPrefix(arg, "-runner=") {
@@ -233,7 +239,7 @@ func (a *App) Run(args []string) int {
 		}
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
-	if !isGoTestBinary() {
+	if !isGoTestBinary() && cmdPeek != "integrations" {
 		if !strings.HasPrefix(identity.Command, "update") {
 			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
 		}
@@ -308,7 +314,7 @@ func needsAgentIdentity(args []string) bool {
 	switch args[0] {
 	case "api":
 		return len(args) > 1 && args[1] != "call" && !isHelpToken(args[1])
-	case "help", "version", "doctor", "config", "update", "install", "skills", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
+	case "help", "version", "doctor", "config", "update", "install", "skills", "integrations", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
 		return false
 	}
 	return true

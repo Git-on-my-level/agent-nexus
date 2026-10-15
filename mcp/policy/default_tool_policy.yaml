@@ -81,6 +81,21 @@ hosted_default_commands:
   - "work.observations.list"
   - "work.refresh.get"
 commands:
+  "integrations.list":
+    classification: unsupported_shell_shaped
+    reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
+  "integrations.status":
+    classification: unsupported_shell_shaped
+    reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
+  "integrations.enable":
+    classification: unsupported_shell_shaped
+    reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
+  "integrations.disable":
+    classification: unsupported_shell_shaped
+    reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
+  "integrations.run":
+    classification: unsupported_shell_shaped
+    reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
   "agent.inbox.subscribe":
     classification: unsupported_other
     reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"

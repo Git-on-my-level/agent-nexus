@@ -44,6 +44,83 @@ x-anx-extension-vocabulary:
   x-anx-stability: experimental | beta | stable
   x-anx-surface: canonical | projection | diagnostic | utility
   x-anx-agent-notes: Idempotency, retries, and protocol caveats.
+# CLI-only commands participate in discovery, never the HTTP route inventory.
+x-anx-local-commands:
+  - x-anx-command-id: integrations.list
+    x-anx-cli-path: integrations list
+    summary: List optional harness integrations and local state.
+    x-anx-why: List optional harness integrations and local state.
+    x-anx-input-mode: flags
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: Envelope v2 with local integration state and changed/dry_run for writes.
+    x-anx-error-codes: [invalid_flags, unknown_integration, integration_config_invalid]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
+    x-anx-examples:
+      - title: Discover integrations
+        command: anx integrations list
+  - x-anx-command-id: integrations.status
+    x-anx-cli-path: integrations status
+    summary: Inspect harness settings, integration config and spool counts.
+    x-anx-why: Inspect harness settings, integration config and spool counts.
+    x-anx-input-mode: flags
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: Envelope v2 with local integration state and changed/dry_run for writes.
+    x-anx-error-codes: [invalid_flags, unknown_integration, integration_config_invalid]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
+    x-anx-examples:
+      - title: Discover integrations
+        command: anx integrations list
+  - x-anx-command-id: integrations.enable
+    x-anx-cli-path: integrations enable
+    summary: Opt into an optional harness integration.
+    x-anx-why: Opt into an optional harness integration.
+    x-anx-input-mode: flags
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: Envelope v2 with local integration state and changed/dry_run for writes.
+    x-anx-error-codes: [invalid_flags, unknown_integration, integration_config_invalid]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
+    x-anx-examples:
+      - title: Discover integrations
+        command: anx integrations list
+  - x-anx-command-id: integrations.disable
+    x-anx-cli-path: integrations disable
+    summary: Remove only an ANX-owned integration hook and config.
+    x-anx-why: Remove only an ANX-owned integration hook and config.
+    x-anx-input-mode: flags
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: Envelope v2 with local integration state and changed/dry_run for writes.
+    x-anx-error-codes: [invalid_flags, unknown_integration, integration_config_invalid]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
+    x-anx-examples:
+      - title: Discover integrations
+        command: anx integrations list
+  - x-anx-command-id: integrations.run
+    x-anx-cli-path: integrations run
+    summary: Silent bounded harness event handler; always exits zero.
+    x-anx-why: Silent bounded harness event handler; always exits zero.
+    x-anx-input-mode: json-body
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: Hook-only; no stdout, at most one stderr line.
+    x-anx-error-codes: [invalid_flags, unknown_integration, integration_config_invalid]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
+    x-anx-examples:
+      - title: Discover integrations
+        command: anx integrations list
 paths:
   /adapters:
     get:

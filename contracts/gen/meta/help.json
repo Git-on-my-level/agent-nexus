@@ -2,7 +2,7 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
-  "group_count": 36,
+  "group_count": 37,
   "groups": [
     {
       "name": "topics",
@@ -271,6 +271,17 @@
       ]
     },
     {
+      "name": "integrations",
+      "command_count": 5,
+      "command_ids": [
+        "integrations.disable",
+        "integrations.enable",
+        "integrations.list",
+        "integrations.run",
+        "integrations.status"
+      ]
+    },
+    {
       "name": "meta",
       "command_count": 9,
       "command_ids": [
@@ -453,7 +464,7 @@
       ]
     }
   ],
-  "command_count": 235,
+  "command_count": 240,
   "commands": [
     {
       "command_id": "actors.create",
@@ -8775,6 +8786,206 @@
       ],
       "go_method": "InboxSummary",
       "ts_method": "inboxSummary"
+    },
+    {
+      "command_id": "integrations.disable",
+      "cli_path": "integrations disable",
+      "group": "integrations",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Remove only an ANX-owned integration hook and config.",
+      "why": "Remove only an ANX-owned integration hook and config.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+      "error_codes": [
+        "invalid_flags",
+        "unknown_integration",
+        "integration_config_invalid"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+      "examples": [
+        {
+          "title": "Discover integrations",
+          "command": "anx integrations list"
+        }
+      ],
+      "adjacent_commands": [
+        "integrations.enable",
+        "integrations.list",
+        "integrations.run",
+        "integrations.status"
+      ],
+      "go_method": "",
+      "ts_method": ""
+    },
+    {
+      "command_id": "integrations.enable",
+      "cli_path": "integrations enable",
+      "group": "integrations",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Opt into an optional harness integration.",
+      "why": "Opt into an optional harness integration.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+      "error_codes": [
+        "invalid_flags",
+        "unknown_integration",
+        "integration_config_invalid"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+      "examples": [
+        {
+          "title": "Discover integrations",
+          "command": "anx integrations list"
+        }
+      ],
+      "adjacent_commands": [
+        "integrations.disable",
+        "integrations.list",
+        "integrations.run",
+        "integrations.status"
+      ],
+      "go_method": "",
+      "ts_method": ""
+    },
+    {
+      "command_id": "integrations.list",
+      "cli_path": "integrations list",
+      "group": "integrations",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "List optional harness integrations and local state.",
+      "why": "List optional harness integrations and local state.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+      "error_codes": [
+        "invalid_flags",
+        "unknown_integration",
+        "integration_config_invalid"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+      "examples": [
+        {
+          "title": "Discover integrations",
+          "command": "anx integrations list"
+        }
+      ],
+      "adjacent_commands": [
+        "integrations.disable",
+        "integrations.enable",
+        "integrations.run",
+        "integrations.status"
+      ],
+      "go_method": "",
+      "ts_method": ""
+    },
+    {
+      "command_id": "integrations.run",
+      "cli_path": "integrations run",
+      "group": "integrations",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Silent bounded harness event handler; always exits zero.",
+      "why": "Silent bounded harness event handler; always exits zero.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Hook-only; no stdout, at most one stderr line.",
+      "error_codes": [
+        "invalid_flags",
+        "unknown_integration",
+        "integration_config_invalid"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+      "examples": [
+        {
+          "title": "Discover integrations",
+          "command": "anx integrations list"
+        }
+      ],
+      "adjacent_commands": [
+        "integrations.disable",
+        "integrations.enable",
+        "integrations.list",
+        "integrations.status"
+      ],
+      "go_method": "",
+      "ts_method": ""
+    },
+    {
+      "command_id": "integrations.status",
+      "cli_path": "integrations status",
+      "group": "integrations",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Inspect harness settings, integration config and spool counts.",
+      "why": "Inspect harness settings, integration config and spool counts.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local integration state and changed/dry_run for writes.",
+      "error_codes": [
+        "invalid_flags",
+        "unknown_integration",
+        "integration_config_invalid"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
+      "examples": [
+        {
+          "title": "Discover integrations",
+          "command": "anx integrations list"
+        }
+      ],
+      "adjacent_commands": [
+        "integrations.disable",
+        "integrations.enable",
+        "integrations.list",
+        "integrations.run"
+      ],
+      "go_method": "",
+      "ts_method": ""
     },
     {
       "command_id": "meta.commands.get",

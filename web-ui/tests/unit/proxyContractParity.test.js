@@ -13,6 +13,15 @@ import {
 
 describe("proxyContractParity", () => {
   describe("isProxyableCommand", () => {
+    it("does not proxy local CLI integrations", () => {
+      expect(isProxyableCommand("LOCAL", "/")).toBe(false);
+      expect(
+        getAllProxyablePaths().some((entry) => entry.method === "LOCAL"),
+      ).toBe(false);
+      expect(
+        catalogCommandIds.some((id) => id.startsWith("integrations.")),
+      ).toBe(false);
+    });
     it("matches GET /topics", () => {
       expect(isProxyableCommand("GET", "/topics")).toBe(true);
     });

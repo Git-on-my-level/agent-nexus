@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `235`
+- Commands: `240`
 
 ## `actors.create`
 
@@ -1808,6 +1808,81 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
 - Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
+
+## `integrations.disable`
+
+- CLI path: `integrations disable`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Remove only an ANX-owned integration hook and config.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `unknown_integration`, `integration_config_invalid`
+- Output: Envelope v2 with local integration state and changed/dry_run for writes.
+- Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
+- Examples:
+  - Discover integrations: `anx integrations list`
+
+## `integrations.enable`
+
+- CLI path: `integrations enable`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Opt into an optional harness integration.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `unknown_integration`, `integration_config_invalid`
+- Output: Envelope v2 with local integration state and changed/dry_run for writes.
+- Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
+- Examples:
+  - Discover integrations: `anx integrations list`
+
+## `integrations.list`
+
+- CLI path: `integrations list`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: List optional harness integrations and local state.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `unknown_integration`, `integration_config_invalid`
+- Output: Envelope v2 with local integration state and changed/dry_run for writes.
+- Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
+- Examples:
+  - Discover integrations: `anx integrations list`
+
+## `integrations.run`
+
+- CLI path: `integrations run`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Silent bounded harness event handler; always exits zero.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `unknown_integration`, `integration_config_invalid`
+- Output: Hook-only; no stdout, at most one stderr line.
+- Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
+- Examples:
+  - Discover integrations: `anx integrations list`
+
+## `integrations.status`
+
+- CLI path: `integrations status`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Inspect harness settings, integration config and spool counts.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `unknown_integration`, `integration_config_invalid`
+- Output: Envelope v2 with local integration state and changed/dry_run for writes.
+- Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
+- Examples:
+  - Discover integrations: `anx integrations list`
 
 ## `meta.commands.get`
 

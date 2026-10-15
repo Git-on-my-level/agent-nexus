@@ -19,6 +19,11 @@ core authentication buckets, not downstream authorization rules. Handlers may
 apply stricter permissions. `handler_defined` means the outer classifier
 defers to the handler; consumers must classify these routes explicitly.
 
+`x-anx-local-commands` in the OpenAPI document describes CLI-only commands.
+These generate `method: LOCAL`, an empty route path and no HTTP helper methods.
+The shared metadata registries include them for discovery; HTTP clients reject
+invocation before transport. They never enter the HTTP route inventory.
+
 ## Generation
 
 Generate all contract-derived artifacts from repo root:

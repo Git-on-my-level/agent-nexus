@@ -31,6 +31,17 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "help" || parts[0] == "debug" && len(parts) > 1 && parts[1] == "meta" {
 		return "read_only"
 	}
+	if parts[0] == "integrations" {
+		if len(parts) > 1 {
+			switch parts[1] {
+			case "enable", "disable":
+				return "local_operational_write"
+			case "run":
+				return "remote_coordination_write"
+			}
+		}
+		return "read_only"
+	}
 	if parts[0] == "skills" {
 		if len(parts) > 1 && (parts[1] == "configure" || parts[1] == "sync" || parts[1] == "adopt") {
 			// Conservative: a string does not retain quoted argv boundaries,

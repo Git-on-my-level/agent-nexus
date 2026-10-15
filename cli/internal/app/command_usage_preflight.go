@@ -26,6 +26,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if len(args) >= 2 && args[0] == "bridge" && args[1] == "install" && !bridgeInstallTargetsRuntime(args[2:]) {
 		return "bridge install", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"as": {kind: preflightFlagString}, "dry-run": {kind: preflightFlagBool}})
 	}
+	if args[0] == "integrations" {
+		o, err := parseIntegrationOptions(args[1:])
+		return strings.TrimSpace("integrations " + o.verb), err
+	}
 	if args[0] == "update" {
 		o, err := parseUpdateOptions(args[1:])
 		name := "update"
