@@ -157,7 +157,7 @@
         class="agent-row__inbox"
         href={askHref}
         data-agent-inbox-link
-        use:tooltip={"Answer in Inbox (I)"}>Answer in Inbox</a
+        use:tooltip={"Answer in Decide (I)"}>Answer in Decide</a
       >
     {:else if model.durationTitle && model.duration}
       <p class="text-micro text-fg-subtle">

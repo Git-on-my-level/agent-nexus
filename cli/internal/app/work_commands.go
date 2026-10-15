@@ -13,6 +13,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/internal/registry"
 )
 
@@ -239,6 +240,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		case "serve":
 			result, err := a.runPMServe(ctx, args[2:], cfg)
 			return result, "pm serve", err
+		case "curate":
+			result, err := a.runPMCurate(ctx, args[2:], cfg)
+			return result, "pm curate", err
 		case "ask":
 			result, err := a.runPMAsk(ctx, args[2:], cfg)
 			return result, "pm ask", err
@@ -304,7 +308,15 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if parsed.name == "pm decisions dispatch" {
 		started = time.Now().UTC()
 	}
+	var createWarnings []output.Warning
+	if parsed.name == "work create" {
+		// Warnings only: one bounded read before the write, never a rejection.
+		createWarnings = a.workCreateWarnings(ctx, cfg, anyString(asMap(body)["title"]))
+	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
+	if err == nil && result != nil && len(createWarnings) > 0 {
+		result.Warnings = append(result.Warnings, createWarnings...)
+	}
 	if parsed.name == "pm turns claim" {
 		if cap, ok := parsePMClaimCapacity(result, err); ok {
 			return applyPMClaimCapacityResult(result, cap), parsed.name, nil
@@ -386,6 +398,9 @@ func workHelpText(topic string) (string, bool) {
 		return fmt.Sprintf("Usage: anx pm context\n\nInside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.\n\nAdjacent commands: `%s`\n\nOutside a claimed turn\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
 	}
 
+	if isInternalWorkCommand(topic) {
+		return "", false
+	}
 	spec, exact := workCommands[topic]
 	if !exact && !isWorkCommandGroup(topic) {
 		return "", false
@@ -606,7 +621,7 @@ func formatWorkCommandText(name string, body any) string {
 			}
 			lines = append(lines, line)
 		}
-		for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition", "dark_after"} {
+		for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition"} {
 			if value := anyString(work[key]); value != "" {
 				lines = append(lines, key+": "+value)
 			}
@@ -998,6 +1013,13 @@ func applyPMTurnContextBody(a *App, parsed parsedWorkCommand, object map[string]
 			object["limit"] = n
 		}
 	}
+}
+
+// isInternalWorkCommand reports registry entries that only back the top-level
+// loop verb (anx context). They are not a user-facing `anx work` subcommand and
+// must not appear in help or the generated runtime reference.
+func isInternalWorkCommand(name string) bool {
+	return name == "work context"
 }
 
 func isWorkCommandGroup(topic string) bool {

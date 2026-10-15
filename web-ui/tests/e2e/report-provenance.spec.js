@@ -3,6 +3,8 @@ import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
 import {
   expectNoClippedContent,
@@ -27,7 +29,8 @@ import {
 const WORKSPACE = "/o/local/w/local";
 const DOC_ID = "provenance-dashboard";
 const DOC_PATH = `${WORKSPACE}/docs/${DOC_ID}`;
-const OVERVIEW = `${WORKSPACE}/overview`;
+// The old Overview's pinned dashboard now lives below the initiatives on Watch.
+const OVERVIEW = `${WORKSPACE}/watch`;
 const NOW = "2026-10-06T12:00:00Z";
 const ago = (days) =>
   new Date(Date.parse(NOW) - days * 86_400_000).toISOString();
@@ -331,6 +334,11 @@ async function installDashboard(page) {
     if (path === `/docs/${DOC_ID}` && request.method() === "GET")
       return json({ document: DOCUMENT, revision: REVISION });
     if (path === `/docs/${DOC_ID}/report`) return json(RENDERED);
+    // Watch lists its dashboard candidates from this read.
+    if (path === "/workspace/dashboard/reports")
+      return json(SNAPSHOT.dashboard);
+    // Watch reads the brief for its initiatives; the dashboard sits below them.
+    if (path === "/brief") return json({ ...brief, generated_at: NOW });
     if (path === "/overview" || path === "/workspace/dashboard")
       return json(SNAPSHOT);
     return route.fallback();
@@ -358,7 +366,7 @@ async function open(page, path, width = 1440, height = 1100) {
 
 for (const [surface, path] of [
   ["the document report view", DOC_PATH],
-  ["the Overview's embedded dashboard", OVERVIEW],
+  ["the Watch page's embedded dashboard", OVERVIEW],
 ]) {
   test(`every panel says whether it is live or hand-written on ${surface}`, async ({
     page,
@@ -503,93 +511,6 @@ for (const viewport of AUDIT_VIEWPORTS) {
 }
 
 /**
- * The reminder core files when a panel passes its review date.
- *
- * It is an author-only nudge with no requester and no response proposals, and
- * core drops it from every inbox read once the report is revised, archived,
- * trashed or unpinned. Offering Reply and Acknowledge gave the author two
- * buttons that could only fail.
- */
-const REMINDER = {
-  id: "report-review:milestones",
-  kind: "report_review",
-  subtype: "report_review_due",
-  title: `Panel milestones on ${REPORT.title} is due for review: refresh it or convert it to live.`,
-  body: "Refresh it or convert it to a live panel.",
-  summary: "Panel milestones is due for review.",
-  response_proposals: [],
-  subject_ref: `document:${DOC_ID}`,
-  related_refs: [`document:${DOC_ID}`],
-  panel_id: "milestones",
-  revision_ref: DOCUMENT.revision_ref,
-};
-
-test("a review reminder offers the dashboard, not a reply it cannot send", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  await installDashboard(page);
-  await page.route("**/inbox**", (route) => {
-    const request = route.request();
-    if (!["fetch", "xhr"].includes(request.resourceType()))
-      return route.fallback();
-    const path = decodeURIComponent(new URL(request.url()).pathname);
-    const json = (body) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(body),
-      });
-    // The list projection, and the single item the detail page reads.
-    if (/\/inbox$/.test(path)) return json({ items: [REMINDER], total: 1 });
-    if (/\/inbox\//.test(path)) return json({ item: REMINDER });
-    return route.fallback();
-  });
-  await page.goto(`${WORKSPACE}/inbox`);
-
-  // It is the author's to act on, so it waits in Needs you rather than filing
-  // itself under Handled.
-  const row = page.getByText("is due for review", { exact: false }).first();
-  await expect(row).toBeVisible({ timeout: 60_000 });
-  await row.click();
-
-  const reminder = page.locator("[data-inbox-reminder]");
-  await expect(reminder).toBeVisible();
-  await expect(reminder).toContainText("There is nothing to answer");
-  await expect(
-    reminder.getByRole("link", { name: "Open dashboard" }),
-  ).toHaveAttribute("href", new RegExp(`/docs/${DOC_ID}$`));
-
-  // The two controls that could only fail are gone.
-  await expect(page.getByRole("button", { name: "Send response" })).toHaveCount(
-    0,
-  );
-  await expect(page.getByRole("button", { name: "Acknowledge" })).toHaveCount(
-    0,
-  );
-  await expect(page.getByLabel("Your response")).toHaveCount(0);
-
-  // And no phantom requester: nobody is waiting on a reminder, and an empty
-  // actor used to render as the word "someone".
-  await expect(page.getByText("from someone")).toHaveCount(0);
-  await expect(page.getByText("REVIEW DUE").first()).toBeVisible();
-
-  // The item page is still one click away, and says the same things there.
-  await reminder.getByRole("link", { name: "Open item" }).click();
-  const detail = page.getByTestId("inbox-reminder-detail");
-  await expect(detail).toBeVisible();
-  await expect(detail).toContainText("There is nothing to answer");
-  await expect(
-    detail.getByRole("link", { name: "Open dashboard" }),
-  ).toHaveAttribute("href", new RegExp(`/docs/${DOC_ID}$`));
-  // The shared label, not the raw kind, and still no requester or composer.
-  await expect(page.getByText("REVIEW DUE").first()).toBeVisible();
-  await expect(page.getByText("REPORT_REVIEW")).toHaveCount(0);
-  await expect(page.getByText("from someone")).toHaveCount(0);
-  await expect(page.getByLabel("Your response")).toHaveCount(0);
-});
-
-/**
  * Before / after for a review. Off unless `REVIEW_CAPTURES` is set — it
  * asserts nothing, so it has no place in a CI run. Output lands in the
  * gitignored `web-ui/.screenshots/review/`; review binaries are not committed.
@@ -606,7 +527,7 @@ for (const { label, width, height } of [
 ]) {
   for (const [surface, path] of [
     ["dashboard", DOC_PATH],
-    ["overview", OVERVIEW],
+    ["watch", OVERVIEW],
   ]) {
     test(`capture ${surface} provenance @ ${label}`, async ({
       page,

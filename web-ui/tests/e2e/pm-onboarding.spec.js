@@ -52,7 +52,8 @@ const OFFLINE = {
  */
 const LEGACY_REGISTERED = { configured: true, connected: false };
 
-const pmSlot = (page) => page.locator("[data-pm-nav]").first();
+/** Ask is a primary destination, shown only while a PM is connected. */
+const askLink = (page) => page.getByRole("link", { name: "Ask", exact: true });
 
 /**
  * Navigate to a page the app immediately redirects away from.
@@ -85,42 +86,39 @@ test.describe("no PM agent onboarded", () => {
       ],
     });
 
-    await page.goto(`${ROOT}/tasks`);
+    await page.goto(`${ROOT}/initiatives`);
     await waitForAppReady(page);
 
-    // The one entry point, in the slot Ask PM normally occupies.
-    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "setup");
-    await expect(
-      page.getByRole("link", { name: "Set up your PM" }),
-    ).toBeVisible();
+    // Ask is not shown at all; setup is one hop down (palette, More).
+    await expect(askLink(page)).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
-    await expectCleanLayout(page, "tasks with no PM");
+    await expectCleanLayout(page, "initiatives with no PM");
 
     /*
      * The PM lists are still read, deliberately: a proposal filed earlier
      * still waits for a yes whether or not a PM is running, and the Inbox is
      * the only place to answer it. What is gated is the affordances.
      */
-    expect(
-      api.calls.filter((call) => call.path === "/pm/decisions"),
-    ).not.toEqual([]);
+    await expect
+      .poll(
+        () => api.calls.filter((call) => call.path === "/pm/decisions").length,
+      )
+      .toBeGreaterThan(0);
 
-    await page.goto(`${ROOT}/inbox`);
+    await page.goto(`${ROOT}/decide`);
     await waitForAppReady(page);
-    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
-    // The reader's own rows still load; the Inbox is not broken by a missing PM.
-    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
-    await expectCleanLayout(page, "inbox with no PM");
+    await expect(askLink(page)).toHaveCount(0);
+    // The reader's own rows still load; Decide is not broken by a missing PM.
+    await expect(page.getByRole("heading", { name: "Decide" })).toBeVisible();
+    await expectCleanLayout(page, "decide with no PM");
 
     // The palette offers setup, and never a conversation nothing can answer.
     await page.keyboard.press("ControlOrMeta+k");
     const palette = page.getByRole("dialog", { name: "Command palette" });
     await expect(
-      palette.getByRole("option", { name: "Set up your PM" }),
+      palette.getByRole("option", { name: /PM setup/ }),
     ).toBeVisible();
-    await expect(palette.getByRole("option", { name: /Ask PM/ })).toHaveCount(
-      0,
-    );
+    await expect(palette.getByRole("option", { name: /^Ask$/ })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(palette).toHaveCount(0);
 
@@ -162,20 +160,14 @@ test.describe("no PM agent onboarded", () => {
       "connected",
     );
     await expect(page.getByText(/Your PM is running/i)).toBeVisible();
-    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
-    await expect(page.getByRole("link", { name: "Ask PM" })).toBeVisible();
+    await expect(askLink(page).first()).toBeVisible();
     await expectCleanLayout(page, "pm setup connected");
 
     // The shell carries the new state across a client-side navigation, so
     // other surfaces grow their PM affordances without a reload.
-    await page.getByRole("link", { name: "Tasks" }).first().click();
-    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-    // The page's own header action, not the shell's slot.
-    await expect(
-      page
-        .getByRole("link", { name: "Ask PM", exact: true })
-        .locator(":scope:not([data-pm-nav])"),
-    ).toHaveCount(1);
+    await page.getByRole("link", { name: "Watch" }).first().click();
+    await expect(page.getByRole("heading", { name: "Watch" })).toBeVisible();
+    await expect(askLink(page).first()).toBeVisible();
   });
 
   test("setup reads at phone width @states", async ({ page }) => {
@@ -185,8 +177,8 @@ test.describe("no PM agent onboarded", () => {
     await page.goto(`${ROOT}/pm/setup`);
     await waitForAppReady(page);
     await expect(page.locator("[data-pm-install-command]")).toBeVisible();
-    // The bottom bar keeps the PM slot, with copy that fits a tab on one line.
-    await expect(page.getByRole("link", { name: "PM setup" })).toBeVisible();
+    // The bottom bar has no Ask tab until a PM is connected.
+    await expect(askLink(page)).toHaveCount(0);
     await expectCleanLayout(page, "pm setup phone");
   });
 });
@@ -199,7 +191,7 @@ test.describe("an onboarded PM that is not running", () => {
     await waitForAppReady(page);
 
     await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
-    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
+    await expect(askLink(page).first()).toBeVisible();
     await expect(page.locator("[data-pm-status]")).toHaveAttribute(
       "data-pm-status",
       "offline",
@@ -249,67 +241,22 @@ test.describe("before core answers, and when it never does", () => {
     const api = await installWorkspaceApi(page, { pm: CONNECTED });
     api.hold.pmPresence = deferred();
 
-    await page.goto(`${ROOT}/tasks`);
+    await page.goto(`${ROOT}/initiatives`);
     await waitForAppReady(page);
-    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-
-    // Neither label, and no task affordance, while the read is in flight.
-    await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: "Set up your PM" }),
-    ).toHaveCount(0);
+      page.getByRole("heading", { name: "Initiatives" }),
+    ).toBeVisible();
+
+    // No Ask, and no initiative affordance, while the read is in flight.
+    await expect(askLink(page)).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
     await expectCleanLayout(page, "pm state loading");
 
     api.hold.pmPresence.resolve();
-    // The answer lands and the slot commits to one label.
-    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
-    await expect(
-      page.getByRole("link", { name: "Ask PM", exact: true }).first(),
-    ).toBeVisible();
+    // The answer lands and Ask appears.
+    await expect(askLink(page).first()).toBeVisible();
     await expectCleanLayout(page, "pm state resolved");
   });
-
-  /*
-   * The phone bar must not move when the slot resolves: a later layout check
-   * would otherwise measure whichever geometry it happened to catch. 320px
-   * is where "PM setup" is widest relative to its tab.
-   */
-  for (const [name, pm] of [
-    ["setup", NOT_ONBOARDED],
-    ["ask", CONNECTED],
-  ]) {
-    test(`the phone bar keeps its geometry as the slot resolves to ${name} @states`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width: 320, height: 568 });
-      const api = await installWorkspaceApi(page, { pm });
-      api.hold.pmPresence = deferred();
-      const bottomNav = page.getByRole("navigation", {
-        name: "Primary navigation",
-      });
-      const tabBoxes = () =>
-        bottomNav.evaluate((nav) =>
-          [...nav.children].map((tab) => {
-            const box = tab.getBoundingClientRect();
-            return [box.x, box.y, box.width, box.height];
-          }),
-        );
-
-      await page.goto(`${ROOT}/tasks`);
-      await waitForAppReady(page);
-      await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-      await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
-      const pending = await tabBoxes();
-
-      api.hold.pmPresence.resolve();
-      await expect(bottomNav.locator("[data-pm-nav]")).toHaveAttribute(
-        "data-pm-nav",
-        name,
-      );
-      expect(await tabBoxes()).toEqual(pending);
-    });
-  }
 
   /*
    * A read that never succeeds used to leave Ask PM on screen forever, which
@@ -321,29 +268,25 @@ test.describe("before core answers, and when it never does", () => {
     const api = await installWorkspaceApi(page, { pm: CONNECTED });
     api.fail.pmPresence = { status: 500, message: "presence unavailable" };
 
-    await page.goto(`${ROOT}/tasks`);
+    await page.goto(`${ROOT}/initiatives`);
     await waitForAppReady(page);
-    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-
-    await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: "Set up your PM" }),
-    ).toHaveCount(0);
-    // The failure belongs to the PM surface, not to Tasks: the page works.
-    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
+      page.getByRole("heading", { name: "Initiatives" }),
+    ).toBeVisible();
+
+    await expect(askLink(page)).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+    // The failure belongs to the PM surface, not to Initiatives: the page works.
+    await expect(
+      page.getByRole("link", { name: "New initiative" }),
+    ).toBeVisible();
     await expectCleanLayout(page, "pm state unreadable");
 
-    // The palette offers neither a conversation nor an install.
+    // The palette offers no conversation.
     await page.keyboard.press("ControlOrMeta+k");
     const palette = page.getByRole("dialog", { name: "Command palette" });
     await expect(palette).toBeVisible();
-    await expect(palette.getByRole("option", { name: /Ask PM/ })).toHaveCount(
-      0,
-    );
-    await expect(
-      palette.getByRole("option", { name: "Set up your PM" }),
-    ).toHaveCount(0);
+    await expect(palette.getByRole("option", { name: /^Ask$/ })).toHaveCount(0);
     await page.keyboard.press("Escape");
   });
 });
@@ -365,7 +308,7 @@ test.describe("a core that predates the computed PM state", () => {
     await page.goto(`${ROOT}/pm`);
     await waitForAppReady(page);
     await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
-    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
+    await expect(askLink(page).first()).toBeVisible();
     await expect(page.locator("[data-pm-status]")).toHaveAttribute(
       "data-pm-status",
       "offline",
@@ -384,27 +327,28 @@ test.describe("a core with no presence route at all", () => {
   test("shows no PM surface, and no setup either @states", async ({ page }) => {
     await installWorkspaceApi(page, { pm: null, conversations: [] });
 
-    await page.goto(`${ROOT}/tasks`);
+    await page.goto(`${ROOT}/initiatives`);
     await waitForAppReady(page);
-    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-    await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: "Set up your PM" }),
-    ).toHaveCount(0);
+      page.getByRole("heading", { name: "Initiatives" }),
+    ).toBeVisible();
+    await expect(askLink(page)).toHaveCount(0);
     await expect(page.locator("[data-pm-status]")).toHaveCount(0);
     await expect(page.locator("[data-pm-offline-note]")).toHaveCount(0);
-    // Tasks itself is unaffected.
-    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
+    // Initiatives itself is unaffected.
+    await expect(
+      page.getByRole("link", { name: "New initiative" }),
+    ).toBeVisible();
   });
 });
 
-test("explicit uninstall changes sidebar to setup on tab return without reload @states", async ({
+test("explicit uninstall removes Ask on tab return without reload @states", async ({
   page,
 }) => {
   const api = await installWorkspaceApi(page, { pm: CONNECTED });
-  await page.goto(`${ROOT}/tasks`);
+  await page.goto(`${ROOT}/initiatives`);
   await waitForAppReady(page);
-  await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
+  await expect(askLink(page).first()).toBeVisible();
   await page.evaluate(() => {
     window.__uninstallProbe = "same-document";
   });
@@ -415,10 +359,7 @@ test("explicit uninstall changes sidebar to setup on tab return without reload @
   await page.evaluate(() =>
     document.dispatchEvent(new Event("visibilitychange")),
   );
-  await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "setup");
-  await expect(
-    page.getByRole("link", { name: "Set up your PM" }),
-  ).toBeVisible();
+  await expect(askLink(page)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
   expect(await page.evaluate(() => window.__uninstallProbe)).toBe(
     "same-document",

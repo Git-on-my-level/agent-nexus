@@ -105,7 +105,7 @@ func testPlanAndReportReads(t *testing.T, sizes []int, measure bool) {
 				t.Fatalf("report hydration: %d queries for %d cards", got, size)
 			}
 			counter.Reset()
-			if err = s.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), page.Work, func(string, string) bool { return true }, time.Now(), 0); err != nil {
+			if err = s.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), page.Work, func(string, string) bool { return true }, time.Now()); err != nil {
 				t.Fatal(err)
 			}
 			if got := counter.Count(); measure && got != int64(2+2*((size+49)/50)+2*((size+199)/200)+size/200) {
@@ -122,7 +122,7 @@ func testPlanAndReportReads(t *testing.T, sizes []int, measure bool) {
 				n = 200
 			}
 			counter.Reset()
-			items, err := s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), refs[:n], func(string, string) bool { return true }, time.Now(), 0)
+			items, err := s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), refs[:n], func(string, string) bool { return true }, time.Now())
 			if err != nil || len(items) != n {
 				t.Fatalf("batch=%d error=%v", len(items), err)
 			}

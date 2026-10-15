@@ -179,7 +179,7 @@
   <WorkspacePageHeader title="Threads">
     {#snippet subtitle()}
       <span class="hidden sm:inline"
-        >The conversation behind each task, doc and board. Open one to read what
+        >The conversation behind each initiative and doc. Open one to read what
         was said and when.</span
       >
     {/snippet}
@@ -278,7 +278,7 @@
                 >{/each}Updated <Time
                 value={thread.updated_at}
                 fallback="—"
-              />{#if topicSeg}{" · "}linked to a topic{/if}
+              />{#if topicSeg}{" · "}linked to a project{/if}
             </p>
           </a>
           {#if thread.ref || thread.handle}

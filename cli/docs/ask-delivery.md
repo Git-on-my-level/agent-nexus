@@ -22,8 +22,8 @@ Structured access-grant requests support only approve/reject; their API exposes
 Re-ask with `--supersedes event:<previous-ask>` after supplying the missing evidence.
 
 Effective source cancellation, card closure/archive and expiry reconcile through durable, indexed batches of
-200; busy workspaces may take several ticks. Open asks expose `is_stale` when the
-card has not changed for `ANX_ASK_STALE_AFTER` (Go duration, default `168h`).
+200; busy workspaces may take several ticks. Asks carry no inactivity flag:
+urgency comes from the ask's own `--by` deadline (`decide_by` in brief.v1).
 Subscriptions accelerate delivery; a failed subscription never loses the task's
 recorded decision.
 
@@ -142,7 +142,7 @@ limits and a 64 KiB payload cap. A receiver must remain authorized at send time.
 
 ## API and cost
 
-`GET /asks/{ask_id}` exposes status, response, task outcome, staleness, and bounded
+`GET /asks/{ask_id}` exposes status, response, task outcome and bounded
 delivery state/logs. `GET /stream/asks/{ask_id}` performs only point reads each tick.
 `POST /asks/{ask_id}/subscriptions`, `POST /agent-inbox/subscriptions` and
 `POST /asks/{ask_id}/delivery` create or acknowledge subscriptions.

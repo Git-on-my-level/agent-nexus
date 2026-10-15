@@ -342,6 +342,7 @@ const adapterCommandTable = [
     (filters = {}) => ({ options: q(filters) }),
   ],
   ["getOverview", "overview.get", (filters = {}) => ({ options: q(filters) })],
+  ["getBrief", "brief.get", () => ({ options: {} })],
   [
     "setWorkspaceDashboard",
     "workspace.dashboard.set",
@@ -430,6 +431,11 @@ const adapterCommandTable = [
     "answerPmDecision",
     "pm.decisions.answer",
     (id, payload) => pb(pathParams({ decision_id: id }), payload),
+  ],
+  [
+    "ungroupCurationBatch",
+    "curation.ungroup",
+    (payload) => ({ options: b(payload) }),
   ],
   [
     "dispatchPmDecision",
@@ -573,6 +579,12 @@ const adapterCommandTable = [
     "denyAccessRequest",
     "auth.access-requests.deny",
     (requestId) => pb(pathParams({ request_id: requestId }), {}),
+  ],
+  ["getNotificationSettings", "notifications.settings.get"],
+  [
+    "setNotificationSettings",
+    "notifications.settings.set",
+    (payload) => ({ options: b(payload) }),
   ],
   ["listSecrets", "secrets.list"],
   ["createSecret", "secrets.create", (payload) => ({ options: b(payload) })],

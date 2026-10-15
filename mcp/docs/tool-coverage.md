@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 224
+- Command count: 235
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -20,6 +20,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | auth | 22 |
 | boards | 13 |
 | cards | 13 |
+| curation | 5 |
+| deliveries | 3 |
 | derived | 1 |
 | docs | 19 |
 | events | 8 |
@@ -27,7 +29,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | host | 15 |
 | inbox | 5 |
 | meta | 9 |
+| notifications | 2 |
 | ops | 3 |
+| orient | 1 |
 | overview | 2 |
 | plan | 2 |
 | pm | 27 |
@@ -48,13 +52,13 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 81 |
-| exposed_write | 67 |
-| gated_admin | 28 |
+| exposed_read | 85 |
+| exposed_write | 68 |
+| gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
-| unsupported_interactive | 9 |
-| unsupported_other | 7 |
+| unsupported_interactive | 12 |
+| unsupported_other | 9 |
 | unsupported_shell_shaped | 2 |
 | unsupported_streaming | 6 |
 
@@ -62,11 +66,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 148 | exposed_read + exposed_write + adapted |
-| hosted default | 66 | explicit read-only private-app allowlist |
-| gated | 41 | requires explicit admin/sensitive policy scope |
+| standalone default | 153 | exposed_read + exposed_write + adapted |
+| hosted default | 67 | explicit read-only private-app allowlist |
+| gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 35 | not represented as direct MCP tools in v1 |
+| unsupported | 40 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -142,6 +146,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | boards.trash | boards | POST | /boards/{board_id}/trash | exposed_write | ordinary reversible board lifecycle write |
 | boards.unarchive | boards | POST | /boards/{board_id}/unarchive | exposed_write | ordinary reversible board lifecycle write |
 | boards.workspace | boards | GET | /boards/{board_id}/workspace | exposed_read | bounded board workspace projection |
+| brief.get | orient | GET | /brief | exposed_read | brief.v1: the caller's decisions, initiatives against promises, own asks and answers. |
 | cards.archive | cards | POST | /cards/{card_id}/archive | exposed_write | ordinary reversible card lifecycle write |
 | cards.create | cards | POST | /cards | exposed_write | ordinary card creation |
 | cards.get | cards | GET | /cards/{card_id} | exposed_read | card read |
@@ -155,6 +160,14 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | cards.revisions.list | cards | GET | /cards/{card_id}/revisions | exposed_read | card revision inventory read |
 | cards.timeline | cards | GET | /cards/{card_id}/timeline | exposed_read | bounded card timeline projection |
 | cards.trash | cards | POST | /cards/{card_id}/trash | exposed_write | ordinary reversible card lifecycle write |
+| curation.candidates | curation | GET | /curation/candidates | exposed_read | Bounded curation candidates a PM reviews before proposing; read only. |
+| curation.metrics | curation | GET | /curation/metrics | exposed_read | Counts only; no titles or refs. |
+| curation.propose | curation | POST | /curation/proposals | exposed_write | PM files a curation proposal; nothing changes until a human accepts it. |
+| curation.run | curation | POST | /curation/run | gated_admin | Workspace-wide formula pass that core also runs on its own schedule. |
+| curation.ungroup | curation | POST | /curation/ungroup | unsupported_interactive | human-only undo of an accepted batch requires human judgment |
+| deliveries.claim | deliveries | POST | /deliveries/claim | unsupported_other | Delivery claims belong to the owning adapter's runtime, not an MCP tool call |
+| deliveries.list | deliveries | GET | /deliveries | exposed_read | The caller's own queued notifications and wake deliveries, bounded by limit. |
+| deliveries.receipt | deliveries | POST | /deliveries/{delivery_id}/receipt | unsupported_other | Delivery receipts belong to the owning adapter's runtime, not an MCP tool call |
 | derived.rebuild | derived | POST | /derived/rebuild | gated_admin | projection rebuild is maintenance/ops |
 | docs.archive | docs | POST | /docs/{document_id}/archive | exposed_write | ordinary reversible document lifecycle write |
 | docs.comments.create | docs | POST | /docs/{document_id}/comments | exposed_write | ordinary document comment write for cross-host knowledge |
@@ -214,6 +227,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | meta.livez | meta | GET | /livez | exposed_read | liveness diagnostic read |
 | meta.readyz | meta | GET | /readyz | exposed_read | readiness diagnostic read |
 | meta.version | meta | GET | /version | exposed_read | version metadata read |
+| notifications.settings.get | notifications | GET | /notification-settings | unsupported_interactive | human-only notification settings |
+| notifications.settings.set | notifications | PUT | /notification-settings | unsupported_interactive | human-only notification settings require human judgment |
 | ops.blob.usage.rebuild | ops | POST | /ops/blob-usage/rebuild | gated_admin | blob usage rebuild is maintenance/ops |
 | ops.health | ops | GET | /ops/health | gated_admin | ops health can expose operational diagnostics |
 | ops.usage.summary | ops | GET | /ops/usage-summary | gated_admin | unversioned usage summary is ops/quota telemetry |

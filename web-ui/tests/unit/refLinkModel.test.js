@@ -195,7 +195,7 @@ describe("RefLink model", () => {
       routedValue: "card-1",
       primaryLabel: "Restock lemons",
       secondaryLabel: "",
-      href: "/o/acme/w/proj/tasks/card%3Acard-1",
+      href: "/o/acme/w/proj/initiatives/card%3Acard-1",
       isLink: true,
     });
   });
@@ -343,8 +343,8 @@ describe("RefLink model", () => {
 
     expect(cardRef).toMatchObject({
       kind: "card",
-      label: "Task card-1",
-      primaryLabel: "Task card-1",
+      label: "Initiative card-1",
+      primaryLabel: "Initiative card-1",
       secondaryLabel: "card:card-1",
     });
 

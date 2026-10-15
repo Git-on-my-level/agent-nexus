@@ -56,7 +56,7 @@ func pmToolStep(args []string) (string, string) {
 	if !known || workspaceIndependentCommand(args) {
 		return "", ""
 	}
-	if name == "pm serve" || name == "pm turns heartbeat" || name == "pm turns claim" || name == "pm turns complete" || name == "pm turns fail" || name == "pm turns release" || strings.HasPrefix(name, "secret ") || strings.HasPrefix(name, "auth ") || strings.HasPrefix(name, "host ") || strings.HasPrefix(name, "api ") {
+	if name == "pm serve" || name == "pm curate" || name == "pm turns heartbeat" || name == "pm turns claim" || name == "pm turns complete" || name == "pm turns fail" || name == "pm turns release" || strings.HasPrefix(name, "secret ") || strings.HasPrefix(name, "auth ") || strings.HasPrefix(name, "host ") || strings.HasPrefix(name, "api ") {
 		return "", ""
 	}
 	target := ""
@@ -87,7 +87,7 @@ func pmToolStep(args []string) (string, string) {
 	}
 
 	// Resource get/inspect and turn-context calls have a leading resource ref.
-	if target == "" && len(tail) > 0 && (strings.HasSuffix(name, " get") || strings.HasSuffix(name, " inspect") || name == "work context" || name == "cards messages" || name == "topics messages") && pmActivityRef.MatchString(tail[0]) {
+	if target == "" && len(tail) > 0 && (strings.HasSuffix(name, " get") || strings.HasSuffix(name, " inspect") || name == "work context" || name == "context" || name == "cards messages" || name == "topics messages") && pmActivityRef.MatchString(tail[0]) {
 		target = tail[0]
 	}
 	return "anx " + name, target

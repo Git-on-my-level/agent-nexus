@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/delivery"
 	"context"
 	"encoding/json"
 	"errors"
@@ -187,6 +188,7 @@ type handlerOptions struct {
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
 	seriesStore                    *series.Store
+	deliveryStore                  *delivery.Store
 	authStore                      *auth.Store
 	runStore                       *commandcenter.Store
 	agentChanges                   *agentChangeHub
@@ -1099,6 +1101,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeInvite(w, r, opts, inviteID)
 	})
 
+	for _, path := range []string{"/deliveries", "/deliveries/", "/notification-settings"} {
+		registerRoute(path, deliveryRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleDeliveryRoutes(w, r, opts) })
+	}
 	for _, path := range []string{"/adapters", "/adapters/", "/series", "/series/"} {
 		registerRoute(path, seriesRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSeriesRoutes(w, r, opts) })
 	}
@@ -2117,6 +2122,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
+	registerRoute("/brief", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetBriefV1(w, r, opts) })
 	registerRoute("/overview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetOverview(w, r, opts) })
 	registerRoute("/overview/changes", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleOverviewChanges(w, r, opts) })
 	registerRoute("/workspace/dashboard/reports", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleListWorkspaceDashboardReports(w, r, opts) })
@@ -2651,6 +2657,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	registerStreamRoute("asks/{ask_id}", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		handleAskOutcome(w, r, opts, true)
 	})
+
+	registerRoute("/curation/candidates", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleCurationCandidates(w, r, opts) })
+	registerRoute("/curation/proposals", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationPropose(w, r, opts) })
+	registerRoute("/curation/ungroup", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationUngroup(w, r, opts) })
+	registerRoute("/curation/run", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationRun(w, r, opts) })
+	registerRoute("/curation/metrics", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleCurationMetrics(w, r, opts) })
 
 	registerRoute("/inbox/summary", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

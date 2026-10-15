@@ -21,7 +21,7 @@ func TestSourceRefsGenericAnnotationsAndMarkdownIsolation(t *testing.T) {
 	}
 	resolve := func(source string) {
 		t.Helper()
-		items, err := s.ResolveRefs(ctx, []string{"github:org/repo#42"}, nil, time.Now(), 0)
+		items, err := s.ResolveRefs(ctx, []string{"github:org/repo#42"}, nil, time.Now())
 		if err != nil || items[0].Source != source {
 			t.Fatalf("items=%v err=%v", items, err)
 		}
@@ -47,7 +47,7 @@ func TestSourceRefsGenericAnnotationsAndMarkdownIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil || len(card["source_refs"].([]any)) != 1 {
+	if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil || len(card["source_refs"].([]any)) != 1 {
 		t.Fatalf("card=%v err=%v", card, err)
 	}
 	if _, err = s.PatchWork(ctx, "actor-1", w["id"].(string), updated["version"].(int64), map[string]any{"source_refs": []any{}}); err != nil {

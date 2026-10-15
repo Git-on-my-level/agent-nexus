@@ -53,14 +53,22 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await page.goto(appPath("/"));
 
   await expect(page).toHaveURL(
-    new RegExp(`${APP_BASE_PATH}/o/local/w/local/overview/?$`),
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/decide/?$`),
   );
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
 
+  // Primary navigation is Decide / Watch / Ask; the rest is one hop down in
+  // the account menu, and its links must carry the mount prefix too.
   await expect(
-    page.locator(`a[href="${appPath("/o/local/w/local/tasks")}"]`).first(),
+    page.locator(`a[href="${appPath("/o/local/w/local/watch")}"]`).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^Account menu/ }).click();
+  await expect(
+    page
+      .locator(`a[href="${appPath("/o/local/w/local/initiatives")}"]`)
+      .first(),
   ).toBeVisible();
   await expect(
     page.locator(`a[href="${appPath("/o/local/w/local/docs")}"]`).first(),
@@ -90,10 +98,10 @@ test("workspace root preserves query and fragment under a mount prefix without r
     appPath("/o/local/w/local?dashboard=weekly#overview-reports"),
   );
   await expect(page).toHaveURL(
-    `${baseURL}${appPath("/o/local/w/local/overview?dashboard=weekly#overview-reports")}`,
+    `${baseURL}${appPath("/o/local/w/local/decide?dashboard=weekly#overview-reports")}`,
   );
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
   expect(documents).toHaveLength(1);
 });

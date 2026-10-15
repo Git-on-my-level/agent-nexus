@@ -2,7 +2,6 @@ package primitives
 
 import (
 	"agent-nexus-core/internal/handles"
-	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/schema"
 	"context"
 	"database/sql"
@@ -100,7 +99,7 @@ func (s *Store) PMCardSnapshots(ctx context.Context, refs []string) (map[string]
 			uniqueCards = append(uniqueCards, card)
 		}
 	}
-	if err = s.EnrichCardPlans(WithLegacyCardPlans(ctx), uniqueCards, nil, time.Now().UTC(), plans.DefaultStalledAfter); err != nil {
+	if err = s.EnrichCardPlans(WithLegacyCardPlans(ctx), uniqueCards, nil, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	// Reuse enriched canonical content without sharing the mutable pin label.

@@ -116,7 +116,7 @@ func TestBriefIsIdenticalUnderSummaryWorkView(t *testing.T) {
 		t.Fatalf("the dependency signal this test exists to protect is not present: %v", top)
 	}
 	risk := brief["at_risk"].(map[string]any)["items"].([]any)
-	if len(risk) == 0 || risk[0].(map[string]any)["reason"] != "Blocked on waiting on vendor access" {
-		t.Fatalf("recorded blockers are not reaching the brief's reasons: %v", brief["at_risk"])
+	if len(risk) == 0 || risk[0].(map[string]any)["state"] != "past_promise" || anyString(risk[0].(map[string]any)["reason"]) == "" {
+		t.Fatalf("the past-promise row is missing its computed reason: %v", brief["at_risk"])
 	}
 }

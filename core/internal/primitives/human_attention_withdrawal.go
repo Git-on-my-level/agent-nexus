@@ -16,12 +16,23 @@ func (s *Store) AppendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 	return s.appendHumanAttentionWithdrawal(ctx, actorID, sourceEventID, event, false)
 }
 func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sourceEventID string, event map[string]any, onlyIfClosed bool) (map[string]any, error) {
+	return s.withdrawHumanAttention(ctx, actorID, actorID, sourceEventID, event, onlyIfClosed)
+}
+
+// appendHumanAttentionWithdrawalAs records a withdrawal by someone other than
+// the requester: a human accepting a curation proposal. actorID must still be
+// the ask's requester; withdrawnBy is who decided.
+func (s *Store) appendHumanAttentionWithdrawalAs(ctx context.Context, actorID, withdrawnBy, sourceEventID string, event map[string]any) (map[string]any, error) {
+	return s.withdrawHumanAttention(ctx, actorID, strings.TrimSpace(withdrawnBy), sourceEventID, event, false)
+}
+
+func (s *Store) withdrawHumanAttention(ctx context.Context, actorID, withdrawnBy, sourceEventID string, event map[string]any, onlyIfClosed bool) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 	actorID = strings.TrimSpace(actorID)
 	sourceEventID = strings.TrimSpace(sourceEventID)
-	if actorID == "" || sourceEventID == "" {
+	if actorID == "" || sourceEventID == "" || withdrawnBy == "" {
 		return nil, fmt.Errorf("request actor and source event id are required")
 	}
 	if s.quota.enabled() {
@@ -101,6 +112,9 @@ func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 	event["type"] = "human_attention_withdrawn"
 	event["thread_id"] = threadID
 	event["summary"] = "Ask withdrawn by requester"
+	if withdrawnBy != actorID {
+		event["summary"] = "Ask withdrawn on an accepted curation proposal"
+	}
 	for _, ref := range sourceRefs {
 		refs = appendUnique(refs, ref)
 	}
@@ -109,10 +123,13 @@ func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 		"request_event_id":      sourceEventID,
 		"request_event_ref":     "event:" + sourceEventID,
 		"requester_actor_id":    actorID,
-		"withdrawn_by_actor_id": actorID,
+		"withdrawn_by_actor_id": withdrawnBy,
 		"reason":                reason,
 	}
-	prepared, err := prepareEventForInsert(actorID, event)
+	if sources := anyStringSlice(asMapValue(event["provenance"])["sources"]); withdrawnBy != actorID && len(sources) > 0 {
+		event["payload"].(map[string]any)["proposal_event_ref"] = sources[0]
+	}
+	prepared, err := prepareEventForInsert(withdrawnBy, event)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +139,7 @@ func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 	if err := insertPreparedEvent(ctx, tx, prepared); err != nil {
 		return nil, err
 	}
-	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'withdrawn',?,?)`, sourceEventID, prepared.Body["id"], actorID, prepared.Body["ts"])
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'withdrawn',?,?)`, sourceEventID, prepared.Body["id"], withdrawnBy, prepared.Body["ts"])
 	if err != nil {
 		return nil, err
 	}

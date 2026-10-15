@@ -131,7 +131,7 @@ for (const viewport of [
     test.setTimeout(60_000);
     await page.setViewportSize(viewport);
     const state = await setup(page);
-    await page.goto(`${ROOT}/tasks/card%3Arelease`);
+    await page.goto(`${ROOT}/initiatives/card%3Arelease`);
     const panel = page.getByRole("region", {
       name: "Participation",
       exact: true,
@@ -181,11 +181,11 @@ for (const viewport of [
 
     await page.goto(`${ROOT}/agents/agent-one`);
     const agentPanel = page.getByRole("region", {
-      name: "Recent task participation",
+      name: "Recent initiative participation",
       exact: true,
     });
     await expect(
-      agentPanel.getByText("2 task participations · 2 currently active"),
+      agentPanel.getByText("2 initiative participations · 2 currently active"),
     ).toBeVisible();
     // The coverage bound is on the heading's tip now, not a paragraph under
     // it: a sentence a reader needs once should not be on screen every visit.

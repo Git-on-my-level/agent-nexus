@@ -90,8 +90,7 @@
   .card[data-tile-health="blocked"] {
     border-left: 3px solid var(--danger-text, var(--warn-text));
   }
-  .card[data-tile-health="at_risk"],
-  .card[data-tile-health="stale"] {
+  .card[data-tile-health="past_promise"] {
     border-left: 3px solid var(--warn-text);
   }
   .card-head {

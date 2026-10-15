@@ -229,13 +229,19 @@ async function send(entry) {
     }
     return entry.receipt;
   }
+  if (entry.operation === "notifications.settings.set") {
+    const result = await client.setNotificationSettings(entry.request.body);
+    if (!Array.isArray(result?.channels))
+      throw new Error("Notification settings receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "topics.patch") {
     const result = await client.updateTopic(
       entry.request.id,
       entry.request.body,
     );
     if (result.topic?.id !== entry.request.id || !result.topic?.updated_at)
-      throw new Error("Topic receipt is incomplete.");
+      throw new Error("Project receipt is incomplete.");
     return result;
   }
   if (entry.operation === "cards.move") {
@@ -246,6 +252,12 @@ async function send(entry) {
     );
     if (!result.card?.id || !result.board?.updated_at)
       throw new Error("Move receipt is incomplete.");
+    return result;
+  }
+  if (entry.operation === "curation.ungroup") {
+    const result = await client.ungroupCurationBatch(entry.request.body);
+    if (typeof result?.ungrouped !== "boolean")
+      throw new Error("Ungroup receipt is incomplete.");
     return result;
   }
   if (entry.operation === "pm.decisions.create") {
@@ -265,7 +277,7 @@ async function send(entry) {
   if (entry.operation === "work.create") {
     const result = await client.createWork(entry.request.body);
     if (!result.work?.ref && !result.work?.id)
-      throw new Error("Task receipt is incomplete.");
+      throw new Error("Initiative receipt is incomplete.");
     return result;
   }
   if (
@@ -442,7 +454,7 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
           ["Next actor", draft.nextActor],
           ["Next action", draft.nextAction],
           ["Due date", draft.due],
-          ["Board", draft.board],
+          ["Group", draft.board],
         ]
           .filter(([, value]) => value)
           .map(([label, value]) => `${label}: ${value}`)
@@ -472,7 +484,7 @@ export function inboxControlLabel(action) {
   return (
     {
       read: "Mark read",
-      archive: "Archive task",
+      archive: "Archive initiative",
       dispatch: "Deliver approved instruction",
       reconcile: "Check source receipt",
       acknowledge: "Acknowledge delivery",
@@ -717,6 +729,19 @@ export function enqueuePmDecisionAnswer({
   });
 }
 
+/**
+ * Undo an accepted batch. Ungrouping by key is idempotent in core, so a
+ * retry of the saved request is replay-safe.
+ */
+export function enqueueCurationUngroup({ key: batchKey, ...options }) {
+  return enqueueLocalMutation({
+    ...options,
+    key: crypto.randomUUID(),
+    operation: "curation.ungroup",
+    request: { body: { key: batchKey } },
+  });
+}
+
 export async function enqueueLocalMutation({
   draftTarget,
   operation,
@@ -916,7 +941,9 @@ async function attempt(entry) {
                   ? "document action"
                   : entry.operation === "topics.patch"
                     ? "topic edit"
-                    : "response",
+                    : entry.operation === "notifications.settings.set"
+                      ? "notification settings"
+                      : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =

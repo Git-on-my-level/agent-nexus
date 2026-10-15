@@ -37,6 +37,7 @@ type App struct {
 	skillLookPath      func(string) (string, error)
 	stdinConsumed      bool
 	outputStarted      bool
+	writes             writeTracker
 }
 
 func (a *App) clockNow() time.Time {
@@ -143,7 +144,7 @@ func (a *App) Run(args []string) int {
 	if topic, help := commandHelpTopic(remaining); help {
 		text, ok := helpTopicText(topic)
 		if !ok {
-			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", "unknown help topic "+topic))
+			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", unknownHelpTopicMessage(topic)))
 		}
 		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: helpEnvelopeResult(topic, text)})
 		return 0
@@ -262,6 +263,11 @@ func (a *App) Run(args []string) int {
 		warnings = append(result.Warnings, warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
+	if !resolved.JSON {
+		if ref := createdRef(identity.Command, value); ref != "" {
+			a.writeOutput(a.Stdout, "created "+ref+"\n")
+		}
+	}
 	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
@@ -288,7 +294,9 @@ func needsAgentIdentity(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "help", "version", "doctor", "config", "update", "install", "skills", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "api":
+	case "api":
+		return len(args) > 1 && args[1] != "call" && !isHelpToken(args[1])
+	case "help", "version", "doctor", "config", "update", "install", "skills", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
 		return false
 	}
 	return true
@@ -334,22 +342,21 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 		copyDetails["hint"] = normalized.Hint
 		details = copyDetails
 	}
+	phase, writeSent := a.writes.phase()
+	payload := &output.ErrorPayload{
+		Code:        normalized.Code,
+		Message:     normalized.Message,
+		Retryable:   errnorm.RecoverableValue(normalized),
+		ExitCode:    errnorm.ExitCode(err),
+		Details:     details,
+		NextActions: deriveErrorActions(identity.Command, normalized),
+		Phase:       phase,
+		WriteSent:   &writeSent,
+	}
+	envelope := output.Envelope{OK: false, Command: identity.Command, Error: payload}
 	if jsonMode {
-		envelope := output.Envelope{
-			OK:      false,
-			Command: identity.Command,
-			Error: &output.ErrorPayload{
-				Code:        normalized.Code,
-				Message:     normalized.Message,
-				Retryable:   errnorm.RecoverableValue(normalized),
-				ExitCode:    errnorm.ExitCode(err),
-				Details:     details,
-				NextActions: deriveErrorActions(identity.Command, normalized),
-			},
-		}
 		a.renderEnvelope(a.Stdout, true, envelope)
 	} else {
-		envelope := output.Envelope{OK: false, Command: identity.Command, Error: &output.ErrorPayload{Code: normalized.Code, Message: normalized.Message, Retryable: errnorm.RecoverableValue(normalized), ExitCode: errnorm.ExitCode(err), Details: details, NextActions: deriveErrorActions(identity.Command, normalized)}}
 		a.renderEnvelope(a.Stderr, false, envelope)
 	}
 	return errnorm.ExitCode(err)

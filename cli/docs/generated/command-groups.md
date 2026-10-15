@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `32`
+- Groups: `36`
 
 ## `topics`
 
@@ -162,6 +162,24 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.timeline` (`cards timeline`)
   - `cards.trash` (`cards trash`)
 
+## `curation`
+
+- Commands: `5`
+- Command IDs:
+  - `curation.candidates` (`curation candidates`)
+  - `curation.metrics` (`curation metrics`)
+  - `curation.propose` (`curation propose`)
+  - `curation.run` (`curation run`)
+  - `curation.ungroup` (`curation ungroup`)
+
+## `deliveries`
+
+- Commands: `3`
+- Command IDs:
+  - `deliveries.claim` (`deliveries claim`)
+  - `deliveries.list` (`deliveries list`)
+  - `deliveries.receipt` (`deliveries receipt`)
+
 ## `derived`
 
 - Commands: `1`
@@ -249,6 +267,13 @@ Generated from `contracts/anx-openapi.yaml`.
   - `meta.readyz` (`meta readyz`)
   - `meta.version` (`meta version`)
 
+## `notifications`
+
+- Commands: `2`
+- Command IDs:
+  - `notifications.settings.get` (`notifications settings get`)
+  - `notifications.settings.set` (`notifications settings set`)
+
 ## `ops`
 
 - Commands: `3`
@@ -256,6 +281,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.blob.usage.rebuild` (`ops blob usage rebuild`)
   - `ops.health` (`ops health`)
   - `ops.usage.summary` (`ops usage summary`)
+
+## `orient`
+
+- Commands: `1`
+- Command IDs:
+  - `brief.get` (`orient`)
 
 ## `overview`
 

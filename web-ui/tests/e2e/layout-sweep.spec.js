@@ -11,7 +11,8 @@ import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
 /**
  * Runs the geometry audit over every QA visual scene (the same seeded,
  * fully mocked states `pnpm qa:diff` screenshots) at each audit viewport.
- * Adding a scene to `QA_SCENES` gets it audited here for free.
+ * Adding a scene to `QA_SCENES` gets it audited here for free. Decide, Watch
+ * and the initiative list read `GET /brief`, which `installQaRoutes` fixtures.
  */
 for (const viewport of AUDIT_VIEWPORTS) {
   test.describe(`layout sweep @ ${viewport.name}`, () => {

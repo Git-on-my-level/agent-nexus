@@ -46,9 +46,9 @@
     </p>
     <p class="mt-1 max-w-prose text-micro text-fg-muted">
       Its work, its questions and what it finishes now show up here. Anything it
-      needs an answer for lands in your <a
+      needs an answer for lands in <a
         class="text-accent-text hover:underline"
-        href={hrefFor("/inbox")}>Inbox</a
+        href={hrefFor("/decide")}>Decide</a
       >.
     </p>
   </section>
@@ -103,7 +103,7 @@
 
     <!--
       What the reader gets for doing it, in the words of the surfaces it
-      fills. The example is marked as one and is not a row in the Inbox: a
+      fills. The example is marked as one and is not a row in Decide: a
       workspace's first real item should be the reader's, not ours.
     -->
     <div class="border-t border-line px-4 py-4">
@@ -115,13 +115,14 @@
           > lists every agent on that machine and what each one is doing.
         </li>
         <li>
-          <a class="text-accent-text hover:underline" href={hrefFor("/tasks")}
-            >Tasks</a
+          <a
+            class="text-accent-text hover:underline"
+            href={hrefFor("/initiatives")}>Initiatives</a
           > holds the work they pick up, and what you file for them.
         </li>
         <li>
-          <a class="text-accent-text hover:underline" href={hrefFor("/inbox")}
-            >Inbox</a
+          <a class="text-accent-text hover:underline" href={hrefFor("/decide")}
+            >Decide</a
           > is the only place that needs you: an agent that is stuck or needs a decision
           asks here and waits for your answer.
         </li>
@@ -129,7 +130,7 @@
 
       <figure class="mt-3 max-w-prose" data-first-agent-example>
         <figcaption class="text-micro text-fg-subtle">
-          Example — what an ask looks like in your Inbox
+          Example — what an ask looks like in Decide
         </figcaption>
         <div
           class="mt-1.5 rounded-md border border-dashed border-line bg-bg-soft px-3 py-2"

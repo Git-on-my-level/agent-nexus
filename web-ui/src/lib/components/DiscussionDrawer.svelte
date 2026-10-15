@@ -1055,9 +1055,7 @@
                         />
                       </svg>
                       <span class="text-[0.65rem] font-semibold tabular-nums">
-                        {displayMessageCount > 99
-                          ? "99+"
-                          : String(displayMessageCount)}
+                        {displayMessageCount}
                       </span>
                     </span>
                   {/if}
@@ -1139,9 +1137,7 @@
                     />
                   </svg>
                   <span class="text-[0.65rem] font-semibold tabular-nums">
-                    {displayMessageCount > 99
-                      ? "99+"
-                      : String(displayMessageCount)}
+                    {displayMessageCount}
                   </span>
                 </span>
               {/if}

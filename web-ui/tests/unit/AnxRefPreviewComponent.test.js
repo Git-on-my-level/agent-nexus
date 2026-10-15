@@ -53,7 +53,7 @@ describe("AnxRefPreview", () => {
     );
     const text = container.querySelector(".anx-ref-preview").textContent;
     expect(text).toContain("Initiative plans on cards");
-    expect(text).toContain("Task");
+    expect(text).toContain("Initiative");
     expect(text).toContain("in progress");
     expect(text).toContain("3/7");
     expect(text).toContain("Codex Sol");
@@ -109,7 +109,7 @@ describe("AnxRefPreview", () => {
     const open = container.querySelector(".anx-ref-preview__actions a");
     expect(open.textContent.trim()).toBe("Open");
     expect(open.getAttribute("href")).toBe(
-      "/o/scaling/w/anx/tasks/initiative-plans",
+      "/o/scaling/w/anx/initiatives/initiative-plans",
     );
     expect(
       container.querySelector(".anx-ref-preview__actions button").textContent,

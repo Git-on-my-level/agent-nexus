@@ -70,6 +70,21 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, err := a.runOrient(ctx, args[1:], cfg)
 		return "orient", result, err
 	}
+	if args[0] == "note" {
+		result, err := a.runNote(ctx, args[1:], cfg)
+		return "note", result, err
+	}
+	if args[0] == "done" {
+		result, err := a.runDone(ctx, args[1:], cfg)
+		return "done", result, err
+	}
+	if args[0] == "context" {
+		result, err := a.runContext(ctx, args[1:], cfg)
+		return "context", result, err
+	}
+	if args[0] == "work" && len(args) >= 2 && (args[1] == "note" || args[1] == "done" || args[1] == "context") {
+		return "work " + args[1], nil, errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown work subcommand %q; the loop verb is anx %s", args[1], args[1]))
+	}
 	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
 		result, err := a.runDailyWork(ctx, args[1], args[2:], cfg)
 		return "work " + args[1], result, err
@@ -105,6 +120,8 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	switch args[0] {
 	case "series", "adapters":
 		return a.runSeriesCommand(ctx, args, cfg)
+	case "deliveries":
+		return a.runDeliveriesCommand(ctx, args[1:], cfg)
 	case "version":
 		result, err := a.runVersion(cfg)
 		return "version", result, err
@@ -207,7 +224,8 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 			return "api", nil, apiSubcommandSpec.requiredError()
 		}
 		if apiSubcommandSpec.normalize(args[1]) != "call" {
-			return "api", nil, apiSubcommandSpec.unknownError(args[1])
+			result, err := a.runAPIOperation(ctx, args[1:], cfg)
+			return "api", result, err
 		}
 		result, err := a.runAPICall(ctx, args[2:], cfg)
 		return "api call", result, err
@@ -221,7 +239,7 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 			if text, ok := helpTopicText(topic); ok {
 				return "help", &commandResult{Text: text, Data: helpEnvelopeResult(topic, text)}, nil
 			}
-			return "help", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown help topic %q", topic))
+			return "help", nil, errnorm.Usage("unknown_command", unknownHelpTopicMessage(topic))
 		}
 		text := a.rootUsageText()
 		return "help", &commandResult{Text: text, Data: helpEnvelopeResult("", text)}, nil
@@ -361,7 +379,13 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		Body:    requestBody,
 	})
 	if err != nil {
+		a.writes.record(method, err)
 		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "failed to perform request", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		a.writes.record(method, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body))
+	} else {
+		a.writes.record(method, nil)
 	}
 
 	parsedBody := parseResponseBody(resp.Body)
@@ -526,4 +550,16 @@ func parseOverviewCommand(args []string) (string, string, error) {
 		return "overview changes", "overview.changes", nil
 	}
 	return "overview", "", errnorm.Usage("invalid_args", "usage: anx overview [changes]")
+}
+
+// unknownHelpTopicMessage names the loop verb for the removed `anx work
+// note|done|context` shapes, so a stale help lookup lands on the real command.
+func unknownHelpTopicMessage(topic string) string {
+	topic = strings.TrimSpace(topic)
+	for _, verb := range []string{"note", "done", "context"} {
+		if topic == "work "+verb || strings.HasPrefix(topic, "work "+verb+" ") {
+			return fmt.Sprintf("unknown help topic %q; the loop verb is anx %s (see anx help %s)", topic, verb, verb)
+		}
+	}
+	return fmt.Sprintf("unknown help topic %q", topic)
 }

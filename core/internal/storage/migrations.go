@@ -1071,6 +1071,44 @@ var migrations = []migration{
 	},
 	{Version: 88, AfterApply: installTopicWorkspacePageIndexes},
 	{Version: 89, AfterApply: upgradeWorkSummaryAskLinks},
+	// brief.v1 facts materialized on write events (asks, notes, plan and
+	// card changes), with a one-time backfill. See brief_facts.go.
+	{Version: 90, AfterApply: installBriefFacts},
+	{Version: 91, AfterApply: installBriefAskBlocks},
+	// Curation proposals: one row per action+targets key, so the formula and
+	// the PM propose a key at most once while open and never after a dismissal.
+	{Version: 92, Statements: []string{`CREATE TABLE IF NOT EXISTS curation_proposals (
+		key TEXT PRIMARY KEY,
+		proposal_event_id TEXT NOT NULL,
+		action TEXT NOT NULL,
+		source TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'open',
+		targets_json TEXT NOT NULL DEFAULT '[]',
+		created_at TEXT NOT NULL,
+		resolved_at TEXT
+	)`,
+		`CREATE INDEX IF NOT EXISTS idx_curation_proposals_event ON curation_proposals(proposal_event_id)`,
+		// Accepted batch proposals: one row per member ask, so brief.v1
+		// decisions collapse members with a primary-key seek per page.
+		`CREATE TABLE IF NOT EXISTS curation_batch_members (
+		ask_id TEXT PRIMARY KEY,
+		batch_key TEXT NOT NULL,
+		proposal_event_id TEXT NOT NULL,
+		created_at TEXT NOT NULL
+	)`,
+		`CREATE INDEX IF NOT EXISTS idx_curation_batch_members_key ON curation_batch_members(batch_key)`},
+	},
+	// One durable delivery queue for wakes and human notifications, plus the
+	// indexed open-ask deadline ledger the escalation clock reads.
+	{Version: 93, AfterApply: installDeliveryQueue},
+	// S20 seeks promised notes by due time instead of scanning brief_notes.
+	{Version: 94, AfterApply: installBriefNotesNextAtIndex},
+	// Trashing a message removes its brief note; restoring the message puts
+	// the note back and dirties the card so the promise fold is recomputed.
+	{Version: 95, AfterApply: installBriefNotesTrash},
+	// Date-only by and next.at were stored at midnight. End of that UTC day
+	// is the resolution brief_asks and ask_deadlines both use.
+	{Version: 96, AfterApply: installDateOnlyEndOfDay},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

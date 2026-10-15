@@ -1,5 +1,4 @@
 import { formatWait } from "$lib/inboxMailbox.js";
-import { inboxItemMailboxId } from "$lib/inboxUtils.js";
 
 /**
  * Presentation model for the Agents roster and agent pages.
@@ -161,15 +160,12 @@ export function askKindLabel(kind) {
 }
 
 /**
- * Inbox deep link for an open ask (`AgentOpenAsk.inbox_item_id`), or the
- * Needs you list while core's inbox projection has not caught up.
+ * Decide permalink for an open ask (`AgentOpenAsk.inbox_item_id`), or the
+ * Decide list while core's inbox projection has not caught up.
  */
 export function inboxAskPath(ask) {
-  const params = new URLSearchParams({ mailbox: "needs-you" });
   const itemId = text(ask?.inbox_item_id);
-  const id = itemId ? inboxItemMailboxId({ id: itemId }) : "";
-  if (id) params.set("item", id);
-  return `/inbox?${params.toString()}`;
+  return itemId ? `/decide/${encodeURIComponent(itemId)}` : "/decide";
 }
 
 /**
@@ -272,7 +268,7 @@ export function agentRowModel(
   if (state === "idle") {
     return {
       ...base,
-      headline: cardTitle || "No current task",
+      headline: cardTitle || "No current initiative",
       duration: signalAge,
       durationTitle: "Last signal",
     };
@@ -283,7 +279,7 @@ export function agentRowModel(
       ...base,
       // The alarming case: something is riding on a silence.
       headline: cardTitle
-        ? `No signal for ${signalAge} on this task`
+        ? `No signal for ${signalAge} on this initiative`
         : `No signal for ${signalAge} during a run`,
       duration: signalAge,
       durationTitle: "Last signal",
@@ -412,7 +408,7 @@ export function isRunActive(run) {
 /** Task page path for a `card:<slug>` ref. */
 export function taskPath(cardRef) {
   const ref = text(cardRef);
-  return ref ? `/tasks/${encodeURIComponent(ref)}` : "";
+  return ref ? `/initiatives/${encodeURIComponent(ref)}` : "";
 }
 
 /** A readable task title from `card:<slug>` when no title is loaded. */
@@ -429,7 +425,7 @@ export function titleFromCardRef(ref, titles = new Map()) {
 
 /**
  * Progress notes and messages the agent wrote, newest first, as one list.
- * Notes come from presence (`anx work note`); messages are its posts on
+ * Notes come from presence (`anx note`); messages are its posts on
  * tasks and threads.
  */
 export function agentActivity({ notes = [], messages = [], limit = 20 } = {}) {

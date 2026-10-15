@@ -31,6 +31,7 @@ type localHelperTopic struct {
 var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "series", Description: "Push and query declared live series with source provenance"},
 	{Path: "adapters", Description: "Declare and administer scoped host-local live data sources"},
+	{Path: "deliveries", Description: "List, claim and receipt durable notification and wake deliveries"},
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
@@ -65,6 +66,11 @@ var localHelperTopics = []localHelperTopic{
 	{Path: "adapters list", Summary: "List declared sources and grant state.", QuickStart: "anx adapters list", Examples: []string{"anx adapters list"}, Flags: []localHelperFlag{}},
 	{Path: "adapters revoke", Summary: "Revoke a source grant immediately; keep observations.", QuickStart: "anx adapters revoke <name>", Examples: []string{"anx adapters revoke github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters revoke."}}},
 	{Path: "adapters delete", Summary: "Delete a source and its series history; invalidate its tokens.", QuickStart: "anx adapters delete <name>", Examples: []string{"anx adapters delete github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters delete."}}},
+	{Path: "deliveries list", Summary: "List your own deliveries with receipts.", QuickStart: "anx deliveries list", Examples: []string{"anx deliveries list --limit 20"}, Flags: []localHelperFlag{{Name: "--limit <n>", Description: "Accepted by deliveries list."}}},
+	{Path: "deliveries claim", Summary: "Claim due deliveries for a channel your adapter delivers.", QuickStart: "anx deliveries claim --channel <channel>", Examples: []string{"anx deliveries claim --channel chat --limit 10 --lease-seconds 60"}, Flags: []localHelperFlag{{Name: "--channel <channel>", Description: "Accepted by deliveries claim."}, {Name: "--limit <n>", Description: "Accepted by deliveries claim."}, {Name: "--lease-seconds <n>", Description: "Accepted by deliveries claim."}}},
+	{Path: "deliveries receipt", Summary: "Record delivered or failed for a claimed delivery.", QuickStart: "anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered", Examples: []string{"anx deliveries receipt <delivery_id> --claim-token <token> --outcome failed --error timeout --retryable true"}, Flags: []localHelperFlag{{Name: "<delivery_id>", Description: "Accepted by deliveries receipt."}, {Name: "--claim-token <token>", Description: "Accepted by deliveries receipt."}, {Name: "--outcome <delivered|failed>", Description: "Accepted by deliveries receipt."}, {Name: "--error <text>", Description: "Accepted by deliveries receipt."}, {Name: "--retryable <bool>", Description: "Accepted by deliveries receipt."}}},
+	{Path: "notifications settings get", Summary: "Read your notification channels and the channels adapters deliver.", QuickStart: "anx notifications settings get", Examples: []string{"anx notifications settings get"}, Flags: []localHelperFlag{}},
+	{Path: "notifications settings set", Summary: "Replace your notification channels, addresses and push or digest opt-ins.", QuickStart: "anx notifications settings set --body-file <path|->", Examples: []string{"anx notifications settings set --body-file settings.json"}, Flags: []localHelperFlag{{Name: "--body-file <path|->", Description: "Accepted by notifications settings set."}}},
 	{Path: "adapters token", Summary: "Exchange owner identity for a short-lived, push-only token.", QuickStart: "anx adapters token <name>", Examples: []string{"anx --json adapters token github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters token."}}},
 
 	{
@@ -1035,19 +1041,18 @@ func (a *App) rootUsageText() string {
 
 Usage: anx [global flags] <command>
 
-Daily loop:
-  orient                  See me, my work, asks, notifications, stale items, and next steps (read_only)
-  sessions register --from-file <path>  Register a provider session, not a credential (remote_coordination_write)
-  work participants register <card> --from-file <path>  Join without assigning or moving work (remote_coordination_write)
-  work start [card]       Assign me, mark in progress, and set current card (remote_coordination_write)
-  work note <text> [card] Post progress and refresh presence (remote_coordination_write)
-  work block <why> [card] Mark blocked; add --ask --recommend <text> [--body <markdown> | --body-file <path|->] [--force --reason <text>] to ask (remote_coordination_write)
-  work done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
-  ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
-  await <ask-id|card-ref|access-request:<id>>  Wait on the ask stream for an answer or access decision (read_only)
-  inbox list                List my open asks; add --status answered for replies (read_only)
+Loop (stable):
+  orient                  Your brief: answers, asks waiting on a human, initiatives vs promises, next (read_only)
+  context <card>          Everything about one initiative (read_only)
+  note <card> ["<text>"] [--next <when> "<what>"] [--evidence <ref>]  Post progress and renew the promise (remote_coordination_write)
+  ask <title> --recommend <text> [--by <when>] [--blocks <ref>]  Request a human decision (remote_coordination_write)
+  await <ask-id|card-ref|access-request:<id>>  Wait for an answer or access decision (read_only)
+  done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
+  plan show|set|step <card>  Read or change an initiative's plan (remote_coordination_write)
+  series push <name> <value>  Push one live data point (remote_coordination_write)
 
-Setup: anx host discover; anx host enroll; anx doctor; anx install skill --path ./SKILL.md
+Setup: anx help enroll|tokens|secrets|adapters|pm|bridge; anx doctor; anx install skill --path ./SKILL.md
+Scripts: anx api <operationId|command-id> [--param k=v] [--json-body <json>]
 Help: anx help onboarding; anx help <command>; anx help --all
 Global flags: --json, --base-url, --workspace, --as, --timeout`) + "\n"
 }
@@ -1141,9 +1146,15 @@ Global Flags:
 }
 
 func helpTopicText(topic string) (string, bool) {
-	text, ok := helpTopicTextRaw(topic)
+	text, ok := setupJobHelp(topic, helpTopicTextRaw)
+	if !ok {
+		text, ok = helpTopicTextRaw(topic)
+	}
 	if !ok {
 		return "", false
+	}
+	if stability, stable := loopTierStability(topic); stable {
+		text = strings.TrimRight(text, "\n") + "\nStability: " + stability + "\n"
 	}
 	return qualifyDiagnosticExamples(text), true
 }
@@ -1166,7 +1177,19 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.\n", true
 	}
 	if topic == "work" {
-		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true
+		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|->; anx work list. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
+	}
+	if topic == "note" {
+		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]...: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  Warnings (never errors): note_no_next, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n", true
+	}
+	if topic == "done" {
+		return "anx done [card] --evidence <url|event:ref|artifact:ref>...: resolve a card with evidence and clear presence; omitted card uses presence (remote_coordination_write).\n", true
+	}
+	if topic == "context" {
+		return "anx context <card> [--limit N] [--cursor C]: everything about one initiative: the card, a bounded observation page and refresh state, composed from read-only requests (read_only).\n", true
+	}
+	if topic == "api" {
+		return "anx api <operationId|command-id> [--param name=value]... [--json-body <json>|@<file>|-]: call any contract operation by name. Path parameters are filled from --param; other params become query parameters. Operation names: anx debug meta commands. Raw form: anx api call --method <M> --path <P>.\n", true
 	}
 	if strings.HasPrefix(topic, "work ") && isDailyWorkVerb(strings.TrimPrefix(topic, "work ")) {
 		return "anx " + topic + " [card]: use anx help work for the daily loop.\n", true
@@ -1189,7 +1212,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return draftUsageText(), true
 	}
 	if topic == "orient" {
-		return "anx orient [--stale-hours N]: bounded personal snapshot (read_only)\n", true
+		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json prints the brief.v1 object verbatim.\n", true
 	}
 	if topic == "bridge run" {
 		return "anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.\n", true
@@ -2043,6 +2066,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
 		{command: "series", valid: []string{"list", "show", "query", "push"}},
 		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},
+		{command: "deliveries", valid: []string{"list", "claim", "receipt"}},
 		{command: "runs", valid: []string{"list", "get", "ingest"}},
 		{command: "host", valid: []string{"list", "revoke"}},
 		authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec,
@@ -2141,10 +2165,10 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 
 1. Enroll this machine once per workspace with anx host enroll; a human or granted auth-admin agent approves it.
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
-3. Run anx orient. Confirm your handle, host, assigned work and next actions.
-4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
-5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
-6. Run anx work done --evidence <url|ref> when the card is complete.
+3. Run anx orient. Confirm your handle, host, answers, initiatives and the next command.
+4. Run anx context card:<slug>, then anx note card:<slug> "Progress" --next <when> "<what>" as you go.
+5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" --by <when> and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
+6. Run anx done card:<slug> --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
 Install the bundled skill: anx install skill --path ./SKILL.md

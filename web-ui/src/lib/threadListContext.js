@@ -15,8 +15,8 @@ import { parseRef } from "./typedRefs.js";
 
 /** Operator nouns, matching the ref chips: `topic:` is a Project, `card:` a Task. */
 const SUBJECT_LABELS = Object.freeze({
-  board: "Board",
-  card: "Task",
+  board: "Group",
+  card: "Initiative",
   doc: "Doc",
   document: "Doc",
   thread: "Thread",

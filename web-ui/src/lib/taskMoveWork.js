@@ -28,9 +28,9 @@ export function taskMoveDraft(work, phase, options = {}) {
 
 export function taskMoveRequest(draft, actor, key) {
   const { work, phase, boardToken, resolutionRefs = [] } = draft;
-  if (!work || !phase) throw new Error("Choose a task and destination.");
+  if (!work || !phase) throw new Error("Choose an initiative and destination.");
   if (phase === "done" && !resolutionRefs.length)
-    throw new Error("Add evidence before marking this task done.");
+    throw new Error("Add evidence before marking this initiative done.");
   if (!isNexusOwned(work))
     return {
       operation: "pm.decisions.create",
@@ -45,11 +45,11 @@ export function taskMoveRequest(draft, actor, key) {
   const board = work.board_ref || work.board_id;
   if (!board || !boardToken)
     throw new Error(
-      "The board revision is unavailable. Use latest version before sending this move.",
+      "This initiative changed. Use the latest version before moving it.",
     );
   if (!Number.isSafeInteger(Number(work.version)) || Number(work.version) < 1)
     throw new Error(
-      "The task revision is unavailable. Use latest version before sending this move.",
+      "This initiative changed. Use the latest version before moving it.",
     );
   return {
     operation: "cards.move",

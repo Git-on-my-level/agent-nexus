@@ -763,6 +763,11 @@
   },
   {
     "method": "GET",
+    "path": "/brief",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
     "path": "/overview",
     "policy": "collection"
   },
@@ -1211,5 +1216,60 @@
     "path": "/pm/disconnect",
     "policy": "independent",
     "reason": "Selected authenticated PM alone can reset onboarding and terminate unfinished PM turns. Returns connection state only; unrelated principals cannot reset or observe turn data."
+  },
+  {
+    "method": "GET",
+    "path": "/deliveries",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "POST",
+    "path": "/deliveries/claim",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "POST",
+    "path": "/deliveries/{delivery_id}/receipt",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "GET",
+    "path": "/notification-settings",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "PUT",
+    "path": "/notification-settings",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "GET",
+    "path": "/curation/candidates",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/curation/metrics",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/proposals",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/run",
+    "policy": "maintenance"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/ungroup",
+    "policy": "reference-write"
   }
 ]

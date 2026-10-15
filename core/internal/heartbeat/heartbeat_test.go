@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -187,5 +188,22 @@ func generateIdentity(t *testing.T, id string) Identity {
 	return Identity{
 		ID:         id,
 		PrivateKey: privateKey,
+	}
+}
+
+func TestSnapshotAttentionSummaryIsOptionalAndContentFree(t *testing.T) {
+	empty, err := json.Marshal(Snapshot{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(empty), "attention_summary") {
+		t.Fatalf("absent summary must be omitted: %s", empty)
+	}
+	raw, err := json.Marshal(Snapshot{AttentionSummary: map[string]any{"open_decisions": 2, "earliest_decide_by": "2026-01-01T00:00:00Z", "principals": []map[string]any{{"principal_id": "actor-1", "due": 2}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"attention_summary":{"earliest_decide_by":"2026-01-01T00:00:00Z","open_decisions":2,"principals":[{"due":2,"principal_id":"actor-1"}]}`) {
+		t.Fatalf("summary shape: %s", raw)
 	}
 }

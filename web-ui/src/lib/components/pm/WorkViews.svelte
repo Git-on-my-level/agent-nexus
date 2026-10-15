@@ -94,8 +94,8 @@
   let anySourced = $derived(tableRows.some((work) => !isNexusOwned(work)));
   let columns = $derived(
     [
-      "Task",
-      multipleBoards ? "Board" : "",
+      "Initiative",
+      multipleBoards ? "Group" : "",
       "Status",
       "Owner",
       anySourced ? "Last checked" : "",
@@ -487,13 +487,14 @@
       ? 'select-none'
       : ''}"
     role="region"
-    aria-label="Task board grouped by phase"
+    aria-label="Initiatives grouped by phase"
     tabindex="0"
   >
     <p id="task-board-card-help" class="sr-only">
-      Drag a task between phases, or focus it and press the left or right arrow
-      to move it. Enter opens the task. Moving a task that lives in another
-      tracker asks for confirmation and files a request for you to approve.
+      Drag an initiative between phases, or focus it and press the left or right
+      arrow to move it. Enter opens the initiative. Moving an initiative that
+      lives in another tracker asks for confirmation and files a request for you
+      to approve.
     </p>
     {#each groups as group (group.key)}
       {@const folded =
@@ -514,8 +515,10 @@
           <h2 class="ui-label mb-0 truncate">{group.label}</h2>
           <span
             class="shrink-0 text-micro tabular-nums text-fg-subtle"
-            title={truncated ? "At least; not every task is loaded" : undefined}
-            >{group.items.length}{truncated ? "+" : ""}</span
+            title={truncated
+              ? "At least this many; not every initiative is loaded"
+              : undefined}
+            >{truncated ? "at least " : ""}{group.items.length}</span
           >
         </div>
         {#if folded}
@@ -552,7 +555,9 @@
                 tabindex={slot.placeholder ? undefined : 0}
                 role={slot.placeholder ? "presentation" : "group"}
                 aria-hidden={slot.placeholder ? "true" : undefined}
-                aria-label={work ? work.title || "Untitled task" : undefined}
+                aria-label={work
+                  ? work.title || "Untitled initiative"
+                  : undefined}
                 aria-keyshortcuts={slot.placeholder
                   ? undefined
                   : "ArrowLeft ArrowRight Enter"}
@@ -587,7 +592,7 @@
                     requested={Boolean(requested[key] || decisionId)}
                     requestedHref={decisionId
                       ? workspaceHref(
-                          `/inbox?item=decision:${encodeURIComponent(decisionId)}`,
+                          `/decide?item=decision:${encodeURIComponent(decisionId)}`,
                         )
                       : ""}
                   />
@@ -633,7 +638,7 @@
     <div
       class="wide-scroll overflow-x-auto rounded-md border border-line"
       role="region"
-      aria-label="Task table"
+      aria-label="Initiative table"
       tabindex="0"
     >
       <!--
@@ -644,7 +649,7 @@
     -->
       <table class="work-table w-full border-collapse text-left text-meta">
         <caption class="sr-only"
-          >Tracked tasks, most in need of attention first</caption
+          >Tracked initiatives, most in need of attention first</caption
         >
         <thead class="text-micro uppercase tracking-wide text-fg-subtle">
           <tr>
@@ -672,7 +677,7 @@
                   href={href(work)}
                   onpointerenter={() => prefetch(work)}
                   onfocus={() => prefetch(work)}
-                  >{work.title || "Untitled task"}</a
+                  >{work.title || "Untitled initiative"}</a
                 >
                 {#if work.next_actor || work.next_action}
                   <p class="truncate text-micro text-fg-muted">
@@ -772,7 +777,7 @@
         fill="currentColor"
         aria-hidden="true"><path d="M7 4l7 6-7 6V4z" /></svg
       >{showClosed ? `Hide ${closedLabel}` : closedLabel}{truncated
-        ? "+"
+        ? " (and more)"
         : ""}</a
     >
   {/if}

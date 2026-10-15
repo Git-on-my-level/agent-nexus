@@ -16,7 +16,7 @@ import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
  */
 
 const ROOT = "/o/local/w/local";
-const TASKS = `${ROOT}/tasks`;
+const TASKS = `${ROOT}/initiatives`;
 
 const LONG_ID =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -356,8 +356,12 @@ async function installTasksApi(page, overrides = {}) {
         body: JSON.stringify(body),
       });
     const respond = async (name, okBody, okStatus = 200) => {
-      api.calls.push({ name, path, method });
+      const call = { name, path, method, answered: false };
+      api.calls.push(call);
       if (api.hold[name]) await api.hold[name].promise;
+      // Failure settings are read from here on; a test that reconfigures the
+      // mock waits for this to be true on the reads it released.
+      call.answered = true;
       const failure = api.fail[name];
       if (failure)
         return json(
@@ -569,7 +573,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const api = await installTasksApi(page);
       api.hold.work = deferred();
       await page.goto(TASKS);
-      await expect(page.getByText("Loading tasks…")).toBeVisible(firstPaint);
+      await expect(page.getByText("Loading initiatives…")).toBeVisible(
+        firstPaint,
+      );
       await expectCleanLayout(page, "initial loading");
 
       api.hold.work.resolve();
@@ -586,15 +592,22 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.work = deferred();
       api.emitLive();
       await expect.poll(reads, { timeout: 15000 }).toBeGreaterThan(before);
-      const refreshing = page.getByText("Refreshing…", { exact: true });
-      await expect(refreshing).toBeVisible();
+      // A silent re-read: no "Refreshing…" banner, no spinner, and the rows
+      // the reader is looking at stay put while the read is held.
+      await expect(page.getByText("Refreshing…")).toHaveCount(0);
+      await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
+      await expect(page.locator("[data-tasks-loading]")).toHaveCount(0);
       await expectCleanLayout(page, "reloading over populated table");
       api.hold.work.resolve();
       api.hold = {};
       // The mock reads failure settings when it responds. Finish this
       // successful refresh before configuring the next event's failure;
       // otherwise its warning can satisfy the assertion below too early.
-      await expect(refreshing).toHaveCount(0);
+      await expect
+        .poll(() =>
+          api.calls.filter((call) => call.name === "work" && !call.answered),
+        )
+        .toHaveLength(0);
 
       // A failed live re-read keeps the last good rows plus a warning.
       api.fail.work = { message: LONG_ERROR };
@@ -618,9 +631,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
         fail: { work: { status: 500, message: LONG_ERROR } },
       });
       await page.goto(TASKS);
-      await expect(page.getByText("Tasks could not be refreshed")).toBeVisible(
-        firstPaint,
-      );
+      await expect(
+        page.getByText("Initiatives could not be refreshed"),
+      ).toBeVisible(firstPaint);
       await expect(page.getByRole("link", { name: LONG_TITLE })).toHaveCount(0);
       await expect(
         page.getByText("Showing the previously loaded records.", {
@@ -635,9 +648,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.work = [];
       await retry.click();
       await expect(page.getByText("Nothing tracked yet")).toBeVisible();
-      await expect(page.getByText("Tasks could not be refreshed")).toHaveCount(
-        0,
-      );
+      await expect(
+        page.getByText("Initiatives could not be refreshed"),
+      ).toHaveCount(0);
       await expectCleanLayout(page, "empty workspace", bothEnds);
     });
 
@@ -675,7 +688,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByLabel("Owner", { exact: true }).fill(LONG_OWNER);
       // The free-text filters apply on Enter, like the selects apply on change.
       await page.keyboard.press("Enter");
-      await expect(page.getByText("No matching tasks")).toBeVisible();
+      await expect(page.getByText("No matching initiatives")).toBeVisible();
       await expectCleanLayout(
         page,
         "every filter active, no matches",
@@ -686,10 +699,10 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
 
       await page
-        .getByRole("searchbox", { name: "Search tasks" })
+        .getByRole("searchbox", { name: "Search initiatives" })
         .fill(`no-such-task-${LONG_ID}`);
       await page.keyboard.press("Enter");
-      await expect(page.getByText("No matching tasks")).toBeVisible();
+      await expect(page.getByText("No matching initiatives")).toBeVisible();
       await expectCleanLayout(page, "search with no matches");
     });
 
@@ -699,7 +712,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await installTasksApi(page);
       await page.goto(`${TASKS}?view=board`);
       await expect(
-        page.getByRole("region", { name: "Task board grouped by phase" }),
+        page.getByRole("region", { name: "Initiatives grouped by phase" }),
       ).toBeVisible(firstPaint);
       await expect(
         page.locator('[data-work-ref="card:release"]'),
@@ -744,7 +757,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await focusCard(page, "card:unreachable");
       await page.keyboard.press("ArrowRight");
       await expect(
-        notice.getByRole("link", { name: "Open in Inbox" }),
+        notice.getByRole("link", { name: "Open in Decide" }),
       ).toBeVisible();
       await expectCleanLayout(page, "requested move notice", bothEnds);
 
@@ -754,10 +767,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
         page.getByRole("dialog", { name: "Keyboard shortcuts" }),
       ).toBeVisible();
       await expect(
-        page.getByText("Move focused task to the previous or next phase"),
+        page.getByText(
+          "Move focused initiative to the previous or next placement",
+        ),
       ).toBeVisible();
       await expect(page.locator("#task-board-card-help")).toContainText(
-        "Drag a task between phases",
+        "Drag an initiative between phases",
       );
       await expectCleanLayout(page, "shortcut overlay over move notice");
       await page.keyboard.press("Escape");
@@ -831,11 +846,15 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.boards.resolve();
       api.hold = {};
       await expect(page.getByLabel("Outcome")).toBeVisible();
-      await expect(page.getByLabel("Board")).toBeVisible();
+      await expect(
+        page.getByRole("combobox", { name: "Group", exact: true }),
+      ).toBeVisible();
       await expectCleanLayout(page, "new task empty form", bothEnds);
 
       await page.getByLabel("Outcome").fill(LONG_TITLE);
-      await page.getByLabel("Board").selectOption("board:archive");
+      await page
+        .getByRole("combobox", { name: "Group", exact: true })
+        .selectOption("board:archive");
       await page.getByLabel("Context").fill(`${LONG_ERROR}\n${LONG_ID}`);
       await page.getByLabel("Acceptance criteria").fill(LONG_ACTION);
       await page.getByLabel("Accountable owner").fill(LONG_OWNER);
@@ -844,7 +863,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "new task filled form", bothEnds);
 
       api.hold.createWork = deferred();
-      await page.getByRole("button", { name: "Create task" }).click();
+      await page.getByRole("button", { name: "Create initiative" }).click();
       // Assert after the outbox reaches the held HTTP request, rather than
       // catching the brief device-persistence phase before enqueue returns.
       await expect
@@ -869,10 +888,10 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const saved = page.locator('[data-mutation-state="retrying"]');
       await expect(saved).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Create task" }),
+        page.getByRole("button", { name: "Create initiative" }),
       ).toBeDisabled();
       await expect(saved.getByLabel("Saved message")).toHaveValue(
-        `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nBoard: board:archive`,
+        `Outcome: ${LONG_TITLE}\nContext: ${LONG_ERROR}\n${LONG_ID}\nAcceptance criteria: ${LONG_ACTION}\nAccountable owner: ${LONG_OWNER}\nNext actor: ${LONG_OWNER}\nNext action: ${LONG_ACTION}\nGroup: board:archive`,
       );
       for (const [field, value] of [
         ["Outcome", LONG_TITLE],
@@ -885,7 +904,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
         await expect(page.getByLabel(field, { exact: true })).toHaveValue(
           value,
         );
-      await expect(page.getByLabel("Board")).toHaveValue("board:archive");
+      await expect(
+        page.getByRole("combobox", { name: "Group", exact: true }),
+      ).toHaveValue("board:archive");
       await expect(
         saved.getByRole("button", { name: "Copy text" }),
       ).toBeVisible();
@@ -911,7 +932,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
         await page.getByLabel(field, { exact: true }).fill("");
       await page.reload();
       await expect(page.getByLabel("Outcome")).toBeVisible(firstPaint);
-      await expect(page.getByLabel("Board")).toHaveCount(0);
+      await expect(
+        page.getByRole("combobox", { name: "Group", exact: true }),
+      ).toHaveCount(0);
       await expect(
         page.getByText("This workspace has no board yet"),
       ).toHaveCount(0);
@@ -947,8 +970,10 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
       await expectCleanLayout(page, "detail details disclosure open", bothEnds);
 
-      // The read-by-read history is a disclosure under the source line.
-      await page.locator("summary", { hasText: "Observation history" }).click();
+      // The evidence timeline is open under the source line; no click needed.
+      await expect(
+        page.locator("details[open] > summary", { hasText: "Timeline" }),
+      ).toBeVisible();
       await page.getByRole("button", { name: "Older observations" }).click();
       await expectCleanLayout(page, "detail older observations", bothEnds);
 
@@ -972,16 +997,20 @@ for (const viewport of AUDIT_VIEWPORTS) {
       // A missing card is a dead link, not an outage: no Retry.
       api.fail = { getWork: { status: 404, message: LONG_ERROR } };
       await page.reload();
-      await expect(page.getByText("Task not found")).toBeVisible(firstPaint);
+      await expect(page.getByText("Initiative not found")).toBeVisible(
+        firstPaint,
+      );
       await expect(
-        page.getByRole("button", { name: "Back to tasks" }),
+        page.getByRole("button", { name: "Back to initiatives" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
       await expectCleanLayout(page, "detail not found", bothEnds);
 
       api.fail = { getWork: { status: 500, message: LONG_ERROR } };
       await page.reload();
-      await expect(page.getByText("Task unavailable")).toBeVisible(firstPaint);
+      await expect(page.getByText("Initiative unavailable")).toBeVisible(
+        firstPaint,
+      );
       await expectCleanLayout(page, "detail unavailable", bothEnds);
     });
 
@@ -1061,7 +1090,7 @@ test("the Owner column reads one way for a person and an agent", async ({
 
   // The signed-in identity is this actor too, and the account menu shows a
   // name in full on purpose. Only the table is under test here.
-  const table = page.getByRole("region", { name: "Task table" });
+  const table = page.getByRole("region", { name: "Initiative table" });
   const owner = (name) => table.locator(`[data-owner-name="${name}"]`).first();
   await expect(owner("Maya Chen")).toBeVisible();
   await expect(table.locator("[data-owner-pending]")).toHaveCount(1);
@@ -1109,7 +1138,10 @@ test("Tasks restores its list on reload while revalidation is held", async ({
   await expect(
     page.getByText(LONG_TITLE, { exact: true }).first(),
   ).toBeVisible();
-  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  // Painted from the snapshot: rows are up, with no loading skeleton, while the
+  // re-read is still outstanding.
+  await expect(page.locator("[data-tasks-loading]")).toHaveCount(0);
+  await expect(page.getByText("Refreshing…")).toHaveCount(0);
   revalidation.resolve();
 });
 
@@ -1153,7 +1185,7 @@ for (const status of [401, 403]) {
   });
 }
 
-test("a sidebar denial clears Tasks and rejects a pending snapshot", async ({
+test("a brief denial clears Tasks and rejects a pending snapshot", async ({
   page,
 }) => {
   await installTasksApi(page);
@@ -1168,12 +1200,18 @@ test("a sidebar denial clears Tasks and rejects a pending snapshot", async ({
     resumed = true;
     await route.fallback();
   });
-  await page.route("**/inbox?**", (route) =>
-    route.fulfill({
-      status: 403,
-      contentType: "application/json",
-      body: JSON.stringify({ error: { message: "Read permission denied" } }),
-    }),
+  // The shell reads the reader's brief for the Decide count; a denial on
+  // it revokes every display snapshot for the principal.
+  // Match the API path exactly: a "**/brief**" glob also catches the
+  // briefStore.js module and breaks the page instead of denying the read.
+  await page.route(
+    (url) => url.pathname === "/brief",
+    (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Read permission denied" } }),
+      }),
   );
   await page.reload();
   await expect(page.getByRole("alert").first()).toBeVisible();

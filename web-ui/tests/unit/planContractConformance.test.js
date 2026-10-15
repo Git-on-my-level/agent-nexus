@@ -51,7 +51,6 @@ function planStateFor(graph) {
     critical_path: graph.critical_path,
     next_steps: graph.next_steps,
     shape: graph.shape,
-    health: graph.health,
     last_movement_at: "2026-10-04T12:00:00Z",
   };
 }
@@ -93,10 +92,6 @@ describe("plan rendering replays the shared contract corpus", () => {
         });
       });
 
-      it("renders the health core computed", () => {
-        expect(layout().health).toBe(graph.health);
-      });
-
       it("gives every step the status core computed", () => {
         const state = planStateFor(graph);
         const byId = new Map(
@@ -118,10 +113,9 @@ describe("a plan with no computed state claims nothing", () => {
     ],
   };
 
-  it("shows no shape, health, progress, path or next steps", () => {
+  it("shows no shape, progress, path or next steps", () => {
     const layout = planLayout(plan);
     expect(layout.shape).toBe("");
-    expect(layout.health).toBe("");
     expect(layout.progress).toBeNull();
     expect(layout.criticalPath).toEqual([]);
     expect(layout.next).toEqual([]);
@@ -147,12 +141,11 @@ describe("a plan with no computed state claims nothing", () => {
 describe("plan_state fields that do not belong to the contract", () => {
   const plan = { steps: [{ id: "a", title: "A", after: [] }] };
 
-  it("ignores a shape or health that is not a contract value", () => {
+  it("ignores a shape that is not a contract value", () => {
     const layout = planLayout(plan, {
-      planState: { shape: "spiral", health: "fine" },
+      planState: { shape: "spiral" },
     });
     expect(layout.shape).toBe("");
-    expect(layout.health).toBe("");
   });
 
   it("drops a step id the authored plan does not contain", () => {

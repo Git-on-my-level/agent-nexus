@@ -308,16 +308,29 @@ func orientServerWithResumeAsk(t *testing.T) *httptest.Server {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/agents/"):
 			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"},"open_asks":[{"id":"ask-9","title":"Blocked","delivery":"resume"}],"recent_notes":[]}`)
-		case r.URL.Path == "/work":
-			fmt.Fprint(w, `{"work":[],"has_more":false}`)
-		case r.URL.Path == "/agent-inbox/asks":
-			fmt.Fprint(w, `{"items":[],"page_info":{"has_more":false}}`)
-		case r.URL.Path == "/agent-notifications":
-			fmt.Fprint(w, `{"items":[]}`)
+		case r.URL.Path == "/brief":
+			fmt.Fprint(w, `{"schema":"brief.v1","decisions":[],"initiatives":[],"your_asks":[],"answered_for_you":[]}`)
 		default:
 			http.NotFound(w, r)
 		}
 	}))
+}
+
+func orientDeliveryWarning(t *testing.T, out *bytes.Buffer) string {
+	t.Helper()
+	var doc map[string]any
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("json: %v: %s", err, out.String())
+	}
+	if anyString(asMap(doc["result"])["schema"]) != "brief.v1" {
+		t.Fatalf("orient must print the brief verbatim: %s", out.String())
+	}
+	for _, raw := range asSlice(doc["warnings"]) {
+		if anyString(asMap(raw)["code"]) == "ask_delivery" {
+			return anyString(asMap(raw)["message"])
+		}
+	}
+	return ""
 }
 
 func TestOrientDeliveryHealthWarnsWhenNothingDelivers(t *testing.T) {
@@ -328,13 +341,8 @@ func TestOrientDeliveryHealthWarnsWhenNothingDelivers(t *testing.T) {
 	if exit := a.Run([]string{"--json", "--as", "worker", "orient"}); exit != 0 {
 		t.Fatalf("exit=%d output=%s", exit, out.String())
 	}
-	result := envelopeResult(t, out)
-	health := asMap(result["delivery_health"])
-	if got := asSlice(health["open_resume_asks"]); len(got) != 1 || anyString(got[0]) != "event:ask-9" {
-		t.Fatalf("health=%#v", health)
-	}
-	if health["bridge_running"] != false || anyString(health["warning"]) == "" {
-		t.Fatalf("health=%#v", health)
+	if warning := orientDeliveryWarning(t, out); !strings.Contains(warning, "1 open resume ask") {
+		t.Fatalf("missing delivery warning: %s", out.String())
 	}
 }
 
@@ -347,10 +355,8 @@ func TestOrientDeliveryHealthQuietWhenBridgeRuns(t *testing.T) {
 	if exit := a.Run([]string{"--json", "--as", "worker", "orient"}); exit != 0 {
 		t.Fatalf("exit=%d output=%s", exit, out.String())
 	}
-	result := envelopeResult(t, out)
-	health := asMap(result["delivery_health"])
-	if health["bridge_running"] != true || anyString(health["warning"]) != "" {
-		t.Fatalf("health=%#v", health)
+	if warning := orientDeliveryWarning(t, out); warning != "" {
+		t.Fatalf("unexpected delivery warning: %s", warning)
 	}
 }
 

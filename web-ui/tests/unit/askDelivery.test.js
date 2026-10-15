@@ -220,7 +220,7 @@ describe("ask delivery model", () => {
       nextActorLabel: "Dana",
     });
     expect(model.notDelivered).toBe(
-      "Not delivered: no subscriber; the task is ready for Dana.",
+      "Not delivered: no subscriber; the initiative is ready for Dana.",
     );
     expect(model.subscriptions).toEqual([]);
   });
@@ -238,7 +238,7 @@ describe("ask delivery model", () => {
       { nextActorLabel: "Dana" },
     );
     expect(blocked.notDelivered).toBe(
-      "Not delivered: no subscriber; the task is blocked for Dana.",
+      "Not delivered: no subscriber; the initiative is blocked for Dana.",
     );
     const sourceOwned = askDeliveryModel({
       ...answered,
@@ -250,20 +250,20 @@ describe("ask delivery model", () => {
       },
     });
     expect(sourceOwned.notDelivered).toBe(
-      "Not delivered: no subscriber; the task is in progress for jira-bot.",
+      "Not delivered: no subscriber; the initiative is in progress for jira-bot.",
     );
     for (const model of [blocked, sourceOwned]) {
       expect(model.notDelivered).not.toContain("unblocked");
     }
   });
 
-  it("says the task was closed when no subscriber was waiting", () => {
+  it("says the initiative was closed when no subscriber was waiting", () => {
     const model = askDeliveryModel({
       ...answered,
       task_outcome: { card_ref: "card:anx-7", phase: "done" },
     });
     expect(model.notDelivered).toBe(
-      "Not delivered: no subscriber; the task was closed.",
+      "Not delivered: no subscriber; the initiative was closed.",
     );
   });
 
@@ -315,11 +315,10 @@ describe("ask delivery model", () => {
     const model = askDeliveryModel({
       ask_id: "event:ask-1",
       status: "open",
-      is_stale: true,
       delivery: [],
     });
     expect(model.notDelivered).toBeNull();
-    expect(model.isStale).toBe(true);
+    expect(model.isStale).toBeUndefined();
     expect(model.needsContext).toBe(false);
   });
 
@@ -494,13 +493,12 @@ describe("a handled context request in the Inbox list", () => {
     ).toBeNull();
   });
 
-  it("folds an open ask only when core projects is_stale", () => {
-    // Only the projected signal folds the row; ask age alone does not.
+  it("never folds an open ask on a stale flag, which core no longer projects", () => {
     const rows = buildInboxRows({
       inboxItems: [openAsk({ is_stale: true }), openAsk({ id: "inbox-2" })],
       now: NOW,
     });
-    expect(rows.map((row) => row.stale)).toEqual([false, true]);
+    expect(rows.map((row) => Boolean(row.stale))).toEqual([false, false]);
   });
 });
 

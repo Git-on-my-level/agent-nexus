@@ -293,7 +293,7 @@ describe("refChipModel", () => {
     const model = refChipModel("card:initiative-plans", resolved, context);
     expect(model).toMatchObject({
       kind: "card",
-      kindLabel: "Task",
+      kindLabel: "Initiative",
       title: "Initiative plans on cards",
       statusLabel: "in progress",
       statusTone: "neutral",
@@ -301,7 +301,7 @@ describe("refChipModel", () => {
       isExternal: false,
     });
     // Core sends `/tasks/<handle>`; the UI rebases it onto the workspace route.
-    expect(model.href).toBe("/o/scaling/w/anx/tasks/initiative-plans");
+    expect(model.href).toBe("/o/scaling/w/anx/initiatives/initiative-plans");
   });
 
   it("tones a done ref ok and a blocked ref danger", () => {
@@ -316,7 +316,7 @@ describe("refChipModel", () => {
 
   it("opens a project ref as the Tasks list filtered to it", () => {
     expect(refChipModel("topic:release-b", resolved, context).href).toBe(
-      "/o/scaling/w/anx/tasks?project_ref=topic%3Arelease-b",
+      "/o/scaling/w/anx/initiatives?project_ref=topic%3Arelease-b",
     );
   });
 
@@ -535,7 +535,7 @@ describe("safeRefDestination", () => {
     // A card has a destination we can derive ourselves, so the hostile URL is
     // dropped and the chip still goes somewhere real.
     const card = refChipModel("card:a", unsafe("card:a"), context);
-    expect(card.href).toBe("/o/scaling/w/anx/tasks/card%3Aa");
+    expect(card.href).toBe("/o/scaling/w/anx/initiatives/card%3Aa");
     expect(card.href).not.toContain("javascript");
 
     // A board has no derivable destination, so the chip simply does not link

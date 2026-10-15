@@ -228,7 +228,7 @@ async function runGoldenPath(page, request) {
 
         if (
           await page
-            .getByRole("heading", { name: "Overview", exact: true })
+            .getByRole("heading", { name: "Decide", exact: true })
             .isVisible()
             .catch(() => false)
         ) {
@@ -282,6 +282,8 @@ async function runGoldenPath(page, request) {
     coreBaseUrl,
     actorDisplayName,
   );
+  // The dev actor asks; the registered human answers on Decide.
+  const requesterActorId = actorId;
   actorId = registeredHuman.agent.actor_id;
   await page.context().addCookies([
     {
@@ -294,7 +296,7 @@ async function runGoldenPath(page, request) {
     },
   ]);
   await page.goto("/o/local/w/local");
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview$/, {
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/decide$/, {
     timeout: 30_000,
   });
   const session = await getUiJson(page.request, "/auth/session");
@@ -302,7 +304,7 @@ async function runGoldenPath(page, request) {
   expect(session.agent.actor_id).toBe(actorId);
 
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible({
     timeout: 30000,
   });
@@ -378,7 +380,7 @@ async function runGoldenPath(page, request) {
       { timeout: 30_000 },
     ),
     page.goto(
-      `/o/local/w/local/tasks/${encodeURIComponent(`card:${resolvedCardId}`)}`,
+      `/o/local/w/local/initiatives/${encodeURIComponent(`card:${resolvedCardId}`)}`,
     ),
   ]);
   expect(workResponse.status()).toBe(200);
@@ -533,7 +535,8 @@ async function runGoldenPath(page, request) {
         title: `Review handoff ${runSuffix}`,
         body: "Please review the inbox item.",
         subject_ref: cardBody.card.ref,
-        requester_actor_id: actorId,
+        // Decide lists asks waiting on the reader, never the reader's own.
+        requester_actor_id: requesterActorId,
         response_proposals: ["Approve", "Request changes"],
       },
       provenance: {
@@ -545,11 +548,11 @@ async function runGoldenPath(page, request) {
     actor_id: actorId,
   });
 
-  await page.getByRole("link", { name: "Inbox", exact: true }).click();
+  await page.getByRole("link", { name: "Decide", exact: true }).first().click();
   // Svelte's client-side navigation resolves cold route imports after click
   // returns. Wait for navigation before applying the content assertion budget.
-  await page.waitForURL("**/o/local/w/local/inbox", { timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await page.waitForURL("**/o/local/w/local/decide", { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Decide" })).toBeVisible();
 
   // The rebuild can return before the inbox projection shows the new ask.
   // Poll the list instead of reading it once.
@@ -567,7 +570,9 @@ async function runGoldenPath(page, request) {
       { timeout: 30_000 },
     )
     .not.toBe("");
-  await page.goto(`/o/local/w/local/inbox/${encodeURIComponent(inboxItem.id)}`);
+  await page.goto(
+    `/o/local/w/local/decide/${encodeURIComponent(inboxItem.id)}`,
+  );
   await expect(
     page.getByRole("heading", {
       name: `Review handoff ${runSuffix}`,
@@ -579,8 +584,36 @@ async function runGoldenPath(page, request) {
       response.request().method() === "POST" &&
       response.url().includes("/respond"),
   );
-  await page.getByRole("button", { name: "Acknowledge", exact: true }).click();
-  expect((await acknowledgeResponsePromise).ok()).toBeTruthy();
+  // Decide answers with the first proposal, or a typed reply when the ask
+  // offers none. The send is held briefly for Undo, then goes out.
+  const proposal = page.locator('[data-decision-proposal="1"]');
+  if (await proposal.isVisible().catch(() => false)) await proposal.click();
+  else {
+    await page.locator("form textarea").first().fill("Acknowledged");
+    await page.getByRole("button", { name: "Send reply" }).click();
+  }
+  const acknowledgeResponse = await acknowledgeResponsePromise;
+  if (acknowledgeResponse.status() === 409) {
+    // The requester has no notification route: core refuses the default
+    // target. Decide keeps the answer and offers to send it without notifying.
+    expect((await acknowledgeResponse.json()).error?.code).toBe(
+      "notification_target_required",
+    );
+    await expect(
+      page.locator("[data-decision-unnotifiable]").first(),
+    ).toBeVisible();
+    const silentResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/respond"),
+    );
+    await page.locator("[data-decision-answer-silently]").first().click();
+    const silentResponse = await silentResponsePromise;
+    expect(silentResponse.request().postDataJSON()?.notify_mode).toBe("none");
+    expect(silentResponse.ok()).toBeTruthy();
+  } else {
+    expect(acknowledgeResponse.ok()).toBeTruthy();
+  }
   await expect
     .poll(
       async () => {

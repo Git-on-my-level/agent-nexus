@@ -39,6 +39,7 @@ hosted_default_commands:
   - "events.get"
   - "events.list"
   - "home.unread"
+  - "brief.get"
   - "overview.get"
   - "overview.changes"
   - "workspace.dashboard.list"
@@ -717,6 +718,39 @@ commands:
   "overview.changes":
     classification: exposed_read
     reason: "Principal-scoped bounded visit digest; reads without advancing the baseline."
+  "brief.get":
+    classification: exposed_read
+    reason: "brief.v1: the caller's decisions, initiatives against promises, own asks and answers."
+  "curation.candidates":
+    classification: exposed_read
+    reason: "Bounded curation candidates a PM reviews before proposing; read only."
+  "curation.metrics":
+    classification: exposed_read
+    reason: "Counts only; no titles or refs."
+  "curation.propose":
+    classification: exposed_write
+    reason: "PM files a curation proposal; nothing changes until a human accepts it."
+  "curation.run":
+    classification: gated_admin
+    reason: "Workspace-wide formula pass that core also runs on its own schedule."
+  "curation.ungroup":
+    classification: unsupported_interactive
+    reason: "human-only undo of an accepted batch requires human judgment"
+  "deliveries.list":
+    classification: exposed_read
+    reason: "The caller's own queued notifications and wake deliveries, bounded by limit."
+  "deliveries.claim":
+    classification: unsupported_other
+    reason: "Delivery claims belong to the owning adapter's runtime, not an MCP tool call"
+  "deliveries.receipt":
+    classification: unsupported_other
+    reason: "Delivery receipts belong to the owning adapter's runtime, not an MCP tool call"
+  "notifications.settings.get":
+    classification: unsupported_interactive
+    reason: "human-only notification settings"
+  "notifications.settings.set":
+    classification: unsupported_interactive
+    reason: "human-only notification settings require human judgment"
   "overview.get":
     classification: exposed_read
     reason: "Executive Overview projection shared with the web UI and CLI."

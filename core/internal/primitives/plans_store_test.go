@@ -37,7 +37,7 @@ func TestPlanEditsRefStateAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+	if err = store.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	state := card["plan_state"].(plans.State)
@@ -76,7 +76,7 @@ func TestPlanEditsRefStateAndHistory(t *testing.T) {
 	if count != 2 || snapshots != 1 {
 		t.Fatalf("plan events=%d", count)
 	}
-	preview, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), []string{child["ref"].(string)}, func(string, string) bool { return false }, time.Now(), 0)
+	preview, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), []string{child["ref"].(string)}, func(string, string) bool { return false }, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestBatchRefsSharedCorpus(t *testing.T) {
 	if err = store.SetCardPlan(ctx, "actor-1", initiative["id"].(string), initiative["updated_at"].(string), plans.Plan{Steps: []plans.Step{{ID: "brief", Title: "Brief", Ref: "doc:brief", Status: "done"}}}); err != nil {
 		t.Fatal(err)
 	}
-	items, err := store.ResolveRefs(ctx, fixture.Refs, nil, time.Now(), 0)
+	items, err := store.ResolveRefs(ctx, fixture.Refs, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestBatchRefsSharedCorpus(t *testing.T) {
 	if items[0].Progress == nil || items[0].Progress.Done != 1 {
 		t.Fatal("context ref fallback status ignored:", items[0])
 	}
-	if _, err = store.ResolveRefs(ctx, make([]string, 201), nil, time.Now(), 0); err == nil {
+	if _, err = store.ResolveRefs(ctx, make([]string, 201), nil, time.Now()); err == nil {
 		t.Fatal("accepted >200 refs")
 	}
 }
@@ -165,14 +165,14 @@ func TestRefPreviewKeepsPrivatePlanOutOfPublicCardPreview(t *testing.T) {
 	if err = store.SetCardPlan(ctx, "actor-1", initiative["id"].(string), initiative["updated_at"].(string), p); err != nil {
 		t.Fatal(err)
 	}
-	items, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{initiative["ref"].(string)}, func(_ string, owner string) bool { return owner != "private-owner" }, time.Now(), 0)
+	items, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{initiative["ref"].(string)}, func(_ string, owner string) bool { return owner != "private-owner" }, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !items[0].Resolvable || items[0].Progress != nil || items[0].NextStep != nil {
 		t.Fatalf("public preview leaked private plan: %+v", items[0])
 	}
-	items, err = store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "private-owner"}), []string{initiative["ref"].(string)}, nil, time.Now(), 0)
+	items, err = store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "private-owner"}), []string{initiative["ref"].(string)}, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := store.ResolveRefs(ctx, []string{externalURL, "https://github.com/org/repo/pull/999"}, nil, time.Now(), 0)
+	items, err := store.ResolveRefs(ctx, []string{externalURL, "https://github.com/org/repo/pull/999"}, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,13 +205,13 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 	// A known URL projects source state; an unknown URL keeps the agent fallback.
 	p := plans.Plan{Steps: []plans.Step{{ID: "known", Title: "Known", Ref: externalURL, Status: "blocked"}, {ID: "unknown", Title: "Unknown", Ref: items[1].Ref, Status: "active"}}}
 	facts := map[string]plans.Fact{externalURL: {Known: true, Status: items[0].Phase, MovementAt: items[0].MovementAt}}
-	state := plans.Compute(p, facts, time.Now().Add(-6*24*time.Hour), time.Now(), 0)
-	if state.Progress.Done != 1 || state.Steps[1].Status != "active" || state.Health != "stalled" {
+	state := plans.Compute(p, facts, time.Now().Add(-6*24*time.Hour))
+	if state.Progress.Done != 1 || state.Steps[1].Status != "active" {
 		t.Fatal(state)
 	}
 }
 
-func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
+func TestStepMovementIsEvidenceButCardChatterIsNot(t *testing.T) {
 	t.Parallel()
 	for _, subject := range []string{"card", "step"} {
 		t.Run(subject, func(t *testing.T) {
@@ -252,11 +252,12 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil {
 				t.Fatal(err)
 			}
-			if card["plan_health"].(plans.Health).State != "stale" {
-				t.Fatal(card["plan_health"])
+			before := card["plan_health"].(plans.Health)
+			if before.State != plans.PromiseNone || before.LastEvidenceAt == nil {
+				t.Fatal(before)
 			}
 			thread := parent["thread_id"].(string)
 			if subject == "step" {
@@ -265,13 +266,15 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 			if _, err = s.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": thread, "refs": []string{}, "payload": map[string]any{"text": "Verified progress"}}); err != nil {
 				t.Fatal(err)
 			}
-			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil {
 				t.Fatal(err)
 			}
-			// Activity resets recency: stale resolves to on_track (the parked
-			// card has no dated signal, but dark is for active work).
-			if card["plan_health"].(plans.Health).State != "on_track" {
-				t.Fatal(card["plan_health"])
+			// A linked step moving is a plan-step change and resets the clock;
+			// a note on the card without evidence is not evidence.
+			after := card["plan_health"].(plans.Health)
+			moved := *after.LastEvidenceAt != *before.LastEvidenceAt
+			if after.State != plans.PromiseNone || moved != (subject == "step") {
+				t.Fatalf("before=%v after=%v", *before.LastEvidenceAt, *after.LastEvidenceAt)
 			}
 		})
 	}
@@ -314,7 +317,7 @@ func TestPlanStepDigestOverRealCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.EnrichCardPlans(ctx, []map[string]any{row}, nil, time.Now().UTC(), 0); err != nil {
+	if err = store.EnrichCardPlans(ctx, []map[string]any{row}, nil, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	digest, ok := row["plan_step_digest"].(plans.StepDigest)
@@ -339,7 +342,7 @@ func TestPlanStepDigestOverRealCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.EnrichCardPlans(ctx, []map[string]any{planless}, nil, time.Now().UTC(), 0); err != nil {
+	if err = store.EnrichCardPlans(ctx, []map[string]any{planless}, nil, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	if planless["plan_step_digest"] != nil {
@@ -362,14 +365,14 @@ func TestPlanlessCardPossiblyMootFromRelatedRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+	if err = store.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	moot, ok := card["possibly_moot"].(primitives.PossiblyMoot)
 	if !ok || !moot.Flagged || moot.Sources != 1 {
 		t.Fatalf("planless related refs must flag possibly_moot: %#v", card["possibly_moot"])
 	}
-	previews, err := store.ResolveRefs(ctx, []string{decision["ref"].(string)}, nil, time.Now(), 0)
+	previews, err := store.ResolveRefs(ctx, []string{decision["ref"].(string)}, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

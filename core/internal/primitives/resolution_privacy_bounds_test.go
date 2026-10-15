@@ -51,7 +51,7 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	defer db.Close()
 	scoped := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"})
 	reader := primitives.NewTestStore(db, ws.Layout().ArtifactContentDir)
-	previews, err := reader.ResolveRefs(scoped, []string{"shared-alias", "https://source.test/shared"}, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0)
+	previews, err := reader.ResolveRefs(scoped, []string{"shared-alias", "https://source.test/shared"}, func(_ string, owner string) bool { return owner == "" }, time.Now())
 	if err != nil || !previews[0].Resolvable || previews[0].Status != "done" || !previews[1].Resolvable || previews[1].ID != visible["id"] {
 		t.Fatalf("hidden evidence changed public facts: %+v %v", previews, err)
 	}
@@ -75,13 +75,13 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0); err != nil {
+	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, func(_ string, owner string) bool { return owner == "" }, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	// Resolution still uses visible evidence. Authored plans, however, carry
 	// every published key's ownership, just as native card refs do; a key also
 	// published privately cannot expose a stored step to a stranger.
-	if current["plan_health"].(plans.Health).State != "no_plan" || current["next_step"] != nil {
+	if current["plan_health"].(plans.Health).State != "no_promise" || current["next_step"] != nil {
 		t.Fatalf("private published ownership failed to suppress stored plan: %+v", current)
 	}
 	// A native link to the visible publisher remains unaffected by inaccessible
@@ -97,11 +97,12 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, nil, time.Now(), 0); err != nil {
+	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	// The parked card reads on_track and is unaffected by the hidden candidates.
-	if current["plan_health"].(plans.Health).State != "on_track" {
+	// The parked card promises nothing and is unaffected by the hidden
+	// candidates: the visible step still resolves.
+	if current["plan_health"].(plans.Health).State != "no_promise" || current["next_step"] == nil {
 		t.Fatalf("hidden candidates changed native public health: %+v", current)
 	}
 }
@@ -127,7 +128,7 @@ func TestPerformanceSourceURLResolutionBoundsTotalReturnedRows(t *testing.T) {
 	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
 	defer db.Close()
 	s = primitives.NewTestStore(db, ws.Layout().ArtifactContentDir)
-	got, err := s.ResolveRefs(ctx, []string{"https://source.test/shared"}, nil, time.Now(), 0)
+	got, err := s.ResolveRefs(ctx, []string{"https://source.test/shared"}, nil, time.Now())
 	if err != nil || got[0].Resolvable {
 		t.Fatalf("ambiguous: %+v %v", got, err)
 	}

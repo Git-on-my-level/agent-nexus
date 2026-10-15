@@ -84,8 +84,10 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 				t.Fatalf("initiatives=%+v error=%v", data, err)
 			}
 			// Default reports retain the legacy projection: computed attention
-			// summaries add no query unless the report opts in.
-			if got := counter.Count(); got != 7 {
+			// summaries add no query unless the report opts in. The eighth
+			// statement is the one batched promise-note read per plan batch,
+			// constant in the number of cards.
+			if got := counter.Count(); got != 8 {
 				t.Fatalf("initiatives: %d queries for %d cards and boards", got, i+1)
 			}
 			counter.Reset()
@@ -95,8 +97,9 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			attachResourceAccessScope(resolveReq, handlerOptions{primitiveStore: store})
 			handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
 			// Scoped candidates authorize the read without an additional
-			// whole-body ownership query, independent of workspace size.
-			if out.Code != 200 || counter.Count() != 11 {
+			// whole-body ownership query, independent of workspace size. One
+			// statement is the batched promise-note read.
+			if out.Code != 200 || counter.Count() != 12 {
 				t.Fatalf("mixed ref queries=%d status=%d body=%s", counter.Count(), out.Code, out.Body.String())
 			}
 		}
@@ -117,9 +120,10 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 	attachResourceAccessScope(reportReq, handlerOptions{primitiveStore: store})
 	reader := reportReader{r: reportReq, opts: handlerOptions{primitiveStore: store}, now: time.Now()}
 	// This new request captures one authorization snapshot, unlike the reused
-	// render request above. Projection queries remain six at either workspace size.
+	// render request above. Projection queries remain fixed at either workspace
+	// size; one is the batched promise-note read.
 	data, _, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 40}})
-	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 8 {
+	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 9 {
 		t.Fatalf("private initiatives must be omitted without more queries: data=%+v queries=%d error=%v", data, counter.Count(), err)
 	}
 	for _, item := range data["items"].([]map[string]any) {
@@ -128,7 +132,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	previews, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now(), 0)
+	previews, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now())
 	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" || counter.Count() != 3 {
 		t.Fatalf("private parent-thread ref: %+v queries=%d error=%v", previews, counter.Count(), err)
 	}

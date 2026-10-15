@@ -87,7 +87,7 @@ func TestForgejoPullRequestRefResolvesFromForge(t *testing.T) {
 	}
 	resolve := func() []primitives.RefPreview {
 		t.Helper()
-		items, err := s.ResolveRefs(ctx, []string{prURL, "forgejo:acme/widgets#2"}, nil, time.Now(), 0)
+		items, err := s.ResolveRefs(ctx, []string{prURL, "forgejo:acme/widgets#2"}, nil, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +108,7 @@ func TestForgejoPullRequestRefResolvesFromForge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.EnrichCardPlans(ctx, []map[string]any{enriched}, nil, time.Now(), 0); err != nil {
+	if err = s.EnrichCardPlans(ctx, []map[string]any{enriched}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	state := enriched["plan_state"].(plans.State)
@@ -129,7 +129,7 @@ func TestForgejoPullRequestRefResolvesFromForge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.EnrichCardPlans(ctx, []map[string]any{enriched}, nil, time.Now(), 0); err != nil {
+	if err = s.EnrichCardPlans(ctx, []map[string]any{enriched}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	state = enriched["plan_state"].(plans.State)

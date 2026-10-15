@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 /**
- * One card, four surfaces, one answer.
+ * One card, every surface that still renders it, one answer.
  *
  * Before `WorkSummary` each surface decided a card's state for itself from a
  * different field of the same response: the Tasks table printed the stored
@@ -19,8 +20,8 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
  */
 
 const WORKSPACE = "/o/local/w/local";
-const OVERVIEW = `${WORKSPACE}/overview`;
-const TASKS = `${WORKSPACE}/tasks`;
+const WATCH = `${WORKSPACE}/watch`;
+const TASKS = `${WORKSPACE}/initiatives`;
 const CARD_REF = "card:release-b";
 const NOW = "2026-10-04T12:00:00.000Z";
 /** Two hours before NOW, so the age badge is a stable "2h". */
@@ -153,30 +154,6 @@ const darkCard = {
   },
 };
 
-/**
- * A card from a core that computes no summary at all, carrying only the
- * legacy fields — plus a source status Nexus has no phase for. Every surface
- * has to keep saying something about it.
- */
-const legacyCard = {
-  ref: "card:legacy",
-  handle: "legacy",
-  title: "Legacy card",
-  summary: "A card from a core before work_summary.",
-  phase: "in_progress",
-  column_key: "in_progress",
-  board_ref: "board:other",
-  updated_at: MOVED_AT,
-  source: {
-    authority: "jira",
-    connection_id: "jira-main",
-    native_id: "OPS-12",
-    native_status: "In UAT",
-  },
-  freshness: { status: "unknown" },
-  plan_health: { state: "blocked", reason: "A dependency is blocked." },
-};
-
 const boards = [
   {
     board: {
@@ -225,7 +202,7 @@ async function install(page) {
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
     principals: [{ actor_id: "operator", principal_kind: "human" }],
-    work: [card, sideCard, legacyCard, planlessCard, darkCard],
+    work: [card, sideCard, planlessCard, darkCard],
   });
   await page.route("**/*", async (route) => {
     // Decoded: a card ref carries a colon, so the path arrives percent-encoded.
@@ -236,8 +213,8 @@ async function install(page) {
     if (path === "/work")
       return route.fulfill({
         json: {
-          work: [card, sideCard, legacyCard, planlessCard, darkCard].map(
-            (row) => asCore(row, optedIn),
+          work: [card, sideCard, planlessCard, darkCard].map((row) =>
+            asCore(row, optedIn),
           ),
         },
       });
@@ -246,10 +223,6 @@ async function install(page) {
     if (path === `/work/${planlessCard.ref}`)
       return route.fulfill({ json: { work: asCore(planlessCard, optedIn) } });
     if (path.startsWith(`/work/${planlessCard.ref}/`))
-      return route.fulfill({ json: { observations: [], participants: [] } });
-    if (path === `/work/${legacyCard.ref}`)
-      return route.fulfill({ json: { work: legacyCard } });
-    if (path.startsWith(`/work/${legacyCard.ref}/`))
       return route.fulfill({ json: { observations: [], participants: [] } });
     if (path === `/work/${CARD_REF}/observations`)
       return route.fulfill({ json: { observations: [] } });
@@ -261,29 +234,6 @@ async function install(page) {
       return route.fulfill({
         status: 404,
         json: { error: { code: "not_found", message: "no plan" } },
-      });
-    if (path === "/overview")
-      return route.fulfill({
-        json: {
-          generated_at: NOW,
-          work: {
-            status: "ok",
-            total: 2,
-            human_count: 0,
-            items: [asCore(card, optedIn)],
-          },
-          initiatives: {
-            status: "ok",
-            count: 3,
-            items: [card, planlessCard, darkCard].map((row) => ({
-              ...asCore(row, optedIn),
-              href: `/tasks/${row.handle}`,
-            })),
-          },
-          needs_you: { status: "ok", count: 0, rows: [], href: "/inbox" },
-          dashboard: { status: "ok", has_more: false, reports: [] },
-          agents: { status: "ok", items: [] },
-        },
       });
     return route.fallback();
   });
@@ -323,7 +273,7 @@ for (const viewport of [
   { label: "desktop", width: 1440, height: 1100 },
   { label: "phone", width: 390, height: 844 },
 ]) {
-  test(`one card reads the same on Overview, table and board @ ${viewport.label}`, async ({
+  test(`one card reads the same on the Initiatives table and board @ ${viewport.label}`, async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -332,11 +282,6 @@ for (const viewport of [
       width: viewport.width,
       height: viewport.height,
     });
-
-    await page.goto(OVERVIEW);
-    const overview = await readSummary(
-      page.locator(`[data-initiative-tile="${CARD_REF}"]`),
-    );
 
     await page.goto(`${TASKS}?view=table`);
     const table = await readSummary(
@@ -360,103 +305,18 @@ for (const viewport of [
     ).toContainText("vs 100");
 
     // The point of the whole change.
-    expect(table).toEqual(overview);
-    expect(board).toEqual(overview);
+    expect(board).toEqual(table);
 
     /*
      * And what they agree on is the computed state plus the board's own
      * disagreement with it, not the stored phase on its own.
      */
-    expect(overview.state).toBe("blocked");
-    expect(overview.status).toContain("Blocked");
-    expect(overview.setStatus).toContain("marked in progress");
-    expect(overview.progress).toBe("2/5");
+    expect(table.state).toBe("blocked");
+    expect(table.status).toContain("Blocked");
+    expect(table.setStatus).toContain("marked in progress");
+    expect(table.progress).toBe("2/5");
   });
 }
-
-test("the task header agrees with the row it was opened from", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  await install(page);
-  await page.setViewportSize({ width: 1440, height: 1100 });
-
-  await page.goto(`${TASKS}?view=table`);
-  const row = await readSummary(page.locator(`[data-work-ref="${CARD_REF}"]`));
-
-  await page.goto(`${TASKS}/${encodeURIComponent(CARD_REF)}`);
-  const header = page.locator('[data-work-summary="header"]');
-  await expect(header).toBeVisible({ timeout: 60_000 });
-  // Header density has room for words, so progress carries its unit; the
-  // state, the label and the disagreement are the same facts as the row's.
-  await expect(header.locator("[data-health]").first()).toHaveAttribute(
-    "data-health",
-    row.state,
-  );
-  await expect(header.locator("[data-health]").first()).toContainText(
-    "Blocked",
-  );
-  await expect(header.locator("[data-summary-set-status]")).toContainText(
-    "marked in progress",
-  );
-  await expect(header.locator("[data-summary-progress]")).toHaveText(
-    "2/5 steps",
-  );
-  // The computed reason is on screen here, not only in the tooltip: a page
-  // has room for the sentence, and "Blocked" without it sends the reader
-  // looking for why.
-  await expect(header.locator("[data-summary-reason]")).toContainText(
-    "critical path is blocked",
-  );
-});
-
-test("a card from a core with no computed summary still reads a state", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  await install(page);
-  await page.setViewportSize({ width: 1440, height: 1100 });
-
-  await page.goto(`${TASKS}?view=table`);
-  const row = page.locator('[data-work-ref="card:legacy"]');
-  const legacy = await readSummary(row);
-  /*
-   * The back-compatibility reader: `plan_health` is the old spelling of the
-   * computed state, and the Status column keeps a value rather than going
-   * blank on a core that has not shipped `work_summary` yet.
-   */
-  expect(legacy.state).toBe("blocked");
-  expect(legacy.status).toContain("Blocked");
-  /*
-   * A legacy core computed a health but never said whether the stored phase
-   * agreed with it, so the client compares the two itself — which is the only
-   * place it decides anything about state, and only when core gave it a
-   * computed health to compare against.
-   */
-  expect(legacy.setStatus).toContain("marked in progress");
-  // And it has no plan, so there is no progress to state — an omitted part
-  // stays omitted rather than becoming an invented 0/0.
-  expect(legacy.progress).toBe("");
-  // Same card, same answer, on the board.
-  await page.goto(`${TASKS}?view=board`);
-  const board = await readSummary(
-    page.locator('[data-work-slot][data-work-ref="card:legacy"]'),
-  );
-  expect(board).toEqual(legacy);
-
-  /*
-   * And the tracker's own word for where it stands is back on the page
-   * header, which is where it was before this change and where there is room
-   * for it. A list row does not carry it: the badge cannot wrap by design,
-   * and a fourth one in the Status cell made every row two lines tall.
-   */
-  await page.goto(`${TASKS}/${encodeURIComponent("card:legacy")}`);
-  const header = page.locator('[data-work-summary="header"]');
-  await expect(header).toBeVisible({ timeout: 60_000 });
-  await expect(header.locator("[data-summary-source-status]")).toHaveText(
-    "In UAT",
-  );
-});
 
 test("the surfaces ask core to compute the summary", async ({ page }) => {
   /*
@@ -474,29 +334,26 @@ test("the surfaces ask core to compute the summary", async ({ page }) => {
     const url = new URL(request.url());
     // The card reads themselves, not their sub-resources: observations and
     // participants carry no card state and should not pay for a summary.
-    if (/^\/overview$|^\/work$|^\/work\/[^/]+$/.test(url.pathname)) {
+    if (/^\/work$|^\/work\/[^/]+$/.test(url.pathname)) {
       asked.push(`${url.pathname}?summary=${url.searchParams.get("summary")}`);
     }
   });
 
-  await page.goto(OVERVIEW);
-  await expect(
-    page.locator(`[data-initiative-tile="${CARD_REF}"]`),
-  ).toBeVisible({ timeout: 60_000 });
   await page.goto(`${TASKS}?view=table`);
   await expect(page.locator(`[data-work-ref="${CARD_REF}"]`)).toBeVisible({
     timeout: 60_000,
   });
-  await page.goto(`${TASKS}/${encodeURIComponent(CARD_REF)}`);
-  await expect(page.locator('[data-work-summary="header"]')).toBeVisible({
-    timeout: 60_000,
-  });
+
+  await page.goto(`${TASKS}?view=board`);
+  await expect(
+    page.locator(`[data-work-slot][data-work-ref="${CARD_REF}"]`),
+  ).toBeVisible({ timeout: 60_000 });
 
   expect(asked.length).toBeGreaterThan(0);
   expect(asked.filter((entry) => !entry.endsWith("?summary=1"))).toEqual([]);
 });
 
-test("a planless card reads as its phase, with the missing plan as a note", async ({
+test("a planless card reads as its phase in the table and the board, with no plan note in a list", async ({
   page,
 }) => {
   /*
@@ -510,47 +367,28 @@ test("a planless card reads as its phase, with the missing plan as a note", asyn
   await install(page);
   await page.setViewportSize({ width: 1440, height: 1100 });
 
-  // On the Overview card: the state, and the note under it.
-  await page.goto(OVERVIEW);
-  /*
-   * In the "No plan" fold, found by the hint rather than by a status. That
-   * fold is the reason the grouping had to move: core no longer calls a
-   * planless card `no_plan`, so reading the status would have folded nothing
-   * and dropped every planless initiative into the attention grid.
-   */
-  const fold = page.locator("[data-initiative-group='no-plan']");
-  await expect(fold).toBeVisible({ timeout: 60_000 });
-  await fold.locator("summary").click();
-  const tile = page.locator(`[data-initiative-tile="${planlessCard.ref}"]`);
-  await expect(tile).toBeVisible();
-  const card = await readSummary(tile);
+  // In the Tasks table: the state is the phase, and there is no note.
+  await page.goto(`${TASKS}?view=table`);
+  const row = page.locator(`[data-work-ref="${planlessCard.ref}"]`);
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  const card = await readSummary(row);
   expect(card.state).toBe("in_progress");
   expect(card.status).toContain("In progress");
   // The stored phase agrees, so core sends none and the card claims none.
   expect(card.setStatus).toBe("");
-  await expect(tile.locator("[data-summary-hint='no_plan']")).toHaveText(
-    "No plan",
-  );
-
-  // In the Tasks table: the same state, and no note.
-  await page.goto(`${TASKS}?view=table`);
-  const row = page.locator(`[data-work-ref="${planlessCard.ref}"]`);
-  await expect(row).toBeVisible({ timeout: 60_000 });
-  expect(await readSummary(row)).toEqual(card);
   await expect(row.locator("[data-summary-hints]")).toHaveCount(0);
   await expect(row).not.toContainText("No plan");
 
-  // On the task header: the note is back, on its own line under the status.
-  await page.goto(`${TASKS}/${encodeURIComponent(planlessCard.ref)}`);
-  const header = page.locator('[data-work-summary="header"]');
-  await expect(header).toBeVisible({ timeout: 60_000 });
-  await expect(header.locator("[data-summary-hint='no_plan']")).toHaveText(
-    "No plan",
-  );
-  await expect(header.locator("[data-summary-set-status]")).toHaveCount(0);
+  // The board says the same thing about the same card.
+  await page.goto(`${TASKS}?view=board`);
+  expect(
+    await readSummary(
+      page.locator(`[data-work-slot][data-work-ref="${planlessCard.ref}"]`),
+    ),
+  ).toEqual(card);
 });
 
-test("the Initiatives filter reuses the board role Overview selects by", async ({
+test("the Initiatives filter keeps the same rows, fewer of them", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -558,14 +396,14 @@ test("the Initiatives filter reuses the board role Overview selects by", async (
   await page.setViewportSize({ width: 1440, height: 1100 });
 
   await page.goto(`${TASKS}?view=table`);
-  await expect(page.locator("[data-work-ref]")).toHaveCount(5, {
+  await expect(page.locator("[data-work-ref]")).toHaveCount(4, {
     timeout: 60_000,
   });
 
   // It is a filter, not a second renderer: the same rows, fewer of them.
   await page.goto(`${TASKS}?view=table&initiatives=1`);
   await expect(page.locator("[data-task-initiatives-filter]")).toContainText(
-    "initiatives board",
+    "Showing initiatives only",
   );
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(page.locator(`[data-work-ref="${CARD_REF}"]`)).toBeVisible();
@@ -592,18 +430,108 @@ test("a dark card shows the state and the possibly-moot evidence everywhere", as
     "dark",
   );
   await expect(summary.locator("[data-moot]")).toContainText("Possibly moot");
+});
 
-  // The Overview card agrees, badge for badge. Dark is not done and carries
-  // no no-plan hint, so the tile sits in the open attention grid.
-  await page.goto(OVERVIEW);
-  const tile = page.locator(`[data-initiative-tile="${darkCard.ref}"]`);
-  await expect(tile).toBeVisible({ timeout: 60_000 });
-  const tileSummary = tile.locator("[data-work-summary]:visible").first();
-  await expect(tileSummary.locator("[data-health]").first()).toHaveAttribute(
-    "data-health",
-    "dark",
+test("one initiative reads the same on the Watch list, the Watch board and its page", async ({
+  page,
+}) => {
+  /*
+   * The surfaces that render an initiative's computed state now all read the
+   * brief. Whatever the state and the promise line say, the list row, the
+   * by-stage card and the initiative page header have to say the same thing.
+   */
+  test.setTimeout(120_000);
+  const ref = "card:battery-measurement";
+  const row = brief.initiatives.find((item) => item.ref === ref);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await installWorkspaceApi(page, {
+    actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
+    principals: [{ actor_id: "operator", principal_kind: "human" }],
+    work: [
+      {
+        ref,
+        handle: "battery-measurement",
+        title: row.title,
+        summary: "Measure the battery.",
+        phase: "in_progress",
+        column_key: "in_progress",
+        source: { authority: "nexus" },
+        freshness: { status: "unknown" },
+      },
+    ],
+  });
+  const workRow = {
+    ref,
+    handle: "battery-measurement",
+    title: row.title,
+    summary: "Measure the battery.",
+    phase: "in_progress",
+    column_key: "in_progress",
+    source: { authority: "nexus" },
+    freshness: { status: "unknown" },
+  };
+  await page.route(
+    (url) =>
+      [`/work/${ref}`, "/work/battery-measurement"].includes(
+        decodeURIComponent(url.pathname),
+      ),
+    (route) => route.fulfill({ json: { work: workRow } }),
   );
-  await expect(tileSummary.locator("[data-moot]")).toContainText(
-    "Possibly moot",
+  await page.route(
+    (url) => url.pathname === "/brief",
+    (route) =>
+      route.fulfill({
+        json: { ...brief, generated_at: new Date().toISOString() },
+      }),
   );
+
+  const LABELS = {
+    past_promise: "Past promise",
+    moving: "Moving",
+    no_promise: "No promise",
+    done: "Done",
+  };
+  const read = async (scope) => {
+    // The list groups by state and the row carries it as an attribute; the
+    // by-stage card and the page header print the label.
+    const stateAttr = await scope
+      .getAttribute("data-watch-state")
+      .catch(() => null);
+    const state = stateAttr
+      ? LABELS[stateAttr]
+      : (
+          await scope
+            .locator('[data-source="computed:initiatives.state"]')
+            .first()
+            .innerText()
+        ).trim();
+    const parts = {};
+    for (const field of ["promise", "past_promise_for"]) {
+      const part = scope
+        .locator(`[data-source="computed:initiatives.${field}"]`)
+        .first();
+      parts[field] = (await part.count())
+        ? (await part.innerText()).trim()
+        : "";
+    }
+    return { state, parts };
+  };
+
+  await page.goto(WATCH);
+  const list = await read(page.locator(`[data-watch-row="${ref}"]`));
+  await page.goto(`${WATCH}?view=board`);
+  const board = await read(
+    page.locator(`[data-watch-row="${ref}"][data-watch-variant="card"]`),
+  );
+  // The card links to the initiative page, which is the drill-down.
+  const href = await page
+    .locator(`[data-watch-row="${ref}"] [data-watch-title]`)
+    .getAttribute("href");
+  await page.goto(href);
+  const header = await read(page.locator("main").first());
+
+  expect(list.state).toBe("Past promise");
+  expect(list.parts.past_promise_for).toContain("past");
+  expect(board).toEqual(list);
+  expect(header).toEqual(list);
 });

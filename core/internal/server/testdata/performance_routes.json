@@ -225,6 +225,28 @@
   },
   {
     "method": "GET",
+    "path": "/deliveries",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Caller-owned rows only, page-bounded by limit (at most 200) and ordered by created_at; receipts are bounded to 10 per delivery. Includes authentication.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/notification-settings",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Caller-owned channel rows only, bounded by the per-human channel cap, plus a 64-row declared-channel read. Includes authentication.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
     "path": "/boards",
     "max_queries": 100,
     "max_rows": 1024,
@@ -614,6 +636,17 @@
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/brief",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "brief.v1 reads materialized facts with indexed, limited seeks; at most 50 rows per section.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },
@@ -1397,5 +1430,27 @@
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "authorized_as": "agent"
+  },
+  {
+    "method": "GET",
+    "path": "/curation/candidates",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Bounded formula review: one indexed page of 200 open asks, 200 open initiatives and one 200-ref resolution.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/curation/metrics",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Window fold over the (type, ts) index, capped at 2000 asks and 5000 notes; counts only.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

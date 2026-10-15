@@ -33,7 +33,7 @@ func TestEvidenceStructuralWritesInvalidateRequestSnapshot(t *testing.T) {
 			request := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})
 			assertResolved := func(want bool) {
 				t.Helper()
-				got, err := s.ResolveRefs(request, []string{"snapshot-key"}, nil, time.Now(), 0)
+				got, err := s.ResolveRefs(request, []string{"snapshot-key"}, nil, time.Now())
 				if err != nil || len(got) != 1 || got[0].Resolvable != want {
 					t.Fatalf("resolved=%+v want=%v err=%v", got, want, err)
 				}

@@ -1141,7 +1141,7 @@
         {#if pendingIsQuoteOnly}
           <span
             class="shrink-0 rounded bg-line-subtle px-1.5 py-0.5 text-micro text-fg-muted"
-            title="Exact position not unique in this revision — comment is anchored by quote."
+            title="Exact position not unique in this version — comment is anchored by quote."
           >
             Quote only
           </span>

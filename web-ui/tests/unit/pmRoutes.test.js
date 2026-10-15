@@ -5,7 +5,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +12,7 @@ import { clearPrincipalLocalWork } from "../../src/lib/localWorkStore.js";
 import { readerScope } from "../../src/lib/readerScope.js";
 const state = vi.hoisted(() => {
   let value = {
-    url: new URL("http://localhost/o/local/w/local/tasks"),
+    url: new URL("http://localhost/o/local/w/local/initiatives"),
     params: { organization: "local", workspace: "local" },
   };
   const listeners = new Set();
@@ -111,31 +110,16 @@ vi.mock("$app/navigation", () => ({
   invalidate: vi.fn(),
   invalidateAll: vi.fn(),
 }));
-import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte";
-import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte";
+import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte";
+import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte";
 import PMPage from "../../src/routes/o/[organization]/w/[workspace]/pm/+page.svelte";
 import { get as getStore } from "svelte/store";
 import {
   currentOrganizationSlug,
   currentWorkspaceSlug,
 } from "../../src/lib/workspaceContext.js";
-import InboxPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte";
-import { PROPOSAL_FLASH_MS } from "../../src/lib/inboxProposalChoice.js";
-import {
-  flushInboxResponse,
-  resetInboxResponseQueue,
-} from "../../src/lib/inboxResponseQueue.js";
-import {
-  clearWorkspaceViews,
-  readWorkspaceView,
-} from "../../src/lib/workspaceViewCache.js";
-import {
-  inboxNeedsYouCount,
-  startInboxCount,
-} from "../../src/lib/inboxCount.js";
-import { readerScopeKey } from "../../src/lib/readerScope.js";
-import { mutationOutbox } from "../../src/lib/mutationOutbox.js";
-import { commitInboxView } from "../../src/lib/inboxViewCache.js";
+import { resetInboxResponseQueue } from "../../src/lib/inboxResponseQueue.js";
+import { clearWorkspaceViews } from "../../src/lib/workspaceViewCache.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -163,7 +147,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   for (const mock of Object.values(client)) mock.mockReset();
   navigation.guards.length = 0;
-  state.route("/tasks");
+  state.route("/initiatives");
   client.listWork.mockResolvedValue({ work: [], next_cursor: "" });
   client.listWorkParticipants.mockResolvedValue({
     participants: [],
@@ -223,7 +207,7 @@ describe("PM operator interactions", () => {
     });
     render(WorkPage);
     await waitFor(() => expect(client.listWork).toHaveBeenCalledTimes(1));
-    state.route("/tasks?q=new");
+    state.route("/initiatives?q=new");
     await waitFor(() => expect(screen.getByText("Current work")).toBeTruthy());
     old.resolve({ work: [work("card:old", "Old work")], next_cursor: "" });
     await Promise.resolve();
@@ -340,7 +324,7 @@ describe("PM operator interactions", () => {
       },
     });
     await new Promise((resolve) => setTimeout(resolve, 800));
-    state.route("/tasks?q=new");
+    state.route("/initiatives?q=new");
     await screen.findByText("New filter result");
     slow.resolve({
       work: [work("card:old", "Old filter result")],
@@ -352,108 +336,6 @@ describe("PM operator interactions", () => {
     expect(client.listWork).toHaveBeenCalledTimes(2);
   });
 
-  it("queues the final Inbox event arriving during an active read", async () => {
-    state.route("/inbox");
-    let emit;
-    client.streamEvents.mockImplementation(
-      ({ onEvent, signal }) =>
-        new Promise((resolve) => {
-          emit = onEvent;
-          signal?.addEventListener("abort", resolve);
-        }),
-    );
-    const slow = deferred();
-    client.getHomeUnread
-      .mockReturnValueOnce(slow.promise)
-      .mockResolvedValue({ groups: [] });
-    render(InboxPage);
-    await waitFor(() => expect(client.getHomeUnread).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(emit).toBeTypeOf("function"));
-    emit({
-      id: "inbox-during-read",
-      event: "event",
-      data: {
-        event: {
-          id: "inbox-during-read",
-          type: "card_moved",
-          ts: new Date().toISOString(),
-          refs: ["card:latest"],
-        },
-      },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    slow.resolve({ groups: [] });
-    await waitFor(() => expect(client.getHomeUnread).toHaveBeenCalledTimes(2), {
-      timeout: 3000,
-    });
-  });
-
-  it("committing an Inbox answer during a slow load still refreshes sources", async () => {
-    state.route("/inbox");
-    const slow = deferred();
-    client.getHomeUnread
-      .mockReturnValueOnce(slow.promise)
-      .mockResolvedValue({ groups: [] });
-    client.listInboxItems.mockImplementation(async ({ status }) => ({
-      items:
-        status === "open"
-          ? [
-              {
-                id: "inbox:ask-one",
-                kind: "ask",
-                title: "Choose a path",
-                response_proposals: ["Proceed"],
-                source_event_time: new Date().toISOString(),
-              },
-            ]
-          : [],
-    }));
-    client.respondInboxItem.mockResolvedValue({ event: { id: "answered" } });
-    const { container } = render(InboxPage);
-    await screen.findByRole("heading", { name: "Choose a path" });
-    await fireEvent.click(container.querySelector('[data-inbox-proposal="1"]'));
-    await new Promise((resolve) =>
-      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
-    );
-    await flushInboxResponse();
-    await waitFor(() => expect(client.getHomeUnread).toHaveBeenCalledTimes(2), {
-      timeout: 3000,
-    });
-    slow.resolve({ groups: [] });
-  });
-
-  it.each([
-    [{ health: "stalled" }, "Stale"],
-    [{ health: "on_track", health_state: "done" }, "Done"],
-    [{ health: "on_track", health_state: "at_risk" }, "At risk"],
-  ])(
-    "task plan badge reads canonical and legacy health %j",
-    async (health, badge) => {
-      state.route("/tasks/card%3Aone", { workId: "card:one" });
-      client.getWork.mockResolvedValue({
-        work: work("card:one", "Plan health"),
-      });
-      client.listWorkObservations.mockResolvedValue({ observations: [] });
-      client.getCardPlan.mockResolvedValue({
-        plan: { steps: [{ id: "ship", title: "Ship", after: [] }] },
-        plan_state: {
-          ...health,
-          shape: "lanes",
-          steps: [{ id: "ship", status: "active", resolvable: false }],
-          progress: { done: 0, total: 1 },
-          critical_path: ["ship"],
-          next_steps: ["ship"],
-        },
-      });
-      const { container } = render(WorkDetail);
-      // One summary per page: the header carries the card's state, and the
-      // Plan section no longer badges it a second time.
-      await screen.findByRole("heading", { name: "Plan", exact: true });
-      const header = container.querySelector('[data-work-summary="header"]');
-      expect(header).toBeTruthy();
-      expect(within(header).getByText(badge)).toBeTruthy();
-    },
-  );
   it("clears a live plan when the next read has no steps", async () => {
     let emit;
     client.streamEvents.mockImplementation(
@@ -463,7 +345,7 @@ describe("PM operator interactions", () => {
           signal?.addEventListener("abort", resolve);
         }),
     );
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Planned work"),
     });
@@ -510,7 +392,7 @@ describe("PM operator interactions", () => {
           signal?.addEventListener("abort", resolve);
         }),
     );
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Planned work"),
     });
@@ -549,7 +431,7 @@ describe("PM operator interactions", () => {
     expect(document.querySelector('[data-plan-node="ship"]')).toBeTruthy();
   });
   it("does not promote the claimed verification field, and refresh only queues", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: { ...work("card:one", "Claimed work"), refresh: { state: "idle" } },
     });
@@ -578,97 +460,6 @@ describe("PM operator interactions", () => {
     );
     expect(client.requestWorkRefresh).toHaveBeenCalledWith("card:one");
   });
-  /*
-   * Core refuses every PM route where no PM is onboarded (409
-   * `pm_not_onboarded`). A task is not a PM surface, so that answer means the
-   * Decisions section is empty — not "Decisions unavailable" on a page the
-   * reader opened to read a task.
-   */
-  it("shows no decisions error on a task when no PM is onboarded", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
-    client.getWork.mockResolvedValue({
-      work: work("card:one", "Ungated work"),
-    });
-    client.listWorkObservations.mockResolvedValue({ observations: [] });
-    const refusal = Object.assign(new Error("PM is not onboarded."), {
-      status: 409,
-      body: { error: { code: "pm_not_onboarded" } },
-    });
-    client.listPmDecisions.mockRejectedValue(refusal);
-    client.listPmActions.mockRejectedValue(refusal);
-    render(WorkDetail);
-    await screen.findByText("Ungated work");
-    await waitFor(() =>
-      expect(screen.queryByText("Decisions unavailable")).toBeNull(),
-    );
-  });
-
-  it("still reports a real failure to read a task's decisions", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
-    client.getWork.mockResolvedValue({
-      work: work("card:one", "Broken read"),
-    });
-    client.listWorkObservations.mockResolvedValue({ observations: [] });
-    client.listPmDecisions.mockRejectedValue(new Error("core unreachable"));
-    render(WorkDetail);
-    await screen.findByText("Decisions unavailable");
-  });
-
-  it("scopes task detail decisions to this work, newest first, with an inbox answer link", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
-    client.getWork.mockResolvedValue({
-      work: work("card:one", "Decided work"),
-    });
-    client.listWorkObservations.mockResolvedValue({ observations: [] });
-    client.listPmDecisions.mockResolvedValue({
-      items: [
-        {
-          id: "d-old",
-          work_ref: "card:one",
-          instruction: "Older question",
-          status: "answered",
-          created_at: "2026-09-01T10:00:00Z",
-        },
-        {
-          id: "d-new",
-          work_ref: "card:one",
-          instruction: "Newer question",
-          status: "awaiting_answer",
-          created_at: "2026-09-02T10:00:00Z",
-        },
-        {
-          id: "d-other",
-          work_ref: "card:two",
-          instruction: "Other work question",
-          status: "awaiting_answer",
-          created_at: "2026-09-03T10:00:00Z",
-        },
-      ],
-    });
-    render(WorkDetail);
-    await screen.findByText("Newer question");
-    expect(screen.getByText("Older question")).toBeTruthy();
-    expect(screen.queryByText("Other work question")).toBeNull();
-    expect(client.listPmDecisions).toHaveBeenCalledWith({ limit: 200 });
-    expect(
-      screen.getByRole("link", { name: "Answer", exact: true }),
-    ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: "Answer", exact: true })
-        .getAttribute("href"),
-    ).toBe("/o/local/w/local/inbox?item=decision:d-new");
-    const rows = [
-      ...screen
-        .getByText("Newer question")
-        .closest("ul")
-        .querySelectorAll("li"),
-    ];
-    expect(rows.map((row) => row.querySelector("p").textContent)).toEqual([
-      "Newer question",
-      "Older question",
-    ]);
-  });
   it("keeps the Source filter labeled after switching to the board view", async () => {
     client.listWork.mockResolvedValue({
       work: [work("card:one", "Sample one")],
@@ -679,9 +470,9 @@ describe("PM operator interactions", () => {
     expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
       "SELECT",
     );
-    state.route("/tasks?view=board");
+    state.route("/initiatives?view=board");
     await screen.findByRole("region", {
-      name: "Task board grouped by phase",
+      name: "Initiatives grouped by phase",
     });
     expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
       "SELECT",
@@ -752,606 +543,6 @@ describe("PM operator interactions", () => {
       client.sendPmMessage.mock.calls[1][1],
     );
   });
-  it("records a revision-bound answer without dispatching and retains failed follow-through", async () => {
-    state.route("/inbox?item=decision:decision-one");
-    const decision = {
-      id: "decision-one",
-      work_ref: "card:one",
-      instruction: "Update sample note",
-      scope: "work.annotate",
-      target_revision: "7",
-      status: "awaiting_answer",
-      revision: 2,
-    };
-    client.listPmDecisions.mockResolvedValue({ items: [decision] });
-    client.answerPmDecision.mockResolvedValue({
-      ...decision,
-      status: "answered",
-      answer: "Within the stated scope",
-      action_id: "action-one",
-      revision: 3,
-    });
-    client.getPmAction
-      .mockResolvedValueOnce({
-        id: "action-one",
-        decision_id: decision.id,
-        status: "pending_delivery",
-        revision: 1,
-      })
-      .mockResolvedValueOnce({
-        id: "action-one",
-        decision_id: decision.id,
-        status: "failed",
-        revision: 2,
-        receipt: { detail: "Source unavailable" },
-      });
-    client.dispatchPmDecision.mockRejectedValue(
-      new Error("Source unavailable"),
-    );
-    render(InboxPage);
-    await screen.findByRole("heading", { name: "Update sample note" });
-    const input = screen.getByLabelText(
-      "Your note (recorded with the decision)",
-    );
-    await fireEvent.input(input, {
-      target: { value: "Within the stated scope" },
-    });
-    await fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    await screen.findByText("Pending delivery", { exact: true });
-    expect(client.answerPmDecision).toHaveBeenCalledWith(
-      "decision-one",
-      expect.objectContaining({
-        revision: 2,
-        approve: true,
-        text: "Within the stated scope",
-        actor_id: "human",
-        request_key: expect.any(String),
-      }),
-    );
-    expect(client.dispatchPmDecision).not.toHaveBeenCalled();
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Deliver approved instruction" }),
-    );
-    // An uncertain delivery keeps the exact admitted intent for recovery.
-    await screen.findByText("Retrying", { exact: true });
-    expect(client.dispatchPmDecision).toHaveBeenCalledWith(
-      "decision-one",
-      expect.objectContaining({
-        request_key: expect.any(String),
-        if_revision: 3,
-        if_action_revision: 1,
-      }),
-    );
-    await within(screen.getByLabelText("Selected inbox item")).findByText(
-      "Failed",
-      { exact: true },
-    );
-    expect(
-      screen.getByRole("button", { name: "Retry confirmation", exact: true }),
-    ).toBeTruthy();
-    expect(screen.getByText("Within the stated scope")).toBeTruthy();
-    expect(screen.queryByText("Outcome verified")).toBeNull();
-  });
-  it("a restored failed control keeps delayed feeds loading without downgrading its receipt", async () => {
-    state.route("/inbox?item=decision:restored-control");
-    const decision = {
-      id: "restored-control",
-      work_ref: "card:one",
-      instruction: "Restored approval",
-      status: "answered",
-      revision: 3,
-      action_id: "restored-action",
-      answer: "Keep this note",
-    };
-    const pending = {
-      id: "restored-action",
-      decision_id: decision.id,
-      status: "pending_delivery",
-      revision: 1,
-    };
-    const list = deferred(),
-      tasks = deferred();
-    client.listPmDecisions.mockResolvedValue({ items: [decision] });
-    client.listPmActions.mockReturnValue(list.promise);
-    client.listWork.mockReturnValue(tasks.promise);
-    client.getPmAction.mockResolvedValue({
-      ...pending,
-      status: "failed",
-      revision: 3,
-    });
-    render(InboxPage);
-    await waitFor(() => expect(client.getPmAction).toHaveBeenCalled());
-    const previous = getStore(mutationOutbox);
-    try {
-      mutationOutbox.set([
-        {
-          key: "restored-control",
-          scope: readerScopeKey(),
-          operation: "inbox.controls",
-          target: "inbox:controls",
-          state: "attention",
-          attempts: 1,
-          request: {
-            items: [
-              {
-                action: "dispatch",
-                id: decision.id,
-                body: {
-                  request_key: "original",
-                  if_revision: 3,
-                  if_action_revision: 1,
-                },
-              },
-            ],
-          },
-        },
-      ]);
-      await waitFor(() =>
-        expect(client.getPmAction.mock.calls.length).toBeGreaterThan(1),
-      );
-      list.resolve({ items: [pending] });
-      tasks.resolve({ work: [work("card:one", "Loaded delayed task")] });
-      await screen.findByRole("heading", { name: "Loaded delayed task" });
-      await within(screen.getByLabelText("Selected inbox item")).findByText(
-        "Failed",
-        { exact: true },
-      );
-      expect(client.listWork).toHaveBeenCalledTimes(1);
-      await waitFor(() =>
-        expect(
-          readWorkspaceView(`${readerScopeKey()}:inbox`)?.[1]?.value?.items[0]
-            ?.revision,
-        ).toBe(1),
-      );
-      commitInboxView(readerScopeKey(), { decision });
-      await within(screen.getByLabelText("Selected inbox item")).findByText(
-        "Failed",
-        { exact: true },
-      );
-    } finally {
-      mutationOutbox.set(previous);
-    }
-  });
-  it("confirmation cancels a selected getter before it can restore an unanswered decision", async () => {
-    state.route("/inbox?item=decision:pending-getter");
-    const decision = {
-      id: "pending-getter",
-      instruction: "Choose rollout",
-      work_ref: "card:one",
-      status: "awaiting_answer",
-      revision: 1,
-    };
-    const getter = deferred();
-    let emit;
-    client.streamEvents.mockImplementation(
-      ({ onEvent, signal }) =>
-        new Promise((resolve) => {
-          emit = onEvent;
-          signal?.addEventListener("abort", resolve);
-        }),
-    );
-    client.getPmDecision.mockReturnValue(getter.promise);
-    client.listPmDecisions
-      .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValue({ items: [decision] });
-    client.answerPmDecision.mockResolvedValue({
-      ...decision,
-      status: "answered",
-      revision: 2,
-      answer: "Wait for evidence",
-    });
-    render(InboxPage);
-    await waitFor(() => expect(client.getPmDecision).toHaveBeenCalled());
-    emit({
-      id: "decision-listed",
-      event: "event",
-      data: {
-        event: {
-          id: "decision-listed",
-          type: "card_moved",
-          refs: ["card:one"],
-          ts: new Date().toISOString(),
-        },
-      },
-    });
-    await waitFor(
-      () => expect(client.listPmDecisions).toHaveBeenCalledTimes(2),
-      { timeout: 3000 },
-    );
-    await screen.findByRole("heading", { name: "Choose rollout" });
-    await fireEvent.input(
-      screen.getByLabelText("Your note (recorded with the decision)"),
-      { target: { value: "Wait for evidence" } },
-    );
-    await fireEvent.click(screen.getByRole("button", { name: "Decline" }));
-    await waitFor(() =>
-      expect(
-        readWorkspaceView(`${readerScopeKey()}:inbox`)[0].value.items[0].status,
-      ).toBe("answered"),
-    );
-    getter.resolve(decision);
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Approve", exact: true }),
-      ).toBeNull(),
-    );
-    expect(
-      readWorkspaceView(`${readerScopeKey()}:inbox`)[0].value.items[0].status,
-    ).toBe("answered");
-  });
-  it("a confirmed inbox control reloads sources and fences a stale selected decision", async () => {
-    state.route("/inbox?item=decision:control-refresh");
-    const stale = {
-      id: "control-refresh",
-      instruction: "Control refresh",
-      work_ref: "card:one",
-      status: "awaiting_answer",
-      revision: 1,
-    };
-    const getter = deferred();
-    client.listPmDecisions.mockResolvedValue({ items: [] });
-    client.getPmDecision.mockReturnValue(getter.promise);
-    render(InboxPage);
-    await waitFor(() => expect(client.getPmDecision).toHaveBeenCalled());
-    client.listPmDecisions.mockResolvedValue({
-      items: [
-        {
-          ...stale,
-          status: "answered",
-          revision: 2,
-          answer: "Already approved",
-        },
-      ],
-    });
-    window.dispatchEvent(
-      new CustomEvent("anx:mutation-confirmed", {
-        detail: {
-          operation: "inbox.controls",
-          scope: readerScopeKey(),
-          request: { items: [] },
-          result: { controls: [] },
-        },
-      }),
-    );
-    await screen.findByRole("heading", { name: "Control refresh" });
-    getter.resolve(stale);
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Approve", exact: true }),
-      ).toBeNull(),
-    );
-    expect(client.listPmDecisions.mock.calls.length).toBeGreaterThan(1);
-    expect(screen.getByText("Already approved")).toBeTruthy();
-  });
-  it("loads a directly linked decision and receipt beyond the partial list", async () => {
-    state.route("/inbox?item=decision:older-decision");
-    client.listPmDecisions.mockResolvedValue({ items: [], has_more: true });
-    client.getPmDecision.mockResolvedValue({
-      id: "older-decision",
-      instruction: "Older sample instruction",
-      work_ref: "card:one",
-      action_id: "older-action",
-      status: "answered",
-      answer: "Previously authorized",
-    });
-    client.getPmAction.mockResolvedValue({
-      id: "older-action",
-      decision_id: "older-decision",
-      status: "unknown",
-      receipt: { detail: "Delivery uncertain" },
-    });
-    render(InboxPage);
-    await screen.findByRole("heading", { name: "Older sample instruction" });
-    expect(client.getPmDecision).toHaveBeenCalledWith("older-decision");
-    expect(
-      (await screen.findAllByText("Delivery uncertain", { exact: true }))
-        .length,
-    ).toBeGreaterThan(0);
-    expect(client.getPmAction).toHaveBeenCalledWith("older-action");
-  });
-  it("places awaiting decisions in Needs you and selects the first row", async () => {
-    state.route("/inbox");
-    client.listPmDecisions.mockResolvedValue({
-      items: [
-        {
-          id: "later",
-          instruction: "Later sample instruction",
-          status: "awaiting_answer",
-          work_ref: "card:one",
-        },
-      ],
-    });
-    const { container } = render(InboxPage);
-    await waitFor(() =>
-      expect(
-        container.querySelector('[data-inbox-row="decision:later"]'),
-      ).toBeTruthy(),
-    );
-    // The first row of the mailbox is selected without a click; the pane is
-    // never an empty "choose an item" placeholder while rows exist.
-    expect(
-      await screen.findByRole("heading", { name: "Later sample instruction" }),
-    ).toBeTruthy();
-    expect(screen.queryByText("Choose an item.")).toBeNull();
-    expect(
-      screen.getAllByRole("link", { name: /Needs you/ }).length,
-    ).toBeGreaterThan(0);
-  });
-  it("sends a suggested response behind an undo toast, never at once", async () => {
-    state.route("/inbox");
-    const askedAt = new Date(
-      Date.now() - (3 * 60 + 12) * 60_000 - 20_000,
-    ).toISOString();
-    client.listInboxItems.mockImplementation(async ({ status }) => ({
-      items:
-        status === "open"
-          ? [
-              {
-                id: "inbox:ask-one",
-                kind: "ask",
-                title: "Pick the default path",
-                requester_label: "Omar Reed",
-                source_event_time: askedAt,
-                response_proposals: ["Combat first", "Hub first"],
-              },
-            ]
-          : [],
-    }));
-    client.respondInboxItem.mockResolvedValue({ event: { id: "e1" } });
-    const { container } = render(InboxPage);
-    // Auto-selected, with the wait spelled out and the recommendation marked.
-    await screen.findByRole("heading", { name: "Pick the default path" });
-    expect(screen.getByText(/has been blocked for/)).toBeTruthy();
-    expect(
-      container.querySelector("[data-inbox-blocked-for]")?.textContent,
-    ).toBe("3h 12m");
-    expect(screen.getByText("Recommended")).toBeTruthy();
-    // The recommendation wears a badge; nothing is selected until the reader
-    // acts, so no option arrives pre-highlighted.
-    expect(container.querySelector("[data-inbox-proposal-armed]")).toBeNull();
-
-    // One press selects. A number key is one keystroke from its neighbour, so
-    // it must not send on its own.
-    const armedKey = () =>
-      container
-        .querySelector("[data-inbox-proposal-armed]")
-        ?.getAttribute("data-inbox-proposal") ?? "";
-    await fireEvent.keyDown(window, { key: "2" });
-    expect(armedKey()).toBe("2");
-    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
-
-    // A different number moves the highlight rather than sending.
-    await fireEvent.keyDown(window, { key: "1" });
-    expect(armedKey()).toBe("1");
-    // Escape clears it.
-    await fireEvent.keyDown(window, { key: "Escape" });
-    expect(container.querySelector("[data-inbox-proposal-armed]")).toBeNull();
-    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
-
-    // The same key again confirms, and the send still waits behind undo.
-    await fireEvent.keyDown(window, { key: "2" });
-    await fireEvent.keyDown(window, { key: "2" });
-    expect(client.respondInboxItem).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText("Response saved. Waiting to send."),
-    ).toBeTruthy();
-
-    await fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await flushInboxResponse();
-    expect(client.respondInboxItem).not.toHaveBeenCalled();
-    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
-  });
-  /*
-   * The pane's half of the same blocker as the item page: the sender is bound
-   * to one workspace, and a suggestion sends a moment after it is chosen. A
-   * reader who switches workspace inside that moment used to have their
-   * answer sent to the workspace they had just arrived in.
-   */
-  it("sends a suggestion to the workspace it was chosen in, not the one switched to", async () => {
-    state.route("/inbox");
-    currentOrganizationSlug.set("org-a");
-    currentWorkspaceSlug.set("workspace-a");
-    client.listInboxItems.mockImplementation(async ({ status }) => ({
-      items:
-        status === "open"
-          ? [
-              {
-                id: "inbox:ask-one",
-                kind: "ask",
-                title: "Pick the default path",
-                requester_label: "Omar Reed",
-                source_event_time: new Date(Date.now() - 60_000).toISOString(),
-                response_proposals: ["Combat first", "Hub first"],
-              },
-            ]
-          : [],
-    }));
-    client.respondInboxItem.mockResolvedValue({ event: { id: "e1" } });
-    const { container } = render(InboxPage);
-    await screen.findByRole("heading", { name: "Pick the default path" });
-
-    // Choose, then leave for another workspace before the flash ends.
-    await fireEvent.click(container.querySelector('[data-inbox-proposal="2"]'));
-    currentWorkspaceSlug.set("workspace-b");
-    await new Promise((resolve) =>
-      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
-    );
-    await flushInboxResponse();
-
-    expect(client.respondInboxItem).toHaveBeenCalledTimes(1);
-    const [itemId, request] = client.respondInboxItem.mock.calls[0];
-    expect(itemId).toBe("inbox:ask-one");
-    expect(request).toMatchObject({ response_text: "Hub first" });
-    expect(capturedScopes).toEqual([["org-a", "workspace-a"]]);
-  });
-  it.each(
-    ["response", "decision", "archive"].flatMap((kind) =>
-      ["after", "before"].map((returnTiming) => ({ kind, returnTiming })),
-    ),
-  )(
-    "persists a confirmed $kind when returning $returnTiming confirmation",
-    async ({ kind, returnTiming }) => {
-      state.route("/inbox");
-      currentOrganizationSlug.set("org-a");
-      currentWorkspaceSlug.set("workspace-a");
-      const scopeA = readerScopeKey();
-      const confirmed = deferred();
-      const ask = {
-        id: "inbox:ask-one",
-        kind: "ask",
-        title: "Choose a path",
-        status: "open",
-        response_proposals: ["Proceed"],
-        related_refs: ["thread:one"],
-        source_event_time: new Date().toISOString(),
-      };
-      const decision = {
-        id: "decision-one",
-        instruction: "Choose rollout",
-        status: "awaiting_answer",
-        revision: 1,
-      };
-      const task = {
-        ref: "card:stale",
-        title: "Blocked stale",
-        version: 1,
-        phase: "blocked",
-        source: { authority: "nexus" },
-        work_summary: {
-          status: { state: "blocked", label: "Blocked" },
-          age: 127 * 86400,
-          last_movement_at: new Date(Date.now() - 127 * 86400000).toISOString(),
-        },
-      };
-      client.listInboxItems.mockImplementation(async ({ status }) => ({
-        items: kind === "response" && status === "open" ? [ask] : [],
-      }));
-      client.listPmDecisions.mockResolvedValue({
-        items: kind === "decision" ? [decision] : [],
-      });
-      client.listWork.mockResolvedValue({
-        work: kind === "archive" ? [task] : [],
-      });
-      client.respondInboxItem.mockReturnValue(confirmed.promise);
-      client.answerPmDecision.mockReturnValue(confirmed.promise);
-      client.archiveCard.mockReturnValue(confirmed.promise);
-      const view = render(InboxPage);
-      await waitFor(() =>
-        expect(readWorkspaceView(`${scopeA}:inbox`)).toBeTruthy(),
-      );
-      let write;
-      if (kind === "response") {
-        await screen.findByRole("heading", { name: ask.title });
-        await fireEvent.click(
-          view.container.querySelector('[data-inbox-proposal="1"]'),
-        );
-        await new Promise((resolve) =>
-          setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
-        );
-        write = flushInboxResponse();
-        await waitFor(() => expect(client.respondInboxItem).toHaveBeenCalled());
-      } else if (kind === "decision") {
-        await screen.findByRole("heading", { name: decision.instruction });
-        await fireEvent.input(
-          screen.getByLabelText("Your note (recorded with the decision)"),
-          {
-            target: { value: "Wait for evidence" },
-          },
-        );
-        await fireEvent.click(screen.getByRole("button", { name: "Decline" }));
-        await waitFor(() => expect(client.answerPmDecision).toHaveBeenCalled());
-      } else {
-        await fireEvent.click(
-          await screen.findByRole("button", { name: "Stale (1)", exact: true }),
-        );
-        await fireEvent.click(
-          screen.getByRole("button", {
-            name: "Archive Blocked stale",
-            exact: true,
-          }),
-        );
-        await waitFor(() => expect(client.archiveCard).toHaveBeenCalled());
-      }
-      view.unmount();
-      currentWorkspaceSlug.set("workspace-b");
-      const stopB = startInboxCount("workspace-b");
-      let stopA;
-      const returnToA = async () => {
-        for (const name of [
-          "listInboxItems",
-          "listPmDecisions",
-          "listPmActions",
-          "listWork",
-          "getHomeUnread",
-        ]) {
-          client[name].mockRejectedValue(new Error("Reads unavailable"));
-        }
-        const readCalls = client.getHomeUnread.mock.calls.length;
-        currentWorkspaceSlug.set("workspace-a");
-        state.route("/inbox", {
-          organization: "org-a",
-          workspace: "workspace-a",
-        });
-        stopA = startInboxCount("workspace-a");
-        expect(getStore(inboxNeedsYouCount)).toMatchObject({
-          workspace: "workspace-a",
-          count: returnTiming === "before" ? 1 : 0,
-        });
-        render(InboxPage);
-        await waitFor(() =>
-          expect(client.getHomeUnread.mock.calls.length).toBeGreaterThan(
-            readCalls,
-          ),
-        );
-      };
-      if (returnTiming === "before") {
-        stopB();
-        await returnToA();
-      }
-      confirmed.resolve(
-        kind === "decision"
-          ? {
-              ...decision,
-              status: "declined",
-              answer: "Wait for evidence",
-              revision: 2,
-            }
-          : kind === "archive"
-            ? { card: { id: "stale", version: 2 } }
-            : { event: { id: "confirmed" } },
-      );
-      if (write) await write;
-      await waitFor(() => {
-        const snapshot = readWorkspaceView(`${scopeA}:inbox`);
-        if (kind === "response") expect(snapshot[3].value.items).toEqual([]);
-        else if (kind === "decision")
-          expect(snapshot[0].value.items[0].status).toBe("declined");
-        else expect(snapshot[2].value.work).toEqual([]);
-      });
-      if (returnTiming === "after") {
-        expect(getStore(inboxNeedsYouCount).workspace).toBe("workspace-b");
-        stopB();
-        await returnToA();
-      }
-      await waitFor(() => {
-        expect(screen.queryByRole("button", { name: /^1 Proceed/ })).toBeNull();
-        expect(
-          screen.queryByRole("button", { name: "Decline", exact: true }),
-        ).toBeNull();
-        expect(
-          screen.queryByRole("button", {
-            name: "Archive Blocked stale",
-            exact: true,
-          }),
-        ).toBeNull();
-        expect(getStore(inboxNeedsYouCount)).toMatchObject({
-          workspace: "workspace-a",
-          count: 0,
-        });
-      });
-      stopA();
-    },
-  );
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");
     client.getPmConversation
@@ -1393,7 +584,7 @@ describe("PM operator interactions", () => {
     );
   });
   it("clears an old refresh request state when navigating to another commitment", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork
       .mockResolvedValueOnce({ work: work("card:one", "First commitment") })
       .mockResolvedValueOnce({ work: work("card:two", "Second commitment") });
@@ -1405,7 +596,7 @@ describe("PM operator interactions", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Check GitHub now" }),
     );
-    state.route("/tasks/card%3Atwo", { workId: "card:two" });
+    state.route("/initiatives/card%3Atwo", { workId: "card:two" });
     await screen.findByRole("heading", { name: "Second commitment" });
     expect(
       screen.getByRole("button", { name: "Check GitHub now" }).disabled,
@@ -1461,7 +652,7 @@ describe("PM operator interactions", () => {
     const headings = [...result.container.querySelectorAll("thead th")].map(
       (node) => node.textContent.trim(),
     );
-    expect(headings).toEqual(["Task", "Status", "Owner"]);
+    expect(headings).toEqual(["Initiative", "Status", "Owner"]);
     expect(screen.queryByText("created here")).toBeNull();
     const toggle = result.container.querySelector("[data-work-closed-toggle]");
     expect(toggle.textContent).toContain("1 done");
@@ -1489,10 +680,16 @@ describe("PM operator interactions", () => {
     const wide = [...result.container.querySelectorAll("thead th")].map(
       (node) => node.textContent.trim(),
     );
-    expect(wide).toEqual(["Task", "Board", "Status", "Owner", "Last checked"]);
+    expect(wide).toEqual([
+      "Initiative",
+      "Group",
+      "Status",
+      "Owner",
+      "Last checked",
+    ]);
   });
   it("keeps the latest handoff report when older observation pagination fails", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Evidence task"),
     });
@@ -1512,7 +709,6 @@ describe("PM operator interactions", () => {
       .mockRejectedValueOnce(new Error("Older history unavailable"));
     render(WorkDetail);
     await screen.findByText("Latest shared report");
-    await fireEvent.click(screen.getByText("Observation history"));
     await fireEvent.click(
       screen.getByRole("button", { name: "Older observations", hidden: true }),
     );
@@ -1525,7 +721,7 @@ describe("PM operator interactions", () => {
     });
   });
   it("marks handoff unavailable when the initial evidence read fails", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: work("card:one", "Evidence task"),
     });
@@ -1537,7 +733,7 @@ describe("PM operator interactions", () => {
     expect(screen.queryByText("Latest shared report")).toBeNull();
   });
   it("shows task evidence as one source line with each link once", async () => {
-    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    state.route("/initiatives/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: {
         ...work("card:one", "Issue work"),

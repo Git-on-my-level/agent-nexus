@@ -196,7 +196,7 @@ or closed for a session, idle or left for a task participation, as appropriate.
 Closing a session is terminal and does not finish a task. An activity expiry is
 absence of a recent observation, not proof that a process died.
 
-Use `anx work context` to read evidence first. `anx work start` deliberately
+Use `anx context` to read evidence first. `anx work start` deliberately
 assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
@@ -501,7 +501,7 @@ anx work capabilities
 anx work list --project-ref topic:launch --source github --freshness stale --limit 50
 anx --json work list --limit 50 --cursor '<opaque next_cursor>'
 anx work get card:launch
-anx work context card:launch --limit 10
+anx context card:launch --limit 10
 anx work freshness card:launch
 anx work observations list card:launch --limit 10
 anx work observations submit card:launch --from-file report.json

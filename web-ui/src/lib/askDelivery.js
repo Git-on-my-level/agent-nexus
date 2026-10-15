@@ -2,7 +2,7 @@
  * What an ask's answer did, and whether anyone received it.
  *
  * Core owns every fact here. `GET /asks/{ask_id}` (contract `AskOutcome`)
- * carries the ask's status, whether it has gone stale, the task decision the
+ * carries the ask's status, the task decision the
  * answer recorded, and one row per delivery subscription. The ask event's own
  * payload carries the authoring evidence — typed refs for native resources and
  * labelled external links. This module turns both into the one vocabulary the
@@ -268,26 +268,19 @@ export function askDeliveryModel(
     if (!task) {
       notDelivered = "Not delivered: no subscriber was registered.";
     } else if (task.closed) {
-      notDelivered = "Not delivered: no subscriber; the task was closed.";
+      notDelivered = "Not delivered: no subscriber; the initiative was closed.";
     } else if (phase && owner) {
-      notDelivered = `Not delivered: no subscriber; the task is ${phase} for ${owner}.`;
+      notDelivered = `Not delivered: no subscriber; the initiative is ${phase} for ${owner}.`;
     } else if (phase) {
-      notDelivered = `Not delivered: no subscriber; the task is ${phase}.`;
+      notDelivered = `Not delivered: no subscriber; the initiative is ${phase}.`;
     } else if (owner) {
-      notDelivered = `Not delivered: no subscriber; the task is with ${owner}.`;
+      notDelivered = `Not delivered: no subscriber; the initiative is with ${owner}.`;
     } else {
       notDelivered = "Not delivered: no subscriber was registered.";
     }
   }
   return {
     status,
-    /*
-     * Core computes staleness per ask, from the subject card's last change
-     * against the deployment's `ANX_ASK_STALE_AFTER`, and only `GET
-     * /asks/{ask_id}` carries it — an inbox row does not, so this is a fact the
-     * detail knows and the list cannot.
-     */
-    isStale: outcome.is_stale === true,
     needsContext: status === NEEDS_CONTEXT_OUTCOME,
     task,
     subscriptions,

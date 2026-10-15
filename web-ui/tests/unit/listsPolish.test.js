@@ -56,9 +56,9 @@ describe("thread row context", () => {
   };
 
   it("names what the thread belongs to", () => {
-    expect(threadSubjectKindLabel(asksForMaya)).toBe("Board");
+    expect(threadSubjectKindLabel(asksForMaya)).toBe("Group");
     expect(threadSubjectKindLabel({ subject_ref: "card:gds-launch-1" })).toBe(
-      "Task",
+      "Initiative",
     );
     expect(threadSubjectKindLabel({ topic_ref: "topic:launch" })).toBe(
       "Project",
@@ -77,17 +77,17 @@ describe("thread row context", () => {
   it("tells two threads of the same name apart by their owner", () => {
     expect(
       threadRowContextParts(asksForMaya, { ownerName: "Maya Chen" }),
-    ).toEqual(["Board", "Maya Chen"]);
+    ).toEqual(["Group", "Maya Chen"]);
     expect(
       threadRowContextParts(
         { ...asksForMaya, subject_ref: "board:asks-priya" },
         { ownerName: "priya" },
       ),
-    ).toEqual(["Board", "priya"]);
+    ).toEqual(["Group", "priya"]);
   });
 
   it("drops the parts it does not have", () => {
-    expect(threadRowContextParts(asksForMaya)).toEqual(["Board"]);
+    expect(threadRowContextParts(asksForMaya)).toEqual(["Group"]);
     expect(threadRowContextParts({}, { ownerName: "" })).toEqual([]);
   });
 });

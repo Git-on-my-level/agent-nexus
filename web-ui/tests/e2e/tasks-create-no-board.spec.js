@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 /**
  * Regression: a brand-new workspace with zero boards must be able to create
- * a Task from /tasks/new. Core defaults the backing board; the operator is
+ * a Task from /initiatives/new. Core defaults the backing board; the operator is
  * not asked to pick one, and the dead-end "Ask the PM / anx boards create"
  * path must not appear.
  */
@@ -26,7 +26,7 @@ async function unlockIfActorGate(page, name) {
   await expect(gate).toHaveCount(0);
 }
 
-test("fresh workspace with zero boards can create a Task from /tasks/new", async ({
+test("fresh workspace with zero boards can create a Task from /initiatives/new", async ({
   page,
   request,
 }) => {
@@ -53,10 +53,10 @@ test("fresh workspace with zero boards can create a Task from /tasks/new", async
     window.localStorage.setItem("workspaceTourSeen.local:local", "1");
   });
 
-  await page.goto(`${ROOT}/tasks/new`);
+  await page.goto(`${ROOT}/initiatives/new`);
   await unlockIfActorGate(page, `Task creator ${Date.now()}`);
-  if (!page.url().includes("/tasks/new")) {
-    await page.goto(`${ROOT}/tasks/new`);
+  if (!page.url().includes("/initiatives/new")) {
+    await page.goto(`${ROOT}/initiatives/new`);
   }
 
   await expect(page.getByText("This workspace has no board yet")).toHaveCount(
@@ -64,14 +64,16 @@ test("fresh workspace with zero boards can create a Task from /tasks/new", async
   );
   await expect(page.getByText("anx boards create")).toHaveCount(0);
   await expect(page.getByLabel("Outcome")).toBeVisible({ timeout: 20000 });
-  await expect(page.getByLabel("Board")).toHaveCount(picksBoard ? 1 : 0);
+  await expect(page.getByLabel("Group", { exact: true })).toHaveCount(
+    picksBoard ? 1 : 0,
+  );
 
   await page.getByLabel("Outcome").fill(title);
   await page
     .getByLabel("Acceptance criteria")
     .fill("The task is visible on Tasks");
   if (picksBoard) {
-    await page.getByLabel("Board").selectOption({ index: 1 });
+    await page.getByLabel("Group", { exact: true }).selectOption({ index: 1 });
   }
 
   const createResponsePromise = page.waitForResponse((response) => {
@@ -80,7 +82,7 @@ test("fresh workspace with zero boards can create a Task from /tasks/new", async
       /\/work\/?$/.test(new URL(response.url()).pathname)
     );
   });
-  await page.getByRole("button", { name: "Create task" }).click();
+  await page.getByRole("button", { name: "Create initiative" }).click();
   const createResponse = await createResponsePromise;
   expect(
     createResponse.ok(),
@@ -96,6 +98,6 @@ test("fresh workspace with zero boards can create a Task from /tasks/new", async
     expect(body.board_ref ?? "").toBe("");
   }
 
-  await expect(page).toHaveURL(/\/tasks\/card%3A/, { timeout: 20000 });
+  await expect(page).toHaveURL(/\/initiatives\/card%3A/, { timeout: 20000 });
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 });

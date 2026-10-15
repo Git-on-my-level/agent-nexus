@@ -120,6 +120,9 @@ func TestWorkBlockAskBodyAndOverride(t *testing.T) {
 					}
 					presenceNote = anyString(input["note"])
 					fmt.Fprint(w, `{}`)
+				case r.Method == http.MethodGet && r.URL.Path == "/brief":
+					// Best-effort ask_no_deadline count; a failed read is tolerated.
+					http.NotFound(w, r)
 				default:
 					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 					http.NotFound(w, r)

@@ -51,7 +51,7 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 }
 
 func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
-	for _, command := range []string{"orient", "inbox list", "doctor", "version", "work list", "work context", "bridge status", "skills status", "cards create", "work start"} {
+	for _, command := range []string{"orient", "inbox list", "doctor", "version", "work list", "context", "bridge status", "skills status", "cards create", "work start"} {
 		if !updateInvocationEligible(command, strings.Fields(command)) {
 			t.Errorf("eligible command did not trigger update check: %s", command)
 		}

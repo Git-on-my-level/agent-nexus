@@ -26,7 +26,7 @@ const INBOX_CATEGORY_URGENCY_BASE = {
 
 const INBOX_SUBJECT_LABELS = {
   topic: "Project",
-  card: "Task",
+  card: "Initiative",
   board: "Board",
   document: "Document",
   thread: "Thread",

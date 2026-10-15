@@ -1,0 +1,286 @@
+{
+  "observations": [
+    {
+      "data": {
+        "items": [
+          {
+            "age_seconds": 3600,
+            "created_at": "2026-10-05T00:00:00Z",
+            "id": "open:ask",
+            "status": "open",
+            "title": "Approve the launch scope"
+          }
+        ]
+      },
+      "id": "decisions",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-asks"
+    },
+    {
+      "data": {
+        "items": [
+          {
+            "age_seconds": 60,
+            "created_at": "2026-10-05T00:00:00Z",
+            "id": "completed:answer",
+            "responded_at": "2026-10-05T00:00:00Z",
+            "response_text": "Friday",
+            "status": "answered",
+            "title": "Choose the release date"
+          }
+        ]
+      },
+      "id": "answered",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-asks"
+    },
+    {
+      "data": {
+        "unit": "h",
+        "value": 6.5
+      },
+      "id": "s17-median-hours",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    },
+    {
+      "data": {
+        "unit": "%",
+        "value": 72
+      },
+      "id": "s18-answered-recommended",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    },
+    {
+      "data": {
+        "unit": "%",
+        "value": 8
+      },
+      "id": "s18-needs-context",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    },
+    {
+      "data": {
+        "unit": "%",
+        "value": 5
+      },
+      "id": "s18-withdrawn-moot",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    },
+    {
+      "data": {
+        "unit": "%",
+        "value": 81
+      },
+      "id": "s20-met",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    },
+    {
+      "data": {
+        "unit": "h",
+        "value": 3
+      },
+      "id": "s20-median-slip",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    },
+    {
+      "data": {
+        "unit": "%",
+        "value": 12
+      },
+      "id": "s20-moved-2plus",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "metric"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 10
+        },
+        "freshness": "unknown",
+        "id": "decisions",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Open decisions",
+        "type": "live-asks"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "answered_only": true,
+          "answered_within_hours": 168,
+          "limit": 10
+        },
+        "freshness": "unknown",
+        "id": "answered",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Answered this week",
+        "type": "live-asks"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s17-median-hours",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s17_weighted_median_hours"
+        },
+        "source_ids": [],
+        "title": "Decision time, weighted median (hours)",
+        "type": "metric"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s18-answered-recommended",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s18_answered_recommended_pct"
+        },
+        "source_ids": [],
+        "title": "Asks answered as recommended (%)",
+        "type": "metric"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s18-needs-context",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s18_needs_context_pct"
+        },
+        "source_ids": [],
+        "title": "Asks needing context (%)",
+        "type": "metric"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s18-withdrawn-moot",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s18_withdrawn_moot_pct"
+        },
+        "source_ids": [],
+        "title": "Asks withdrawn as moot after 24h (%)",
+        "type": "metric"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s20-met",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s20_met_pct"
+        },
+        "source_ids": [],
+        "title": "Promises met (%)",
+        "type": "metric"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s20-median-slip",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s20_median_slip_hours"
+        },
+        "source_ids": [],
+        "title": "Promise median slip (hours)",
+        "type": "metric"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "s20-moved-2plus",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "last",
+          "range": "30d",
+          "series": "anx.health.s20_moved_2plus_pct"
+        },
+        "source_ids": [],
+        "title": "Promises moved twice or more (%)",
+        "type": "metric"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "Live decision and promise health folded from workspace events.",
+    "title": "ANX health"
+  }
+}

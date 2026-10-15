@@ -43,11 +43,7 @@
     rankCommands,
   } from "$lib/commandPaletteModel.js";
   import { workspacePath } from "$lib/workspacePaths";
-  import {
-    pmFeaturesVisible,
-    pmKnownAbsent,
-    pmSetupOffered,
-  } from "$lib/pm/onboardingState.js";
+  import { pmFeaturesVisible, pmKnownAbsent } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workSummaryModel } from "$lib/workSummary.js";
@@ -55,14 +51,14 @@
   /**
    * ⌘K: go anywhere, act on what is on screen, or search.
    *
-   * Three kinds of rows, in this order: actions on the task or doc the
-   * operator is looking at, "Go to" destinations, then task and doc search
+   * Three kinds of rows, in this order: actions on the initiative or doc the
+   * operator is looking at, "Go to" destinations, then initiative and doc search
    * results. Every action goes through an existing core call (cards.move,
    * cards.patch, pm decisions), exactly as the page controls do.
    *
    * The palette also owns the global letter shortcuts it advertises, so a
    * shortcut shown here is always one that works: G then O/I/A/T/D anywhere, and
-   * on a task M (move), A (assign), O (open source); on a doc E (edit).
+   * on an initiative M (move), A (assign), O (open source); on a doc E (edit).
    * None of them fire while typing or while a dialog is open.
    */
   let {
@@ -164,12 +160,11 @@
   let contextRequestId = 0;
 
   // No PM agent onboarded: the palette must not offer a conversation that
-  // cannot answer, here or on a task.
+  // cannot answer, here or on an initiative.
   let pmState = $derived(
     $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
   );
   let pmVisible = $derived(pmFeaturesVisible(pmState));
-  let pmNeedsSetup = $derived(pmSetupOffered(pmState));
   // Refusing the move needs a confirmed absence, not an unproven one.
   let pmAbsent = $derived(pmKnownAbsent(pmState));
 
@@ -273,7 +268,7 @@
     }
   }
 
-  // ---- Commands on the task or doc in view -------------------------------
+  // ---- Commands on the initiative or doc in view -------------------------------
 
   let people = $derived(
     filterActorsForUserSelection($actorRegistry)
@@ -307,7 +302,7 @@
     if (!isNexusOwned(work) && !draft.approved) {
       if (
         !window.confirm(
-          `Ask the PM to request moving “${work.title}” to ${phaseLabel(phase)} at ${sourceLabel(work.source)}? You approve the request in Inbox.`,
+          `Ask the PM to request moving “${work.title}” to ${phaseLabel(phase)} at ${sourceLabel(work.source)}? You approve the request in Decide.`,
         )
       )
         return;
@@ -317,7 +312,7 @@
     moveError = "";
     try {
       await enqueueTaskMove(draft, {
-        href: href(`/tasks/${encodeURIComponent(workId)}`),
+        href: href(`/initiatives/${encodeURIComponent(workId)}`),
       });
       if (inputEl === originInput) close();
       return {
@@ -340,7 +335,7 @@
       id: draft.work.cardId,
       target: assignmentTarget,
       title: "Saved assignment",
-      href: href(`/tasks/${encodeURIComponent(workId)}`),
+      href: href(`/initiatives/${encodeURIComponent(workId)}`),
       draft,
       preview: `Assign “${draft.work.title}” to ${draft.name}`,
       body: {
@@ -358,10 +353,10 @@
     if (assignmentPending) return;
     const work = contextWork;
     if (!work || (work.ref !== workId && workKey(work) !== workId))
-      throw new Error("Wait for this task to load before assigning it.");
+      throw new Error("Wait for this initiative to load before assigning it.");
     if (!work?.updated_at)
       throw new Error(
-        "This task did not report a revision. Reload before assigning it.",
+        "This initiative did not report a revision. Reload before assigning it.",
       );
     // Keep the observed base, including all other assignees, across edits and
     // recovery. A conflict is rebased only by the explicit action below.
@@ -391,7 +386,7 @@
       )
         return;
       if (!result?.work?.updated_at)
-        throw new Error("This task is no longer available.");
+        throw new Error("This initiative is no longer available.");
       assignmentDraft = {
         ...draft,
         work: {
@@ -403,7 +398,7 @@
       assignmentError = "";
     } catch {
       assignmentError =
-        "Could not refresh this task. Your assignment is still saved.";
+        "Could not refresh this initiative. Your assignment is still saved.";
     }
   }
 
@@ -426,7 +421,7 @@
     const work = contextWork;
     if (!work || !workId || (work.ref !== workId && workKey(work) !== workId))
       return { root: [], move: [], assign: [] };
-    const group = `Actions on “${work.title || "this task"}”`;
+    const group = `Actions on “${work.title || "this initiative"}”`;
     const owned = isNexusOwned(work);
     const source = sourceLabel(work.source);
     /*
@@ -461,7 +456,7 @@
         : [];
     const sourceHref = safeSourceHref(work.source?.url);
     const link = absoluteUrl(
-      href(`/tasks/${encodeURIComponent(workKey(work))}`),
+      href(`/initiatives/${encodeURIComponent(workKey(work))}`),
     );
     const root = [
       ...(movable
@@ -527,7 +522,7 @@
             {
               id: "task:ask-pm",
               group,
-              label: "Ask PM about this task",
+              label: "Ask PM about this initiative",
               keywords: ["pm"],
               icon: "askPm",
               run: () =>
@@ -585,7 +580,6 @@
       go,
       mod: modSymbol(),
       pmVisible,
-      pmNeedsSetup,
     }),
   );
 
@@ -633,20 +627,20 @@
   let searchCommands = $derived([
     ...results.tasks.map((work) => ({
       id: `result:task:${workKey(work)}`,
-      group: "Tasks",
+      group: "Initiatives",
       kind: "task",
-      label: work.title || "Untitled task",
+      label: work.title || "Untitled initiative",
       /*
        * A result's state is the shared summary, not a phase this row looked
        * up for itself: a search hit used to read "In progress" for a card the
-       * Tasks table called blocked. The source stays a plain subtitle — it is
+       * Initiatives table called blocked. The source stays a plain subtitle — it is
        * where the card lives, not what state it is in.
        */
       summary: workSummaryModel(work),
       subtitle:
         work.source && !isNexusOwned(work) ? sourceLabel(work.source) : "",
       icon: "tasks",
-      run: () => go(`/tasks/${encodeURIComponent(workKey(work))}`),
+      run: () => go(`/initiatives/${encodeURIComponent(workKey(work))}`),
     })),
     ...results.docs.map((doc) => ({
       id: `result:doc:${doc.id ?? resourceRouteSegment(doc, "document")}`,
@@ -819,8 +813,8 @@
       pendingG = 0;
       const target = GO_TO_SHORTCUTS[key];
       if (target) {
-        // Captured before page handlers: "G then T" is Tasks, not the
-        // Tasks page's "T" for table view.
+        // Captured before page handlers: "G then I" is Initiatives, not the
+        // Initiatives page's "T" for table view.
         event.preventDefault();
         event.stopPropagation();
         void goto(href(target));
@@ -885,9 +879,9 @@
   );
   let emptyText = $derived(
     subpage === "assign" && contextWork && !isNexusOwned(contextWork)
-      ? `Assignment for this task is owned by ${sourceLabel(contextWork.source)}.`
+      ? `Assignment for this initiative is owned by ${sourceLabel(contextWork.source)}.`
       : subpage && !contextWork
-        ? "Loading this task…"
+        ? "Loading this initiative…"
         : "No matches",
   );
 </script>
@@ -1069,7 +1063,7 @@
                 {/if}
                 {#if command.kind}
                   <span class="cmd-result-badge"
-                    >{command.kind === "task" ? "Task" : "Doc"}</span
+                    >{command.kind === "task" ? "Initiative" : "Doc"}</span
                   >
                 {:else if command.shortcut}
                   <span class="cmd-shortcut" aria-hidden="true">

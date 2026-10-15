@@ -455,6 +455,10 @@ export function queueInboxResponse({
   message,
   restore,
   binding,
+  // An account-level page answers rows from many workspaces with a binding
+  // per workspace. Those answers keep the undo window instead of sending at
+  // once like an answer left behind by a workspace switch.
+  crossWorkspace = false,
 }) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
@@ -535,7 +539,7 @@ export function queueInboxResponse({
    * a workspace that cannot even see the item. Send it now, with the sender
    * it was written with.
    */
-  if (entry.scope !== responseScope()) {
+  if (!crossWorkspace && entry.scope !== responseScope()) {
     pending = entry;
     void commit(entry);
     return entry.id;
@@ -713,6 +717,28 @@ export function retryInboxResponse(itemId = "", { asNew = false } = {}) {
     responded_at: new Date().toISOString(),
   });
   return commit(entry);
+}
+
+/**
+ * Send a failed response again as a new request with some fields changed, such
+ * as `notify_mode: "none"` after core said the requester cannot be notified.
+ * The text is unchanged and goes through the same persisted, undoable queue;
+ * the old record is superseded, never dropped before the new one is saved.
+ */
+export function resendInboxResponse(itemId, overrides = {}) {
+  const want = String(itemId ?? "").trim();
+  const failed = failedByItem.get(want);
+  if (!failed) return null;
+  // queueInboxResponse assigns the new request its own idempotency key.
+  const id = queueInboxResponse({
+    itemId: failed.itemId,
+    item: failed.item,
+    request: { ...failed.request, ...overrides },
+    message: failed.message,
+    restore: failed.restore,
+  });
+  forgetFailure(want);
+  return id;
 }
 
 /** Give up on a failed response: the item stays unanswered, visibly so. */
@@ -898,6 +924,9 @@ async function commit(entry, recovered = false) {
     const failure = {
       ...classification,
       error: classification.message,
+      // Core's error code, so a row can offer the fix it names (for example
+      // answering without notifying an unreachable requester).
+      code: String(err?.body?.error?.code ?? ""),
       nextAt: classification.state === "retrying" ? entry.nextAt : null,
       outcome: String(entry.request?.outcome ?? ""),
       response_text: String(entry.request?.response_text ?? ""),

@@ -106,14 +106,14 @@
       return {
         label: "Text removed",
         tone: "warn",
-        title: "The quoted text is no longer present in this revision.",
+        title: "The quoted text is no longer present in this version.",
       };
     }
     if (anchorStatus === "historical") {
       return {
-        label: "On older revision",
+        label: "On older version",
         tone: "muted",
-        title: "Comment is anchored to a previous revision of this document.",
+        title: "Comment is anchored to a previous version of this document.",
       };
     }
     if (anchorStatus === "quote_only") {
@@ -121,7 +121,7 @@
         label: "Quote only",
         tone: "muted",
         title:
-          "Exact position not unique in this revision — comment is anchored by quote.",
+          "Exact position not unique in this version — comment is anchored by quote.",
       };
     }
     return null;

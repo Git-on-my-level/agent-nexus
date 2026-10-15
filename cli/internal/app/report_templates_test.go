@@ -5,14 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"agent-nexus-cli/internal/visualreport"
 )
 
 func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
-	if len(reportTemplates) != 6 {
-		t.Fatalf("got %d templates, want 6", len(reportTemplates))
+	if len(reportTemplates) != 7 {
+		t.Fatalf("got %d templates, want 7", len(reportTemplates))
 	}
 	for _, template := range reportTemplates {
 		t.Run(template.name, func(t *testing.T) {
@@ -42,6 +43,12 @@ func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
 				panel := raw
 				if source := panel["source"]; source != nil {
 					seriesCount++
+					if template.name == "anx-health" {
+						if panel["type"] != "metric" || !strings.HasPrefix(reportStringValue(asMap(source)["series"]), "anx.health.") {
+							t.Fatalf("unexpected anx-health series panel: %#v", panel)
+						}
+						continue
+					}
 					if template.name != "workspace-overview" || panel["type"] != "chart" {
 						t.Fatalf("unexpected series panel in %s: %#v", template.name, panel)
 					}
@@ -76,7 +83,10 @@ func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
 			if liveCount == 0 {
 				t.Fatal("template has no live query")
 			}
-			if seriesCount != 0 {
+			if template.name == "anx-health" && seriesCount != 7 {
+				t.Fatalf("anx-health has %d series panels, want 7", seriesCount)
+			}
+			if template.name != "anx-health" && seriesCount != 0 {
 				t.Fatalf("%s has %d declared series panels, want throughput only on workspace-overview", template.name, seriesCount)
 			}
 			if template.name == "fleet-health" && (len(panels) != 1 || panels[0]["type"] != "live-fleet-health") {

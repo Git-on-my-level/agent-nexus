@@ -74,14 +74,14 @@ function documentRevisionLabel(revision, id, documents = {}) {
   const revisionNumber = record.revision_number;
 
   if (title && Number.isFinite(Number(revisionNumber))) {
-    return `${title} revision ${revisionNumber}`.trim();
+    return `${title} version ${revisionNumber}`.trim();
   }
 
   if (title) {
-    return `${title} revision`.trim();
+    return `${title} version`.trim();
   }
 
-  return `Document revision ${id}`.trim();
+  return `Document version ${id}`.trim();
 }
 
 export function buildTimelineRefLabelHints(
@@ -261,7 +261,7 @@ export function buildTimelineEventChangePreview(event, ctx = {}) {
     const to = String(payload.column_key ?? "").trim();
     // Headline already shows column transitions when `to` is set; avoid duplicating.
     if (from && !to) {
-      lines.push(`Column: ${from || "—"} → ${to || "—"}`);
+      lines.push(`Stage: ${from || "—"} → ${to || "—"}`);
     }
     const bTh = String(payload.before_thread_id ?? "").trim();
     const aTh = String(payload.after_thread_id ?? "").trim();
@@ -275,7 +275,7 @@ export function buildTimelineEventChangePreview(event, ctx = {}) {
   if (type === "card_created") {
     // Title is already in the row headline when present; skip redundant preview line.
     if (payload.column_key) {
-      lines.push(`Column: ${String(payload.column_key)}`);
+      lines.push(`Stage: ${String(payload.column_key)}`);
     }
     if (payload.summary)
       lines.push(`Summary: ${clipLine(payload.summary, 100)}`);

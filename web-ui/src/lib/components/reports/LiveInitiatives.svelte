@@ -37,7 +37,7 @@
   let grouped = $derived(
     groupedWorkSummaryCards(items, {
       now,
-      href: (ref) => workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
+      href: (ref) => workspaceHref(`/initiatives/${encodeURIComponent(ref)}`),
     }),
   );
 </script>

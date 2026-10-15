@@ -54,7 +54,7 @@ it("keeps source intent and receipt keys separate and actor bound", () => {
 it("fails closed without task and board bases or completion evidence", () => {
   expect(() =>
     taskMoveRequest(taskMoveDraft(work, "review"), "human", "key"),
-  ).toThrow(/board revision/);
+  ).toThrow(/initiative changed/);
   expect(() =>
     taskMoveRequest(
       taskMoveDraft({ ...work, version: undefined }, "review", {
@@ -63,7 +63,7 @@ it("fails closed without task and board bases or completion evidence", () => {
       "human",
       "key",
     ),
-  ).toThrow(/task revision/);
+  ).toThrow(/initiative changed/);
   expect(() =>
     taskMoveRequest(
       taskMoveDraft(work, "done", { boardToken: "stamp" }),

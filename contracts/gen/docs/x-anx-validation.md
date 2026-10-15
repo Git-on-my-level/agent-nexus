@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `224`
+- Command operations: `235`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `204`
+- Missing recommended examples: `212`
 
 ## Baseline gap counts
 
@@ -210,6 +210,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `boards.trash` `POST /boards/{board_id}/trash`
 - `boards.unarchive` `POST /boards/{board_id}/unarchive`
 - `boards.workspace` `GET /boards/{board_id}/workspace`
+- `brief.get` `GET /brief`
 - `cards.archive` `POST /cards/{card_id}/archive`
 - `cards.create` `POST /cards`
 - `cards.get` `GET /cards/{card_id}`
@@ -223,6 +224,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - `cards.revisions.list` `GET /cards/{card_id}/revisions`
 - `cards.timeline` `GET /cards/{card_id}/timeline`
 - `cards.trash` `POST /cards/{card_id}/trash`
+- `curation.candidates` `GET /curation/candidates`
+- `curation.metrics` `GET /curation/metrics`
+- `curation.propose` `POST /curation/proposals`
+- `curation.run` `POST /curation/run`
+- `curation.ungroup` `POST /curation/ungroup`
+- `deliveries.list` `GET /deliveries`
 - `derived.rebuild` `POST /derived/rebuild`
 - `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`
 - `events.archive` `POST /events/{event_id}/archive`
@@ -264,6 +271,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `meta.livez` `GET /livez`
 - `meta.readyz` `GET /readyz`
 - `meta.version` `GET /version`
+- `notifications.settings.get` `GET /notification-settings`
 - `ops.blob.usage.rebuild` `POST /ops/blob-usage/rebuild`
 - `ops.health` `GET /ops/health`
 - `ops.usage.summary` `GET /ops/usage-summary`

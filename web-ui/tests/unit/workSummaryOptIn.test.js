@@ -106,10 +106,6 @@ describe("no card read is left opted out", () => {
    */
   const NO_STATE_SHOWN = new Map([
     [
-      "getWork src/lib/components/inbox/InboxControlWork.svelte",
-      "refreshes only frozen work/lifecycle/observation bases for an explicit saved-control rebase; renders no computed card state",
-    ],
-    [
       "listWork src/lib/inboxSources.js",
       "names the source behind an inbox row",
     ],
@@ -122,7 +118,7 @@ describe("no card read is left opted out", () => {
       "picks a task by title for a PM conversation",
     ],
     [
-      "listWork src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte",
+      "listWork src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte",
       "the mirrors list: other tasks on the same source item, by title and read state",
     ],
   ]);

@@ -37,7 +37,7 @@ func TestOverviewPrioritizesOpenWorkWithinCandidateLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	overview, err := s.OverviewVisible(ctx, nil, nil, nil, time.Now(), 0)
+	overview, err := s.OverviewVisible(ctx, nil, nil, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

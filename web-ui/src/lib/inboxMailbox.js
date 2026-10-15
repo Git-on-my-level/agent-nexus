@@ -193,7 +193,7 @@ export function classifyInboxRow(row, now = Date.now()) {
     }
     const freshness = workFreshness(row.item || row, now);
     if (
-      row.item?.work_summary?.status?.state === "stale" ||
+      row.item?.work_summary?.status?.state === "past_promise" ||
       freshness.key === "stale" ||
       freshness.key === "error"
     ) {
@@ -247,10 +247,7 @@ export function inboxRowBadge(row, now = Date.now()) {
     };
   if (row.kind === "task") {
     const status = row.item?.work_summary?.status;
-    if (
-      status?.label &&
-      ["blocked", "stale", "at_risk"].includes(status.state)
-    ) {
+    if (status?.label && ["blocked", "past_promise"].includes(status.state)) {
       return { label: status.label, tone: "warn" };
     }
     if (taskIsBlocked(row)) return { label: "Blocked", tone: "warn" };
@@ -340,13 +337,6 @@ export function rowWaitMs(row, now = Date.now()) {
   return Number.isFinite(since) ? Math.max(0, now - since) : Number.NaN;
 }
 
-function humanizeSlug(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  const words = raw.replace(/[-_]+/g, " ").trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 /**
  * What an inbox item is about, in operator terms. A task wins: an ask filed
  * on a project that names one task is blocking that task, and that is what
@@ -378,11 +368,24 @@ export function inboxItemSubject(
             workKey(entry) === ref || entry?.handle === id || entry?.id === id,
         ) || null
       : null;
+  /*
+   * Resolved titles only: the loaded row, the core preview, the resolve map,
+   * then the item's own subject title. The raw ref is the last resort, shown
+   * only when no title is visible to this reader.
+   */
+  const previewTitle = (
+    prefix === "card" && Array.isArray(item?.related_cards)
+      ? item.related_cards.find(
+          (entry) => String(entry?.ref ?? "").trim() === ref,
+        )
+      : null
+  )?.title;
   const title =
     String(task?.title ?? "").trim() ||
+    String(previewTitle ?? "").trim() ||
     titleFor(ref) ||
     (ref === explicit ? String(item?.subject_title ?? "").trim() : "") ||
-    humanizeSlug(id);
+    ref;
   /*
    * The card's computed summary, so the "Blocks …" box says what the Tasks
    * table and the board say. Core sends a bounded preview per visible item in
@@ -647,7 +650,6 @@ export function buildInboxRows({
       waitingSince:
         item.source_event_time || item.trigger_at || item.created_at || "",
       status: item.status || (item.responded_at ? "completed" : "open"),
-      stale: item.is_stale === true && inboxItemNeedsResponse(item),
       category: String(item.kind ?? item.category ?? "").trim(),
       severity: item.severity || "",
       requester: { name: requesterName, id: requesterId },

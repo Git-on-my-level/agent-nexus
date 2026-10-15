@@ -125,6 +125,7 @@ export declare class AnxClient {
     boardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    briefGet(options?: RequestOptions): Promise<InvokeResult>;
     cardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsCreate(options?: RequestOptions): Promise<InvokeResult>;
     cardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -138,6 +139,14 @@ export declare class AnxClient {
     cardsRevisionsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    curationCandidates(options?: RequestOptions): Promise<InvokeResult>;
+    curationMetrics(options?: RequestOptions): Promise<InvokeResult>;
+    curationPropose(options?: RequestOptions): Promise<InvokeResult>;
+    curationRun(options?: RequestOptions): Promise<InvokeResult>;
+    curationUngroup(options?: RequestOptions): Promise<InvokeResult>;
+    deliveriesClaim(options?: RequestOptions): Promise<InvokeResult>;
+    deliveriesList(options?: RequestOptions): Promise<InvokeResult>;
+    deliveriesReceipt(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
     docsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCommentsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -197,6 +206,8 @@ export declare class AnxClient {
     metaLivez(options?: RequestOptions): Promise<InvokeResult>;
     metaReadyz(options?: RequestOptions): Promise<InvokeResult>;
     metaVersion(options?: RequestOptions): Promise<InvokeResult>;
+    notificationsSettingsGet(options?: RequestOptions): Promise<InvokeResult>;
+    notificationsSettingsSet(options?: RequestOptions): Promise<InvokeResult>;
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;

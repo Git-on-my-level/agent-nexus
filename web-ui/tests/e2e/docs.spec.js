@@ -300,7 +300,7 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
 
   await page.getByRole("button", { name: "Edit" }).click();
   await expect(
-    page.getByRole("button", { name: "Save revision" }),
+    page.getByRole("button", { name: "Save version" }),
   ).toBeVisible();
 
   // The single textarea in the revision form (pre-filled with head content).
@@ -308,7 +308,7 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
     .getByRole("textbox", { name: /Content \(Markdown\)/ })
     .fill("Revised content from E2E test.");
 
-  await page.getByRole("button", { name: "Save revision" }).click();
+  await page.getByRole("button", { name: "Save version" }).click();
 
   await expect.poll(() => updateCount).toBe(1);
   expect(updatePayload).toMatchObject({
@@ -497,12 +497,12 @@ test("update document conflict — 409 response shows error", async ({
 
   await page.getByRole("button", { name: "Edit" }).click();
   await expect(
-    page.getByRole("button", { name: "Save revision" }),
+    page.getByRole("button", { name: "Save version" }),
   ).toBeVisible();
   await page
     .getByRole("textbox", { name: /Content \(Markdown\)/ })
     .fill("Some conflicting changes.");
-  await page.getByRole("button", { name: "Save revision" }).click();
+  await page.getByRole("button", { name: "Save version" }).click();
 
   await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
   await expect(
@@ -759,11 +759,11 @@ test("documents list redirects through the default workspace and loads revision 
   ).toBeVisible();
 
   await page.getByRole("button", { name: "More actions" }).click();
-  await page.getByRole("menuitem", { name: "Revision history" }).click();
+  await page.getByRole("menuitem", { name: "Version history" }).click();
   await expect(page.getByText("Current version")).toBeVisible();
   await page.getByRole("button", { name: /Version 2/ }).click();
   await expect(
-    page.getByText("Viewing revision 2", { exact: false }),
+    page.getByText("Viewing version 2", { exact: false }),
   ).toBeVisible();
   await expect(
     page.getByText("Prior version.", { exact: false }),
@@ -784,7 +784,7 @@ test("documents list redirects through the default workspace and loads revision 
   await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
   await expect(
-    page.getByRole("menuitem", { name: "Revision history" }),
+    page.getByRole("menuitem", { name: "Version history" }),
   ).toHaveCount(0);
   await expect(page.getByText("Version 3", { exact: true })).toHaveCount(0);
 });

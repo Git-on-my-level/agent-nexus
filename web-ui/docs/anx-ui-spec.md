@@ -72,34 +72,34 @@ Agent Nexus web UI does **not**:
 
 Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appear in navigation, buttons, banners, or empty states except where noted as technical exceptions.
 
-**Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Agents, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
+**Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Decide, Watch, Initiatives, Agents and Docs. Three places are exempt, because their whole job is to expose the core model:
 
 1. **Diagnostics surfaces** (`/events` "Audit", `/threads`), including their nav entries and headings.
-2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`inboxSubjectNoun`) — because their job is to name the _ref type_. These still use the operator noun where one exists: a `card:` subject reads "Task", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
+2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`inboxSubjectNoun`) — because their job is to name the _ref type_. These still use the operator noun where one exists: a `card:` subject reads "Initiative", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
 3. **Timeline and audit event rows**, which name the core event that occurred.
 
-Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists, because `work.create` defaults the backing board.
+Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Decide, Watch, Initiatives, Docs, onboarding, keyboard help, and compact `RefLink` chips use Initiative / Project. Humans never see topic, thread, board, column or revision outside Diagnostics. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Initiative creation asks the operator to choose a Board only when more than one board already exists, because `work.create` defaults the backing board.
 
-The Tasks table and board cards name the board only when more than one board is in view; with one board there is no choice to make, so there is no Board column and no board name on a card.
+The initiative table and board cards name the board only when more than one board is in view; with one board there is no choice to make, so there is no Board column and no board name on a card.
 
-| Concept                        | Canonical term                                                 | Banned UI aliases                                                               | Allowed technical exceptions                                                                                                              |
-| ------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
-| Soft-delete lifecycle          | Trash, trashed, move to trash, restore                         | tombstone, tombstoned                                                           | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active | archived | trashed`) |
-| Root work item                 | Task, Tasks                                                    | Topic, Topics, Card, Cards, backing thread, Threads (as operator-facing labels) | `card:` refs, `card_id`, the `work.list` / `work.get` command ids, `thread_id`, `thread:` refs, `/threads` diagnostic detail route        |
-| Project / work grouping        | Project                                                        | Topic, Topics (as operator-facing labels)                                       | `topic:` refs; core reports `"projects": "topics"` in `work.capabilities`                                                                 |
-| Backing board                  | Board — only where the operator has a real choice among boards | Board as a required step, label or column when the workspace has one board      | `board:` refs, `board_id`, the `boards.*` command family, diagnostics surfaces                                                            |
-| Document collection            | Docs                                                           | Documents (as collection label)                                                 | `document` for singular resources and API field names                                                                                     |
-| Inbox triage action            | Acknowledge                                                    | Dismiss                                                                         | —                                                                                                                                         |
-| Operator-facing actor in prose | Operator                                                       | user, end user                                                                  | `actor`, `principal` in identity and auth contexts                                                                                        |
-| Enrolled machine               | Host (Access), machine (prose)                                 | device, node, runner (as the concept)                                           | `host:` refs, `host_id`, the `hosts.*` command family                                                                                     |
-| Human with access              | People (Access section), person                                | principal, user (as operator labels)                                            | `principal` in audit copy ids and API paths                                                                                               |
-| Irreversible removal           | Permanently delete                                             | Purge (primary copy)                                                            | CLI/command `purge` where it is the API surface name                                                                                      |
+| Concept                        | Canonical term                                                 | Banned UI aliases                                                                                                     | Allowed technical exceptions                                                                                                              |
+| ------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
+| Soft-delete lifecycle          | Trash, trashed, move to trash, restore                         | tombstone, tombstoned                                                                                                 | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active | archived | trashed`) |
+| Root work item                 | Initiative, Initiatives (single operator noun)                 | Task, Tasks, Topic, Topics, Card, Cards, backing thread, Threads, Board, Column, Revision (as operator-facing labels) | `card:` refs, `card_id`, the `work.list` / `work.get` command ids, `thread_id`, `thread:` refs, `/threads` diagnostic detail route        |
+| Project / work grouping        | Project                                                        | Topic, Topics (as operator-facing labels)                                                                             | `topic:` refs; core reports `"projects": "topics"` in `work.capabilities`                                                                 |
+| Backing board                  | Board — only where the operator has a real choice among boards | Board as a required step, label or column when the workspace has one board                                            | `board:` refs, `board_id`, the `boards.*` command family, diagnostics surfaces                                                            |
+| Document collection            | Docs                                                           | Documents (as collection label)                                                                                       | `document` for singular resources and API field names                                                                                     |
+| Inbox triage action            | Acknowledge                                                    | Dismiss                                                                                                               | —                                                                                                                                         |
+| Operator-facing actor in prose | Operator                                                       | user, end user                                                                                                        | `actor`, `principal` in identity and auth contexts                                                                                        |
+| Enrolled machine               | Host (Access), machine (prose)                                 | device, node, runner (as the concept)                                                                                 | `host:` refs, `host_id`, the `hosts.*` command family                                                                                     |
+| Human with access              | People (Access section), person                                | principal, user (as operator labels)                                                                                  | `principal` in audit copy ids and API paths                                                                                               |
+| Irreversible removal           | Permanently delete                                             | Purge (primary copy)                                                                                                  | CLI/command `purge` where it is the API surface name                                                                                      |
 
 `Artifact` remains the umbrella object; `Receipt` and `Review` are artifact kinds only.
 
 **Domain note:** Operator vocabulary and core vocabulary are deliberately different. The boundary between them is the typed ref.
 
-- **Operator-facing nouns are Overview, Inbox, Agents, Tasks and Docs, plus Hosts and People inside Access.** **Overview** is the workspace home: it summarizes what needs the operator, work in flight, agent presence, and visual reports, and it links into those surfaces. It is not an attention surface and it introduces no actions. A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards). An **Agent** is a derived principal on a host, shown by what it is doing; the Agents view is presence, not a second attention queue.
+- **Operator-facing nouns are Decide, Watch, Ask, Initiatives, Agents and Docs, plus Hosts and People inside Access.** An **Initiative** is the operator's only unit of work (`work.list` / `work.get` projected over cards); an initiative without a plan is still an initiative. An **Agent** is a derived principal on a host, shown by what it is doing; the Agents view is presence, not a second attention queue.
 - **Core primitives — topic, board, card, thread, artifact — are not operator nouns.** They are the durable model that agents address by typed ref (`topic:`, `card:`, `board:`, `document:` — the contract's prefixes, per `contracts/anx-schema.yaml` → `ref_format`; `doc:` is a CLI target shorthand only and is rejected inside a ref) through the CLI and generated clients. The UI renders them, but never asks an operator to think in them.
 - A **thread** is infrastructure: a durable append-only event timeline that backs topics, cards, boards and documents, and resolves packet subjects. It is never an operator-facing noun.
 - A **topic** is the core discussion/context primitive built on a thread. It has **no operator destination**; it appears only as a ref-type label (e.g. in `RefLink` or an Events filter) and as the detail rendering of its backing thread.
@@ -108,55 +108,61 @@ The practical rule: if an operator has to learn a word to use the product, it be
 
 ---
 
-## 2. Core UX model: Overview, Inbox, Agents, Tasks, Docs
+## 2. Core UX model: Decide, Watch, Ask
 
 ### 2.1 Primary navigation
 
-The primary navigation units are **Overview**, **Inbox**, **Agents**,
-**Tasks**, and **Docs**, in that order, in the sidebar and in the mobile
-bottom bar. Overview is first because it is the workspace home. Inbox
-shows its Needs you count; Agents shows how many agents are working (nothing at
-zero). Agents is presence: who is working, waiting on a human, idle or stale.
-It never answers an ask; a waiting agent's row links into the Inbox. Ask PM is
-an action in the shell, not a nav category; see 3.9 for what that slot shows
-when no PM agent is onboarded. The account menu in the sidebar
-footer and the `/more` hub group the secondary destinations under two labels:
-**Settings** (Archive, Access, Secrets, Integrations) and **Diagnostics**
-(Audit, Threads). Sign out is the last item of the account menu.
+The primary destinations are **Decide**, **Watch** and **Ask**, in that order,
+in the sidebar on desktop and in the bottom bar on a phone (with **More**).
+Ask is the PM conversation and is hidden entirely when no PM is connected;
+global search (⌘K) is not a PM feature. Everything else is one hop down:
+**Initiatives** (the table), Docs, Agents and Archive under **Workspace**;
+Access, Secrets, Integrations, Notifications and PM setup under **Settings**; Audit and
+Threads under **Diagnostics**. They live in the account menu, the `/more`
+hub, the ⌘K palette, ref chips and the initiative page, never in primary nav.
+Adding a primary destination needs a DECISIONS entry (end-state §4).
+
+All three screens and the initiative page read one `brief.v1`
+(`GET /brief`, fixture `contracts/fixtures/brief/brief.v1.json`) through
+`src/lib/briefStore.js`, so they never disagree and a cold open is one read.
+
+**Decide** (`/decide`) is every decision waiting on the reader: asks, reviews,
+access and host approvals, PM proposals. Order is `decide_by`, then blocked
+count, then priority, then age. `src/lib/components/decide/DecisionCard.svelte`
+is the only rendering of a decision (list, permalink `/decide/{id}`, the
+initiative page). Proposals are buttons with the recommendation first; one tap
+answers. Undo is the client-held delayed send in `inboxResponseQueue.js`,
+never a retraction. Copy ref is on every row, and `c` copies the focused row's
+ref (`j`/`k` move focus). Reply drafts use the durable key
+`inbox:<item-id>:reply` on every surface. `?initiative=<ref>` narrows the list.
+
+**Watch** (`/watch`) is outcomes per workspace: a list by attention and a
+by-stage view whose columns are placement (backlog, ready, in progress,
+review, done). Rows show only the four computed states (past promise, moving,
+no promise, done); blocked and waiting-on-you are exact count badges linking
+into Decide. No-promise rows show "last evidence Nd ago". The header shows
+the brief's age ("as of 2 min ago"). Moves go through the durable outbox
+(`taskMoveWork.js`).
+
+**Initiative page** (`/initiatives/{id}`) is the drill-down: computed state,
+one plan rendering, open decisions through DecisionCard, evidence newest
+first, linked docs and refs.
+
+**I1.** Every element showing phase, health, progress or a promise carries
+`data-source="computed:<field>"` naming a `brief.v1` field
+(`BRIEF_COMPUTED_FIELDS` in `src/lib/brief.js`), or sits in an author chip
+(`data-author-chip`). `tests/unit/briefGoldens.test.js` lints the fixture
+renders and holds the Decide and Watch goldens (I7); regenerate with `-u`.
+
+**I5.** A failed or slow read never renders a blank screen or a raw error
+body: the screen keeps its last snapshot with a banner and Retry, or shows a
+friendly error with Retry when nothing has loaded.
 
 Access carries the one count that lives behind the account menu: how many
-access requests wait for a decision, covering both agents asking for a grant
-and machines asking to enroll. It counts what the reader can still decide:
-undecided access requests plus pending, unexpired host enrollments. An
-approved enrollment is waiting on its machine, so it is not in the number and
-the section heading reads **Enrollment in progress** instead. Core's
-`GET /auth/access/summary` is the cheaper read but its `pending_count`
-includes those approved ceremonies, so the shell counts from the two lists and
-the badge and the page cannot disagree. The badge runs only for a person:
-deciding a grant is human-only, so an agent principal would only ever be
-refused. Because the Access item is out of sight
-until the menu opens, the same number also sits on the menu trigger (the
-avatar and name button), and on the Access row in `/more`. One number, the
-detail on hover, and nothing at zero — or for a reader without administration
-authority, who could not act on it.
+access requests wait for a decision. Counts are exact.
 
-Overview (`/overview`) summarizes four existing reads and links into them. It
-does not answer an ask, move a task, or edit a document. Its own sections are
-**Initiatives**, **Recent changes** and the pinned **Dashboard**; everything
-else answers a different question and sits one fold down under **More detail**,
-with links to the surface that owns it. **Needs you** is the
-Inbox count and its first rows, and lives in the Inbox and its badge. **Work at a glance** counts `GET /work` by
-phase and source, plus blocked tasks, tasks whose next actor is a person, and
-freshness (stale, unknown, error); each count links to Tasks with the matching
-query (`source`, `phase`, `freshness`, and `human=1` for a person as next
-actor). **Agents** counts working, waiting, and stale and links to the roster.
-**Reports** lists documents whose current content is a valid visual report
-(`parseVisualReport`), newest first, and renders the selected one. A document
-whose title starts with `Dashboard` or `Fleet Dashboard` is preferred. A failed
-read is unavailable; it is never shown as zero or healthy.
-
-Tasks is the operator projection over work (`work.list` / `work.get`), shown as
-table or board. Boards and cards remain the backing store; they are not
+Initiatives (`/initiatives`) is the operator table over work (`work.list` /
+`work.get`). Boards and cards remain the backing store; they are not
 separate product destinations. Threads remain the backing timeline for docs,
 inbox deep links and audit inspection at `/threads/...`.
 
@@ -169,9 +175,9 @@ A diagnostic surface is labelled and grouped rather than merely unlinked: an
 orphaned page reachable only by typing its URL is undiscoverable to the
 operator who needs it and unexplained to everyone else.
 
-There are no legacy route aliases: `/work`, `/work/{card_ref}`, `/work/new`,
-`/decisions` and `/settings` were removed outright rather than left as
-redirects. (`/work` is still a core **API** path and is unrelated.)
+`/inbox`, `/inbox/{id}`, `/overview` and `/tasks/**` redirect to `/decide`,
+`/decide/{id}`, `/watch` and `/initiatives/**`, because links to them already
+sit in notifications and agent output. The pages themselves are gone.
 
 ### 2.2 Topic detail: timeline + workspace
 
@@ -239,7 +245,7 @@ A dedicated surface showing items that need operator attention. It is the only a
 
 - The first row of the current mailbox is selected automatically; the pane is never an empty placeholder while rows exist. The automatic selection stays on its row while the list refreshes, so a live update never swaps the item being answered. Below `lg` the list and the detail are separate screens and only an explicit choice (`?item=`) opens the detail.
 - The pane header says who is blocked and for how long ("Omar Reed has been blocked for 3h 12m").
-- A **context strip** shows what the item blocks — the subject task (title, phase) or doc (title, version) — and the latest progress note around it (author, age, excerpt), preferring the requester's own latest message. It reads `docs.get` and `events.list` (message events on the task's thread and the item's threads). When the requester is an agent with a presence note (`anx work note`), the strip also shows that note with its age and the agent's state dot, linked to the agent page (`components/agents/AgentPresenceLine.svelte`, read from the shell roster). Threads and boards are not operator subjects and get no subject line.
+- A **context strip** shows what the item blocks — the subject task (title, phase) or doc (title, version) — and the latest progress note around it (author, age, excerpt), preferring the requester's own latest message. It reads `docs.get` and `events.list` (message events on the task's thread and the item's threads). When the requester is an agent with a presence note (`anx note`), the strip also shows that note with its age and the agent's state dot, linked to the agent page (`components/agents/AgentPresenceLine.svelte`, read from the shell roster). Threads and boards are not operator subjects and get no subject line.
 - The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event, numbered 1–5. The first is marked **Recommended**. Choosing a proposal selects it and sends it; **`review`** items also offer **Approve** / **Reject**, which send fixed text. A freeform reply and **Acknowledge** complete the surface. The Inbox pane and the standalone item route (`/inbox/{id}`) share this component (`InboxRespondPanel`) and behave the same; the standalone page adds the notify-target and attachment controls.
 - Both surfaces notify the original requester by default when core can reach them (`notification_target_status.resolvable`), and nobody otherwise. Acknowledge never notifies.
 - Links from the standalone page back into the Inbox use the Inbox's own parameters (`?mailbox=handled&item=…`); `?status=` is not an Inbox parameter.

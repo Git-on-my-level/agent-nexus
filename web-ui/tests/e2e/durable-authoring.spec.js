@@ -103,7 +103,7 @@ test("task fields restore and uncertain creation replays the original body acros
       },
     }),
   );
-  await page.goto(`${root}/tasks/new`);
+  await page.goto(`${root}/initiatives/new`);
   await page.getByLabel("Outcome", { exact: true }).fill("Durable outcome");
   await page.getByLabel("Context", { exact: true }).fill("Keep the scope note");
   await page
@@ -117,7 +117,9 @@ test("task fields restore and uncertain creation replays the original body acros
   await expect(
     page.getByLabel("Acceptance criteria", { exact: true }),
   ).toHaveValue("Evidence reviewed\nOwner confirms");
-  await page.getByRole("button", { name: "Create task", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create initiative", exact: true })
+    .click();
   await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("author-retrying.png"),
@@ -127,7 +129,7 @@ test("task fields restore and uncertain creation replays the original body acros
   healthy = true;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await expect.poll(() => attempts.length).toBeGreaterThan(1);
-  await expect(page).toHaveURL(/\/tasks\/card%3Aauthored/);
+  await expect(page).toHaveURL(/\/initiatives\/card%3Aauthored/);
   expect(committed.size).toBe(1);
   for (const body of attempts) expect(body).toEqual(attempts[0]);
 });
@@ -272,9 +274,7 @@ test("revision draft restores its original base after reload and an uncertain se
   await expect(
     page.getByRole("textbox", { name: "Content (Markdown)", exact: true }),
   ).toHaveValue("My new revision body");
-  await page
-    .getByRole("button", { name: "Save revision", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Save version", exact: true }).click();
   await expect(page.locator('[data-mutation-state="retrying"]')).toBeVisible();
   await page.reload();
   healthy = true;

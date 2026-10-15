@@ -47,7 +47,7 @@ describe("operator vocabulary", () => {
   });
 
   it("uses operator nouns on compact RefLink chips", () => {
-    expect(compactNounForPrefix("card")).toBe("Task");
+    expect(compactNounForPrefix("card")).toBe("Initiative");
     expect(compactNounForPrefix("topic")).toBe("Project");
     // RefLink must not reintroduce its own map: that drift is the bug.
     expect(readSrc("lib/components/RefLink.svelte")).not.toMatch(
@@ -77,7 +77,7 @@ describe("operator vocabulary", () => {
 
   it("never says card in the Tasks keyboard shortcut list", () => {
     const src = readSrc(
-      "routes/o/[organization]/w/[workspace]/tasks/+page.svelte",
+      "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte",
     );
     const list = src.match(/SHORTCUTS\s*=\s*\[([\s\S]*?)\n\s*\];/)?.[1];
     expect(list, "shortcut list not found").toBeTruthy();

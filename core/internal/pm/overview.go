@@ -82,3 +82,47 @@ func (s *Service) OverviewDecisions(ctx context.Context, p Principal) ([]Decisio
 	}
 	return out, byDecision, truncated, nil
 }
+
+// AwaitingDecisions returns up to 100 decisions awaiting this human's answer
+// that they may answer now, for brief.v1. It is one indexed page plus one
+// batched resource check: approval uses the same principal and resource
+// authorization as the overview's read and answer checks, so a decision on a
+// ref the reader cannot read never appears. Unlike OverviewDecisions it skips
+// the action and work-placement reads, which the brief does not render.
+func (s *Service) AwaitingDecisions(ctx context.Context, p Principal) ([]Decision, bool, error) {
+	if !p.Human {
+		return []Decision{}, false, nil
+	}
+	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
+		return nil, false, err
+	}
+	rows, err := s.store.database().QueryContext(ctx, `SELECT body FROM pm_records d
+ WHERE d.kind='decision' AND d.workspace_id=? AND json_extract(d.body,'$.status')='awaiting_answer' AND d.actor_id=? ORDER BY d.rowid DESC LIMIT 101`, p.WorkspaceID, p.ActorID)
+	if err != nil {
+		return nil, false, err
+	}
+	ds, err := scanBodies[Decision](rows)
+	if err != nil {
+		return nil, false, err
+	}
+	truncated := len(ds) > 100
+	if truncated {
+		ds = ds[:100]
+	}
+	refs := make([]string, 0, len(ds))
+	for _, d := range ds {
+		refs = append(refs, d.WorkRef)
+	}
+	approval, err := s.authorizeReadBatch(ctx, p, "pm.approve", refs)
+	if err != nil {
+		return nil, false, err
+	}
+	out := []Decision{}
+	for _, d := range ds {
+		if d.Status == AwaitingAnswer && d.ActorID == p.ActorID && approval[d.WorkRef] {
+			d.CanAnswer = true
+			out = append(out, d)
+		}
+	}
+	return out, truncated, nil
+}

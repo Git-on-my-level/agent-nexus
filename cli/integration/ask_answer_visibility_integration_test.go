@@ -4,12 +4,13 @@ package integration
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
 // Regression for oss#389: an agent that filed asks without any delivery wiring
 // must still see its own answered asks through `anx inbox list --status
-// answered`, matching what `anx orient` reports under my_asks_and_answers.
+// answered`, matching what `anx orient` reports under answered_for_you.
 func TestInboxListAnsweredIncludesOwnAnsweredAsks(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
@@ -61,20 +62,40 @@ func TestInboxListAnsweredIncludesOwnAnsweredAsks(t *testing.T) {
 	}
 
 	oriented := h.runCLIExpectOK(t, "worker", nil, "orient")
-	ownAsks, ok := getPathValue(oriented.Payload, "result.my_asks_and_answers")
-	if !ok {
-		t.Fatalf("orient returned no my_asks_and_answers: %s", oriented.Stdout)
+	if got := mustStringPath(t, oriented.Payload, "result.schema"); got != "brief.v1" {
+		t.Fatalf("orient schema=%s: %s", got, oriented.Stdout)
 	}
-	orientAnswered := map[string]bool{}
+	ownAsks, ok := getPathValue(oriented.Payload, "result.answered_for_you")
+	if !ok {
+		t.Fatalf("orient returned no answered_for_you: %s", oriented.Stdout)
+	}
+	orientTitles := map[string]bool{}
+	orientRefs := []string{}
 	for _, raw := range ownAsks.([]any) {
 		row := raw.(map[string]any)
-		if row["answer"] != nil {
-			orientAnswered[fmt.Sprint(row["ask_id"])] = true
+		if row["answer"] == nil || strings.TrimSpace(fmt.Sprint(row["answer"])) == "" {
+			continue
+		}
+		orientTitles[fmt.Sprint(row["title"])] = true
+		orientRefs = append(orientRefs, fmt.Sprint(row["ref"]))
+	}
+	for i := 1; i <= 5; i++ {
+		title := fmt.Sprintf("Decision %d: ship now?", i)
+		if !orientTitles[title] {
+			t.Fatalf("orient omitted answered ask %q: %s", title, oriented.Stdout)
 		}
 	}
 	for askID := range askIDs {
-		if !orientAnswered[askID] {
-			t.Fatalf("orient disagreed with inbox list: ask %s has no answer under orient", askID)
+		eventID := strings.TrimPrefix(askID, "event:")
+		matched := false
+		for _, ref := range orientRefs {
+			if ref == askID || strings.Contains(ref, eventID) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Fatalf("orient disagreed with inbox list: ask %s has no answer under orient: %s", askID, oriented.Stdout)
 		}
 	}
 }

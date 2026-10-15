@@ -4,6 +4,7 @@ package series
 
 import (
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/delivery"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 	"context"
@@ -52,6 +53,9 @@ type Declaration struct {
 	AgentID          string       `json:"agent_id"`
 	ExpectedInterval string       `json:"expected_interval"`
 	Series           []Definition `json:"series"`
+	// Delivers lists notification channels this adapter delivers (for example
+	// "email" or "telegram"). Its owning agent may claim those deliveries.
+	Delivers []string `json:"delivers,omitempty"`
 }
 type Adapter struct {
 	Declaration
@@ -100,8 +104,15 @@ func Labels(labels map[string]string) (string, error) {
 
 func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal) (Adapter, error) {
 	interval, err := Duration(d.ExpectedInterval)
-	if err != nil || interval < time.Second || interval%time.Second != 0 || interval > 30*24*time.Hour || !Name.MatchString(d.Name) || len(d.Description) > 2000 || strings.TrimSpace(d.Description) == "" || len(d.Series) < 1 || len(d.Series) > 100 {
+	if err != nil || interval < time.Second || interval%time.Second != 0 || interval > 30*24*time.Hour || !Name.MatchString(d.Name) || len(d.Description) > 2000 || strings.TrimSpace(d.Description) == "" || (len(d.Series) < 1 && len(d.Delivers) == 0) || len(d.Series) > 100 || len(d.Delivers) > 8 {
 		return Adapter{}, ErrInvalid
+	}
+	channels := map[string]bool{}
+	for _, channel := range d.Delivers {
+		if !delivery.ValidChannel(channel) || channels[channel] {
+			return Adapter{}, ErrInvalid
+		}
+		channels[channel] = true
 	}
 	seen := map[string]bool{}
 	for _, def := range d.Series {
@@ -161,6 +172,9 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 			return out, err
 		}
 	}
+	if err = delivery.SetAdapterChannelsTx(ctx, tx, d.Name, d.Delivers); err != nil {
+		return out, err
+	}
 	if err = s.Auth.AuditSeriesTx(ctx, tx, actor, "series_write_granted", d.Name); err != nil {
 		return out, err
 	}
@@ -193,6 +207,9 @@ func (s Store) Remove(ctx context.Context, name string, deleteData bool, actor a
 			if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE series IN (SELECT name FROM series_definitions WHERE adapter=?)`, name); err != nil {
 				return err
 			}
+		}
+		if _, err = tx.ExecContext(ctx, `DELETE FROM adapter_channels WHERE adapter=?`, name); err != nil {
+			return err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM series_definitions WHERE adapter=?`, name); err != nil {
 			return err
@@ -232,6 +249,9 @@ func (s Store) Adapters(ctx context.Context) ([]Adapter, error) {
 	for i := range out {
 		defs, err := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT name,kind,unit FROM series_definitions WHERE adapter=? ORDER BY name`, out[i].Name)
 		if err != nil {
+			return nil, err
+		}
+		if out[i].Delivers, err = adapterChannels(ctx, s.DB, out[i].Name); err != nil {
 			return nil, err
 		}
 		out[i].Series = []Definition{}
@@ -416,4 +436,21 @@ type seriesTransaction interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func adapterChannels(ctx context.Context, db *sql.DB, adapter string) ([]string, error) {
+	rows, err := resourceaccess.NewDB(db).QueryContext(ctx, `SELECT channel FROM adapter_channels WHERE adapter=? ORDER BY channel LIMIT 8`, adapter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

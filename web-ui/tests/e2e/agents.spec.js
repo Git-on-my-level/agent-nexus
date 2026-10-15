@@ -304,7 +304,7 @@ async function installAgentsApi(page, overrides = {}) {
   return api;
 }
 
-test("roster groups agents by derived state and hands asks to the Inbox", async ({
+test("roster groups agents by derived state and hands asks to Decide", async ({
   page,
 }) => {
   const api = await installAgentsApi(page);
@@ -334,7 +334,6 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
     page.locator('[data-agent-row="release-bot.workstation-a"]'),
   ).toBeHidden();
   await expect(page.locator('[data-agent-dot="stale"]').first()).toBeVisible();
-  await expect(page.locator("[data-agents-nav-count]").first()).toHaveText("1");
 
   const working = page.locator('[data-agent-row="codex.workstation-a"]');
   await expect(working).toContainText("codex sol");
@@ -348,7 +347,7 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   const inboxLink = waiting.locator("[data-agent-inbox-link]");
   await expect(inboxLink).toHaveAttribute(
     "href",
-    `${BASE}/inbox?mailbox=needs-you&item=${encodeURIComponent(INBOX_ITEM.id)}`,
+    `${BASE}/decide/${encodeURIComponent(INBOX_ITEM.id)}`,
   );
   // Waiting rows come from the roster alone: no per-agent detail reads.
   expect(api.detailCalls).toEqual([]);
@@ -358,7 +357,7 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   // Silence only reads as an alarm where something is waiting on it.
   await expect(
     page.locator('[data-agent-row="builder.workstation-a"]'),
-  ).toContainText("No signal for 2d 2h on this task");
+  ).toContainText("No signal for 2d 2h on this initiative");
   await expect(
     page.locator('[data-agent-row="packager.workstation-a"]'),
   ).toContainText("Not running");
@@ -369,7 +368,7 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   ).toContainText("Never checked in");
 });
 
-test("roster keys move, open and hand off to the Inbox", async ({ page }) => {
+test("roster keys move, open and hand off to Decide", async ({ page }) => {
   await installAgentsApi(page);
   await page.goto(`${BASE}/agents`);
   await expect(page.locator("[data-agents-roster]")).toBeVisible();
@@ -385,7 +384,7 @@ test("roster keys move, open and hand off to the Inbox", async ({ page }) => {
     page.locator('[data-agent-row="claude.workstation-a"]'),
   ).toHaveAttribute("aria-current", "true");
   await page.keyboard.press("i");
-  await expect(page).toHaveURL(/\/inbox\?mailbox=needs-you&item=/);
+  await expect(page).toHaveURL(/\/decide\/[^/?]+$/);
 
   await page.goto(`${BASE}/agents`);
   await expect(page.locator("[data-agents-roster]")).toBeVisible();
@@ -420,7 +419,7 @@ test("agent page shows work, runs and notes, with credentials aside", async ({
   await expect(page.getByText("Exclude on workstation-a…")).toBeVisible();
 });
 
-test("waiting agent page links its ask into the Inbox", async ({ page }) => {
+test("waiting agent page links its ask into Decide", async ({ page }) => {
   await installAgentsApi(page);
   await page.goto(`${BASE}/agents/claude.workstation-a`);
   const ask = page.locator("[data-agent-open-ask]");
@@ -428,10 +427,10 @@ test("waiting agent page links its ask into the Inbox", async ({ page }) => {
   // created_at is an instant: 192 minutes floors to the shared hour phrase.
   await expect(ask).toContainText("3 h ago");
   await expect(
-    ask.getByRole("link", { name: "Answer in Inbox" }),
+    ask.getByRole("link", { name: "Answer in Decide" }),
   ).toHaveAttribute(
     "href",
-    `${BASE}/inbox?mailbox=needs-you&item=${encodeURIComponent(INBOX_ITEM.id)}`,
+    `${BASE}/decide/${encodeURIComponent(INBOX_ITEM.id)}`,
   );
 });
 
@@ -464,7 +463,7 @@ test("a loud status never squeezes the task link off a phone", async ({
 
   // And the link does what a link does.
   await link.click();
-  await expect(page).toHaveURL(/\/tasks\/card%3Atune-core-combat-loop$/);
+  await expect(page).toHaveURL(/\/initiatives\/card%3Atune-core-combat-loop$/);
 });
 
 test("the task link stays a usable target at every audited width", async ({

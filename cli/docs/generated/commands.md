@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `224`
+- Commands: `235`
 
 ## `actors.create`
 
@@ -874,6 +874,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
 
+## `brief.get`
+
+- CLI path: `orient`
+- HTTP: `GET /brief`
+- Stability: `stable`
+- Surface: `projection`
+- Input mode: `none`
+- Why: One brief for the human surfaces and the agent orient loop.
+- Concepts: `home`, `inbox`, `cards`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns the bare brief.v1 object.
+- Agent notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
+
 ## `cards.archive`
 
 - CLI path: `cards archive`
@@ -1029,6 +1042,114 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board, card }`.
+
+## `curation.candidates`
+
+- CLI path: `curation candidates`
+- HTTP: `GET /curation/candidates`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Let a PM review the same candidates the formula would propose, with judgment.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Output: Returns `{ candidates, limitations }`.
+- Agent notes: Read only. Post the ones worth a human decision with `curation propose`.
+
+## `curation.metrics`
+
+- CLI path: `curation metrics`
+- HTTP: `GET /curation/metrics`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Watch whether asks, decisions and promises are getting better.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
+- Output: Returns `{ metrics }`.
+- Agent notes: Counts only; no titles or refs.
+
+## `curation.propose`
+
+- CLI path: `curation propose`
+- HTTP: `POST /curation/proposals`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Let a PM post a curation proposal with its rationale.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`, `not_found`, `conflict`
+- Output: Returns `{ proposal }` with `status` created, existing or dismissed.
+- Agent notes: Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.
+
+## `curation.run`
+
+- CLI path: `curation run`
+- HTTP: `POST /curation/run`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Run the no-PM formula fallback now.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Output: Returns `{ proposals, skipped }`.
+- Agent notes: Proposals only; nothing is withdrawn or merged until a human accepts.
+
+## `curation.ungroup`
+
+- CLI path: `curation ungroup`
+- HTTP: `POST /curation/ungroup`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Undo a batch a human accepted.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
+- Output: Returns `{ ungrouped }`.
+- Agent notes: Human principals only. Returns whether any grouping was removed.
+
+## `deliveries.claim`
+
+- CLI path: `deliveries claim`
+- HTTP: `POST /deliveries/claim`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Claim due deliveries for a channel the calling adapter delivers.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns JSON with the named delivery objects.
+- Agent notes: Only the owning agent of an active adapter delivering the channel may claim. Claim tokens are returned only here; an expired lease makes the delivery claimable again.
+- Examples:
+  - Claim chat deliveries: `anx deliveries claim --channel chat --limit 10 --lease-seconds 60`
+
+## `deliveries.list`
+
+- CLI path: `deliveries list`
+- HTTP: `GET /deliveries`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List the caller's own queued notifications and wake deliveries with their receipts.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns JSON with the named delivery objects.
+- Agent notes: Reads only the caller's own rows; bounded by limit.
+
+## `deliveries.receipt`
+
+- CLI path: `deliveries receipt`
+- HTTP: `POST /deliveries/{delivery_id}/receipt`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Record delivered or failed for a delivery claimed by this adapter.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns JSON with the named delivery objects.
+- Agent notes: Receipts are idempotent per claim token; a stale or superseded claim returns conflict. A delivery on a channel the caller does not deliver reads as not found.
+- Examples:
+  - Confirm a delivery: `anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered`
 
 ## `derived.rebuild`
 
@@ -1793,6 +1914,34 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `compatibility`
 - Output: Returns `{ schema_version, command_registry_digest }`.
 
+## `notifications.settings.get`
+
+- CLI path: `notifications settings get`
+- HTTP: `GET /notification-settings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read the caller's notification channels and the channels adapters can deliver.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns JSON with the named delivery objects.
+- Agent notes: Human principals only; each principal reads its own settings.
+
+## `notifications.settings.set`
+
+- CLI path: `notifications settings set`
+- HTTP: `PUT /notification-settings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `file-and-body`
+- Why: Replace the caller's notification channels, addresses and push or digest opt-ins.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns JSON with the named delivery objects.
+- Agent notes: Human principals only. The whole channel list is replaced; channels must be delivered by an active adapter.
+- Examples:
+  - Set channels: `anx notifications settings set --body-file settings.json`
+
 ## `ops.blob.usage.rebuild`
 
 - CLI path: `ops blob usage rebuild`
@@ -1853,13 +2002,13 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `documents`, `cards`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns the workspace Overview projection.
-- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.
+- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.
 
 ## `plan.set`
 
 - CLI path: `plan set`
 - HTTP: `PUT /cards/{card_id}/plan`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `json-body`
 - Why: Add linked steps rather than writing progress prose. Never select a view.
@@ -1872,7 +2021,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `plan show`
 - HTTP: `GET /cards/{card_id}/plan`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `flags`
 - Why: Read live initiative steps, progress and health.
@@ -2416,7 +2565,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `series push`
 - HTTP: `POST /series/{name}/points`
-- Stability: `beta`
+- Stability: `stable`
 - Surface: `canonical`
 - Input mode: `flags`
 - Why: Push one declared series point.

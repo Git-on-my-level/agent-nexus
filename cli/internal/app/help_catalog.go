@@ -202,6 +202,9 @@ func runtimeHelpDocTopics() []runtimeHelpDocTopic {
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if isInternalWorkCommand(name) {
+			continue
+		}
 		addTopic(runtimeHelpDocTopic{Path: name, Kind: "command", Summary: workCommands[name].summary})
 	}
 	return topics

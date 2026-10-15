@@ -24,6 +24,7 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/delivery"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/series"
@@ -120,6 +121,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithActorRegistry(registry),
 		WithAuthStore(authStore),
 		WithSeriesStore(&series.Store{DB: servingDB, Auth: authStore}),
+		WithDeliveryStore(&delivery.Store{DB: servingDB}),
 		WithRunStore(commandcenter.NewStore(servingDB, commandcenter.SQLIdentities{DB: servingDB})),
 		WithWorkspaceHumanGrantVerifier(options.workspaceHumanGrantVerifier),
 		WithWorkspaceManagedAgentGrantVerifier(options.workspaceManagedGrantVerifier),

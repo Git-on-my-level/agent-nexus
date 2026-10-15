@@ -26,9 +26,10 @@
       "url": "/tasks/initiative",
       "resolvable": true,
       "plan_health": {
-        "state": "on_track",
-        "reason": "Open steps are progressing.",
-        "since": "2026-10-04T12:00:00Z"
+        "state": "no_promise",
+        "reason": "No promise.",
+        "since": "2026-10-04T12:00:00Z",
+        "last_evidence_at": "2026-10-04T12:00:00Z"
       },
       "possibly_moot": {
         "flagged": false,
@@ -36,9 +37,9 @@
       },
       "summary": {
         "status": {
-          "state": "on_track",
-          "label": "In progress",
-          "reason": "Open steps are progressing.",
+          "state": "no_promise",
+          "label": "No promise",
+          "reason": "No promise.",
           "since": "2026-10-04T12:00:00Z"
         },
         "progress": {

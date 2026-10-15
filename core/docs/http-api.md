@@ -157,7 +157,7 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
   - Coordination noise does not count as activity: agent notification read/dismissal, topic-creation bookkeeping, and derived projection maintenance.
 - Topic, board, and card backing-thread linkage is exposed through `thread_id` on the canonical resource shape; keeping those backing links synchronized no longer emits an operator-visible timeline event or bumps the topic’s visible update clock.
 
-- `work.annotate` proposal `instruction` must be a nonempty JSON object. Allowed keys are `project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`, `dark_after`, `start_at`, `due_at`, `relations`, and `executions`. Priority accepts `p0`, `p1`, `p2`, `p3`; dates accept an RFC 3339 timestamp (priority and dates also accept an empty string or null to clear). `dark_after` accepts a Go duration (`168h`) or a day count (`7d`), or an empty string or null to clear; it sets how far out the next dated signal must lie before the card reads dark. Blockers must be an array of strings; relations must be an array of objects with `kind` (`parent`, `child`, `depends_on`, `related`, `artifact`) and a nonempty string `ref` such as `card:<handle-or-id>`; executions must be an array of objects with nonempty string `authority` and `run_id`. Both proposal endpoints validate keys and canonical local value shapes before insertion; invalid input returns `400 invalid_request` with the key allowlist for unknown keys and accepted values or shapes for value errors.
+- `work.annotate` proposal `instruction` must be a nonempty JSON object. Allowed keys are `project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`, `start_at`, `due_at`, `relations`, and `executions`. Priority accepts `p0`, `p1`, `p2`, `p3`; dates accept an RFC 3339 timestamp (priority and dates also accept an empty string or null to clear). Blockers must be an array of strings; relations must be an array of objects with `kind` (`parent`, `child`, `depends_on`, `related`, `artifact`) and a nonempty string `ref` such as `card:<handle-or-id>`; executions must be an array of objects with nonempty string `authority` and `run_id`. Both proposal endpoints validate keys and canonical local value shapes before insertion; invalid input returns `400 invalid_request` with the key allowlist for unknown keys and accepted values or shapes for value errors.
 - `POST /pm/turns/{turn_id}/heartbeat` accepts `{"lease_token":"..."}` from the selected PM actor and returns `200 PMHeartbeatTurn` without the token. It renews `lease_expires_at` to `min(now + ANX_PM_LEASE_TTL, deadline)` under the claim write lock. Missing token returns `409 lease_required`; expired, released, or foreign token returns `409 lease_mismatch`; closed turn returns `409 turn_closed`. TTL defaults to `60s` (range `1s` to `10m`). Runners must renew at a cadence strictly less than TTL/2. Expiry makes the same open turn unclaimed/pending and reclaimable with a new token, preserving history; it does not fail the turn. Only reaching the turn deadline does that.
 
 ## Generic sessions and nonlocking task participation
@@ -256,9 +256,9 @@ The canonical shapes and error codes are in `contracts/anx-openapi.yaml`. See th
 
 Steps require a unique slug `id` (64 bytes) and `title` (500 bytes), with optional `ref`, `after` (existing unique step ids, max 50), `due` (YYYY-MM-DD or RFC3339), and `status` (done, active, blocked, not_started). Plans cap at 200 steps and reject cycles. Refs accept card/doc/document/topic refs, opaque adapter-published identifier aliases, or absolute HTTP(S) URLs (2048 bytes). External state comes from ingested source observations and generic structured source_refs; there is no network fetch. Unknown, ambiguous or inaccessible evidence keys remain unresolved. Referencing a private published key makes the stored plan inherit its card and board ownership before projection, pagination and counts.
 
-Card and work reads expose `plan` and `plan_state`. State has effective `steps`, `progress:{done,total}`, `critical_path` (unfinished ids), `next_steps` (dependency-ready, unblocked ids), `shape` and `health`. A connected path is chain; disconnected paths are lanes; any branching/merging graph is dag. Longest paths count unfinished steps and break ties by lexicographic ids. Detailed plan_health uses the shared six-state rules below; legacy health retains on_track/stalled/blocked. Any unfinished blocked step makes health blocked; detailed completed plans are done, and empty plans are no_plan or stale. Set `ANX_PLAN_STALLED_AFTER` to a positive Go duration to configure the threshold. Plan edits and referenced native activity or external meaningful progress/source activity count as movement; unchanged observation timestamps do not. Doc/topic/board preview status is lifecycle state. Doc/topic plan steps have no workflow phase, so use their fallback status without inventing completion from existence.
+Card and work reads expose `plan` and `plan_state`. State has effective `steps`, `progress:{done,total}`, `critical_path` (unfinished ids), `next_steps` (dependency-ready, unblocked ids) and `shape`. A connected path is chain; disconnected paths are lanes; any branching/merging graph is dag. Longest paths count unfinished steps and break ties by lexicographic ids. `plan_health` uses the promise rules below. Plan edits and referenced native activity or external meaningful progress/source activity count as movement; unchanged observation timestamps do not. Doc/topic/board preview status is lifecycle state. Doc/topic plan steps have no workflow phase, so use their fallback status without inventing completion from existence.
 
-The existing live-initiatives report projection retains `progress` and `needs[]`. Plans replace markdown-derived progress with computed counts and needs with blocked step titles; `plan_state` and `health` are additional fields. Cards without plans retain the previous summary projection.
+The existing live-initiatives report projection retains `progress` and `needs[]`. Plans replace markdown-derived progress with computed counts and needs with blocked step titles; `plan_state` and `health` (the `plan_health.state` promise state) are additional fields. Cards without plans retain the previous summary projection.
 
 Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 200 rows per native report scope). Plan enrichment uses one plan/activity query per 50 selected cards plus at most one fact query per referenced resource kind and one external-evidence scan, independent of card/step count. Batch ref resolution uses at most five initial kind queries, one plan/activity query per 50 selected cards and five linked-fact queries. Work and plan projection reads never call `GetWork` per row or ref. Native report event and decision reads each stop after one 200-candidate page, including uncached `POST /reports/preview`, and preserve `truncated` when more remain. `GET /work` applies its source, owner, phase, freshness, query and project filters in SQL before a bounded page is hydrated. Cursor ordering uses UTC timestamps and card IDs, including nanosecond precision.
 
@@ -276,9 +276,9 @@ string `summary`. Supported Card, Work and Overview reads accept `summary=1`
 to put the computed object at `summary` and retain prose at `summary_text`.
 This explicit opt-in allows clients to migrate without breaking Markdown readers.
 
-`status:{state,label,reason,since?}` is always present and uses effective health,
-including blocked steps, near due dates, stale movement and terminal card phase.
-`set_status:{state,label}` appears when the stored phase disagrees. Optional
+`status:{state,label,reason,since?}` is always present and carries the card's
+promise state (`past_promise`, `moving`, `no_promise` or `done`), the same value
+as `plan_health.state`. The stored phase is placement, not a status. Optional
 parts are omitted without a meaningful signal: `progress:{done,total,unit}`
 counts plan steps or explicit child-card relations; `next:{id,title,ref,more}`
 selects a readable ready step; `owner` prefers the latest source owner, then
@@ -286,7 +286,7 @@ native assignment/execution actor; `due`, `age` and `last_movement_at` describe
 card timing. Ages are nonnegative seconds. `source` appears for external
 authority. `steps` retains the bounded plan-step digest. The same canonical
 inputs and rules apply on every enriched read surface; clients need no status
-or progress heuristics. Legacy phase, health, progress and plan fields remain.
+or progress heuristics. Stored phase, progress and plan fields remain.
 
 Summary inputs are loaded in batches of at most 50 canonical card IDs. Linked
 facts share the existing 4,000-ref resolution budget across plans and explicit
@@ -368,9 +368,9 @@ advance the baseline. A first visit (or unauthenticated dev read) has null since
 and empty items; anonymous reads never share stored visit state.
 
 Digest items have kind, ref, title, optional step_id and optional ts. Kinds are
-`step_completed`, `initiative_stalled` (with additive `kind_v2: initiative_stale`), `initiative_blocked`, `ask_answered`,
-and `decision_created`. Steps and health are net changes against previously
-visible statuses, including time-only stalling and steps of now-closed cards.
+`step_completed`, `initiative_past_promise`, `ask_answered` and
+`decision_created`. Steps and promise state are net changes against previously
+visible statuses, including time-only promise misses and steps of now-closed cards.
 Newly visible cards do not invent transitions. Answers are canonical events
 and new decisions are ordinary permission-filtered PM records in
 `(since,generated_at]`; private answer/decision text is never copied. Reads
@@ -411,6 +411,17 @@ fenced examples and counting empty Markdown checkbox lines.
 
 See `../../docs/live-series.md` for adapter declaration, scoped token exchange, bounded queries, caps, retention, panel sources and fallback semantics. The canonical paths and JSON schemas are in `contracts/anx-openapi.yaml`.
 
+## Delivery queue and notification settings
+
+One durable queue carries agent wakes (bridge channel, mirrored from `agent_wakeups`) and human push or digest notifications. Adapters that declare `delivers: [channel]` (up to 8 per declaration; `bridge` is reserved) move deliveries for those channels; `series` may be empty when `delivers` is non-empty.
+
+- `GET /deliveries?limit=N` (`anx deliveries list`): the caller's own deliveries, newest first, each with up to 10 receipts: `{"deliveries":[{"delivery":{...},"receipts":[...]}]}`. Any authenticated principal; `limit` is capped at 200.
+- `POST /deliveries/claim` (`anx deliveries claim --channel`): body `{channel, limit, lease_seconds}`. Only the owning agent of an active adapter that delivers the channel may claim; others get `403 forbidden`. Returns `{"deliveries":[...]}` including `address` and `claim_token`. An expired lease makes a delivery claimable again.
+- `POST /deliveries/{delivery_id}/receipt` (`anx deliveries receipt`): body `{claim_token, outcome: delivered|failed, error, retryable}`; returns `{"delivery":{...}}`. A stale or superseded claim returns `409 conflict`; a delivery on a channel the caller does not deliver returns `404 not_found`. Retryable failures back off from 30 seconds, doubling to 1 hour, and fail permanently after 6 attempts.
+- `GET /notification-settings` and `PUT /notification-settings` (`anx notifications settings get|set`): a human principal's own channels. `PUT` replaces the whole list `{"channels":[{channel,address,push_enabled,digest_enabled}]}`; each channel must be delivered by an active adapter (`400 invalid_request` otherwise). Both return `{"channels":[...],"available_channels":[...]}`. Agent principals get `403 forbidden`.
+
+Receipts (`notification_delivered`, `notification_failed`) live in the queue, not the event log. Push and digest content is built only for principals who can read the ask; the heartbeat `attention_summary` carries counts and times only. Claim and receipt mutate under a lease and claim token and are not auto-retried by routes; see the `delivery` section of `contracts/anx-schema.yaml`.
+
 ### Conditional card archive
 
 `POST /cards/{card_id}/archive` accepts optional `if_latest_observation_id`, a
@@ -444,28 +455,20 @@ time uses its containing card timestamp.
 Card reads/lists, work reads/lists, ref previews, initiative overview and live
 reports add `plan_health: {state, reason, since}`, `next_step: {id, title, ref}`
 (or null), `status_mismatch`, and `possibly_moot` alongside existing progress and `plan_state`.
-Health precedence: no steps → `no_plan` if recent, `stale` after the inactivity threshold; all complete → `done`; any unfinished
-blocked step/dependency → `blocked`; card or unfinished step due within 24 hours
-or overdue → `at_risk`; no card/plan/step activity for 72 hours → `stale`;
-an active card — stored phase in progress or in review, and not archived —
-that would otherwise read `on_track` and whose next dated signal lies further
-out than the dark horizon or does not exist → `dark`; otherwise `on_track`.
-Done, cancelled, blocked, backlog, ready and archived cards keep the states
-they already read. A planless active card reads `dark` on `plan_health` too,
-replacing `no_plan`, so agents reading this field see what the summary chip
-says. The next dated
-signal is the earliest of open (unfinished) step due dates, the effective card
-`due_at`, and the first RFC3339 instant or YYYY-MM-DD date inside the
-`wake_condition` annotation (first 1024 bytes scanned; a past signal still
-counts, so an already-due wake is never dark). The horizon defaults to 168
-hours (7 days); workspace service env `ANX_PLAN_DARK_AFTER` overrides it and
-the per-card `dark_after` annotation (duration such as `72h` or `7d`; empty
-clears) overrides it per card. A signal exactly at the horizon is not dark.
-Workspace service env `ANX_PLAN_STALLED_AFTER` overrides
-the stale threshold. Card and linked card messages count as activity; repeated
-source polls do not. `since` is the reproducible condition anchor documented in
-OpenAPI, not a persisted historical transition timestamp; for `dark` it is the
-next dated signal (null when the card has no dated signal at all). Ready steps prefer the
+The state is one clock, promise versus evidence (`promises` in
+`contracts/anx-schema.yaml`). The counted promise is the earliest unmet `at`
+among open step due dates, the effective card `due_at`, the first RFC3339
+instant or YYYY-MM-DD date inside `wake_condition` (first 1024 bytes scanned)
+and each author's latest note `next`. Resets are a linked step resource moving,
+a plan edit, a changed source observation and a note carrying resolved
+evidence; card chatter without evidence is not a reset, and repeated source
+polls do not count. States: `done` (card done or cancelled), `past_promise`
+(the counted promise is past and no reset landed since), `moving` (a counted
+promise is still ahead) and `no_promise`. There are no inactivity thresholds,
+dark horizons or per-card overrides; blocked is a count, not a state. Optional
+`promise`, `past_promise_for_seconds`, `promise_moves` and `last_evidence_at`
+explain the state. `since` is `promise.at` for `past_promise` and
+`last_evidence_at` otherwise (null for `done`). Ready steps prefer the
 critical path, then lexicographic id, skipping unreadable linked resources.
 `status_mismatch` is true for backlog cards with completed steps; computation
 never changes phase.
@@ -482,7 +485,6 @@ withholds the flag entirely — an unobserved source never counts as terminal.
 `sources` counts the known sources and zero never flags. The flag only carries evidence ("all 2
 linked sources are merged"); it never auto-closes anything, and computation
 never changes phase.
-`plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, `dark` (unnamed there) to on_track, other detailed states to on_track. New clients read `plan_health.state`.
 
 ### Computed card summaries
 
@@ -506,7 +508,7 @@ report card panels accept the same opt-in. Card plan reads and resolved card
 previews expose their computed `summary` directly; Inbox related-card context
 resolves at most 50 distinct card refs per visible page.
 
-Summary parts are `status`, `set_status`, `progress`, `next`, `owner`, `due`,
+Summary parts are `status`, `progress`, `next`, `owner`, `due`,
 `age`, `created_at`, `last_movement_at`, `source`, `steps`, `attention`,
 `resolution_truncated` and `attention_truncated`. Attention includes `count`,
 `oldest_age`, `oldest_at` and optional `truncated`. Ages are elapsed seconds;
@@ -537,7 +539,7 @@ Boards expose an open `role` string on create, patch, get and list. `anx boards 
 
 Evidence resolution uses a transactionally maintained lookup index with 200-candidate pages. Aggregated plan refs are resolved in batches of at most 200. Card and board access are checked before enrichment and serialization, including work observations and plan reads. Effective health inputs are shared: explicit work due annotations (including clearing) override card due dates; meaningful source activity/progress, plan edits and discussion timestamps are normalized once.
 
-Evidence lookups apply principal card/board access before selecting at most 33 candidates per exact key; overloaded visible aliases remain unknown. Source URL lookup selects at most two accessible native cards per URL, sufficient to establish ambiguity. Aggregated plan reads share a round-robin budget of 4,000 distinct refs, resolved in batches of 200. `plan_resolution_truncated` reports omitted refs. Both `identifier_aliases` and compatible `aliases` publish exact generic aliases (50 unique strings, 2048 bytes each). Detailed health remains available in `plan_health.state`, `plan_state.health_state`, and Overview `health.state`; legacy badges remain `on_track`, `blocked`, or `stalled`.
+Evidence lookups apply principal card/board access before selecting at most 33 candidates per exact key; overloaded visible aliases remain unknown. Source URL lookup selects at most two accessible native cards per URL, sufficient to establish ambiguity. Aggregated plan reads share a round-robin budget of 4,000 distinct refs, resolved in batches of 200. `plan_resolution_truncated` reports omitted refs. Both `identifier_aliases` and compatible `aliases` publish exact generic aliases (50 unique strings, 2048 bytes each). Health is `plan_health.state`, one of `past_promise`, `moving`, `no_promise` or `done`.
 
 Indexed alias caps apply equally to `source_refs`, `source`, observation `facts`,
 and observation `evidence`: each alias array allows 50 unique nonblank strings;

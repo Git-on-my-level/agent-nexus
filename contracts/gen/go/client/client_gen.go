@@ -839,6 +839,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"boards.archive", "boards.cards.batch_add", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.trash", "boards.unarchive"},
 	},
 	{
+		CommandID: "brief.get",
+		CLIPath:   "orient",
+		Group:     "orient",
+		Method:    "GET",
+		Path:      "/brief",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"home", "inbox", "cards"},
+	},
+	{
 		CommandID:  "cards.archive",
 		CLIPath:    "cards archive",
 		Group:      "cards",
@@ -991,6 +1001,107 @@ var CommandRegistry = []CommandSpec{
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
 		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline"},
+	},
+	{
+		CommandID: "curation.candidates",
+		CLIPath:   "curation candidates",
+		Group:     "curation",
+		Method:    "GET",
+		Path:      "/curation/candidates",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"curation.metrics", "curation.propose", "curation.run", "curation.ungroup"},
+	},
+	{
+		CommandID: "curation.metrics",
+		CLIPath:   "curation metrics",
+		Group:     "curation",
+		Method:    "GET",
+		Path:      "/curation/metrics",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"curation.candidates", "curation.propose", "curation.run", "curation.ungroup"},
+	},
+	{
+		CommandID: "curation.propose",
+		CLIPath:   "curation propose",
+		Group:     "curation",
+		Method:    "POST",
+		Path:      "/curation/proposals",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.run", "curation.ungroup"},
+	},
+	{
+		CommandID: "curation.run",
+		CLIPath:   "curation run",
+		Group:     "curation",
+		Method:    "POST",
+		Path:      "/curation/run",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.propose", "curation.ungroup"},
+	},
+	{
+		CommandID: "curation.ungroup",
+		CLIPath:   "curation ungroup",
+		Group:     "curation",
+		Method:    "POST",
+		Path:      "/curation/ungroup",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"curation.candidates", "curation.metrics", "curation.propose", "curation.run"},
+	},
+	{
+		CommandID: "deliveries.claim",
+		CLIPath:   "deliveries claim",
+		Group:     "deliveries",
+		Method:    "POST",
+		Path:      "/deliveries/claim",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"deliveries.list", "deliveries.receipt"},
+		Examples: []Example{
+			{
+				Title:   "Claim chat deliveries",
+				Command: "anx deliveries claim --channel chat --limit 10 --lease-seconds 60",
+			},
+		},
+	},
+	{
+		CommandID: "deliveries.list",
+		CLIPath:   "deliveries list",
+		Group:     "deliveries",
+		Method:    "GET",
+		Path:      "/deliveries",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"deliveries.claim", "deliveries.receipt"},
+	},
+	{
+		CommandID:  "deliveries.receipt",
+		CLIPath:    "deliveries receipt",
+		Group:      "deliveries",
+		Method:     "POST",
+		Path:       "/deliveries/{delivery_id}/receipt",
+		PathParams: []string{"delivery_id"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"inbox"},
+		Adjacent:   []string{"deliveries.claim", "deliveries.list"},
+		Examples: []Example{
+			{
+				Title:   "Confirm a delivery",
+				Command: "anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered",
+			},
+		},
 	},
 	{
 		CommandID: "derived.rebuild",
@@ -1777,6 +1888,34 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.readyz"},
 	},
 	{
+		CommandID: "notifications.settings.get",
+		CLIPath:   "notifications settings get",
+		Group:     "notifications",
+		Method:    "GET",
+		Path:      "/notification-settings",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"notifications.settings.set"},
+	},
+	{
+		CommandID: "notifications.settings.set",
+		CLIPath:   "notifications settings set",
+		Group:     "notifications",
+		Method:    "PUT",
+		Path:      "/notification-settings",
+		InputMode: "file-and-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"notifications.settings.get"},
+		Examples: []Example{
+			{
+				Title:   "Set channels",
+				Command: "anx notifications settings set --body-file settings.json",
+			},
+		},
+	},
+	{
 		CommandID: "ops.blob.usage.rebuild",
 		CLIPath:   "ops blob usage rebuild",
 		Group:     "ops",
@@ -1839,7 +1978,7 @@ var CommandRegistry = []CommandSpec{
 		Path:       "/cards/{card_id}/plan",
 		PathParams: []string{"card_id"},
 		InputMode:  "json-body",
-		Stability:  "beta",
+		Stability:  "stable",
 		Concepts:   []string{"cards", "write"},
 		Adjacent:   []string{"plan.show"},
 	},
@@ -1851,7 +1990,7 @@ var CommandRegistry = []CommandSpec{
 		Path:       "/cards/{card_id}/plan",
 		PathParams: []string{"card_id"},
 		InputMode:  "flags",
-		Stability:  "beta",
+		Stability:  "stable",
 		Concepts:   []string{"cards", "read"},
 		Adjacent:   []string{"plan.set"},
 	},
@@ -2332,7 +2471,7 @@ var CommandRegistry = []CommandSpec{
 		Path:       "/series/{name}/points",
 		PathParams: []string{"name"},
 		InputMode:  "flags",
-		Stability:  "beta",
+		Stability:  "stable",
 		Concepts:   []string{"documents"},
 		Adjacent:   []string{"series.list", "series.query", "series.show"},
 		Examples: []Example{
@@ -3139,6 +3278,10 @@ func (c *Client) BoardsWorkspace(ctx context.Context, pathParams map[string]stri
 	return c.Invoke(ctx, "boards.workspace", pathParams, opts)
 }
 
+func (c *Client) BriefGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "brief.get", nil, opts)
+}
+
 func (c *Client) CardsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "cards.archive", pathParams, opts)
 }
@@ -3189,6 +3332,38 @@ func (c *Client) CardsTimeline(ctx context.Context, pathParams map[string]string
 
 func (c *Client) CardsTrash(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "cards.trash", pathParams, opts)
+}
+
+func (c *Client) CurationCandidates(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.candidates", nil, opts)
+}
+
+func (c *Client) CurationMetrics(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.metrics", nil, opts)
+}
+
+func (c *Client) CurationPropose(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.propose", nil, opts)
+}
+
+func (c *Client) CurationRun(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.run", nil, opts)
+}
+
+func (c *Client) CurationUngroup(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "curation.ungroup", nil, opts)
+}
+
+func (c *Client) DeliveriesClaim(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "deliveries.claim", nil, opts)
+}
+
+func (c *Client) DeliveriesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "deliveries.list", nil, opts)
+}
+
+func (c *Client) DeliveriesReceipt(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "deliveries.receipt", pathParams, opts)
 }
 
 func (c *Client) DerivedRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
@@ -3425,6 +3600,14 @@ func (c *Client) MetaReadyz(ctx context.Context, opts RequestOptions) (*http.Res
 
 func (c *Client) MetaVersion(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "meta.version", nil, opts)
+}
+
+func (c *Client) NotificationsSettingsGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.settings.get", nil, opts)
+}
+
+func (c *Client) NotificationsSettingsSet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.settings.set", nil, opts)
 }
 
 func (c *Client) OpsBlobUsageRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

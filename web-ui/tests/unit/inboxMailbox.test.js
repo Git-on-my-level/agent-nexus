@@ -525,7 +525,7 @@ describe("inbox mailbox row ids", () => {
 });
 
 describe("inbox subject fallback labels", () => {
-  it("names a card subject as Task, humanizing the handle when no work title is known", () => {
+  it("names a card subject by its ref only when no title is visible", () => {
     const rows = buildInboxRows({
       inboxItems: [
         {
@@ -538,7 +538,7 @@ describe("inbox subject fallback labels", () => {
       ],
     });
     const row = rows.find((item) => item.id === "inbox:in-card");
-    expect(row.source).toBe("Task: Card 1");
+    expect(row.source).toBe("Initiative: card:card-1");
   });
 });
 
@@ -661,7 +661,7 @@ describe("inbox subjects", () => {
     expect(subject).toMatchObject({
       ref: "card:lock-hub-quest",
       kind: "card",
-      noun: "Task",
+      noun: "Initiative",
       title: "Lock hub quest path",
     });
     // The state comes from the shared summary, so the "Blocks …" box cannot
@@ -763,7 +763,9 @@ describe("update rows", () => {
         ({ "actor-leo": "Leo Park", "actor-nina": "Nina Vale" })[id] || "",
     });
     const row = rows.find((item) => item.kind === "update");
-    expect(row.source).toBe("Leo moved 2 tasks to review · Nina commented");
+    expect(row.source).toBe(
+      "Leo moved 2 initiatives to review · Nina commented",
+    );
     expect(row.source).not.toMatch(/Board updates|Thread updates/);
     expect(inboxRowBadge(row)).toBeNull();
   });
@@ -958,7 +960,7 @@ it("ranks decisions by the linked work priority when the proposal has none", () 
 });
 
 it("does not revive a stored blocker when core says its plan is done or moving", () => {
-  for (const state of ["done", "on_track", "stale"]) {
+  for (const state of ["done", "moving", "past_promise"]) {
     const item = {
       ref: `card:${state}`,
       phase: "blocked",
@@ -972,7 +974,7 @@ it("does not revive a stored blocker when core says its plan is done or moving",
     const rows = buildInboxRows({ work: [item] });
     expect(filterMailbox(rows, "needs-you")).toEqual([]);
     expect(isStaleBlockedTask(item)).toBe(false);
-    if (state === "stale") expect(rows[0].mailbox).toBe("watching");
+    if (state === "past_promise") expect(rows[0].mailbox).toBe("watching");
   }
 });
 

@@ -25,27 +25,6 @@ function walk(node, visit) {
   }
 }
 
-it("every authored text field in the Inbox response form uses durable drafts", () => {
-  const ast = parse(
-    readFileSync(
-      `${root}/lib/components/inbox/InboxRespondPanel.svelte`,
-      "utf8",
-    ),
-  );
-  let fields = 0;
-  walk(ast.html, (node) => {
-    if (node.type !== "Element" || node.name !== "textarea") return;
-    fields += 1;
-    expect(
-      node.attributes.some(
-        (attribute) =>
-          attribute.type === "Action" && attribute.name === "durableDraft",
-      ),
-    ).toBe(true);
-  });
-  expect(fields).toBe(2);
-});
-
 it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
   for (const path of files(root)) {
     const ast = parse(readFileSync(path, "utf8"));
@@ -68,6 +47,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "createPmConversation",
           "sendPmMessage",
           "answerPmDecision",
+          "ungroupCurationBatch",
           "createPmDecision",
           "createArtifactAttachment",
           "createWork",
@@ -78,6 +58,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "updateBoardCard",
           "moveBoardCard",
           "createCardRevision",
+          "setNotificationSettings",
           "archiveDocument",
           "unarchiveDocument",
           "trashDocument",
@@ -193,7 +174,7 @@ it("PM recovery sends the checkpointed bodies without upgrading or rebuilding th
 
 it("task and document authoring surfaces checkpoint complete forms", () => {
   for (const [path, expected] of [
-    ["routes/o/[organization]/w/[workspace]/tasks/new/+page.svelte", 1],
+    ["routes/o/[organization]/w/[workspace]/initiatives/new/+page.svelte", 1],
     ["lib/components/CommandPalette.svelte", 1],
     ["routes/o/[organization]/w/[workspace]/docs/+page.svelte", 1],
     [
@@ -213,7 +194,10 @@ it("task and document authoring surfaces checkpoint complete forms", () => {
 
 it("task moves checkpoint full drafts and have no legacy direct sender", () => {
   for (const [path, action] of [
-    ["routes/o/[organization]/w/[workspace]/tasks/+page.svelte", "durableForm"],
+    [
+      "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte",
+      "durableForm",
+    ],
     ["lib/components/CommandPalette.svelte", "durableMoveForm"],
   ]) {
     const ast = parse(readFileSync(`${root}/${path}`, "utf8"));
@@ -270,6 +254,20 @@ it("event lifecycle surfaces share a durable batch composer", () => {
   }
   const ast = parse(
     readFileSync(`${root}/lib/components/EventLifecycleWork.svelte`, "utf8"),
+  );
+  let actions = 0;
+  walk(ast.html, (node) => {
+    if (node.type === "Action" && node.name === "durableForm") actions++;
+  });
+  expect(actions).toBe(1);
+});
+
+it("notification settings checkpoint their complete form and send only through the outbox", () => {
+  const ast = parse(
+    readFileSync(
+      `${root}/routes/o/[organization]/w/[workspace]/notifications/+page.svelte`,
+      "utf8",
+    ),
   );
   let actions = 0;
   walk(ast.html, (node) => {

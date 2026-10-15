@@ -113,8 +113,8 @@ func TestAwaitActionsFollowStructuredOutcome(t *testing.T) {
 	for _, tc := range []struct {
 		outcome, want string
 	}{
-		{"answered", "anx work note Ship card:task"},
-		{"approved", "anx work note Ship card:task"},
+		{"answered", "anx note card:task Ship"},
+		{"approved", "anx note card:task Ship"},
 		{"acknowledged", "anx work get card:task"},
 	} {
 		actions := deriveNextActions("await", nil, map[string]any{"outcome": tc.outcome, "answer": "Ship", "subject_ref": "card:task"})

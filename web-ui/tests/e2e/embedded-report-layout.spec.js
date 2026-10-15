@@ -2,6 +2,8 @@ import { mkdir } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
+import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
 import {
   expectNoClippedContent,
@@ -11,7 +13,7 @@ import {
 /**
  * A report embedded in a narrower container than it was designed for.
  *
- * The Overview pins a dashboard below the initiatives, and that dashboard is a
+ * Watch pins a dashboard below the initiatives, and that dashboard is a
  * full report rendered into a column that is already sharing the page with a
  * sidebar. A `live-initiatives` panel inside it carries whole plans — a tech
  * tree eight layers wide, step titles a sentence long, a dependency list that
@@ -26,7 +28,8 @@ import {
  */
 
 const WORKSPACE = "/o/local/w/local";
-const OVERVIEW = `${WORKSPACE}/overview`;
+// The old Overview's pinned dashboard now lives below the initiatives on Watch.
+const OVERVIEW = `${WORKSPACE}/watch`;
 const DOC_ID = "wide-dashboard";
 const NOW = "2026-10-06T12:00:00Z";
 
@@ -253,6 +256,11 @@ async function installEmbeddedReport(page) {
         body: JSON.stringify(body),
       });
 
+    // Watch lists its dashboard candidates from this read.
+    if (path === "/workspace/dashboard/reports")
+      return json(SNAPSHOT.dashboard);
+    // Watch reads the brief for its initiatives; the dashboard sits below them.
+    if (path === "/brief") return json({ ...brief, generated_at: NOW });
     if (path === "/overview" || path === "/workspace/dashboard") {
       return json(SNAPSHOT);
     }
@@ -418,6 +426,8 @@ test("a plan too wide to fit scrolls inside its own box, and says so", async ({
 
   // And the diagram is reachable: scrolling it right brings the last column in.
   if (box.scrollable) {
+    // Watch lists the initiatives first, so the dashboard starts below the fold.
+    await scroller.scrollIntoViewIfNeeded();
     await scroller.evaluate((node) => {
       node.scrollLeft = node.scrollWidth;
     });

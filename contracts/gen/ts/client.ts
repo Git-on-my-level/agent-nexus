@@ -174,6 +174,12 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "name",
           "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "delivers",
+          "type": "list\u003cstring\u003e"
         },
         {
           "name": "series",
@@ -3679,6 +3685,36 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "boardsWorkspace"
   },
   {
+    "command_id": "brief.get",
+    "cli_path": "orient",
+    "group": "orient",
+    "method": "GET",
+    "path": "/brief",
+    "operation_id": "getBrief",
+    "summary": "Read the caller's brief.v1 for this workspace",
+    "description": "Decisions waiting on the caller, initiatives against their promises, the caller's own open asks and asks answered for them. Decide, Watch and `anx orient --json` all render this object.",
+    "why": "One brief for the human surfaces and the agent orient loop.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the bare brief.v1 object.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token"
+    ],
+    "concepts": [
+      "home",
+      "inbox",
+      "cards"
+    ],
+    "stability": "stable",
+    "surface": "projection",
+    "agent_notes": "Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.",
+    "go_method": "BriefGet",
+    "ts_method": "briefGet"
+  },
+  {
     "command_id": "cards.archive",
     "cli_path": "cards archive",
     "group": "cards",
@@ -4648,6 +4684,431 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "CardsTrash",
     "ts_method": "cardsTrash"
+  },
+  {
+    "command_id": "curation.candidates",
+    "cli_path": "curation candidates",
+    "group": "curation",
+    "method": "GET",
+    "path": "/curation/candidates",
+    "operation_id": "listCurationCandidates",
+    "summary": "List formula curation candidates",
+    "description": "Bounded formula review of open asks and initiatives: asks whose every observed linked source is terminal (withdraw as moot), near-duplicate initiatives (merge) and open asks sharing a subject or thread (batch). Candidates are suggestions, never actions. An unobserved source withholds a moot candidate, sources are never named, and restricted asks and initiatives are never candidates. Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.",
+    "why": "Let a PM review the same candidates the formula would propose, with judgment.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ candidates, limitations }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Read only. Post the ones worth a human decision with `curation propose`.",
+    "adjacent_commands": [
+      "curation.metrics",
+      "curation.propose",
+      "curation.run",
+      "curation.ungroup"
+    ],
+    "go_method": "CurationCandidates",
+    "ts_method": "curationCandidates"
+  },
+  {
+    "command_id": "curation.metrics",
+    "cli_path": "curation metrics",
+    "group": "curation",
+    "method": "GET",
+    "path": "/curation/metrics",
+    "operation_id": "getCurationMetrics",
+    "summary": "Decision and promise health metrics",
+    "description": "Scorecard metrics folded from events in a bounded window (default 30 days, at most 90): S17 median time-to-decision weighted by blocked refs, S18 ask quality (answered with the recommended proposal, needs context, withdrawn as moot after 24h) and S20 promise calibration (met, median slip, moved twice or more). Reads at most 2000 asks and 5000 notes; `truncated` reports when the window held more.",
+    "why": "Watch whether asks, decisions and promises are getting better.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ metrics }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Counts only; no titles or refs.",
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.propose",
+      "curation.run",
+      "curation.ungroup"
+    ],
+    "go_method": "CurationMetrics",
+    "ts_method": "curationMetrics"
+  },
+  {
+    "command_id": "curation.propose",
+    "cli_path": "curation propose",
+    "group": "curation",
+    "method": "POST",
+    "path": "/curation/proposals",
+    "operation_id": "createCurationProposal",
+    "summary": "Propose a curation action as a decision",
+    "description": "Files one curation proposal (withdraw an ask as moot, merge a duplicate initiative into another, or batch related asks) as a human decision. The proposal is an ask addressed to a human whose first response proposal accepts it; answering with it performs the action as the answering human, through normal authority, and records an undo trail in the proposal thread. Any other answer dismisses it. The same action over the same targets is proposed at most once while open, and not again after a dismissal.",
+    "why": "Let a PM post a curation proposal with its rationale.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ proposal }` with `status` created, existing or dismissed.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "forbidden",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "action",
+          "type": "string",
+          "enum_values": [
+            "batch",
+            "merge",
+            "withdraw"
+          ]
+        },
+        {
+          "name": "rationale",
+          "type": "string"
+        },
+        {
+          "name": "targets",
+          "type": "list\u003cstring\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "title",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.metrics",
+      "curation.run",
+      "curation.ungroup"
+    ],
+    "go_method": "CurationPropose",
+    "ts_method": "curationPropose"
+  },
+  {
+    "command_id": "curation.run",
+    "cli_path": "curation run",
+    "group": "curation",
+    "method": "POST",
+    "path": "/curation/run",
+    "operation_id": "runCurationFormula",
+    "summary": "Run the formula curation pass",
+    "description": "Files every current formula candidate as a proposal from the system principal. Bounded like the candidate list; already proposed and dismissed keys are skipped. Core also runs this pass on its own schedule, so a workspace with no PM still gets proposals.",
+    "why": "Run the no-PM formula fallback now.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ proposals, skipped }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Proposals only; nothing is withdrawn or merged until a human accepts.",
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.metrics",
+      "curation.propose",
+      "curation.ungroup"
+    ],
+    "go_method": "CurationRun",
+    "ts_method": "curationRun"
+  },
+  {
+    "command_id": "curation.ungroup",
+    "cli_path": "curation ungroup",
+    "group": "curation",
+    "method": "POST",
+    "path": "/curation/ungroup",
+    "operation_id": "ungroupCurationBatch",
+    "summary": "Undo an accepted batch proposal",
+    "description": "Removes the grouping an accepted batch proposal recorded, so its member asks show as separate decisions again. The key is the proposal key named in the batch decision and in the applied trail's undo. Nothing else changes; no ask is answered or withdrawn.",
+    "why": "Undo a batch a human accepted.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ungrouped }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "forbidden"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only. Returns whether any grouping was removed.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "curation.candidates",
+      "curation.metrics",
+      "curation.propose",
+      "curation.run"
+    ],
+    "go_method": "CurationUngroup",
+    "ts_method": "curationUngroup"
+  },
+  {
+    "command_id": "deliveries.claim",
+    "cli_path": "deliveries claim",
+    "group": "deliveries",
+    "method": "POST",
+    "path": "/deliveries/claim",
+    "operation_id": "deliveries_claim",
+    "summary": "Claim due deliveries for a channel under a lease",
+    "why": "Claim due deliveries for a channel the calling adapter delivers.",
+    "input_mode": "flags",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "flags",
+      "flags": [
+        {
+          "name": "channel",
+          "required": true,
+          "description": "Channel to claim; the active adapter owned by the caller must declare it in delivers."
+        },
+        {
+          "name": "limit",
+          "description": "Maximum deliveries to claim."
+        },
+        {
+          "name": "lease-seconds",
+          "description": "Claim lease length in seconds."
+        }
+      ]
+    },
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Only the owning agent of an active adapter delivering the channel may claim. Claim tokens are returned only here; an expired lease makes the delivery claimable again.",
+    "examples": [
+      {
+        "title": "Claim chat deliveries",
+        "command": "anx deliveries claim --channel chat --limit 10 --lease-seconds 60"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "channel",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "lease_seconds",
+          "type": "integer"
+        },
+        {
+          "name": "limit",
+          "type": "integer"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "deliveries.list",
+      "deliveries.receipt"
+    ],
+    "go_method": "DeliveriesClaim",
+    "ts_method": "deliveriesClaim"
+  },
+  {
+    "command_id": "deliveries.list",
+    "cli_path": "deliveries list",
+    "group": "deliveries",
+    "method": "GET",
+    "path": "/deliveries",
+    "operation_id": "deliveries_list",
+    "summary": "List the caller's own deliveries with receipts",
+    "why": "List the caller's own queued notifications and wake deliveries with their receipts.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Reads only the caller's own rows; bounded by limit.",
+    "adjacent_commands": [
+      "deliveries.claim",
+      "deliveries.receipt"
+    ],
+    "go_method": "DeliveriesList",
+    "ts_method": "deliveriesList"
+  },
+  {
+    "command_id": "deliveries.receipt",
+    "cli_path": "deliveries receipt",
+    "group": "deliveries",
+    "method": "POST",
+    "path": "/deliveries/{delivery_id}/receipt",
+    "operation_id": "deliveries_receipt",
+    "summary": "Record a delivery outcome for a claimed delivery",
+    "why": "Record delivered or failed for a delivery claimed by this adapter.",
+    "input_mode": "flags",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "flags",
+      "flags": [
+        {
+          "name": "claim-token",
+          "required": true,
+          "description": "Claim token returned by deliveries claim."
+        },
+        {
+          "name": "outcome",
+          "required": true,
+          "description": "delivered or failed."
+        },
+        {
+          "name": "error",
+          "description": "Failure detail; never include secrets."
+        },
+        {
+          "name": "retryable",
+          "description": "Mark a failed delivery as retryable (true or false)."
+        }
+      ]
+    },
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Receipts are idempotent per claim token; a stale or superseded claim returns conflict. A delivery on a channel the caller does not deliver reads as not found.",
+    "examples": [
+      {
+        "title": "Confirm a delivery",
+        "command": "anx deliveries receipt \u003cdelivery_id\u003e --claim-token \u003ctoken\u003e --outcome delivered"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "claim_token",
+          "type": "string"
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "enum_values": [
+            "delivered",
+            "failed"
+          ]
+        }
+      ],
+      "optional": [
+        {
+          "name": "error",
+          "type": "string"
+        },
+        {
+          "name": "retryable",
+          "type": "boolean"
+        }
+      ]
+    },
+    "path_params": [
+      "delivery_id"
+    ],
+    "adjacent_commands": [
+      "deliveries.claim",
+      "deliveries.list"
+    ],
+    "go_method": "DeliveriesReceipt",
+    "ts_method": "deliveriesReceipt"
   },
   {
     "command_id": "derived.rebuild",
@@ -8226,6 +8687,99 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "metaVersion"
   },
   {
+    "command_id": "notifications.settings.get",
+    "cli_path": "notifications settings get",
+    "group": "notifications",
+    "method": "GET",
+    "path": "/notification-settings",
+    "operation_id": "notification_settings_get",
+    "summary": "Read the caller's notification channel settings",
+    "why": "Read the caller's notification channels and the channels adapters can deliver.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only; each principal reads its own settings.",
+    "adjacent_commands": [
+      "notifications.settings.set"
+    ],
+    "go_method": "NotificationsSettingsGet",
+    "ts_method": "notificationsSettingsGet"
+  },
+  {
+    "command_id": "notifications.settings.set",
+    "cli_path": "notifications settings set",
+    "group": "notifications",
+    "method": "PUT",
+    "path": "/notification-settings",
+    "operation_id": "notification_settings_set",
+    "summary": "Replace the caller's notification channel settings",
+    "why": "Replace the caller's notification channels, addresses and push or digest opt-ins.",
+    "input_mode": "file-and-body",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "file-and-body",
+      "flags": [
+        {
+          "name": "body-file",
+          "required": true,
+          "description": "UTF-8 notification settings JSON file or stdin (-)."
+        }
+      ]
+    },
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns JSON with the named delivery objects.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only. The whole channel list is replaced; channels must be delivered by an active adapter.",
+    "examples": [
+      {
+        "title": "Set channels",
+        "command": "anx notifications settings set --body-file settings.json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "channels",
+          "type": "list\u003cany\u003e"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "notifications.settings.get"
+    ],
+    "go_method": "NotificationsSettingsSet",
+    "ts_method": "notificationsSettingsSet"
+  },
+  {
     "command_id": "ops.blob.usage.rebuild",
     "cli_path": "ops blob usage rebuild",
     "group": "ops",
@@ -8377,7 +8931,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "projection",
-    "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.",
+    "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.",
     "adjacent_commands": [
       "overview.changes"
     ],
@@ -8410,7 +8964,7 @@ export const commandRegistry: CommandSpec[] = [
       "cards",
       "write"
     ],
-    "stability": "beta",
+    "stability": "stable",
     "surface": "canonical",
     "agent_notes": "One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.",
     "body_schema": {
@@ -8469,7 +9023,7 @@ export const commandRegistry: CommandSpec[] = [
       "cards",
       "read"
     ],
-    "stability": "beta",
+    "stability": "stable",
     "surface": "canonical",
     "agent_notes": "Read plan_state for effective status, progress, shape, critical path and health. An unset plan returns null plan and plan_state.",
     "path_params": [
@@ -9495,7 +10049,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions",
     "operation_id": "pmDecisionsCreate",
     "summary": "Propose a scoped PM decision",
-    "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, dark_after. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.",
+    "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.",
     "why": "Propose a scoped PM decision.",
     "input_mode": "json-body",
     "streaming": {
@@ -10218,7 +10772,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}/decisions",
     "operation_id": "pmTurnsDecisionsCreate",
     "summary": "Record a selected PM agent proposal",
-    "description": "For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, dark_after. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
+    "description": "For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
     "why": "Record a selected PM agent proposal.",
     "input_mode": "json-body",
     "streaming": {
@@ -11368,7 +11922,7 @@ export const commandRegistry: CommandSpec[] = [
     "concepts": [
       "documents"
     ],
-    "stability": "beta",
+    "stability": "stable",
     "surface": "canonical",
     "agent_notes": "Explicit declared push source; core never fetches external data.",
     "examples": [
@@ -12556,10 +13110,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
-          "name": "dark_after",
-          "type": "string"
-        },
-        {
           "name": "definition_of_done",
           "type": "list\u003cstring\u003e"
         },
@@ -13167,10 +13717,6 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.blockers",
           "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "patch.dark_after",
-          "type": "string"
         },
         {
           "name": "patch.due_at",
@@ -13783,6 +14329,10 @@ export class AnxClient {
     return this.invoke("boards.workspace", pathParams, options);
   }
 
+  briefGet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("brief.get", {}, options);
+  }
+
   cardsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("cards.archive", pathParams, options);
   }
@@ -13833,6 +14383,38 @@ export class AnxClient {
 
   cardsTrash(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("cards.trash", pathParams, options);
+  }
+
+  curationCandidates(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.candidates", {}, options);
+  }
+
+  curationMetrics(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.metrics", {}, options);
+  }
+
+  curationPropose(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.propose", {}, options);
+  }
+
+  curationRun(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.run", {}, options);
+  }
+
+  curationUngroup(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("curation.ungroup", {}, options);
+  }
+
+  deliveriesClaim(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("deliveries.claim", {}, options);
+  }
+
+  deliveriesList(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("deliveries.list", {}, options);
+  }
+
+  deliveriesReceipt(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("deliveries.receipt", pathParams, options);
   }
 
   derivedRebuild(options: RequestOptions = {}): Promise<InvokeResult> {
@@ -14069,6 +14651,14 @@ export class AnxClient {
 
   metaVersion(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("meta.version", {}, options);
+  }
+
+  notificationsSettingsGet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("notifications.settings.get", {}, options);
+  }
+
+  notificationsSettingsSet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("notifications.settings.set", {}, options);
   }
 
   opsBlobUsageRebuild(options: RequestOptions = {}): Promise<InvokeResult> {

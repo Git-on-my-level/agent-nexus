@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-import { expectPerf } from "../helpers/e2ePerf.js";
 import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 /**
@@ -15,7 +14,7 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const WORKSPACE = "/o/local/w/local";
 const CARD_REF = "card:renderer";
-const CARD_PATH = `${WORKSPACE}/tasks/${encodeURIComponent(CARD_REF)}`;
+const CARD_PATH = `${WORKSPACE}/initiatives/${encodeURIComponent(CARD_REF)}`;
 const PR_URL = "https://github.com/Git-on-my-level/agent-nexus/pull/246";
 const NOW = "2026-10-04T12:00:00Z";
 
@@ -171,9 +170,10 @@ async function openCard(page, options) {
   await installCard(page, options);
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.goto(CARD_PATH);
-  await expect(page.locator("[data-initiative-body]")).toBeVisible({
-    timeout: 60_000,
-  });
+  // The description sits collapsed above the plan; open it to read it.
+  const description = page.locator("[data-initiative-description]");
+  await expect(description).toBeVisible({ timeout: 60_000 });
+  await description.locator(":scope > summary").click();
 }
 
 test("the card body renders GFM through the shared renderer", async ({
@@ -181,7 +181,7 @@ test("the card body renders GFM through the shared renderer", async ({
 }) => {
   test.setTimeout(90_000);
   await openCard(page);
-  const body = page.locator("[data-initiative-body] .markdown-rendered");
+  const body = page.locator("[data-initiative-description] .markdown-rendered");
 
   // Task lists, tables and code blocks: full GFM.
   await expect(body.locator('input[type="checkbox"]')).toHaveCount(2);
@@ -196,7 +196,7 @@ test("a details disclosure opens and an HTML comment leaves no trace", async ({
 }) => {
   test.setTimeout(90_000);
   await openCard(page);
-  const body = page.locator("[data-initiative-body] .markdown-rendered");
+  const body = page.locator("[data-initiative-description] .markdown-rendered");
 
   // The marker is gone from the DOM, not merely invisible. (Svelte's own
   // empty anchor comments are everywhere, so this looks for authored ones.)
@@ -224,7 +224,7 @@ test("refs written in prose become chips with a working preview", async ({
 }) => {
   test.setTimeout(90_000);
   await openCard(page);
-  const body = page.locator("[data-initiative-body] .markdown-rendered");
+  const body = page.locator("[data-initiative-description] .markdown-rendered");
 
   // The ANX ref carries its resolved title, not the raw ref.
   const chip = body.locator("[data-anx-ref='card:contracts']");
@@ -244,7 +244,7 @@ test("a GitHub ref in prose becomes a chip carrying its status", async ({
 }) => {
   test.setTimeout(90_000);
   await openCard(page);
-  const body = page.locator("[data-initiative-body] .markdown-rendered");
+  const body = page.locator("[data-initiative-description] .markdown-rendered");
 
   const chip = body.locator(`[data-anx-ref='${PR_URL}']`);
   await expect(chip).toContainText("One shared markdown renderer");
@@ -282,75 +282,6 @@ test("a valid GitHub ref is never not-found, even when the resolve misses it", a
   await expect(chip).not.toContainText("not found");
   await expect(chip).toContainText("Git-on-my-level/agent-nexus#246");
   await expect(chip).toHaveAttribute("href", PR_URL);
-});
-
-test("badges stay compact and show their full text at once on hover", async ({
-  page,
-}) => {
-  test.setTimeout(90_000);
-  await openCard(page);
-
-  /*
-   * Status: a pill with the label, never truncated. It lives in the page
-   * header now, through the one `WorkSummary` every surface renders — the
-   * Plan section used to badge it separately.
-   *
-   * The label is core's own wording, shown verbatim: core calls `on_track`
-   * "In progress". The state is what the colour and the sort read.
-   */
-  const summary = page.locator('[data-work-summary="header"]');
-  const health = summary.locator("[data-health]").first();
-  await expect(health).toHaveAttribute("data-health", "on_track");
-  await expect(health).toContainText("In progress");
-  const clipped = await health.evaluate(
-    (node) => node.scrollWidth > node.clientWidth + 1,
-  );
-  expect(clipped).toBe(false);
-
-  /*
-   * Age: green, because the plan moved eight hours ago and an initiative is
-   * expected to move every three days. On a page header it says what the
-   * date is about — a bare "8 h ago" beside a status badge and a "Live ·
-   * updated just now" chip is the one thing on the line a reader cannot
-   * place. A table cell has a column heading for that and keeps the badge to
-   * two characters; the exact instant and the expectation stay in the
-   * tooltip either way.
-   */
-  const age = summary.locator("[data-freshness]").first();
-  await expect(age).toHaveText("moved 8 h ago");
-  await expect(age).toHaveClass(/ui-badge--ok/);
-  await expect(age).toHaveAttribute(
-    "data-tooltip",
-    /^Moved .*\(8 h ago\) — within the expected 3d$/,
-  );
-  await expect(age).toHaveAttribute("datetime", planState.last_movement_at);
-  // Longer, and still a pill rather than a clipped one: the badge does not
-  // wrap by design, so growing its text is exactly what would truncate it.
-  expect(
-    await age.evaluate((node) => node.scrollWidth > node.clientWidth + 1),
-  ).toBe(false);
-
-  /*
-   * The tooltip itself: the browser's own takes about a second and paints a
-   * question-mark cursor while you wait. Ours is up in a frame or two, and
-   * the cursor is gone.
-   */
-  await expect(page.locator("[data-anx-tooltip]")).toHaveCount(0);
-  await expect(age).toHaveCSS("cursor", "auto");
-  await age.hover();
-  const tip = page.locator("[data-anx-tooltip]");
-  const hoveredAt = Date.now();
-  // The delay constant is asserted in the tooltip unit test. This checks the
-  // tip actually paints. The 300ms budget includes host scheduling, so only
-  // the advisory job enforces it.
-  await expect(tip).toBeVisible();
-  expectPerf(() => {
-    expect(Date.now() - hoveredAt).toBeLessThan(300);
-  });
-  await expect(tip).toContainText("within the expected 3d");
-  // And it goes away again when the pointer leaves.
-  await page.mouse.move(0, 0);
-  await expect(tip).toHaveCount(0);
 });
 
 test("the task page is quiet where there is nothing to say", async ({

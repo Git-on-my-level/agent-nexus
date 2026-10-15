@@ -43,18 +43,20 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		}
 		work = append(work, w)
 	}
-	if err = s.EnrichCardPlans(ctx, work, nil, now, time.Hour); err != nil {
+	if err = s.EnrichCardPlans(ctx, work, nil, now); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.RecordOverviewVisit(ctx, "alice", work, now); err != nil {
 		t.Fatal(err)
 	}
 	// Native writes and plan writes can produce the same completion digest.
-	for i, status := range []string{"done", "", "blocked", "blocked"} {
-		if status == "" {
-			continue
-		}
+	// The "stall" card gains a step due well in the past: it is now past its
+	// promise, a transition the digest reports once.
+	for i, status := range []string{"done", "due", "blocked", "blocked"} {
 		p := plans.Plan{Steps: []plans.Step{{ID: "step", Title: "Step", Status: status, After: []string{}}}}
+		if status == "due" {
+			p.Steps[0].Status, p.Steps[0].Due = "", now.Add(-72*time.Hour).Format("2006-01-02")
+		}
 		raw, _ := json.Marshal(p)
 		if _, err = db.Exec(`UPDATE card_plans SET body_json=?,updated_at=? WHERE card_id=?`, string(raw), now.Add(time.Minute).Format(time.RFC3339Nano), work[i]["id"]); err != nil {
 			t.Fatal(err)
@@ -89,15 +91,16 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	d, err := s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour), time.Hour)
+	d, err := s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
 	queries := counter.Count()
 	// Closed IDs are bounded before hydration; the answer probe shares the
-	// visit read. This fixture uses ten reads; growing its corpus adds none.
-	if queries != 11 {
-		t.Fatalf("queries=%d want 11", queries)
+	// visit read, and promise notes load in one statement per plan batch.
+	// Growing the corpus adds none.
+	if queries != 12 {
+		t.Fatalf("queries=%d want 12", queries)
 	}
 	got := map[string]int{}
 	for _, item := range d.Items {
@@ -106,7 +109,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 			t.Fatal(item)
 		}
 	}
-	want := map[string]int{"step_completed": 1, "initiative_stalled": 1, "initiative_blocked": 1, "ask_answered": 1}
+	want := map[string]int{"step_completed": 1, "initiative_past_promise": 1, "ask_answered": 1}
 	if !reflect.DeepEqual(got, want) || d.Truncated {
 		t.Fatalf("digest=%+v got=%v", d, got)
 	}
@@ -142,7 +145,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		t.Fatalf("digest wire fixture differs: got=%+v want=%+v", d, expected)
 	}
 	// A fresh principal and a new workspace never inherit Alice's baseline.
-	if d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "bob", visible, now.Add(2*time.Hour), time.Hour); err != nil || d.Since != nil || len(d.Items) != 0 {
+	if d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "bob", visible, now.Add(2*time.Hour)); err != nil || d.Since != nil || len(d.Items) != 0 {
 		t.Fatalf("%+v %v", d, err)
 	}
 	other, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -151,7 +154,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 	}
 	defer other.Close()
 	otherStore := primitives.NewTestStore(other.DB(), other.Layout().ArtifactContentDir)
-	if d, err = otherStore.LoadOverviewChanges(ctx, "alice", nil, now, 0); err != nil || d.Since != nil {
+	if d, err = otherStore.LoadOverviewChanges(ctx, "alice", nil, now); err != nil || d.Since != nil {
 		t.Fatalf("workspace leak: %+v %v", d, err)
 	}
 	// More candidates than the read/output caps are explicitly truncated.
@@ -161,7 +164,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour), time.Hour)
+	d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour))
 	if err != nil || len(d.Items) != primitives.MaxOverviewChanges || !d.Truncated || counter.Count() > queries {
 		t.Fatalf("bounded digest items=%d truncated=%v queries=%d error=%v", len(d.Items), d.Truncated, counter.Count(), err)
 	}
@@ -192,7 +195,7 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	if err = s.SetCardPlan(ctx, "actor-1", w["id"].(string), w["updated_at"].(string), p); err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.ResolveRefs(ctx, []string{"card:initiative", "card:unknown"}, nil, time.Now(), 0)
+	items, err := s.ResolveRefs(ctx, []string{"card:initiative", "card:unknown"}, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,12 +208,14 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	}
 	item["last_moved_at"] = "2026-10-04T12:00:00Z"
 	health := item["plan_health"].(map[string]any)
-	// A dark card with no dated signal at all carries a null anchor.
-	if since, ok := health["since"]; ok && since != nil {
-		if _, err = time.Parse(time.RFC3339Nano, since.(string)); err != nil {
-			t.Fatal(err)
+	// Anchors are real timestamps; the fixture pins them.
+	for _, key := range []string{"since", "last_evidence_at"} {
+		if at, ok := health[key]; ok && at != nil {
+			if _, err = time.Parse(time.RFC3339Nano, at.(string)); err != nil {
+				t.Fatal(err)
+			}
+			health[key] = "2026-10-04T12:00:00Z"
 		}
-		health["since"] = "2026-10-04T12:00:00Z"
 	}
 	summary := item["summary"].(map[string]any)
 	if _, err = time.Parse(time.RFC3339Nano, summary["created_at"].(string)); err != nil {
@@ -238,7 +243,7 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	if _, err = s.PatchThread(ctx, "actor-1", b["thread_id"].(string), map[string]any{"pm_actor_id": "private"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	items, err = s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{"card:initiative"}, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0)
+	items, err = s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{"card:initiative"}, func(_ string, owner string) bool { return owner == "" }, time.Now())
 	raw, _ = json.Marshal(items)
 	if err != nil || string(raw) != `[{"ref":"card:initiative","resolvable":false}]` {
 		t.Fatalf("private board leak: %s %v", raw, err)

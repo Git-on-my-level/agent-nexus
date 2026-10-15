@@ -830,7 +830,7 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 	if !strings.Contains(stdout.String(), "anx help onboarding") {
 		t.Fatalf("expected onboarding hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Daily loop") || !strings.Contains(stdout.String(), "orient ") {
+	if !strings.Contains(stdout.String(), "Loop (stable)") || !strings.Contains(stdout.String(), "orient ") {
 		t.Fatalf("expected orient command output=%s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "anx install skill --path ./SKILL.md") {
@@ -867,7 +867,7 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "anx install skill --path") {
 		t.Fatalf("expected skill export hint output=%s", output)
 	}
-	if !strings.Contains(output, "anx host enroll") || !strings.Contains(output, "anx work done") {
+	if !strings.Contains(output, "anx host enroll") || !strings.Contains(output, "anx done") {
 		t.Fatalf("expected host enrollment and daily loop output=%s", output)
 	}
 	if !strings.Contains(output, "CEO by default") || !strings.Contains(output, "small set of outcome cards") {
@@ -961,8 +961,8 @@ func TestRunMetaSkillAnxRendersBundledSkill(t *testing.T) {
 	if !strings.Contains(output, "## Daily loop") {
 		t.Fatalf("expected daily loop section output=%s", output)
 	}
-	if !strings.Contains(output, "anx work start") || !strings.Contains(output, "anx await") || !strings.Contains(output, "anx.card.<card-slug>") {
-		t.Fatalf("expected daily loop and run label in skill output=%s", output)
+	if !strings.Contains(output, "anx orient") || !strings.Contains(output, "anx await") || !strings.Contains(output, "anx help <job>") {
+		t.Fatalf("expected loop verbs in skill output=%s", output)
 	}
 }
 
@@ -984,7 +984,7 @@ func TestRunMetaSkillCursorAliasWritesSkillFile(t *testing.T) {
 	if !strings.Contains(string(content), "## Daily loop") {
 		t.Fatalf("expected written daily loop section content=%s", string(content))
 	}
-	if !strings.Contains(output, "anx host enroll") {
+	if !strings.Contains(output, "anx help enroll") {
 		t.Fatalf("expected host enrollment guidance output=%s", output)
 	}
 }
@@ -1397,4 +1397,15 @@ func runHelpCommandAllowExit(t *testing.T, args []string) (string, string, int) 
 
 	exitCode := cli.Run(args)
 	return stdout.String(), stderr.String(), exitCode
+}
+
+func TestHelpWorkContextPointsToLoopVerb(t *testing.T) {
+	for _, verb := range []string{"context", "note", "done"} {
+		args := []string{"--json", "help", "work", verb}
+		payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), nil, nil, args))
+		msg := anyString(asMap(payload["error"])["message"])
+		if !strings.Contains(msg, "unknown help topic") || !strings.Contains(msg, "anx "+verb) {
+			t.Fatalf("work %s: message=%q", verb, msg)
+		}
+	}
 }

@@ -9,7 +9,7 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   /**
-   * The requesting agent's own presence note (`anx work note`), for the
+   * The requesting agent's own presence note (`anx note`), for the
    * Inbox context strip. Renders nothing for humans or agents with no note.
    */
   let { actorId = "" } = $props();

@@ -35,9 +35,7 @@
     "next_steps": [
       "b"
     ],
-    "done": 1,
-    "health": "on_track",
-    "health_state": "on_track"
+    "done": 1
   },
   {
     "name": "branch-and-merge",
@@ -85,9 +83,7 @@
     "next_steps": [
       "a"
     ],
-    "done": 0,
-    "health": "on_track",
-    "health_state": "on_track"
+    "done": 0
   },
   {
     "name": "lanes",
@@ -132,9 +128,7 @@
       "a",
       "c"
     ],
-    "done": 0,
-    "health": "on_track",
-    "health_state": "on_track"
+    "done": 0
   },
   {
     "name": "blocked-tied-path",
@@ -178,9 +172,7 @@
     "next_steps": [
       "a"
     ],
-    "done": 0,
-    "health": "blocked",
-    "health_state": "blocked"
+    "done": 0
   },
   {
     "name": "ref-overrides-prose",
@@ -213,9 +205,7 @@
     "next_steps": [
       "b"
     ],
-    "done": 1,
-    "health": "on_track",
-    "health_state": "on_track"
+    "done": 1
   },
   {
     "name": "empty",
@@ -225,9 +215,7 @@
     "shape": "chain",
     "critical_path": [],
     "next_steps": [],
-    "done": 0,
-    "health": "no_plan",
-    "health_state": "no_plan"
+    "done": 0
   },
   {
     "name": "context-ref-fallback",
@@ -248,8 +236,6 @@
     "shape": "chain",
     "critical_path": [],
     "next_steps": [],
-    "done": 1,
-    "health": "done",
-    "health_state": "done"
+    "done": 1
   }
 ]

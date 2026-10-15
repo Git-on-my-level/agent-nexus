@@ -1050,13 +1050,7 @@ func boardCardRiskState(card map[string]any, now time.Time, riskHorizon time.Dur
 }
 
 func makeInboxItemID(category string, threadID string, subjectID string, sourceEventID string) string {
-	if strings.TrimSpace(subjectID) == "" {
-		subjectID = "none"
-	}
-	if strings.TrimSpace(sourceEventID) == "" {
-		sourceEventID = "none"
-	}
-	return "inbox:" + category + ":" + threadID + ":" + subjectID + ":" + sourceEventID
+	return primitives.HumanAttentionInboxItemID(category, threadID, subjectID, sourceEventID)
 }
 
 func parseTimestamp(raw any) (time.Time, bool) {
@@ -1148,10 +1142,6 @@ func handleGetInboxSummary(w http.ResponseWriter, r *http.Request, opts handlerO
 	asks := make([]map[string]any, 0, len(projected))
 	for _, item := range projected {
 		asks = append(asks, payloadFromDerivedInboxItem(item))
-	}
-	if err := enrichInboxAskStaleness(r, opts, asks); err != nil {
-		writeError(w, 500, "internal_error", "failed to enrich inbox projections")
-		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, map[string]any{"open_ask_count": count, "asks": asks, "generated_at": time.Now().UTC().Format(time.RFC3339Nano)})

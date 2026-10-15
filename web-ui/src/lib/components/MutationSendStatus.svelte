@@ -121,7 +121,7 @@
                         ].includes(entry.operation)
                       ? "Edit request"
                       : entry.operation === "topics.patch"
-                        ? "Edit topic"
+                        ? "Edit project"
                         : "Edit message"}</button
             >
           {/if}

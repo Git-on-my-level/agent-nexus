@@ -93,7 +93,7 @@ test("uncertain assignment survives reload and replays its exact request", async
           524,
         );
   });
-  await page.goto(`${root}/tasks/card%3Aassignment`);
+  await page.goto(`${root}/initiatives/card%3Aassignment`);
   await choose(page);
   await expect.poll(() => attempts.length).toBeGreaterThan(0);
   await openAssignment(page);
@@ -146,7 +146,7 @@ test("offline assignment survives tab closure", async ({
       ? json(route, { card: { ...work, id: "assignment-id" } })
       : route.abort("internetdisconnected"),
   );
-  await page.goto(`${root}/tasks/card%3Aassignment`);
+  await page.goto(`${root}/initiatives/card%3Aassignment`);
   await openAssignment(page);
   await context.setOffline(true);
   await choose(page);
@@ -164,7 +164,7 @@ test("offline assignment survives tab closure", async ({
   healthy = true;
   await context.setOffline(false);
   const next = await context.newPage();
-  await next.goto(`${root}/tasks/card%3Aassignment`);
+  await next.goto(`${root}/initiatives/card%3Aassignment`);
   await openAssignment(next);
   await expect(
     next
@@ -192,7 +192,7 @@ test("conflicting assignment keeps its selected person and rebases only explicit
     },
     () => ({ ...work, updated_at: version }),
   );
-  await page.goto(`${root}/tasks/card%3Aassignment`);
+  await page.goto(`${root}/initiatives/card%3Aassignment`);
   await choose(page);
   await openAssignment(page);
   await expect(

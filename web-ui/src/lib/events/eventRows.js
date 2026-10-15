@@ -151,13 +151,13 @@ export function normalizeEventRow(
     label = "Ask opened";
     detail = firstText(payload.title, payload.subject, event?.summary);
     href = inboxId
-      ? workspaceHref(`/inbox/${encodeURIComponent(inboxId)}`)
+      ? workspaceHref(`/decide/${encodeURIComponent(inboxId)}`)
       : href;
   } else if (type === "human_attention_responded") {
     label = "Ask resolved";
     detail = firstText(payload.title, payload.subject, event?.summary);
     href = inboxId
-      ? workspaceHref(`/inbox/${encodeURIComponent(inboxId)}`)
+      ? workspaceHref(`/decide/${encodeURIComponent(inboxId)}`)
       : href;
   } else if (
     [

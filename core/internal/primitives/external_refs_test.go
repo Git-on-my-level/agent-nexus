@@ -23,7 +23,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	refs := []string{"github:org/repo#264", "org/repo#264", "https://github.com/org/repo/pull/264", "https://github.com/org/repo/issues/264", "TASK-627", "github:org/repo#999", "github:broken", "card:missing", "org/repo#264"}
-	items, err := s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
+	items, err := s.ResolveRefs(ctx, refs, nil, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+	if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if card["plan_state"].(plans.State).Progress.Done != 1 || card["status_mismatch"] != true || card["column_key"] != "backlog" || card["next_step"] != (*plans.NextStep)(nil) {
@@ -64,7 +64,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 	if _, err = s.PatchThread(ctx, "actor-1", card["thread_id"].(string), map[string]any{"pm_actor_id": "private"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	items, err = s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), refs, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0)
+	items, err = s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), refs, func(_ string, owner string) bool { return owner == "" }, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestExternalObservationAliasesAndConnectionAmbiguity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		items, err := s.ResolveRefs(ctx, []string{"github:org/repo#9"}, nil, time.Now(), 0)
+		items, err := s.ResolveRefs(ctx, []string{"github:org/repo#9"}, nil, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}

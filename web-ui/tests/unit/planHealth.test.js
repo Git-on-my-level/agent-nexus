@@ -9,108 +9,67 @@ import {
 } from "../../src/lib/planHealth.js";
 
 describe("attentionRank", () => {
-  it("ranks worst first, planless last", () => {
+  it("ranks past promise first, done last", () => {
     expect(ATTENTION_ORDER).toEqual([
-      "blocked",
-      "at_risk",
-      "stale",
-      "dark",
-      "on_track",
+      "past_promise",
+      "no_promise",
+      "moving",
       "done",
-      "no_plan",
     ]);
-    expect(attentionRank("blocked")).toBeLessThan(attentionRank("at_risk"));
-    expect(attentionRank("at_risk")).toBeLessThan(attentionRank("stale"));
-    expect(attentionRank("stale")).toBeLessThan(attentionRank("dark"));
-    expect(attentionRank("dark")).toBeLessThan(attentionRank("on_track"));
-    expect(attentionRank("on_track")).toBeLessThan(attentionRank("done"));
-    expect(attentionRank("done")).toBeLessThan(attentionRank("no_plan"));
+    expect(attentionRank("past_promise")).toBeLessThan(
+      attentionRank("no_promise"),
+    );
+    expect(attentionRank("no_promise")).toBeLessThan(attentionRank("moving"));
+    expect(attentionRank("moving")).toBeLessThan(attentionRank("done"));
   });
 
-  it("sorts an unknown state with the tail rather than above blocked", () => {
-    expect(attentionRank("something-new")).toBeGreaterThanOrEqual(
-      attentionRank("no_plan"),
-    );
-    expect(attentionRank("")).toBeGreaterThanOrEqual(attentionRank("no_plan"));
+  it("sorts an unknown or removed state with the tail", () => {
+    for (const state of ["something-new", "", "stale", "no_plan"]) {
+      expect(attentionRank(state)).toBeGreaterThan(attentionRank("done"));
+    }
   });
 });
 
 describe("planHealthModel", () => {
-  it("reads the computed plan_health field", () => {
+  it("reads a past promise as a warning", () => {
     const health = planHealthModel({
       plan_health: {
-        state: "at_risk",
-        reason: "two steps slipped their due date",
+        state: "past_promise",
+        reason: "Past its note promise. Moved 2×.",
         since: "2026-10-01T00:00:00Z",
       },
     });
-    expect(health.state).toBe("at_risk");
-    expect(health.short).toBe("At risk");
+    expect(health.state).toBe("past_promise");
+    expect(health.label).toBe("Past promise");
     expect(health.tone).toBe("warn");
-    expect(health.reason).toBe("two steps slipped their due date");
+    expect(health.reason).toBe("Past its note promise. Moved 2×.");
     expect(health.since).toBe("2026-10-01T00:00:00Z");
     expect(health.known).toBe(true);
   });
 
-  it("reads the dark state with its own chip", () => {
-    const health = planHealthModel({
-      plan_health: {
-        state: "dark",
-        reason: "Next dated signal is 2026-11-05, 22 days out.",
-        since: "2026-11-05T00:00:00Z",
-      },
-    });
-    expect(health.state).toBe("dark");
-    expect(health.label).toBe("Dark");
-    expect(health.tone).toBe("warn");
-    expect(health.rank).toBeLessThan(attentionRank("on_track"));
+  it.each([
+    ["moving", "Moving", "ok"],
+    ["no_promise", "No promise", "neutral"],
+    ["done", "Done", "ok"],
+  ])("maps %s to %s / %s", (state, label, tone) => {
+    const health = planHealthModel({ plan_health: { state } });
+    expect(health.label).toBe(label);
+    expect(health.tone).toBe(tone);
     expect(health.known).toBe(true);
   });
 
-  it("reads the older health.status field, with stalled as stale", () => {
-    expect(
-      planHealthModel({ health: { status: "stalled", reason: "no movement" } })
-        .state,
-    ).toBe("stale");
-    expect(planHealthModel({ health: { status: "on_track" } }).state).toBe(
-      "on_track",
-    );
-    expect(planHealthModel({ health: { status: "blocked" } }).state).toBe(
-      "blocked",
-    );
-  });
-
-  it("prefers plan_health over the older field", () => {
-    expect(
-      planHealthModel({
-        plan_health: { state: "blocked" },
-        health: { status: "on_track" },
-      }).state,
-    ).toBe("blocked");
-  });
-
-  it("derives done from a finished plan", () => {
-    const health = planHealthModel({
-      health: { status: "on_track" },
-      plan_state: { progress: { done: 7, total: 7 } },
-    });
-    expect(health.state).toBe("done");
-    expect(health.tone).toBe("ok");
-  });
-
-  it("does not call a blocked initiative done", () => {
-    expect(
-      planHealthModel({
-        health: { status: "blocked" },
-        plan_state: { progress: { done: 7, total: 7 } },
-      }).state,
-    ).toBe("blocked");
-  });
-
-  it("derives no_plan when there is explicitly no plan state", () => {
-    const health = planHealthModel({ plan_state: null });
-    expect(health.state).toBe("no_plan");
-    expect(health.tone).toBe("neutral");
+  it("does not read the removed health fields", () => {
+    for (const item of [
+      { health: { status: "blocked" } },
+      { plan_state: { health: "stalled", health_state: "at_risk" } },
+      { plan_health: { state: "stale" } },
+      { plan_state: null },
+      { plan_state: { progress: { done: 7, total: 7 } } },
+    ]) {
+      const health = planHealthModel(item);
+      expect(health.known).toBe(false);
+      expect(health.state).toBe("");
+    }
   });
 
   it("renders no badge when core computed nothing", () => {
@@ -119,10 +78,9 @@ describe("planHealthModel", () => {
     expect(health.state).toBe("");
   });
 
-  it("never produces a label long enough to be truncated", () => {
+  it("never produces a label that is truncated", () => {
     for (const state of ATTENTION_ORDER) {
       const health = planHealthModel({ plan_health: { state } });
-      expect(health.short.length).toBeLessThanOrEqual(8);
       expect(health.short).not.toContain("…");
     }
   });

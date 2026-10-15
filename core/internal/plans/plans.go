@@ -12,7 +12,6 @@ import (
 )
 
 const MaxSteps = 200
-const DefaultStalledAfter = 72 * time.Hour
 
 type Step struct {
 	ID     string   `json:"id"`
@@ -40,8 +39,6 @@ type State struct {
 	CriticalPath   []string        `json:"critical_path"`
 	NextSteps      []string        `json:"next_steps"`
 	Shape          string          `json:"shape"`
-	HealthState    string          `json:"health_state"`
-	Health         string          `json:"health"`
 	LastMovementAt string          `json:"last_movement_at"`
 }
 type Fact struct {
@@ -153,11 +150,8 @@ func Status(phase string) string {
 }
 
 // Compute requires a validated plan. Facts are principal-scoped by the caller.
-func Compute(p Plan, facts map[string]Fact, movement, now time.Time, threshold time.Duration) State {
-	if threshold <= 0 {
-		threshold = DefaultStalledAfter
-	}
-	out := State{Steps: []EffectiveStep{}, CriticalPath: []string{}, NextSteps: []string{}, Shape: "chain", Health: "on_track", Progress: Progress{Total: len(p.Steps)}}
+func Compute(p Plan, facts map[string]Fact, movement time.Time) State {
+	out := State{Steps: []EffectiveStep{}, CriticalPath: []string{}, NextSteps: []string{}, Shape: "chain", Progress: Progress{Total: len(p.Steps)}}
 	steps := map[string]Step{}
 	status := map[string]string{}
 	children := map[string][]string{}
@@ -241,8 +235,6 @@ func Compute(p Plan, facts map[string]Fact, movement, now time.Time, threshold t
 			out.CriticalPath = append(out.CriticalPath, id)
 		}
 	}
-	out.HealthState = HealthFor(&p, out, movement, movement, now, threshold, "", DarkInput{}).State
-	out.Health = LegacyHealth(out.HealthState)
 	out.LastMovementAt = movement.UTC().Format(time.RFC3339Nano)
 	return out
 }

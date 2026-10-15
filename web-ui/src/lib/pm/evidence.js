@@ -137,6 +137,7 @@ export function distinctEvidenceLinks(observations) {
         kind,
         label: linkLabel(entry, href, counters[kind]),
         summary: String(entry?.summary ?? "").trim(),
+        ref: String(entry?.ref ?? "").trim(),
       });
     }
   }
