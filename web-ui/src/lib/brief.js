@@ -412,19 +412,22 @@ export function groupLoops(initiatives, now = Date.now()) {
   const loops = (initiatives ?? []).filter(isLoop);
   const buckets = Object.fromEntries(LOOP_GROUPS.map((group) => [group, []]));
   for (const row of loops) buckets[loopGroup(row, now)].push(row);
-  const order = {
-    // Longest wait or silence first; flat loops by how long they have been flat.
-    waiting: (a, b) => b.waitingOnYouCount - a.waitingOnYouCount,
-    silent: (a, b) =>
-      (silentFor(b, now) ?? Infinity) - (silentFor(a, now) ?? Infinity),
-    flat: (a, b) =>
-      (b.metricFlat?.for_seconds ?? 0) - (a.metricFlat?.for_seconds ?? 0),
-  };
+  // Longest wait or silence first; flat loops by how long they have been flat.
+  function within(group, a, b) {
+    if (group === "waiting") return b.waitingOnYouCount - a.waitingOnYouCount;
+    if (group === "silent")
+      return (silentFor(b, now) ?? Infinity) - (silentFor(a, now) ?? Infinity);
+    if (group === "flat")
+      return (
+        (b.metricFlat?.for_seconds ?? 0) - (a.metricFlat?.for_seconds ?? 0)
+      );
+    return 0;
+  }
   return LOOP_GROUPS.map((group) => ({
     group,
     label: LOOP_GROUP_LABELS[group],
     rows: [...buckets[group]].sort(
-      (a, b) => order[group]?.(a, b) || compareInitiatives(a, b),
+      (a, b) => within(group, a, b) || compareInitiatives(a, b),
     ),
   })).filter((entry) => entry.rows.length);
 }
@@ -437,7 +440,7 @@ export function formatMetricValue(value) {
     if (!Number.isFinite(number)) return String(value);
     const abs = Math.abs(number);
     if (abs >= 1000)
-      return number.toLocaleString("en-US", { maximumFractionDigits: 0 });
+      return String(Math.round(number)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     if (abs >= 10) return String(Math.round(number * 10) / 10);
     return String(Math.round(number * 1000) / 1000);
   }
