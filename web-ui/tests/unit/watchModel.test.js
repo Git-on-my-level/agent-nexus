@@ -9,6 +9,7 @@ import {
   initiativeLine,
   normalizeBrief,
   PLACEMENTS,
+  plainInline,
 } from "../../src/lib/brief.js";
 
 const NOW = Date.parse("2026-10-15T09:00:00Z");
@@ -102,5 +103,31 @@ describe("freshnessLabel", () => {
     expect(freshnessLabel("2026-10-15T06:00:00Z", NOW)).toBe("as of 3h ago");
     expect(freshnessLabel("2026-10-15T09:00:00Z", NOW)).toBe("as of just now");
     expect(freshnessLabel("", NOW)).toBe("");
+  });
+});
+
+describe("plainInline", () => {
+  it("strips inline markdown from an authored one-liner", () => {
+    expect(plainInline("**fix** the top three")).toBe("fix the top three");
+    expect(plainInline("land the `ask` fix, re-run the _whole_ sweep")).toBe(
+      "land the ask fix, re-run the whole sweep",
+    );
+    expect(plainInline("see [notes](https://example.com)")).toBe("see notes");
+    expect(plainInline("- [ ] todo")).toBe("todo");
+  });
+
+  it("leaves identifiers and arithmetic alone", () => {
+    expect(plainInline("snake_case_name")).toBe("snake_case_name");
+    expect(plainInline("2*3*4")).toBe("2*3*4");
+  });
+
+  it("feeds the computed line", () => {
+    const row = {
+      ...byId("observability"),
+      promise: { at: "2026-10-28T00:00:00Z", what: "**dashboards** live" },
+    };
+    expect(initiativeLine(row, NOW).map((p) => p.text)).toContain(
+      "next: dashboards live · Oct 28",
+    );
   });
 });

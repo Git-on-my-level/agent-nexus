@@ -11,23 +11,28 @@
   import { freshnessLabel } from "$lib/brief.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
-  import { isNexusOwned, workKey } from "$lib/pm/presentation.js";
+  import { isNexusOwned } from "$lib/pm/presentation.js";
   import {
     mutationOutbox,
     mutationConfirmations,
+    supersedeLocalMutation,
   } from "$lib/mutationOutbox.js";
   import {
     enqueueTaskMove,
-    taskMoveDraft,
     taskMoveError,
-    taskMoveTarget,
     isTaskMove,
   } from "$lib/taskMoveWork.js";
+  import {
+    createWatchMover,
+    displayedPlacement,
+    watchMoveAttention,
+  } from "$lib/watchMove.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import Banner from "$lib/components/Banner.svelte";
   import Button from "$lib/components/Button.svelte";
+  import InlineAlert from "$lib/components/InlineAlert.svelte";
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import WatchList from "$lib/components/watch/WatchList.svelte";
@@ -59,20 +64,95 @@
 
   let staleAge = $derived(formatAgo($store.updatedAt, now) || "earlier");
 
-  // Optimistic placements, dropped as soon as a fresh brief lands.
-  let placed = $state({});
-  $effect(() => {
-    void brief;
-    placed = {};
-  });
+  // Local column until the outbox entry is visible. A brief refresh does not
+  // clear it; confirmation and a rejected move do, via displayedPlacement.
+  let localPlacement = $state({});
   let initiatives = $derived(
-    (brief?.initiatives ?? []).map((row) =>
-      placed[row.ref] ? { ...row, placement: placed[row.ref] } : row,
-    ),
+    (brief?.initiatives ?? []).map((row) => {
+      const placement = displayedPlacement(
+        row,
+        $mutationOutbox,
+        $mutationConfirmations,
+        localPlacement[row.ref] || "",
+      );
+      return placement ? { ...row, placement } : row;
+    }),
   );
+  $effect(() => {
+    const rows = brief?.initiatives ?? [];
+    const outbox = $mutationOutbox;
+    const confirmations = $mutationConfirmations;
+    let changed = false;
+    const next = { ...localPlacement };
+    for (const ref of Object.keys(next)) {
+      const row = rows.find((item) => item.ref === ref);
+      if (brief && !row) {
+        delete next[ref];
+        changed = true;
+        continue;
+      }
+      if (!row) continue;
+      if (
+        displayedPlacement(row, outbox, confirmations, "") ||
+        watchMoveAttention(outbox, [ref]) ||
+        row.placement === next[ref]
+      ) {
+        delete next[ref];
+        changed = true;
+      }
+    }
+    if (changed) localPlacement = next;
+  });
 
   let notice = $state(null);
-  let moveError = $state("");
+  let localMoveError = $state("");
+  let attentionError = $derived(
+    watchMoveAttention(
+      $mutationOutbox,
+      (brief?.initiatives ?? []).map((row) => row.ref),
+    ),
+  );
+  let moveError = $derived(localMoveError || attentionError);
+  let held = $derived(
+    (brief?.initiatives ?? [])
+      .filter((row) =>
+        displayedPlacement(
+          row,
+          $mutationOutbox,
+          $mutationConfirmations,
+          localPlacement[row.ref] || "",
+        ),
+      )
+      .map((row) => row.ref),
+  );
+
+  const mover = createWatchMover({
+    async readWork(row) {
+      const work = (await coreClient.getWork(row.ref, { summary: 1 })).work;
+      let boardToken = "";
+      if (isNexusOwned(work)) {
+        const board = await coreClient.getBoard(
+          work.board_ref || work.board_id,
+        );
+        boardToken = (board?.board || board)?.updated_at || "";
+      }
+      return { work, boardToken };
+    },
+    enqueue(draft) {
+      return enqueueTaskMove(draft, {
+        draftTarget: "tasks:move",
+        href: workspaceHref("/watch?view=board"),
+      });
+    },
+    entries: () => get(mutationOutbox),
+    supersede: (key, replacementKey) =>
+      supersedeLocalMutation(key, { replacementKey }),
+    confirmExternal(work) {
+      return window.confirm(
+        `Ask the PM to request moving “${work.title}”? You approve the request in Decide.`,
+      );
+    },
+  });
 
   /** A confirmed move changes what core computes; read it again. */
   let confirmed = $derived(
@@ -86,64 +166,35 @@
     seen.confirmed = count;
   });
 
-  async function moveInitiative(row, placement, beforeRef = "") {
-    moveError = "";
+  async function moveInitiative(row, placement) {
+    localMoveError = "";
     notice = null;
-    if (placement === row.placement) return;
-    if (placement === "done") {
+    const result = await mover.move(row, placement);
+    if (result.status === "needs-evidence") {
       notice = {
         text: `Marking “${row.title}” done needs evidence.`,
         href: workspaceHref(`/initiatives/${encodeURIComponent(row.id)}`),
         link: "Open the initiative to add it",
       };
-      return;
+      return false;
     }
-    let work;
-    let boardToken = "";
-    try {
-      work = (await coreClient.getWork(row.ref, { summary: 1 })).work;
-      if (isNexusOwned(work)) {
-        const board = await coreClient.getBoard(
-          work.board_ref || work.board_id,
-        );
-        boardToken = (board?.board || board)?.updated_at || "";
-      }
-    } catch {
-      moveError = "Couldn't read that initiative. Nothing was moved.";
-      return;
+    if (result.status === "unreadable") {
+      localMoveError = "Couldn't read that initiative. Nothing was moved.";
+      return false;
     }
-    if (
-      get(mutationOutbox).some((entry) => entry.target === taskMoveTarget(work))
-    )
-      return;
-    if (
-      !isNexusOwned(work) &&
-      !window.confirm(
-        `Ask the PM to request moving “${row.title}”? You approve the request in Decide.`,
-      )
-    )
-      return;
-    const draft = taskMoveDraft(work, placement, {
-      key: workKey(work),
-      ref: "",
-      boardToken,
-      beforeCardId: beforeRef,
-      approved: true,
-    });
-    placed = { ...placed, [row.ref]: placement };
-    try {
-      await enqueueTaskMove(draft, {
-        draftTarget: "tasks:move",
-        href: workspaceHref("/watch?view=board"),
-      });
-      // The confirmation effect above re-reads the brief once core accepts it.
-      notice = { text: "Saved. Waiting for confirmation." };
-    } catch (err) {
-      const rest = { ...placed };
-      delete rest[row.ref];
-      placed = rest;
-      moveError = taskMoveError(err);
+    if (result.status === "busy") {
+      localMoveError = result.message;
+      return false;
     }
+    if (result.status === "failed") {
+      localMoveError = taskMoveError(result.error);
+      return false;
+    }
+    if (result.status !== "queued") return false;
+    localPlacement = { ...localPlacement, [row.ref]: result.placement };
+    // The confirmation effect above re-reads the brief once core accepts it.
+    notice = { text: "Saved. Waiting for confirmation." };
+    return true;
   }
 
   // Dashboards, kept from the old Overview below the initiatives.
@@ -226,7 +277,7 @@
       {/if}
       {#if refreshing}
         <span
-          class="ml-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-border border-t-fg-muted align-middle"
+          class="ml-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-line border-t-fg-muted align-middle"
           role="status"
           aria-label="Updating"
         ></span>
@@ -234,16 +285,18 @@
     {/snippet}
     {#snippet actions()}
       <div
-        class="inline-flex rounded-md border border-border"
+        class="inline-flex rounded-md border border-line bg-bg-soft p-0.5"
         role="group"
         aria-label="View"
+        data-watch-view-toggle
       >
         {#each [["list", "List"], ["board", "By stage"]] as [key, text] (key)}
           <button
             type="button"
-            class="px-3 py-1 text-meta {view === key
-              ? 'bg-panel-hover text-fg'
-              : 'text-fg-muted'}"
+            class="rounded px-3 py-1 text-meta font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {view ===
+            key
+              ? 'bg-panel-hover text-fg shadow-sm'
+              : 'text-fg-muted hover:text-fg'}"
             aria-pressed={view === key}
             onclick={() => setView(key)}>{text}</button
           >
@@ -274,7 +327,7 @@
     </p>
   {/if}
   {#if moveError}
-    <p class="text-meta text-danger-text" role="alert">{moveError}</p>
+    <InlineAlert>{moveError}</InlineAlert>
   {/if}
 
   {#if !brief && failed}
@@ -291,22 +344,31 @@
   {:else if !brief}
     <SkeletonList rows={4} />
   {:else if !initiatives.length}
-    <p class="text-meta text-fg-muted" data-watch-empty>No initiatives yet.</p>
+    <div
+      class="rounded-md border border-dashed border-line px-4 py-8 text-center"
+      data-watch-empty
+    >
+      <p class="text-meta text-fg">No initiatives yet.</p>
+      <p class="mt-1 text-micro text-fg-muted">
+        Initiatives appear here once an agent or a person files one.
+        <a
+          class="text-accent-text hover:underline"
+          href={workspaceHref("/initiatives/new")}>Create one</a
+        >
+      </p>
+    </div>
   {:else if view === "board"}
-    <WatchBoard {initiatives} {now} onMove={moveInitiative} />
+    <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
   {:else}
     <WatchList {initiatives} {now} />
   {/if}
 
   {#if selectedReport}
-    <section
-      class="rounded-md border border-border bg-panel"
-      data-watch-dashboard
-    >
+    <section class="min-w-0 space-y-2 pt-2" data-watch-dashboard>
       <header
-        class="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2"
+        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
       >
-        <h2 class="text-subtitle text-fg">Dashboard</h2>
+        <h2 class="ui-label mb-0">Dashboard</h2>
         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <DashboardPicker
             {reports}
@@ -329,13 +391,10 @@
             >{/if}
         </div>
       </header>
-      {#if pinError}<p
-          class="px-3 py-2 text-meta text-danger-text"
-          role="alert"
-        >
+      {#if pinError}<p class="text-meta text-danger-text" role="alert">
           {pinError}
         </p>{/if}
-      <div class="px-1 py-2">
+      <div class="min-w-0">
         <VisualReport
           compact
           report={selectedReport.report}

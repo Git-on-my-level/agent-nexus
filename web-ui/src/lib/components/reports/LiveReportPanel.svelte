@@ -1,5 +1,6 @@
 <script>
   import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
@@ -62,6 +63,21 @@
   };
 </script>
 
+{#snippet prose(source)}
+  <!-- Agent-written markdown: rendered, not printed, and clamped to a
+       glance. The card itself is one click away. -->
+  <MarkdownRenderer
+    {source}
+    plain
+    class="row-prose"
+    {resolved}
+    {organizationSlug}
+    {workspaceSlug}
+    {onpreview}
+    {onpreviewclose}
+  />
+{/snippet}
+
 <div class="live-panel" aria-live="polite">
   {#if !live || live.status === "loading"}
     <p class="muted">Reading workspace…</p>
@@ -97,7 +113,7 @@
                   : "Needs an answer"} ·
               {/if}{formatLiveAge(item.age_seconds, now)}
             </p>
-            {#if item.response_text}<p>{item.response_text}</p>{/if}
+            {#if item.response_text}{@render prose(item.response_text)}{/if}
           </li>
         {/each}
       </ul>
@@ -118,7 +134,7 @@
                   `/initiatives/${encodeURIComponent(item.ref)}`,
                 )}>{item.title}</a
               >{:else}<strong class="row-title">{item.title}</strong>{/if}
-            <p class="muted">
+            <p class="muted row-meta">
               <WorkSummary
                 summary={workSummaryModel(item, { now })}
                 density="row"
@@ -127,10 +143,10 @@
               />
               {#if item.priority}<span>{item.priority.toUpperCase()}</span>{/if}
               {#if instantIso(item.updated_at)}<span
-                  >· updated <Time value={item.updated_at} {now} /></span
+                  >updated <Time value={item.updated_at} {now} /></span
                 >{/if}
             </p>
-            {#if workProse(item)}<p>{workProse(item)}</p>{/if}
+            {#if workProse(item)}{@render prose(workProse(item))}{/if}
             {#each item.needs ?? [] as need}<p class="partial">{need}</p>{/each}
           </li>
         {/each}
@@ -275,8 +291,8 @@
           {@const title = item.title ?? item.label ?? item.ref ?? ""}
           <li>
             {#if title}<strong class="row-title">{title}</strong>{/if}
-            {#if workProse(item)}<p>{workProse(item)}</p>{/if}
-            {#if item.detail}<p>{item.detail}</p>{/if}
+            {#if workProse(item)}{@render prose(workProse(item))}{/if}
+            {#if item.detail}{@render prose(item.detail)}{/if}
             {#if instantIso(at)}<p class="muted">
                 <Time value={at} {now} />
               </p>{/if}
@@ -321,6 +337,33 @@
   .rows li {
     padding-bottom: 12px;
     border-bottom: 1px solid var(--line-subtle);
+  }
+  .row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 8px;
+    margin-top: 2px;
+  }
+  .live-panel :global(.row-prose) {
+    margin-top: 2px;
+    color: var(--fg-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .live-panel :global(.row-prose > *) {
+    margin: 0;
+  }
+  .live-panel :global(.row-prose > * + *) {
+    margin-top: 2px;
+  }
+  .live-panel :global(.row-prose ul),
+  .live-panel :global(.row-prose ol) {
+    padding-left: 1.1em;
   }
   .row-title {
     text-align: left;

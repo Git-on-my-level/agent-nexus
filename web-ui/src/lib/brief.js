@@ -413,6 +413,24 @@ export function formatDay(iso) {
 }
 
 /**
+ * Authored one-liners (a promise's `what`) are markdown. The computed line is
+ * plain text, so strip the inline markup rather than print `**fix**`. Kept
+ * dependency-free: this module loads with the shell, the markdown renderer
+ * does not.
+ */
+export function plainInline(value) {
+  return text(value)
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, "$2")
+    .replace(/(^|[^\w*])([*_])(?=\S)([^*_]*?\S)\2(?![\w*])/g, "$1$3")
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1")
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?)/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * The computed line under an initiative's title. Each part names the brief
  * field it came from, so the renderer can tag it for the I1 lint.
  *
@@ -441,7 +459,7 @@ export function initiativeLine(row, now = Date.now()) {
       parts.push({
         field: "initiatives.promise",
         text: row.promise.what
-          ? `next: ${row.promise.what}${row.promise.at ? ` · ${formatDay(row.promise.at)}` : ""}`
+          ? `next: ${plainInline(row.promise.what)}${row.promise.at ? ` · ${formatDay(row.promise.at)}` : ""}`
           : `next ${formatDay(row.promise.at)}`,
       });
   } else if (row.state === "no_promise") {

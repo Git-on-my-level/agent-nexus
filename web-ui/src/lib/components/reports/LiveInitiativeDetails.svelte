@@ -68,6 +68,7 @@
                and the initiative page has the whole body. -->
           <MarkdownRenderer
             source={workProse(item)}
+            plain
             class="summary"
             {resolved}
             {organizationSlug}

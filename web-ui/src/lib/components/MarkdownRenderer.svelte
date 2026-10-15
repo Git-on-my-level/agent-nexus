@@ -21,6 +21,12 @@
     source = "",
     class: className = "",
     inline = false,
+    /**
+     * Clamped previews: everything still renders (links, ref chips), but no
+     * link or chip inside takes a tab stop, so a line-clamp cannot leave a
+     * hidden one in the tab order. The preview's own title opens the item.
+     */
+    plain = false,
     /** Page-level batch resolve result, from `indexResolvedRefs`. */
     resolved = new Map(),
     organizationSlug = "",
@@ -40,7 +46,11 @@
     void html;
     void resolved;
     const host = root;
-    if (!host || !refChips) return;
+    if (!host) return;
+    if (!refChips) {
+      if (plain) untab(host);
+      return;
+    }
 
     const chips = [];
     for (const node of host.querySelectorAll("[data-md-ref]")) {
@@ -65,10 +75,18 @@
       );
     }
 
+    if (plain) untab(host);
     return () => {
       for (const chip of chips) unmount(chip);
     };
   });
+
+  function untab(host) {
+    for (const node of host.querySelectorAll(
+      "a[href], button, [tabindex]:not([tabindex='-1'])",
+    ))
+      node.setAttribute("tabindex", "-1");
+  }
 </script>
 
 {#if html}
