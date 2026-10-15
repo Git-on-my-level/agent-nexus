@@ -32,6 +32,7 @@ import {
   QA_BOARDS,
   filterByQuery,
 } from "../tests/fixtures/qa-seed.js";
+import briefFixture from "../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 import { auditLayout, formatViolations } from "../tests/helpers/layoutAudit.js";
 import { getExpectedCommandRegistryDigest } from "../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../src/lib/config.js";
@@ -84,115 +85,87 @@ const QA_HOME_FEED_TYPES = new Set([
 export const QA_SCENES = [
   ...extensionScenes,
   {
-    name: "workspace-home-handoff-first-run",
-    path: "/o/local/w/local",
-    workspaceMode: "home-first-run",
-    waitFor: async (page) => {
-      // Initiatives are the page. What is waiting on you is in the Inbox and
-      // its badge, and one fold down here, so the scene is the folded state.
-      await page.waitForSelector("text=No open initiatives.");
-      await page.locator("[data-overview-detail]:not([open])").waitFor();
-    },
-  },
-  {
-    name: "workspace-home-handoff-populated",
-    path: "/o/local/w/local",
-    workspaceMode: "home-recent",
-    waitFor: async (page) => {
-      await page.waitForSelector(
-        "[data-overview-report='doc-fleet-dashboard']",
-      );
-      // The worst initiative is first, and the collapsed tails are both there.
-      await page
-        .locator("[data-initiative-group='attention'] [data-tile-health]")
-        .first()
-        .waitFor();
-      await page.locator("[data-initiative-group='done']").waitFor();
-      await page.locator("[data-initiative-group='no-plan']").waitFor();
-      await page.waitForSelector("text=Approve rollback wording");
-    },
-  },
-  {
-    name: "workspace-home-handoff-empty",
-    path: "/o/local/w/local",
-    workspaceMode: "home-empty",
-    /*
-     * Nothing has ever reported into this workspace, so the Overview is the
-     * connect-your-first-agent panel rather than a stack of empty sections.
-     * The sections this scene used to wait on — initiatives, the dashboard
-     * note, the detail fold and the urgent band inside it — are not rendered
-     * in that state by design; `workspace-home-handoff-first-run` still
-     * covers them, because its one open ask means it is not a cold start.
-     *
-     * The panel carries the longest strings in the product (an install
-     * command and an `anx --base-url …` line), which is what makes auditing
-     * it at phone width worth a scene.
-     */
-    waitFor: async (page) => {
-      await page.locator("[data-first-agent-panel]").waitFor();
-      await page.waitForSelector("text=Connect your first agent");
-      await page.locator("[data-setup-prompt='machine']").waitFor();
-      await page.locator("[data-first-agent-waiting]").waitFor();
-      await page.locator("[data-first-agent-example]").waitFor();
-    },
-  },
-  {
-    name: "workspace-inbox-empty",
-    path: "/o/local/w/local/inbox",
-    workspaceMode: "inbox-empty",
-    waitFor: async (page) => {
-      // Empty Needs you now reads "You're clear." plus a link to Watching.
-      await page.waitForSelector("text=You're clear.");
-    },
-  },
-  {
-    name: "workspace-inbox-populated",
-    path: "/o/local/w/local/inbox",
-    workspaceMode: "inbox-populated",
-    waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="inbox-row-inbox-ask-auth"]');
-    },
-  },
-  {
-    name: "workspace-inbox-loading",
-    path: "/o/local/w/local/inbox",
-    workspaceMode: "inbox-loading",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Loading inbox…");
-    },
-  },
-  {
-    name: "workspace-inbox-error",
-    path: "/o/local/w/local/inbox",
-    workspaceMode: "inbox-error",
-    waitFor: async (page) => {
-      await page.waitForSelector('[role="alert"]');
-    },
-  },
-  {
-    name: "workspace-capture-ui",
-    path: "/o/local/w/local/inbox/inbox-ask-auth",
-    workspaceMode: "capture-ui",
-    thresholdRatio: 0.018,
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Approve auth callback rollback window");
-    },
-  },
-  {
-    name: "workspace-capture-degraded",
-    path: "/o/local/w/local/inbox/inbox-ask-auth",
-    workspaceMode: "capture-degraded",
-    waitFor: async (page) => {
-      await page.waitForSelector('[role="alert"]');
-      await page.waitForSelector("text=Failed to load inbox item");
-    },
-  },
-  {
-    name: "workspace-tasks",
-    path: "/o/local/w/local/tasks",
+    name: "workspace-watch-list",
+    path: "/o/local/w/local/watch",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Tasks")');
+      await page.waitForSelector("[data-watch-group='past_promise']");
+      await page.waitForSelector("text=Battery measurement");
+    },
+  },
+  {
+    name: "workspace-watch-board",
+    path: "/o/local/w/local/watch?view=board",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector("[data-watch-column='review']");
+      await page.waitForSelector("text=Fleet onboarding");
+    },
+  },
+  {
+    name: "workspace-watch-empty",
+    path: "/o/local/w/local/watch",
+    workspaceMode: "workspace-default",
+    briefState: "empty",
+    waitFor: async (page) => {
+      await page.waitForSelector("text=No initiatives yet.");
+    },
+  },
+  {
+    name: "workspace-decide-populated",
+    path: "/o/local/w/local/decide",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector("[data-decision-ref]");
+      await page.waitForSelector("text=Review fleet onboarding runbook");
+    },
+  },
+  {
+    name: "workspace-decide-empty",
+    path: "/o/local/w/local/decide",
+    workspaceMode: "workspace-default",
+    briefState: "empty",
+    waitFor: async (page) => {
+      // Clear: nothing is waiting on the reader.
+      await page.waitForSelector("text=Nothing is waiting on you.");
+    },
+  },
+  {
+    name: "workspace-decide-loading",
+    path: "/o/local/w/local/decide",
+    workspaceMode: "workspace-default",
+    briefState: "loading",
+    waitFor: async (page) => {
+      await page.waitForSelector('h1:has-text("Decide")');
+      await page.waitForSelector("[data-skeleton-list]");
+    },
+  },
+  {
+    name: "workspace-decide-error",
+    path: "/o/local/w/local/decide",
+    workspaceMode: "workspace-default",
+    briefState: "error",
+    waitFor: async (page) => {
+      await page.waitForSelector('[role="alert"]');
+      await page.waitForSelector("text=Decisions didn’t load");
+    },
+  },
+  {
+    name: "workspace-decide-permalink",
+    path: "/o/local/w/local/decide/ask-91",
+    workspaceMode: "workspace-default",
+    thresholdRatio: 0.018,
+    waitFor: async (page) => {
+      await page.waitForSelector("text=Merge battery-v2 calibration?");
+      await page.waitForSelector("[data-decision-ref]");
+    },
+  },
+  {
+    name: "workspace-initiatives",
+    path: "/o/local/w/local/initiatives",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector('h1:has-text("Initiatives")');
       // The bootstrap placeholder carries the destination's own name, so the
       // scene has to wait for the loaded page rather than for the heading.
       await page.waitForSelector("text=Nothing tracked yet");
@@ -256,11 +229,8 @@ export const QA_SCENES = [
       await page
         .getByRole("button", { name: "Revoke administration", exact: true })
         .waitFor();
-      // The PM slot resolves on its own read; audit the shell once it has.
-      await page
-        .locator("[data-pm-nav]")
-        .first()
-        .waitFor({ state: "attached" });
+      // Ask is rendered only after PM presence resolves.
+      await page.getByRole("link", { name: "Ask", exact: true }).waitFor();
     },
   },
   {
@@ -268,7 +238,9 @@ export const QA_SCENES = [
     path: "/o/local/w/local/agents",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Waiting on you");
+      // The Decide nav hint uses the same words and is display:none, so a
+      // page-wide text selector never becomes visible. The roster heading is.
+      await page.locator("h2").filter({ hasText: "Waiting on you" }).waitFor();
       // Identities that never checked in are folded into a counted group, so
       // the roster's first screen is the agents that actually exist.
       await page.waitForSelector('[data-agents-fold="inactive"]');
@@ -284,10 +256,10 @@ export const QA_SCENES = [
   },
   {
     name: "command-palette-open",
-    path: "/o/local/w/local/inbox",
-    workspaceMode: "inbox-populated",
+    path: "/o/local/w/local/decide",
+    workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="inbox-row-inbox-ask-auth"]');
+      await page.waitForSelector("[data-decision-ref]");
       // The sidebar trigger only exists on wide layouts; the shortcut works everywhere.
       if (await page.locator(".shell-search-trigger").isVisible()) {
         await page.click(".shell-search-trigger");
@@ -1333,8 +1305,24 @@ export async function installQaEnvironment(page, scene) {
   );
 }
 
+function qaBrief(scenario) {
+  const body = {
+    ...briefFixture,
+    generated_at: QA_FIXED_NOW_ISO,
+  };
+  if (scenario.briefState !== "empty") return body;
+  return {
+    ...body,
+    decisions: [],
+    initiatives: [],
+    your_asks: [],
+    answered_for_you: [],
+  };
+}
+
 export async function installQaRoutes(page, scene) {
   const workspaceScenario = createWorkspaceScenario(scene.workspaceMode);
+  workspaceScenario.briefState = scene.briefState ?? "ok";
 
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -1376,6 +1364,41 @@ async function handleWorkspaceApiRoute(
 ) {
   if (pathname === "/overview" && request.method() === "GET") {
     await route.fulfill(jsonResponse(200, overviewSnapshot(scenario)));
+    return;
+  }
+
+  // Decide, Watch, the initiative page and the Decide nav badge all read this.
+  if (pathname === "/brief" && request.method() === "GET") {
+    if (scenario.briefState === "loading") {
+      await new Promise(() => {});
+      return;
+    }
+    if (scenario.briefState === "error") {
+      await route.fulfill(
+        jsonResponse(500, {
+          error: { message: "QA baseline brief failure." },
+        }),
+      );
+      return;
+    }
+    await route.fulfill(jsonResponse(200, qaBrief(scenario)));
+    return;
+  }
+
+  // Watch loads dashboards under the initiatives. An empty selector keeps
+  // that section out of the capture instead of racing a proxied 404.
+  if (
+    pathname === "/workspace/dashboard/reports" &&
+    request.method() === "GET"
+  ) {
+    await route.fulfill(
+      jsonResponse(200, {
+        reports: [],
+        has_more: false,
+        pinned_ref: null,
+        next_cursor: "",
+      }),
+    );
     return;
   }
 

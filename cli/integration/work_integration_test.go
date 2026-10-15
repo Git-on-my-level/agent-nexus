@@ -66,7 +66,7 @@ func TestUnifiedWorkObservationReplayScenario(t *testing.T) {
 	if fmt.Sprint(a) == fmt.Sprint(b) {
 		t.Fatal("observation cursor repeated page")
 	}
-	h.runCLIExpectOK(t, "reporter", nil, "work", "context", ref, "--limit", "2")
+	h.runCLIExpectOK(t, "reporter", nil, "context", ref, "--limit", "2")
 	queued := h.runCLIExpectOK(t, "reporter", nil, "work", "refresh", "request", ref)
 	again := h.runCLIExpectOK(t, "reporter", nil, "work", "refresh", "request", ref)
 	if mustStringPath(t, queued.Payload, "result.refresh.requested_at") != mustStringPath(t, again.Payload, "result.refresh.requested_at") {

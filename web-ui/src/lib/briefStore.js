@@ -37,15 +37,14 @@ function create(scope) {
 export function briefStore() {
   const scope = readerScopeKey();
   if (!instance || instanceScope !== scope) {
-    // A reader switch drops the old reader's live subscription with it.
-    // This runs from template/derived reads (the nav badge), where writing
-    // to a store is forbidden, so teardown is deferred past the read.
-    const stopLive = unmount;
+    // Runs from a derived read (the nav badge) before the previous
+    // mountBrief cleanups. Those cleanups own the live subscription:
+    // zeroing the count here lets them drive it negative, and the next
+    // mount takes the already-mounted branch and never subscribes.
+    // Destroying the old store writes state, which a derived must not do,
+    // so that waits until after the read.
     const old = instance;
-    unmount = null;
-    mounts = 0;
     queueMicrotask(() => {
-      stopLive?.();
       old?.destroy();
     });
     instance = create(scope);

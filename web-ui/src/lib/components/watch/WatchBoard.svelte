@@ -41,6 +41,8 @@
   }
 
   function onPointerDown(event, row) {
+    // A horizontal flick scrolls the board. Touch placement uses Move to.
+    if (event.pointerType === "touch") return;
     if (event.button != null && event.button !== 0) return;
     if (
       event.target instanceof HTMLElement &&
@@ -132,9 +134,7 @@
           <div
             data-work-slot
             data-work-ref={row.ref}
-            class="touch-pan-y {dragging && drag?.row.ref === row.ref
-              ? 'opacity-50'
-              : ''}"
+            class={dragging && drag?.row.ref === row.ref ? "opacity-50" : ""}
             onpointerdown={(event) => onPointerDown(event, row)}
             role="presentation"
           >
