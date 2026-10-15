@@ -390,7 +390,11 @@
     pinned = false;
   }
 
-  /** A tap on Send or Cancel must not blur the field and unpin the bar. */
+  /**
+   * A tap on Send or Cancel must not blur the field and unpin the bar.
+   * `mousedown`, not `pointerdown`: cancelling a pointerdown suppresses the
+   * compatibility click a touch tap relies on, so Send would never submit.
+   */
   function keepFocus(event) {
     if (pinned) event.preventDefault();
   }
@@ -809,7 +813,7 @@
             type="submit"
             class="ui-btn-primary max-lg:min-h-11"
             title={`Send reply (${formatShortcut("Enter")})`}
-            onpointerdown={keepFocus}
+            onmousedown={keepFocus}
             disabled={!reply.trim()}>Send reply</button
           >
           {#if stack}
@@ -817,7 +821,7 @@
               type="button"
               class="ui-btn-secondary max-lg:min-h-11"
               data-decision-reply-cancel
-              onpointerdown={keepFocus}
+              onmousedown={keepFocus}
               onclick={() => {
                 replying = false;
                 pinned = false;

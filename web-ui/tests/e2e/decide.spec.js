@@ -231,6 +231,53 @@ test.describe("phone composer", () => {
     expect(bodies[0].response_text).toBe("Merge after the rig 4 rerun.");
   });
 
+  test("touch taps on a pinned bar's Send and Cancel still click", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context, {
+      briefRoute: (route) =>
+        json(route, { ...LONG, generated_at: new Date().toISOString() }),
+    });
+    await page.goto(LIST);
+    const merge = page.locator(`[data-decide-card="${MERGE.inbox_item_id}"]`);
+    const bar = merge.locator("[data-decision-composer]");
+    const field = merge.locator("[data-decision-reply]");
+    const send = merge.getByRole("button", { name: "Send reply" });
+    const cancel = merge.locator("[data-decision-reply-cancel]");
+
+    // Nothing may cancel the pointerdown a touch tap's click depends on.
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    await expect(bar).toHaveAttribute("data-pinned", "true");
+    for (const button of [send, cancel]) {
+      const cancelled = await button.evaluate(
+        (node) =>
+          !node.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              cancelable: true,
+              pointerType: "touch",
+            }),
+          ),
+      );
+      expect(cancelled).toBe(false);
+    }
+
+    // Cancel closes the pinned bar.
+    await cancel.tap();
+    await expect(field).toBeHidden();
+    await expect(merge.locator("[data-decision-reply-toggle]")).toBeVisible();
+
+    // Send posts the reply from the pinned bar.
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    await expect(bar).toHaveAttribute("data-pinned", "true");
+    await field.fill("Hold until rig 4 settles.");
+    await send.tap();
+    await flush(page);
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0].response_text).toBe("Hold until rig 4 settles.");
+  });
+
   test("the permalink's reply pins while it is in use", async ({
     page,
     context,

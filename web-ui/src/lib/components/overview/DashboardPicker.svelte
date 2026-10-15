@@ -90,6 +90,18 @@
     }
   }
 
+  // The trigger moves when the screen turns or resizes; keep the menu on it.
+  $effect(() => {
+    if (!open) return;
+    const replace = () => placeMenu();
+    window.addEventListener("resize", replace);
+    window.addEventListener("orientationchange", replace);
+    return () => {
+      window.removeEventListener("resize", replace);
+      window.removeEventListener("orientationchange", replace);
+    };
+  });
+
   function toggle() {
     if (open) close();
     else openMenu();

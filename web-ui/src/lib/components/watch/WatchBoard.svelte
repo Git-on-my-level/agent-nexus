@@ -241,7 +241,10 @@
       target.index === fromIndex
     )
       return;
-    commit(session.row, target.placement, before);
+    const ref = session.row.ref;
+    void commit(session.row, target.placement, before).then(() =>
+      followMove(ref, target.placement),
+    );
   }
 
   /**
