@@ -111,4 +111,36 @@ describe("WatchRow", () => {
       ),
     ).toBeNull();
   });
+
+  it("renders the note as markdown, never raw asterisks", () => {
+    const { container } = render(WatchRow, {
+      initiative: row({
+        note: {
+          text: "**Goal:** land the `ask` fix",
+          author: { id: "a", display: "Ada" },
+          at: "2026-10-15T06:00:00Z",
+        },
+      }),
+      now: NOW,
+    });
+    const note = container.querySelector("[data-watch-note]");
+    expect(note.textContent).not.toContain("**");
+    expect(note.querySelector("strong")?.textContent).toBe("Goal:");
+    expect(note.querySelector("code")?.textContent).toBe("ask");
+  });
+
+  for (const variant of ["row", "card"]) {
+    it(`draws a progress bar with its count (${variant})`, () => {
+      const { container } = render(WatchRow, {
+        initiative: row(),
+        variant,
+        now: NOW,
+      });
+      const bar = container.querySelector("[data-watch-progress]");
+      expect(bar.getAttribute("role")).toBe("img");
+      expect(bar.getAttribute("aria-label")).toContain("6 of 9 steps done");
+      expect(bar.getAttribute("data-watch-progress")).toBe("late");
+      expect(bar.querySelectorAll(".seg--done")).toHaveLength(6);
+    });
+  }
 });
