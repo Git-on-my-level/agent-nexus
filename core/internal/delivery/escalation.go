@@ -24,7 +24,12 @@ const (
 	escalateBatch  = 50
 	recipientCap   = 200
 	digestItemCap  = 10
-	digestScanCap  = 50
+	// digestReadableCap is how many readable overdue asks a digest counts.
+	// digestPage is the index seek size; digestScanHardCap stops the walk
+	// so an unreadable prefix cannot grow without a bound.
+	digestReadableCap = 50
+	digestPage        = 50
+	digestScanHardCap = 500
 	// deadlinePage is the primary-key page while walking the open-ask ledger.
 	// The walk continues until the ledger is exhausted, so unreadable rows
 	// cannot fill the page and hide a later readable ask from a count.
@@ -52,7 +57,9 @@ func EscalationMode(askTS, decideBy time.Time, blocks int) string {
 // Escalator runs the decide_by clock: it normalizes newly recorded asks,
 // escalates asks whose decide_by passed unanswered and queues one digest per
 // recipient channel per day. Every read is a seek on an ask_deadlines or
-// notification_channel_settings index with a fixed batch cap.
+// notification_channel_settings index with a fixed batch cap. The digest
+// walks that index until it has digestReadableCap asks the recipient can
+// read, the rows run out, or it has scanned digestScanHardCap rows.
 type Escalator struct {
 	Store         Store
 	WorkspaceName string
@@ -250,9 +257,9 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 	if err != nil || len(recipients) == 0 {
 		return err
 	}
-	var overdue []dueAsk
 	var ledger []deadlineFact
 	loaded := false
+	readable := map[string][]dueAsk{}
 	for _, r := range recipients {
 		key := "digest:" + r.principal + ":" + r.channel + ":" + day
 		if _, err := e.Store.getByKey(ctx, key); err == nil {
@@ -261,25 +268,26 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			return err
 		}
 		if !loaded {
-			if overdue, err = e.overdue(ctx, now); err != nil {
-				return err
-			}
 			if ledger, err = loadDeadlineFacts(ctx, e.Store.DB); err != nil {
 				return err
 			}
 			loaded = true
 		}
-		items := []map[string]any{}
-		visible := 0
-		for _, a := range overdue {
-			if e.CanRead == nil || !e.CanRead(ctx, r.principal, a.id) {
-				continue
+		overdue, ok := readable[r.principal]
+		if !ok {
+			if overdue, err = e.readableOverdue(ctx, now, r.principal); err != nil {
+				return err
 			}
-			visible++
-			if len(items) < digestItemCap {
-				items = append(items, map[string]any{"title": e.askTitle(ctx, a.id), "ref": "event:" + a.id, "link": e.link(a.id), "decide_by": stamp(a.decideBy)})
-			}
+			readable[r.principal] = overdue
 		}
+		items := []map[string]any{}
+		for _, a := range overdue {
+			if len(items) >= digestItemCap {
+				break
+			}
+			items = append(items, map[string]any{"title": e.askTitle(ctx, a.id), "ref": "event:" + a.id, "link": e.link(a.id), "decide_by": stamp(a.decideBy)})
+		}
+		visible := len(overdue)
 		if visible == 0 {
 			// Nothing overdue for this recipient today; no message.
 			continue
@@ -307,23 +315,57 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-func (e *Escalator) overdue(ctx context.Context, now time.Time) ([]dueAsk, error) {
-	rows, err := e.Store.DB.QueryContext(ctx, `SELECT request_event_id, decide_by FROM ask_deadlines INDEXED BY idx_ask_deadlines_decide_by WHERE decide_by IS NOT NULL AND decide_by<=? ORDER BY decide_by LIMIT ?`, stamp(now), digestScanCap)
-	if err != nil {
-		return nil, err
+// readableOverdue pages idx_ask_deadlines_decide_by and keeps only asks this
+// principal can read. Unreadable rows do not fill the window. A nil CanRead
+// admits nothing, matching the previous filter.
+func (e *Escalator) readableOverdue(ctx context.Context, now time.Time, principal string) ([]dueAsk, error) {
+	if e.CanRead == nil {
+		return nil, nil
 	}
-	defer rows.Close()
-	out := []dueAsk{}
-	for rows.Next() {
-		var a dueAsk
-		var by string
-		if err := rows.Scan(&a.id, &by); err != nil {
+	out := make([]dueAsk, 0, digestItemCap)
+	scanned := 0
+	offset := 0
+	for len(out) < digestReadableCap && scanned < digestScanHardCap {
+		batch := digestPage
+		if remain := digestScanHardCap - scanned; remain < batch {
+			batch = remain
+		}
+		rows, err := e.Store.DB.QueryContext(ctx, `SELECT request_event_id, decide_by FROM ask_deadlines INDEXED BY idx_ask_deadlines_decide_by WHERE decide_by IS NOT NULL AND decide_by<=? ORDER BY decide_by LIMIT ? OFFSET ?`, stamp(now), batch, offset)
+		if err != nil {
 			return nil, err
 		}
-		a.decideBy, _ = time.Parse(time.RFC3339Nano, by)
-		out = append(out, a)
+		n := 0
+		var scanErr error
+		for rows.Next() {
+			var a dueAsk
+			var by string
+			if scanErr = rows.Scan(&a.id, &by); scanErr != nil {
+				break
+			}
+			a.decideBy, _ = time.Parse(time.RFC3339Nano, by)
+			n++
+			scanned++
+			if !e.CanRead(ctx, principal, a.id) {
+				continue
+			}
+			out = append(out, a)
+			if len(out) == digestReadableCap {
+				break
+			}
+		}
+		if scanErr == nil {
+			scanErr = rows.Err()
+		}
+		rows.Close()
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		if n < batch {
+			break
+		}
+		offset += n
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (e *Escalator) askTitle(ctx context.Context, id string) string {

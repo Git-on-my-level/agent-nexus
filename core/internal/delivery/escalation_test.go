@@ -313,6 +313,34 @@ func TestDigestRespectsReadAndPreferences(t *testing.T) {
 	}
 }
 
+func TestDigestReadsPastUnreadablePrefix(t *testing.T) {
+	e := newEnv(t)
+	esc, _ := newEscalator(e, func(_, ask string) bool { return ask == "readable" })
+	e.setChannel(t, "alice", "email", "a@example.com", false, true)
+	start := baseNow.Add(-4 * 24 * time.Hour)
+	for i := 0; i < 60; i++ {
+		e.addAsk(t, fmt.Sprintf("hidden-%02d", i), start.Add(time.Duration(i)*time.Second), "3d", 0, "hidden")
+	}
+	e.addAsk(t, "readable", start.Add(61*time.Second), "3d", 0, "Visible ask")
+	if err := esc.Step(context.Background(), baseNow); err != nil {
+		t.Fatal(err)
+	}
+	var payloadJSON string
+	if err := e.db.QueryRow(`SELECT payload_json FROM deliveries WHERE kind='digest'`).Scan(&payloadJSON); err != nil {
+		t.Fatalf("digest dropped the readable ask behind 60 unreadable ones: %v", err)
+	}
+	var p struct {
+		Overdue int              `json:"overdue"`
+		Items   []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(payloadJSON), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Overdue != 1 || len(p.Items) != 1 || p.Items[0]["ref"] != "event:readable" || p.Items[0]["title"] != "Visible ask" {
+		t.Fatalf("digest missed the readable ask: overdue=%d items=%v", p.Overdue, p.Items)
+	}
+}
+
 func TestDigestItemCap(t *testing.T) {
 	e := newEnv(t)
 	esc, _ := newEscalator(e, nil)
@@ -406,7 +434,7 @@ func TestHotReadQueryPlans(t *testing.T) {
 		{"escalation due", `SELECT request_event_id, ask_ts, decide_by, blocks_count FROM ask_deadlines INDEXED BY idx_ask_deadlines_due WHERE escalated_at IS NULL AND decide_by IS NOT NULL AND decide_by<=? ORDER BY decide_by, request_event_id LIMIT ?`, "idx_ask_deadlines_due", []any{"x", 50}, "ask_deadlines"},
 		{"normalize pending", `SELECT request_event_id, ask_ts, by_raw FROM ask_deadlines INDEXED BY idx_ask_deadlines_pending WHERE normalized=0 LIMIT ?`, "idx_ask_deadlines_pending", []any{200}, "ask_deadlines"},
 		{"overdue count", `SELECT COUNT(*) FROM ask_deadlines INDEXED BY idx_ask_deadlines_decide_by WHERE decide_by IS NOT NULL AND decide_by<=?`, "idx_ask_deadlines_decide_by", []any{"x"}, "ask_deadlines"},
-		{"overdue list", `SELECT request_event_id, decide_by FROM ask_deadlines INDEXED BY idx_ask_deadlines_decide_by WHERE decide_by IS NOT NULL AND decide_by<=? ORDER BY decide_by LIMIT ?`, "idx_ask_deadlines_decide_by", []any{"x", 50}, "ask_deadlines"},
+		{"overdue list", `SELECT request_event_id, decide_by FROM ask_deadlines INDEXED BY idx_ask_deadlines_decide_by WHERE decide_by IS NOT NULL AND decide_by<=? ORDER BY decide_by LIMIT ? OFFSET ?`, "idx_ask_deadlines_decide_by", []any{"x", 50, 0}, "ask_deadlines"},
 		{"earliest MIN", `SELECT MIN(decide_by) FROM ask_deadlines INDEXED BY idx_ask_deadlines_due WHERE escalated_at IS NULL AND decide_by IS NOT NULL`, "idx_ask_deadlines_due", nil, "ask_deadlines"},
 		{"principal list", `SELECT * FROM deliveries WHERE principal_id=? ORDER BY created_at DESC, delivery_id DESC LIMIT ?`, "idx_deliveries_principal", []any{"p", 10}, "deliveries"},
 		{"deadline ledger page", `SELECT request_event_id, COALESCE(decide_by,''), COALESCE(escalated_at,'') FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?`, "sqlite_autoindex_ask_deadlines_1", []any{"", 500}, "ask_deadlines"},

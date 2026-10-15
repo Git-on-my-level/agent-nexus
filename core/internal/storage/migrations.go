@@ -1109,6 +1109,9 @@ var migrations = []migration{
 	// Date-only by and next.at were stored at midnight. End of that UTC day
 	// is the resolution brief_asks and ask_deadlines both use.
 	{Version: 96, AfterApply: installDateOnlyEndOfDay},
+	// Filed-batch respond ids follow the oldest member of the whole batch.
+	// brief_asks.batch_id plus idx_brief_asks_batch is that seek.
+	{Version: 97, AfterApply: installBriefAskBatchID},
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {
