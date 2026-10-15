@@ -13,7 +13,12 @@
    */
   import { page } from "$app/stores";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { initiativeLine, WATCH_STATE_LABELS } from "$lib/brief.js";
+  import {
+    formatMetricValue,
+    formatSpan,
+    initiativeLine,
+    WATCH_STATE_LABELS,
+  } from "$lib/brief.js";
   import { formatAgo } from "$lib/time/format.js";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import InitiativeProgress from "./InitiativeProgress.svelte";
@@ -24,6 +29,8 @@
     now = Date.now(),
     /** Extra content under the card (the move menu). */
     footer = null,
+    /** Loops view: the measured series and whether it has gone flat. */
+    metrics = false,
   } = $props();
 
   let workspaceHref = $derived(
@@ -72,6 +79,45 @@
       data-source="computed:initiatives.waiting_on_you_count"
       >{initiative.waitingOnYouCount} waiting on you</a
     >
+  {/if}
+{/snippet}
+
+{#snippet metricLine()}
+  {#if metrics && initiative.series?.length}
+    <p
+      class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-micro text-fg-muted"
+      data-watch-metrics
+    >
+      {#each initiative.series as metric, index (metric.ref)}
+        {@const value = formatMetricValue(metric.last_value)}
+        {@const age = formatAgo(metric.last_at, now)}
+        <span
+          class="inline-flex min-w-0 max-w-full items-baseline gap-1"
+          title={metric.ref}
+          data-source="computed:initiatives.series"
+        >
+          <span class="truncate">{metric.name || metric.ref}</span>
+          {#if value}<span
+              class="max-w-[10rem] truncate font-medium tabular-nums text-fg"
+              title={value}>{value}</span
+            >{:else}<span class="text-fg-subtle">no data</span>{/if}
+          {#if age}<span class="shrink-0 text-fg-subtle">· {age}</span>{/if}
+          {#if index === 0 && initiative.metricFlat?.flat}
+            <span
+              class="ui-badge ui-badge--warn shrink-0"
+              title="{metric.name ||
+                metric.ref} has not moved beyond tolerance in the last {formatSpan(
+                initiative.metricFlat.window_seconds,
+              )}"
+              data-source="computed:initiatives.metric_flat"
+              >{initiative.metricFlat.for_seconds > 0
+                ? `flat ${formatSpan(initiative.metricFlat.for_seconds)}`
+                : "flat"}</span
+            >
+          {/if}
+        </span>
+      {/each}
+    </p>
   {/if}
 {/snippet}
 
@@ -171,6 +217,7 @@
         data-watch-title>{initiative.title}</a
       >
       {@render computedLine()}
+      {@render metricLine()}
       {#if initiative.note}<div class="mt-1">{@render note()}</div>{/if}
     </div>
     <div class="flex shrink-0 flex-wrap items-center gap-2 pt-0.5 sm:ml-auto">

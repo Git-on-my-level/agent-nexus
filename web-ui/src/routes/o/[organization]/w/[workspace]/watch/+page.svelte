@@ -8,7 +8,7 @@
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   import { patchSearchParams } from "$lib/urlState.js";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
-  import { freshnessLabel } from "$lib/brief.js";
+  import { freshnessLabel, isLoop } from "$lib/brief.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import { isNexusOwned } from "$lib/pm/presentation.js";
@@ -37,6 +37,7 @@
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import WatchList from "$lib/components/watch/WatchList.svelte";
   import WatchBoard from "$lib/components/watch/WatchBoard.svelte";
+  import WatchLoops from "$lib/components/watch/WatchLoops.svelte";
 
   const store = briefStore();
   let brief = $derived($store.data);
@@ -47,12 +48,15 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
+  const VIEWS = ["list", "board", "loops"];
   let view = $derived(
-    $page.url.searchParams.get("view") === "board" ? "board" : "list",
+    VIEWS.includes($page.url.searchParams.get("view") ?? "")
+      ? $page.url.searchParams.get("view")
+      : "list",
   );
   function setView(next) {
     const params = patchSearchParams($page.url.searchParams, {
-      view: next === "board" ? "board" : "",
+      view: next === "list" ? "" : next,
     });
     const query = params.toString();
     void goto(`${$page.url.pathname}${query ? `?${query}` : ""}`, {
@@ -78,6 +82,7 @@
       return placement ? { ...row, placement } : row;
     }),
   );
+  let loopCount = $derived(initiatives.filter(isLoop).length);
   $effect(() => {
     const rows = brief?.initiatives ?? [];
     const outbox = $mutationOutbox;
@@ -290,7 +295,7 @@
         aria-label="View"
         data-watch-view-toggle
       >
-        {#each [["list", "List"], ["board", "By stage"]] as [key, text] (key)}
+        {#each [["list", "List"], ["board", "By stage"], ["loops", "Loops"]] as [key, text] (key)}
           <button
             type="button"
             class="rounded px-3 py-1 text-meta font-medium transition-colors max-md:min-h-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {view ===
@@ -298,7 +303,14 @@
               ? 'bg-panel-hover text-fg shadow-sm'
               : 'text-fg-muted hover:text-fg'}"
             aria-pressed={view === key}
-            onclick={() => setView(key)}>{text}</button
+            aria-label={key === "loops" && loopCount
+              ? `${text}, ${loopCount}`
+              : undefined}
+            data-watch-view={key}
+            onclick={() => setView(key)}
+            >{text}{#if key === "loops" && loopCount}<span
+                class="ml-1 tabular-nums text-fg-subtle">{loopCount}</span
+              >{/if}</button
           >
         {/each}
       </div>
@@ -357,6 +369,8 @@
         >
       </p>
     </div>
+  {:else if view === "loops"}
+    <WatchLoops {initiatives} {now} />
   {:else if view === "board"}
     <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
   {:else}

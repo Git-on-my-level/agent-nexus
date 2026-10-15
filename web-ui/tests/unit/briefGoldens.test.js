@@ -82,13 +82,19 @@ describe("brief.v1 fixture renders Decide and Watch (I7)", () => {
 });
 
 describe("computed-source lint (I1)", () => {
-  it("every Watch row, in both variants", () => {
-    for (const initiative of brief.initiatives) {
+  it("every Watch row, in both variants and with metrics", () => {
+    const measured = {
+      ...brief.initiatives[0],
+      series: [{ ref: "series:conversion", name: "conversion", last_value: 3 }],
+      metricFlat: { flat: true, for_seconds: 345600, window_seconds: 604800 },
+    };
+    for (const initiative of [...brief.initiatives, measured]) {
       for (const variant of ["row", "card"]) {
         const { container } = render(WatchRow, {
           initiative,
           variant,
           now: NOW,
+          metrics: true,
         });
         expect(lintComputed(container), `${initiative.ref} ${variant}`).toEqual(
           [],
