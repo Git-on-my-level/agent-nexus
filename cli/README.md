@@ -106,6 +106,9 @@ reasons, ledger size and retention/capacity drops. Input is limited to 64 KiB;
 card titles/bodies are defensively truncated, and the retained prompt is quoted.
 Malformed, oversized or unidentifiable input and storage failures produce one
 short stderr diagnostic. A storage failure prevents sending unpersisted work.
+The enrolled host and token principal are bound durably before the first card
+request. If either changes, pending events stay queued as `identity_changed` rather than
+replaying under a different actor; restore the original principal to retry.
 The owner-only spool contains task text: keep the ANX config directory private.
 Retention is enforced on hook invocations; status does not mutate the spool.
 Disable removes the hook and integration config but preserves pending work and

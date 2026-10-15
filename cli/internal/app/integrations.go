@@ -411,7 +411,35 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 		routed.AccessToken = ""
 		routed.Sources = map[string]string{"base_url": "integration", "agent": "integration"}
 		routed.Timeout = time.Second
-		_, err := a.invokeTypedJSON(sendCtx, routed, "integrations run", d.CommandID, nil, nil, d.Body)
+		host, err := a.resolvedHost(routed)
+		if err != nil {
+			return err
+		}
+		if d.HostID != "" && d.HostID != host.ID {
+			return integrations.ErrIdentityChanged
+		}
+		key := d.Key
+		auth, err := a.resolveHostAgent(sendCtx, routed)
+		if err != nil {
+			return err
+		}
+		if auth.HostID != host.ID {
+			return integrations.ErrIdentityChanged
+		}
+		principal := "actor:" + auth.ActorID
+		if auth.ActorID == "" {
+			if auth.AgentID == "" {
+				return errnorm.Local("identity_unresolved", "derived principal is unavailable")
+			}
+			principal = "agent:" + auth.AgentID
+		}
+		if err = integrations.BindHost(sendCtx, path, key, host.ID, principal); err != nil {
+			return err
+		}
+		// Use this already-resolved bearer for the bounded call. Do not allow
+		// a second auth refresh to switch hosts after the durable binding.
+		auth.HostID = ""
+		_, err = a.invokeTypedJSON(sendCtx, auth, "integrations run", d.CommandID, nil, nil, d.Body)
 		return err
 	}, event.Key)
 }

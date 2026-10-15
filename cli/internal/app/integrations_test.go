@@ -349,3 +349,127 @@ func TestIntegrationsRunCannotEnterSettingsMutationHandler(t *testing.T) {
 		t.Fatal(state)
 	}
 }
+
+func TestIntegrationsDoNotReplayUnderReenrolledHost(t *testing.T) {
+	a, out, home := integrationTestApp(t)
+	var mu sync.Mutex
+	creates := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/auth/token" {
+			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1"},"tokens":{"access_token":"token","expires_in":3600}}`)
+			return
+		}
+		if r.URL.Path == "/cards" {
+			mu.Lock()
+			creates++
+			mu.Unlock()
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"error":{"code":"unavailable","message":"unknown outcome"}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = hostidentity.Save(home, hostidentity.Host{ID: "host-original", KeyID: "key", WorkspaceID: "ws_test", BaseURL: server.URL}, key); err != nil {
+		t.Fatal(err)
+	}
+	enabled := integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+	for i := 0; i < 2; i++ {
+		a.Stdin = strings.NewReader(sampleHook(home))
+		out.Reset()
+		if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 {
+			t.Fatal(code, out.String())
+		}
+		if i == 0 {
+			dir := filepath.Join(home, ".config", "anx")
+			host, ok, err := hostidentity.LoadAt(dir, server.URL)
+			if err != nil || !ok {
+				t.Fatal(err)
+			}
+			host.ID = "host-reenrolled"
+			if err = integrations.AtomicWrite(filepath.Join(filepath.Dir(host.PrivateKeyPath), "host.json"), integrations.JSON(host)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if creates != 1 {
+		t.Fatal("replayed under another host", creates)
+	}
+	c, err := integrations.LoadConfig(enabled["config_path"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := integrations.LoadQueue(integrations.QueuePath(filepath.Join(home, ".config", "anx"), suggestedIntegration, c.ID))
+	if err != nil || len(q.Pending) != 1 || q.Pending[0].Reason != "identity_changed" {
+		t.Fatal(q, err)
+	}
+}
+
+func TestIntegrationsMayRecoverAuthBeforeFirstCardAttempt(t *testing.T) {
+	a, out, home := integrationTestApp(t)
+	var mu sync.Mutex
+	grants, creates := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/auth/token" {
+			mu.Lock()
+			grants++
+			n := grants
+			mu.Unlock()
+			if n == 1 {
+				w.WriteHeader(401)
+				fmt.Fprint(w, `{"error":{"code":"invalid_token","message":"enroll again"}}`)
+				return
+			}
+			fmt.Fprint(w, `{"agent":{"id":"agent-new","actor_id":"actor-new"},"tokens":{"access_token":"token","expires_in":3600}}`)
+			return
+		}
+		if r.URL.Path == "/cards" {
+			mu.Lock()
+			creates++
+			mu.Unlock()
+			w.WriteHeader(201)
+			fmt.Fprint(w, `{"card":{"ref":"card:task"}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = hostidentity.Save(home, hostidentity.Host{ID: "host-old", KeyID: "key", WorkspaceID: "ws_test", BaseURL: server.URL}, key); err != nil {
+		t.Fatal(err)
+	}
+	integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+	for i := 0; i < 2; i++ {
+		a.Stdin = strings.NewReader(sampleHook(home))
+		out.Reset()
+		if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 {
+			t.Fatal(code, out.String())
+		}
+		if i == 0 {
+			host, _, err := hostidentity.Load(home, server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			host.ID = "host-new"
+			if err = integrations.AtomicWrite(filepath.Join(filepath.Dir(host.PrivateKeyPath), "host.json"), integrations.JSON(host)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if creates != 1 {
+		t.Fatal("auth recovery failed", creates)
+	}
+}

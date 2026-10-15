@@ -15,11 +15,16 @@ const MaxLedger = 1000
 const MaxAge = 30 * 24 * time.Hour
 const MaxDrain = 4
 
+var ErrIdentityChanged = errors.New("identity_changed")
+
 type Delivery struct {
-	CommandID string         `json:"command_id"`
-	BaseURL   string         `json:"base_url"`
-	Agent     string         `json:"agent"`
-	Body      map[string]any `json:"body"`
+	PrincipalID string         `json:"principal_id,omitempty"`
+	Key         string         `json:"key"`
+	HostID      string         `json:"host_id,omitempty"`
+	CommandID   string         `json:"command_id"`
+	BaseURL     string         `json:"base_url"`
+	Agent       string         `json:"agent"`
+	Body        map[string]any `json:"body"`
 }
 type Pending struct {
 	Event    Event     `json:"event"`
@@ -162,6 +167,9 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 					p.Reason = "pending"
 				}
 			}
+			if p.Delivery != nil {
+				p.Delivery.Key = p.Event.Key
+			}
 			for i := range current.Pending {
 				if current.Pending[i].Event.Key == p.Event.Key {
 					current.Pending[i] = p
@@ -194,6 +202,9 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 				}
 				if sendErr != nil {
 					current.Pending[i].Reason = "delivery_failed"
+					if errors.Is(sendErr, ErrIdentityChanged) {
+						current.Pending[i].Reason = "identity_changed"
+					}
 					last = sendErr
 					failed := current.Pending[i]
 					current.Pending = append(append(current.Pending[:i], current.Pending[i+1:]...), failed)
@@ -211,4 +222,32 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 		}
 	}
 	return last
+}
+
+// BindHost durably fixes the authentication namespace before the first mutation.
+// An offline event may have a prepared body before any host is enrolled.
+func BindHost(ctx context.Context, path, key, hostID string, principal ...string) error {
+	return updateQueue(ctx, path, func(q *Queue) error {
+		for i := range q.Pending {
+			p := &q.Pending[i]
+			if p.Event.Key != key {
+				continue
+			}
+			if p.Delivery == nil {
+				return fmt.Errorf("delivery_not_prepared")
+			}
+			if p.Delivery.HostID != "" && p.Delivery.HostID != hostID {
+				return ErrIdentityChanged
+			}
+			if len(principal) > 0 {
+				if p.Delivery.PrincipalID != "" && p.Delivery.PrincipalID != principal[0] {
+					return ErrIdentityChanged
+				}
+				p.Delivery.PrincipalID = principal[0]
+			}
+			p.Delivery.HostID = hostID
+			return nil
+		}
+		return fmt.Errorf("delivery_not_pending")
+	})
 }

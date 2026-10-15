@@ -302,3 +302,54 @@ func TestSettingsRepairInterruptedBinaryPathChange(t *testing.T) {
 		}
 	}
 }
+
+func TestSpoolHostBindingSurvivesUnknownOutcome(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "queue.json")
+	e := Event{Key: "event", Timestamp: time.Now()}
+	if err := Enqueue(ctx, path, e); err != nil {
+		t.Fatal(err)
+	}
+	prepare := func(Event) (Delivery, error) { return Delivery{Body: map[string]any{"request_key": e.Key}}, nil }
+	if err := Drain(ctx, path, prepare, func(ctx context.Context, d Delivery) error {
+		if err := BindHost(ctx, path, e.Key, "host-original"); err != nil {
+			t.Fatal(err)
+		}
+		return errors.New("unknown outcome")
+	}); err == nil {
+		t.Fatal("wanted delivery failure")
+	}
+	q, err := LoadQueue(path)
+	if err != nil || q.Pending[0].Delivery.HostID != "host-original" {
+		t.Fatal(q, err)
+	}
+	if err = BindHost(ctx, path, e.Key, "host-reenrolled"); !errors.Is(err, ErrIdentityChanged) {
+		t.Fatal("changed actor namespace allowed", err)
+	}
+	if err = BindHost(ctx, path, e.Key, "host-original"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSpoolPinsTokenPrincipalAsWellAsHost(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "queue.json")
+	e := Event{Key: "event", Timestamp: time.Now()}
+	if err := Enqueue(ctx, path, e); err != nil {
+		t.Fatal(err)
+	}
+	_ = Drain(ctx, path, func(Event) (Delivery, error) { return Delivery{}, nil }, func(ctx context.Context, d Delivery) error { return BindHost(ctx, path, e.Key, "host", "actor:first") })
+	// A pending event must reject a different token subject even for the same host.
+	if err := Enqueue(ctx, path, Event{Key: "pending", Timestamp: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	_ = Drain(ctx, path, func(Event) (Delivery, error) { return Delivery{}, nil }, func(ctx context.Context, d Delivery) error {
+		if err := BindHost(ctx, path, "pending", "host", "actor:first"); err != nil {
+			t.Fatal(err)
+		}
+		return errors.New("unknown outcome")
+	})
+	if err := BindHost(ctx, path, "pending", "host", "actor:other"); !errors.Is(err, ErrIdentityChanged) {
+		t.Fatal("principal changed", err)
+	}
+}
