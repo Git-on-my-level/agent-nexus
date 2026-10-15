@@ -214,6 +214,10 @@ test("an answer to a question that no longer exists offers Copy and Discard, not
   await expect(toast).toContainText("Not sent.");
   await expect(toast.getByRole("button", { name: "Retry" })).toHaveCount(0);
   expect((await records(page)).length).toBe(1);
+  const chip = page.locator("[data-unsent-indicator]");
+  await chip.locator("summary").click();
+  await expect(chip.getByRole("button", { name: "Retry send" })).toHaveCount(0);
+  await expect(chip.locator("[data-inbox-discard]")).toBeVisible();
   await failed.getByRole("button", { name: "Discard" }).click();
   await expect(page.locator(`${ROW} [data-decision-failed]`)).toHaveCount(0);
   await expect(toast).toHaveCount(0);
