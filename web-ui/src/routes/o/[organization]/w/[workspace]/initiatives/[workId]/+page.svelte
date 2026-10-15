@@ -35,6 +35,7 @@
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import InfoTip from "$lib/components/InfoTip.svelte";
   import DecisionCard from "$lib/components/decide/DecisionCard.svelte";
+  import InitiativeProgress from "$lib/components/watch/InitiativeProgress.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
   import { undoInboxResponse } from "$lib/inboxResponseQueue.js";
   import { briefStore, mountBrief } from "$lib/briefStore.js";
@@ -824,22 +825,36 @@
                read. Nothing on this line is stored or hand-written. -->
           {#if briefRow}
             <span
-              class="text-meta font-medium text-fg"
+              class="ui-badge {briefRow.state === 'past_promise'
+                ? 'ui-badge--warn'
+                : briefRow.state === 'done'
+                  ? 'ui-badge--ok'
+                  : 'ui-badge--neutral'}"
               data-source="computed:initiatives.state"
               >{WATCH_STATE_LABELS[briefRow.state]}</span
             >
-            {#each briefParts as part (part.field)}
-              <span
-                class="text-meta text-fg-muted"
-                data-source={`computed:${part.field}`}>{part.text}</span
-              >
-            {/each}
+            <span class="flex flex-wrap items-baseline gap-x-1.5">
+              {#each briefParts as part, i (part.field)}
+                {#if i > 0}<span class="text-fg-subtle" aria-hidden="true"
+                    >·</span
+                  >{/if}<span
+                  class="text-meta {part.field ===
+                  'initiatives.past_promise_for'
+                    ? 'text-warn-text'
+                    : 'text-fg-muted'}"
+                  data-source={`computed:${part.field}`}>{part.text}</span
+                >
+              {/each}
+            </span>
             {#if briefRow.progress}
-              <span
-                class="text-meta text-fg-muted"
-                data-source="computed:initiatives.progress"
-                >{briefRow.progress.done} of {briefRow.progress.total} done</span
-              >
+              <span class="w-full max-w-sm sm:w-56" data-initiative-progress>
+                <InitiativeProgress
+                  progress={briefRow.progress}
+                  state={briefRow.state}
+                  title={work.title}
+                  variant="card"
+                />
+              </span>
             {/if}
           {:else if !$briefState.data}
             <span class="text-micro text-fg-subtle" role="status"
@@ -973,14 +988,67 @@
                   >Next actor: {nextActor.label} — no principal named</span
                 >{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
             </p>
+            {#if shownNextSteps.length}
+              <!-- The steps core computed as ready: their dependencies are
+                   done and nothing about them is blocked, named by the plan's
+                   own titles. -->
+              <ul
+                class="mt-2 space-y-1 break-words text-meta text-fg"
+                data-next-steps
+              >
+                {#each shownNextSteps as step (step.id)}
+                  <li
+                    class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                    data-next-step={step.id}
+                  >
+                    <span
+                      class="inline-block h-1.5 w-1.5 shrink-0 rounded-full {stepStatus.get(
+                        step.id,
+                      ) === 'active'
+                        ? 'bg-accent-solid'
+                        : 'bg-fg-subtle'}"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="min-w-0">{step.title}</span>
+                    {#if stepStatus.get(step.id) === "active"}<span
+                        class="text-micro text-fg-muted">in progress</span
+                      >{/if}
+                    {#if step.ref}
+                      <AnxRefChip
+                        refValue={step.ref}
+                        resolved={planRefs}
+                        organizationSlug={$page.params.organization}
+                        workspaceSlug={$page.params.workspace}
+                        showKind={false}
+                        onpreview={(model, anchor) =>
+                          refPreview?.open(model, anchor)}
+                        onpreviewclose={() => refPreview?.requestClose()}
+                      />
+                    {/if}
+                  </li>
+                {/each}
+                {#if nextSteps.length > shownNextSteps.length}
+                  <li class="text-micro text-fg-muted" data-next-more>
+                    +{nextSteps.length - shownNextSteps.length} more ready
+                  </li>
+                {/if}
+              </ul>
+            {/if}
             {#if nextNote}
               <div
                 class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1"
                 data-next-note
               >
-                <p class="min-w-0 break-words text-meta text-fg-muted">
-                  {nextNote}
-                </p>
+                <MarkdownRenderer
+                  inline
+                  source={nextNote}
+                  class="min-w-0 break-words text-meta text-fg-muted"
+                  resolved={planRefs}
+                  organizationSlug={$page.params.organization}
+                  workspaceSlug={$page.params.workspace}
+                  onpreview={(model, anchor) => refPreview?.open(model, anchor)}
+                  onpreviewclose={() => refPreview?.requestClose()}
+                />
                 <!-- Hand-written, beside steps that are computed. No date: a
                      card's `updated_at` is its concurrency token, so stamping
                      this note with it would claim a rewrite nobody made. -->
@@ -993,7 +1061,15 @@
               <ul
                 class="mt-2 list-disc space-y-1 break-words pl-5 text-meta text-warn-text"
               >
-                {#each work.blockers as blocker}<li>{blocker}</li>{/each}
+                {#each work.blockers as blocker}<li>
+                    <MarkdownRenderer
+                      inline
+                      source={blocker}
+                      resolved={planRefs}
+                      organizationSlug={$page.params.organization}
+                      workspaceSlug={$page.params.workspace}
+                    />
+                  </li>{/each}
               </ul>
             {/if}
             {#if work.wake_condition}<p class="mt-2 text-micro text-fg-muted">
