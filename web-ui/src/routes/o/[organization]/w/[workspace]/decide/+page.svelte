@@ -15,6 +15,7 @@
   import {
     inboxResponseOverlay,
     inboxUnsentResponses,
+    onInboxResponseCommitted,
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import { inboxShortcutAction, otherDialogOpen } from "$lib/inboxShortcuts.js";
@@ -127,29 +128,30 @@
     onWidth();
     query?.addEventListener?.("change", onWidth);
     const stop = mountBrief();
+    const stopCommitted = onInboxResponseCommitted(() =>
+      brief.refresh({ force: true }),
+    );
     const clock = setInterval(() => (now = Date.now()), 30_000);
     return () => {
       query?.removeEventListener?.("change", onWidth);
+      stopCommitted();
       stop();
       clearInterval(clock);
     };
   });
 
   /*
-   * Clearing the loaded page is not "you're clear" when core truncated the
-   * list: fetch the next page instead.
+   * Core caps the decisions it sends. Once the reader has answered everything
+   * loaded, there may be more: say so, never "you're clear". Each committed
+   * answer re-reads the brief once (no loop: a read is triggered by a commit,
+   * not by what the read returns), which pulls the next page in as answers
+   * land. An initiative filter is not paged, so it never waits on this.
    */
-  // Effect bookkeeping, deliberately not reactive: one refetch per brief.
-  const refetched = { asOf: "" };
   let morePending = $derived(
-    Boolean($brief.data?.truncated?.decisions) && !decisions.length,
+    !initiative &&
+      Boolean($brief.data?.truncated?.decisions) &&
+      !decisions.length,
   );
-  $effect(() => {
-    const asOf = $brief.data?.asOf ?? "";
-    if (!morePending || refetched.asOf === asOf) return;
-    refetched.asOf = asOf;
-    void brief.refresh({ force: true });
-  });
 
   function itemHref(id) {
     const params = new URLSearchParams($page.url.searchParams);
@@ -273,6 +275,7 @@
         void detail?.focusReply();
         return;
       case "open":
+        if (!paneVisible) return;
         event.preventDefault();
         openSubject();
         return;
@@ -363,10 +366,16 @@
       data-decide-empty
     >
       {#if morePending}
-        <p class="text-body font-medium text-fg">Loading more…</p>
+        <p class="text-body font-medium text-fg">More are waiting.</p>
         <p class="text-meta text-fg-muted">
           You answered everything that was loaded.
         </p>
+        <button
+          type="button"
+          class="ui-btn-secondary mt-2"
+          disabled={$brief.refreshing}
+          onclick={() => brief.refresh({ force: true })}>Load more</button
+        >
       {:else}
         <p class="text-body font-medium text-fg">You’re clear.</p>
         <p class="text-meta text-fg-muted">Nothing is waiting on you.</p>
