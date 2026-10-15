@@ -263,15 +263,27 @@ func (a *App) Run(args []string) int {
 		warnings = append(result.Warnings, warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
-	if !resolved.JSON {
-		if ref := createdRef(identity.Command, value); ref != "" {
-			a.writeOutput(a.Stdout, "created "+ref+"\n")
+	a.writeAskAutoCreatedWarning(warnings)
+	if root, ok := value.(map[string]any); ok {
+		if ref := ensureCreatedRef(identity.Command, root); ref != "" && !resolved.JSON {
+			a.writeOutput(a.Stdout, ref+"\n")
 		}
 	}
 	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return 0
+}
+
+func (a *App) writeAskAutoCreatedWarning(warnings []output.Warning) {
+	if a == nil || a.Stderr == nil {
+		return
+	}
+	for _, warning := range warnings {
+		if warning.Code == askAutoCreatedCardCode {
+			fmt.Fprintf(a.Stderr, "warning: %s\n", warning.Message)
+		}
+	}
 }
 
 func needsAgentIdentity(args []string) bool {

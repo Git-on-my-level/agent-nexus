@@ -40,6 +40,9 @@ func planHelpText(topic string) (string, bool) {
 		if topic == "plan step add" {
 			text += "Omitting --step-id derives a slug from --title. --after is a comma-separated list of step ids.\n"
 		}
+		if topic == "plan step add" || topic == "plan step update" {
+			text += planRefHelp
+		}
 		if topic == "plan step update" {
 			text += "Pass at least one field; an empty --after clears dependencies. Source state takes precedence over fallback --status.\n"
 		}
@@ -54,8 +57,11 @@ func planHelpText(topic string) (string, bool) {
 		"anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]\n" +
 		"anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]\n" +
 		"anx plan step rm <card> <step-id>\n" +
+		planRefHelp +
 		"Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.\n", true
 }
+
+const planRefHelp = "--ref accepts a typed ref (card:, doc:, document:, topic:, or series:) or an http(s) URL such as a Linear issue or GitHub pull request. Bare tracker ids (SCA-123) and pull numbers (#123) are rejected; pass the full URL.\n"
 
 func parsePlanCommand(args []string) (planCommand, error) {
 	p := planCommand{fields: map[string]string{}, name: "plan"}
@@ -89,7 +95,11 @@ func parsePlanCommand(args []string) (planCommand, error) {
 		}
 		for _, key := range keys {
 			k := key
-			fs.Func(k, "Step "+k, func(v string) error { p.fields[k] = v; return nil })
+			desc := "Step " + k
+			if k == "ref" {
+				desc = "Typed ref or http(s) URL; not a bare tracker id (SCA-123) or pull number (#123)"
+			}
+			fs.Func(k, desc, func(v string) error { p.fields[k] = v; return nil })
 		}
 	}
 	tail := args[width:]
@@ -138,10 +148,28 @@ func parsePlanCommand(args []string) (planCommand, error) {
 			return p, errnorm.Usage("invalid_request", "invalid --if-updated-at timestamp")
 		}
 	}
+	if err := rejectBarePlanRef(p.fields["ref"]); err != nil {
+		return p, err
+	}
 	return p, nil
 }
 
-var planSlugNonWord = regexp.MustCompile(`[^a-z0-9]+`)
+func rejectBarePlanRef(ref string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil
+	}
+	if bareTrackerID.MatchString(ref) || barePRNumber.MatchString(ref) {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("--ref %q is not a ref or URL. Pass the full URL (for example the Linear or GitHub URL) or a typed ref such as card:<slug>.", ref))
+	}
+	return nil
+}
+
+var (
+	planSlugNonWord = regexp.MustCompile(`[^a-z0-9]+`)
+	bareTrackerID   = regexp.MustCompile(`^[A-Z][A-Z0-9]+-\d+$`)
+	barePRNumber    = regexp.MustCompile(`^#\d+$`)
+)
 
 func init() {
 	for _, verb := range []string{"add", "update", "rm"} {
@@ -162,6 +190,7 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 	}
 	path := "/cards/" + url.PathEscape(p.card) + "/plan"
 	var plan map[string]any
+	addedStepID := ""
 	if p.name == "plan set" {
 		raw, err := a.readBodyInput(p.file)
 		if err != nil {
@@ -221,6 +250,7 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 			}
 			steps = append(steps, map[string]any{"id": id, "title": p.fields["title"], "after": []string{}})
 			index = len(steps) - 1
+			addedStepID = id
 		} else if index < 0 {
 			return nil, p.name, errnorm.WithDetails(errnorm.Usage("not_found", fmt.Sprintf("step id %q does not exist; read the plan to find its step ids", p.step)), map[string]any{"card_ref": p.card})
 		}
@@ -255,8 +285,29 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 	result, err := a.invokeRawJSON(ctx, cfg, p.name, "PUT", path, map[string]any{"plan": plan, "if_updated_at": p.token})
 	if err != nil {
 		errnorm.AnnotateDetail(err, "card_ref", p.card)
+		return result, p.name, err
 	}
-	return result, p.name, err
+	if addedStepID != "" && result != nil {
+		cardRef := firstNonEmpty(anyString(commandResultBody(result)["card_ref"]), p.card)
+		if data := asMap(result.Data); data != nil {
+			if ref := planStepRef(cardRef, addedStepID); ref != "" {
+				data["ref"] = ref
+			}
+		}
+	}
+	return result, p.name, nil
+}
+
+func planStepRef(cardRef, stepID string) string {
+	cardRef = strings.TrimSpace(cardRef)
+	stepID = strings.TrimSpace(stepID)
+	if cardRef == "" || stepID == "" {
+		return ""
+	}
+	if !strings.Contains(cardRef, ":") {
+		cardRef = "card:" + cardRef
+	}
+	return cardRef + "#" + stepID
 }
 
 func parseRefResolve(args []string) ([]string, string, error) {

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -11,11 +12,14 @@ import (
 )
 
 const (
-	openInitiativeTarget     = 15
-	initiativeScanLimit      = 200
-	nearDuplicateThreshold   = 0.8
-	workNearDuplicateWarning = "work_near_duplicate"
-	workOverTargetWarning    = "work_over_target"
+	openInitiativeTarget         = 15
+	initiativeScanLimit          = 200
+	askInitiativeSuggestionLimit = 50
+	askInitiativeSuggestionCount = 3
+	nearDuplicateThreshold       = 0.8
+	workNearDuplicateWarning     = "work_near_duplicate"
+	workOverTargetWarning        = "work_over_target"
+	askAutoCreatedCardCode       = "ask_auto_created_card"
 )
 
 // workCreateWarnings reads one page of at most 200 open initiatives and warns
@@ -35,6 +39,71 @@ func (a *App) workCreateWarnings(ctx context.Context, cfg config.Resolved, title
 		}
 	}
 	return workCreateWarningsFor(title, open)
+}
+
+// suggestOpenInitiativeCards reads one page of at most 50 work rows, already
+// ordered newest-first by the work list, and returns up to three open
+// initiatives other than exclude. A read error yields no suggestions.
+func (a *App) suggestOpenInitiativeCards(ctx context.Context, cfg config.Resolved, exclude string) []map[string]any {
+	result, err := a.invokeRawJSON(ctx, cfg, "work list", "GET", fmt.Sprintf("/work?limit=%d", askInitiativeSuggestionLimit), nil)
+	if err != nil {
+		return nil
+	}
+	var open []map[string]any
+	for _, raw := range asSlice(commandResultBody(result)["work"]) {
+		row := asMap(raw)
+		if !isOpenInitiative(row) {
+			continue
+		}
+		ref := firstNonEmpty(anyString(row["ref"]), anyString(row["card_ref"]))
+		if ref == "" || ref == exclude {
+			continue
+		}
+		open = append(open, row)
+	}
+	sort.SliceStable(open, func(i, j int) bool {
+		left, right := anyString(open[i]["updated_at"]), anyString(open[j]["updated_at"])
+		if left == right {
+			return false
+		}
+		return left > right
+	})
+	if len(open) > askInitiativeSuggestionCount {
+		open = open[:askInitiativeSuggestionCount]
+	}
+	return open
+}
+
+func askAutoCreatedCardWarning(subjectRef, board string, rows []map[string]any) output.Warning {
+	if strings.TrimSpace(board) == "" {
+		board = "the default board"
+	}
+	msg := fmt.Sprintf("No --subject-ref: created %s on %s. Asks belong on an initiative; pass --subject-ref card:<slug>.", subjectRef, board)
+	suggestions := make([]any, 0, len(rows))
+	var listed []string
+	for _, row := range rows {
+		ref := firstNonEmpty(anyString(row["ref"]), anyString(row["card_ref"]))
+		if ref == "" {
+			continue
+		}
+		title := strings.TrimSpace(anyString(row["title"]))
+		item := map[string]any{"ref": ref}
+		label := ref
+		if title != "" {
+			item["title"] = title
+			label = ref + " (" + title + ")"
+		}
+		suggestions = append(suggestions, item)
+		listed = append(listed, label)
+	}
+	if len(listed) > 0 {
+		msg += " Suggestions: " + strings.Join(listed, "; ") + "."
+	}
+	details := map[string]any{"created_ref": subjectRef, "board": board}
+	if len(suggestions) > 0 {
+		details["suggestions"] = suggestions
+	}
+	return output.Warning{Code: askAutoCreatedCardCode, Message: msg, Details: details}
 }
 
 func isOpenInitiative(row map[string]any) bool {
