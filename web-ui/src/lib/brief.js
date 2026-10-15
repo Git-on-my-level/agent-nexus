@@ -59,6 +59,8 @@ export const BRIEF_COMPUTED_FIELDS = new Set([
   "initiatives.progress",
   "initiatives.blocked_count",
   "initiatives.waiting_on_you_count",
+  "initiatives.series",
+  "initiatives.metric_flat",
   "generated_at",
 ]);
 
@@ -362,6 +364,84 @@ export function groupWatch(initiatives) {
     label: WATCH_STATE_LABELS[state],
     rows: sorted.filter((row) => row.state === state),
   })).filter((group) => group.rows.length);
+}
+
+/**
+ * Loops: initiatives that measure something (a `series:` ref). Watch's Loops
+ * view groups them by what they need, first match wins: a decision waiting on
+ * the reader, then silence (past its promise, or no evidence for
+ * `LOOP_SILENT_SECONDS`), then a metric that has stopped moving, then the
+ * rest. Finished loops fold away under Done.
+ */
+export const LOOP_SILENT_SECONDS = 3 * 86_400;
+export const LOOP_GROUPS = ["waiting", "silent", "flat", "moving", "done"];
+export const LOOP_GROUP_LABELS = {
+  waiting: "Waiting on you",
+  silent: "Silent too long",
+  flat: "Metric flat",
+  moving: "Moving",
+  done: "Done",
+};
+
+export function isLoop(row) {
+  return Array.isArray(row?.series) && row.series.length > 0;
+}
+
+/** Seconds since the last evidence, or null when there has been none. */
+function silentFor(row, now) {
+  const at = time(row.lastEvidenceAt);
+  return at === null ? null : Math.max(0, Math.floor((now - at) / 1000));
+}
+
+export function loopGroup(row, now = Date.now()) {
+  if (row.state === "done") return "done";
+  if (row.waitingOnYouCount > 0) return "waiting";
+  const quiet = silentFor(row, now);
+  if (
+    row.state === "past_promise" ||
+    quiet === null ||
+    quiet >= LOOP_SILENT_SECONDS
+  )
+    return "silent";
+  if (row.metricFlat?.flat) return "flat";
+  return "moving";
+}
+
+/** `[{ group, label, rows }]` in attention order; empty groups dropped. */
+export function groupLoops(initiatives, now = Date.now()) {
+  const loops = (initiatives ?? []).filter(isLoop);
+  const buckets = Object.fromEntries(LOOP_GROUPS.map((group) => [group, []]));
+  for (const row of loops) buckets[loopGroup(row, now)].push(row);
+  const order = {
+    // Longest wait or silence first; flat loops by how long they have been flat.
+    waiting: (a, b) => b.waitingOnYouCount - a.waitingOnYouCount,
+    silent: (a, b) =>
+      (silentFor(b, now) ?? Infinity) - (silentFor(a, now) ?? Infinity),
+    flat: (a, b) =>
+      (b.metricFlat?.for_seconds ?? 0) - (a.metricFlat?.for_seconds ?? 0),
+  };
+  return LOOP_GROUPS.map((group) => ({
+    group,
+    label: LOOP_GROUP_LABELS[group],
+    rows: [...buckets[group]].sort(
+      (a, b) => order[group]?.(a, b) || compareInitiatives(a, b),
+    ),
+  })).filter((entry) => entry.rows.length);
+}
+
+/** A metric's latest value for display: numbers trimmed, never "NaN". */
+export function formatMetricValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  if (typeof value === "number" || (String(value).trim() && !isNaN(number))) {
+    if (!Number.isFinite(number)) return String(value);
+    const abs = Math.abs(number);
+    if (abs >= 1000)
+      return number.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (abs >= 10) return String(Math.round(number * 10) / 10);
+    return String(Math.round(number * 1000) / 1000);
+  }
+  return String(value);
 }
 
 /** `[{ placement, label, rows }]` for every board column, empty or not. */

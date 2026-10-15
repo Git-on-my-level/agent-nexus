@@ -106,3 +106,104 @@ test("a failed read shows a banner with Retry, never the raw body", async ({
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(page.locator("[data-watch-row]").first()).toBeVisible();
 });
+
+/** The fixture plus loops in every Loops group. */
+function loopsBrief() {
+  const now = Date.now();
+  const ago = (s) => new Date(now - s * 1000).toISOString();
+  const base = brief.initiatives.find((row) => row.series?.length);
+  const make = (id, title, extra) => ({
+    ...base,
+    ref: `card:${id}`,
+    title,
+    state: "moving",
+    past_promise_for_seconds: 0,
+    waiting_on_you_count: 0,
+    last_evidence_at: ago(3600),
+    possibly_moot: { flagged: false },
+    note: null,
+    metric_flat: null,
+    series: [
+      {
+        ref: `series:${id}`,
+        name: `${id} rate`,
+        labels: {},
+        last_value: 0.42,
+        last_at: ago(1800),
+      },
+    ],
+    ...extra,
+  });
+  return {
+    ...brief,
+    generated_at: new Date().toISOString(),
+    initiatives: [
+      ...brief.initiatives,
+      make("loop-ask", "Signup experiment", { waiting_on_you_count: 1 }),
+      make("loop-quiet", "Retention nudges", {
+        last_evidence_at: ago(9 * 86400),
+      }),
+      make("loop-moving", "Onboarding emails", {
+        metric_flat: { flat: false, for_seconds: 0, window_seconds: 604800 },
+      }),
+    ],
+  };
+}
+
+test("Loops lists measured initiatives by what they need", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) => json(route, loopsBrief()));
+  await page.goto(WATCH);
+  const loopsButton = page.locator('[data-watch-view="loops"]');
+  // The fixture's loop plus three added ones.
+  await expect(loopsButton).toContainText("4");
+  await loopsButton.click();
+  await expect(page).toHaveURL(/view=loops/);
+  const groups = page.locator("[data-watch-loop-group]");
+  await expect(groups.first()).toHaveAttribute(
+    "data-watch-loop-group",
+    "waiting",
+  );
+  await expect(page.locator('[data-watch-loop-group="silent"]')).toContainText(
+    "Retention nudges",
+  );
+  await expect(page.locator('[data-watch-loop-group="flat"]')).toBeVisible();
+  await expect(
+    page.locator(
+      '[data-watch-loop-group="flat"] [data-source="computed:initiatives.metric_flat"]',
+    ),
+  ).toContainText(/^flat /);
+  await expect(page.locator('[data-watch-loop-group="moving"]')).toContainText(
+    "Onboarding emails",
+  );
+  // Only loops: an initiative without a series is not listed.
+  await expect(
+    page.locator('[data-watch-row="card:observability"]'),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[data-watch-row="card:loop-ask"] [data-watch-metrics]'),
+  ).toContainText("0.42");
+});
+
+test("Loops says how to add one when there are none", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      generated_at: new Date().toISOString(),
+      initiatives: brief.initiatives.map((row) => ({
+        ...row,
+        series: [],
+        metric_flat: null,
+      })),
+    }),
+  );
+  await page.goto(`${WATCH}?view=loops`);
+  await expect(page.locator("[data-watch-loops-empty]")).toContainText(
+    "series:",
+  );
+});
