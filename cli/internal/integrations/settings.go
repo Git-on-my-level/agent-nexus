@@ -10,6 +10,9 @@ import (
 
 type ClaudeCode struct{}
 
+func (ClaudeCode) Scopes() []string                { return []string{"user", "project", "local"} }
+func (ClaudeCode) ProjectScoped(scope string) bool { return scope != "user" }
+
 func (ClaudeCode) ConfigPath(home, project, scope string) (string, error) {
 	switch scope {
 	case "user":
@@ -83,6 +86,7 @@ func (ClaudeCode) Merge(raw []byte, r Recipe, command, previous string, enable b
 	}
 	var out []json.RawMessage
 	found := false
+	installed := false
 	for _, g := range groups {
 		group, err := object(g)
 		if err != nil {
@@ -96,6 +100,7 @@ func (ClaudeCode) Merge(raw []byte, r Recipe, command, previous string, enable b
 			return nil, false, fmt.Errorf("hook group must contain a hooks array")
 		}
 		kept := make([]json.RawMessage, 0, len(entries))
+		removed := false
 		for _, h := range entries {
 			handler, err := object(h)
 			if err != nil {
@@ -110,13 +115,29 @@ func (ClaudeCode) Merge(raw []byte, r Recipe, command, previous string, enable b
 			}
 			// Remove just our handler, even if a user added siblings to its group.
 			found = true
+			removed = true
 		}
-		if len(kept) > 0 || len(entries) == 0 || len(group) > 2 {
+		// Unknown group fields belong to the user. If removing our last
+		// handler would discard them, retain the complete group unchanged.
+		knownFields := 1 // hooks
+		if _, ok := group["matcher"]; ok {
+			knownFields++
+		}
+		if len(kept) == 0 && len(group) > knownFields {
+			if enable && removed {
+				group["matcher"] = encode(r.Matcher)
+				group["hooks"] = encode([]json.RawMessage{expectedHook(command)})
+				out = append(out, encode(group))
+				installed = true
+			} else {
+				out = append(out, g)
+			}
+		} else if len(kept) > 0 {
 			group["hooks"] = encode(kept)
 			out = append(out, encode(group))
 		}
 	}
-	if enable {
+	if enable && !installed {
 		out = append(out, encode(map[string]any{"matcher": r.Matcher, "hooks": []json.RawMessage{expectedHook(command)}}))
 	}
 	if !enable && !found {

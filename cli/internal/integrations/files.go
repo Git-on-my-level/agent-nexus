@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,31 @@ import (
 )
 
 const MaxFileBytes = 20 << 20
+
+var ErrSettingsChanged = errors.New("harness settings changed concurrently; retry setup")
+
+// Create only missing directories, then set their exact private mode even under
+// a restrictive umask. Existing directory permissions belong to the user.
+func privateMkdirAll(path string) error {
+	if st, err := os.Stat(path); err == nil {
+		if !st.IsDir() {
+			return fmt.Errorf("not a directory: %s", path)
+		}
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := privateMkdirAll(filepath.Dir(path)); err != nil {
+		return err
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return privateMkdirAll(path)
+		}
+		return err
+	}
+	return os.Chmod(path, 0700)
+}
 
 func Read(path string) ([]byte, error) {
 	st, err := os.Lstat(path)
@@ -55,6 +81,10 @@ func JSON(v any) []byte { b, _ := json.MarshalIndent(v, "", "  "); return append
 // AtomicWrite rejects symlinks and keeps the existing mode. Files and parent
 // directories created by ANX are owner-only. The rename is on the same volume.
 func AtomicWrite(path string, raw []byte) error {
+	return atomicWrite(path, raw, nil)
+}
+
+func atomicWrite(path string, raw []byte, beforeRename func() error) error {
 	if len(raw) > MaxFileBytes {
 		return fmt.Errorf("file exceeds %d bytes", MaxFileBytes)
 	}
@@ -67,7 +97,7 @@ func AtomicWrite(path string, raw []byte) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := privateMkdirAll(filepath.Dir(path)); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".anx-write-*")
@@ -88,6 +118,11 @@ func AtomicWrite(path string, raw []byte) error {
 	if closeErr != nil {
 		return closeErr
 	}
+	if beforeRename != nil {
+		if err := beforeRename(); err != nil {
+			return err
+		}
+	}
 	if err = os.Rename(f.Name(), path); err != nil {
 		return err
 	}
@@ -97,6 +132,64 @@ func AtomicWrite(path string, raw []byte) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// UpdateSettings runs under the caller's ANX lock, but external harness writers
+// do not share it. Compare both identity and contents immediately before each
+// rename, rebuilding the merge at most three times. This narrows the unavoidable
+// filesystem check/rename race without overwriting observed concurrent edits.
+func UpdateSettings(path string, merge func([]byte) ([]byte, bool, error)) ([]byte, bool, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		info, err := os.Lstat(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, false, err
+		}
+		raw, err := ReadSettings(path)
+		if err != nil {
+			return nil, false, err
+		}
+		next, changed, err := merge(raw)
+		if err != nil {
+			return nil, false, err
+		}
+		if !changed {
+			return next, false, nil
+		}
+		if err = Backup(path, raw); err != nil {
+			return nil, false, err
+		}
+		err = atomicWrite(path, next, func() error {
+			checkIdentity := func() error {
+				current, statErr := os.Lstat(path)
+				if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+					return statErr
+				}
+				if (info == nil) != (current == nil) {
+					return ErrSettingsChanged
+				}
+				if info != nil && (!os.SameFile(info, current) || info.Size() != current.Size() || !info.ModTime().Equal(current.ModTime()) || info.Mode() != current.Mode()) {
+					return ErrSettingsChanged
+				}
+				return nil
+			}
+			if err := checkIdentity(); err != nil {
+				return err
+			}
+			latest, readErr := ReadSettings(path)
+			if readErr != nil {
+				return readErr
+			}
+			if !bytes.Equal(raw, latest) {
+				return ErrSettingsChanged
+			}
+			return checkIdentity()
+		})
+		if errors.Is(err, ErrSettingsChanged) {
+			continue
+		}
+		return next, err == nil, err
+	}
+	return nil, false, ErrSettingsChanged
 }
 func Backup(path string, raw []byte) error {
 	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
@@ -133,7 +226,7 @@ func Lock(ctx context.Context, path string) (func(), error) {
 		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := privateMkdirAll(filepath.Dir(path)); err != nil {
 		return nil, err
 	}
 	f, err := filelock.OpenNoFollow(path, os.O_CREATE|os.O_RDWR, 0600)

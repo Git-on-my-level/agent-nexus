@@ -17,6 +17,12 @@ const MaxDrain = 4
 
 var ErrIdentityChanged = errors.New("identity_changed")
 
+// RejectedDelivery is a definitive card-create refusal, not an uncertain send.
+// Keep the text for inspection but exclude it from automatic replay.
+type RejectedDelivery struct{ Status int }
+
+func (e RejectedDelivery) Error() string { return fmt.Sprintf("terminal_http_%d", e.Status) }
+
 type Delivery struct {
 	PrincipalID string         `json:"principal_id,omitempty"`
 	Key         string         `json:"key"`
@@ -38,6 +44,7 @@ type Receipt struct {
 }
 type Queue struct {
 	Pending        []Pending `json:"pending"`
+	DeadLetters    []Pending `json:"dead_letters"`
 	Ledger         []Receipt `json:"ledger"`
 	Dropped        int       `json:"dropped"`
 	LastDropReason string    `json:"last_drop_reason,omitempty"`
@@ -47,7 +54,7 @@ func QueuePath(dir, name, id string) string {
 	return filepath.Join(dir, "integrations", name, id+".spool.json")
 }
 func LoadQueue(path string) (Queue, error) {
-	q := Queue{Pending: []Pending{}, Ledger: []Receipt{}}
+	q := Queue{Pending: []Pending{}, DeadLetters: []Pending{}, Ledger: []Receipt{}}
 	b, err := Read(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return q, nil
@@ -74,18 +81,26 @@ func updateQueue(ctx context.Context, path string, fn func(*Queue) error) error 
 	return AtomicWrite(path, JSON(q))
 }
 func (q *Queue) prune(now time.Time) {
-	kept := q.Pending[:0]
-	for _, p := range q.Pending {
-		if now.Sub(p.Event.Timestamp) > MaxAge {
-			q.Dropped++
-			q.LastDropReason = "age"
-		} else {
-			kept = append(kept, p)
+	pruneAge := func(entries []Pending) []Pending {
+		kept := entries[:0]
+		for _, p := range entries {
+			if now.Sub(p.Event.Timestamp) > MaxAge {
+				q.Dropped++
+				q.LastDropReason = "age"
+			} else {
+				kept = append(kept, p)
+			}
 		}
+		return kept
 	}
-	q.Pending = kept
-	for len(q.Pending) > MaxPending {
-		q.Pending = q.Pending[1:]
+	q.Pending = pruneAge(q.Pending)
+	q.DeadLetters = pruneAge(q.DeadLetters)
+	for len(q.Pending)+len(q.DeadLetters) > MaxPending {
+		if len(q.DeadLetters) > 0 && (len(q.Pending) == 0 || q.DeadLetters[0].Event.Timestamp.Before(q.Pending[0].Event.Timestamp)) {
+			q.DeadLetters = q.DeadLetters[1:]
+		} else {
+			q.Pending = q.Pending[1:]
+		}
 		q.Dropped++
 		q.LastDropReason = "capacity"
 	}
@@ -93,10 +108,18 @@ func (q *Queue) prune(now time.Time) {
 		q.Ledger = q.Ledger[len(q.Ledger)-MaxLedger:]
 	}
 }
-func Enqueue(ctx context.Context, path string, e Event) error {
+func Enqueue(ctx context.Context, path string, e Event, reason ...string) error {
 	return updateQueue(ctx, path, func(q *Queue) error {
 		q.prune(e.Timestamp)
-		for _, p := range q.Pending {
+		for i, p := range q.Pending {
+			if p.Event.Key == e.Key {
+				if len(reason) > 0 && reason[0] != "pending" {
+					q.Pending[i].Reason = reason[0]
+				}
+				return nil
+			}
+		}
+		for _, p := range q.DeadLetters {
 			if p.Event.Key == e.Key {
 				return nil
 			}
@@ -106,7 +129,11 @@ func Enqueue(ctx context.Context, path string, e Event) error {
 				return nil
 			}
 		}
-		q.Pending = append(q.Pending, Pending{Event: e, Reason: "pending"})
+		initial := "pending"
+		if len(reason) > 0 {
+			initial = reason[0]
+		}
+		q.Pending = append(q.Pending, Pending{Event: e, Reason: initial})
 		q.prune(e.Timestamp)
 		return nil
 	})
@@ -207,7 +234,14 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 					}
 					last = sendErr
 					failed := current.Pending[i]
-					current.Pending = append(append(current.Pending[:i], current.Pending[i+1:]...), failed)
+					current.Pending = append(current.Pending[:i], current.Pending[i+1:]...)
+					var rejected RejectedDelivery
+					if errors.As(sendErr, &rejected) {
+						failed.Reason = rejected.Error()
+						current.DeadLetters = append(current.DeadLetters, failed)
+					} else {
+						current.Pending = append(current.Pending, failed)
+					}
 				} else {
 					current.Pending = append(current.Pending[:i], current.Pending[i+1:]...)
 					current.Ledger = append(current.Ledger, Receipt{Key: p.Event.Key, TaskID: p.Event.TaskID, At: time.Now().UTC()})

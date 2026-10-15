@@ -75,11 +75,19 @@ Run project/local setup from the project root. Settings must contain a JSON obje
 absolute binary, exact config directory, recipe, and installation ID), so a
 changed executable path can be repaired after an interrupted setup. It preserves unrelated keys and hooks,
 keeps a one-time `.anx-backup` before changing an existing file, and uses locked,
-atomic replacements. Object formatting/key order can change; hook order is kept.
+atomic replacements. Before renaming, ANX checks file identity and contents,
+re-merging up to three times if the harness wrote concurrently; continued edits
+refuse setup. This check narrows the filesystem check/rename race; harness writers
+do not share ANX's lock. New parent directories are explicitly chmodded to 0700;
+existing directory modes remain unchanged. Object formatting/key order can
+change; hook order is kept. If removing the last handler would discard unknown
+group metadata, ANX leaves that group untouched (status reports drift after
+disable); remove that group manually once its metadata is no longer needed.
 Dry-run reports the exact prospective settings/config JSON without writing files.
 
 Workspace selection uses the hook event's `cwd` and the normal `anx config map`
-rules. `--workspace <alias>` pins a workspace instead. Board/column choices are
+rules, even when the invoking shell exports `ANX_BASE_URL`. Ordinary commands
+retain their usual environment precedence. `--workspace <alias>` pins a workspace instead. Board/column choices are
 stored per resolved workspace; rerun enable from another mapped directory to
 record its board. Missing boards stay queued as `no_board`; no board is created
 implicitly. The derived host agent defaults to `claude-code`; `--as <name>`
@@ -94,15 +102,21 @@ The hook explicitly pins the ANX config directory and does not require PATH.
 
 `integrations run` is a hook-only stdin entrypoint. It writes no stdout, exits 0,
 and spends at most three seconds (the installed hook timeout is ten seconds).
-Every accepted event is persisted before delivery. Failed requests keep their
+Every accepted event is persisted before delivery. Missing or corrupt installation
+config retains the event as `missing_config` or `config_invalid` and emits one
+short diagnostic; status remains available. Failed requests keep their
 original workspace, agent, request key, and complete card body for replay through
 the existing actor-scoped card-create API. A task ID determines the request key;
 when absent, session ID plus tool-use ID is required. Recent local receipts are
 only an optimization; the server's atomic replay receipt prevents duplicates.
 
-The spool retains at most 100 pending events for 30 days, drains at most four
-per invocation, rotating failed entries to avoid starvation, and keeps the last 1,000 local receipts. Status reports spool
-reasons, ledger size and retention/capacity drops. Input is limited to 64 KiB;
+The spool retains at most 100 events total (pending plus dead letters) for 30
+days, drains at most four pending events per invocation, rotates retryable
+failures to avoid starvation, and keeps the last 1,000 local receipts. A definitive
+card-create HTTP 4xx other than 408 or 429 becomes a dead letter, preserving its
+text without retrying it. Status reports `dead_letter_count`,
+`dead_letter_reasons` (such as `terminal_http_400`), pending reasons, ledger size,
+and retention/capacity drops. Input is limited to 64 KiB;
 card titles/bodies are defensively truncated, and the retained prompt is quoted.
 Malformed, oversized or unidentifiable input and storage failures produce one
 short stderr diagnostic. A storage failure prevents sending unpersisted work.
@@ -121,7 +135,8 @@ specific desktop MCP tool and activation of edited settings depend on the
 installed Claude Code version; ANX status checks configuration, not activation.
 
 Developers add recipes in `internal/integrations/registry.go` with an event parser,
-existing ANX action command ID and body builder. Adapters implement settings
-location, merge and inspection. Neither requires a new CLI command. The first
+default agent, existing ANX action command ID and body builder; the recipe supplies
+the harness provenance stamp. Adapters own allowed/default scopes, project scope
+semantics, settings location, merge and inspection. Neither requires a new CLI command. The first
 adapter installs POSIX-shell commands; Windows hook-shell support is not yet
 qualified.

@@ -925,20 +925,23 @@ Discover and opt into optional harness hooks
 Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.
+
+Harness scopes:
+  claude-code: user|project|local (default: user)
 ```
 
 ## `series`
@@ -9746,20 +9749,23 @@ Local Help: integrations list
 Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.
+
+Harness scopes:
+  claude-code: user|project|local (default: user)
 ```
 
 ## `integrations status`
@@ -9772,20 +9778,23 @@ Local Help: integrations status
 Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.
+
+Harness scopes:
+  claude-code: user|project|local (default: user)
 ```
 
 ## `integrations enable`
@@ -9798,20 +9807,23 @@ Local Help: integrations enable
 Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.
+
+Harness scopes:
+  claude-code: user|project|local (default: user)
 ```
 
 ## `integrations disable`
@@ -9824,20 +9836,23 @@ Local Help: integrations disable
 Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.
+
+Harness scopes:
+  claude-code: user|project|local (default: user)
 ```
 
 ## `integrations run`
@@ -9850,20 +9865,23 @@ Local Help: integrations run
 Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.
+
+Harness scopes:
+  claude-code: user|project|local (default: user)
 ```
 
 ## `skills sync`

@@ -11,17 +11,20 @@ import (
 )
 
 type Recipe struct {
-	Name        string                             `json:"name"`
-	Harness     string                             `json:"harness"`
-	Description string                             `json:"description"`
-	Event       string                             `json:"event"`
-	Matcher     string                             `json:"matcher"`
-	Parse       func([]byte) (Event, error)        `json:"-"`
-	CommandID   string                             `json:"command_id"`
-	BuildBody   func(Event, Target) map[string]any `json:"-"`
+	Name         string                                     `json:"name"`
+	Harness      string                                     `json:"harness"`
+	DefaultAgent string                                     `json:"default_agent"`
+	Description  string                                     `json:"description"`
+	Event        string                                     `json:"event"`
+	Matcher      string                                     `json:"matcher"`
+	Parse        func([]byte) (Event, error)                `json:"-"`
+	CommandID    string                                     `json:"command_id"`
+	Body         func(Event, Target, string) map[string]any `json:"-"`
 }
 
-var Recipes = []Recipe{{Name: "claude-code-suggested-tasks", Harness: "claude-code", Description: "Mirror Claude Code suggested tasks as ANX cards.", Event: "PostToolUse", Matcher: "^mcp__ccd_session__spawn_task$", Parse: parseSuggestedTask, CommandID: "cards.create", BuildBody: CardBody}}
+var Recipes = []Recipe{{Name: "claude-code-suggested-tasks", Harness: "claude-code", DefaultAgent: "claude-code", Description: "Mirror Claude Code suggested tasks as ANX cards.", Event: "PostToolUse", Matcher: "^mcp__ccd_session__spawn_task$", Parse: parseSuggestedTask, CommandID: "cards.create", Body: CardBody}}
+
+func (r Recipe) BuildBody(e Event, target Target) map[string]any { return r.Body(e, target, r.Harness) }
 
 func Lookup(name string) (Recipe, error) {
 	for _, r := range Recipes {
@@ -34,6 +37,8 @@ func Lookup(name string) (Recipe, error) {
 
 // Adapter owns only harness settings; recipes own the event-to-action mapping.
 type Adapter interface {
+	Scopes() []string // default scope first
+	ProjectScoped(scope string) bool
 	ConfigPath(home, project, scope string) (string, error)
 	Merge(raw []byte, recipe Recipe, command, previous string, enable bool) ([]byte, bool, error)
 	Inspect(raw []byte, recipe Recipe, command string) (present, matches bool, err error)

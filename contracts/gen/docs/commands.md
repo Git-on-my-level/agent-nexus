@@ -1822,7 +1822,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Envelope v2 with local integration state and changed/dry_run for writes.
 - Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
 - Examples:
-  - Discover integrations: `anx integrations list`
+  - Remove the managed hook: `anx integrations disable claude-code-suggested-tasks`
 
 ## `integrations.enable`
 
@@ -1837,7 +1837,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Envelope v2 with local integration state and changed/dry_run for writes.
 - Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
 - Examples:
-  - Discover integrations: `anx integrations list`
+  - Opt into suggested task mirroring: `anx integrations enable claude-code-suggested-tasks --board follow-ups`
 
 ## `integrations.list`
 
@@ -1867,7 +1867,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Hook-only; no stdout, at most one stderr line.
 - Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
 - Examples:
-  - Discover integrations: `anx integrations list`
+  - Harness supplies the PostToolUse payload on stdin: `anx integrations run claude-code-suggested-tasks < hook-event.json`
 
 ## `integrations.status`
 
@@ -1882,7 +1882,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Envelope v2 with local integration state and changed/dry_run for writes.
 - Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
 - Examples:
-  - Discover integrations: `anx integrations list`
+  - Inspect the installed hook and local spool: `anx integrations status claude-code-suggested-tasks`
 
 ## `meta.commands.get`
 

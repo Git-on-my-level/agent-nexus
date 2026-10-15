@@ -129,6 +129,14 @@ func sampleHook(cwd string) string {
 }
 func TestIntegrationsRunSpoolsAndRoutesCWD(t *testing.T) {
 	a, out, home := integrationTestApp(t)
+	originalGetenv := a.Getenv
+	conflictingBase := "http://127.0.0.1:2"
+	a.Getenv = func(key string) string {
+		if key == "ANX_BASE_URL" {
+			return conflictingBase
+		}
+		return originalGetenv(key)
+	}
 	dir := filepath.Join(home, ".config", "anx")
 	cwd := filepath.Join(home, "project")
 	base := "http://127.0.0.1:1"
@@ -158,7 +166,11 @@ func TestIntegrationsRunSpoolsAndRoutesCWD(t *testing.T) {
 	}
 	// Register that workspace, then replay under the original event's cwd.
 	a.Getwd = func() (string, error) { return filepath.Join(cwd, "subdir"), nil }
-	integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "follow-ups")
+	enabled := integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "follow-ups")
+	c, err := integrations.LoadConfig(enabled["config_path"].(string))
+	if err != nil || c.Boards[base].Board != "follow-ups" || c.Boards[conflictingBase].Board != "" {
+		t.Fatal(c, err)
+	}
 	a.Getwd = func() (string, error) { return home, nil }
 	a.Stdin = strings.NewReader(sampleHook(filepath.Join(cwd, "subdir")))
 	out.Reset()
@@ -477,5 +489,224 @@ func TestIntegrationsMayRecoverAuthBeforeFirstCardAttempt(t *testing.T) {
 	defer mu.Unlock()
 	if creates != 1 {
 		t.Fatal("auth recovery failed", creates)
+	}
+}
+
+func TestIntegrationsMissingOrCorruptConfigKeepsEvent(t *testing.T) {
+	for _, corrupt := range []bool{false, true} {
+		t.Run(fmt.Sprint("corrupt=", corrupt), func(t *testing.T) {
+			a, out, home := integrationTestApp(t)
+			enabled := integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+			configPath := enabled["config_path"].(string)
+			reason := "missing_config"
+			if corrupt {
+				reason = "config_invalid"
+				if err := os.WriteFile(configPath, []byte(`{`), 0600); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Remove(configPath); err != nil {
+				t.Fatal(err)
+			}
+			a.Stdin = strings.NewReader(sampleHook(home))
+			out.Reset()
+			stderr := a.Stderr.(*bytes.Buffer)
+			stderr.Reset()
+			if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 || strings.Count(stderr.String(), "\n") != 1 {
+				t.Fatal(code, out.String(), stderr.String())
+			}
+			status := integrationResult(t, a, out, "status", suggestedIntegration)
+			if status["state"] != "drifted" || status["spool_depth"] != float64(1) || asMap(status["spool_reasons"])[reason] != float64(1) {
+				t.Fatal(status)
+			}
+			id := strings.TrimSuffix(filepath.Base(configPath), ".json")
+			q, err := integrations.LoadQueue(integrations.QueuePath(filepath.Join(home, ".config", "anx"), suggestedIntegration, id))
+			if err != nil || len(q.Pending) != 1 || q.Pending[0].Event.Prompt != "Full original prompt" || q.Pending[0].Reason != reason {
+				t.Fatal(q, err)
+			}
+		})
+	}
+}
+
+type integrationPanicReader struct{}
+
+func (integrationPanicReader) Read([]byte) (int, error) {
+	panic("private panic detail must not reach harness")
+}
+
+func TestIntegrationsHookRecoversPanic(t *testing.T) {
+	for _, afterPersistence := range []bool{false, true} {
+		t.Run(fmt.Sprint("afterPersistence=", afterPersistence), func(t *testing.T) {
+			a, out, home := integrationTestApp(t)
+			enabled := integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+			if afterPersistence {
+				original := integrations.Recipes
+				integrations.Recipes = append([]integrations.Recipe{}, original...)
+				defer func() { integrations.Recipes = original }()
+				for i := range integrations.Recipes {
+					if integrations.Recipes[i].Name == suggestedIntegration {
+						integrations.Recipes[i].Body = func(integrations.Event, integrations.Target, string) map[string]any {
+							panic("private panic detail must not reach harness")
+						}
+					}
+				}
+				a.Stdin = strings.NewReader(sampleHook(home))
+			} else {
+				a.Stdin = integrationPanicReader{}
+			}
+			out.Reset()
+			stderr := a.Stderr.(*bytes.Buffer)
+			stderr.Reset()
+			if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 || strings.Count(stderr.String(), "\n") != 1 || strings.Contains(stderr.String(), "private panic") {
+				t.Fatal(code, out.String(), stderr.String())
+			}
+			if afterPersistence {
+				c, err := integrations.LoadConfig(enabled["config_path"].(string))
+				if err != nil {
+					t.Fatal(err)
+				}
+				q, err := integrations.LoadQueue(integrations.QueuePath(filepath.Join(home, ".config", "anx"), suggestedIntegration, c.ID))
+				if err != nil || len(q.Pending) != 1 || q.Pending[0].Event.Prompt != "Full original prompt" {
+					t.Fatal(q, err)
+				}
+			}
+		})
+	}
+}
+
+// Each call gets a fresh token for the same host. Once an uncertain mutation
+// binds actor-1, actor-2 must never receive a second card POST for that event.
+func TestIntegrationsDoNotReplayUnderChangedActor(t *testing.T) {
+	a, out, home := integrationTestApp(t)
+	var mu sync.Mutex
+	grants, creates := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/auth/token":
+			grants++
+			fmt.Fprintf(w, `{"agent":{"id":"agent-1","actor_id":"actor-%d"},"tokens":{"access_token":"token-%d","expires_in":1}}`, grants, grants)
+		case "/cards":
+			creates++
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"error":{"code":"unavailable","message":"unknown outcome"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	saveIntegrationTestHost(t, home, server.URL)
+	integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+	for i := 0; i < 2; i++ {
+		a.Stdin = strings.NewReader(sampleHook(home))
+		out.Reset()
+		if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 {
+			t.Fatal(code, out.String())
+		}
+	}
+	mu.Lock()
+	if creates != 1 || grants != 2 {
+		t.Errorf("creates=%d grants=%d", creates, grants)
+	}
+	mu.Unlock()
+	status := integrationResult(t, a, out, "status", suggestedIntegration)
+	if asMap(status["spool_reasons"])["identity_changed"] != float64(1) {
+		t.Fatal(status)
+	}
+}
+
+func saveIntegrationTestHost(t *testing.T, home, base string) {
+	t.Helper()
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = hostidentity.Save(home, hostidentity.Host{ID: "host-test", KeyID: "key", WorkspaceID: "ws_test", BaseURL: base}, key); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIntegrationsTerminalCardFailuresDeadLetter(t *testing.T) {
+	for _, statusCode := range []int{400, 401, 403, 404, 408, 409, 422, 429, 503} {
+		t.Run(fmt.Sprint(statusCode), func(t *testing.T) {
+			a, out, home := integrationTestApp(t)
+			var mu sync.Mutex
+			creates := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/auth/token" {
+					fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1"},"tokens":{"access_token":"token","expires_in":3600}}`)
+					return
+				}
+				if r.URL.Path != "/cards" {
+					http.NotFound(w, r)
+					return
+				}
+				mu.Lock()
+				creates++
+				mu.Unlock()
+				w.WriteHeader(statusCode)
+				fmt.Fprint(w, `{"error":{"code":"rejected","message":"do not print upstream text"}}`)
+			}))
+			defer server.Close()
+			saveIntegrationTestHost(t, home, server.URL)
+			integrationResult(t, a, out, "enable", suggestedIntegration, "--board", "tasks")
+			for i := 0; i < 2; i++ {
+				a.Stdin = strings.NewReader(sampleHook(home))
+				out.Reset()
+				stderr := a.Stderr.(*bytes.Buffer)
+				stderr.Reset()
+				if code := a.Run([]string{"integrations", "run", suggestedIntegration}); code != 0 || out.Len() != 0 || strings.Count(stderr.String(), "\n") > 1 || strings.Contains(stderr.String(), "upstream text") {
+					t.Fatal(code, out.String(), stderr.String())
+				}
+			}
+			terminal := statusCode >= 400 && statusCode < 500 && statusCode != 408 && statusCode != 429
+			status := integrationResult(t, a, out, "status", suggestedIntegration)
+			mu.Lock()
+			sent := creates
+			mu.Unlock()
+			if terminal {
+				if sent != 1 || status["dead_letter_count"] != float64(1) || status["spool_depth"] != float64(0) || asMap(status["dead_letter_reasons"])[fmt.Sprintf("terminal_http_%d", statusCode)] != float64(1) {
+					t.Fatal(sent, status)
+				}
+			} else if sent != 2 || status["dead_letter_count"] != float64(0) || status["spool_depth"] != float64(1) {
+				t.Fatal(sent, status)
+			}
+		})
+	}
+}
+
+type integrationOtherAdapter struct{ integrations.ClaudeCode }
+
+func (integrationOtherAdapter) Scopes() []string { return []string{"account", "repository"} }
+func (integrationOtherAdapter) ConfigPath(home, project, scope string) (string, error) {
+	return filepath.Join(home, "other-harness", scope+".json"), nil
+}
+
+func TestIntegrationsRecipeOwnsAgentHarnessAndScopes(t *testing.T) {
+	r, _ := integrations.Lookup(suggestedIntegration)
+	r.Name = "other-suggested-tasks"
+	r.Harness = "other-harness"
+	r.DefaultAgent = "other-agent"
+	original := integrations.Recipes
+	integrations.Recipes = append(append([]integrations.Recipe{}, original...), r)
+	integrations.Adapters[r.Harness] = integrationOtherAdapter{}
+	defer func() { integrations.Recipes = original; delete(integrations.Adapters, r.Harness) }()
+	if !strings.Contains(integrationsUsageText(), "other-harness: account|repository (default: account)") {
+		t.Fatal("help omitted adapter scopes")
+	}
+	a, out, _ := integrationTestApp(t)
+	for _, scope := range []string{"account", "repository"} {
+		enabled := integrationResult(t, a, out, "enable", r.Name, "--scope", scope)
+		c, err := integrations.LoadConfig(enabled["config_path"].(string))
+		if err != nil || c.Agent != r.DefaultAgent || c.Scope != scope {
+			t.Fatal(c, err)
+		}
+	}
+	body := r.BuildBody(integrations.Event{}, integrations.Target{Board: "tasks"})
+	summary := asMap(body["card"])["summary"].(string)
+	if !strings.Contains(summary, "Harness: other-harness") || strings.Contains(summary, "claude") {
+		t.Fatal(summary)
 	}
 }

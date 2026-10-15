@@ -74,8 +74,8 @@ x-anx-local-commands:
     x-anx-surface: utility
     x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
     x-anx-examples:
-      - title: Discover integrations
-        command: anx integrations list
+      - title: Inspect the installed hook and local spool
+        command: anx integrations status claude-code-suggested-tasks
   - x-anx-command-id: integrations.enable
     x-anx-cli-path: integrations enable
     summary: Opt into an optional harness integration.
@@ -89,8 +89,8 @@ x-anx-local-commands:
     x-anx-surface: utility
     x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
     x-anx-examples:
-      - title: Discover integrations
-        command: anx integrations list
+      - title: Opt into suggested task mirroring
+        command: anx integrations enable claude-code-suggested-tasks --board follow-ups
   - x-anx-command-id: integrations.disable
     x-anx-cli-path: integrations disable
     summary: Remove only an ANX-owned integration hook and config.
@@ -104,8 +104,8 @@ x-anx-local-commands:
     x-anx-surface: utility
     x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
     x-anx-examples:
-      - title: Discover integrations
-        command: anx integrations list
+      - title: Remove the managed hook
+        command: anx integrations disable claude-code-suggested-tasks
   - x-anx-command-id: integrations.run
     x-anx-cli-path: integrations run
     summary: Silent bounded harness event handler; always exits zero.
@@ -119,8 +119,8 @@ x-anx-local-commands:
     x-anx-surface: utility
     x-anx-agent-notes: Off by default. Local settings only; run uses existing card-create replay safety.
     x-anx-examples:
-      - title: Discover integrations
-        command: anx integrations list
+      - title: Harness supplies the PostToolUse payload on stdin
+        command: anx integrations run claude-code-suggested-tasks < hook-event.json
 paths:
   /adapters:
     get:

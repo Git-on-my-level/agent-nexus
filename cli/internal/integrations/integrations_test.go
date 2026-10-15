@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -126,7 +127,7 @@ func TestPayloadParsing(t *testing.T) {
 		if err != nil || e.TaskID != "task_1234abcd" {
 			t.Fatal(e, err)
 		}
-		body := CardBody(e, Target{Board: "tasks"})
+		body := CardBody(e, Target{Board: "tasks"}, "test-harness")
 		if !strings.Contains(body["card"].(map[string]any)["summary"].(string), "> "+strings.ReplaceAll(e.Prompt, "\n", "\n> ")) {
 			t.Fatal("prompt changed")
 		}
@@ -150,7 +151,7 @@ func TestSpoolFailureReplayFrozenDelivery(t *testing.T) {
 	if err := Enqueue(ctx, path, e); err != nil {
 		t.Fatal(err)
 	}
-	original := Delivery{BaseURL: "https://workspace.example", Agent: "claude-code", Body: CardBody(e, Target{Board: "tasks"})}
+	original := Delivery{BaseURL: "https://workspace.example", Agent: "claude-code", Body: CardBody(e, Target{Board: "tasks"}, "test-harness")}
 	prepare := func(Event) (Delivery, error) { return original, nil }
 	var seen []Delivery
 	fail := func(_ context.Context, d Delivery) error {
@@ -275,7 +276,7 @@ func TestSettingsPreserveUnknownGroupMetadata(t *testing.T) {
 	r := recipe(t)
 	raw := []byte(`{"hooks":{"PostToolUse":[{"matcher":"custom","user_metadata":{"keep":true},"hooks":[{"type":"command","command":"owned"}]}]}}`)
 	next, changed, err := (ClaudeCode{}).Merge(raw, r, "owned", "", false)
-	if err != nil || !changed || !strings.Contains(string(next), `"user_metadata"`) || !strings.Contains(string(next), `"keep"`) {
+	if err != nil || changed || !bytes.Equal(next, raw) {
 		t.Fatal(string(next), changed, err)
 	}
 }
@@ -351,5 +352,72 @@ func TestSpoolPinsTokenPrincipalAsWellAsHost(t *testing.T) {
 	})
 	if err := BindHost(ctx, path, "pending", "host", "actor:other"); !errors.Is(err, ErrIdentityChanged) {
 		t.Fatal("principal changed", err)
+	}
+}
+
+func TestSettingsMetadataEnableAndDisableRemainValid(t *testing.T) {
+	r := recipe(t)
+	for _, matcher := range []string{`"matcher":"custom",`, ""} {
+		raw := []byte(`{"hooks":{"PostToolUse":[{` + matcher + `"metadata":{"keep":true},"hooks":[{"type":"command","command":"old"}]}]}}`)
+		next, _, err := (ClaudeCode{}).Merge(raw, r, "new", "old", true)
+		if err != nil || !bytes.Contains(next, []byte(`"metadata"`)) || bytes.Contains(next, []byte(`"old"`)) {
+			t.Fatal(string(next), err)
+		}
+		again, changed, err := (ClaudeCode{}).Merge(next, r, "new", "", true)
+		if err != nil || changed || !bytes.Equal(next, again) {
+			t.Fatal(string(again), changed, err)
+		}
+		disabled, changed, err := (ClaudeCode{}).Merge(next, r, "new", "", false)
+		if err != nil || changed || !bytes.Equal(next, disabled) {
+			t.Fatal(string(disabled), changed, err)
+		}
+		var root map[string]any
+		if err := json.Unmarshal(disabled, &root); err != nil {
+			t.Fatal(err)
+		}
+		groups := root["hooks"].(map[string]any)["PostToolUse"].([]any)
+		for _, group := range groups {
+			if len(group.(map[string]any)["hooks"].([]any)) == 0 {
+				t.Fatal("empty handlers", string(disabled))
+			}
+		}
+	}
+}
+
+func TestDeadLettersExcludedFromDrainAndBounded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.json")
+	now := time.Now().UTC()
+	event := Event{Key: "bad", Title: "Keep my text", Timestamp: now}
+	ctx := context.Background()
+	if err := Enqueue(ctx, path, event); err != nil {
+		t.Fatal(err)
+	}
+	prepare := func(Event) (Delivery, error) { return Delivery{}, nil }
+	sends := 0
+	send := func(context.Context, Delivery) error { sends++; return RejectedDelivery{Status: 400} }
+	if err := Drain(ctx, path, prepare, send); err == nil {
+		t.Fatal("missing refusal")
+	}
+	if err := Enqueue(ctx, path, event); err != nil {
+		t.Fatal(err)
+	}
+	if err := Drain(ctx, path, prepare, send); err != nil {
+		t.Fatal(err)
+	}
+	q, err := LoadQueue(path)
+	if err != nil || len(q.Pending) != 0 || len(q.DeadLetters) != 1 || sends != 1 || q.DeadLetters[0].Reason != "terminal_http_400" || q.DeadLetters[0].Event.Title != event.Title {
+		t.Fatal(q, sends, err)
+	}
+	// Pending and rejected text share the same retention budget.
+	for i := 0; i < MaxPending; i++ {
+		q.DeadLetters = append(q.DeadLetters, Pending{Event: Event{Timestamp: now}})
+	}
+	q.prune(now)
+	if len(q.DeadLetters)+len(q.Pending) != MaxPending || q.Dropped != 1 {
+		t.Fatal(q)
+	}
+	q.prune(now.Add(MaxAge + time.Second))
+	if len(q.DeadLetters) != 0 || q.LastDropReason != "age" {
+		t.Fatal(q)
 	}
 }

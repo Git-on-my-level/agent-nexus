@@ -8347,8 +8347,8 @@ export const commandRegistry = [
         "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
         "examples": [
             {
-                "title": "Discover integrations",
-                "command": "anx integrations list"
+                "title": "Remove the managed hook",
+                "command": "anx integrations disable claude-code-suggested-tasks"
             }
         ],
         "adjacent_commands": [
@@ -8387,8 +8387,8 @@ export const commandRegistry = [
         "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
         "examples": [
             {
-                "title": "Discover integrations",
-                "command": "anx integrations list"
+                "title": "Opt into suggested task mirroring",
+                "command": "anx integrations enable claude-code-suggested-tasks --board follow-ups"
             }
         ],
         "adjacent_commands": [
@@ -8467,8 +8467,8 @@ export const commandRegistry = [
         "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
         "examples": [
             {
-                "title": "Discover integrations",
-                "command": "anx integrations list"
+                "title": "Harness supplies the PostToolUse payload on stdin",
+                "command": "anx integrations run claude-code-suggested-tasks \u003c hook-event.json"
             }
         ],
         "adjacent_commands": [
@@ -8507,8 +8507,8 @@ export const commandRegistry = [
         "agent_notes": "Off by default. Local settings only; run uses existing card-create replay safety.",
         "examples": [
             {
-                "title": "Discover integrations",
-                "command": "anx integrations list"
+                "title": "Inspect the installed hook and local spool",
+                "command": "anx integrations status claude-code-suggested-tasks"
             }
         ],
         "adjacent_commands": [

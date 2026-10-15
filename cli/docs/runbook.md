@@ -975,4 +975,10 @@ For pending `no_board` events, enable the integration with a board in that mappe
 directory (or pin `--workspace`). For `delivery_failed`, check ordinary host
 enrollment, authorization, connectivity and the configured board. A later hook
 invocation retries up to four persisted events using their original replay keys.
-Status is offline and read-only; disable retains the spool and receipts.
+Missing or corrupt installation config preserves incoming events with
+`missing_config` or `config_invalid`; repair the config and re-enable to resume.
+A terminal card-create 4xx (except 408/429) is retained as a dead letter and is
+excluded from automatic drain; inspect `dead_letter_count` and
+`dead_letter_reasons` in status. Pending and dead-letter text share the 100-event,
+30-day retention budget. Status is offline and read-only; disable retains the
+spool and receipts.

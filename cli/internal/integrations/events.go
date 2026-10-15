@@ -72,9 +72,9 @@ func truncate(s string, n int) string {
 	}
 	return s
 }
-func CardBody(e Event, target Target) map[string]any {
+func CardBody(e Event, target Target, harness string) map[string]any {
 	// Quote the prompt linearly; no user-provided fence can terminate it.
-	provenance := fmt.Sprintf("\n\nHarness: claude-code\nSession: %s\nCwd: %s\nTask: %s\nHost: %s\nTimestamp: %s", truncate(e.SessionID, 256), truncate(e.CWD, 4096), e.TaskID, truncate(e.Host, 255), e.Timestamp.UTC().Format(time.RFC3339Nano))
+	provenance := fmt.Sprintf("\n\nHarness: %s\nSession: %s\nCwd: %s\nTask: %s\nHost: %s\nTimestamp: %s", harness, truncate(e.SessionID, 256), truncate(e.CWD, 4096), e.TaskID, truncate(e.Host, 255), e.Timestamp.UTC().Format(time.RFC3339Nano))
 	quoted := "> " + strings.ReplaceAll(e.Prompt, "\n", "\n> ")
 	body := truncate(e.TLDR, 4000) + "\n\n" + truncate(quoted, 54000) + provenance
 	card := map[string]any{"title": truncate(e.Title, 500), "summary": truncate(body, 64000), "assignee_refs": []any{}, "resolution_refs": []any{}, "related_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}

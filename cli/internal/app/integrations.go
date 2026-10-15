@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ type integrationOptions struct {
 }
 
 func parseIntegrationOptions(args []string) (integrationOptions, error) {
-	o := integrationOptions{scope: "user"}
+	o := integrationOptions{}
 	if len(args) == 0 {
 		return o, nil
 	}
@@ -44,7 +45,7 @@ func parseIntegrationOptions(args []string) (integrationOptions, error) {
 	}
 	fs := newSilentFlagSet("integrations " + o.verb)
 	if o.verb != "run" {
-		fs.StringVar(&o.scope, "scope", "user", "Settings scope: user, project, local")
+		fs.StringVar(&o.scope, "scope", "", "Harness settings scope (adapter default when omitted)")
 	}
 	if o.verb == "enable" {
 		fs.StringVar(&o.board, "board", "", "Parent board ref or handle")
@@ -62,8 +63,23 @@ func parseIntegrationOptions(args []string) (integrationOptions, error) {
 	if len(fs.Args()) > 0 {
 		return o, errnorm.Usage("invalid_args", "unexpected positional arguments")
 	}
-	if o.scope != "user" && o.scope != "project" && o.scope != "local" {
-		return o, errnorm.Usage("invalid_flags", "scope must be user, project, or local")
+	if o.name != "" {
+		r, _ := integrations.Lookup(o.name)
+		scopes := integrations.Adapters[r.Harness].Scopes()
+		if o.scope == "" {
+			o.scope = scopes[0]
+		}
+		if !slices.Contains(scopes, o.scope) {
+			return o, errnorm.Usage("invalid_flags", "scope must be one of: "+strings.Join(scopes, ", "))
+		}
+	} else if o.scope != "" {
+		allowed := false
+		for _, adapter := range integrations.Adapters {
+			allowed = allowed || slices.Contains(adapter.Scopes(), o.scope)
+		}
+		if !allowed {
+			return o, errnorm.Usage("invalid_flags", "unknown harness settings scope")
+		}
 	}
 	if len(o.board) > 256 {
 		return o, errnorm.Usage("invalid_flags", "board ref exceeds 256 bytes")
@@ -86,23 +102,34 @@ func parseIntegrationOptions(args []string) (integrationOptions, error) {
 	return o, nil
 }
 func integrationsUsageText() string {
-	return strings.TrimSpace(`Optional harness hooks. Disabled until explicitly enabled.
+	usage := strings.TrimSpace(`Optional harness hooks. Disabled until explicitly enabled.
 
 Usage:
-  anx integrations list [--scope user|project|local]
-  anx integrations status <name> [--scope user|project|local]
-  anx integrations enable <name> [--scope user|project|local] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
-  anx integrations disable <name> [--scope user|project|local] [--dry-run]
-  anx integrations run <name>
+  anx integrations list [--scope <scope>]
+  anx integrations status <name> [--scope <scope>]
+  anx integrations enable <name> [--scope <scope>] [--board <ref>] [--column <key>] [--workspace <alias>] [--as <name>] [--dry-run]
+  anx integrations disable <name> [--scope <scope>] [--dry-run]
+  anx integrations run <name> < hook-event.json
 
 Enable preserves unrelated harness settings and creates a one-time .anx-backup.
-Dry-run returns the exact settings/config JSON and writes nothing. Project/local
-scope uses the current directory as project root. User scope is the default.
+Dry-run returns the exact settings/config JSON and writes nothing. Each harness
+adapter defines its scopes and default; project scopes use the current directory.
 Workspace routing follows the hook event cwd unless --workspace pins an alias.
 Board choices are stored per workspace; missing boards spool with reason no_board.
 Run is a silent, bounded hook entrypoint, always exits 0, and retries a bounded
-local spool. Status exposes pending events, ledger count, and retention drops.
+local spool. Status exposes pending events, dead letters, ledger count, and drops.
 Use status/disable with the same scope and project directory used for enable.`)
+	scopes := []string{}
+	seen := map[string]bool{}
+	for _, r := range integrations.Recipes {
+		if seen[r.Harness] {
+			continue
+		}
+		seen[r.Harness] = true
+		allowed := integrations.Adapters[r.Harness].Scopes()
+		scopes = append(scopes, "  "+r.Harness+": "+strings.Join(allowed, "|")+" (default: "+allowed[0]+")")
+	}
+	return usage + "\n\nHarness scopes:\n" + strings.Join(scopes, "\n")
 }
 func init() {
 	for _, verb := range integrationsSpec.valid {
@@ -110,6 +137,9 @@ func init() {
 	}
 }
 func (a *App) integrationLocation(cfg config.Resolved, r integrations.Recipe, scope string) (string, string, string, string, error) {
+	if scope == "" {
+		scope = integrations.Adapters[r.Harness].Scopes()[0]
+	}
 	dir, err := a.configDir(cfg)
 	if err != nil {
 		return "", "", "", "", err
@@ -129,14 +159,18 @@ func integrationError(err error) error {
 	return errnorm.Wrap(errnorm.KindLocal, "integration_config_invalid", "cannot inspect or update integration settings", err)
 }
 func (a *App) integrationStatus(cfg config.Resolved, r integrations.Recipe, scope string) (map[string]any, error) {
+	if scope == "" {
+		scope = integrations.Adapters[r.Harness].Scopes()[0]
+	}
 	dir, _, path, id, err := a.integrationLocation(cfg, r, scope)
 	if err != nil {
 		return nil, err
 	}
 	c, err := integrations.LoadConfig(integrations.ConfigPath(dir, r.Name, id))
 	exists := err == nil
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, integrationError(err)
+	invalidConfig := err != nil && !errors.Is(err, os.ErrNotExist)
+	if invalidConfig {
+		c = integrations.Config{}
 	}
 	raw, err := integrations.ReadSettings(path)
 	if err != nil {
@@ -153,7 +187,7 @@ func (a *App) integrationStatus(cfg config.Resolved, r integrations.Recipe, scop
 		return nil, integrationError(err)
 	}
 	state := "disabled"
-	if !exists && present {
+	if invalidConfig || !exists && present {
 		state = "drifted"
 	}
 	configurationMatches := exists && c.Name == r.Name && c.ID == id && c.Scope == scope && c.SettingsPath == path && c.Command == integrations.HookCommand(c.Executable, dir, r.Name, id)
@@ -174,9 +208,12 @@ func (a *App) integrationStatus(cfg config.Resolved, r integrations.Recipe, scop
 	for _, p := range q.Pending {
 		reasons[p.Reason]++
 	}
-	result := map[string]any{"name": r.Name, "harness": r.Harness, "description": r.Description, "scope": scope, "state": state, "settings_path": path, "hook_present": present, "hook_matches": matches, "config_matches": configurationMatches, "executable_exists": executableExists, "config": nil, "spool_depth": len(q.Pending), "spool_reasons": reasons, "ledger_count": len(q.Ledger), "dropped": q.Dropped, "last_drop_reason": q.LastDropReason}
+	result := map[string]any{"name": r.Name, "harness": r.Harness, "description": r.Description, "scope": scope, "state": state, "settings_path": path, "hook_present": present, "hook_matches": matches, "config_matches": configurationMatches, "executable_exists": executableExists, "config": nil, "spool_depth": len(q.Pending), "dead_letter_count": len(q.DeadLetters), "dead_letter_reasons": integrationReasons(q.DeadLetters), "spool_reasons": reasons, "ledger_count": len(q.Ledger), "dropped": q.Dropped, "last_drop_reason": q.LastDropReason}
 	if exists {
 		result["config"] = c
+	}
+	if invalidConfig {
+		result["config_error"] = "config_invalid"
 	}
 	return result, nil
 }
@@ -192,6 +229,9 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 	if o.verb == "list" {
 		items := []any{}
 		for _, r := range integrations.Recipes {
+			if o.scope != "" && !slices.Contains(integrations.Adapters[r.Harness].Scopes(), o.scope) {
+				continue
+			}
 			s, err := a.integrationStatus(cfg, r, o.scope)
 			if err != nil {
 				return nil, name, err
@@ -258,14 +298,14 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 		c.ID = id
 		c.Scope = o.scope
 		c.Project = project
-		if o.scope == "user" {
+		if !integrations.Adapters[r.Harness].ProjectScoped(o.scope) {
 			c.Project = ""
 		}
 		c.SettingsPath = path
 		c.Executable = executable
 		c.Command = integrations.HookCommand(executable, dir, r.Name, id)
 		if c.Agent == "" {
-			c.Agent = "claude-code"
+			c.Agent = r.DefaultAgent
 		}
 		if cfg.As != "" {
 			c.Agent = cfg.As
@@ -285,7 +325,7 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 			if c.Workspace != "" {
 				alias = &c.Workspace
 			}
-			routed, err = a.resolveWorkspace(routed, alias)
+			routed, err = a.resolveIntegrationWorkspace(routed, alias)
 			if err != nil {
 				return nil, name, err
 			}
@@ -314,20 +354,20 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 	if o.dry || !changed {
 		return &commandResult{Data: result}, name, nil
 	}
-	if settingsChanged {
-		if err = integrations.Backup(path, raw); err != nil {
-			return nil, name, integrationError(err)
-		}
-	}
 	if o.verb == "enable" && configChanged {
 		if err = integrations.AtomicWrite(configPath, integrations.JSON(c)); err != nil {
 			return nil, name, integrationError(err)
 		}
 	}
 	if settingsChanged {
-		if err = integrations.AtomicWrite(path, next); err != nil {
+		next, settingsChanged, err = integrations.UpdateSettings(path, func(latest []byte) ([]byte, bool, error) {
+			return integrations.Adapters[r.Harness].Merge(latest, r, command, old.Command, o.verb == "enable")
+		})
+		if err != nil {
 			return nil, name, integrationError(err)
 		}
+		result["settings_json"] = json.RawMessage(next)
+		result["changed"] = settingsChanged || configChanged
 	}
 	if o.verb == "disable" && exists {
 		if err = os.Remove(configPath); err != nil {
@@ -343,7 +383,14 @@ func (a *App) runIntegrationHook(overrides config.Overrides, args []string) int 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	finished := make(chan error, 1)
-	go func() { finished <- a.processIntegrationHook(ctx, overrides, args) }()
+	go func() {
+		defer func() {
+			if recover() != nil {
+				finished <- fmt.Errorf("hook_panic")
+			}
+		}()
+		finished <- a.processIntegrationHook(ctx, overrides, args)
+	}()
 	select {
 	case err := <-finished:
 		if err != nil {
@@ -364,19 +411,12 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 		return err
 	}
 	r, _ := integrations.Lookup(o.name)
-	dir, _, _, id, err := a.integrationLocation(cfg, r, "user")
+	dir, _, _, id, err := a.integrationLocation(cfg, r, "")
 	if err != nil {
 		return err
 	}
 	if o.installation != "" {
 		id = o.installation
-	}
-	c, err := integrations.LoadConfig(integrations.ConfigPath(dir, r.Name, id))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
 	}
 	raw, err := a.readStdinBytes(integrations.MaxPayloadBytes + 1)
 	if err != nil {
@@ -389,22 +429,28 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 	event.Timestamp = a.clockNow().UTC()
 	event.Host, _ = os.Hostname()
 	path := integrations.QueuePath(dir, r.Name, id)
-	if err = integrations.Enqueue(ctx, path, event); err != nil {
+	c, loadErr := integrations.LoadConfig(integrations.ConfigPath(dir, r.Name, id))
+	reason := "pending"
+	if errors.Is(loadErr, os.ErrNotExist) {
+		reason = "missing_config"
+	} else if loadErr != nil || c.Name != r.Name || c.ID != id || c.Agent == "" {
+		reason = "config_invalid"
+	}
+	if err = integrations.Enqueue(ctx, path, event, reason); err != nil {
 		return err
+	}
+	if reason != "pending" {
+		return fmt.Errorf("%s", reason)
 	}
 	return integrations.Drain(ctx, path, func(e integrations.Event) (integrations.Delivery, error) {
 		routed := cfg
-		routed.Sources = map[string]string{}
-		for k, v := range cfg.Sources {
-			routed.Sources[k] = v
-		}
 		local := *a
 		local.Getwd = func() (string, error) { return e.CWD, nil }
 		var alias *string
 		if c.Workspace != "" {
 			alias = &c.Workspace
 		}
-		routed, routeErr := local.resolveWorkspace(routed, alias)
+		routed, routeErr := local.resolveIntegrationWorkspace(routed, alias)
 		if routeErr != nil {
 			return integrations.Delivery{}, fmt.Errorf("workspace_unresolved")
 		}
@@ -449,6 +495,37 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 		// a second auth refresh to switch hosts after the durable binding.
 		auth.HostID = ""
 		_, err = a.invokeTypedJSON(sendCtx, auth, "integrations run", d.CommandID, nil, nil, d.Body)
+		var remote *errnorm.Error
+		if errors.As(err, &remote) && remote.Kind == errnorm.KindRemote {
+			details, _ := remote.Details.(map[string]any)
+			status, _ := details["status"].(int)
+			if status >= 400 && status < 500 && status != 408 && status != 429 {
+				return integrations.RejectedDelivery{Status: status}
+			}
+		}
 		return err
 	}, event.Key)
+}
+
+// Integrations route from event cwd, independently of the invoking shell's API
+// override. Copy Sources so ordinary command resolution retains its precedence.
+func (a *App) resolveIntegrationWorkspace(cfg config.Resolved, alias *string) (config.Resolved, error) {
+	sources := make(map[string]string, len(cfg.Sources))
+	for k, v := range cfg.Sources {
+		sources[k] = v
+	}
+	cfg.Sources = sources
+	if alias == nil {
+		cfg.BaseURL = config.DefaultBaseURL
+		cfg.Sources["base_url"] = "default"
+	}
+	return a.resolveWorkspace(cfg, alias)
+}
+
+func integrationReasons(entries []integrations.Pending) map[string]int {
+	reasons := map[string]int{}
+	for _, p := range entries {
+		reasons[p.Reason]++
+	}
+	return reasons
 }

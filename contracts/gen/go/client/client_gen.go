@@ -1798,8 +1798,8 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"integrations.enable", "integrations.list", "integrations.run", "integrations.status"},
 		Examples: []Example{
 			{
-				Title:   "Discover integrations",
-				Command: "anx integrations list",
+				Title:   "Remove the managed hook",
+				Command: "anx integrations disable claude-code-suggested-tasks",
 			},
 		},
 	},
@@ -1815,8 +1815,8 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"integrations.disable", "integrations.list", "integrations.run", "integrations.status"},
 		Examples: []Example{
 			{
-				Title:   "Discover integrations",
-				Command: "anx integrations list",
+				Title:   "Opt into suggested task mirroring",
+				Command: "anx integrations enable claude-code-suggested-tasks --board follow-ups",
 			},
 		},
 	},
@@ -1849,8 +1849,8 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.status"},
 		Examples: []Example{
 			{
-				Title:   "Discover integrations",
-				Command: "anx integrations list",
+				Title:   "Harness supplies the PostToolUse payload on stdin",
+				Command: "anx integrations run claude-code-suggested-tasks < hook-event.json",
 			},
 		},
 	},
@@ -1866,8 +1866,8 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.run"},
 		Examples: []Example{
 			{
-				Title:   "Discover integrations",
-				Command: "anx integrations list",
+				Title:   "Inspect the installed hook and local spool",
+				Command: "anx integrations status claude-code-suggested-tasks",
 			},
 		},
 	},
