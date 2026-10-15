@@ -289,6 +289,27 @@
     event.stopPropagation();
   }
 
+  /**
+   * Phone: a card moved to another stage would vanish into a hidden column.
+   * Once the move has landed, follow it there and keep focus on the card, so
+   * the reader sees where it went (and can move it back).
+   */
+  async function followMove(ref, placement, { focus = true } = {}) {
+    if (!window.matchMedia?.("(max-width: 767px)").matches) return;
+    const landedThere = columns
+      .find((column) => column.placement === placement)
+      ?.rows.some((row) => row.ref === ref);
+    if (!landedThere) return;
+    chosenStage = placement;
+    if (!focus) return;
+    await tick();
+    document
+      .querySelector(
+        `[data-work-slot][data-work-ref="${globalThis.CSS?.escape?.(ref) ?? ref.replace(/["\\]/g, "\\$&")}"]`,
+      )
+      ?.focus();
+  }
+
   function onCardKey(event, row) {
     if (event.repeat) {
       if (event.key === "ArrowLeft" || event.key === "ArrowRight")
@@ -316,6 +337,7 @@
     if (!next || next === row.placement) return;
     const ref = row.ref;
     void commit(row, next, "").then(async () => {
+      await followMove(ref, next, { focus: false });
       await tick();
       const active = document.activeElement;
       if (
@@ -448,7 +470,9 @@
                         const to = event.currentTarget.value;
                         event.currentTarget.value = row.placement;
                         if (to && to !== row.placement)
-                          void commit(row, to, "");
+                          void commit(row, to, "").then(() =>
+                            followMove(row.ref, to),
+                          );
                       }}
                     >
                       {#each PLACEMENTS as placement (placement)}
