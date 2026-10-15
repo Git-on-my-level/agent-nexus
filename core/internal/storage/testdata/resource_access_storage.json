@@ -1497,7 +1497,7 @@
     "../delivery/store.go:Store:Enqueue": "b45f8181b70144ec631bff5f30c1ea333dd68ce0a94825eb24f20727b4ea2990",
     "../delivery/store.go:Store:Get": "eccf30f59d44e36d12244f972316a6f1fb04683964ddde5be80450438a997295",
     "../delivery/store.go:Store:ListForPrincipal": "0f8c5648828cdbdd4d5b8d09ac7c7ac25eacdffc02faf029fccc26774552b430",
-    "../delivery/store.go:Store:RecordReceipt": "23576530dcc20b3f81b51c4928ccc00062db308be8cee7307b51976de413f59a",
+    "../delivery/store.go:Store:RecordReceipt": "c17d8bc7c7063545f49bb7c43fb71ee605eaf91ffb5fed73ba059070eac1bd31",
     "../delivery/store.go:Store:ReplaceSettings": "4a8588bbfcc0ac7e9873a903cfd9fd4eea142f6c48b109a9ad93e9091d07a2bb",
     "../delivery/store.go:Store:Settings": "563477b06d1b16ca157f3d8627130d0e349bf292685f05ea55037acbd176ca67",
     "../delivery/store.go:Store:getByKey": "7551e51e956819cc270042872dc9a74c1b9bb2024bbde4034791e36ca5270344",

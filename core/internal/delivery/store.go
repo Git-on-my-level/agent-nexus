@@ -326,6 +326,9 @@ func Backoff(attempts int) time.Duration {
 // max_attempts is spent, then it fails. Receipts are appended to
 // delivery_receipts, never to the event log. The caller must hold the claim
 // token; the claimer identity is checked by the caller against the channel.
+// A retry of the receipt that already delivered or failed this attempt
+// returns that row and does not append another receipt. The claim token
+// stays on the row so that retry can be recognized; callers do not receive it.
 func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel string, delivered bool, errText string, retryable bool, recordedBy string) (Delivery, error) {
 	deliveryID = strings.TrimSpace(deliveryID)
 	claimToken = strings.TrimSpace(claimToken)
@@ -349,19 +352,29 @@ func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channe
 		// Do not confirm that another channel's delivery exists.
 		return Delivery{}, ErrNotFound
 	}
+	if (d.Status == StatusDelivered || d.Status == StatusFailed) && d.ClaimToken == claimToken {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=? AND attempt=?`, deliveryID, d.Attempt).Scan(&n); err != nil {
+			return Delivery{}, err
+		}
+		if n > 0 {
+			d.ClaimToken = ""
+			return d, nil
+		}
+	}
 	if d.Status != StatusClaimed || d.ClaimToken != claimToken {
 		return Delivery{}, ErrConflict
 	}
 	outcome := OutcomeDelivered
 	switch {
 	case delivered:
-		_, err = tx.ExecContext(ctx, `UPDATE deliveries SET status='delivered', claim_token='', lease_expires_at='', last_error='', delivered_at=?, updated_at=? WHERE delivery_id=?`, stamp(now), stamp(now), deliveryID)
+		_, err = tx.ExecContext(ctx, `UPDATE deliveries SET status='delivered', lease_expires_at='', last_error='', delivered_at=?, updated_at=? WHERE delivery_id=?`, stamp(now), stamp(now), deliveryID)
 	case retryable && d.Attempt < d.MaxAttempts:
 		outcome = OutcomeFailed
 		_, err = tx.ExecContext(ctx, `UPDATE deliveries SET status='pending', claim_token='', lease_expires_at='', last_error=?, next_attempt_at=?, updated_at=? WHERE delivery_id=?`, errText, stamp(now.Add(Backoff(d.Attempt))), stamp(now), deliveryID)
 	default:
 		outcome = OutcomeFailed
-		_, err = tx.ExecContext(ctx, `UPDATE deliveries SET status='failed', claim_token='', lease_expires_at='', last_error=?, failed_at=?, updated_at=? WHERE delivery_id=?`, errText, stamp(now), stamp(now), deliveryID)
+		_, err = tx.ExecContext(ctx, `UPDATE deliveries SET status='failed', lease_expires_at='', last_error=?, failed_at=?, updated_at=? WHERE delivery_id=?`, errText, stamp(now), stamp(now), deliveryID)
 	}
 	if err != nil {
 		return Delivery{}, fmt.Errorf("record delivery receipt: %w", err)
@@ -374,6 +387,7 @@ func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channe
 	if err != nil {
 		return Delivery{}, err
 	}
+	updated.ClaimToken = ""
 	return updated, tx.Commit()
 }
 
