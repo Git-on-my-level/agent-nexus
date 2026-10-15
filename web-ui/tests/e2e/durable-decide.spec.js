@@ -51,8 +51,8 @@ test("drafts restore after reload, navigation and in another tab", async ({
   await page.reload();
   await expect(page.locator(`${ROW} [data-decision-reply]`)).toHaveValue(TEXT);
   await page.goto(LIST);
+  // Decide opens on the first decision, its composer already open.
   const row = page.locator(ROW);
-  await row.locator("[data-decision-reply-toggle]").click();
   await expect(row.locator("[data-decision-reply]")).toHaveValue(TEXT);
   const revised = `${TEXT} Include verification.`;
   await row.locator("[data-decision-reply]").fill(revised);

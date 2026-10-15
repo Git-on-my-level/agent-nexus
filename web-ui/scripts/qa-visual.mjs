@@ -116,7 +116,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local/decide",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("[data-decision-ref]");
+      await page.waitForSelector("[data-decide-row]");
       await page.waitForSelector("text=Review fleet onboarding runbook");
     },
   },
@@ -259,7 +259,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local/decide",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("[data-decision-ref]");
+      await page.waitForSelector("[data-decide-row]");
       // The sidebar trigger only exists on wide layouts; the shortcut works everywhere.
       if (await page.locator(".shell-search-trigger").isVisible()) {
         await page.click(".shell-search-trigger");
