@@ -9,8 +9,11 @@
    * the card sits in the hole at once while the move is sent. Arrow keys move
    * a focused card a column at a time; Enter opens it.
    *
-   * Touch never starts a drag — on a phone a horizontal swipe scrolls the
-   * board — so every card also has a "Move to" select.
+   * Touch never starts a drag, so every card also has a "Move to" select.
+   *
+   * Below `md` the board is one column at a time: a stage switcher with
+   * counts picks the column, rather than five 16rem columns scrolled
+   * sideways behind a narrow window.
    */
   import { tick } from "svelte";
   import { flip } from "svelte/animate";
@@ -75,6 +78,14 @@
       return { ...group, rows: rest };
     });
   });
+
+  /** Phone: the one stage on screen. Defaults to the first with cards. */
+  let chosenStage = $state("");
+  let stage = $derived(
+    chosenStage ||
+      columns.find((column) => column.rows.length)?.placement ||
+      PLACEMENTS[0],
+  );
 
   /** @type {{ row: object, pointerId: number, startX: number, startY: number, offsetX: number, offsetY: number, width: number, height: number, target: HTMLElement | null } | null} */
   let drag = $state(null);
@@ -230,7 +241,10 @@
       target.index === fromIndex
     )
       return;
-    commit(session.row, target.placement, before);
+    const ref = session.row.ref;
+    void commit(session.row, target.placement, before).then(() =>
+      followMove(ref, target.placement),
+    );
   }
 
   /**
@@ -278,6 +292,27 @@
     event.stopPropagation();
   }
 
+  /**
+   * Phone: a card moved to another stage would vanish into a hidden column.
+   * Once the move has landed, follow it there and keep focus on the card, so
+   * the reader sees where it went (and can move it back).
+   */
+  async function followMove(ref, placement, { focus = true } = {}) {
+    if (!window.matchMedia?.("(max-width: 767px)").matches) return;
+    const landedThere = columns
+      .find((column) => column.placement === placement)
+      ?.rows.some((row) => row.ref === ref);
+    if (!landedThere) return;
+    chosenStage = placement;
+    if (!focus) return;
+    await tick();
+    document
+      .querySelector(
+        `[data-work-slot][data-work-ref="${globalThis.CSS?.escape?.(ref) ?? ref.replace(/["\\]/g, "\\$&")}"]`,
+      )
+      ?.focus();
+  }
+
   function onCardKey(event, row) {
     if (event.repeat) {
       if (event.key === "ArrowLeft" || event.key === "ArrowRight")
@@ -305,6 +340,7 @@
     if (!next || next === row.placement) return;
     const ref = row.ref;
     void commit(row, next, "").then(async () => {
+      await followMove(ref, next, { focus: false });
       await tick();
       const active = document.activeElement;
       if (
@@ -322,6 +358,32 @@
   }
 </script>
 
+<div
+  class="-mt-1 mb-3 flex gap-0.5 rounded-md border border-line bg-bg-soft p-0.5 md:hidden"
+  role="group"
+  aria-label="Stage"
+  data-watch-stage-switcher
+>
+  {#each columns as column (column.placement)}
+    <button
+      type="button"
+      class="flex min-h-11 min-w-0 flex-auto flex-col items-center justify-center rounded px-1 py-1 leading-tight transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {stage ===
+      column.placement
+        ? 'bg-panel-hover text-fg shadow-sm'
+        : 'text-fg-muted'}"
+      aria-pressed={stage === column.placement}
+      data-watch-stage-tab={column.placement}
+      onclick={() => (chosenStage = column.placement)}
+    >
+      <span class="text-body font-medium tabular-nums"
+        >{column.rows.length}</span
+      >
+      <span class="max-w-full truncate text-[11px] tracking-tight"
+        >{column.label}</span
+      >
+    </button>
+  {/each}
+</div>
 <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
@@ -342,14 +404,20 @@
   {#each columns as column (column.placement)}
     {@const slots = slotsFor(column)}
     <section
-      class="column flex w-64 shrink-0 flex-col rounded-md bg-bg-soft p-2 xl:w-auto xl:min-w-[11.5rem] xl:flex-1 xl:basis-0"
+      class="column flex w-64 shrink-0 flex-col rounded-md bg-bg-soft p-2 max-md:w-full xl:w-auto xl:min-w-[11.5rem] xl:flex-1 xl:basis-0 {stage ===
+      column.placement
+        ? ''
+        : 'max-md:hidden'}"
       class:column--over={dragging && hover?.placement === column.placement}
       data-work-phase-column
       data-work-phase={column.placement}
       data-watch-column={column.placement}
       aria-label={column.label}
     >
-      <div class="mb-1.5 flex items-baseline justify-between gap-2 px-1 py-1">
+      <!-- On a phone the stage switcher above names the column. -->
+      <div
+        class="mb-1.5 flex items-baseline justify-between gap-2 px-1 py-1 max-md:sr-only"
+      >
         <h2 class="ui-label mb-0 truncate">{column.label}</h2>
         <span class="shrink-0 text-micro tabular-nums text-fg-subtle"
           >{column.rows.length}</span
@@ -398,14 +466,16 @@
                   >
                     <span aria-hidden="true">Move to</span>
                     <select
-                      class="min-w-0 cursor-pointer rounded-sm border border-line bg-bg-soft px-1 py-0.5 text-micro text-fg-muted hover:border-line-strong hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                      class="min-w-0 cursor-pointer rounded-sm border border-line bg-bg-soft px-1 py-0.5 text-micro text-fg-muted max-md:min-h-11 max-md:px-2 max-md:text-meta hover:border-line-strong hover:text-fg focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
                       value={row.placement}
                       aria-label="Move {row.title} to"
                       onchange={(event) => {
                         const to = event.currentTarget.value;
                         event.currentTarget.value = row.placement;
                         if (to && to !== row.placement)
-                          void commit(row, to, "");
+                          void commit(row, to, "").then(() =>
+                            followMove(row.ref, to),
+                          );
                       }}
                     >
                       {#each PLACEMENTS as placement (placement)}

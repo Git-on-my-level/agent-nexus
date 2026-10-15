@@ -62,24 +62,27 @@ async function flush(page) {
 test.describe("phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
+  const card = (page, id) => page.locator(`[data-decide-card="${id}"]`);
+
   test("one tap answers from a cold open (S9)", async ({ page, context }) => {
     const bodies = await setup(context);
     await page.goto(LIST);
-    const row = page.locator(`[data-decide-row="${MERGE.inbox_item_id}"]`);
-    await expect(row).toBeVisible();
+    // A phone gets a stack of whole decisions, not a list to tap into.
+    await expect(page.locator("[data-decide-stack]")).toBeVisible();
+    await expect(page.locator("[data-decide-row]")).toHaveCount(0);
     // The order is decide_by first.
-    await expect(page.locator("[data-decide-row]").first()).toHaveAttribute(
-      "data-decide-row",
+    await expect(page.locator("[data-decide-card]").first()).toHaveAttribute(
+      "data-decide-card",
       "ask-88",
     );
-    // The list is its own screen on a phone: tap the decision, then answer.
-    await row.tap();
-    const pane = page.locator(
-      `[data-variant="pane"][data-decision-ref="${MERGE.ref}"]`,
+    const merge = card(page, MERGE.inbox_item_id);
+    await expect(merge.locator("[data-decision-body]")).toContainText(
+      "Calibration drift",
     );
-    await pane.locator('[data-decision-proposal="1"]').tap();
-    // Answered: it leaves the list, the way an inbox clears.
-    await expect(pane).toHaveCount(0);
+    await merge.locator('[data-decision-proposal="1"]').tap();
+    // Answered: the card folds to one line while the answer waits.
+    await expect(merge.locator("[data-decide-answered]")).toBeVisible();
+    await expect(merge.locator("[data-decision-proposal]")).toHaveCount(0);
     await flush(page);
     await expect.poll(() => bodies.length).toBe(1);
     expect(bodies[0]).toMatchObject({
@@ -87,6 +90,217 @@ test.describe("phone", () => {
       outcome: "answered",
     });
     expect(bodies[0].idempotency_key).toBeTruthy();
+    // Sent: it leaves the stack.
+    await expect(merge).toHaveCount(0);
+  });
+
+  test("Undo on the folded card puts the decision back unsent", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context);
+    await page.goto(LIST);
+    const merge = card(page, MERGE.inbox_item_id);
+    await merge.locator('[data-decision-proposal="2"]').tap();
+    await merge.locator("[data-decide-undo]").tap();
+    await expect(merge.locator('[data-decision-proposal="2"]')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(bodies).toHaveLength(0);
+  });
+
+  test("?item= scrolls to its card and highlights it", async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    await page.goto(`${LIST}?item=ask-93`);
+    const target = card(page, "ask-93");
+    await expect(target).toHaveAttribute("data-highlighted", "true");
+    await expect(target).toBeInViewport();
+  });
+
+  test("Reply keeps Send on screen and sends the text", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context);
+    await page.goto(LIST);
+    const merge = card(page, MERGE.inbox_item_id);
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    const box = merge.locator("[data-decision-reply]");
+    await expect(box).toBeFocused();
+    await box.fill("Merge after the rig 4 rerun.");
+    const send = merge.getByRole("button", { name: "Send reply" });
+    await expect(send).toBeInViewport();
+    // Clear of the bottom nav.
+    const nav = await page.locator(".shell-bottom-nav").boundingBox();
+    const sendBox = await send.boundingBox();
+    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(nav.y);
+    await send.tap();
+    await flush(page);
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0].response_text).toBe("Merge after the rig 4 rerun.");
+  });
+});
+
+test.describe("phone composer", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  const LONG = {
+    ...brief,
+    decisions: brief.decisions.map((decision) =>
+      decision.inbox_item_id === MERGE.inbox_item_id
+        ? {
+            ...decision,
+            body: Array(24)
+              .fill("Calibration drift is under 2% on five of six rigs.")
+              .join("\n\n"),
+          }
+        : decision,
+    ),
+  };
+
+  /** True when the element's centre is the element (nothing on top of it). */
+  const uncovered = (locator) =>
+    locator.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.x + box.width / 2,
+        box.y + box.height / 2,
+      );
+      return Boolean(hit) && (hit === node || node.contains(hit));
+    });
+
+  test("a typed reply pins Send above the nav, then above the keyboard", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context, {
+      briefRoute: (route) =>
+        json(route, { ...LONG, generated_at: new Date().toISOString() }),
+    });
+    await page.goto(LIST);
+    const merge = page.locator(`[data-decide-card="${MERGE.inbox_item_id}"]`);
+    await merge.locator("[data-decision-more]").tap();
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    const field = merge.locator("[data-decision-reply]");
+    await expect(field).toBeFocused();
+    // The long body puts the composer far below the fold in flow.
+    await merge.evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await field.fill("Merge after the rig 4 rerun.");
+
+    const bar = merge.locator("[data-decision-composer]");
+    await expect(bar).toHaveAttribute("data-pinned", "true");
+    const send = merge.getByRole("button", { name: "Send reply" });
+    expect(await uncovered(send)).toBe(true);
+    expect(await uncovered(field)).toBe(true);
+    const nav = await page.locator(".shell-bottom-nav").boundingBox();
+    const sendBox = await send.boundingBox();
+    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(nav.y);
+
+    // An on-screen keyboard: the visual viewport loses its bottom 340px.
+    const KEYBOARD = 340;
+    await page.evaluate((keyboard) => {
+      const viewport = window.visualViewport;
+      Object.defineProperty(viewport, "height", {
+        configurable: true,
+        get: () => window.innerHeight - keyboard,
+      });
+      viewport.dispatchEvent(new Event("resize"));
+    }, KEYBOARD);
+    const top = 844 - KEYBOARD;
+    await expect
+      .poll(async () => {
+        const box = await send.boundingBox();
+        return box.y + box.height;
+      })
+      .toBeLessThanOrEqual(top);
+    const fieldBox = await field.boundingBox();
+    expect(fieldBox.y).toBeGreaterThanOrEqual(0);
+    expect(fieldBox.y + fieldBox.height).toBeLessThanOrEqual(top);
+    expect(await uncovered(send)).toBe(true);
+    expect(await uncovered(field)).toBe(true);
+
+    // Enter is a newline on a phone keyboard; Send is the way out.
+    await field.press("Enter");
+    await expect(field).toHaveValue("Merge after the rig 4 rerun.\n");
+    await expect(field).toBeFocused();
+    await send.tap();
+    await flush(page);
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0].response_text).toBe("Merge after the rig 4 rerun.");
+  });
+
+  test("touch taps on a pinned bar's Send and Cancel still click", async ({
+    page,
+    context,
+  }) => {
+    const bodies = await setup(context, {
+      briefRoute: (route) =>
+        json(route, { ...LONG, generated_at: new Date().toISOString() }),
+    });
+    await page.goto(LIST);
+    const merge = page.locator(`[data-decide-card="${MERGE.inbox_item_id}"]`);
+    const bar = merge.locator("[data-decision-composer]");
+    const field = merge.locator("[data-decision-reply]");
+    const send = merge.getByRole("button", { name: "Send reply" });
+    const cancel = merge.locator("[data-decision-reply-cancel]");
+
+    // Nothing may cancel the pointerdown a touch tap's click depends on.
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    await expect(bar).toHaveAttribute("data-pinned", "true");
+    for (const button of [send, cancel]) {
+      const cancelled = await button.evaluate(
+        (node) =>
+          !node.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              cancelable: true,
+              pointerType: "touch",
+            }),
+          ),
+      );
+      expect(cancelled).toBe(false);
+    }
+
+    // Cancel closes the pinned bar.
+    await cancel.tap();
+    await expect(field).toBeHidden();
+    await expect(merge.locator("[data-decision-reply-toggle]")).toBeVisible();
+
+    // Send posts the reply from the pinned bar.
+    await merge.locator("[data-decision-reply-toggle]").tap();
+    await expect(bar).toHaveAttribute("data-pinned", "true");
+    await field.fill("Hold until rig 4 settles.");
+    await send.tap();
+    await flush(page);
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0].response_text).toBe("Hold until rig 4 settles.");
+  });
+
+  test("the permalink's reply pins while it is in use", async ({
+    page,
+    context,
+  }) => {
+    await setup(context, {
+      briefRoute: (route) =>
+        json(route, { ...LONG, generated_at: new Date().toISOString() }),
+    });
+    await page.goto(`${LIST}/${MERGE.inbox_item_id}`);
+    const field = page.locator("[data-decision-reply]");
+    await expect(page.locator("[data-decision-composer]")).not.toHaveAttribute(
+      "data-pinned",
+      "true",
+    );
+    await field.focus();
+    await expect(page.locator("[data-decision-composer]")).toHaveAttribute(
+      "data-pinned",
+      "true",
+    );
+    await field.fill("Hold for rig 4.");
+    expect(
+      await uncovered(page.getByRole("button", { name: "Send reply" })),
+    ).toBe(true);
   });
 });
 
@@ -246,30 +460,33 @@ test("a refused answer comes back with its recovery controls", async ({
 test.describe("phone keyboard", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("number keys on the list never answer a hidden decision", async ({
+  test("number keys in the stack never answer a decision", async ({
     page,
     context,
   }) => {
     const bodies = await setup(context);
     await page.goto(LIST);
-    await expect(page.locator("[data-decide-row]").first()).toBeVisible();
+    await expect(page.locator("[data-decide-card]").first()).toBeVisible();
     await page.keyboard.press("1");
     await page.keyboard.press("1");
     await page.waitForTimeout(300);
-    await expect(page.locator("[data-decide-row]")).toHaveCount(
+    await expect(page.locator("[data-decide-card]")).toHaveCount(
       brief.decisions.length,
     );
+    await expect(page.locator("[data-decide-answered]")).toHaveCount(0);
+    await expect(page.locator("[data-decision-armed]")).toHaveCount(0);
     await flush(page);
     expect(bodies).toHaveLength(0);
   });
 
-  test("a link to an item that is gone shows the list", async ({
+  test("a link to an item that is gone shows the stack", async ({
     page,
     context,
   }) => {
     await setup(context);
     await page.goto(`${LIST}?item=ask-gone`);
-    await expect(page.locator("[data-decide-row]").first()).toBeVisible();
-    await expect(page.locator('[data-variant="pane"]')).toBeHidden();
+    await expect(page.locator("[data-decide-card]").first()).toBeVisible();
+    await expect(page.locator("[data-highlighted]")).toHaveCount(0);
+    await expect(page.locator('[data-variant="pane"]')).toHaveCount(0);
   });
 });

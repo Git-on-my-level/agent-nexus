@@ -87,6 +87,92 @@ test("the by-stage view shows the five placements", async ({
   ).toBeVisible();
 });
 
+test.describe("phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("by stage shows one column at a time with a counted switcher", async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    await page.goto(`${WATCH}?view=board`);
+    const switcher = page.locator("[data-watch-stage-switcher]");
+    await expect(switcher).toBeVisible();
+    // Counts on every stage; the first stage with cards is on screen.
+    await expect(
+      switcher.locator('[data-watch-stage-tab="review"]'),
+    ).toContainText("1");
+    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+    await expect(page.locator('[data-watch-column="backlog"]')).toBeVisible();
+
+    await switcher.locator('[data-watch-stage-tab="review"]').tap();
+    await expect(
+      switcher.locator('[data-watch-stage-tab="review"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    const review = page.locator('[data-watch-column="review"]');
+    await expect(review).toBeVisible();
+    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+    // Every card keeps its Move to menu, and nothing scrolls sideways.
+    await expect(
+      review.locator('[data-work-ref="card:fleet-onboarding"] select'),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+  });
+});
+
+test.describe("phone move", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("a card moved with Move to takes the switcher with it", async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    const now = new Date().toISOString();
+    await context.route(/\/work\/card(?:%3A|:)labels/, (route) =>
+      json(route, {
+        work: {
+          ref: "card:labels",
+          id: "labels",
+          title: "Label scheme",
+          phase: "backlog",
+          board_ref: "board:b1",
+          version: 1,
+          source: { authority: "nexus" },
+          updated_at: now,
+        },
+      }),
+    );
+    await context.route(/\/boards\/(?:board(?:%3A|:))?b1/, (route) =>
+      json(route, { board: { id: "b1", updated_at: now } }),
+    );
+    await context.route(/\/cards\/[^/]+\/move/, (route) =>
+      json(route, { card: { id: "labels" } }),
+    );
+    await page.goto(`${WATCH}?view=board`);
+    const card = page.locator(
+      '[data-watch-column="backlog"] [data-work-ref="card:labels"]',
+    );
+    await expect(card).toBeVisible();
+    await card.locator("select").selectOption("review");
+
+    // The reader goes with it: Review is on screen, with the card focused.
+    await expect(
+      page.locator('[data-watch-stage-tab="review"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    const moved = page.locator(
+      '[data-watch-column="review"] [data-work-ref="card:labels"]',
+    );
+    await expect(moved).toBeVisible();
+    await expect(moved).toBeFocused();
+    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+  });
+});
+
 test("a failed read shows a banner with Retry, never the raw body", async ({
   page,
   context,

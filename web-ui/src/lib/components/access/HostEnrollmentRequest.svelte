@@ -43,7 +43,7 @@
   aria-label={`Enrollment request from ${enrollment.requested_slug}`}
 >
   <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
-    <div class="min-w-0 flex-1 space-y-1">
+    <div class="min-w-[min(100%,14rem)] flex-1 space-y-1">
       <p class="text-meta font-medium text-fg">
         {enrollment.requested_slug}
         <span class="font-normal text-fg-muted">wants to join as a host</span>
@@ -86,7 +86,7 @@
       </dl>
     </div>
 
-    <div class="shrink-0 text-right">
+    <div class="shrink-0 sm:text-right">
       <p class="text-micro text-fg-subtle">Code on the machine</p>
       <p
         class="font-mono text-[18px] font-semibold leading-7 tracking-[0.12em] text-fg"
