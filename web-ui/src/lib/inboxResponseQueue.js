@@ -797,6 +797,35 @@ export function dismissInboxResponseFailure(itemId = "") {
   );
 }
 
+/**
+ * Drop a failed response the reader chose to discard, typically because its
+ * item no longer exists (404) and no retry can succeed. The reader decides;
+ * the page offers Copy first so the text is never lost silently.
+ */
+export function discardInboxResponse(itemId) {
+  const target = String(itemId ?? "").trim();
+  if (!target) return;
+  const entry = failedByItem.get(target);
+  if (entry) {
+    cancelledSends.add(entry.request.idempotency_key);
+    inboxUnsentResponses.update((records) =>
+      records.filter(
+        (record) =>
+          record.request.idempotency_key !== entry.request.idempotency_key,
+      ),
+    );
+    void Promise.resolve(entry.saved)
+      .catch(() => {})
+      .then(() => removePersistedResponse(entry, "undo"))
+      .then(() => cancelledSends.delete(entry.request.idempotency_key))
+      .catch(() => {});
+  }
+  forgetFailure(target);
+  inboxResponseToast.update((toast) =>
+    toast?.state === "failed" && toast.itemId === target ? null : toast,
+  );
+}
+
 export function editInboxResponse(itemId) {
   const entry = failedByItem.get(String(itemId));
   if (!entry) return;
@@ -988,6 +1017,8 @@ async function commit(entry, recovered = false) {
       deadline: 0,
       error: failure.error,
       expired: failure.expired,
+      gone: failure.status === 404,
+      retrying: classification.state === "retrying",
     });
   } finally {
     inFlight.delete(entry.request.idempotency_key);
