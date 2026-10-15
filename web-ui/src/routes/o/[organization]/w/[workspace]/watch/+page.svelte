@@ -303,6 +303,9 @@
               ? 'bg-panel-hover text-fg shadow-sm'
               : 'text-fg-muted hover:text-fg'}"
             aria-pressed={view === key}
+            aria-label={key === "loops" && loopCount
+              ? `${text}, ${loopCount}`
+              : undefined}
             data-watch-view={key}
             onclick={() => setView(key)}
             >{text}{#if key === "loops" && loopCount}<span

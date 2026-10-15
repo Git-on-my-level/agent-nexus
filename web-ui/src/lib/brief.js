@@ -387,7 +387,7 @@ export function isLoop(row) {
   return Array.isArray(row?.series) && row.series.length > 0;
 }
 
-/** Seconds since the last evidence, or null when there has been none. */
+/** Seconds since the last evidence, or null when there has been none (or it is unreadable). */
 function silentFor(row, now) {
   const at = time(row.lastEvidenceAt);
   return at === null ? null : Math.max(0, Math.floor((now - at) / 1000));
@@ -396,11 +396,11 @@ function silentFor(row, now) {
 export function loopGroup(row, now = Date.now()) {
   if (row.state === "done") return "done";
   if (row.waitingOnYouCount > 0) return "waiting";
+  // A loop with no evidence yet has not gone quiet; only a dated gap counts.
   const quiet = silentFor(row, now);
   if (
     row.state === "past_promise" ||
-    quiet === null ||
-    quiet >= LOOP_SILENT_SECONDS
+    (quiet !== null && quiet >= LOOP_SILENT_SECONDS)
   )
     return "silent";
   if (row.metricFlat?.flat) return "flat";
@@ -416,7 +416,7 @@ export function groupLoops(initiatives, now = Date.now()) {
   function within(group, a, b) {
     if (group === "waiting") return b.waitingOnYouCount - a.waitingOnYouCount;
     if (group === "silent")
-      return (silentFor(b, now) ?? Infinity) - (silentFor(a, now) ?? Infinity);
+      return (silentFor(b, now) ?? 0) - (silentFor(a, now) ?? 0);
     if (group === "flat")
       return (
         (b.metricFlat?.for_seconds ?? 0) - (a.metricFlat?.for_seconds ?? 0)
@@ -435,16 +435,19 @@ export function groupLoops(initiatives, now = Date.now()) {
 /** A metric's latest value for display: numbers trimmed, never "NaN". */
 export function formatMetricValue(value) {
   if (value === null || value === undefined || value === "") return "";
+  const numeric =
+    typeof value === "number" ||
+    /^\s*-?(\d+\.?\d*|\.\d+)\s*$/.test(String(value));
+  if (!numeric) return String(value);
   const number = Number(value);
-  if (typeof value === "number" || (String(value).trim() && !isNaN(number))) {
-    if (!Number.isFinite(number)) return String(value);
-    const abs = Math.abs(number);
-    if (abs >= 1000)
-      return String(Math.round(number)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    if (abs >= 10) return String(Math.round(number * 10) / 10);
-    return String(Math.round(number * 1000) / 1000);
-  }
-  return String(value);
+  if (!Number.isFinite(number)) return "";
+  const abs = Math.abs(number);
+  if (abs === 0) return "0";
+  if (abs >= 1e15 || abs < 0.001) return number.toExponential(2);
+  if (abs >= 1000)
+    return String(Math.round(number)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (abs >= 10) return String(Math.round(number * 10) / 10);
+  return String(Math.round(number * 1000) / 1000);
 }
 
 /** `[{ placement, label, rows }]` for every board column, empty or not. */

@@ -88,31 +88,35 @@
       class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-micro text-fg-muted"
       data-watch-metrics
     >
-      {#each initiative.series as metric (metric.ref)}
+      {#each initiative.series as metric, index (metric.ref)}
         {@const value = formatMetricValue(metric.last_value)}
         {@const age = formatAgo(metric.last_at, now)}
         <span
-          class="inline-flex min-w-0 items-baseline gap-1"
+          class="inline-flex min-w-0 max-w-full items-baseline gap-1"
           title={metric.ref}
           data-source="computed:initiatives.series"
         >
           <span class="truncate">{metric.name || metric.ref}</span>
-          {#if value}<span class="font-medium tabular-nums text-fg"
-              >{value}</span
+          {#if value}<span
+              class="max-w-[10rem] truncate font-medium tabular-nums text-fg"
+              title={value}>{value}</span
             >{:else}<span class="text-fg-subtle">no data</span>{/if}
-          {#if age}<span class="text-fg-subtle">· {age}</span>{/if}
+          {#if age}<span class="shrink-0 text-fg-subtle">· {age}</span>{/if}
+          {#if index === 0 && initiative.metricFlat?.flat}
+            <span
+              class="ui-badge ui-badge--warn shrink-0"
+              title="{metric.name ||
+                metric.ref} has not moved beyond tolerance in the last {formatSpan(
+                initiative.metricFlat.window_seconds,
+              )}"
+              data-source="computed:initiatives.metric_flat"
+              >{initiative.metricFlat.for_seconds > 0
+                ? `flat ${formatSpan(initiative.metricFlat.for_seconds)}`
+                : "flat"}</span
+            >
+          {/if}
         </span>
       {/each}
-      {#if initiative.metricFlat?.flat}
-        <span
-          class="ui-badge ui-badge--warn"
-          title="No movement beyond tolerance in the last {formatSpan(
-            initiative.metricFlat.window_seconds,
-          )}"
-          data-source="computed:initiatives.metric_flat"
-          >flat {formatSpan(initiative.metricFlat.for_seconds)}</span
-        >
-      {/if}
     </p>
   {/if}
 {/snippet}

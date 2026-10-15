@@ -40,7 +40,15 @@ describe("Watch loops", () => {
       loopGroup(loop({ waitingOnYouCount: 1, state: "past_promise" }), NOW),
     ).toBe("waiting");
     expect(loopGroup(loop({ state: "past_promise" }), NOW)).toBe("silent");
-    expect(loopGroup(loop({ lastEvidenceAt: "" }), NOW)).toBe("silent");
+    // No evidence yet (or an unreadable date) is not silence.
+    expect(loopGroup(loop({ lastEvidenceAt: "" }), NOW)).toBe("moving");
+    expect(loopGroup(loop({ lastEvidenceAt: null }), NOW)).toBe("moving");
+    expect(loopGroup(loop({ lastEvidenceAt: "not a date" }), NOW)).toBe(
+      "moving",
+    );
+    expect(
+      loopGroup(loop({ lastEvidenceAt: ago(LOOP_SILENT_SECONDS - 1) }), NOW),
+    ).toBe("moving");
     expect(
       loopGroup(loop({ lastEvidenceAt: ago(LOOP_SILENT_SECONDS) }), NOW),
     ).toBe("silent");
@@ -109,6 +117,33 @@ describe("Watch loops", () => {
     ).toBe(false);
   });
 
+  it("puts a never-evidenced loop past its promise after dated silence", () => {
+    const [silent] = groupLoops(
+      [
+        loop({ id: "new", lastEvidenceAt: null, state: "past_promise" }),
+        loop({ id: "quiet-9d", lastEvidenceAt: ago(9 * 86400) }),
+      ],
+      NOW,
+    );
+    expect(silent.rows.map((r) => r.id)).toEqual(["quiet-9d", "new"]);
+  });
+
+  it("breaks ties by the initiative order and keeps Done last", () => {
+    const groups = groupLoops(
+      [
+        loop({ id: "done", state: "done" }),
+        loop({ id: "b", title: "b", waitingOnYouCount: 1 }),
+        loop({ id: "a", title: "a", waitingOnYouCount: 1 }),
+      ],
+      NOW,
+    );
+    expect(groups.map((g) => g.group)).toEqual(["waiting", "done"]);
+    expect(groups[0].rows).toHaveLength(2);
+    expect(new Set(groups[0].rows.map((r) => r.id))).toEqual(
+      new Set(["a", "b"]),
+    );
+  });
+
   it("formats metric values without noise", () => {
     expect(formatMetricValue(null)).toBe("");
     expect(formatMetricValue("")).toBe("");
@@ -118,5 +153,12 @@ describe("Watch loops", () => {
     expect(formatMetricValue(12345.6)).toBe("12,346");
     expect(formatMetricValue("ok")).toBe("ok");
     expect(formatMetricValue("3.5")).toBe("3.5");
+    expect(formatMetricValue(-12345.6)).toBe("-12,346");
+    expect(formatMetricValue(-0.0001)).toBe("-1.00e-4");
+    expect(formatMetricValue(NaN)).toBe("");
+    expect(formatMetricValue(Infinity)).toBe("");
+    expect(formatMetricValue(Number.MAX_VALUE)).toBe("1.80e+308");
+    expect(formatMetricValue("1e2")).toBe("1e2");
+    expect(formatMetricValue("NaN")).toBe("NaN");
   });
 });
