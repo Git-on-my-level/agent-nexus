@@ -34,9 +34,13 @@ How each warning is computed, and what it costs:
 - `ask_overtaken_subject`: reuses the subject card read that grounds the ask
   thread and checks its `possibly_moot.flagged`. No extra request.
 - `ask_auto_created_card`: the ask had no `--subject-ref` and no current card,
-  so the CLI created a ready card. After that write, one best-effort
-  `GET /work?limit=50` (newest first) supplies up to three other open
-  initiatives as suggestions. A failed read leaves the warning without them.
+  so the CLI created a ready card. After that write, best-effort
+  `GET /work?limit=50` pages (newest first) supply up to three other open
+  initiatives. `GET /work` has no parameter that excludes done or cancelled
+  (`phase` is one exact value), so closed rows are dropped client-side and
+  the server order is kept. The CLI follows `next_cursor` until it has three
+  suggestions or four pages. A failed first read leaves the warning without
+  them.
 - `work_near_duplicate`, `work_over_target`: one `GET /work?limit=200` before
   the write; token Jaccard or normalized Levenshtein >= 0.8 against open
   initiative titles; more than 15 open initiatives.

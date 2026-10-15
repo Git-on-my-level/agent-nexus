@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +45,9 @@ func planHelpText(topic string) (string, bool) {
 		if topic == "plan step add" || topic == "plan step update" {
 			text += planRefHelp
 		}
+		if topic == "plan set" {
+			text += planSetRefHelp
+		}
 		if topic == "plan step update" {
 			text += "Pass at least one field; an empty --after clears dependencies. Source state takes precedence over fallback --status.\n"
 		}
@@ -58,10 +63,13 @@ func planHelpText(topic string) (string, bool) {
 		"anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]\n" +
 		"anx plan step rm <card> <step-id>\n" +
 		planRefHelp +
+		planSetRefHelp +
 		"Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.\n", true
 }
 
 const planRefHelp = "--ref accepts a typed ref (card:, doc:, document:, topic:, or series:) or an http(s) URL such as a Linear issue or GitHub pull request. Bare tracker ids (SCA-123) and pull numbers (#123) are rejected; pass the full URL.\n"
+
+const planSetRefHelp = "Each step ref in --from-file is a typed ref or an http(s) URL. A bare tracker id (SCA-123) or pull number (#123) is a usage error that names the step; pass the full URL.\n"
 
 func parsePlanCommand(args []string) (planCommand, error) {
 	p := planCommand{fields: map[string]string{}, name: "plan"}
@@ -134,6 +142,11 @@ func parsePlanCommand(args []string) (planCommand, error) {
 	if p.name == "plan set" && p.file == "" {
 		return p, errnorm.Usage("invalid_request", "--from-file is required")
 	}
+	if p.name == "plan set" {
+		if err := rejectBarePlanRefsInFile(p.file); err != nil {
+			return p, err
+		}
+	}
 	if p.name == "plan step add" && strings.TrimSpace(p.fields["title"]) == "" {
 		return p, errnorm.Usage("invalid_request", "--title is required")
 	}
@@ -156,11 +169,60 @@ func parsePlanCommand(args []string) (planCommand, error) {
 
 func rejectBarePlanRef(ref string) error {
 	ref = strings.TrimSpace(ref)
-	if ref == "" {
+	if !isBarePlanRef(ref) {
 		return nil
 	}
-	if bareTrackerID.MatchString(ref) || barePRNumber.MatchString(ref) {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("--ref %q is not a ref or URL. Pass the full URL (for example the Linear or GitHub URL) or a typed ref such as card:<slug>.", ref))
+	return errnorm.Usage("invalid_request", fmt.Sprintf("--ref %q is not a ref or URL. Pass the full URL (for example the Linear or GitHub URL) or a typed ref such as card:<slug>.", ref))
+}
+
+func isBarePlanRef(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	return ref != "" && (bareTrackerID.MatchString(ref) || barePRNumber.MatchString(ref))
+}
+
+// rejectBarePlanRefsInFile checks a plan file before identity resolution.
+// Stdin is validated when the body is read. A missing or invalid file keeps
+// the existing read error.
+func rejectBarePlanRefsInFile(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" || path == "-" {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var plan map[string]any
+	if json.Unmarshal(raw, &plan) != nil || plan == nil {
+		return nil
+	}
+	return rejectBarePlanStepRefs(plan)
+}
+
+func rejectBarePlanStepRefs(plan map[string]any) error {
+	if plan == nil {
+		return nil
+	}
+	steps, ok := plan["steps"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, raw := range steps {
+		step, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		ref := strings.TrimSpace(anyString(step["ref"]))
+		if !isBarePlanRef(ref) {
+			continue
+		}
+		name := strings.TrimSpace(anyString(step["id"]))
+		if name == "" {
+			name = fmt.Sprintf("steps[%d]", i)
+		} else {
+			name = strconv.Quote(name)
+		}
+		return errnorm.Usage("invalid_request", fmt.Sprintf("step %s ref %q is not a ref or URL. Pass the full URL (for example the Linear or GitHub URL) or a typed ref such as card:<slug>.", name, ref))
 	}
 	return nil
 }
@@ -201,6 +263,9 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 		if _, ok := plan["steps"].([]any); !ok {
 			return nil, p.name, errnorm.Usage("invalid_json", "plan steps must be an array")
+		}
+		if err := rejectBarePlanStepRefs(plan); err != nil {
+			return nil, p.name, err
 		}
 	}
 	current, err := a.invokeRawJSON(ctx, cfg, "plan show", "GET", path, nil)

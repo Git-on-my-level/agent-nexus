@@ -12,8 +12,6 @@ func createdRef(command string, value any) string {
 	switch command {
 	case "ask", "review", "escalate":
 		return anyString(root["ask_id"])
-	case "ask batch":
-		return joinRefs(askBatchRefs(root))
 	case "note":
 		return anyString(root["note_ref"])
 	case "work create":
@@ -30,8 +28,6 @@ func createdRef(command string, value any) string {
 		return firstNonEmpty(resourceRef(asMap(root["artifact"]), "artifact"), anyString(root["ref"]))
 	case "events create":
 		return firstNonEmpty(resourceRef(asMap(root["event"]), "event"), anyString(root["ref"]))
-	case "boards cards create-batch":
-		return joinRefs(refsFromCards(asSlice(root["cards"])))
 	case "plan step add":
 		return strings.TrimSpace(anyString(root["ref"]))
 	default:
@@ -50,11 +46,18 @@ func emitsCreatedRef(command string) bool {
 	}
 }
 
-// ensureCreatedRef stamps result.ref when the create command did not already
-// return one, and returns the ref text output should print first.
+// ensureCreatedRef stamps result.ref for a single new resource and returns the
+// text to print before the envelope. Batch creates print one ref per line and
+// stamp result.ref only when the response already has a batch id.
 func ensureCreatedRef(command string, root map[string]any) string {
 	if root == nil || root["dry_run"] == true || !emitsCreatedRef(command) {
 		return ""
+	}
+	if isBatchCreate(command) {
+		if id := strings.TrimSpace(anyString(root["batch_id"])); id != "" && strings.TrimSpace(anyString(root["ref"])) == "" {
+			root["ref"] = id
+		}
+		return strings.Join(batchCreatedRefs(command, root), "\n")
 	}
 	ref := createdRef(command, root)
 	if ref == "" {
@@ -64,6 +67,21 @@ func ensureCreatedRef(command string, root map[string]any) string {
 		root["ref"] = ref
 	}
 	return ref
+}
+
+func isBatchCreate(command string) bool {
+	return command == "ask batch" || command == "boards cards create-batch"
+}
+
+func batchCreatedRefs(command string, root map[string]any) []string {
+	switch command {
+	case "ask batch":
+		return askBatchRefs(root)
+	case "boards cards create-batch":
+		return refsFromCards(root["cards"])
+	default:
+		return nil
+	}
 }
 
 func resourceRef(item map[string]any, prefix string) string {
@@ -88,35 +106,40 @@ func resourceRef(item map[string]any, prefix string) string {
 
 func askBatchRefs(root map[string]any) []string {
 	var refs []string
-	for _, raw := range asSlice(root["asks"]) {
-		if ref := anyString(asMap(raw)["ask_id"]); ref != "" {
+	eachObject(root["asks"], func(item map[string]any) {
+		if ref := anyString(item["ask_id"]); ref != "" {
 			refs = append(refs, ref)
 		}
-	}
+	})
 	return refs
 }
 
-func refsFromCards(items []any) []string {
+func refsFromCards(items any) []string {
 	var refs []string
-	for _, raw := range items {
-		item := asMap(raw)
+	eachObject(items, func(item map[string]any) {
 		if nested := asMap(item["card"]); len(nested) > 0 {
 			item = nested
 		}
 		if ref := resourceRef(item, "card"); ref != "" {
 			refs = append(refs, ref)
 		}
-	}
+	})
 	return refs
 }
 
-func joinRefs(refs []string) string {
-	var out []string
-	for _, ref := range refs {
-		ref = strings.TrimSpace(ref)
-		if ref != "" {
-			out = append(out, ref)
+func eachObject(raw any, fn func(map[string]any)) {
+	switch items := raw.(type) {
+	case []any:
+		for _, raw := range items {
+			if item := asMap(raw); item != nil {
+				fn(item)
+			}
+		}
+	case []map[string]any:
+		for _, item := range items {
+			if item != nil {
+				fn(item)
+			}
 		}
 	}
-	return strings.Join(out, " ")
 }

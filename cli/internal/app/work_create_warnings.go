@@ -3,7 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
-	"sort"
+	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -16,6 +17,7 @@ const (
 	initiativeScanLimit          = 200
 	askInitiativeSuggestionLimit = 50
 	askInitiativeSuggestionCount = 3
+	askInitiativeSuggestionPages = 4
 	nearDuplicateThreshold       = 0.8
 	workNearDuplicateWarning     = "work_near_duplicate"
 	workOverTargetWarning        = "work_over_target"
@@ -41,37 +43,58 @@ func (a *App) workCreateWarnings(ctx context.Context, cfg config.Resolved, title
 	return workCreateWarningsFor(title, open)
 }
 
-// suggestOpenInitiativeCards reads one page of at most 50 work rows, already
-// ordered newest-first by the work list, and returns up to three open
-// initiatives other than exclude. A read error yields no suggestions.
+// suggestOpenInitiativeCards reads newest-first work pages and returns up to
+// three open initiatives other than exclude. GET /work's phase parameter is an
+// exact match, and ListWork always includes closed rows, so there is no
+// server filter that excludes done and cancelled. Closed rows are dropped
+// here and the server's order is kept. A failed first page yields no
+// suggestions; a later page failure keeps whatever was already collected.
 func (a *App) suggestOpenInitiativeCards(ctx context.Context, cfg config.Resolved, exclude string) []map[string]any {
-	result, err := a.invokeRawJSON(ctx, cfg, "work list", "GET", fmt.Sprintf("/work?limit=%d", askInitiativeSuggestionLimit), nil)
-	if err != nil {
-		return nil
-	}
 	var open []map[string]any
-	for _, raw := range asSlice(commandResultBody(result)["work"]) {
-		row := asMap(raw)
-		if !isOpenInitiative(row) {
-			continue
+	seenCursor := map[string]bool{"": true}
+	cursor := ""
+	for page := 0; page < askInitiativeSuggestionPages && len(open) < askInitiativeSuggestionCount; page++ {
+		result, err := a.invokeRawJSON(ctx, cfg, "work list", "GET", openInitiativeWorkPath(askInitiativeSuggestionLimit, cursor), nil)
+		if err != nil {
+			if page == 0 {
+				return nil
+			}
+			break
 		}
-		ref := firstNonEmpty(anyString(row["ref"]), anyString(row["card_ref"]))
-		if ref == "" || ref == exclude {
-			continue
+		body := commandResultBody(result)
+		for _, raw := range asSlice(body["work"]) {
+			row := asMap(raw)
+			if !isOpenInitiative(row) {
+				continue
+			}
+			ref := firstNonEmpty(anyString(row["ref"]), anyString(row["card_ref"]))
+			if ref == "" || ref == exclude {
+				continue
+			}
+			open = append(open, row)
+			if len(open) == askInitiativeSuggestionCount {
+				break
+			}
 		}
-		open = append(open, row)
-	}
-	sort.SliceStable(open, func(i, j int) bool {
-		left, right := anyString(open[i]["updated_at"]), anyString(open[j]["updated_at"])
-		if left == right {
-			return false
+		cursor = strings.TrimSpace(anyString(body["next_cursor"]))
+		if cursor == "" || seenCursor[cursor] {
+			break
 		}
-		return left > right
-	})
-	if len(open) > askInitiativeSuggestionCount {
-		open = open[:askInitiativeSuggestionCount]
+		seenCursor[cursor] = true
 	}
 	return open
+}
+
+// openInitiativeWorkPath is the GET /work query for initiative suggestions.
+// The list is newest-first. phase selects one exact phase and cannot exclude
+// done or cancelled, so the caller filters those rows.
+func openInitiativeWorkPath(limit int, cursor string) string {
+	query := url.Values{}
+	query.Set("limit", strconv.Itoa(limit))
+	if strings.TrimSpace(cursor) != "" {
+		query.Set("cursor", cursor)
+	}
+	return "/work?" + query.Encode()
 }
 
 func askAutoCreatedCardWarning(subjectRef, board string, rows []map[string]any) output.Warning {

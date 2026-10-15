@@ -472,7 +472,7 @@ Asking for decisions
 Initiative plans
 
 Use `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>` to add a linked step. --ref is a typed ref or a full URL (a Linear issue or GitHub pull request), not a bare id like SCA-123 or #123. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Stable ids belong to the plan; agents never select a view.
-Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a full plan, or `step update <card> <step-id>` and `step rm <card> <step-id>` for edits. Writes compare the token from a fresh read; reconcile conflicts explicitly. Known refs override fallback status. Resolve chips in one request with `anx refs resolve <ref>...`.
+Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a full plan, or `step update <card> <step-id>` and `step rm <card> <step-id>` for edits. A step ref in that file is a typed ref or full URL, not a bare id like SCA-123 or #123. Writes compare the token from a fresh read; reconcile conflicts explicitly. Known refs override fallback status. Resolve chips in one request with `anx refs resolve <ref>...`.
 
 
 Daily loop
