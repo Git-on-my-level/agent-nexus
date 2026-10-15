@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -173,8 +174,14 @@ func TestScopedInboxBudgetFallsBackWithCompleteCounts(t *testing.T) {
 	if err = s.ReplaceDerivedInboxItems(ctx, tid, items); err != nil {
 		t.Fatal(err)
 	}
-	for done := false; !done; {
+	// Each chunk has a 100ms budget and the server retries a timeout. Under a
+	// parallel package run that budget can expire before the batch commits.
+	for done, timeouts := false, 0; !done; {
 		done, err = ws.MaintainScopeInboxBatch(ctx)
+		if errors.Is(err, context.DeadlineExceeded) && timeouts < 64 {
+			timeouts++
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

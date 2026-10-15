@@ -59,6 +59,8 @@ export const BRIEF_COMPUTED_FIELDS = new Set([
   "initiatives.progress",
   "initiatives.blocked_count",
   "initiatives.waiting_on_you_count",
+  "initiatives.series",
+  "initiatives.metric_flat",
   "generated_at",
 ]);
 
@@ -254,6 +256,8 @@ function normalizeInitiative(raw) {
     blockedCount: Math.max(0, Number(raw.blocked_count) || 0),
     waitingOnYouCount: Math.max(0, Number(raw.waiting_on_you_count) || 0),
     note,
+    series: Array.isArray(raw.series) ? raw.series : [],
+    metricFlat: raw.metric_flat ?? null,
     possiblyMoot: raw.possibly_moot?.flagged
       ? { reason: text(raw.possibly_moot.reason) }
       : null,
@@ -360,6 +364,90 @@ export function groupWatch(initiatives) {
     label: WATCH_STATE_LABELS[state],
     rows: sorted.filter((row) => row.state === state),
   })).filter((group) => group.rows.length);
+}
+
+/**
+ * Loops: initiatives that measure something (a `series:` ref). Watch's Loops
+ * view groups them by what they need, first match wins: a decision waiting on
+ * the reader, then silence (past its promise, or no evidence for
+ * `LOOP_SILENT_SECONDS`), then a metric that has stopped moving, then the
+ * rest. Finished loops fold away under Done.
+ */
+export const LOOP_SILENT_SECONDS = 3 * 86_400;
+export const LOOP_GROUPS = ["waiting", "silent", "flat", "moving", "done"];
+export const LOOP_GROUP_LABELS = {
+  waiting: "Waiting on you",
+  silent: "Silent too long",
+  flat: "Metric flat",
+  moving: "Moving",
+  done: "Done",
+};
+
+export function isLoop(row) {
+  return Array.isArray(row?.series) && row.series.length > 0;
+}
+
+/** Seconds since the last evidence, or null when there has been none (or it is unreadable). */
+function silentFor(row, now) {
+  const at = time(row.lastEvidenceAt);
+  return at === null ? null : Math.max(0, Math.floor((now - at) / 1000));
+}
+
+export function loopGroup(row, now = Date.now()) {
+  if (row.state === "done") return "done";
+  if (row.waitingOnYouCount > 0) return "waiting";
+  // A loop with no evidence yet has not gone quiet; only a dated gap counts.
+  const quiet = silentFor(row, now);
+  if (
+    row.state === "past_promise" ||
+    (quiet !== null && quiet >= LOOP_SILENT_SECONDS)
+  )
+    return "silent";
+  if (row.metricFlat?.flat) return "flat";
+  return "moving";
+}
+
+/** `[{ group, label, rows }]` in attention order; empty groups dropped. */
+export function groupLoops(initiatives, now = Date.now()) {
+  const loops = (initiatives ?? []).filter(isLoop);
+  const buckets = Object.fromEntries(LOOP_GROUPS.map((group) => [group, []]));
+  for (const row of loops) buckets[loopGroup(row, now)].push(row);
+  // Longest wait or silence first; flat loops by how long they have been flat.
+  function within(group, a, b) {
+    if (group === "waiting") return b.waitingOnYouCount - a.waitingOnYouCount;
+    if (group === "silent")
+      return (silentFor(b, now) ?? 0) - (silentFor(a, now) ?? 0);
+    if (group === "flat")
+      return (
+        (b.metricFlat?.for_seconds ?? 0) - (a.metricFlat?.for_seconds ?? 0)
+      );
+    return 0;
+  }
+  return LOOP_GROUPS.map((group) => ({
+    group,
+    label: LOOP_GROUP_LABELS[group],
+    rows: [...buckets[group]].sort(
+      (a, b) => within(group, a, b) || compareInitiatives(a, b),
+    ),
+  })).filter((entry) => entry.rows.length);
+}
+
+/** A metric's latest value for display: numbers trimmed, never "NaN". */
+export function formatMetricValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const numeric =
+    typeof value === "number" ||
+    /^\s*-?(\d+\.?\d*|\.\d+)\s*$/.test(String(value));
+  if (!numeric) return String(value);
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "";
+  const abs = Math.abs(number);
+  if (abs === 0) return "0";
+  if (abs >= 1e15 || abs < 0.001) return number.toExponential(2);
+  if (abs >= 1000)
+    return String(Math.round(number)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (abs >= 10) return String(Math.round(number * 10) / 10);
+  return String(Math.round(number * 1000) / 1000);
 }
 
 /** `[{ placement, label, rows }]` for every board column, empty or not. */

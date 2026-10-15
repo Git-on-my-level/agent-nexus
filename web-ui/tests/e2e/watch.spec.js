@@ -87,6 +87,92 @@ test("the by-stage view shows the five placements", async ({
   ).toBeVisible();
 });
 
+test.describe("phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("by stage shows one column at a time with a counted switcher", async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    await page.goto(`${WATCH}?view=board`);
+    const switcher = page.locator("[data-watch-stage-switcher]");
+    await expect(switcher).toBeVisible();
+    // Counts on every stage; the first stage with cards is on screen.
+    await expect(
+      switcher.locator('[data-watch-stage-tab="review"]'),
+    ).toContainText("1");
+    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+    await expect(page.locator('[data-watch-column="backlog"]')).toBeVisible();
+
+    await switcher.locator('[data-watch-stage-tab="review"]').tap();
+    await expect(
+      switcher.locator('[data-watch-stage-tab="review"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    const review = page.locator('[data-watch-column="review"]');
+    await expect(review).toBeVisible();
+    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+    // Every card keeps its Move to menu, and nothing scrolls sideways.
+    await expect(
+      review.locator('[data-work-ref="card:fleet-onboarding"] select'),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+  });
+});
+
+test.describe("phone move", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("a card moved with Move to takes the switcher with it", async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    const now = new Date().toISOString();
+    await context.route(/\/work\/card(?:%3A|:)labels/, (route) =>
+      json(route, {
+        work: {
+          ref: "card:labels",
+          id: "labels",
+          title: "Label scheme",
+          phase: "backlog",
+          board_ref: "board:b1",
+          version: 1,
+          source: { authority: "nexus" },
+          updated_at: now,
+        },
+      }),
+    );
+    await context.route(/\/boards\/(?:board(?:%3A|:))?b1/, (route) =>
+      json(route, { board: { id: "b1", updated_at: now } }),
+    );
+    await context.route(/\/cards\/[^/]+\/move/, (route) =>
+      json(route, { card: { id: "labels" } }),
+    );
+    await page.goto(`${WATCH}?view=board`);
+    const card = page.locator(
+      '[data-watch-column="backlog"] [data-work-ref="card:labels"]',
+    );
+    await expect(card).toBeVisible();
+    await card.locator("select").selectOption("review");
+
+    // The reader goes with it: Review is on screen, with the card focused.
+    await expect(
+      page.locator('[data-watch-stage-tab="review"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    const moved = page.locator(
+      '[data-watch-column="review"] [data-work-ref="card:labels"]',
+    );
+    await expect(moved).toBeVisible();
+    await expect(moved).toBeFocused();
+    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+  });
+});
+
 test("a failed read shows a banner with Retry, never the raw body", async ({
   page,
   context,
@@ -105,4 +191,114 @@ test("a failed read shows a banner with Retry, never the raw body", async ({
   await expect(page.getByText("cloudflare-secret-error-body")).toHaveCount(0);
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(page.locator("[data-watch-row]").first()).toBeVisible();
+});
+
+/** The fixture plus loops in every Loops group. */
+function loopsBrief() {
+  const now = Date.now();
+  const ago = (s) => new Date(now - s * 1000).toISOString();
+  const base = brief.initiatives.find((row) => row.series?.length);
+  const make = (id, title, extra) => ({
+    ...base,
+    ref: `card:${id}`,
+    title,
+    state: "moving",
+    past_promise_for_seconds: 0,
+    waiting_on_you_count: 0,
+    last_evidence_at: ago(3600),
+    possibly_moot: { flagged: false },
+    note: null,
+    metric_flat: null,
+    series: [
+      {
+        ref: `series:${id}`,
+        name: `${id} rate`,
+        labels: {},
+        last_value: 0.42,
+        last_at: ago(1800),
+      },
+    ],
+    ...extra,
+  });
+  return {
+    ...brief,
+    generated_at: new Date().toISOString(),
+    initiatives: [
+      ...brief.initiatives,
+      make("loop-ask", "Signup experiment", { waiting_on_you_count: 1 }),
+      make("loop-quiet", "Retention nudges", {
+        last_evidence_at: ago(9 * 86400),
+      }),
+      make("loop-flat", "Pricing page test", {
+        metric_flat: {
+          flat: true,
+          for_seconds: 4 * 86400,
+          window_seconds: 604800,
+        },
+      }),
+      make("loop-moving", "Onboarding emails", {
+        metric_flat: { flat: false, for_seconds: 0, window_seconds: 604800 },
+      }),
+    ],
+  };
+}
+
+test("Loops lists measured initiatives by what they need", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) => json(route, loopsBrief()));
+  await page.goto(WATCH);
+  const loopsButton = page.locator('[data-watch-view="loops"]');
+  // The fixture's loop plus four added ones.
+  await expect(loopsButton).toContainText("5");
+  await loopsButton.click();
+  await expect(page).toHaveURL(/view=loops/);
+  const groups = page.locator("[data-watch-loop-group]");
+  await expect(groups.first()).toHaveAttribute(
+    "data-watch-loop-group",
+    "waiting",
+  );
+  await expect(page.locator('[data-watch-loop-group="silent"]')).toContainText(
+    "Retention nudges",
+  );
+  await expect(page.locator('[data-watch-loop-group="flat"]')).toContainText(
+    "Pricing page test",
+  );
+  await expect(
+    page.locator(
+      '[data-watch-loop-group="flat"] [data-source="computed:initiatives.metric_flat"]',
+    ),
+  ).toContainText(/^flat /);
+  await expect(page.locator('[data-watch-loop-group="moving"]')).toContainText(
+    "Onboarding emails",
+  );
+  // Only loops: an initiative without a series is not listed.
+  await expect(
+    page.locator('[data-watch-row="card:observability"]'),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[data-watch-row="card:loop-ask"] [data-watch-metrics]'),
+  ).toContainText("0.42");
+});
+
+test("Loops says how to add one when there are none", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      generated_at: new Date().toISOString(),
+      initiatives: brief.initiatives.map((row) => ({
+        ...row,
+        series: [],
+        metric_flat: null,
+      })),
+    }),
+  );
+  await page.goto(`${WATCH}?view=loops`);
+  await expect(page.locator("[data-watch-loops-empty]")).toContainText(
+    "series:",
+  );
 });

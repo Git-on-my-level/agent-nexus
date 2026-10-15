@@ -98,8 +98,15 @@ export const QA_SCENES = [
     path: "/o/local/w/local/watch?view=board",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("[data-watch-column='review']");
-      await page.waitForSelector("text=Fleet onboarding");
+      // Below `md` the board shows one stage at a time, so wait for the card
+      // to be in the DOM rather than on screen.
+      await page.waitForSelector("[data-watch-column='review']", {
+        state: "attached",
+      });
+      await page.waitForSelector(
+        "[data-watch-column='review'] [data-work-ref='card:fleet-onboarding']",
+        { state: "attached" },
+      );
     },
   },
   {
@@ -116,7 +123,8 @@ export const QA_SCENES = [
     path: "/o/local/w/local/decide",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("[data-decide-row]");
+      // Two-pane rows at `lg`+, the stack of cards below it.
+      await page.waitForSelector("[data-decide-row], [data-decide-card]");
       await page.waitForSelector("text=Review fleet onboarding runbook");
     },
   },
@@ -259,7 +267,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local/decide",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("[data-decide-row]");
+      await page.waitForSelector("[data-decide-row], [data-decide-card]");
       // The sidebar trigger only exists on wide layouts; the shortcut works everywhere.
       if (await page.locator(".shell-search-trigger").isVisible()) {
         await page.click(".shell-search-trigger");

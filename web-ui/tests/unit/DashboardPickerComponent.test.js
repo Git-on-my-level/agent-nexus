@@ -42,6 +42,50 @@ const open = async (props = {}) => {
 };
 
 describe("the dashboard picker", () => {
+  it("keeps a phone menu on screen as the screen resizes", async () => {
+    const phone = vi
+      .spyOn(window, "matchMedia")
+      .mockImplementation((query) => ({
+        matches: query.includes("max-width"),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+      }));
+    const width = vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+    let triggerLeft = 300;
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(() => ({
+        left: triggerLeft,
+        top: 0,
+        right: triggerLeft + 80,
+        bottom: 36,
+        width: 80,
+        height: 36,
+        x: triggerLeft,
+        y: 0,
+      }));
+    try {
+      await open();
+      const menu = screen.getByRole("menu");
+      // 390 wide, 16px gutters, a 352px (22rem) menu: its left edge can be
+      // at most 390 - 16 - 352 = 22, so 22 - 300 from the trigger.
+      expect(menu.style.left).toBe("-278px");
+      triggerLeft = 40;
+      window.dispatchEvent(new Event("resize"));
+      await tick();
+      expect(menu.style.left).toBe("-18px");
+      triggerLeft = 10;
+      window.dispatchEvent(new Event("orientationchange"));
+      await tick();
+      expect(menu.style.left).toBe("6px");
+    } finally {
+      phone.mockRestore();
+      width.mockRestore();
+      rect.mockRestore();
+    }
+  });
+
   it("lists every loaded report and names the current one", async () => {
     await open();
     expect(

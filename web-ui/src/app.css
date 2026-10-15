@@ -1067,6 +1067,18 @@
     padding: 1.25rem 1rem 5rem;
   }
 
+  /*
+   * Compact shell: the fixed bottom nav grows by the home-indicator inset, so
+   * the page's bottom clearance has to grow with it or the last row of every
+   * page sits under the nav on a notched phone.
+   */
+  @media (max-width: 1023px) {
+    /* `body` outranks the `sm` padding shorthand below, not the :has() pages. */
+    body .shell-main-scroll {
+      padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
   /* Resource detail dock pages: tighter top inset — header is already compact. */
   .shell-main-scroll:has(.page-dock-layout) {
     padding-top: 0.625rem;

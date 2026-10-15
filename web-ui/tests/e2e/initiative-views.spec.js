@@ -665,8 +665,16 @@ test("the plan reads at phone width", async ({ page }, testInfo) => {
     timeout: 60_000,
   });
 
-  // The tree scrolls sideways rather than squashing or overflowing the page.
+  /*
+   * The rows lead on a phone: the diagram ellipsises every step title at this
+   * width, so it waits behind "Show diagram".
+   */
   const scroller = page.locator(".plan-tree-scroll");
+  await expect(scroller).toBeHidden();
+  const rowsFirst = page.locator(".plan-track--tree > li").first();
+  await expect(rowsFirst).toBeVisible();
+  await page.locator("[data-plan-diagram-toggle]").click();
+  // Opened, the tree scrolls sideways rather than squashing or overflowing.
   await expect(scroller).toBeVisible();
   const overflows = await scroller.evaluate(
     (node) => node.scrollWidth > node.clientWidth,

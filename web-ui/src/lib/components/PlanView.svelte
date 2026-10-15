@@ -60,6 +60,16 @@
   } = $props();
 
   let layout = $derived(planLayout(plan, { planState, resolved, now }));
+  /**
+   * The critical path only says something when it is a subset. When every
+   * step is on it — any chain, most small plans — marking each one is noise.
+   */
+  let criticalMarked = $derived(
+    layout.nodes.some((node) => node.onCriticalPath) &&
+      !layout.nodes.every((node) => node.onCriticalPath),
+  );
+  /** Phone: the tree's picture folds behind "Show diagram"; rows lead. */
+  let diagramShown = $state(false);
   let nodeById = $derived(new Map(layout.nodes.map((node) => [node.id, node])));
 
   /**
@@ -200,8 +210,11 @@
       />
     {/if}
     {#if node.due}<span class="plan-node__due">due {node.due}</span>{/if}
-    {#if node.onCriticalPath}
-      <span class="plan-node__flag" data-plan-critical>critical path</span>
+    {#if node.onCriticalPath && criticalMarked}
+      <span class="plan-node__flag" data-plan-critical
+        ><span class="plan-node__flag-mark" aria-hidden="true"></span>critical
+        path</span
+      >
     {/if}
     {#if node.after.length}
       <span class="plan-node__after"
@@ -217,6 +230,23 @@
   <div class="plan" data-plan-shape={shape}>
     {#if shape === "dag"}
       <!--
+        On a phone the picture is too narrow to name its steps — every box
+        ellipsises — so the rows lead and the diagram is one tap away.
+      -->
+      <button
+        type="button"
+        class="plan-diagram-toggle"
+        aria-expanded={diagramShown}
+        data-plan-diagram-toggle
+        onclick={() => (diagramShown = !diagramShown)}
+        >{diagramShown ? "Hide diagram" : "Show diagram"}</button
+      >
+      <div
+        class="plan-diagram"
+        class:plan-diagram--shown={diagramShown}
+        data-plan-diagram
+      >
+        <!--
         Horizontal scroll only when the fit ran out of room, and when it does,
         the box says so. A diagram that runs past the right edge with no
         scrollbar in sight reads as broken rather than as scrollable — which is
@@ -225,81 +255,85 @@
         Said in words rather than with an edge gradient: the gradient would
         have to overlay the scroller, and the last node once you reached it.
       -->
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <div
-        class="plan-tree-scroll"
-        class:plan-tree-scroll--scrollable={scrollable}
-        data-plan-scrollable={scrollable ? "true" : "false"}
-        bind:clientWidth={frameWidth}
-        tabindex="0"
-        role="region"
-        aria-label={scrollable
-          ? "Plan diagram — scrolls sideways"
-          : "Plan diagram"}
-      >
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
-          class="plan-tree"
-          style:width="{geometry.width}px"
-          style:height="{geometry.height}px"
+          class="plan-tree-scroll"
+          class:plan-tree-scroll--scrollable={scrollable}
+          data-plan-scrollable={scrollable ? "true" : "false"}
+          bind:clientWidth={frameWidth}
+          tabindex="0"
+          role="region"
+          aria-label={scrollable
+            ? "Plan diagram — scrolls sideways"
+            : "Plan diagram"}
         >
-          <svg
-            class="plan-tree__edges"
-            width={geometry.width}
-            height={geometry.height}
-            aria-hidden="true"
-            focusable="false"
+          <div
+            class="plan-tree"
+            style:width="{geometry.width}px"
+            style:height="{geometry.height}px"
           >
-            {#each geometry.edges as edge (`${edge.from}->${edge.to}`)}
-              <path
-                d={edge.path}
-                class="plan-edge"
-                class:plan-edge--critical={edge.onCriticalPath}
-                class:plan-edge--from-collapsed={edge.fromCollapsed}
-              />
-            {/each}
-          </svg>
-          {#if geometry.collapsed}
-            <!-- The finished prefix, as one column. The steps are still in the
+            <svg
+              class="plan-tree__edges"
+              width={geometry.width}
+              height={geometry.height}
+              aria-hidden="true"
+              focusable="false"
+            >
+              {#each geometry.edges as edge (`${edge.from}->${edge.to}`)}
+                <path
+                  d={edge.path}
+                  class="plan-edge"
+                  class:plan-edge--critical={edge.onCriticalPath &&
+                    criticalMarked}
+                  class:plan-edge--from-collapsed={edge.fromCollapsed}
+                />
+              {/each}
+            </svg>
+            {#if geometry.collapsed}
+              <!-- The finished prefix, as one column. The steps are still in the
                  list below, so nothing is lost by folding them. -->
-            <div
-              class="plan-done-column"
-              data-plan-done-count={geometry.collapsed.count}
-              style:left="{geometry.collapsed.x}px"
-              style:top="{geometry.collapsed.y}px"
-              style:width="{geometry.collapsed.width}px"
-              style:height="{geometry.collapsed.height}px"
-              use:tooltip={`${doneSummary(geometry.collapsed.count)} — listed in full below`}
-            >
-              <span class="plan-done-column__check" aria-hidden="true">✓</span>
-              <span class="plan-done-column__count"
-                >{geometry.collapsed.count}</span
+              <div
+                class="plan-done-column"
+                data-plan-done-count={geometry.collapsed.count}
+                style:left="{geometry.collapsed.x}px"
+                style:top="{geometry.collapsed.y}px"
+                style:width="{geometry.collapsed.width}px"
+                style:height="{geometry.collapsed.height}px"
+                use:tooltip={`${doneSummary(geometry.collapsed.count)} — listed in full below`}
               >
-              <span class="plan-done-column__label">done</span>
-            </div>
-          {/if}
-          {#each geometry.nodes as box (box.id)}
-            {@const node = nodeById.get(box.id)}
-            <div
-              class="plan-node"
-              class:plan-node--critical={node.onCriticalPath}
-              data-status={node.status}
-              data-plan-node={node.id}
-              style:left="{box.x}px"
-              style:top="{box.y}px"
-              style:width="{box.width}px"
-              style:height="{box.height}px"
-            >
-              {@render stepBody(node)}
-            </div>
-          {/each}
+                <span class="plan-done-column__check" aria-hidden="true">✓</span
+                >
+                <span class="plan-done-column__count"
+                  >{geometry.collapsed.count}</span
+                >
+                <span class="plan-done-column__label">done</span>
+              </div>
+            {/if}
+            {#each geometry.nodes as box (box.id)}
+              {@const node = nodeById.get(box.id)}
+              <div
+                class="plan-node"
+                class:plan-node--critical={node.onCriticalPath &&
+                  criticalMarked}
+                data-status={node.status}
+                data-plan-node={node.id}
+                style:left="{box.x}px"
+                style:top="{box.y}px"
+                style:width="{box.width}px"
+                style:height="{box.height}px"
+              >
+                {@render stepBody(node)}
+              </div>
+            {/each}
+          </div>
         </div>
+        {#if scrollable}
+          <p class="plan-scroll-hint" data-plan-scroll-hint>
+            <span aria-hidden="true">↔</span>
+            Scroll to see the rest of the plan
+          </p>
+        {/if}
       </div>
-      {#if scrollable}
-        <p class="plan-scroll-hint" data-plan-scroll-hint>
-          <span aria-hidden="true">↔</span>
-          Scroll to see the rest of the plan
-        </p>
-      {/if}
       <!--
         The tree's rows. A diagram is a picture of the plan, not a reading of
         it: the edges are hidden from assistive tech, a folded prefix is a
@@ -312,7 +346,7 @@
           <li
             data-status={node.status}
             data-plan-node={node.id}
-            class:plan-critical={node.onCriticalPath}
+            class:plan-critical={node.onCriticalPath && criticalMarked}
           >
             {@render stepRow(node)}
           </li>
@@ -327,7 +361,7 @@
                 <li
                   data-status={node.status}
                   data-plan-node={node.id}
-                  class:plan-critical={node.onCriticalPath}
+                  class:plan-critical={node.onCriticalPath && criticalMarked}
                 >
                   {@render stepRow(node)}
                 </li>
@@ -363,7 +397,7 @@
               <li
                 data-status={node.status}
                 data-plan-node={node.id}
-                class:plan-critical={node.onCriticalPath}
+                class:plan-critical={node.onCriticalPath && criticalMarked}
               >
                 {@render stepRow(node)}
               </li>
@@ -380,7 +414,7 @@
           <li
             data-status={node.status}
             data-plan-node={node.id}
-            class:plan-critical={node.onCriticalPath}
+            class:plan-critical={node.onCriticalPath && criticalMarked}
           >
             {@render stepRow(node)}
           </li>
@@ -503,14 +537,63 @@
   /* The spine of the plan, named rather than only drawn: the tree shows it as
      a highlighted edge, and a timeline has no edges to highlight. */
   .plan-node__flag {
+    display: inline-flex;
     flex: none;
-    padding: 0 4px;
-    border: 1px solid var(--accent-solid);
-    border-radius: 3px;
-    color: var(--accent-text);
+    align-items: center;
+    gap: 4px;
+    color: var(--fg-muted);
     font-size: 10px;
     line-height: 1.5;
     white-space: nowrap;
+  }
+  .plan-node__flag-mark {
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    background: var(--accent-solid);
+    transform: rotate(45deg);
+  }
+
+  /* The diagram fold exists only on a phone; wider, the picture leads. */
+  .plan-diagram-toggle {
+    display: none;
+  }
+  @media (max-width: 639px) {
+    .plan[data-plan-shape="dag"] {
+      display: flex;
+      flex-direction: column;
+    }
+    .plan-diagram-toggle {
+      display: inline-flex;
+      order: 2;
+      align-self: flex-start;
+      align-items: center;
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--accent-text);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .plan-diagram {
+      display: none;
+      order: 3;
+    }
+    .plan-diagram--shown {
+      display: block;
+    }
+    .plan-track--tree {
+      order: 1;
+      margin-top: 0;
+      border-top: 0;
+      padding-top: 0;
+    }
+    .plan-issues {
+      order: 4;
+    }
   }
 
   /* The folded finished prefix. */

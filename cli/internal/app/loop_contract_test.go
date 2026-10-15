@@ -25,7 +25,7 @@ func TestCreateCommandsPrintRefFirst(t *testing.T) {
 	if exit := a.Run([]string{"--as", "worker", "note", "card:x", "Progress", "--next", "1d", "checkpoint"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
-	if first := strings.SplitN(out.String(), "\n", 2)[0]; first != "created event:evt-9" {
+	if first := strings.SplitN(out.String(), "\n", 2)[0]; first != "event:evt-9" {
 		t.Fatalf("first line=%q\n%s", first, out.String())
 	}
 	if ref := createdRef("work create", map[string]any{"work": map[string]any{"ref": "card:new"}}); ref != "card:new" {
@@ -171,7 +171,7 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 		"note_moved_without_evidence": "promise moved without evidence; only an --evidence ref resets the clock",
 		"ask_no_deadline":             "no --by or --blocks; this sorts below every decision with a deadline or blocked work",
 		"ask_overtaken_subject":       "merged since the subject last moved",
-		"ask_auto_subject":            "created a subject card card:x for this ask",
+		"ask_auto_created_card":       "No --subject-ref: created card:x on board:tasks",
 	}
 	for _, w := range workCreateWarningsFor("Fix flaky BLE test", func() []map[string]any {
 		rows := []map[string]any{{"ref": "card:ble", "title": "Fix flaky BLE tests"}}

@@ -1616,6 +1616,19 @@
     cursor: pointer;
     transition: all var(--motion-fast);
   }
+  /* Phone: one swipeable row of thumb-sized starters, not four 24px lines. */
+  @media (max-width: 639px) {
+    .pm-suggestions {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .pm-chip {
+      height: 44px;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+  }
   .pm-chip:hover {
     color: var(--fg);
     border-color: var(--line);

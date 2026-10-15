@@ -185,6 +185,22 @@
       },
       "possibly_moot": {
         "flagged": false
+      },
+      "series": [
+        {
+          "ref": "series:conversion?loop=signup",
+          "name": "conversion",
+          "labels": {
+            "loop": "signup"
+          },
+          "last_value": 0.12,
+          "last_at": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "metric_flat": {
+        "flat": true,
+        "for_seconds": 345600,
+        "window_seconds": 604800
       }
     },
     {
@@ -209,7 +225,9 @@
       "note": null,
       "possibly_moot": {
         "flagged": false
-      }
+      },
+      "series": [],
+      "metric_flat": null
     },
     {
       "ref": "card:observability",
@@ -233,7 +251,9 @@
       "note": null,
       "possibly_moot": {
         "flagged": false
-      }
+      },
+      "series": [],
+      "metric_flat": null
     },
     {
       "ref": "card:labels",
@@ -251,7 +271,9 @@
       "possibly_moot": {
         "flagged": true,
         "reason": "PR #212 and #214 merged since it last moved"
-      }
+      },
+      "series": [],
+      "metric_flat": null
     },
     {
       "ref": "card:ble-reliability",
@@ -271,7 +293,9 @@
       "note": null,
       "possibly_moot": {
         "flagged": false
-      }
+      },
+      "series": [],
+      "metric_flat": null
     },
     {
       "ref": "card:docs-refresh",
@@ -291,7 +315,9 @@
       "note": null,
       "possibly_moot": {
         "flagged": false
-      }
+      },
+      "series": [],
+      "metric_flat": null
     }
   ],
   "your_asks": [],

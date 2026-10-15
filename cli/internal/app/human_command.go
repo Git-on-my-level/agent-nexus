@@ -24,7 +24,7 @@ Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Ma
 anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
 ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
 Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
-Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
+Pass --subject-ref card:<slug> so the ask stays on an initiative. The subject falls back to the current card. If both are absent, the CLI creates a ready card on the default board and warns (ask_auto_created_card). --from-file <path.md> reads a request with YAML frontmatter.
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
@@ -116,7 +116,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&byFlag, "by", "When the human should decide: YYYY-MM-DD, RFC3339, or a duration like 2d")
 	fs.Var(&blocksFlags, "blocks", "Typed ref this decision blocks (repeatable, at most 20)")
 	fs.Var(&priorityFlag, "priority", "Optional badge: p0..p3 or critical/high/medium/low")
-	fs.Var(&subjectRefFlag, "subject-ref", "Subject typed ref")
+	fs.Var(&subjectRefFlag, "subject-ref", "Initiative card ref (card:<slug>); omit only when the current card should own the ask")
 	fs.Var(&bodyFlag, "body", "Detailed body text")
 	fs.Var(&bodyFileFlag, "body-file", "Read detailed body from file")
 	fs.Var(&titleFlag, "title", "Title override")
@@ -289,7 +289,10 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 				return nil, errnorm.Local("invalid_response", "created subject has no card ref")
 			}
 			autoSubject = true
-			loopWarnings = append(loopWarnings, askWarning("ask_auto_subject", "created a subject card "+subjectRef+" for this ask; pass --subject-ref <card> to ask about existing work", nil))
+			board := firstNonEmpty(anyString(work["board_ref"]), strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")))
+			// One bounded work page. A failed read leaves the warning without suggestions.
+			suggestions := a.suggestOpenInitiativeCards(ctx, cfg, subjectRef)
+			loopWarnings = append(loopWarnings, askAutoCreatedCardWarning(subjectRef, board, suggestions))
 		}
 	}
 	if !strings.HasPrefix(subjectRef, "card:") {

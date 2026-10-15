@@ -9,16 +9,16 @@ The trigger phrase is an exact substring of the warning message. The
 participant skill must not contain any trigger phrase (I6); this table is the
 machine-readable source for that check.
 
-| id | command | trigger phrase | suggests |
-| --- | --- | --- | --- |
-| ask_no_deadline | ask | `no --by or --blocks` | Add `--by <when>` (when the human should decide) and/or `--blocks <ref>` for the work this decision blocks. |
-| ask_overtaken_subject | ask | `since the subject last moved` | The subject card is flagged possibly moot; if the decision is overtaken, `anx ask withdraw <ask-id> --reason overtaken`. |
-| ask_auto_subject | ask | `created a subject card` | Pass `--subject-ref <card>` to ask about existing work instead of creating a new card. |
-| work_near_duplicate | work create | `matches an open initiative` | Add a step to the matching initiative: `anx plan step add <card> --title <title> --ref <url>`. |
-| work_over_target | work create | `open initiatives (target 15)` | Prefer a plan step on an existing initiative over a new one. |
-| note_no_next | note | `no --next` | Renew the card's promise: `anx note <card> --next <when> "<what>"`. |
-| note_moved_without_evidence | note | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`. |
-| note_beyond_horizon | note | `beyond the 2-day horizon` | Promise a nearer checkpoint, for example `--next 2d "<checkpoint>"`. |
+| id                          | command     | trigger phrase                   | suggests                                                                                                                                                     |
+| --------------------------- | ----------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ask_no_deadline             | ask         | `no --by or --blocks`            | Add `--by <when>` (when the human should decide) and/or `--blocks <ref>` for the work this decision blocks.                                                  |
+| ask_overtaken_subject       | ask         | `since the subject last moved`   | The subject card is flagged possibly moot; if the decision is overtaken, `anx ask withdraw <ask-id> --reason overtaken`.                                     |
+| ask_auto_created_card       | ask         | `No --subject-ref`               | Pass `--subject-ref card:<slug>` so the ask stays on an initiative. The warning lists up to three open initiatives when a cheap work-list page is available. |
+| work_near_duplicate         | work create | `matches an open initiative`     | Add a step to the matching initiative: `anx plan step add <card> --title <title> --ref <url>`.                                                               |
+| work_over_target            | work create | `open initiatives (target 15)`   | Prefer a plan step on an existing initiative over a new one.                                                                                                 |
+| note_no_next                | note        | `no --next`                      | Renew the card's promise: `anx note <card> --next <when> "<what>"`.                                                                                          |
+| note_moved_without_evidence | note        | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`.                                                       |
+| note_beyond_horizon         | note        | `beyond the 2-day horizon`       | Promise a nearer checkpoint, for example `--next 2d "<checkpoint>"`.                                                                                         |
 
 `<when>` everywhere is the `review_by` grammar: a UTC date (`YYYY-MM-DD`), an
 RFC3339 timestamp, or a positive `s`/`m`/`h`/`d` duration. A malformed value is
@@ -33,8 +33,14 @@ How each warning is computed, and what it costs:
   request.
 - `ask_overtaken_subject`: reuses the subject card read that grounds the ask
   thread and checks its `possibly_moot.flagged`. No extra request.
-- `ask_auto_subject`: the ask had no subject and no current card, so the CLI
-  created one.
+- `ask_auto_created_card`: the ask had no `--subject-ref` and no current card,
+  so the CLI created a ready card. After that write, best-effort
+  `GET /work?limit=50` pages (newest first) supply up to three other open
+  initiatives. `GET /work` has no parameter that excludes done or cancelled
+  (`phase` is one exact value), so closed rows are dropped client-side and
+  the server order is kept. The CLI follows `next_cursor` until it has three
+  suggestions or four pages. A failed first read leaves the warning without
+  them.
 - `work_near_duplicate`, `work_over_target`: one `GET /work?limit=200` before
   the write; token Jaccard or normalized Levenshtein >= 0.8 against open
   initiative titles; more than 15 open initiatives.

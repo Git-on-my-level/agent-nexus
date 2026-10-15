@@ -71,6 +71,18 @@
   let full = $derived(variant === "full");
   /** Decide's detail pane: the old Inbox reading pane, no card chrome. */
   let pane = $derived(variant === "pane");
+  /**
+   * Decide on a phone: one card in a scrollable stack. The whole decision is
+   * on the card (a long body folds behind "Show more"), suggestions are full
+   * width tap targets and one tap answers; Reply opens a composer that pins
+   * above the bottom nav and the on-screen keyboard.
+   */
+  let stack = $derived(variant === "stack");
+  /** Variants that read the whole decision rather than a summary row. */
+  let rich = $derived(pane || full || stack);
+  let bodyEl = $state(null);
+  let bodyOpen = $state(false);
+  let bodyLong = $state(false);
   let replying = $state(false);
   let reply = $state("");
   let copied = $state(false);
@@ -183,6 +195,7 @@
       restore: { origin: "decide", reply, chosen: body },
     });
     replying = false;
+    pinned = false;
     onAnswered?.(decision);
   }
 
@@ -317,6 +330,88 @@
     void copyRef();
   }
 
+  // A stacked card folds a long body; measure whether there is more to show.
+  $effect(() => {
+    if (!stack || !bodyEl || bodyOpen) return;
+    const measure = () =>
+      (bodyLong = bodyEl.scrollHeight > bodyEl.clientHeight + 4);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(bodyEl);
+    return () => observer.disconnect();
+  });
+
+  /*
+   * Phone: while the reader is typing a reply, the composer (field, Send,
+   * Cancel) is a bar fixed to the bottom of the screen, directly above the
+   * bottom nav or the on-screen keyboard, whichever reaches higher. Both are
+   * measured — the nav's real height, and the keyboard as the part of the
+   * layout viewport the visual viewport has lost — so nothing depends on how
+   * a browser treats a scroller's padding. The field being typed into is
+   * inside the bar, so the bar can never cover it. The form keeps the bar's
+   * height in flow, so the card does not jump when it pins.
+   */
+  const PHONE_QUERY = "(max-width: 1023px)";
+  let pinned = $state(false);
+  let pinBottom = $state(0);
+  let barSpace = $state(0);
+  let barEl = $state(null);
+
+  function onPhone() {
+    return (
+      typeof window !== "undefined" &&
+      Boolean(window.matchMedia?.(PHONE_QUERY).matches)
+    );
+  }
+
+  function measurePin() {
+    const viewport = window.visualViewport;
+    const keyboard = viewport
+      ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      : 0;
+    const nav = document.querySelector(".shell-bottom-nav");
+    const navHeight =
+      nav && getComputedStyle(nav).display !== "none"
+        ? nav.getBoundingClientRect().height
+        : 0;
+    pinBottom = Math.round(Math.max(navHeight, keyboard));
+  }
+
+  function onComposerFocusIn() {
+    if (pinned || !(stack || full) || !onPhone()) return;
+    barSpace = barEl?.offsetHeight ?? 0;
+    measurePin();
+    pinned = true;
+  }
+
+  function onComposerFocusOut(event) {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    pinned = false;
+  }
+
+  /**
+   * A tap on Send or Cancel must not blur the field and unpin the bar.
+   * `mousedown`, not `pointerdown`: cancelling a pointerdown suppresses the
+   * compatibility click a touch tap relies on, so Send would never submit.
+   */
+  function keepFocus(event) {
+    if (pinned) event.preventDefault();
+  }
+
+  $effect(() => {
+    if (!pinned) return;
+    const viewport = window.visualViewport;
+    window.addEventListener("resize", measurePin);
+    viewport?.addEventListener("resize", measurePin);
+    viewport?.addEventListener("scroll", measurePin);
+    return () => {
+      window.removeEventListener("resize", measurePin);
+      viewport?.removeEventListener("resize", measurePin);
+      viewport?.removeEventListener("scroll", measurePin);
+    };
+  });
+
   function onReplyKeydown(event) {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -362,7 +457,9 @@
 <article
   class="decision min-w-0 {pane
     ? 'space-y-4 p-4 sm:p-5'
-    : `rounded-md border bg-panel px-3 py-3 sm:px-4 ${focused ? 'border-accent' : 'border-line-subtle'}`}"
+    : stack || full
+      ? `space-y-3 rounded-md border bg-panel px-4 py-4 ${focused ? 'border-accent' : 'border-line-subtle'}`
+      : `rounded-md border bg-panel px-3 py-3 sm:px-4 ${focused ? 'border-accent' : 'border-line-subtle'}`}"
   data-decision-ref={decision.ref}
   data-decision-kind={decision.kind}
   data-variant={variant}
@@ -409,7 +506,7 @@
       {/if}
     </p>
     <h3
-      class="{pane || full
+      class="{rich
         ? 'text-subtitle'
         : 'text-body font-medium'} text-fg [overflow-wrap:anywhere]"
       data-decision-title
@@ -438,26 +535,36 @@
 
   {#if decision.body}
     <div
-      class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere] {pane ||
-      full
+      class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere] {rich
         ? ''
-        : 'mt-2 line-clamp-3'}"
+        : 'mt-2 line-clamp-3'} {stack && !bodyOpen ? 'decision-fold' : ''}"
+      class:decision-fold--faded={stack && !bodyOpen && bodyLong}
+      bind:this={bodyEl}
       data-decision-body
     >
       <MarkdownRenderer
         source={decision.body}
         class="markdown-rendered--ask"
-        inline={!(pane || full)}
+        inline={!rich}
         organizationSlug={organizationSlug || $page.params.organization}
         workspaceSlug={workspaceSlug || $page.params.workspace}
       />
     </div>
+    {#if stack && (bodyLong || bodyOpen)}
+      <button
+        type="button"
+        class="-mt-1 inline-flex min-h-11 items-center text-meta font-medium text-accent-text"
+        aria-expanded={bodyOpen}
+        data-decision-more
+        onclick={() => (bodyOpen = !bodyOpen)}
+        >{bodyOpen ? "Show less" : "Show more"}</button
+      >
+    {/if}
   {/if}
 
   {#if decision.curation}
     <div
-      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {pane ||
-      full
+      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {rich
         ? ''
         : 'mt-2'}"
       data-decision-curation
@@ -484,8 +591,7 @@
 
   {#if decision.batch}
     <div
-      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {pane ||
-      full
+      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {rich
         ? ''
         : 'mt-2'}"
       data-decision-batch
@@ -527,8 +633,7 @@
 
   {#if failure}
     <div
-      class="flex flex-wrap items-center gap-2 rounded-md border border-danger bg-danger-soft px-2 py-1.5 text-meta {pane ||
-      full
+      class="flex flex-wrap items-center gap-2 rounded-md border border-danger bg-danger-soft px-2 py-1.5 text-meta {rich
         ? ''
         : 'mt-2'}"
       role="alert"
@@ -564,7 +669,7 @@
     </div>
   {/if}
 
-  <div class={pane || full ? "space-y-3" : "mt-3 space-y-2"}>
+  <div class={rich ? "space-y-3" : "mt-3 space-y-2"}>
     {#if pmAnswer && (pmSent || pmQueued)}
       {#if pmQueued}
         <MutationSendStatus target={pmTarget} />
@@ -620,13 +725,15 @@
             Suggested responses
           </p>
         {/if}
-        <ul class="space-y-1.5">
+        <ul class={stack ? "space-y-2" : "space-y-1.5"}>
           {#each decision.proposals as proposal, index (index)}
             {@const selected = armed === index}
             <li>
               <button
                 type="button"
-                class="proposal flex w-full items-start gap-2.5 rounded-md border px-3 py-2 text-left text-meta text-fg transition-colors disabled:opacity-60 {selected
+                class="proposal flex min-h-11 w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left text-fg transition-colors disabled:opacity-60 lg:min-h-0 lg:items-start {stack
+                  ? 'text-body'
+                  : 'text-meta'} {selected
                   ? 'border-accent bg-accent-soft ring-1 ring-accent'
                   : 'border-line-subtle bg-bg-soft hover:border-line hover:bg-panel-hover'}"
                 class:proposal--sending={flashing === index}
@@ -673,46 +780,76 @@
         pmAnswer ||
         elsewhere}
       onsubmit={sendReply}
+      onfocusin={onComposerFocusIn}
+      onfocusout={onComposerFocusOut}
+      style:min-height={pinned ? `${barSpace}px` : undefined}
       data-anx-save-scope
     >
       <label
         class={pane || full ? "ui-label" : "sr-only"}
         for={`decide-reply-${itemId}`}>Reply</label
       >
-      <textarea
-        id={`decide-reply-${itemId}`}
-        class="ui-input {pane || full ? 'min-h-20' : 'min-h-16'}"
-        placeholder={pane || full ? "Write your own answer…" : "Reply…"}
-        bind:value={reply}
-        bind:this={replyEl}
-        use:durableDraft={draftKey}
-        onkeydown={onReplyKeydown}
-        aria-keyshortcuts="R"
-        data-decision-reply
-      ></textarea>
-      <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="submit"
-          class="ui-btn-primary"
-          title={`Send reply (${formatShortcut("Enter")})`}
-          disabled={!reply.trim()}>Send reply</button
-        >
+      <div
+        class="space-y-2"
+        class:decide-composer-bar--pinned={pinned}
+        style:bottom={pinned ? `${pinBottom}px` : undefined}
+        bind:this={barEl}
+        data-decision-composer
+        data-pinned={pinned ? "true" : undefined}
+      >
+        <textarea
+          id={`decide-reply-${itemId}`}
+          class="ui-input {pane || full ? 'min-h-20' : 'min-h-16'}"
+          placeholder={pane || full ? "Write your own answer…" : "Reply…"}
+          bind:value={reply}
+          bind:this={replyEl}
+          use:durableDraft={draftKey}
+          onkeydown={onReplyKeydown}
+          aria-keyshortcuts="R"
+          data-decision-reply
+        ></textarea>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="submit"
+            class="ui-btn-primary max-lg:min-h-11"
+            title={`Send reply (${formatShortcut("Enter")})`}
+            onmousedown={keepFocus}
+            disabled={!reply.trim()}>Send reply</button
+          >
+          {#if stack}
+            <button
+              type="button"
+              class="ui-btn-secondary max-lg:min-h-11"
+              data-decision-reply-cancel
+              onmousedown={keepFocus}
+              onclick={() => {
+                replying = false;
+                pinned = false;
+              }}>Cancel</button
+            >
+          {/if}
+        </div>
       </div>
     </form>
   </div>
-  <div class="flex flex-wrap items-center gap-2 {pane || full ? '' : 'mt-2'}">
-    {#if !(pane || full) && !answered && !structured && !pmAnswer && !elsewhere && !confirming}
+  <div class="flex flex-wrap items-center gap-2 {rich ? '' : 'mt-2'}">
+    {#if !(pane || full) && !(stack && replying) && !answered && !structured && !pmAnswer && !elsewhere && !confirming}
       <button
         type="button"
-        class="text-meta text-fg-muted hover:text-fg"
+        class="inline-flex items-center text-meta text-fg-muted hover:text-fg max-lg:min-h-11 {stack
+          ? 'max-lg:rounded-md max-lg:border max-lg:border-line max-lg:px-4 max-lg:font-medium max-lg:text-fg'
+          : ''}"
         aria-expanded={replying}
         data-decision-reply-toggle
-        onclick={() => (replying = !replying)}>Reply…</button
+        onclick={() => {
+          replying = !replying;
+          if (replying && stack) void focusReply();
+        }}>{stack ? "Reply" : "Reply…"}</button
       >
     {/if}
     <button
       type="button"
-      class="ml-auto text-micro text-fg-muted hover:text-fg"
+      class="ml-auto inline-flex items-center text-micro text-fg-muted hover:text-fg max-lg:min-h-11 max-lg:px-1"
       title="Copy ref (c)"
       data-decision-copy-ref
       onclick={copyRef}>{copied ? "Copied" : "Copy ref"}</button
@@ -721,6 +858,25 @@
 </article>
 
 <style>
+  /* A stacked card's long body folds to about eight lines. */
+  .decision-fold {
+    max-height: 10.5rem;
+    overflow: hidden;
+  }
+  .decision-fold--faded {
+    mask-image: linear-gradient(to bottom, black 70%, transparent);
+  }
+  /* Phone, while typing: the composer bar above the nav or keyboard. */
+  .decide-composer-bar--pinned {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 -8px 16px -10px rgb(0 0 0 / 0.45);
+  }
   /*
    * One pulse, 220ms, so a click reads as "this one, going out" rather than a
    * row that vanished. Reduced motion sends without it.

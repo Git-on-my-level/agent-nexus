@@ -155,7 +155,7 @@
       <ul>
         {#each agents as agent (agent.id)}
           <li
-            class="flex items-center gap-3 border-t border-line-subtle px-4 py-1.5 first:border-t-0 {agent.revoked_at
+            class="flex items-center gap-3 border-t border-line-subtle px-4 py-1.5 first:border-t-0 max-sm:min-h-11 {agent.revoked_at
               ? 'opacity-60'
               : ''}"
             data-host-agent={agent.handle}
@@ -165,7 +165,8 @@
               class="min-w-0 truncate text-meta text-fg hover:underline"
               href={workspaceHref(agentPath(agent))}>{agent.name}</a
             >
-            <span class="min-w-0 truncate text-micro text-fg-subtle"
+            <span
+              class="min-w-0 truncate text-micro text-fg-subtle max-sm:hidden"
               >@{agent.handle}</span
             >
             <span class="ml-auto shrink-0 text-micro text-fg-subtle"

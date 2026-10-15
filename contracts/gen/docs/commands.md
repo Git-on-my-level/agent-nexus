@@ -2015,7 +2015,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns the current principal-scoped read projection.
-- Agent notes: One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.
+- Agent notes: One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step ref values are typed refs or http(s) URLs; a bare tracker id (SCA-123) or pull number (#123) is a CLI usage error naming that step. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.
 
 ## `plan.show`
 
