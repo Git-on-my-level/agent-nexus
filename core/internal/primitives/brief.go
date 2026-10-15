@@ -164,11 +164,11 @@ func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	items, ids, filed, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
+	items, metas, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}
-	items, err = b.collapseBatches(items, ids, filed)
+	items, err = b.collapseBatches(items, metas)
 	return items, truncated, err
 }
 
@@ -178,16 +178,23 @@ func (b *briefBuild) yourAsks() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	items, _, _, truncated, err := b.renderAsks(rows, len(rows) == briefAskCandidates)
+	items, _, truncated, err := b.renderAsks(rows, len(rows) == briefAskCandidates)
 	return items, truncated, err
 }
 
-// renderAsks returns the rendered items and, in the same order, their ask ids
-// and the batch id each ask was filed under (POST /asks/batch), if any.
-func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([]map[string]any, []string, []string, bool, error) {
+// briefDecisionMeta is the per-ask data collapse uses to name the batch
+// respond id. It is not part of the brief document.
+type briefDecisionMeta struct {
+	askID, thread, inboxKind, subject, batchID string
+	created                                    time.Time
+}
+
+// renderAsks returns the rendered items and, in the same order, the meta
+// collapse uses to address a whole batch with one inbox id.
+func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([]map[string]any, []briefDecisionMeta, bool, error) {
 	rows, err := b.readableProposals(rows)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 	asks := make([]BriefAsk, len(rows))
 	index := map[string]briefAskRow{}
@@ -197,7 +204,7 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	}
 	open, err := b.openBlocks(rows)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 	for i := range asks {
 		asks[i].Blocks = open[asks[i].AskID]
@@ -210,11 +217,10 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	}
 	subjects, err := b.cardTitles(collectSubjects(asks))
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 	out := make([]map[string]any, 0, len(asks))
-	ids := make([]string, 0, len(asks))
-	filed := make([]string, 0, len(asks))
+	metas := make([]briefDecisionMeta, 0, len(asks))
 	for _, a := range asks {
 		r := index[a.AskID]
 		var event map[string]any
@@ -255,10 +261,32 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			item["curation"] = curation
 		}
 		out = append(out, item)
-		ids = append(ids, a.AskID)
-		filed = append(filed, strings.TrimSpace(anyStringValue(payload["batch_id"])))
+		metas = append(metas, briefDecisionMeta{
+			askID: a.AskID, thread: r.thread, inboxKind: briefInboxKind(a.Kind),
+			subject: a.SubjectRef, batchID: strings.TrimSpace(anyStringValue(payload["batch_id"])),
+			created: briefEventTime(event, a.CreatedAt),
+		})
 	}
-	return out, ids, filed, truncated, nil
+	return out, metas, truncated, nil
+}
+
+// briefEventTime is the ask event's ts, which is what the inbox projection
+// sorts on when it pins a filed batch's anchor. brief_asks.created_at is the
+// same instant when the trigger stored it; the event ts wins when both parse.
+func briefEventTime(event map[string]any, fallback time.Time) time.Time {
+	if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(anyStringValue(event["ts"]))); err == nil {
+		return parsed
+	}
+	return fallback
+}
+
+func briefInboxKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "ask", "review", "escalate":
+		return strings.ToLower(strings.TrimSpace(kind))
+	default:
+		return ""
+	}
 }
 
 func curationTargets(payload string) ([]string, bool) {
@@ -344,14 +372,19 @@ func (b *briefBuild) readableProposals(rows []briefAskRow) ([]briefAskRow, error
 // POST /asks/batch (their pinned batch_id) or an accepted curation batch
 // proposal. Membership only ever groups asks already on this page, so a batch
 // never reveals or counts a member the reader cannot see.
-func (b *briefBuild) collapseBatches(items []map[string]any, ids, filed []string) ([]map[string]any, error) {
-	if len(ids) < 2 {
+//
+// The kept decision's inbox_item_id is the id that answers every member:
+// the derived batch inbox id for a filing, or inbox:curation-batch:<key>.
+func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisionMeta) ([]map[string]any, error) {
+	if len(metas) < 2 || len(metas) != len(items) {
 		return items, nil
 	}
+	ids := make([]string, len(metas))
 	keys := map[string]string{}
-	for i, id := range ids {
-		if filed[i] != "" {
-			keys[id] = "filed:" + filed[i]
+	for i, meta := range metas {
+		ids[i] = meta.askID
+		if meta.batchID != "" {
+			keys[meta.askID] = "filed:" + meta.batchID
 		}
 	}
 	encoded, _ := json.Marshal(ids)
@@ -375,31 +408,91 @@ func (b *briefBuild) collapseBatches(items []map[string]any, ids, filed []string
 	if len(keys) == 0 {
 		return items, nil
 	}
-	members := map[string][]map[string]any{}
+	groups := map[string][]int{}
 	for i, id := range ids {
 		if key := keys[id]; key != "" {
-			members[key] = append(members[key], items[i])
+			groups[key] = append(groups[key], i)
 		}
 	}
 	out := make([]map[string]any, 0, len(items))
 	for i, id := range ids {
 		key := keys[id]
-		group := members[key]
+		group := groups[key]
 		if key == "" || len(group) < 2 {
 			out = append(out, items[i])
 			continue
 		}
-		if group[0]["ref"] != items[i]["ref"] {
+		if group[0] != i {
 			continue
 		}
 		list := make([]map[string]any, 0, len(group))
-		for _, m := range group {
-			list = append(list, map[string]any{"ref": m["ref"], "inbox_item_id": m["inbox_item_id"], "title": m["title"]})
+		for _, mi := range group {
+			list = append(list, briefBatchMember(items[mi], metas[mi]))
 		}
 		items[i]["batch"] = map[string]any{"key": key, "count": len(group), "members": list}
+		if respondID := batchRespondInboxID(key, group, metas); respondID != "" {
+			items[i]["ref"] = respondID
+			items[i]["inbox_item_id"] = respondID
+		}
 		out = append(out, items[i])
 	}
 	return out, nil
+}
+
+func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]any {
+	member := map[string]any{"ref": item["ref"], "inbox_item_id": item["inbox_item_id"], "title": item["title"]}
+	if meta.subject != "" {
+		member["subject_ref"] = meta.subject
+	}
+	if blocks, ok := item["blocks"].([]map[string]any); ok && len(blocks) > 0 {
+		copied := make([]map[string]any, 0, len(blocks))
+		for _, block := range blocks {
+			ref := strings.TrimSpace(anyStringValue(block["ref"]))
+			if ref == "" {
+				continue
+			}
+			entry := map[string]any{"ref": ref}
+			if title := strings.TrimSpace(anyStringValue(block["title"])); title != "" {
+				entry["title"] = title
+			}
+			copied = append(copied, entry)
+		}
+		if len(copied) > 0 {
+			member["blocks"] = copied
+		}
+	}
+	return member
+}
+
+// batchRespondInboxID is the single inbox id that answers the group. A filed
+// batch uses the same id the inbox projection derives (oldest member anchors
+// it, matching deriveHumanAttentionBatchInboxItem). A curation batch uses a
+// stable id the respond handler fans out.
+func batchRespondInboxID(key string, group []int, metas []briefDecisionMeta) string {
+	if strings.HasPrefix(key, "filed:") {
+		batchID := strings.TrimPrefix(key, "filed:")
+		anchor := metas[group[0]]
+		for _, mi := range group[1:] {
+			if briefMemberBefore(metas[mi], anchor) {
+				anchor = metas[mi]
+			}
+		}
+		if anchor.inboxKind == "" || anchor.thread == "" || anchor.askID == "" || batchID == "" {
+			return ""
+		}
+		return HumanAttentionInboxItemID(anchor.inboxKind, anchor.thread, batchID, anchor.askID)
+	}
+	if strings.TrimSpace(key) == "" {
+		return ""
+	}
+	return CurationBatchInboxItemID(key)
+}
+
+func briefMemberBefore(a, b briefDecisionMeta) bool {
+	if !a.created.Equal(b.created) {
+		return a.created.Before(b.created)
+	}
+	return a.askID < b.askID
 }
 
 func (a BriefAsk) blocksJSON(titles map[string]string) []map[string]any {

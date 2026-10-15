@@ -12537,9 +12537,14 @@ components:
         Server-linked access requests accept only approved or rejected; needs_context and other outcomes
         return 400 without mutation. Approval atomically grants the persisted requested
         grant to its persisted principal. Event-supplied correlation never grants authority.
-        Two modes on one route: a single-ask item requires response_text and outcome; a batch
-        item requires answers (matching its members) and rejects the flat fields and notify
-        overrides. The server enforces the split per item kind.
+        A single-ask item requires response_text and outcome. A batch item — the derived
+        inbox id of a POST /asks/batch filing, or a brief curation id inbox:curation-batch:{key} —
+        accepts that same flat response_text, outcome and notify_mode (`none` or `original`)
+        and records it on every open member in one transaction. `none` records every member
+        without a wake; `original` releases each member on its own delivery mode. A filed
+        batch also accepts answers (one entry per
+        member); flat fields and notify overrides must then be empty, and each member releases
+        on its own delivery mode. The same idempotency key replays the original combined result.
       properties:
         idempotency_key: {type: string, minLength: 1, maxLength: 128, description: Stable key for one intended response. Reuse the same key and body after an ambiguous failure to retrieve the original event and result.}
         actor_id: { type: string }
@@ -12561,9 +12566,10 @@ components:
           type: array
           items: { $ref: '#/components/schemas/RespondInboxItemAnswer' }
           description: >
-            Required for a batch inbox item (one derived from POST /asks/batch): one entry per
-            batch member, each with its own response_text and outcome; the whole batch records
-            atomically and releases together. Flat response_text/outcome must then be empty.
+            Optional per-member answers for a filed ask batch (one derived from POST /asks/batch).
+            When present, one entry per member, flat response_text/outcome must be empty, and
+            notify overrides are rejected. Omit answers to apply one flat response_text, outcome
+            and notify_mode to every open member instead. A curation batch id only accepts the flat form.
 
     RespondInboxItemAnswer:
       type: object
@@ -13486,8 +13492,15 @@ components:
       type: object
       required: [ref, inbox_item_id, kind, title, requested_by, created_at, age_seconds, decide_by, overdue_for_seconds, blocks, blocks_count, proposals]
       properties:
-        ref: { type: string, description: "inbox:<id>" }
-        inbox_item_id: { type: string }
+        ref: { type: string, description: "Same value as inbox_item_id." }
+        inbox_item_id:
+          type: string
+          description: >
+            Inbox id to answer. When batch is present this one id answers every open member:
+            a filed batch uses the derived batch inbox id (inbox:{kind}:{thread}:{batch_id}:{anchor_event_id}),
+            and an accepted curation batch uses inbox:curation-batch:{key}.
+            POST /inbox/{inbox_item_id}/respond with response_text, outcome and notify_mode
+            records that answer on every still-open member in one transaction.
         kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
         title: { type: string }
         body: { type: string }
@@ -13511,7 +13524,7 @@ components:
         curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts. Omitted entirely, with the decision, when the reader cannot read every target." }
         batch:
           type: object
-          description: "Present when these asks were filed together through POST /asks/batch (key filed:<batch_id>) or a human accepted a curation batch proposal over them. The decision stands for every member; answer each member by its own inbox_item_id. Members the reader cannot see are not listed or counted."
+          description: "Present when these asks were filed together through POST /asks/batch (key filed:<batch_id>) or a human accepted a curation batch proposal over them. The decision's inbox_item_id answers every open member in one request (flat response_text, outcome and notify_mode). Members the reader cannot see are not listed or counted, and a hidden open member makes the batch unanswerable."
           required: [key, count, members]
           properties:
             key: { type: string }
@@ -13526,6 +13539,12 @@ components:
                   ref: { type: string }
                   inbox_item_id: { type: string }
                   title: { type: string }
+                  subject_ref: { type: string, description: "Subject of this member ask, when it has one." }
+                  blocks:
+                    type: array
+                    maxItems: 20
+                    items: { $ref: '#/components/schemas/BriefRefTitle' }
+                    description: Open blocked refs on this member that the reader can see.
     BriefPromise:
       type: object
       required: [at, what, source]

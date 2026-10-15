@@ -669,6 +669,61 @@ func (s *Store) ReadableCurationProposal(ctx context.Context, key string, visibl
 	return rec, err
 }
 
+// CurationBatchMemberAsk is one still-open member of an accepted curation batch.
+type CurationBatchMemberAsk struct {
+	AskID, InboxItemID, Kind, Title, SubjectRef, ThreadID    string
+	RequesterActor, RequesterAgent, RequesterLabel, Delivery string
+}
+
+// OpenCurationBatchMembers lists open members of a curation batch.
+// hidden is true when any open member is outside the caller's scoped events
+// relation: the caller must not answer a partial set, and the bool carries
+// no member id. The list is capped at curation.MaxBatchMembers.
+func (s *Store) OpenCurationBatchMembers(ctx context.Context, key string) ([]CurationBatchMemberAsk, bool, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, false, nil
+	}
+	const memberSQL = `SELECT a.ask_id,a.inbox_item_id,a.kind,a.title,a.subject_ref,COALESCE(e.thread_id,''),
+		COALESCE(json_extract(e.payload_json,'$.payload.requester_actor_id'),''),
+		COALESCE(json_extract(e.payload_json,'$.payload.requester_agent_id'),''),
+		COALESCE(json_extract(e.payload_json,'$.payload.requester_label'),''),
+		COALESCE(json_extract(e.payload_json,'$.payload.delivery'),'')
+		FROM curation_batch_members m
+		JOIN brief_asks a ON a.ask_id=m.ask_id
+		JOIN events e ON e.id=m.ask_id
+		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''
+		ORDER BY a.created_at,a.ask_id
+		LIMIT ?`
+	var total int
+	if err := s.db.QueryRowContext(curationInternal(ctx), `SELECT COUNT(*) FROM curation_batch_members m JOIN brief_asks a ON a.ask_id=m.ask_id JOIN events e ON e.id=m.ask_id WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`, key).Scan(&total); err != nil {
+		return nil, false, err
+	}
+	if total > curation.MaxBatchMembers {
+		return nil, false, fmt.Errorf("curation batch has %d open members", total)
+	}
+	rows, err := s.db.QueryContext(ctx, memberSQL, key, curation.MaxBatchMembers)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	out := []CurationBatchMemberAsk{}
+	for rows.Next() {
+		var m CurationBatchMemberAsk
+		if err = rows.Scan(&m.AskID, &m.InboxItemID, &m.Kind, &m.Title, &m.SubjectRef, &m.ThreadID, &m.RequesterActor, &m.RequesterAgent, &m.RequesterLabel, &m.Delivery); err != nil {
+			return nil, false, err
+		}
+		out = append(out, m)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(out) != total {
+		return nil, true, nil
+	}
+	return out, false, nil
+}
+
 // UngroupCurationBatch undoes an accepted batch: its members become separate
 // decisions again. It reports whether any grouping was removed.
 func (s *Store) UngroupCurationBatch(ctx context.Context, key string) (bool, error) {

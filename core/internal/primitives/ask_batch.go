@@ -19,6 +19,33 @@ import (
 const MaxAskBatchMembers = 10
 const MinAskBatchMembers = 2
 
+// CurationBatchInboxPrefix is the brief respond id for an accepted curation
+// batch. POST /inbox/{id}/respond with this id answers every open member.
+const CurationBatchInboxPrefix = "inbox:curation-batch:"
+
+// HumanAttentionInboxItemID is the derived inbox id. An empty subject or
+// source segment is "none", matching the inbox projection.
+func HumanAttentionInboxItemID(category, threadID, subjectID, sourceEventID string) string {
+	if strings.TrimSpace(subjectID) == "" {
+		subjectID = "none"
+	}
+	if strings.TrimSpace(sourceEventID) == "" {
+		sourceEventID = "none"
+	}
+	return "inbox:" + category + ":" + threadID + ":" + subjectID + ":" + sourceEventID
+}
+
+// CurationBatchInboxItemID is the brief decision id for an accepted curation batch.
+func CurationBatchInboxItemID(key string) string {
+	return CurationBatchInboxPrefix + strings.TrimSpace(key)
+}
+
+// CurationBatchClaimID keys the atomic answer claim for a curation batch.
+// It does not collide with filed batch ids (askbatch_…).
+func CurationBatchClaimID(key string) string {
+	return "curation:" + strings.TrimSpace(key)
+}
+
 // ErrHumanAttentionMemberWithdrawn reports that a batch member was withdrawn
 // before its answer could commit. The error text carries the member's ask ref;
 // every other member of the batch is left untouched.
@@ -308,8 +335,21 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 		}
 		return nil, false, ErrHumanAttentionAlreadyResponded
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE id=?`, inboxItemID); err != nil {
-		return nil, false, err
+	// Drop the batch row and each member row. Filed batches share one derived
+	// id; a curation batch has one derived row per member.
+	drop := map[string]struct{}{strings.TrimSpace(inboxItemID): {}}
+	for _, pm := range preparedMembers {
+		if id := strings.TrimSpace(pm.member.InboxItemID); id != "" {
+			drop[id] = struct{}{}
+		}
+	}
+	for id := range drop {
+		if id == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE id=?`, id); err != nil {
+			return nil, false, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, false, err

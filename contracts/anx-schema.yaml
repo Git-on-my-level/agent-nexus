@@ -1363,7 +1363,7 @@ curation:
     - Withdrawing another principal's ask is only ever proposed (I4). A requester withdraws its own ask directly.
     - Restricted asks and initiatives are never formula candidates, so a proposal never names a private ref or title.
     - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Accepting archives the duplicate; undo restores the card.
-    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. Accepting records the grouping server side (curation_batch_members); brief.v1 decisions then collapse the open members into one decision with a batch field, and undo removes the grouping.
+    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. Accepting records the grouping server side (curation_batch_members); brief.v1 decisions then collapse the open members into one decision with a batch field, and undo removes the grouping. Answering that decision answers every still-open member.
     - A reader sees a proposal only when it can read every target; brief.v1 drops pm_proposal decisions naming a card or ask the reader cannot read.
     - Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.
   applied_trail:
@@ -1423,4 +1423,5 @@ brief:
     - "Reads are bounded: indexed lookups, at most section_limit rows per section, truncated flags when more exist."
     - "decide_by is derived from human_attention_requested payload.by; overdue_for is now minus decide_by when positive, 0 before, null without decide_by."
     - "followed_recommendation is true when the response text equals the first response proposal."
+    - "A decision with a batch field stands for every open member the reader can see. Its inbox_item_id is the single respond target: POST /inbox/{inbox_item_id}/respond with one response_text, outcome and notify_mode records that same answer on every still-open member in one transaction and replays on the same idempotency key. A filed batch (key filed:<batch_id>) uses the derived inbox id inbox:{kind}:{thread}:{batch_id}:{anchor_event_id}, the same id the inbox projection stores, so the atomic batch path runs. An accepted curation batch uses inbox:curation-batch:<key>. Each member lists its own inbox_item_id, subject_ref and the blocks the reader can see. Members the reader cannot see are not listed, counted, or revealed by the answer; a batch with a hidden open member is not answerable."
 

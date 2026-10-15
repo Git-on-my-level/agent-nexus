@@ -1050,13 +1050,7 @@ func boardCardRiskState(card map[string]any, now time.Time, riskHorizon time.Dur
 }
 
 func makeInboxItemID(category string, threadID string, subjectID string, sourceEventID string) string {
-	if strings.TrimSpace(subjectID) == "" {
-		subjectID = "none"
-	}
-	if strings.TrimSpace(sourceEventID) == "" {
-		sourceEventID = "none"
-	}
-	return "inbox:" + category + ":" + threadID + ":" + subjectID + ":" + sourceEventID
+	return primitives.HumanAttentionInboxItemID(category, threadID, subjectID, sourceEventID)
 }
 
 func parseTimestamp(raw any) (time.Time, bool) {
