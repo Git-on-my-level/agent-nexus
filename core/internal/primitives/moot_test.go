@@ -148,6 +148,8 @@ func TestCardPossiblyMootEligibility(t *testing.T) {
 		{"backlog", true},
 		{"ready", true},
 		{"in_progress", false},
+		{"blocked", false},
+		{"in_review", false},
 		{"review", false},
 		{"done", false},
 		{"cancelled", false},
@@ -162,6 +164,33 @@ func TestCardPossiblyMootEligibility(t *testing.T) {
 	moot := cardPossiblyMoot(cardHealthInput{Phase: "ready", Related: []string{"https://example.test/pr/1"}}, nil, facts)
 	if !moot.Flagged || moot.Sources != 1 {
 		t.Fatal(moot)
+	}
+}
+
+func TestNextAskOpenPhaseFollowsBriefPlacement(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"backlog", "ready", "in_progress", "review", "blocked", "in_review"} {
+		if !nextAskOpenPhase(phase) {
+			t.Fatalf("%s is an open brief placement", phase)
+		}
+	}
+	for _, phase := range []string{"done", "cancelled"} {
+		if nextAskOpenPhase(phase) {
+			t.Fatalf("%s is closed", phase)
+		}
+	}
+	if briefPlacement("blocked") != "in_progress" || briefPlacement("in_review") != "review" {
+		t.Fatal("placement aliases moved")
+	}
+}
+
+func TestMergeNextAskKeepsBothRules(t *testing.T) {
+	t.Parallel()
+	base := PossiblyMoot{Flagged: true, Reason: "all 1 linked source is done", Sources: 1}
+	ask := PossiblyMoot{Flagged: true, Reason: nextAskDecidedCode, Code: nextAskDecidedCode, AskRef: "event:ask-1", DecidedAt: "2026-10-14T08:00:00Z"}
+	got := mergeNextAsk(base, ask)
+	if !got.Flagged || got.Reason != base.Reason || got.Code != nextAskDecidedCode || got.AskRef != "event:ask-1" || got.DecidedAt == "" || got.Sources != 1 {
+		t.Fatalf("both rules = %+v", got)
 	}
 }
 
@@ -229,6 +258,16 @@ func TestNextAskDecidedMoot(t *testing.T) {
 			text:        "event:ask-1",
 			asks:        asks("answered", "needs_context", "", true),
 			wantFlagged: false,
+		},
+		{
+			name: "expired needs_context flags",
+			text: "event:ask-1",
+			asks: map[string]citedAsk{"ask-1": {
+				ID: "ask-1", Kind: "ask", State: "answered", Outcome: "needs_context",
+				AnsweredAt: decided, ExpiresAt: "2026-10-01T00:00:00Z", Visible: true,
+			}},
+			wantFlagged: true,
+			wantRef:     "event:ask-1",
 		},
 		{
 			name:        "prose without a ref does not flag",

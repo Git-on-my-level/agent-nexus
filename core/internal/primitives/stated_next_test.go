@@ -119,8 +119,8 @@ func TestStatedNextFollowsTheLivePromise(t *testing.T) {
 	if initiativeMoot(t, brief, "In review")["code"] != nextAskDecidedCode {
 		t.Fatal("review did not flag")
 	}
-	if initiativeMoot(t, brief, "Blocked")["flagged"] != false {
-		t.Fatalf("blocked flagged: %#v", initiativeMoot(t, brief, "Blocked"))
+	if initiativeMoot(t, brief, "Blocked")["code"] != nextAskDecidedCode {
+		t.Fatalf("blocked brief moot = %#v", initiativeMoot(t, brief, "Blocked"))
 	}
 	promise := initiativePromise(t, brief, "Loop ledger")
 	if promise["source"] != "note" || promise["what"] != "Check the loop ledger" || !strings.Contains(anyStringValue(promise["at"]), "2026-10-21") {
@@ -162,8 +162,8 @@ func TestStatedNextFollowsTheLivePromise(t *testing.T) {
 	}
 	blockedItem := read(blocked)
 	blockedFlag, _ := blockedItem["possibly_moot"].(PossiblyMoot)
-	if blockedFlag.Flagged || blockedFlag.Code != "" || blockedFlag.AskRef != "" {
-		t.Fatalf("blocked moot = %+v", blockedFlag)
+	if !blockedFlag.Flagged || blockedFlag.Code != nextAskDecidedCode || blockedFlag.AskRef != "event:"+blockedAsk {
+		t.Fatalf("blocked is placed in in_progress and must flag: %+v", blockedFlag)
 	}
 	if read(onlyNote)["next_action"] != nil && read(onlyNote)["next_action"] != "" {
 		t.Fatalf("note-only next_action = %#v", read(onlyNote)["next_action"])

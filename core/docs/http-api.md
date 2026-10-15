@@ -485,12 +485,16 @@ the ingested observation evidence, never a read-time fetch. Context-only refs
 (documents, topics, boards, threads) neither contribute nor block; any other
 ref that is unresolved, invisible to the reader, or of unknown workflow state
 withholds the flag entirely — an unobserved source never counts as terminal.
-`sources` counts the known sources and zero never flags. An open card in
-backlog, ready, in_progress, or review is also flagged (`code: next_ask_decided`)
-when its latest live note cites an explicit `event:<id>` of an inbox ask or
-review the reader can see that is already answered, resolved, withdrawn, or
-expired. An ask the reader cannot see does not flag and is not named. blocked,
-done and cancelled are not flagged by that rule. The flag only carries evidence ("all 2
+`sources` counts the known sources. Zero sources withholds the linked-source
+rule; the next-ask rule can flag with sources still zero. The ask rule uses
+the phase the brief shows. A card placed in backlog, ready, in_progress, or
+review is flagged (`code: next_ask_decided`) when its latest live note cites
+an explicit `event:<id>` of an inbox ask or review the reader can see that is
+already answered, resolved, withdrawn, or expired. Stored `blocked` is placed
+in `in_progress` and stored `in_review` is placed in `review`, so both are
+eligible. `done` and `cancelled` stay closed. The linked-source rule stays on
+stored backlog and ready. An ask the reader cannot see does not flag and is
+not named. The flag only carries evidence ("all 2
 linked sources are merged", or the code `next_ask_decided`); it never auto-closes anything, and computation
 never changes phase.
 

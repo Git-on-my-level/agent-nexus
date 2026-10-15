@@ -11,7 +11,10 @@ import (
 // notes maps card id to the citation text of that card's newest live note
 // (the note brief.v1 shows). The lookup runs only when a note cites an
 // event ref: one statement per 200 distinct refs, each an indexed seek on
-// brief_asks and, for handle spellings, idx_events_handle_unique. The bound
+// brief_asks and, for handle spellings, idx_events_handle_unique. The handle
+// predicate matches that partial index, so the plan uses it without an
+// INDEXED BY hint. A hint would fail signed-in reads: scopeRead rewrites
+// events into a relation shadow that has no physical indexes. The bound
 // is the page (at most nextAskRefsPerNote refs per note, briefMootRefBudget
 // refs in all), never workspace size. An ask the scoped events relation or
 // visible hides is omitted, so its decision cannot flag the card or appear
@@ -97,7 +100,7 @@ func (s *Store) visibleCitedAsksBatch(ctx context.Context, tokens []string, visi
 		AND a.ask_id IN (
 			SELECT value FROM json_each(?)
 			UNION
-			SELECT ev.id FROM events ev INDEXED BY idx_events_handle_unique
+			SELECT ev.id FROM events ev
 			WHERE ev.handle IN (SELECT value FROM json_each(?)) AND ev.handle IS NOT NULL AND trim(ev.handle)<>''
 		)`, string(encoded), string(encoded))
 	if err != nil {

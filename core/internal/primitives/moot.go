@@ -40,11 +40,13 @@ type PossiblyMoot struct {
 // everything around it done still needs somebody to land it.
 var possiblyMootPhases = map[string]bool{"backlog": true, "ready": true}
 
-// nextAskOpenPhase is every open phase where a stated next step can wait on
-// an ask that is already decided. blocked, done and cancelled are not open
-// work. Source-terminal possibly_moot stays on possiblyMootPhases.
+// nextAskOpenPhase follows the phase the brief shows (briefPlacement), not
+// the raw column key. A stored blocked card is placed in in_progress and a
+// stored in_review card is placed in review, so both are open for this rule.
+// done and cancelled stay closed. Source-terminal possibly_moot stays on the
+// stored backlog and ready phases.
 func nextAskOpenPhase(phase string) bool {
-	switch phase {
+	switch briefPlacement(phase) {
 	case "backlog", "ready", "in_progress", "review":
 		return true
 	}
@@ -215,6 +217,14 @@ func (a citedAsk) askCitedDecided(now time.Time) (bool, string) {
 	if !a.Visible || (a.Kind != "ask" && a.Kind != "review") {
 		return false, ""
 	}
+	// Expiry wins over an answer that is still waiting. needs_context does
+	// not keep an ask open once expires_at has passed.
+	if a.ExpiresAt != "" {
+		at, ok := parseMootTime(a.ExpiresAt)
+		if ok && !now.Before(at) {
+			return true, at.UTC().Format(time.RFC3339)
+		}
+	}
 	switch a.State {
 	case "withdrawn", "expired", "resolved":
 		return true, mootStamp(a.AnsweredAt)
@@ -227,12 +237,6 @@ func (a citedAsk) askCitedDecided(now time.Time) (bool, string) {
 	if a.Reason == "expired" {
 		if at := mootStamp(a.AnsweredAt); at != "" {
 			return true, at
-		}
-	}
-	if a.ExpiresAt != "" {
-		at, ok := parseMootTime(a.ExpiresAt)
-		if ok && !now.Before(at) {
-			return true, at.UTC().Format(time.RFC3339)
 		}
 	}
 	return false, ""
