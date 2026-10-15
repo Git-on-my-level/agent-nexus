@@ -109,6 +109,34 @@ describe("PlanView", () => {
     expect(container.querySelectorAll(".plan-edge--critical")).toHaveLength(1);
   });
 
+  it("marks the critical path only when it is not every step", () => {
+    const plan = { steps: [step("a"), step("b", ["a"]), step("c", ["a"])] };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, {
+        shape: "dag",
+        critical_path: ["a", "b", "c"],
+      }),
+    });
+    expect(container.querySelectorAll("[data-plan-critical]")).toHaveLength(0);
+    expect(container.querySelectorAll(".plan-node--critical")).toHaveLength(0);
+    expect(container.querySelectorAll(".plan-edge--critical")).toHaveLength(0);
+  });
+
+  it("puts a tree's diagram behind a toggle the reader can open", async () => {
+    const plan = { steps: [step("a"), step("b", ["a"]), step("c", ["a"])] };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "dag" }),
+    });
+    const toggle = container.querySelector("[data-plan-diagram-toggle]");
+    const diagram = container.querySelector("[data-plan-diagram]");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    toggle.click();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(diagram.classList.contains("plan-diagram--shown")).toBe(true);
+  });
+
   it("renders separate runs as lanes", () => {
     const plan = {
       steps: [step("a"), step("b", ["a"]), step("x"), step("y", ["x"])],
