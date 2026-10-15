@@ -143,6 +143,13 @@ function loopsBrief() {
       make("loop-quiet", "Retention nudges", {
         last_evidence_at: ago(9 * 86400),
       }),
+      make("loop-flat", "Pricing page test", {
+        metric_flat: {
+          flat: true,
+          for_seconds: 4 * 86400,
+          window_seconds: 604800,
+        },
+      }),
       make("loop-moving", "Onboarding emails", {
         metric_flat: { flat: false, for_seconds: 0, window_seconds: 604800 },
       }),
@@ -157,8 +164,8 @@ test("Loops lists measured initiatives by what they need", async ({
   await setup(context, (route) => json(route, loopsBrief()));
   await page.goto(WATCH);
   const loopsButton = page.locator('[data-watch-view="loops"]');
-  // The fixture's loop plus three added ones.
-  await expect(loopsButton).toContainText("4");
+  // The fixture's loop plus four added ones.
+  await expect(loopsButton).toContainText("5");
   await loopsButton.click();
   await expect(page).toHaveURL(/view=loops/);
   const groups = page.locator("[data-watch-loop-group]");
@@ -169,7 +176,9 @@ test("Loops lists measured initiatives by what they need", async ({
   await expect(page.locator('[data-watch-loop-group="silent"]')).toContainText(
     "Retention nudges",
   );
-  await expect(page.locator('[data-watch-loop-group="flat"]')).toBeVisible();
+  await expect(page.locator('[data-watch-loop-group="flat"]')).toContainText(
+    "Pricing page test",
+  );
   await expect(
     page.locator(
       '[data-watch-loop-group="flat"] [data-source="computed:initiatives.metric_flat"]',
