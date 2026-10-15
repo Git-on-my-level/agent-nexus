@@ -14,6 +14,7 @@
   } from "$lib/brief.js";
   import {
     inboxResponseOverlay,
+    inboxResponseToast,
     inboxUnsentResponses,
     onInboxResponseCommitted,
     undoInboxResponse,
@@ -41,6 +42,13 @@
    * row back. Order is core's: decide_by, blocked count, priority, then age.
    * `?initiative=<ref>` narrows to one initiative (Watch's badges link here).
    * `?item=<inbox id>` is the selection, so a reload keeps the place.
+   *
+   * Below `lg` there is no list and no pane: every decision is a full card in
+   * one scrollable stack, answered with one tap. An answered card folds to a
+   * one-line "Answered · Undo" while its answer waits, then leaves. Keys that
+   * act on "the selected decision" do nothing there — a phone with a keyboard
+   * must not answer a card the reader cannot see — and `?item=` scrolls to
+   * and highlights its card instead.
    */
   usePageTitle(() => "Decide");
 
@@ -84,6 +92,28 @@
   let decisions = $derived(
     all.filter((decision) => !answeredIds.has(decision.inboxItemId)),
   );
+
+  /*
+   * Phone stack: a card answered here folds to one line while its answer
+   * waits behind the undo toast, then leaves once the answer goes out.
+   */
+  let folded = $state(new Set());
+  let pendingId = $derived(
+    $inboxResponseToast?.state === "pending"
+      ? ($inboxResponseToast.itemId ?? "")
+      : "",
+  );
+  let stack = $derived(
+    all.filter(
+      (decision) =>
+        decisions.includes(decision) ||
+        (folded.has(decision.inboxItemId) &&
+          decision.inboxItemId === pendingId),
+    ),
+  );
+  let highlighted = $state("");
+  // Effect bookkeeping, deliberately not reactive.
+  const revealed = { id: "" };
 
   let selectedId = $state("");
   let selected = $derived(
@@ -140,6 +170,23 @@
     };
   });
 
+  // Phone: `?item=` scrolls to its card and marks it, once per link.
+  $effect(() => {
+    if (wide || !selectedParam || revealed.id === selectedParam) return;
+    if (!stack.some((d) => d.inboxItemId === selectedParam)) return;
+    revealed.id = selectedParam;
+    const id = selectedParam;
+    void tick().then(() => {
+      document
+        .querySelector(`[data-decide-card="${CSS.escape(id)}"]`)
+        ?.scrollIntoView({ block: "start" });
+      highlighted = id;
+      setTimeout(() => {
+        if (highlighted === id) highlighted = "";
+      }, 2400);
+    });
+  });
+
   /*
    * Core caps the decisions it sends. Once the reader has answered everything
    * loaded, there may be more: say so, never "you're clear". Each committed
@@ -188,6 +235,7 @@
    */
   function onAnswered(decision) {
     if (decision.pmDecision) return;
+    if (!wide) folded = new Set([...folded, decision.inboxItemId]);
     const index = decisions.findIndex(
       (row) => row.inboxItemId === decision.inboxItemId,
     );
@@ -204,6 +252,11 @@
   function onUndo() {
     const restored = undoInboxResponse();
     if (!restored) return;
+    if (folded.has(restored.itemId)) {
+      const unfolded = new Set(folded);
+      unfolded.delete(restored.itemId);
+      folded = unfolded;
+    }
     selectedId = restored.itemId;
   }
 
@@ -215,11 +268,15 @@
       void goto(href(`/decide/${encodeURIComponent(selected.inboxItemId)}`));
   }
 
+  /** Phone stack: only keys that do not act on one decision. */
+  const STACK_KEYS = new Set(["help", "close-help", "undo"]);
+
   function onKeydown(event) {
     const action = inboxShortcutAction(event, {
       helpOpen,
       modalOpen: otherDialogOpen(),
     });
+    if (!wide && (!action || !STACK_KEYS.has(action.type))) return;
     if (!action) {
       if (
         event.key === "c" &&
@@ -360,7 +417,7 @@
     />
   {:else if !$brief.data}
     <SkeletonList rows={4} />
-  {:else if !decisions.length}
+  {:else if !decisions.length && (wide || !stack.length)}
     <div
       class="flex flex-col items-center gap-1 rounded-md border border-line-subtle bg-panel px-5 py-12 text-center"
       data-decide-empty
@@ -381,6 +438,45 @@
         <p class="text-meta text-fg-muted">Nothing is waiting on you.</p>
       {/if}
     </div>
+  {:else if !wide}
+    <ul class="space-y-3" aria-label="Decisions" data-decide-stack>
+      {#each stack as decision (decision.ref)}
+        <li
+          class="scroll-mt-4 rounded-md transition-shadow {highlighted ===
+          decision.inboxItemId
+            ? 'ring-2 ring-accent'
+            : ''}"
+          data-decide-card={decision.inboxItemId}
+          data-highlighted={highlighted === decision.inboxItemId
+            ? "true"
+            : undefined}
+        >
+          {#if folded.has(decision.inboxItemId) && !decisions.includes(decision)}
+            <div
+              class="flex min-h-11 items-center gap-2 rounded-md border border-line-subtle bg-panel px-4 text-meta text-fg-muted"
+              data-decide-answered
+            >
+              <span class="min-w-0 flex-1 truncate"
+                >Answered · <span class="text-fg">{decision.title}</span></span
+              >
+              <button
+                type="button"
+                class="-mr-2 inline-flex min-h-11 shrink-0 items-center px-2 font-medium text-accent-text"
+                data-decide-undo
+                onclick={onUndo}>Undo</button
+              >
+            </div>
+          {:else}
+            <DecisionCard {decision} variant="stack" {now} {onAnswered} />
+          {/if}
+        </li>
+      {/each}
+    </ul>
+    {#if $brief.data.truncated?.decisions}
+      <p class="text-micro text-fg-muted">
+        Showing the first {decisions.length}. Answer some to see the rest.
+      </p>
+    {/if}
   {:else}
     <div
       class="grid overflow-hidden rounded-md border border-line-subtle bg-panel lg:min-h-[30rem] lg:grid-cols-[minmax(16rem,0.85fr)_minmax(0,1.5fr)]"
