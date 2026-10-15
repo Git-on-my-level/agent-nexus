@@ -75,6 +75,17 @@ async function pan(slot, pointerType) {
   });
 }
 
+// jsdom has no Web Animations; the board animates cards into place (flip).
+if (typeof Element.prototype.getAnimations !== "function")
+  Element.prototype.getAnimations = () => [];
+if (typeof Element.prototype.animate !== "function")
+  Element.prototype.animate = () => ({
+    cancel() {},
+    finish() {},
+    onfinish: null,
+    finished: Promise.resolve(),
+  });
+
 afterEach(cleanup);
 
 it("does not move an initiative when a touch pans across the board", async () => {
@@ -110,4 +121,47 @@ it("still moves an initiative when a mouse drag ends on another column", async (
   expect(onMove.mock.calls[0][0].ref).toBe("card:ship");
   expect(onMove.mock.calls[0][1]).toBe("ready");
   expect(onMove.mock.calls[0][2]).toBe("");
+});
+
+it("lands a dropped card in its new column before the move resolves", async () => {
+  let resolve;
+  const onMove = vi.fn(() => new Promise((r) => (resolve = r)));
+  const { container } = render(WatchBoard, {
+    initiatives: [initiative],
+    onMove,
+  });
+  layout(container);
+  await pan(container.querySelector('[data-work-ref="card:ship"]'), "mouse");
+  expect(onMove).toHaveBeenCalledTimes(1);
+  const ready = container.querySelector('[data-watch-column="ready"]');
+  expect(ready.querySelector('[data-work-ref="card:ship"]')).not.toBeNull();
+  expect(
+    ready
+      .querySelector('[data-work-ref="card:ship"]')
+      .getAttribute("aria-busy"),
+  ).toBe("true");
+  // The page declined the move (nothing changed in the rows): it goes back.
+  resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  await Promise.resolve();
+  expect(
+    container
+      .querySelector('[data-watch-column="backlog"]')
+      .querySelector('[data-work-ref="card:ship"]'),
+  ).not.toBeNull();
+});
+
+it("moves a focused card one stage with the arrow keys", async () => {
+  const onMove = vi.fn();
+  const { container } = render(WatchBoard, {
+    initiatives: [initiative],
+    onMove,
+  });
+  const slot = container.querySelector('[data-work-ref="card:ship"]');
+  await fireEvent.keyDown(slot, { key: "ArrowRight" });
+  expect(onMove).toHaveBeenCalledTimes(1);
+  expect(onMove.mock.calls[0][1]).toBe("ready");
+  await fireEvent.keyDown(slot, { key: "ArrowLeft" });
+  // Already in the first stage: nothing to move to.
+  expect(onMove).toHaveBeenCalledTimes(1);
 });
