@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,7 +68,7 @@ func askSubjectServer(t *testing.T, card string, brief ...string) *httptest.Serv
 		case r.URL.Path == "/brief" && len(brief) > 0:
 			fmt.Fprint(w, brief[0])
 		case r.URL.Path == "/work" && r.Method == http.MethodPost:
-			fmt.Fprint(w, `{"work":{"ref":"card:new-subject"}}`)
+			fmt.Fprint(w, `{"work":{"ref":"card:new-subject","board_ref":"board:tasks"}}`)
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
 			fmt.Fprint(w, card)
 		case r.URL.Path == "/events" && r.Method == http.MethodPost:
@@ -103,8 +104,16 @@ func TestAskWarningAutoSubject(t *testing.T) {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	doc := dailyJSON(t, out)
-	if msg := warningCodes(doc)["ask_auto_subject"]; !strings.Contains(msg, "created a subject card") || !strings.Contains(msg, "--subject-ref") {
+	msg := warningCodes(doc)["ask_auto_created_card"]
+	if !strings.Contains(msg, "No --subject-ref") || !strings.Contains(msg, "created card:new-subject on board:tasks") || !strings.Contains(msg, "pass --subject-ref card:<slug>") {
 		t.Fatalf("warnings=%#v", doc["warnings"])
+	}
+	if strings.Contains(msg, "Suggestions:") {
+		t.Fatalf("a failed initiative read must omit suggestions: %q", msg)
+	}
+	stderr := a.Stderr.(*bytes.Buffer).String()
+	if !strings.Contains(stderr, "warning: "+msg) {
+		t.Fatalf("stderr=%q", stderr)
 	}
 }
 

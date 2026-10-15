@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -11,11 +13,15 @@ import (
 )
 
 const (
-	openInitiativeTarget     = 15
-	initiativeScanLimit      = 200
-	nearDuplicateThreshold   = 0.8
-	workNearDuplicateWarning = "work_near_duplicate"
-	workOverTargetWarning    = "work_over_target"
+	openInitiativeTarget         = 15
+	initiativeScanLimit          = 200
+	askInitiativeSuggestionLimit = 50
+	askInitiativeSuggestionCount = 3
+	askInitiativeSuggestionPages = 4
+	nearDuplicateThreshold       = 0.8
+	workNearDuplicateWarning     = "work_near_duplicate"
+	workOverTargetWarning        = "work_over_target"
+	askAutoCreatedCardCode       = "ask_auto_created_card"
 )
 
 // workCreateWarnings reads one page of at most 200 open initiatives and warns
@@ -35,6 +41,92 @@ func (a *App) workCreateWarnings(ctx context.Context, cfg config.Resolved, title
 		}
 	}
 	return workCreateWarningsFor(title, open)
+}
+
+// suggestOpenInitiativeCards reads newest-first work pages and returns up to
+// three open initiatives other than exclude. GET /work's phase parameter is an
+// exact match, and ListWork always includes closed rows, so there is no
+// server filter that excludes done and cancelled. Closed rows are dropped
+// here and the server's order is kept. A failed first page yields no
+// suggestions; a later page failure keeps whatever was already collected.
+func (a *App) suggestOpenInitiativeCards(ctx context.Context, cfg config.Resolved, exclude string) []map[string]any {
+	var open []map[string]any
+	seenCursor := map[string]bool{"": true}
+	cursor := ""
+	for page := 0; page < askInitiativeSuggestionPages && len(open) < askInitiativeSuggestionCount; page++ {
+		result, err := a.invokeRawJSON(ctx, cfg, "work list", "GET", openInitiativeWorkPath(askInitiativeSuggestionLimit, cursor), nil)
+		if err != nil {
+			if page == 0 {
+				return nil
+			}
+			break
+		}
+		body := commandResultBody(result)
+		for _, raw := range asSlice(body["work"]) {
+			row := asMap(raw)
+			if !isOpenInitiative(row) {
+				continue
+			}
+			ref := firstNonEmpty(anyString(row["ref"]), anyString(row["card_ref"]))
+			if ref == "" || ref == exclude {
+				continue
+			}
+			open = append(open, row)
+			if len(open) == askInitiativeSuggestionCount {
+				break
+			}
+		}
+		cursor = strings.TrimSpace(anyString(body["next_cursor"]))
+		if cursor == "" || seenCursor[cursor] {
+			break
+		}
+		seenCursor[cursor] = true
+	}
+	return open
+}
+
+// openInitiativeWorkPath is the GET /work query for initiative suggestions.
+// The list is newest-first. phase selects one exact phase and cannot exclude
+// done or cancelled, so the caller filters those rows.
+func openInitiativeWorkPath(limit int, cursor string) string {
+	query := url.Values{}
+	query.Set("limit", strconv.Itoa(limit))
+	if strings.TrimSpace(cursor) != "" {
+		query.Set("cursor", cursor)
+	}
+	return "/work?" + query.Encode()
+}
+
+func askAutoCreatedCardWarning(subjectRef, board string, rows []map[string]any) output.Warning {
+	if strings.TrimSpace(board) == "" {
+		board = "the default board"
+	}
+	msg := fmt.Sprintf("No --subject-ref: created %s on %s. Asks belong on an initiative; pass --subject-ref card:<slug>.", subjectRef, board)
+	suggestions := make([]any, 0, len(rows))
+	var listed []string
+	for _, row := range rows {
+		ref := firstNonEmpty(anyString(row["ref"]), anyString(row["card_ref"]))
+		if ref == "" {
+			continue
+		}
+		title := strings.TrimSpace(anyString(row["title"]))
+		item := map[string]any{"ref": ref}
+		label := ref
+		if title != "" {
+			item["title"] = title
+			label = ref + " (" + title + ")"
+		}
+		suggestions = append(suggestions, item)
+		listed = append(listed, label)
+	}
+	if len(listed) > 0 {
+		msg += " Suggestions: " + strings.Join(listed, "; ") + "."
+	}
+	details := map[string]any{"created_ref": subjectRef, "board": board}
+	if len(suggestions) > 0 {
+		details["suggestions"] = suggestions
+	}
+	return output.Warning{Code: askAutoCreatedCardCode, Message: msg, Details: details}
 }
 
 func isOpenInitiative(row map[string]any) bool {

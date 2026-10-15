@@ -309,7 +309,7 @@ Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Ma
 anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
 ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
 Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
-Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
+Pass --subject-ref card:<slug> so the ask stays on an initiative. The subject falls back to the current card. If both are absent, the CLI creates a ready card on the default board and warns (ask_auto_created_card). --from-file <path.md> reads a request with YAML frontmatter.
 Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
@@ -462,7 +462,7 @@ Executive workspace
 
 Asking for decisions
 
-- Every ask, review and escalation belongs to a card. Without a current card, the CLI creates one on ANX_ASK_DEFAULT_BOARD or the workspace default. Documents and topics belong in evidence refs.
+- Every ask, review and escalation belongs to an initiative card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
 - Use anx ask with a one-line decision title and --body-file ask.md for Context (2–5 sentences), Options with consequences, Recommendation and Evidence. Include every named document/card/topic as a typed ref and every named PR/file as a labelled URL. Summarise code and link a PR or commit-pinned file with line anchors instead of pasting source. Use anx ask --template decision to start.
 - Use a one-line title (aim for ≤100 characters; hard limit 160) and Markdown --body-file ask.md by default. Start with anx ask --template decision; include Decision, Context, Options with consequences, Recommendation and Evidence. Pointer-only asks and obvious missing evidence fail before publishing. Incomplete context produces warnings; --force --reason records a deliberate lint override. External evidence is structured as {label,url}; native evidence remains in related_refs.
 - Answers atomically record a decision on the card and route next action to its owner/requester/board role. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
@@ -471,8 +471,8 @@ Asking for decisions
 
 Initiative plans
 
-Use `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>` to add a linked step. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Stable ids belong to the plan; agents never select a view.
-Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a full plan, or `step update <card> <step-id>` and `step rm <card> <step-id>` for edits. Writes compare the token from a fresh read; reconcile conflicts explicitly. Known refs override fallback status. Resolve chips in one request with `anx refs resolve <ref>...`.
+Use `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>` to add a linked step. --ref is a typed ref or a full URL (a Linear issue or GitHub pull request), not a bare id like SCA-123 or #123. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Stable ids belong to the plan; agents never select a view.
+Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a full plan, or `step update <card> <step-id>` and `step rm <card> <step-id>` for edits. A step ref in that file is a typed ref or full URL, not a bare id like SCA-123 or #123. Writes compare the token from a fresh read; reconcile conflicts explicitly. Known refs override fallback status. Resolve chips in one request with `anx refs resolve <ref>...`.
 
 
 Daily loop
@@ -9875,6 +9875,7 @@ anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [-
 Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
 Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
 Omitting --step-id derives a slug from --title. --after is a comma-separated list of step ids.
+--ref accepts a typed ref (card:, doc:, document:, topic:, or series:) or an http(s) URL such as a Linear issue or GitHub pull request. Bare tracker ids (SCA-123) and pull numbers (#123) are rejected; pass the full URL.
 ```
 
 ## `plan step update`
@@ -9885,6 +9886,7 @@ Edit a linked initiative step with a card concurrency token.
 anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status done|active|blocked|not_started]
 Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
 Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
+--ref accepts a typed ref (card:, doc:, document:, topic:, or series:) or an http(s) URL such as a Linear issue or GitHub pull request. Bare tracker ids (SCA-123) and pull numbers (#123) are rejected; pass the full URL.
 Pass at least one field; an empty --after clears dependencies. Source state takes precedence over fallback --status.
 ```
 
