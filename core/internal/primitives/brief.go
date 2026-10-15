@@ -844,6 +844,9 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 		}
 		out = append(out, item)
 	}
+	if err := b.initiativeSeries(ids, out); err != nil {
+		return nil, false, err
+	}
 	return out, truncated, nil
 }
 

@@ -13583,12 +13583,53 @@ components:
         blocked_count: { type: integer, description: Open asks and blocks refs holding this initiative. }
         waiting_on_you_count: { type: integer, description: Open decisions addressed to the reader about this initiative. }
         note: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefNote' }] }
+        series:
+          type: array
+          maxItems: 2
+          description: >
+            First two valid, distinct series refs in canonical card refs order,
+            considering at most 200 authored refs within the first 64 KiB of refs JSON,
+            filtered through the same scoped series relations as series reads.
+            Hidden or unmatched explicit label selectors are omitted. Ambiguous
+            selectors retain authored labels with null last_value/last_at.
+            Latest observations are bounded to the last 7 days.
+          items: { $ref: '#/components/schemas/BriefSeries' }
+        metric_flat:
+          nullable: true
+          description: Null when no visible series is returned.
+          allOf: [{ $ref: '#/components/schemas/BriefMetricFlat' }]
         possibly_moot:
           type: object
           required: [flagged]
           properties:
             flagged: { type: boolean }
             reason: { type: string }
+    BriefSeries:
+      type: object
+      required: [ref, name, labels, last_value, last_at]
+      properties:
+        ref: { type: string }
+        name: { type: string }
+        labels: { type: object, additionalProperties: { type: string } }
+        last_value:
+          oneOf: [{ type: number, nullable: true }, { type: string }]
+        last_at: { type: string, format: date-time, nullable: true }
+    BriefMetricFlat:
+      type: object
+      required: [flat, for_seconds, window_seconds]
+      description: >
+        Primary (first returned) series only. Numeric daily extrema must stay within
+        max(1e-9, abs(latest value)*1e-6) of the latest value for at least 3 days.
+        Uses at most 8 UTC daily buckets intersecting a 7-day lookback, including
+        whole boundary buckets conservatively. for_seconds is the observed span
+        from the oldest consecutive qualifying bucket's last observation to the
+        latest observation, capped at 7 days. Missing days break the span.
+        Missing, ambiguous, nonnumeric or older-than-24h latest data yields false/0.
+        Ref _range and _baseline options do not alter this fixed computation.
+      properties:
+        flat: { type: boolean }
+        for_seconds: { type: integer, minimum: 0 }
+        window_seconds: { type: integer, enum: [604800] }
     BriefAnswered:
       type: object
       required: [ref, inbox_item_id, title, answer, answered_at, answered_by, followed_recommendation]
