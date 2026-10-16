@@ -855,3 +855,33 @@ go test -C core ./internal/server -run '^TestLoopBriefCost10KEvents$' -count=1 -
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Scoped curation promise reads
+
+`GET /curation/metrics` retains its existing bounded window and row limits.
+Open promises seek `idx_brief_initiatives_page` by `(open, promise_at)` and
+join the reader-scoped card relation by primary key before aggregation and
+pagination. The relation compiler removes this physical `INDEXED BY` hint when
+`brief_initiatives` is a scoped CTE; SQLite still pushes the range into the
+canonical table and uses that index. It must not materialize the entire
+initiative relation. No loop facts or receipt ranges are loaded by this query.
+
+`TestCurationMetricsScopedPromiseIndex` checks live and request-cached scopes,
+private-card exclusion, and the actual indexed query plan. The shared 50-card
+brief scale gate retains its 50,000-VM-step ceiling. Ask and cleared-note reads
+keep their existing type/time and next-at indexes and admission limits.
+
+```sh
+go test -C core ./internal/primitives -run '^TestCurationMetricsScopedPromiseIndex$' -count=1
+go test -C core ./internal/server -run '^TestResourceAccessRouteMatrix$|^TestCurationMetricsLogsSQLErrorCause$' -count=1
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+```
+
+The generic curation route gate currently fails its existing authorization
+budget on main as well as this branch. At main
+`42fd88cb22be86e2185d93269b8d7dbbc682c77d`, the denied-reader warm path uses
+66,461 VM steps; this fix uses 66,524 (six queries, three returned rows in both).
+Post-invalidation work is 1,761,675 versus 1,761,738 VM steps. The inherited
+closure/query-plan failures are recorded separately from the successful
+index-plan regression and brief scale checks. No budget or plan allowance was
+relaxed for this fix.

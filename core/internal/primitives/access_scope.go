@@ -273,7 +273,7 @@ func scopeReadSnapshot(ctx context.Context, query string, snapshot *denialSnapsh
 	q := strings.TrimSpace(query)
 	// Scoped relation shadows have no named physical indexes. The optimizer
 	// still pushes candidate keys into the indexed canonical relations.
-	for _, index := range []string{"idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1"} {
+	for _, index := range []string{"idx_brief_initiatives_page", "idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1"} {
 		q = strings.ReplaceAll(q, " INDEXED BY "+index, "")
 	}
 	upper := strings.ToUpper(q)
