@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -48,6 +49,42 @@ func TestBriefMaintenanceGateSkipsBusyAndRateLimits(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("expected the distinct error again after a minute, got %#v", got)
 	}
+}
+
+func TestBriefMaintenanceGateEvictsOldestWithoutRewindingRecent(t *testing.T) {
+	gate := newBriefMaintenanceGate(time.Minute)
+	var got []string
+	emit := func(err error) { got = append(got, err.Error()) }
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < briefMaintenanceReportLimit; i++ {
+		gate.maybe(errors.New(fmt.Sprintf("err-%02d", i)), base.Add(time.Duration(i)*time.Second), emit)
+	}
+	if len(got) != briefMaintenanceReportLimit {
+		t.Fatalf("fill: %d", len(got))
+	}
+	// A 33rd distinct error must not wipe the map. The newest key stays
+	// suppressed; only the oldest slot is released.
+	newest := fmt.Sprintf("err-%02d", briefMaintenanceReportLimit-1)
+	gate.maybe(errors.New("err-new"), base.Add(time.Duration(briefMaintenanceReportLimit)*time.Second), emit)
+	gate.maybe(errors.New(newest), base.Add(time.Duration(briefMaintenanceReportLimit)*time.Second), emit)
+	if got[len(got)-1] != "err-new" || countStrings(got, newest) != 1 {
+		t.Fatalf("recent key logged again: %#v", got)
+	}
+	gate.maybe(errors.New("err-00"), base.Add(61*time.Second), emit)
+	gate.maybe(errors.New(newest), base.Add(61*time.Second), emit)
+	if countStrings(got, "err-00") != 2 || countStrings(got, newest) != 1 {
+		t.Fatalf("expiry: %#v", got)
+	}
+}
+
+func countStrings(values []string, want string) int {
+	n := 0
+	for _, value := range values {
+		if value == want {
+			n++
+		}
+	}
+	return n
 }
 
 func fmtWrap(err error) error { return wrappedError{err} }

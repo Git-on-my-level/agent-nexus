@@ -2838,7 +2838,10 @@ func isUniqueViolation(err error) bool {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(text, "unique constraint") || strings.Contains(text, "constraint failed")
+	// Match unique-index failures only. A trigger RAISE(ABORT, ...) is also
+	// reported as "constraint failed" and must stay an internal error so the
+	// handler logs the chain.
+	return strings.Contains(text, "unique constraint")
 }
 
 // VisualReportValidationError is an invalid document write whose content is a

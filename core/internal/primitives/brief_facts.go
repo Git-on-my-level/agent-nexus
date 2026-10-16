@@ -122,12 +122,29 @@ func (g *briefMaintenanceGate) maybe(err error, now time.Time, emit func(error))
 	if prev, ok := g.last[key]; ok && now.Sub(prev) < g.interval {
 		return
 	}
-	if len(g.last) >= 32 {
-		g.last = map[string]time.Time{}
+	for seen, at := range g.last {
+		if now.Sub(at) >= g.interval {
+			delete(g.last, seen)
+		}
+	}
+	if len(g.last) >= briefMaintenanceReportLimit {
+		var oldestKey string
+		var oldest time.Time
+		first := true
+		for seen, at := range g.last {
+			if first || at.Before(oldest) {
+				oldestKey, oldest, first = seen, at, false
+			}
+		}
+		if !first {
+			delete(g.last, oldestKey)
+		}
 	}
 	g.last[key] = now
 	emit(err)
 }
+
+const briefMaintenanceReportLimit = 32
 
 // sqliteBusyOrLocked matches the primary BUSY (5) and LOCKED (6) codes,
 // including extended codes. Error text is not consulted: a submitted value can

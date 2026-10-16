@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -151,5 +152,106 @@ func TestBoardCardCreateClassifiesClientErrors(t *testing.T) {
 	}
 	if strings.Contains(created.Body.String(), "secret-value") {
 		t.Fatalf("success response leaked request material: %s", created.Body.String())
+	}
+}
+
+func TestBoardCardInsertFailureLogsCauseAndPersistsNothing(t *testing.T) {
+	// Serial: this file mutates process-wide logging.
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	ctx := context.Background()
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	t.Cleanup(func() { _ = workspace.Close() })
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	thread, err := store.CreateThread(ctx, "actor-1", map[string]any{
+		"title":      "Board thread",
+		"type":       "incident",
+		"provenance": map[string]any{"sources": []string{"inferred"}},
+	})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	threadID, _ := thread.Thread["id"].(string)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":     "Lanes",
+		"thread_id": threadID,
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID, _ := board["id"].(string)
+	if _, err := workspace.DB().ExecContext(ctx, `CREATE TRIGGER card_insert_probe BEFORE INSERT ON cards BEGIN SELECT RAISE(ABORT, 'probe failure'); END`); err != nil {
+		t.Fatalf("install probe trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = workspace.DB().ExecContext(context.Background(), `DROP TRIGGER IF EXISTS card_insert_probe`)
+	})
+
+	const title = "title-must-not-be-logged"
+	const body = "body-must-not-be-logged"
+	req := httptest.NewRequest(http.MethodPost, "/boards/"+boardID+"/cards", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer super-secret-token")
+	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "actor-1", PrincipalKind: "agent"})
+	rec := httptest.NewRecorder()
+	addBoardCardFromRaw(rec, req, handlerOptions{primitiveStore: store}, boardID, map[string]any{
+		"title":   title,
+		"summary": body,
+	}, "boards.cards.add")
+
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"code":"internal_error"`) || !strings.Contains(rec.Body.String(), "failed to add board card") {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "probe failure") || strings.Contains(rec.Body.String(), title) || strings.Contains(rec.Body.String(), body) {
+		t.Fatalf("client response leaked the insert failure: %s", rec.Body.String())
+	}
+	logged := output.String()
+	if strings.Count(logged, "anx-core: server error") != 1 || !strings.Contains(logged, "probe failure") {
+		t.Fatalf("log: %s", logged)
+	}
+	if strings.Contains(logged, title) || strings.Contains(logged, body) || strings.Contains(logged, "super-secret-token") {
+		t.Fatalf("log leaked request material: %s", logged)
+	}
+	var cards int
+	if err := workspace.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM cards`).Scan(&cards); err != nil {
+		t.Fatalf("count cards: %v", err)
+	}
+	if cards != 0 {
+		t.Fatalf("card persisted: %d", cards)
+	}
+}
+
+func TestOutcomeUnknownLogsSanitizedChain(t *testing.T) {
+	// Serial: this file mutates process-wide logging.
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	for _, cause := range []string{"commit board card create transaction: probe commit failure", "finalize card content: probe promote failure"} {
+		output.Reset()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/boards/board:omi-lanes/cards?token=super-secret-token", nil)
+		req.Header.Set("Authorization", "Bearer super-secret-token")
+		cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "actor-1", PrincipalKind: "agent"})
+		err := &primitives.MutationOutcomeUnknown{Cause: fmt.Errorf("%s", cause)}
+		if !writeMutationOutcomeUnknownError(rec, req, err) {
+			t.Fatal("outcome unknown was not classified")
+		}
+		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"outcome_unknown"`) || strings.Contains(rec.Body.String(), "probe") {
+			t.Fatalf("client response: %d %s", rec.Code, rec.Body.String())
+		}
+		logged := output.String()
+		if strings.Count(logged, "anx-core: server error") != 1 || !strings.Contains(logged, "status=409") || !strings.Contains(logged, cause) {
+			t.Fatalf("log for %q: %s", cause, logged)
+		}
+		if strings.Contains(logged, "super-secret-token") || strings.Contains(logged, "Bearer") || strings.Contains(logged, "omi-lanes") {
+			t.Fatalf("log leaked request material: %s", logged)
+		}
 	}
 }
