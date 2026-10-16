@@ -47,7 +47,14 @@ loop with `unknown` / `done`, under the same admission rule. In either lifecycle
 state, a card with neither annotation nor a recent receipt has `loop: null`. Brief shows at most 12 recent
 runs and 60 goal points, with best respecting direction. Receipt goal history
 uses a 30-day window; series goals use daily last values over the same window.
-The baseline is explicit when supplied, otherwise the first displayed point.
+Rejected and reverted candidates remain in `goal.points` with their decisions
+so charts can mark them, but their scores were not adopted. Incumbent values
+have no decision or decision `kept`: `latest` is the newest incumbent value and
+`best` is the directional best incumbent value across the goal window.
+`best_before`, `best_after` and `improved_7d` compare only incumbent values.
+For example, a kept score of 0.8 followed by a rejected score of 0.95 still has
+latest/best 0.8, with both points shown. The baseline is explicit when supplied,
+otherwise the first displayed incumbent point.
 Watch's existing series and flatness computations remain independent.
 
 ```sh

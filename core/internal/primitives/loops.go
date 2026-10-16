@@ -12,6 +12,7 @@ import (
 )
 
 const loopWindow = 30 * 24 * time.Hour
+const loopIncumbentPredicate = `COALESCE(json_extract(payload_json,'$.payload.experiment.decision'),'kept')='kept'`
 const loopEffectPredicate = `(json_extract(payload_json,'$.payload.outcome')='acted' OR json_extract(payload_json,'$.payload.experiment.decision')='kept')`
 
 type loopCard struct {
@@ -19,15 +20,16 @@ type loopCard struct {
 	metadata           map[string]any
 }
 type loopFacts struct {
-	Runs        []map[string]any `json:"runs"`
-	Points      []map[string]any `json:"points"`
-	Counts      []map[string]any `json:"counts"`
-	LastRun     *string          `json:"last_run"`
-	LastEffect  *string          `json:"last_effect"`
-	BestBefore  *float64         `json:"best_before"`
-	BestAfter   *float64         `json:"best_after"`
-	NextRun     *string          `json:"next_run"`
-	Expirations []*string        `json:"expirations"`
+	Runs            []map[string]any `json:"runs"`
+	Points          []map[string]any `json:"points"`
+	Counts          []map[string]any `json:"counts"`
+	LastRun         *string          `json:"last_run"`
+	LastEffect      *string          `json:"last_effect"`
+	LatestIncumbent *float64         `json:"latest_incumbent"`
+	BestBefore      *float64         `json:"best_before"`
+	BestAfter       *float64         `json:"best_after"`
+	NextRun         *string          `json:"next_run"`
+	Expirations     []*string        `json:"expirations"`
 }
 
 // loadLoopStates admits only caller-selected cards (<=50). Reads canonical scoped
@@ -203,6 +205,9 @@ func computeLoop(c loopCard, f loopFacts, now time.Time) map[string]any {
 		}
 		sort.SliceStable(points, func(i, j int) bool { return workString(points[i]["at"]) < workString(points[j]["at"]) })
 		g := loopGoal(goal, points)
+		if f.LatestIncumbent != nil {
+			g["latest"] = *f.LatestIncumbent
+		}
 		for _, best := range []*float64{f.BestBefore, f.BestAfter} {
 			if best != nil {
 				prior, ok := loopNumber(g["best"])
@@ -219,7 +224,7 @@ func loopGoal(goal map[string]any, points []map[string]any) map[string]any {
 	g := map[string]any{"metric": goal["metric"], "direction": goal["direction"], "target": goal["target"], "unit": goal["unit"], "baseline": goal["baseline"], "latest": nil, "best": nil, "points": points}
 	for _, p := range points {
 		v, ok := loopNumber(p["value"])
-		if !ok {
+		if !ok || p["decision"] != nil && p["decision"] != "kept" {
 			continue
 		}
 		g["latest"] = v
@@ -471,9 +476,10 @@ func readLoopFacts(ctx context.Context, q briefQueryer, requests []map[string]an
  'runs',(SELECT json_group_array(json_object('at',ts,'outcome',json_extract(payload_json,'$.payload.outcome'),'summary',json_extract(payload_json,'$.summary'),'run_id',json_extract(payload_json,'$.payload.run_id'),'metrics',json_extract(payload_json,'$.payload.metrics'),'experiment',json_extract(payload_json,'$.payload.experiment'),'effect_refs',json_extract(payload_json,'$.payload.effect_refs'),'event_id',id)) FROM (SELECT id,ts,payload_json FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 50)),
  'counts',(SELECT json_group_array(json_object('outcome',outcome,'week',week,'n',n,'effects',effects)) FROM (SELECT json_extract(payload_json,'$.payload.outcome') outcome,ts>=? week,COUNT(*) n,SUM(CASE WHEN `+loopEffectPredicate+` THEN 1 ELSE 0 END) effects FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' GROUP BY outcome,week)),
  'points',(SELECT json_group_array(json_object('at',ts,'value',value,'decision',decision)) FROM (SELECT ts,COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) value,json_extract(payload_json,'$.payload.experiment.decision') decision FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' AND COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) IS NOT NULL ORDER BY ts DESC,id DESC LIMIT 60)),
- 'best_before',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')=''),
- 'best_after',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')
- ) FROM requested r`, string(encoded), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now), loopTS(now), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now))
+ 'latest_incumbent',(SELECT COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) FROM events WHERE r.metric<>'' AND `+loopIncumbentPredicate+` AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' AND COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) IS NOT NULL ORDER BY ts DESC,id DESC LIMIT 1),
+ 'best_before',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND `+loopIncumbentPredicate+` AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')=''),
+ 'best_after',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND `+loopIncumbentPredicate+` AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')
+ ) FROM requested r`, string(encoded), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now), loopTS(now), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now))
 	if err != nil {
 		return nil, err
 	}

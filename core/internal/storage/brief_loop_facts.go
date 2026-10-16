@@ -52,3 +52,14 @@ func installBriefLoopFacts(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
+// Derived facts written before the incumbent rule must not serve candidate bests.
+// Queue only existing caches; reads reject dirty facts until maintenance folds.
+func requeueIncumbentLoopFacts(ctx context.Context, tx *sql.Tx) error {
+	has, err := sqliteTableHasColumn(ctx, tx, "brief_initiatives", "loop_valid_until")
+	if err != nil || !has {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives INDEXED BY idx_brief_loop_expiry WHERE loop_valid_until IS NOT NULL ON CONFLICT DO NOTHING`)
+	return err
+}

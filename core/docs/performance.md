@@ -816,7 +816,11 @@ never overwrite the shared canonical projection.
 Maintenance/fallback use migration 99's `idx_events_run_subject_ts` and
 `idx_events_run_effect_ts`; replay uses `idx_events_run_identity`. Their work
 grows with the admitted subjects' receipt density inside 14 days for exact
-counts and 30 days for directional bests, not unrelated workspace history.
+counts and 30 days for directional incumbent bests, not unrelated workspace
+history. Incumbent seeks and aggregates exclude rejected/reverted decisions;
+one additional subject/time-indexed seek obtains the newest incumbent even
+when all 60 displayed candidate points were rejected. Migration 101 queues
+existing loop caches once so earlier candidate bests cannot survive the change.
 Packed result detail remains bounded to 50 runs (brief renders 12) and 60 goal
 points per card. Valid cached reads do not scan those receipt ranges. Goal
 series selectors share the existing bounded daily-rollup batches. The ordinary

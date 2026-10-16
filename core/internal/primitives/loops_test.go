@@ -64,3 +64,23 @@ func TestLoopHealthPrecedenceAndGoals(t *testing.T) {
 		t.Fatal("recent receipt must show loop")
 	}
 }
+
+func TestLoopGoalIncumbentsKeepCandidatePoints(t *testing.T) {
+	for _, direction := range []string{"up", "down"} {
+		t.Run(direction, func(t *testing.T) {
+			points := []map[string]any{{"at": "1", "value": 5., "decision": "rejected"}, {"at": "2", "value": 3., "decision": nil}, {"at": "3", "value": 4., "decision": "kept"}, {"at": "4", "value": 100., "decision": "rejected"}, {"at": "5", "value": -100., "decision": "reverted"}}
+			got := loopGoal(map[string]any{"metric": "score", "direction": direction}, points)
+			best := 4.
+			if direction == "down" {
+				best = 3.
+			}
+			if got["latest"] != 4. || got["best"] != best || got["baseline"] != 3. || len(got["points"].([]map[string]any)) != len(points) {
+				t.Fatal(got)
+			}
+			got = loopGoal(map[string]any{"direction": direction}, []map[string]any{points[0], points[3], points[4]})
+			if got["latest"] != nil || got["best"] != nil || got["baseline"] != nil {
+				t.Fatal(got)
+			}
+		})
+	}
+}

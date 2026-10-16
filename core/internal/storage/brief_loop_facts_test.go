@@ -68,3 +68,37 @@ func TestBriefLoopFactsUpgradeAndReceiptMutations(t *testing.T) {
 		check(`SELECT count(*) FROM brief_dirty WHERE card_id='d'`, 1)
 	}
 }
+
+func TestIncumbentLoopFactsUpgradeInvalidatesOldCaches(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 100)
+	if _, err := db.Exec(`INSERT INTO brief_initiatives(card_id,computed_at,loop_facts_json,loop_valid_from,loop_valid_until) VALUES('old-loop','now','{"best_before":99,"best_after":100}','2026-01-01T00:00:00Z','2099-01-01T00:00:00Z'); DELETE FROM brief_dirty`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err = ws.DB().QueryRow(`SELECT COUNT(*) FROM brief_dirty WHERE card_id='old-loop'`).Scan(&count); err != nil || count != 1 {
+		t.Fatal(count, err)
+	}
+	if _, err = ws.DB().Exec(`DELETE FROM brief_dirty`); err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err = InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	if err = ws.DB().QueryRow(`SELECT COUNT(*) FROM brief_dirty WHERE card_id='old-loop'`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("cache requeued again on restart", count, err)
+	}
+}
