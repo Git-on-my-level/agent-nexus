@@ -1,32 +1,81 @@
 <script>
   /**
-   * Watch's Loops view: initiatives that measure something, grouped by what
-   * they need (`groupLoops`): waiting on you, silent too long, metric flat,
-   * moving. Done folds away. Each row adds its series and flat signal.
+   * Watch's Loops view: how much the loops are doing (`LoopTotals`), then
+   * each loop as a card, grouped by what it needs (`groupLoops`): waiting on
+   * you, failing, silent, not improving, moving. Done folds away. A loop
+   * with receipts gets the full `LoopCard`; one that only links a series
+   * keeps the rich initiative card with its metric line.
    */
+  import { page } from "$app/stores";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { groupLoops, LOOP_SILENT_SECONDS, formatSpan } from "$lib/brief.js";
+  import { loopTotals } from "$lib/loops.js";
+  import LoopCard from "$lib/components/loops/LoopCard.svelte";
+  import LoopTotals from "$lib/components/loops/LoopTotals.svelte";
   import WatchRow from "./WatchRow.svelte";
 
   let { initiatives = [], now = Date.now() } = $props();
 
+  let workspaceHref = $derived(
+    bindWorkspaceHref($page.params.organization, $page.params.workspace),
+  );
   let groups = $derived(groupLoops(initiatives, now));
+  const NEEDS_LOOK = new Set(["waiting", "failing", "silent", "flat"]);
+  /*
+   * Run totals come from loops that record receipts; the loop count and
+   * "need a look" follow the groups below, so the strip and the page agree.
+   */
+  let totals = $derived.by(() => {
+    const rows = groups
+      .filter((g) => g.group !== "done")
+      .flatMap((g) => g.rows);
+    return {
+      ...loopTotals(rows.map((row) => row.loop).filter(Boolean)),
+      loops: rows.length,
+      needsAttention: groups
+        .filter((g) => NEEDS_LOOK.has(g.group))
+        .reduce((sum, g) => sum + g.rows.length, 0),
+    };
+  });
   let open = $derived(groups.filter((g) => g.group !== "done"));
   let done = $derived(groups.find((g) => g.group === "done") ?? null);
   let doneOpen = $state(false);
 
   const HINTS = {
     waiting: "A decision of yours is holding these up.",
-    silent: `Past their promise, or no evidence for ${formatSpan(LOOP_SILENT_SECONDS)} or more.`,
-    flat: "Reporting, but the metric has stopped moving.",
+    failing: "Their last runs hit infrastructure errors.",
+    silent: `Overdue for a run, past their promise, or no evidence for ${formatSpan(LOOP_SILENT_SECONDS)} or more.`,
+    flat: "Running, but no effect within budget or the metric has stopped moving.",
   };
 </script>
 
 {#snippet rows(group)}
-  <div
-    class="divide-y divide-line-subtle rounded-md border border-line bg-panel [&>*:first-child]:rounded-t-md [&>*:last-child]:rounded-b-md"
-  >
+  <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
     {#each group.rows as row (row.ref)}
-      <WatchRow initiative={row} variant="row" {now} metrics />
+      {#if row.loop}
+        <LoopCard
+          ref={row.ref}
+          title={row.title}
+          href={workspaceHref(`/initiatives/${encodeURIComponent(row.id)}`)}
+          loop={row.loop}
+          {now}
+        >
+          {#snippet badges()}
+            {#if row.waitingOnYouCount > 0}
+              <a
+                class="ui-badge ui-badge--warn hover:underline"
+                href={workspaceHref(
+                  `/decide?initiative=${encodeURIComponent(row.ref)}`,
+                )}
+                data-source="computed:initiatives.waiting_on_you_count"
+                >{row.waitingOnYouCount} waiting on you</a
+              >
+            {/if}
+          {/snippet}
+        </LoopCard>
+      {:else}
+        <WatchRow initiative={row} variant="rich" {now} metrics />
+      {/if}
     {/each}
   </div>
 {/snippet}
@@ -38,12 +87,20 @@
   >
     <p class="text-meta text-fg">No loops yet.</p>
     <p class="mt-1 text-micro text-fg-muted">
-      A loop is an initiative that measures something. Link a series to its card
-      with a <code>series:</code> ref and it shows up here.
+      A loop is an initiative that runs on a cadence. Record each run with
+      <code>anx work receipt</code>, or link a series with a
+      <code>series:</code> ref, and it shows up here.
     </p>
   </div>
 {:else}
   <div class="space-y-5" data-watch-loops>
+    {#if totals.loops}
+      <LoopTotals
+        {totals}
+        source="computed:initiatives.loop"
+        attentionNote="waiting on you, failing, silent or not improving"
+      />
+    {/if}
     {#each open as group (group.group)}
       <section
         data-watch-loop-group={group.group}
@@ -106,6 +163,9 @@
     border-radius: 999px;
     background: var(--fg-subtle);
     transform: translateY(-1px);
+  }
+  .loop-dot--failing {
+    background: var(--danger-text);
   }
   .loop-dot--waiting,
   .loop-dot--silent {

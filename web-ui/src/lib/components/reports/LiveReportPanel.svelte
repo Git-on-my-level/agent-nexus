@@ -9,6 +9,18 @@
   import { formatElapsed, instantIso, instantMs } from "$lib/time/format.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { resolveRefLink } from "$lib/refLinkModel";
+  import {
+    compareLoops,
+    normalizeLoop,
+    normalizeLoopStats,
+    normalizeRunReceipt,
+    runText,
+    withUnit,
+  } from "$lib/loops.js";
+  import { formatMetricValue } from "$lib/brief.js";
+  import LoopCard from "$lib/components/loops/LoopCard.svelte";
+  import LoopChart from "$lib/components/loops/LoopChart.svelte";
+  import LoopTotals from "$lib/components/loops/LoopTotals.svelte";
   let {
     panel,
     /** Reference time, so a row's age ticks with the rest of the report. */
@@ -47,6 +59,37 @@
     items.some((item) => item.status === "answered"),
   );
   let buckets = $derived(live?.data?.buckets ?? []);
+  /** `live-loops`: one card per loop, needs-attention first. */
+  let loopRows = $derived(
+    (live?.data?.loops ?? [])
+      .map((row) =>
+        row?.ref
+          ? {
+              ref: row.ref,
+              title: row.title || row.ref,
+              loop: normalizeLoop(row.loop),
+            }
+          : null,
+      )
+      .filter((row) => row?.loop)
+      .sort(compareLoops),
+  );
+  let loopStats = $derived(normalizeLoopStats(live?.data?.stats));
+  /** `live-loop`: one loop's climb and its run receipts. */
+  let oneLoop = $derived(
+    panel.type === "live-loop" && live?.data?.ref
+      ? {
+          ref: live.data.ref,
+          title: live.data.title || live.data.ref,
+          loop: normalizeLoop(live.data.loop),
+          runs: (live.data.runs ?? []).map(normalizeRunReceipt).filter(Boolean),
+        }
+      : null,
+  );
+  const refHref = (ref) =>
+    canNavigate && ref
+      ? resolveRefLink(ref, { organizationSlug, workspaceSlug }).href || ""
+      : "";
   let fleetHosts = $derived(live?.data?.hosts ?? []);
   let fleetEnrollments = $derived(live?.data?.enrollments ?? []);
   let fleetSeries = $derived(live?.data?.series ?? []);
@@ -223,6 +266,119 @@
         {/each}
       </ol>
     {:else}<p class="muted">No recent activity in this view.</p>{/if}
+  {:else if panel.type === "live-loops"}
+    {#if loopStats}
+      <LoopTotals totals={loopStats} />
+    {/if}
+    {#if loopRows.length}
+      <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2" data-live-loops>
+        {#each loopRows as row (row.ref)}
+          <LoopCard
+            ref={row.ref}
+            title={row.title}
+            href={refHref(row.ref)}
+            loop={row.loop}
+            {now}
+            source=""
+          />
+        {/each}
+      </div>
+    {:else}
+      <p class="muted mt-3">
+        No loops yet. A loop is a card with a cadence or run receipts (<code
+          >anx work cadence</code
+        >, <code>anx work receipt</code>).
+      </p>
+    {/if}
+  {:else if panel.type === "live-loop"}
+    {#if oneLoop?.loop}
+      <LoopCard
+        ref={oneLoop.ref}
+        title={oneLoop.title}
+        href={refHref(oneLoop.ref)}
+        loop={oneLoop.loop}
+        {now}
+        source=""
+      />
+      {#if oneLoop.loop.goal?.points.length > 1}
+        <div class="mt-4" data-live-loop-climb>
+          <p class="mb-1 text-micro text-fg-muted">
+            {oneLoop.loop.goal.metric} over time · solid line is best so far{oneLoop
+              .loop.goal.target !== null
+              ? ", dashed is the target"
+              : ""}
+          </p>
+          <LoopChart goal={oneLoop.loop.goal} size="large" />
+        </div>
+      {/if}
+      {#if oneLoop.runs.length}
+        <ol class="mt-4 divide-y divide-line-subtle" data-live-loop-runs>
+          {#each oneLoop.runs as run, i (run.eventId || i)}
+            <li
+              class="run-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-x-3 py-2"
+            >
+              <span
+                class="run-tag run-tag--{run.outcome} {run.decision
+                  ? `run-tag--${run.decision}`
+                  : ''}"
+              >
+                {runText(run)}
+              </span>
+              <div class="min-w-0">
+                <p class="text-meta text-fg [overflow-wrap:anywhere]">
+                  {run.summary || run.runId}
+                </p>
+                {#if run.experiment?.candidate || run.metrics.length || run.effectRefs.length}
+                  <p
+                    class="mt-0.5 flex flex-wrap gap-x-2 text-micro text-fg-muted"
+                  >
+                    {#if run.experiment?.candidate}
+                      <span
+                        >candidate {run.experiment
+                          .candidate}{#if run.experiment.before !== null && run.experiment.after !== null}:
+                          {formatMetricValue(run.experiment.before)} → {formatMetricValue(
+                            run.experiment.after,
+                          )}{/if}</span
+                      >
+                    {/if}
+                    {#each run.metrics as metric (metric.name)}
+                      <span class="tabular-nums"
+                        >{metric.name}
+                        {withUnit(
+                          formatMetricValue(metric.value),
+                          metric.name === oneLoop.loop.goal?.metric
+                            ? oneLoop.loop.goal.unit
+                            : "",
+                        )}</span
+                      >
+                    {/each}
+                    {#each run.effectRefs as ref (ref)}
+                      {@const href = /^https?:\/\//.test(ref)
+                        ? ref
+                        : refHref(ref)}
+                      {#if href}<a
+                          class="text-accent-text hover:underline"
+                          {href}
+                          rel={/^https?:/.test(ref)
+                            ? "noopener noreferrer"
+                            : undefined}
+                          target={/^https?:/.test(ref) ? "_blank" : undefined}
+                          >{ref.replace(/^https?:\/\/(www\.)?/, "")}</a
+                        >{:else}<span>{ref}</span>{/if}
+                    {/each}
+                  </p>
+                {/if}
+              </div>
+              <span class="text-micro text-fg-subtle"
+                ><Time value={run.at} {now} /></span
+              >
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    {:else}
+      <p class="muted">This card has no cadence, goal or run receipts yet.</p>
+    {/if}
   {:else if panel.type === "live-fleet-health"}
     <div class="fleet-summary">
       <strong>{live.data.active_host_count ?? 0} active hosts</strong>
@@ -513,5 +669,29 @@
   strong {
     font-weight: 500;
     text-align: right;
+  }
+  .run-tag {
+    font-size: 0.6875rem;
+    padding: 0.0625rem 0.4375rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
+  .run-tag--acted {
+    color: var(--fg);
+  }
+  .run-tag--kept {
+    border-color: var(--accent-solid);
+    color: var(--accent-text, var(--fg));
+  }
+  .run-tag--reverted,
+  .run-tag--rejected {
+    border-color: var(--warn-text);
+    color: var(--warn-text);
+  }
+  .run-tag--infra_error {
+    border-color: var(--danger-text);
+    color: var(--danger-text);
   }
 </style>
