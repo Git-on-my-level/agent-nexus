@@ -115,33 +115,54 @@ func (s *Store) visibleCitedAsksBatch(ctx context.Context, tokens []string, visi
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := map[string]citedAsk{}
+	type rawCitedAsk struct {
+		id, handle, kind, state, answered, thread, owner, expires, payload, outcome, reason string
+	}
+	var scanned []rawCitedAsk
+	var reviewIDs []string
 	for rows.Next() {
-		var id, handle, kind, state, answered, thread, owner, expires, payload, outcome, reason string
-		if err = rows.Scan(&id, &handle, &kind, &state, &answered, &thread, &owner, &expires, &payload, &outcome, &reason); err != nil {
+		var r rawCitedAsk
+		if err = rows.Scan(&r.id, &r.handle, &r.kind, &r.state, &r.answered, &r.thread, &r.owner, &r.expires, &r.payload, &r.outcome, &r.reason); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		if visible != nil && !visible(thread, owner) {
+		if visible != nil && !visible(r.thread, r.owner) {
 			continue
 		}
+		if r.kind == "review" {
+			reviewIDs = append(reviewIDs, r.id)
+		}
+		scanned = append(scanned, r)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	accessRequests, err := s.AccessRequestsForEvents(ctx, reviewIDs)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]citedAsk{}
+	for _, r := range scanned {
 		var wrapper map[string]any
-		_ = json.Unmarshal([]byte(payload), &wrapper)
-		decisionKind := briefDecisionKind(kind, asMapValue(wrapper["payload"]))
+		_ = json.Unmarshal([]byte(r.payload), &wrapper)
+		_, isAccess := accessRequests["event:"+r.id]
+		decisionKind := briefDecisionKind(r.kind, asMapValue(wrapper["payload"]), isAccess)
 		if decisionKind != "ask" && decisionKind != "review" {
 			continue
 		}
 		ask := citedAsk{
-			ID: id, Kind: decisionKind, State: state, Outcome: outcome, Reason: reason,
-			AnsweredAt: answered, ExpiresAt: expires, Visible: true,
+			ID: r.id, Kind: decisionKind, State: r.state, Outcome: r.outcome, Reason: r.reason,
+			AnsweredAt: r.answered, ExpiresAt: r.expires, Visible: true,
 		}
-		out[id] = ask
-		if lower := strings.ToLower(id); lower != id {
+		out[r.id] = ask
+		if lower := strings.ToLower(r.id); lower != r.id {
 			out[lower] = ask
 		}
-		if handle != "" && handle != id {
-			out[handle] = ask
+		if r.handle != "" && r.handle != r.id {
+			out[r.handle] = ask
 		}
 	}
-	return out, rows.Err()
+	return out, nil
 }

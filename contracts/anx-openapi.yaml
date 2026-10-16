@@ -13720,6 +13720,9 @@ components:
             code: { type: string, description: "next_ask_decided when that rule flags the initiative." }
             ask_ref: { type: string, description: "event ref of the decided ask. Absent when the reader cannot see it; an invisible ask does not flag." }
             decided_at: { type: string, format: date-time }
+        yours:
+          type: boolean
+          description: "Present for agent readers when the calling agent is assigned to this initiative, participates in it, or authored its counted promise."
     BriefLoop:
       type: object
       required: [health, health_reason, every_seconds, progress_budget_seconds, stop_rule, last_run_at, last_effect_at, next_run_due_at, recent_runs, runs_7d, effects_7d, goal]

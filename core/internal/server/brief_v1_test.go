@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
@@ -140,6 +141,61 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	}
 }
 
+func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
+	t.Parallel()
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	db, _ := testsql.Open("file:" + h.workspace.Layout().DatabasePath)
+	t.Cleanup(func() { db.Close() })
+	store := primitives.NewTestStore(db, h.workspace.Layout().ArtifactContentDir)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{"title": "Portfolio"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	boardID := anyString(board["id"])
+	assigned, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Assigned", "owner": "actor:agent-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	promised, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Promised"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
+		"type": "message_posted", "thread_id": promised["thread_id"],
+		"refs":    []string{anyString(promised["ref"]), "thread:" + anyString(promised["thread_id"])},
+		"payload": map[string]any{"text": "on it", "next": map[string]any{"at": "2d", "what": "land PR"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	unrelated, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Unrelated", "owner": "actor:agent-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for drained := false; !drained; {
+		if drained, err = store.RefreshBriefInitiatives(ctx, 200); err != nil {
+			t.Fatal(err)
+		}
+	}
+	brief, err := store.Brief(ctx, primitives.BriefReader{ActorID: "agent-1", Kind: "agent", Display: "worker"}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	yoursByRef := map[string]bool{}
+	for _, raw := range brief["initiatives"].([]map[string]any) {
+		yoursByRef[anyString(raw["ref"])] = raw["yours"] == true
+	}
+	if !yoursByRef[anyString(assigned["ref"])] {
+		t.Fatalf("assigned card should have yours=true: %#v", brief["initiatives"])
+	}
+	if !yoursByRef[anyString(promised["ref"])] {
+		t.Fatalf("promised card should have yours=true: %#v", brief["initiatives"])
+	}
+	if yoursByRef[anyString(unrelated["ref"])] {
+		t.Fatalf("unrelated card must not have yours=true: %#v", brief["initiatives"])
+	}
+}
+
 // I7 (core side): the live brief uses only fields the shared fixture that
 // Decide, Watch and orient render from also uses, plus the optional ones.
 func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
@@ -152,7 +208,7 @@ func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
 	if err = json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true}
+	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true, "yours": true}
 	for key := range body {
 		if _, ok := fixture[key]; !ok {
 			t.Errorf("brief field %q is not in the shared fixture", key)

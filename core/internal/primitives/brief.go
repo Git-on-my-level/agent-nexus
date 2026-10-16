@@ -250,6 +250,16 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	if err != nil {
 		return nil, nil, false, err
 	}
+	var reviewAskIDs []string
+	for _, a := range asks {
+		if a.Kind == "review" {
+			reviewAskIDs = append(reviewAskIDs, a.AskID)
+		}
+	}
+	accessRequests, err := b.s.AccessRequestsForEvents(b.ctx, reviewAskIDs)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	out := make([]map[string]any, 0, len(asks))
 	metas := make([]briefDecisionMeta, 0, len(asks))
 	for _, a := range asks {
@@ -257,7 +267,8 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 		var event map[string]any
 		_ = json.Unmarshal([]byte(r.payload), &event)
 		payload, _ := event["payload"].(map[string]any)
-		kind := briefDecisionKind(a.Kind, payload)
+		_, isAccess := accessRequests["event:"+a.AskID]
+		kind := briefDecisionKind(a.Kind, payload, isAccess)
 		item := map[string]any{
 			"ref": a.InboxItemID, "inbox_item_id": a.InboxItemID, "kind": kind, "title": a.Title,
 			"requested_by": stripActor(a.Requester), "created_at": a.CreatedAt.UTC().Format(time.RFC3339),
@@ -589,11 +600,11 @@ func collectSubjects(asks []BriefAsk) []string {
 	return refs
 }
 
-func briefDecisionKind(kind string, payload map[string]any) string {
+func briefDecisionKind(kind string, payload map[string]any, isAccessRequest bool) string {
 	if _, ok := payload["curation"].(map[string]any); ok {
 		return "pm_proposal"
 	}
-	if strings.TrimSpace(anyStringValue(payload["access_request_id"])) != "" {
+	if isAccessRequest {
 		return "access"
 	}
 	switch kind {
@@ -829,6 +840,11 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	agentCards, err := b.agentInitiativeCards(ids)
+	if err != nil {
+		return nil, false, err
+	}
+	readerID, _ := b.readerIDs()
 	out := make([]map[string]any, 0, len(rows))
 	for _, r := range rows {
 		ref := "card:" + firstNonEmptyString(r.handle, r.cardID)
@@ -849,6 +865,11 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 				b.actors[stripActor(state.Promise.Author)] = true
 			}
 			item["promise"] = p
+		}
+		if !b.reader.human() && readerID != "" {
+			if agentCards[r.cardID] || (state.Promise != nil && stripActor(state.Promise.Author) == readerID) {
+				item["yours"] = true
+			}
 		}
 		if state.PastPromiseFor != nil {
 			item["past_promise_for_seconds"] = int64(*state.PastPromiseFor / time.Second)
@@ -873,6 +894,30 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 		return nil, false, err
 	}
 	return out, truncated, nil
+}
+
+// agentInitiativeCards returns the subset of admitted card IDs that an agent
+// reader is assigned to or actively/idly participates in.
+func (b *briefBuild) agentInitiativeCards(ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if b.reader.human() || strings.TrimSpace(b.reader.ActorID) == "" || len(ids) == 0 {
+		return out, nil
+	}
+	id, prefixed := b.readerIDs()
+	encoded, _ := json.Marshal(ids)
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id FROM cards c WHERE c.id IN (SELECT value FROM json_each(?)) AND (c.assignee IN (?,?) OR EXISTS(SELECT 1 FROM work_participants p JOIN agent_sessions s ON s.id=p.session_id WHERE p.card_id=c.id AND p.activity<>'left' AND s.actor_id IN (?,?)))`, string(encoded), id, prefixed, id, prefixed)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cardID string
+		if err = rows.Scan(&cardID); err != nil {
+			return nil, err
+		}
+		out[cardID] = true
+	}
+	return out, rows.Err()
 }
 
 func briefPlacement(phase string) string {
