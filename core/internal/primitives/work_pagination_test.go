@@ -1,7 +1,10 @@
 package primitives_test
 
 import (
+	"agent-nexus-core/internal/scopesearch"
+	"agent-nexus-core/internal/storage"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -150,6 +153,8 @@ func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
 	var gotIDs []string
 	cursor := ""
 	for pageNum := 0; pageNum < 10; pageNum++ {
+		// Every page can land on another server process.
+		s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
 		page, err := s.ListWork(ctx, primitives.WorkListFilter{
 			Limit:   2,
 			Cursor:  cursor,
@@ -186,6 +191,105 @@ func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
 	for i := range wantVisibleIDs {
 		if gotIDs[i] != wantVisibleIDs[i] {
 			t.Fatalf("visible item %d = %s, want %s", i, gotIDs[i], wantVisibleIDs[i])
+		}
+	}
+}
+
+func TestWorkCursorReaderFiltersRestartAndNoEviction(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := initializeTestWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { ws.Close() }()
+	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	board, err := s.CreateBoard(ctx, "reader", map[string]any{"title": "Public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err = s.CreateWork(ctx, "reader", board["id"].(string), map[string]any{"title": fmt.Sprint(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"})
+	first, err := s.ListWork(reader, primitives.WorkListFilter{Limit: 1})
+	if err != nil || first.NextCursor == "" {
+		t.Fatal(first, err)
+	}
+	expected, err := s.ListWork(reader, primitives.WorkListFilter{Limit: 2, Cursor: first.NextCursor})
+	if err != nil || len(expected.Work) != 2 {
+		t.Fatal(expected, err)
+	}
+	other := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "other"})
+	if _, err = s.ListWork(other, primitives.WorkListFilter{Limit: 1, Cursor: first.NextCursor}); !errors.Is(err, primitives.ErrInvalidCursor) {
+		t.Fatalf("cross-reader cursor accepted: %v", err)
+	}
+	for _, filter := range []primitives.WorkListFilter{
+		{ProjectRef: "board:other"}, {Source: "remote"}, {Owner: "other"}, {Phase: "done"},
+		{Freshness: "stale"}, {Query: "different"}, {Visible: func(string, string) bool { return true }},
+	} {
+		filter.Cursor = first.NextCursor
+		if _, err = s.ListWork(reader, filter); !errors.Is(err, primitives.ErrInvalidCursor) {
+			t.Fatalf("cross-filter cursor accepted: %+v %v", filter, err)
+		}
+	}
+	// Previously the 257th key evicted an issued cursor.
+	for i := 0; i < 260; i++ {
+		if _, err = s.ListWork(reader, primitives.WorkListFilter{Limit: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	resumed, err := s.ListWork(reader, primitives.WorkListFilter{Limit: 2, Cursor: first.NextCursor})
+	if err != nil || len(resumed.Work) != len(expected.Work) {
+		t.Fatal(resumed, err)
+	}
+	for i := range expected.Work {
+		if resumed.Work[i]["id"] != expected.Work[i]["id"] {
+			t.Fatalf("restart skipped visible work: %v / %v", resumed, expected)
+		}
+	}
+	// A fresh reader's own pagination is unaffected by another reader's traversal.
+	own, err := s.ListWork(other, primitives.WorkListFilter{Limit: 2})
+	if err != nil || len(own.Work) != 2 || own.Work[0]["id"] != first.Work[0]["id"] {
+		t.Fatal(own, err)
+	}
+	raw, _ := base64.RawURLEncoding.DecodeString(first.NextCursor)
+	raw[len(raw)-1] ^= 1
+	if _, err = s.ListWork(reader, primitives.WorkListFilter{Cursor: base64.RawURLEncoding.EncodeToString(raw)}); !errors.Is(err, primitives.ErrInvalidCursor) {
+		t.Fatalf("tampered token accepted: %v", err)
+	}
+	var key []byte
+	if err = ws.DB().QueryRow(`SELECT cursor_key FROM document_search_state WHERE singleton=1`).Scan(&key); err != nil {
+		t.Fatal(err)
+	}
+	derived := sha256.Sum256(append([]byte("anx:work-cursor:v1:"), key...))
+	codec, err := scopesearch.NewTokens(derived[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"ExpiresAt", "Version"} {
+		var payload map[string]any
+		if err = codec.OpenContinuation(first.NextCursor, &payload); err != nil {
+			t.Fatal(err)
+		}
+		payload[field] = 0
+		token, err := codec.SealContinuation(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.ListWork(reader, primitives.WorkListFilter{Cursor: token}); !errors.Is(err, primitives.ErrInvalidCursor) {
+			t.Fatalf("invalid %s accepted: %v", field, err)
 		}
 	}
 }

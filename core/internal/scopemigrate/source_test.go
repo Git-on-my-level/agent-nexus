@@ -143,7 +143,7 @@ func TestEpochCoversDatabaseMutationsAndRollback(t *testing.T) {
 		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host','host','host','user','host','[]','now')`,
 		`INSERT INTO series_adapters(name,description,agent_id,host_id,expected_interval,created_at) VALUES('adapter','','series-agent','host',60,'now')`,
 		`INSERT INTO series_definitions VALUES('series','adapter','','gauge')`,
-		`INSERT INTO series_labels VALUES('series','{}')`,
+		`INSERT INTO series_labels(series,labels) VALUES('series','{}')`,
 	} {
 		_, err := w.DB().Exec(q)
 		must(t, err)

@@ -195,9 +195,6 @@ type Store struct {
 	askLifecycleMu       sync.Mutex
 	askCloseCursor       string
 	askCloseBackoff      map[string]askBackoffState
-	workCursorMu         sync.Mutex
-	workFilterCursors    map[string]workCursorPosition
-	workFilterCursorIDs  []string
 }
 
 type eventExec interface {

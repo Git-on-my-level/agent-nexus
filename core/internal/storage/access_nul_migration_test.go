@@ -61,7 +61,7 @@ func TestResourceAccessMigrationRepairsNULRows(t *testing.T) {
 		`DROP TRIGGER access_artifacts_update`,
 		`CREATE TRIGGER access_artifacts_update AFTER UPDATE OF content_refs_json ON artifacts BEGIN SELECT anx_resource_refs(NEW.content_refs_json); END`,
 		`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES('legacy-nul','fixture','state','state')`,
-		`INSERT INTO series_labels VALUES('legacy-nul','{}')`,
+		`INSERT INTO series_labels(series,labels) VALUES('legacy-nul','{}')`,
 		`INSERT INTO series_points(series,labels,ts,state,received_day) VALUES('legacy-nul','{}',1,'public',0)`,
 		`DELETE FROM schema_migrations WHERE version>=60`,
 	} {

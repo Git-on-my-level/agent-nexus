@@ -965,3 +965,52 @@ sessions with still-active participants, a full assigned page, and 1,000 notes
 on an unrelated private card. All variants include 50 initiatives, 100 admitted
 metric refs and over 10,000 metric observations. Read admission and fixture
 construction are outside the measured serving phase.
+
+## Workspace growth admission (migration 106)
+
+Card writes do not fan out to referencing asks. `blocks_count` is an admission
+hint; undated decisions seek `idx_brief_asks_open_page` for at most 240 candidates
+(dated decisions retain 60), then resolve open blockers through scoped card
+primary-key/handle batches and rank that fixed cohort. The existing 1,000-ref
+hydration cap and 50-item display cap remain. Older candidates outside the
+window can be omitted; the response reports truncation. No workspace-wide
+blocker recount runs on a card insert, patch or delete.
+
+Series declarations sum exact per-adapter definition counts, maintained by
+insert/delete/move triggers. `idx_series_adapters_capacity` contains only active
+adapters with definitions; declaration admits at most 1,001 entries, independent
+of retired definitions and delivery-only adapters. Push checks both new and
+expired retained label sets against capacity. Two index seeks on
+`idx_series_labels_capacity(series,last_point_ts)` admit at most 100 recent and
+100 reserved (no observation yet) labels. Point writes advance that timestamp
+atomically; expiry is evaluated against the request clock without cleanup.
+Historical labels and daily rollups remain discoverable. Counts alone use the
+canonical accounting context; business reads and writes retain reader policy.
+Migration 106 backfills these hints once and is idempotent.
+
+`GET /work` retains 20 filter passes, each at most 200 candidates plus lookahead.
+It reads one persistent cursor key by the `document_search_state` singleton
+primary key, derives a separate work-token key, and emits authenticated encrypted
+AES-GCM continuations. Version, principal scope, callback presence and all query
+selectors bind each token; page size may change. Trusted callback callers must
+supply the reader's access scope when representing a principal. Tokens expire
+in 24 hours; malformed, old-format, foreign and expired tokens return the existing
+`invalid_cursor` error. Restart resumes with the persisted workspace key; no
+process-local cursor storage exists. Empty filtered pages can continue without
+exposing hidden IDs or timestamps. Hydration and visibility remain scoped on
+every page. The route's existing scale budget includes the added singleton read.
+
+New native SQLite VM-step budgets live in
+`internal/series/testdata/capacity_budget.json` and
+`internal/storage/testdata/blocker_write_budget.json`; the added singleton key
+lookup is covered by `internal/primitives/testdata/work_cursor_budget.json`.
+The push gate permits two
+constant full-scan steps for the existing two-scope request-budget cleanup;
+capacity selection itself uses the indexes above. These are new focused budgets;
+no existing allowance is widened.
+
+```sh
+go test -C core ./internal/storage -run '^Test(BlockerWriteTenThousandAskReferencesBudget|Upgrade105SeriesCapacityBackfill)$' -v
+go test -C core ./internal/series -run '^Test(SeriesCapacityTenThousand.*Budget|ExpiredLabelReactivationHonorsCapacity|RevokedSeriesCapacityScaleAndPlan)$' -v
+go test -C core ./internal/primitives -run '^Test(WorkCursorReaderFiltersRestartAndNoEviction|WorkListPaginationAdvancesPastAccessFilteredPages)$'
+```

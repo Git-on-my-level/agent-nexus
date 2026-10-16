@@ -586,7 +586,7 @@ func TestRevokedSeriesCapacityScaleAndPlan(t *testing.T) {
 	}
 	foundCountPlan := false
 	for _, stmt := range statements {
-		if !strings.Contains(stmt.SQL, "CROSS JOIN series_definitions") {
+		if !strings.Contains(stmt.SQL, "SUM(definition_count)") {
 			continue
 		}
 		foundCountPlan = true
@@ -595,7 +595,7 @@ func TestRevokedSeriesCapacityScaleAndPlan(t *testing.T) {
 			t.Fatal(err)
 		}
 		joined := strings.Join(details, "\n")
-		if strings.Contains(joined, "SCAN series_definitions") || strings.Contains(joined, "SCAN s") || !strings.Contains(joined, "idx_series_adapters_active") || !strings.Contains(joined, "SEARCH s USING COVERING INDEX idx_series_definitions_adapter") {
+		if !strings.Contains(joined, "idx_series_adapters_capacity") {
 			t.Fatalf("unexpected active series count plan:\n%s", joined)
 		}
 	}

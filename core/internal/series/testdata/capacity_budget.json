@@ -1,0 +1,6 @@
+{
+  "push": 5000,
+  "push_full_scan_steps": 2,
+  "declare": 5000,
+  "declare_full_scan_steps": 0
+}

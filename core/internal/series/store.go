@@ -140,7 +140,8 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 	}
 	out.AgentID = agent
 	var n int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM series_adapters d CROSS JOIN series_definitions s ON s.adapter=d.name WHERE d.revoked_at IS NULL AND d.deleted_at IS NULL LIMIT ?)`, MaxSeries+1).Scan(&n); err != nil {
+	// Capacity accounting includes all definitions, including private contributors.
+	if err = tx.QueryRowContext(resourceaccess.WithoutPolicy(ctx), `SELECT COALESCE(SUM(definition_count),0) FROM (SELECT definition_count FROM series_adapters WHERE revoked_at IS NULL AND deleted_at IS NULL AND definition_count>0 LIMIT ?)`, MaxSeries+1).Scan(&n); err != nil {
 		return out, err
 	}
 	if n+len(d.Series) > MaxSeries {
@@ -362,23 +363,23 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 		return err
 	}
 	var n int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_labels WHERE series=? AND labels=?`, name, labels).Scan(&n); err != nil {
+	cutoff := now.Add(-Retention).UnixNano()
+	// A retained expired stream is a new capacity admission too. NULL timestamps
+	// reserve capacity for registered labels that have not received a point yet.
+	var active bool
+	// Capacity is canonical accounting; never count a reader-filtered subset.
+	capacityCtx := resourceaccess.WithoutPolicy(ctx)
+	if err = tx.QueryRowContext(capacityCtx, `SELECT EXISTS(SELECT 1 FROM series_labels WHERE series=? AND labels=? AND (last_point_ts IS NULL OR last_point_ts>=?))`, name, labels, cutoff).Scan(&active); err != nil {
 		return err
 	}
-	if n == 0 {
-		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_labels WHERE series=?`, name).Scan(&n); err != nil {
+	if !active {
+		if err = tx.QueryRowContext(capacityCtx, `SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM series_labels WHERE series=? AND last_point_ts>=? LIMIT ?)) + (SELECT COUNT(*) FROM (SELECT 1 FROM series_labels WHERE series=? AND last_point_ts IS NULL LIMIT ?))`, name, cutoff, MaxLabelSets, name, MaxLabelSets).Scan(&n); err != nil {
 			return err
 		}
 		if n >= MaxLabelSets {
-			cutoff := now.Add(-Retention).UnixNano()
-			if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM series_labels l WHERE l.series=? AND (EXISTS (SELECT 1 FROM series_points p WHERE p.series=l.series AND p.labels=l.labels AND p.ts>=?) OR (NOT EXISTS (SELECT 1 FROM series_points p WHERE p.series=l.series AND p.labels=l.labels) AND NOT EXISTS (SELECT 1 FROM series_daily d WHERE d.series=l.series AND d.labels=l.labels))) LIMIT ?)`, name, cutoff, MaxLabelSets).Scan(&n); err != nil {
-				return err
-			}
-			if n >= MaxLabelSets {
-				return fmt.Errorf("%w: limit is 100 label sets per series", ErrCapacity)
-			}
+			return fmt.Errorf("%w: limit is 100 label sets per series", ErrCapacity)
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO series_labels(series,labels) VALUES(?,?)`, name, labels); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO series_labels(series,labels) VALUES(?,?) ON CONFLICT(series,labels) DO NOTHING`, name, labels); err != nil {
 			return err
 		}
 	}

@@ -258,8 +258,8 @@ func TestUpgradeFrom103UpdatesAgentSummaryViewAndBriefAskIndex(t *testing.T) {
 		t.Fatalf("AgentSummaryCards after upgrade = %#v err=%v", summaryCards, err)
 	}
 	var postBlocksCount int
-	if err := db.QueryRow(`SELECT blocks_count FROM brief_asks WHERE ask_id='ask-stale'`).Scan(&postBlocksCount); err != nil || postBlocksCount != 0 {
-		t.Fatalf("upgraded blocks_count for completed blocker = %d err=%v, want 0", postBlocksCount, err)
+	if err := db.QueryRow(`SELECT blocks_count FROM brief_asks WHERE ask_id='ask-stale'`).Scan(&postBlocksCount); err != nil || postBlocksCount != 1 {
+		t.Fatalf("stored admission hint for completed blocker = %d err=%v, want 1 (effective count is read-time)", postBlocksCount, err)
 	}
 
 	rows, err := db.Query(`EXPLAIN QUERY PLAN SELECT ask_id FROM brief_asks a WHERE a.state='open' AND a.decide_by IS NULL ORDER BY a.blocks_count DESC, CASE lower(trim(a.priority)) WHEN 'critical' THEN 0 WHEN 'p0' THEN 0 WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END, a.created_at, a.ask_id LIMIT 60`)
@@ -295,5 +295,61 @@ func TestUpgradeFrom103UpdatesAgentSummaryViewAndBriefAskIndex(t *testing.T) {
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUpgrade105SeriesCapacityBackfill(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 104)
+	_, err := db.Exec(`INSERT INTO series_adapters(name,description,agent_id,host_id,expected_interval,created_at) VALUES('active','Active','owner','host',60,'2026-10-16T00:00:00Z');
+ INSERT INTO series_definitions(name,adapter,kind,unit) VALUES('historical','active','gauge','items'),('raw','active','gauge','items');
+ INSERT INTO series_labels(series,labels) VALUES('historical','{}'),('raw','{}');
+ INSERT INTO series_daily(series,labels,day,n,last_ts,last_value) VALUES('historical','{}',0,1,123,1);
+ INSERT INTO series_points(series,labels,ts,value,received_day) VALUES('raw','{}',456,1,0);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+	for i := 0; i < 2; i++ {
+		var n int
+		if err = db.QueryRow(`SELECT definition_count FROM series_adapters WHERE name='active'`).Scan(&n); err != nil || n != 2 {
+			t.Fatal(n, err)
+		}
+		for name, want := range map[string]int64{"historical": 123, "raw": 456} {
+			var got int64
+			if err = db.QueryRow(`SELECT last_point_ts FROM series_labels WHERE series=?`, name).Scan(&got); err != nil || got != want {
+				t.Fatal(name, got, err)
+			}
+		}
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = upgradeAgentSummaryAndBriefAskIndexes(ctx, tx); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Definition edits keep the hint exact, including adapter moves and deletes.
+	if _, err = db.Exec(`INSERT INTO series_adapters(name,description,agent_id,host_id,expected_interval,created_at) VALUES('destination','Destination','owner','host',60,'2026-10-16T00:00:00Z');
+ UPDATE series_definitions SET adapter='destination' WHERE name='raw';
+ DELETE FROM series_definitions WHERE name='historical';`); err != nil {
+		t.Fatal(err)
+	}
+	var a, b int
+	if err = db.QueryRow(`SELECT (SELECT definition_count FROM series_adapters WHERE name='active'),(SELECT definition_count FROM series_adapters WHERE name='destination')`).Scan(&a, &b); err != nil || a != 0 || b != 1 {
+		t.Fatal(a, b, err)
 	}
 }
