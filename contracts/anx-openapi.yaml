@@ -13722,7 +13722,7 @@ components:
             decided_at: { type: string, format: date-time }
     BriefLoop:
       type: object
-      required: [health, health_reason, every_seconds, progress_budget_seconds, stop_rule, last_run_at, last_effect_at, next_run_due_at, recent_runs, runs_7d, goal]
+      required: [health, health_reason, every_seconds, progress_budget_seconds, stop_rule, last_run_at, last_effect_at, next_run_due_at, recent_runs, runs_7d, effects_7d, goal]
       properties:
         health: {type: string, enum: [healthy, stalled, failing, overdue, unknown]}
         health_reason: {type: string}
@@ -13743,6 +13743,7 @@ components:
               outcome: {type: string, enum: [acted, measured, no_op, infra_error]}
               decision: {type: string, nullable: true, enum: [kept, reverted, rejected]}
         runs_7d: {$ref: '#/components/schemas/LoopRunCounts'}
+        effects_7d: {type: integer, minimum: 0, description: Runs in the last seven days with outcome acted or experiment decision kept; each run counts once.}
         goal:
           nullable: true
           allOf: [{$ref: '#/components/schemas/LoopGoal'}]

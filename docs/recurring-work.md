@@ -23,7 +23,7 @@ run id when retrying: its identity is scoped to the canonical card, independent
 of which actor or spelling of the card ref submitted it. A replay returns the
 original event id. Experiment decisions are `kept`, `reverted` or `rejected`.
 Metrics and experiment scores must be finite numbers. Receipts may include at
-most 16 metrics and 10 typed refs or HTTPS effect links. The required summary is
+most 16 metrics and 10 typed refs or HTTP/HTTPS effect links (including `url:` refs; URL schemes are case-insensitive). The required summary is
 one human-readable line of at most 280 characters. `--started-at` accepts RFC3339;
 finish time defaults to the recorded event time. Receipts are separate from
 launcher runs (`anx runs`) and review receipts.
@@ -37,7 +37,9 @@ Core computes health in this order:
 4. An effect occurred within that budget: **healthy**.
 5. Otherwise: **unknown**.
 
-An effect is an `acted` outcome or a `kept` experiment. The default progress
+An effect is an `acted` outcome or a `kept` experiment. Each loop exposes
+`effects_7d`, the number of such runs in the last seven days; a run satisfying
+both conditions counts once. Overview `stats.effects_7d` sums these same counts. The default progress
 budget is seven days. Done and cancelled cards retain a non-null `loop` when
 they have cadence, a goal, or a run receipt in the last 30 days. Their health is
 `unknown` with reason `done`; completion alone does not create a loop. Brief
@@ -66,9 +68,14 @@ anx report init --template hill-climb --card card:optimizer
 comma-separated `health`, and `limit` (default 24, maximum 48). Attention comes
 first: failing, overdue, stalled, then healthy by latest effect. `live-loop`
 requires `card` and includes the newest 50 run receipts. Statistics describe the
-visible admitted cohort (at most 50 initiative candidates); `truncated` signals
-additional candidates or display rows. Effects compare the last seven days with
-the preceding seven; improved compares directional bests in the two periods.
+visible admitted cohort (at most 50 loops, selected from annotation or recent-receipt
+indexes before enrichment); ordinary cards do not consume admission slots.
+`truncated` signals additional visible loops or display rows. Effects compare the
+last seven days with the preceding seven. For improvement, `best_before` is the
+incumbent best in `[now - 30d, now - 7d)` and `best_after` is the incumbent best
+in `[now - 7d, now]`. An explicit baseline (otherwise the first displayed
+incumbent) substitutes only when the earlier window has no incumbent. A week
+above baseline but worse than the earlier incumbent best does not improve.
 
 A generic optimizer ledger such as
 `{action: accept|reject, objective, delta, commit}` maps to a receipt as follows:

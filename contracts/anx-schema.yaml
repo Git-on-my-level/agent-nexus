@@ -767,7 +767,7 @@ reference_conventions:
         most 16 series-name keys (120 characters) with finite numeric values.
         experiment requires candidate (1..200) and decision (kept, reverted, rejected),
         with optional finite score_before/score_after. effect_refs has at most 10
-        typed refs or HTTPS URLs.
+        typed refs or HTTP/HTTPS URLs (including url: refs; schemes are case-insensitive).
 
     exception_raised:
       payload_must_include: ["subtype"]
@@ -1454,4 +1454,5 @@ brief:
     - "Initiative loop is null unless cadence or goal exists or a run was recorded within 30 days."
     - "Done, cancelled and archived cards retain loop data with health unknown and reason done."
     - "Health precedence: two latest infra_error runs => failing; cadence missed by over twice every_seconds => overdue; no acted-or-kept effect within progress budget (default 7d) with runs => stalled; effect within budget => healthy; otherwise unknown. No-run cadence age starts at cadence assignment."
+    - "effects_7d counts runs in the last seven days with outcome acted or experiment decision kept, counting each run once; overview stats sum the same counts."
     - "recent_runs newest first at most 12; goal points oldest first at most 60. Best follows goal direction; series_ref uses scoped UTC daily rollups instead of receipt metrics."

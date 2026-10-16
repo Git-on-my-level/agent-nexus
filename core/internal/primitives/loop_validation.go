@@ -200,19 +200,23 @@ func ValidateRunRecorded(event map[string]any) error {
 		}
 		for _, ref := range refs {
 			if len(ref) > 2048 {
-				return workInvalid("effect ref too long")
+				return workInvalid("effect_refs entry too long")
 			}
-			if u, err := url.Parse(ref); err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil {
+			link := ref
+			if strings.HasPrefix(ref, "url:") {
+				link = strings.TrimPrefix(ref, "url:")
+			}
+			if u, err := url.Parse(link); err == nil && (strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https")) && u.Host != "" && u.User == nil {
 				continue
 			}
 			kind, id, ok := splitTypedRef(ref)
 			if !ok || id == "" {
-				return workInvalid("invalid effect ref")
+				return workInvalid("invalid effect_refs entry: expected a typed ref or HTTP/HTTPS URL")
 			}
 			switch kind {
-			case "actor", "artifact", "event", "thread", "topic", "document", "document_revision", "board", "card", "card_revision", "inbox", "host", "run", "series", "url":
+			case "actor", "artifact", "event", "thread", "topic", "document", "document_revision", "board", "card", "card_revision", "inbox", "host", "run", "series":
 			default:
-				return workInvalid("invalid effect ref type %s", fmt.Sprint(kind))
+				return workInvalid("invalid effect_refs type %s: URLs require HTTP/HTTPS", fmt.Sprint(kind))
 			}
 		}
 	}

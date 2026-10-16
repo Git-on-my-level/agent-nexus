@@ -1118,6 +1118,7 @@ var migrations = []migration{
 	{Version: 99, AfterApply: installRunReceiptIndexes},
 	{Version: 100, AfterApply: installBriefLoopFacts},
 	{Version: 101, AfterApply: requeueIncumbentLoopFacts},
+	{Version: 102, AfterApply: installLoopAdmission},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

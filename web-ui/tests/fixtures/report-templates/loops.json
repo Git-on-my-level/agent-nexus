@@ -98,7 +98,8 @@
                 "no_op": 0,
                 "infra_error": 2
               },
-              "goal": null
+              "goal": null,
+              "effects_7d": 0
             }
           },
           {
@@ -131,7 +132,8 @@
                 "no_op": 1,
                 "infra_error": 0
               },
-              "goal": null
+              "goal": null,
+              "effects_7d": 0
             }
           },
           {
@@ -169,7 +171,8 @@
                 "no_op": 1,
                 "infra_error": 0
               },
-              "goal": null
+              "goal": null,
+              "effects_7d": 0
             }
           },
           {
@@ -362,7 +365,8 @@
                     "decision": "rejected"
                   }
                 ]
-              }
+              },
+              "effects_7d": 2
             }
           },
           {
@@ -400,7 +404,8 @@
                 "no_op": 0,
                 "infra_error": 0
               },
-              "goal": null
+              "goal": null,
+              "effects_7d": 2
             }
           },
           {
@@ -422,7 +427,8 @@
                 "no_op": 0,
                 "infra_error": 0
               },
-              "goal": null
+              "goal": null,
+              "effects_7d": 0
             }
           }
         ]

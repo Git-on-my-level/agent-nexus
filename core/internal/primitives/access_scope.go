@@ -118,9 +118,11 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	// An OR here scans every denied spelling for every candidate placement.
 	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id)")
 	add("resource_access_external_edges", "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.source_kind AND id=_row.source_id)")
+	// Admission hints are internal index candidates, never response facts.
+	// LoopReport verifies scoped card metadata/receipts before its LIMIT.
 	if needed["brief_initiatives"] {
 		visible := denied("card", "_row.card_id") + " AND " + denied("brief_loop", "'loop-facts/'||_row.card_id")
-		graph += ", brief_initiatives AS (SELECT card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until FROM main.brief_initiatives _row)"
+		graph += ", brief_initiatives AS (SELECT card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,loop_annotated,loop_last_run_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until FROM main.brief_initiatives _row)"
 	}
 
 	add("brief_loop_facts", denied("card", "_row.card_id")+" AND "+denied("brief_loop", "'loop-facts/'||_row.card_id"))

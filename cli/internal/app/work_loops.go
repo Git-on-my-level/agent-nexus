@@ -35,21 +35,28 @@ func loopDuration(raw string) (int64, error) {
 	}
 	return int64(d / time.Second), nil
 }
+
+// Shared arity keeps the global scan from interpreting user-authored values.
+func loopWorkValueFlags(name string) []string {
+	switch name {
+	case "work cadence":
+		return []string{"every", "budget", "stop-rule"}
+	case "work goal":
+		return []string{"metric", "direction", "target", "baseline", "unit", "series"}
+	case "work receipt":
+		return []string{"run-id", "outcome", "summary", "candidate", "decision", "score-before", "score-after", "started-at"}
+	}
+	return nil
+}
+
 func parseLoopWork(name string, args []string) (string, map[string]any, error) {
 	fs := newSilentFlagSet(name)
 	var clear trackedBool
 	var id trackedString
 	values := map[string]*trackedString{}
-	keys := []string{}
-	switch name {
-	case "work cadence":
-		keys = []string{"every", "budget", "stop-rule"}
-		fs.Var(&clear, "clear", "Clear cadence")
-	case "work goal":
-		keys = []string{"metric", "direction", "target", "baseline", "unit", "series"}
-		fs.Var(&clear, "clear", "Clear goal")
-	case "work receipt":
-		keys = []string{"run-id", "outcome", "summary", "candidate", "decision", "score-before", "score-after", "started-at"}
+	keys := loopWorkValueFlags(name)
+	if name == "work cadence" || name == "work goal" {
+		fs.Var(&clear, "clear", "Clear annotation")
 	}
 	for _, k := range keys {
 		v := new(trackedString)
@@ -59,7 +66,7 @@ func parseLoopWork(name string, args []string) (string, map[string]any, error) {
 	var metrics, refs trackedStrings
 	if name == "work receipt" {
 		fs.Var(&metrics, "metric", "Metric name=value (repeatable)")
-		fs.Var(&refs, "ref", "Effect ref or HTTPS URL (repeatable)")
+		fs.Var(&refs, "ref", "Effect ref or HTTP/HTTPS URL (repeatable)")
 	}
 	fs.Var(&id, "card-id", "Card ref, handle or id")
 	leading, rest := splitLeadingPositionals(args)

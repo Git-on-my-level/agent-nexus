@@ -151,3 +151,75 @@ func TestLoopAdapterFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestLoopValuesCannotBecomeGlobalFlags(t *testing.T) {
+	for _, tc := range []struct{ verb, flag, value string }{
+		{"receipt", "summary", "--timeout=x"},
+		{"receipt", "summary", "--base-url=http://evil"},
+		{"receipt", "summary", "--json"},
+		{"cadence", "stop-rule", "-x"},
+		{"goal", "unit", "--base-url=http://evil"},
+	} {
+		t.Run(tc.verb+tc.value, func(t *testing.T) {
+			writes := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == "GET" {
+					w.Write([]byte(`{"card":{"id":"x","ref":"card:x","thread_id":"t"},"work":{"id":"x","ref":"card:x","version":3}}`))
+					return
+				}
+				writes++
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+					return
+				}
+				var got any
+				if tc.verb == "receipt" {
+					got = asMap(body["event"])["summary"]
+					w.Write([]byte(`{"event":{"id":"recorded"}}`))
+				} else {
+					key := strings.ReplaceAll(tc.flag, "-", "_")
+					got = asMap(asMap(body["patch"])[tc.verb])[key]
+					w.Write([]byte(`{"work":{"id":"x"}}`))
+				}
+				if got != tc.value {
+					t.Errorf("value changed: got=%v want=%s", got, tc.value)
+				}
+			}))
+			defer srv.Close()
+			args := []string{"work", tc.verb, "card:x"}
+			switch tc.verb {
+			case "receipt":
+				args = append(args, "--run-id", "one", "--outcome", "measured")
+			case "cadence":
+				args = append(args, "--every", "1d")
+			case "goal":
+				args = append(args, "--metric", "score", "--direction", "up")
+			}
+			args = append(args, "--"+tc.flag, tc.value)
+			overrides, remaining, _, err := parseGlobalFlags(args)
+			if err != nil || !reflect.DeepEqual(remaining, args) || overrides.BaseURL != nil || overrides.Timeout != nil || overrides.JSON != nil {
+				t.Fatalf("global scan: %+v %v %v", overrides, remaining, err)
+			}
+			runCLIForTest(t, t.TempDir(), map[string]string{"ANX_BASE_URL": srv.URL, "ANX_ACCESS_TOKEN": "token"}, nil, args)
+			if writes != 1 {
+				t.Fatalf("writes=%d", writes)
+			}
+		})
+	}
+}
+
+func TestGlobalScanRespectsOtherCommandValues(t *testing.T) {
+	for _, args := range [][]string{
+		{"cards", "message", "card:x", "--body", "--base-url=http://evil", "--json"},
+		{"cards", "archive", "card:x", "--reason", "--timeout=x", "--json"},
+		{"work", "--json", "receipt", "card:x", "--summary", "--base-url=http://evil"},
+		{"await", "event:x", "--timeout", "--base-url=http://evil", "--json"},
+	} {
+		overrides, remaining, _, err := parseGlobalFlags(args)
+		if err != nil || overrides.BaseURL != nil || overrides.Timeout != nil || overrides.JSON == nil || !*overrides.JSON {
+			t.Fatalf("%v: %+v %v %v", args, overrides, remaining, err)
+		}
+	}
+}

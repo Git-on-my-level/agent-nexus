@@ -27,7 +27,7 @@ func TestLoopIncumbentsSQLCacheAndImprovement(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			card, err := s.CreateWork(ctx, "owner", workString(board["id"]), map[string]any{"title": "Optimizer", "goal": map[string]any{"metric": "score", "direction": tc.direction}})
+			card, err := s.CreateWork(ctx, "owner", workString(board["id"]), map[string]any{"title": "Optimizer", "goal": map[string]any{"metric": "score", "direction": tc.direction, "baseline": 0.}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -51,6 +51,16 @@ func TestLoopIncumbentsSQLCacheAndImprovement(t *testing.T) {
 				if _, err = ws.DB().Exec(`UPDATE events SET ts=? WHERE id=?`, loopTS(now.Add(-run.age)), event["id"]); err != nil {
 					t.Fatal(err)
 				}
+			}
+			// Exercise readLoopFacts directly: no Go point fold or shared cache
+			// may supply these SQL aggregate results.
+			direct, err := readLoopFacts(ctx, s.db, []map[string]any{{"id": workString(card["id"]), "subject": "card:" + workString(card["id"]), "metric": "score", "direction": tc.direction}}, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlFacts := direct[workString(card["id"])]
+			if sqlFacts.BestBefore == nil || *sqlFacts.BestBefore != tc.before || sqlFacts.BestAfter == nil || *sqlFacts.BestAfter != tc.after {
+				t.Fatalf("SQL windows: %+v", sqlFacts)
 			}
 			check := func(cached bool) {
 				t.Helper()

@@ -161,12 +161,15 @@ func computeLoop(c loopCard, f loopFacts, now time.Time) map[string]any {
 		recent = append(recent, map[string]any{"at": r["at"], "outcome": r["outcome"], "decision": loopDecision(r)})
 	}
 	counts := loopCounts()
+	effects := 0
 	for _, c := range f.Counts {
 		if c["week"] == float64(1) {
 			counts[workString(c["outcome"])] = c["n"]
+			n, _ := loopNumber(c["effects"])
+			effects += int(n)
 		}
 	}
-	out := map[string]any{"health": "unknown", "health_reason": "no runs", "every_seconds": cadence["every_seconds"], "progress_budget_seconds": cadence["progress_budget_seconds"], "stop_rule": cadence["stop_rule"], "last_run_at": f.LastRun, "last_effect_at": f.LastEffect, "next_run_due_at": nil, "recent_runs": recent, "runs_7d": counts, "goal": nil}
+	out := map[string]any{"health": "unknown", "health_reason": "no runs", "every_seconds": cadence["every_seconds"], "progress_budget_seconds": cadence["progress_budget_seconds"], "stop_rule": cadence["stop_rule"], "last_run_at": f.LastRun, "last_effect_at": f.LastEffect, "next_run_due_at": nil, "recent_runs": recent, "runs_7d": counts, "effects_7d": effects, "goal": nil}
 	every, _ := workInt(cadence["every_seconds"])
 	budget, ok := workInt(cadence["progress_budget_seconds"])
 	if !ok {
@@ -328,8 +331,8 @@ func (s *Store) loopSeries(ctx context.Context, cards []loopCard, out map[string
 }
 
 // LoopReport uses the same computation as brief. Candidate admission is capped
-// at 50 canonical cards before receipt enrichment. Truncated means the board
-// contained more candidates; statistics describe this admitted, visible cohort.
+// at 50 visible loops before receipt enrichment. Truncated means there are
+// more loops than the admission/display limit; statistics describe this cohort.
 func (s *Store) LoopReport(ctx context.Context, board, card, health string, limit int, now time.Time) (map[string]any, bool, error) {
 	if limit == 0 {
 		limit = 24
@@ -357,24 +360,39 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 			}
 			boardID = b.ID
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT id,COALESCE(NULLIF(handle,''),id),title FROM cards WHERE COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' AND ((?<>'' AND board_id=?) OR (?='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR board_id IN (SELECT id FROM boards WHERE role='initiatives')))) ORDER BY id LIMIT 51`, boardID, boardID, boardID)
-		if err != nil {
-			return nil, false, err
-		}
-		for rows.Next() {
-			var id, ref, title string
-			if err = rows.Scan(&id, &ref, &title); err != nil {
-				rows.Close()
+		// Each indexed arm admits at most 51 visible loops. The annotation and
+		// receipt predicates recheck scoped truth before LIMIT: hints can include
+		// private receipts, future runs, or metadata the reader cannot see.
+		for _, arm := range []struct {
+			predicate, order string
+			args             []any
+		}{
+			{`bi.loop_annotated=1 AND EXISTS(SELECT 1 FROM work_metadata m WHERE m.card_id=c.id AND (json_type(m.metadata_json,'$.cadence')='object' OR json_type(m.metadata_json,'$.goal')='object'))`, `bi.card_id`, nil},
+			{`bi.loop_last_run_at>=? AND EXISTS(SELECT 1 FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')='card:'||c.id AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')`, `bi.loop_last_run_at DESC,bi.card_id`, []any{loopTS(now.Add(-loopWindow)), loopTS(now.Add(-loopWindow)), loopTS(now)}},
+		} {
+			args := append(arm.args, boardID, boardID, boardID)
+			rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),c.title FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE `+arm.predicate+` AND COALESCE(c.trashed_at,'')='' AND COALESCE(c.archived_at,'')='' AND ((?<>'' AND c.board_id=?) OR (?='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')))) ORDER BY `+arm.order+` LIMIT 51`, args...)
+			if err != nil {
 				return nil, false, err
 			}
-			ids = append(ids, id)
-			items[id] = map[string]any{"ref": "card:" + ref, "title": title}
+			for rows.Next() {
+				var id, ref, title string
+				if err = rows.Scan(&id, &ref, &title); err != nil {
+					rows.Close()
+					return nil, false, err
+				}
+				if _, exists := items[id]; !exists {
+					ids = append(ids, id)
+				}
+				items[id] = map[string]any{"ref": "card:" + ref, "title": title}
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, false, err
+			}
 		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, false, err
-		}
+		sort.Strings(ids)
 		if len(ids) > 50 {
 			ids = ids[:50]
 			partial = true
@@ -410,6 +428,7 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 		item["loop"] = state
 		loops = append(loops, item)
 		stats["loops"] = stats["loops"].(int) + 1
+		stats["effects_7d"] = stats["effects_7d"].(int) + state["effects_7d"].(int)
 		if rank[h] < 3 {
 			stats["needs_attention"] = stats["needs_attention"].(int) + 1
 		}
@@ -420,7 +439,6 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 				counts := stats["runs_7d"].(map[string]any)
 				key := workString(c["outcome"])
 				counts[key] = counts[key].(int) + int(n)
-				stats["effects_7d"] = stats["effects_7d"].(int) + int(effects)
 			} else {
 				stats["effects_prev_7d"] = stats["effects_prev_7d"].(int) + int(effects)
 			}
@@ -479,7 +497,17 @@ func readLoopFacts(ctx context.Context, q briefQueryer, requests []map[string]an
  'latest_incumbent',(SELECT COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) FROM events WHERE r.metric<>'' AND `+loopIncumbentPredicate+` AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' AND COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) IS NOT NULL ORDER BY ts DESC,id DESC LIMIT 1),
  'best_before',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND `+loopIncumbentPredicate+` AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')=''),
  'best_after',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND `+loopIncumbentPredicate+` AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')
- ) FROM requested r`, string(encoded), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now), loopTS(now), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now))
+ ) FROM requested r`,
+		string(encoded), loopTS(now), // requested, next_run
+		loopTS(now.Add(-7*24*time.Hour)), loopTS(now), // 7d expiry
+		loopTS(now.Add(-14*24*time.Hour)), loopTS(now), // 14d expiry
+		loopTS(now.Add(-loopWindow)), loopTS(now), // 30d expiry
+		loopTS(now), loopTS(now), loopTS(now), // last_run, last_effect, runs
+		loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), // counts
+		loopTS(now.Add(-loopWindow)), loopTS(now), // displayed points
+		loopTS(now.Add(-loopWindow)), loopTS(now), // latest incumbent
+		loopTS(now.Add(-loopWindow)), loopTS(now.Add(-7*24*time.Hour)), // best_before: [now-30d, now-7d)
+		loopTS(now.Add(-7*24*time.Hour)), loopTS(now)) // best_after: [now-7d, now]
 	if err != nil {
 		return nil, err
 	}

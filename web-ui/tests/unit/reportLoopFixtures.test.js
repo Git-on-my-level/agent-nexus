@@ -23,6 +23,7 @@ describe("loop report fixtures", () => {
     };
     for (const { loop } of rows) {
       const counts = zeroCounts();
+      let effects = 0;
       // Goal points preserve the complete fixture history beyond the recent-run cap.
       const runs = new Map(loop.recent_runs.map((run) => [run.at, run]));
       for (const point of loop.goal?.points ?? []) {
@@ -36,11 +37,14 @@ describe("loop report fixtures", () => {
         expect(ageDays(run.at)).toBeGreaterThanOrEqual(0);
         if (ageDays(run.at) <= 7) counts[run.outcome]++;
         if (effect(run)) {
-          if (ageDays(run.at) <= 7) totals.effects_7d++;
-          else if (ageDays(run.at) <= 14) totals.effects_prev_7d++;
+          if (ageDays(run.at) <= 7) {
+            totals.effects_7d++;
+            effects++;
+          } else if (ageDays(run.at) <= 14) totals.effects_prev_7d++;
         }
       }
       expect(loop.runs_7d).toEqual(counts);
+      expect(loop.effects_7d).toBe(effects);
       for (const key of outcomes) totals.runs_7d[key] += counts[key];
       expect(loop.last_run_at).toBe(loop.recent_runs[0]?.at ?? null);
       if (loop.health === "failing")

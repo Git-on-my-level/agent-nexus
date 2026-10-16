@@ -828,6 +828,28 @@ series selectors share the existing bounded daily-rollup batches. The ordinary
 The dense 10,000-receipt complete-brief gate now also enforces 50,000 VM steps
 (previously 750,000), 30 SQL calls, 100 returned rows and a one-second safety cap.
 
+`live-loops` admission uses migration 102's two hints on the existing
+`brief_initiatives` rows, updated atomically by metadata and receipt triggers.
+`idx_brief_loop_annotated` traverses annotated card IDs;
+`idx_brief_loop_recent` traverses last-receipt timestamps newer than 30 days.
+Each arm returns at most 51 cards after scoped card, board, metadata and receipt
+checks. The reader deduplicates at most 102 IDs, enriches at most 50 loops and
+sorts this cohort by health before applying the display limit (at most 48).
+Ordinary cards never consume slots or require JSON scans. Candidate index work
+can grow with loops excluded by board/lifecycle/visibility; receipt admission is
+an indexed subject/time existence seek, with no receipt-density aggregation.
+The hints are internal selectors, never response facts or authorization: a
+private receipt alone cannot admit a public card, and mixed receipt visibility
+uses the ordinary scoped receipt query. Stats describe the admitted cohort;
+per-loop and aggregate `effects_7d` both count acted-or-kept runs once.
+
+`TestLoopReportAdmissionBudget` measures the complete report over 4,096 ordinary
+cards plus annotation/receipt loops, using `loop_report_budget.json` and requiring
+both admission indexes. Owner and non-owner reads each measured four SQL calls,
+six rows, 635 VM steps and zero full-scan steps. The existing complete-brief and
+series budgets remain unchanged. Migration 102 performs one indexed per-card
+backfill on upgrade; subsequent startup does no admission backfill.
+
 `TestLoopBriefComparison` is portable to main: copy that exact test file into an
 isolated main checkout. Every case seeds 10,000 otherwise-identical events on one
 cadence/goal card. The zero-receipt control changes only the type to

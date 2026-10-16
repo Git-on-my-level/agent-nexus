@@ -202,7 +202,31 @@
         "for_seconds": 345600,
         "window_seconds": 604800
       },
-      "loop": null
+      "loop": {
+        "health": "healthy",
+        "health_reason": "effect within progress budget",
+        "every_seconds": 86400,
+        "progress_budget_seconds": 604800,
+        "stop_rule": null,
+        "last_run_at": "2026-10-15T08:00:00Z",
+        "last_effect_at": "2026-10-15T08:00:00Z",
+        "next_run_due_at": "2026-10-16T08:00:00Z",
+        "recent_runs": [
+          {
+            "at": "2026-10-15T08:00:00Z",
+            "outcome": "measured",
+            "decision": "kept"
+          }
+        ],
+        "runs_7d": {
+          "acted": 0,
+          "measured": 1,
+          "no_op": 0,
+          "infra_error": 0
+        },
+        "effects_7d": 1,
+        "goal": null
+      }
     },
     {
       "ref": "card:fleet-onboarding",

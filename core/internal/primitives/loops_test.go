@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -27,7 +28,7 @@ func TestRunRecordedValidation(t *testing.T) {
 	if err := ValidateRunRecorded(event(map[string]any{"run_id": "a", "outcome": "measured", "metrics": map[string]any{"x": 0.}, "experiment": map[string]any{"candidate": "a", "decision": "rejected", "score_after": 0.}, "effect_refs": []string{"https://example.com", "card:x"}})); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []map[string]any{{"run_id": "a", "outcome": "failed"}, {"run_id": "a", "outcome": "acted", "x": 1}, {"run_id": "a", "outcome": "acted", "metrics": map[string]any{"x": math.NaN()}}, {"run_id": "a", "outcome": "acted", "experiment": map[string]any{"candidate": "a", "decision": "kept", "extra": 0}}, {"run_id": "a", "outcome": "acted", "effect_refs": []string{"http://example.com"}}} {
+	for _, p := range []map[string]any{{"run_id": "a", "outcome": "failed"}, {"run_id": "a", "outcome": "acted", "x": 1}, {"run_id": "a", "outcome": "acted", "metrics": map[string]any{"x": math.NaN()}}, {"run_id": "a", "outcome": "acted", "experiment": map[string]any{"candidate": "a", "decision": "kept", "extra": 0}}, {"run_id": "a", "outcome": "acted", "effect_refs": []string{"url:javascript:alert(1)"}}} {
 		if err := ValidateRunRecorded(event(p)); err == nil {
 			t.Fatal("accepted", p)
 		}
@@ -80,6 +81,18 @@ func TestLoopGoalIncumbentsKeepCandidatePoints(t *testing.T) {
 			got = loopGoal(map[string]any{"direction": direction}, []map[string]any{points[0], points[3], points[4]})
 			if got["latest"] != nil || got["best"] != nil || got["baseline"] != nil {
 				t.Fatal(got)
+			}
+		})
+	}
+}
+
+func TestRunEffectURLSchemes(t *testing.T) {
+	for _, ref := range []string{"http://example.com", "https://example.com", "HTTP://example.com", "hTtPs://example.com", "url:http://example.com", "url:HTTPS://example.com", "javascript:alert(1)", "url:javascript:alert(1)", "ftp://example.com", "url:ftp://example.com", "https:///missing-host", "url:https://user:secret@example.com"} {
+		t.Run(ref, func(t *testing.T) {
+			err := ValidateRunRecorded(map[string]any{"summary": "Effect", "refs": []string{"card:loop"}, "payload": map[string]any{"run_id": "a", "outcome": "acted", "effect_refs": []string{ref}}})
+			valid := strings.Contains(strings.ToLower(ref), "http") && !strings.Contains(ref, "missing-host") && !strings.Contains(ref, "user:")
+			if valid && err != nil || !valid && (err == nil || !strings.Contains(err.Error(), "effect_refs")) {
+				t.Fatal(ref, err)
 			}
 		})
 	}

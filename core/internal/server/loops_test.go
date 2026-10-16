@@ -389,3 +389,175 @@ func TestLoopDoneArchivedAndNull(t *testing.T) {
 		})
 	}
 }
+
+func TestLoopEffectURLsHTTPValidation(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201).Body.Close()
+	s := h.primitiveStore.(*primitives.Store)
+	card, err := s.CreateWork(context.Background(), "actor-1", "", map[string]any{"title": "URL validation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"javascript:alert(1)", "url:javascript:alert(1)", "ftp://example.org", "url:ftp://example.org"} {
+		raw, _ := json.Marshal(map[string]any{"actor_id": "actor-1", "event": map[string]any{"type": "run_recorded", "summary": "Effect", "thread_id": card["thread_id"], "provenance": eventProvenance(), "refs": []string{anyString(card["ref"])}, "payload": map[string]any{"run_id": ref, "outcome": "acted", "effect_refs": []string{ref}}}})
+		response := postJSONExpectStatus(t, h.baseURL+"/events", string(raw), 400)
+		var body map[string]any
+		err := json.NewDecoder(response.Body).Decode(&body)
+		response.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := body["error"].(map[string]any)
+		if e["code"] != "invalid_request" || !strings.Contains(anyString(e["message"]), "effect_refs") {
+			t.Fatal(body)
+		}
+	}
+}
+
+func TestLoopEffectsCountActedOrKeptOnce(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	s := h.primitiveStore.(*primitives.Store)
+	card, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Effects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, run := range []struct{ outcome, decision string }{{"acted", ""}, {"acted", "kept"}, {"measured", "kept"}, {"measured", "rejected"}, {"no_op", ""}} {
+		payload := map[string]any{"run_id": fmt.Sprint(i), "outcome": run.outcome}
+		if run.decision != "" {
+			payload["experiment"] = map[string]any{"candidate": fmt.Sprint(i), "decision": run.decision}
+		}
+		if _, err = s.AppendEvent(ctx, "actor-1", map[string]any{"type": "run_recorded", "summary": "Run", "refs": []string{anyString(card["ref"])}, "payload": payload}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, cached := range []bool{false, true} {
+		if cached {
+			for done := false; !done; {
+				done, err = s.RefreshBriefInitiatives(ctx, 200)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		detail, _, err := s.LoopReport(ctx, "", anyString(card["ref"]), "", 24, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if detail["loop"].(map[string]any)["effects_7d"] != 3 {
+			t.Fatal(detail)
+		}
+		report, _, err := s.LoopReport(ctx, "", "", "", 24, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if report["stats"].(map[string]any)["effects_7d"] != 3 {
+			t.Fatal(report)
+		}
+		brief := readBriefV1(t, s)
+		loop := brief["initiatives"].([]any)[0].(map[string]any)["loop"].(map[string]any)
+		if loop["effects_7d"] != float64(3) {
+			t.Fatal(loop)
+		}
+	}
+}
+
+func TestLoopReportAdmissionBudget(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	s := h.primitiveStore.(*primitives.Store)
+	var budget struct {
+		Cards   int    `json:"fixture_cards"`
+		Queries int    `json:"max_queries"`
+		Rows    int    `json:"max_rows"`
+		VM      uint64 `json:"max_vm_steps"`
+	}
+	raw, err := os.ReadFile("testdata/loop_report_budget.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(raw, &budget); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.workspace.DB().Exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('ordinary-thread','now','owner','{}');`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.workspace.DB().Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<?) INSERT INTO cards(id,title,summary,column_key,thread_id,created_at,created_by,updated_at,updated_by) SELECT printf('ordinary-%05d',i),'Ordinary','','todo','ordinary-thread','now','owner','now','owner' FROM n`, budget.Cards); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"annotation", "receipt"} {
+		card, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Loop " + kind})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if kind == "annotation" {
+			if _, err = h.workspace.DB().Exec(`UPDATE work_metadata SET metadata_json='{"goal":{"metric":"score","direction":"up"}}' WHERE card_id=?`, card["id"]); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err = s.AppendEvent(ctx, "owner", map[string]any{"type": "run_recorded", "summary": "Measured", "refs": []string{anyString(card["ref"])}, "payload": map[string]any{"run_id": "one", "outcome": "measured"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for done := false; !done; {
+		done, err = s.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	pool, capture, err := perfguard.Open("file:" + h.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	measured := primitives.NewTestStore(pool, h.workspace.Layout().ArtifactContentDir)
+	for _, actor := range []string{"owner", "stranger"} {
+		scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor})
+		scope, closeRead, err := measured.BeginResourceRead(scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		capture.Start()
+		report, partial, err := measured.LoopReport(scope, "", "", "", 24, time.Now().UTC())
+		statements, queries, returned := capture.Stop()
+		work := capture.Work()
+		closeRead()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = capture.WorkError(); err != nil {
+			t.Fatal(err)
+		}
+		if partial || report["stats"].(map[string]any)["loops"] != 2 {
+			t.Fatal(report, partial)
+		}
+		t.Logf("actor=%s queries=%d rows=%d VM=%d fullscan=%d", actor, queries, returned, work.VMSteps, work.FullScanSteps)
+		if queries > budget.Queries || returned > budget.Rows || work.VMSteps > budget.VM {
+			t.Fatalf("report exceeded budget: %+v", work)
+		}
+		for _, index := range []string{"idx_brief_loop_annotated", "idx_brief_loop_recent"} {
+			found := false
+			for _, statement := range statements {
+				if !strings.Contains(statement.SQL, "FROM brief_initiatives bi JOIN cards") {
+					continue
+				}
+				plan, err := perfguard.Explain(ctx, h.workspace.DB(), statement)
+				if err != nil {
+					t.Fatal(err)
+				}
+				text := strings.Join(plan, "\n")
+				if strings.Contains(text, index) {
+					found = true
+				}
+				if strings.Contains(text, "SCAN c\n") || strings.Contains(text, "SCAN events") {
+					t.Fatal(text)
+				}
+			}
+			if !found {
+				t.Fatalf("admission lost %s", index)
+			}
+		}
+	}
+}

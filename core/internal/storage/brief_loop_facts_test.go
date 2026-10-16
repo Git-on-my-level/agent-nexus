@@ -102,3 +102,73 @@ func TestIncumbentLoopFactsUpgradeInvalidatesOldCaches(t *testing.T) {
 		t.Fatal("cache requeued again on restart", count, err)
 	}
 }
+
+func TestLoopAdmissionUpgradeAndMutations(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 101)
+	for _, query := range []string{
+		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('t','now','owner','{}')`,
+		`INSERT INTO cards(id,title,summary,column_key,thread_id,created_at,created_by,updated_at,updated_by) VALUES('c','Loop','','todo','t','now','owner','now','owner'),('d','Other','','todo','t','now','owner','now','owner')`,
+		`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES('c','{"goal":{"metric":"score","direction":"up"}}','now','owner')`,
+		`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('r','run_recorded','2026-10-16T00:00:00Z','owner','t','["card:c"]','{"subject_ref":"card:c","payload":{"run_id":"one","outcome":"measured"}}')`,
+	} {
+		if _, err := db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+	check := func(id string, annotated int, last string) {
+		t.Helper()
+		var got int
+		var at string
+		if err := db.QueryRow(`SELECT loop_annotated,COALESCE(loop_last_run_at,'') FROM brief_initiatives WHERE card_id=?`, id).Scan(&got, &at); err != nil || got != annotated || at != last {
+			t.Fatal(id, got, at, err)
+		}
+	}
+	at := "2026-10-16T00:00:00Z"
+	check("c", 1, at)
+	check("d", 0, "")
+	for _, query := range []string{
+		`UPDATE work_metadata SET metadata_json='{}' WHERE card_id='c'`,
+		`UPDATE events SET payload_json=json_set(payload_json,'$.subject_ref','card:d') WHERE id='r'`,
+	} {
+		if _, err = db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check("c", 0, "")
+	check("d", 0, at)
+	for _, query := range []string{
+		`UPDATE events SET archived_at='now' WHERE id='r'`,
+		`UPDATE events SET archived_at=NULL WHERE id='r'`,
+		`UPDATE events SET type='card_updated' WHERE id='r'`,
+		`UPDATE events SET type='run_recorded' WHERE id='r'`,
+		`DELETE FROM events WHERE id='r'`,
+	} {
+		if _, err = db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+		want := ""
+		if query == `UPDATE events SET archived_at=NULL WHERE id='r'` || query == `UPDATE events SET type='run_recorded' WHERE id='r'` {
+			want = at
+		}
+		check("d", 0, want)
+	}
+	if _, err = db.Exec(`UPDATE work_metadata SET metadata_json='{"cadence":{"every_seconds":60}}' WHERE card_id='c'`); err != nil {
+		t.Fatal(err)
+	}
+	check("c", 1, "")
+	if _, err = db.Exec(`DELETE FROM work_metadata WHERE card_id='c'`); err != nil {
+		t.Fatal(err)
+	}
+	check("c", 0, "")
+}

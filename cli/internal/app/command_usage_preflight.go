@@ -641,6 +641,19 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			addLayer(map[string]map[string]preflightFlagSpec{strings.Join(strings.Fields(topic.Path), " "): flags})
 		}
 	}
+	for _, name := range []string{"work receipt", "work cadence", "work goal"} {
+		flags := map[string]preflightFlagSpec{"card-id": {kind: preflightFlagString}}
+		for _, key := range loopWorkValueFlags(name) {
+			flags[key] = preflightFlagSpec{kind: preflightFlagString}
+		}
+		if name == "work receipt" {
+			flags["metric"] = preflightFlagSpec{kind: preflightFlagString}
+			flags["ref"] = preflightFlagSpec{kind: preflightFlagString}
+		} else {
+			flags["clear"] = preflightFlagSpec{kind: preflightFlagBool}
+		}
+		addLayer(map[string]map[string]preflightFlagSpec{name: flags})
+	}
 	addLayer(manualPreflightFlagSpecs())
 	addLayer(skillsPreflightFlagSpecs())
 	return specs
