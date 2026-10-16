@@ -252,20 +252,21 @@ func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, des
 	if candidate == "" {
 		return "", invalidDocumentRequest("document.handle is invalid")
 	}
-	var n int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM documents WHERE handle = ? OR id = ?`, candidate, candidate).Scan(&n); err != nil {
-		return "", err
-	}
-	var aliasN int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, "document", candidate).Scan(&aliasN); err != nil {
-		return "", err
-	}
-	var retired int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM resource_access_tombstones WHERE kind='document' AND ref=? COLLATE NOCASE`, candidate).Scan(&retired); err != nil {
-		return "", err
-	}
-	if n > 0 || aliasN > 0 || retired > 0 {
-		return "", ErrConflict
+	for _, check := range []struct {
+		query string
+		args  []any
+	}{
+		{`SELECT EXISTS(SELECT 1 FROM documents WHERE handle = ? OR id = ? LIMIT 1)`, []any{candidate, candidate}},
+		{`SELECT EXISTS(SELECT 1 FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ? LIMIT 1)`, []any{"document", candidate}},
+		{TombstoneHandleReservationSQL, []any{"document", candidate}},
+	} {
+		taken, err := probeExists(ctx, tx, check.query, check.args...)
+		if err != nil {
+			return "", err
+		}
+		if taken {
+			return "", ErrConflict
+		}
 	}
 	return candidate, nil
 }

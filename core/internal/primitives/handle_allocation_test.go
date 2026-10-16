@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 
@@ -101,8 +102,10 @@ func TestUniqueHandleFallbackIsBoundedDeterministicAndFits(t *testing.T) {
 	if len(got) > handles.MaxLength || !strings.HasSuffix(got, "-"+digest[:handleHashSuffixStart]) {
 		t.Fatalf("fallback %q len %d, want suffix -%s within %d", got, len(got), digest[:handleHashSuffixStart], handles.MaxLength)
 	}
-	if counter.queries != handleSequentialAttempts*4+4 {
-		t.Fatalf("fallback used %d queries, want %d", counter.queries, handleSequentialAttempts*4+4)
+	// Each taken live handle stops at the first EXISTS. The free hash candidate
+	// still checks handle, id, alias, and tombstone.
+	if counter.queries != handleSequentialAttempts+4 {
+		t.Fatalf("fallback used %d queries, want %d", counter.queries, handleSequentialAttempts+4)
 	}
 
 	insertArtifactHandle(t, ctx, ws.DB(), "len-short-hash", got)
@@ -165,7 +168,7 @@ func TestCardAndDocumentRevisionHandlesSurviveFixedPrefixExhaustion(t *testing.T
 	if fallback != "card-revision-"+hex.EncodeToString(sum[:])[:handleHashSuffixStart] {
 		t.Fatalf("exhausted card-revision fallback = %q", fallback)
 	}
-	if counter.queries > handleSequentialAttempts*4+4 {
+	if counter.queries > handleSequentialAttempts+4 {
 		t.Fatalf("exhausted allocation used %d queries", counter.queries)
 	}
 	docSeed := "artifact-still-document-revision"
@@ -281,6 +284,119 @@ func artifactHandleForCardRevision(t *testing.T, ctx context.Context, db *sql.DB
 		t.Fatal(err)
 	}
 	return handle
+}
+
+func TestUniqueHandleSkipsAliasAndTombstoneReservations(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+
+	if _, err := ws.DB().ExecContext(ctx, `
+		INSERT INTO resource_handle_aliases(id, resource_type, alias_handle, resource_id, canonical_handle, created_at)
+		VALUES('alias-kept', 'artifact', 'kept-name', 'artifact-kept', 'current-name', '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := uniqueHandleTx(ctx, ws.DB(), "artifact", "Kept Name", "artifact-alias-seed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "kept-name-2" {
+		t.Fatalf("alias reservation allocated %q, want kept-name-2", got)
+	}
+
+	if _, err := ws.DB().ExecContext(ctx, `
+		INSERT INTO resource_access_tombstones(kind, id, ref, owner)
+		VALUES('artifact', 'retired-ship', 'Ship-It', 'owner')`); err != nil {
+		t.Fatal(err)
+	}
+	got, err = uniqueHandleTx(ctx, ws.DB(), "artifact", "Ship It", "artifact-tombstone-seed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ship-it-2" {
+		t.Fatalf("tombstone reservation allocated %q, want ship-it-2", got)
+	}
+}
+
+func TestUniqueHandleSeparatesLongParentsSharingTruncatedPrefix(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+
+	parentA := strings.Repeat("p", 61) + "aaa-left"
+	parentB := strings.Repeat("p", 61) + "bbb-right"
+	shared := revisionArtifactDesiredHandle(parentA, 1)
+	if shared != revisionArtifactDesiredHandle(parentB, 1) || !strings.HasSuffix(shared, "-r1") || len(shared) > handles.MaxLength {
+		t.Fatalf("truncated parents = %q and %q", shared, revisionArtifactDesiredHandle(parentB, 1))
+	}
+
+	left, err := uniqueHandleTx(ctx, ws.DB(), "artifact", shared, "artifact-parent-left")
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertArtifactHandle(t, ctx, ws.DB(), "parent-left", left)
+	right, err := uniqueHandleTx(ctx, ws.DB(), "artifact", revisionArtifactDesiredHandle(parentB, 1), "artifact-parent-right")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left == right || len(left) > handles.MaxLength || len(right) > handles.MaxLength {
+		t.Fatalf("shared prefix allocated %q and %q", left, right)
+	}
+	insertArtifactHandle(t, ctx, ws.DB(), "parent-right", right)
+	assertUniqueArtifactHandle(t, ctx, ws.DB(), left)
+	assertUniqueArtifactHandle(t, ctx, ws.DB(), right)
+}
+
+func TestInsertCardArtifactUniqueViolationIsConflict(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	store := NewStore(ws.DB(), blob.NewFilesystemBackend(ws.Layout().ArtifactContentDir), ws.Layout().ArtifactContentDir)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{"title": "Ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	added, err := store.AddBoardCard(ctx, "actor-1", board["id"].(string), AddBoardCardInput{Title: "Ship the fix", ColumnKey: "backlog"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	const artifactID = "colliding-card-artifact"
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO artifacts(id, handle, kind, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		VALUES (?, 'other-artifact-handle', 'note', '2026-01-01T00:00:00Z', 'actor-1', 'text', 'seed', '[]', '{}')`, artifactID); err != nil {
+		t.Fatal(err)
+	}
+	err = store.insertCardRevisionTx(ctx, tx, "actor-1", added.Card["id"].(string), added.Card["handle"].(string), "", cardRevisionInsert{
+		RevisionID:     "rev-collision",
+		RevisionNumber: 2,
+		ArtifactID:     artifactID,
+		CreatedAt:      "2026-01-02T00:00:00Z",
+		ContentHash:    "hash",
+		RefsJSON:       "[]",
+		MetadataJSON:   "{}",
+		EncodedContent: []byte(`{}`),
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("unique artifact insert = %v, want ErrConflict", err)
+	}
 }
 
 func assertUniqueArtifactHandle(t *testing.T, ctx context.Context, db *sql.DB, handle string) {

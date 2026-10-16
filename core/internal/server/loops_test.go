@@ -234,7 +234,8 @@ func TestLoopReceiptsRespectPrivateProvenance(t *testing.T) {
 		}
 		if actor == "stranger" {
 			raw, _ := json.Marshal(data)
-			if strings.Contains(string(raw), "Private") || strings.Contains(string(raw), "99") || data["loop"].(map[string]any)["last_effect_at"].(*string) != nil {
+			// Match the private score as JSON, not the digits inside a timestamp.
+			if strings.Contains(string(raw), "Private") || strings.Contains(string(raw), `"score":99`) || data["loop"].(map[string]any)["last_effect_at"].(*string) != nil {
 				t.Fatal(string(raw))
 			}
 		}

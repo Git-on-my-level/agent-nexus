@@ -1120,6 +1120,11 @@ var migrations = []migration{
 	{Version: 101, AfterApply: requeueIncumbentLoopFacts},
 	{Version: 102, AfterApply: installLoopAdmission},
 	{Version: 103, AfterApply: installLoopAdmissionRecency},
+	// Handle allocation reserves purged identities with kind + ref, case-insensitively.
+	// The primary key (kind, id, ref, owner) cannot seek that pair.
+	{Version: 104, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_resource_access_tombstones_kind_ref ON resource_access_tombstones(kind, ref COLLATE NOCASE)`,
+	}},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {
