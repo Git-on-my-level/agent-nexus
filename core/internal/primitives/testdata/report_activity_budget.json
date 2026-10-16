@@ -1,0 +1,6 @@
+{
+  "max_subjects": 200,
+  "max_queries": 8,
+  "max_rows": 650,
+  "max_vm_steps": 100000
+}

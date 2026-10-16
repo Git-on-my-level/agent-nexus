@@ -9045,7 +9045,9 @@ components:
             Asks return items (id, title,
             status, created_at, age_seconds, request_event_ref, response_text, responded_at).
             Work mix returns group_by, total and buckets (key,label,count).
-            Activity returns items (ref,type,summary,actor_id,ts,count). Series bindings return the panel type's static data shape, live provenance and freshness deadlines.
+            Activity returns items (ref,type,summary,actor_id,ts,count,actor_label,subject,verb,detail,impact).
+            subject is null or an access-filtered current item (ref,title,kind), where kind is initiative, card, ask, doc, board or topic.
+            impact is high, normal or low. detail is short plain text (at most 140 characters). Series bindings return the panel type's static data shape, live provenance and freshness deadlines.
     LiveReportQuery:
       type: object
       additionalProperties: false
@@ -9054,7 +9056,7 @@ components:
         allow board_refs, project_ref, card_ref, limit, sort; work mix allows
         board_refs, project_ref, card_ref, group_by; asks allow card_ref, limit,
         include_answered, answered_only, answered_within_hours; activity allows
-        limit. live-fleet-health accepts an empty query and reads declared fleet.*
+        limit and min_impact (high, normal, low; default low). live-fleet-health accepts an empty query and reads declared fleet.*
         series plus native host and authorized enrollment inventory. card_ref filters initiative rows and asks to one visible card.
         answered_only returns answered asks only and implies include_answered.
         live-cards allows board_refs, project_ref, card_ref, label, role, status, limit and sort (priority, updated, title). Its items use the initiative card shape without plan enrichment. live-timeline uses a series source binding with a range of at most 90d and no agg or fallback; it returns individual items (at, label, value), newest first, capped at 100. Authored panels are also returned with review metadata and their static data. No other field is allowed for that panel type.
@@ -9067,6 +9069,7 @@ components:
         project_ref: {type: string, pattern: '^topic:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
         card_ref: {type: string, pattern: '^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
         limit: {type: integer, minimum: 1, maximum: 100, default: 10}
+        min_impact: {type: string, enum: [high, normal, low], default: low, description: Minimum activity impact after coalescing.}
         include_answered: {type: boolean, default: false}
         answered_only: {type: boolean, default: false}
         answered_within_hours: {type: integer, minimum: 1, maximum: 720, default: 168}

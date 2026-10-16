@@ -144,6 +144,7 @@ type reportReader struct {
 	now              time.Time
 	labels           map[string]string
 	actorLabels      map[string]string
+	activitySubjects map[string]map[string]any
 	visibility       map[string]bool
 	hidden           map[string]bool
 	work             []map[string]any
@@ -438,7 +439,7 @@ func (reader *reportReader) loadEvents() {
 	}
 	cursor := ""
 	for count := 0; count < maxReportCandidates; {
-		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated"}, Limit: 200, Cursor: cursor})
+		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated", "card_created", "board_updated", "document_updated", "document_created", "topic_updated", "topic_created", "message_posted"}, Limit: 200, Cursor: cursor})
 		if err != nil {
 			reader.eventsErr = err
 			return
@@ -652,62 +653,37 @@ func (reader *reportReader) activity(q reports.Query) (map[string]any, bool, err
 	if reader.eventsErr != nil {
 		return nil, false, reader.eventsErr
 	}
+	if err := reader.prepareActivity(); err != nil {
+		return nil, false, err
+	}
 	items := []map[string]any{}
-	bursts := map[string]int{}
 	for _, event := range reader.events {
 		if !reader.activeEvent(event) {
 			continue
 		}
-		kind := anyString(event["type"])
-		actor := anyString(event["actor_id"])
-		at, _ := time.Parse(time.RFC3339Nano, anyString(event["ts"]))
-		summary := anyString(event["summary"])
-		if kind == "card_updated" {
-			board := ""
-			for _, ref := range stringSliceAny(event["refs"]) {
-				if strings.HasPrefix(ref, "board:") {
-					board = ref
-					break
-				}
-			}
-			if board == "" {
-				continue
-			}
-			key := actor + "/" + board
-			if index, ok := bursts[key]; ok {
-				newest, _ := time.Parse(time.RFC3339Nano, anyString(items[index]["ts"]))
-				if newest.Sub(at) <= 5*time.Minute {
-					items[index]["count"] = items[index]["count"].(int) + 1
-					label := reader.labels[board]
-					if label == "" {
-						label = "board"
-					}
-					if reader.actorLabels == nil {
-						reader.actorLabels = map[string]string{}
-					}
-					actorLabel, known := reader.actorLabels[actor]
-					if !known {
-						actorLabel = actor
-						if reader.opts.actorRegistry != nil {
-							if known, err := reader.opts.actorRegistry.Get(reader.r.Context(), actor); err == nil && known.DisplayName != "" {
-								actorLabel = known.DisplayName
-							}
-						}
-						reader.actorLabels[actor] = actorLabel
-					}
-					items[index]["summary"] = fmt.Sprintf("%s updated %s · %d edits", actorLabel, label, items[index]["count"])
-					continue
-				}
-			}
-			bursts[key] = len(items)
+		if item := reader.activityItem(event); item != nil {
+			items = append(items, item)
 		}
-		items = append(items, map[string]any{"ref": event["ref"], "type": kind, "summary": summary, "actor_id": actor, "ts": event["ts"], "count": 1})
 	}
 	decisions, decisionsPartial, err := reader.decisionActivity()
 	if err != nil {
 		return nil, false, err
 	}
-	items = append(items, decisions...)
+	// The decision read is shared across panels; coalescing must not mutate
+	// its cached maps or inflate counts on the next panel.
+	for _, decision := range decisions {
+		copy := map[string]any{}
+		for key, value := range decision {
+			copy[key] = value
+		}
+		items = append(items, copy)
+	}
+	if err := reader.prepareActivityActors(items); err != nil {
+		return nil, false, err
+	}
+	for _, item := range items {
+		item["actor_label"] = reader.activityActorLabel(anyString(item["actor_id"]))
+	}
 	sort.SliceStable(items, func(i, j int) bool {
 		left, _ := time.Parse(time.RFC3339Nano, anyString(items[i]["ts"]))
 		right, _ := time.Parse(time.RFC3339Nano, anyString(items[j]["ts"]))
@@ -716,6 +692,14 @@ func (reader *reportReader) activity(q reports.Query) (map[string]any, bool, err
 		}
 		return left.After(right)
 	})
+	items = coalesceReportActivity(items)
+	filtered := items[:0]
+	for _, item := range items {
+		if activityImpactRank(anyString(item["impact"])) >= activityImpactRank(q.MinImpact) {
+			filtered = append(filtered, item)
+		}
+	}
+	items = filtered
 	partial := reader.eventsPartial || decisionsPartial || len(items) > q.Limit
 	if len(items) > q.Limit {
 		items = items[:q.Limit]
@@ -773,7 +757,7 @@ func (reader *reportReader) readDecisionActivity() ([]map[string]any, bool, erro
 			if label == "" {
 				label = "work"
 			}
-			items = append(items, map[string]any{"ref": "decision:" + decision.ID, "type": "decision_proposed", "summary": "Decision requested for " + label, "actor_id": decision.ProposedBy, "ts": decision.CreatedAt.Format(time.RFC3339Nano), "count": 1})
+			items = append(items, map[string]any{"ref": "decision:" + decision.ID, "type": "decision_proposed", "summary": "Decision requested for " + label, "actor_id": decision.ProposedBy, "ts": decision.CreatedAt.Format(time.RFC3339Nano), "count": 1, "subject": map[string]any{"ref": decision.WorkRef, "title": label, "kind": "card"}, "verb": "requested a decision on", "detail": "", "impact": "normal"})
 		}
 		cursor = page.NextCursor
 		if cursor == "" {

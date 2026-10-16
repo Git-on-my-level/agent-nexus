@@ -12,8 +12,8 @@ import (
 )
 
 func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
-	if len(reportTemplates) != 7 {
-		t.Fatalf("got %d templates, want 7", len(reportTemplates))
+	if len(reportTemplates) != 8 {
+		t.Fatalf("got %d templates, want 8", len(reportTemplates))
 	}
 	for _, template := range reportTemplates {
 		t.Run(template.name, func(t *testing.T) {
@@ -193,5 +193,34 @@ func TestReportInitDefaultsToLiveOnlyDashboard(t *testing.T) {
 				t.Fatalf("authored template panel: %#v", panel)
 			}
 		}
+	}
+}
+
+func TestReportRecentChangesTemplateDefaultsAndDiscovery(t *testing.T) {
+	listed := reportTemplateList()
+	if !strings.Contains(listed.Text, "recent-changes:") {
+		t.Fatal("template is not discoverable")
+	}
+	for _, template := range reportTemplates {
+		for _, panel := range template.build("topic:launch", "card:launch") {
+			if panel["type"] != "live-activity" {
+				continue
+			}
+			query := asMap(panel["data"])
+			want := "normal"
+			if template.name == "recent-changes" {
+				want = "high"
+				if query["limit"] != 15 {
+					t.Fatal("recent history limit is not 15")
+				}
+			}
+			if query["min_impact"] != want || panel["title"] != "What changed" {
+				t.Fatalf("%s: %#v", template.name, panel)
+			}
+		}
+	}
+	initialized := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "report", "init", "--template", "recent-changes"}))
+	if asMap(initialized["result"])["template"] != "recent-changes" {
+		t.Fatalf("init: %#v", initialized)
 	}
 }

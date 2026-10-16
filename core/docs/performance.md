@@ -758,3 +758,39 @@ outside the measured read phase):
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series \
   -run '^TestPerformanceScopedSeriesRefEndpointBudget$' -count=1 -v
 ```
+
+## Report activity enrichment
+
+`GET /docs/{document_id}/report` and `POST /reports/preview` share one
+request-local reader and retain `maxReportCandidates = 200`. Activity admission
+includes asks/responses, card creation/update/movement/resolution, board metadata,
+document/topic changes and promise notes (`message_posted.next`). Plain messages
+are dropped inside this fixed candidate window; filters never refill past it.
+The `recent-changes` template admits 15 high-impact rows from that history rather
+than increasing the candidate budget or issuing a workspace history scan.
+
+Subject title hydration reuses the `refs/resolve` fact projection in a
+presentation-only mode, omitting movement, due-date and message-history reads.
+At most 200 distinct subjects are resolved per batch. Thread-only promise notes
+find at most two owners with `idx_cards_thread_id` (or its equivalent `idx_cards_access_thread`); ambiguity stays unresolved.
+Card IDs/handles use their primary key and `idx_cards_handle_unique`; current
+initiative classification joins board and plan primary keys for admitted card
+IDs. Document/topic/board selectors retain the resolver's ID/handle indexes.
+Actor display names use one scoped primary-key batch per 200 admitted IDs.
+There are no added per-item queries or shared reader caches. Inherited privacy
+admission remains covered by the existing report HTTP scale gates. Enrichment
+cost grows with the fixed candidate page, independently of unrelated history.
+Coalescing/sorting runs over the bounded page; `min_impact` filters after
+coalescing and before the response limit. Highest impact and informative detail
+survive bursts anchored within 30 minutes of the newest event.
+
+The maximum-page scale guard runs owner/stranger reads with card refs and
+thread-only refs on the canonical 4,096-card fixture. Its checked-in incremental
+budget is `internal/primitives/testdata/report_activity_budget.json`; it captures
+SQL calls, returned rows and VM work after ordinary read admission and verifies
+the thread-owner lookup index. No existing budget or plan exception is widened.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core ./internal/primitives \
+  -run '^TestPerformanceReportActivitySubjectsBudgetAndPlans$' -count=1 -v -timeout=6m
+```

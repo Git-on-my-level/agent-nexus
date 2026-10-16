@@ -340,3 +340,34 @@ func (s *Store) Get(ctx context.Context, actorID string) (Actor, error) {
 	}
 	return actor, nil
 }
+
+// DisplayNames resolves only admitted actor IDs; it never loads the roster.
+func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]string, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("actor store database is not initialized")
+	}
+	if len(ids) > 200 {
+		return nil, fmt.Errorf("at most 200 actor IDs")
+	}
+	out := map[string]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	raw, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id,display_name FROM actors WHERE id IN (SELECT value FROM json_each(?))`, string(raw))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, name string
+		if err = rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}

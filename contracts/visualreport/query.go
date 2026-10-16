@@ -22,6 +22,7 @@ import (
 const MaxRows = 2000
 
 type Query struct {
+	MinImpact           string   `json:"min_impact,omitempty"`
 	BoardRefs           []string `json:"board_refs,omitempty"`
 	ProjectRef          string   `json:"project_ref,omitempty"`
 	CardRef             string   `json:"card_ref,omitempty"`
@@ -143,7 +144,7 @@ func ParseAll(content any) ([]Panel, error) {
 }
 
 func ParseQuery(kind string, raw []byte) (Query, error) {
-	q := Query{Limit: 10, Sort: "priority", GroupBy: "phase", AnsweredWithinHours: 168}
+	q := Query{Limit: 10, Sort: "priority", GroupBy: "phase", AnsweredWithinHours: 168, MinImpact: "low"}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || fields == nil {
 		return q, fmt.Errorf("data must be a query object")
@@ -159,7 +160,7 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	case "live-work-mix":
 		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "group_by": true}
 	case "live-activity":
-		allowed = map[string]bool{"limit": true}
+		allowed = map[string]bool{"limit": true, "min_impact": true}
 	case "live-fleet-health":
 		allowed = map[string]bool{}
 	default:
@@ -209,6 +210,9 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 		if _, present := fields[key]; present && (strings.TrimSpace(value) == "" || len(value) > 128) {
 			return q, fmt.Errorf("invalid card filter")
 		}
+	}
+	if q.MinImpact != "low" && q.MinImpact != "normal" && q.MinImpact != "high" {
+		return q, fmt.Errorf("min_impact must be high, normal, or low")
 	}
 	if q.AnsweredOnly {
 		q.IncludeAnswered = true

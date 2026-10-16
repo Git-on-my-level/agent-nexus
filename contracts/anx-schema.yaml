@@ -1119,7 +1119,11 @@ visual_report_live_panels:
     - Asks include ask, review and escalate requests, with optional answers from the last 168 hours by default.
     - Initiatives and asks may filter to one visible card with card_ref; answered_only on live-asks returns only answered asks and includes recent answers.
     - Fleet health reads declared fleet.* series with provenance and the native host inventory; pending enrollment details are visible only to humans and auth admins. If no fleet.* series is declared, the panel says so and still shows host inventory.
-    - Activity includes new asks, authorized PM decision proposals, answers, phase changes and completion; card edit bursts for the same actor and board within five minutes collapse.
+    - Activity retains ref, type, summary, actor_id, ts and count, and adds actor_label, subject (ref, title, kind or null), verb, detail and impact. Current subject titles are batch-resolved with reader access; inaccessible titles are never returned.
+    - Activity min_impact accepts high, normal or low and defaults to low for existing panels. Filtering occurs after coalescing and before the response limit.
+    - High impact includes creation of an initiative, completion/cancellation/reopening, column or phase moves, asks created or answered, completed plan steps and promise dates set or changed (including already-past dates). Promise notes use message_posted.next; plain messages are excluded. Elapsed time alone does not invent a new historical event.
+    - Normal impact includes plan edits without a completed step or date change, meaningful card edits (title, priority, assignee, risk or summary), new cards and authorized PM decision proposals. Board metadata and cosmetic card edits are low impact.
+    - Activity bursts coalesce by actor and subject within thirty minutes of the newest event; unknown card subjects fall back to their board. Highest impact wins, counts sum, and the most informative detail survives. Equal-impact ties favor the newest event; output remains newest first. All reads retain the 200-candidate request budget.
     - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.
 
 initiative_plan:
