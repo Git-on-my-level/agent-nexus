@@ -64,6 +64,22 @@ export async function intentFingerprint(request) {
   return sha256Hex(bytes);
 }
 
+// Legacy saved items predate persisted stage seeds. Derive their fallback
+// from the durable outbox identity, so independent recovery copies agree.
+export async function autoApplyStageKey(entry, stage) {
+  if (!["autoDispatch", "autoReconcile"].includes(stage))
+    throw new Error("Unknown auto-apply stage.");
+  const saved =
+    entry.request[stage]?.request_key || entry.request[`${stage}Key`];
+  if (saved) return saved;
+  if (!entry.key) throw new Error("Saved mutation identity is missing.");
+  return sha256Hex(
+    new TextEncoder().encode(
+      JSON.stringify(["anx:auto-apply:v1", entry.key, stage]),
+    ),
+  );
+}
+
 export function freshRequest(request, operation = "", receipt = null) {
   const value = JSON.parse(JSON.stringify(request));
   for (const body of [

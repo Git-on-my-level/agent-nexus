@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -46,6 +47,26 @@ func init() {
 		}
 		return int64(0), nil
 	})
+	// These readers expose only the already admitted immutable proof. Missing
+	// tokens error instead of returning an empty set (which would grant access).
+	sqlite.MustRegisterScalarFunction("anx_point_snapshot_rows", 2, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		token, ok := args[0].(int64)
+		value, found := pointSnapshots.Load(token)
+		if !ok || !found || value.(*denialSnapshot).pointIndex == nil {
+			return nil, fmt.Errorf("point snapshot unavailable")
+		}
+		snapshot := value.(*denialSnapshot)
+		switch args[1] {
+		case "all":
+			return snapshot.rows, nil
+		case "series-count":
+			return int64(snapshot.pointSeriesCount), nil
+		case "any":
+			return int64(len(snapshot.pointIndex)), nil
+		default:
+			return nil, fmt.Errorf("unknown point snapshot selector")
+		}
+	})
 }
 
 // Point reads share the immutable decoded denial set with ordinary lookups.
@@ -54,6 +75,11 @@ func (s *denialSnapshot) preparePointIndex() {
 	s.pointOnce.Do(func() {
 		s.prepareTargetIndex()
 		s.pointIndex = s.targetIndex
+		for target := range s.pointIndex {
+			if target.kind == "series" {
+				s.pointSeriesCount++
+			}
+		}
 	})
 }
 

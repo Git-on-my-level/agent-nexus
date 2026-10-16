@@ -205,7 +205,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 			graph += ", series_adapters AS (SELECT name,description,agent_id,host_id,expected_interval,created_at,revoked_at,deleted_at,CASE WHEN EXISTS (SELECT 1 FROM main.series_definitions def LEFT JOIN _anx_private_series p ON p.series=def.name WHERE def.adapter=_row.name AND (p.series IS NOT NULL OR NOT (" + denied("filter/series_definitions", "def.name") + "))) THEN NULL ELSE last_push END AS last_push FROM main.series_adapters _row WHERE " + denied("filter/series_adapters", "_row.name") + ")"
 		}
 		for _, table := range []string{"series_labels", "series_points", "series_daily", "series_live_daily"} {
-			add(table, cleanJSON("_row.labels")+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
+			add(table, "CASE WHEN _row.labels='{}' THEN 1 ELSE ("+cleanJSON("_row.labels")+") END"+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
 		}
 	}
 	// An unused ownership graph does not filter any row, but SQLite still has
@@ -257,6 +257,22 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	prose := ""
 	if needed["_anx_denied_prose"] || strings.Contains(graph, "_anx_denied_prose") {
 		prose = ", _anx_denied_prose(ref,bucket) AS MATERIALIZED (SELECT ref," + resourceaccess.MentionRefBucketSQL("ref") + " FROM _anx_denied_refs WHERE instr(ref,':')>0)"
+	}
+	// Pinned series reads use the same proof without decoding unrelated event
+	// history. Arbitrary label JSON still falls back to the complete canonical
+	// atom/prose predicates, lazily; empty labels need no reference traversal.
+	// The unknown-ledger empty check is an unscoped physical first-row seek,
+	// never a scoped existence probe that could walk hidden business rows.
+	if pinned && snapshot != nil && snapshot.pointToken > 0 && len(pointReads) > 0 && pointReads[0] &&
+		(needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"]) {
+		current := "COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)"
+		token := "(SELECT token FROM _anx_point_snapshot)"
+		deniedGraph = "_anx_point_snapshot(token) AS MATERIALIZED (SELECT ? WHERE " + current + "=" + fmt.Sprint(snapshot.epoch) + "), _anx_denied(kind,id) AS MATERIALIZED (SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(anx_point_snapshot_rows(" + token + ",'all')))"
+		graph = strings.ReplaceAll(graph, "NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)", "((SELECT anx_point_snapshot_rows("+token+",'series-count'))=0 OR anx_point_snapshot_denied("+token+",'series',CAST(json_array(_row.series,_row.labels) AS BLOB))=0) AND CASE WHEN NOT EXISTS (SELECT 1 FROM main.resource_access_series_unknown LIMIT 1) OR (SELECT anx_point_snapshot_rows("+token+",'any'))=0 THEN 1 ELSE NOT EXISTS (SELECT 1 FROM main.resource_access_series_unknown u WHERE u.series=_row.series AND u.labels=_row.labels) END")
+		graph = strings.ReplaceAll(graph, "EXISTS (SELECT 1 FROM _anx_denied)", "(SELECT anx_point_snapshot_rows("+token+",'any'))>0")
+		for predicate, lookup := range pointPredicates {
+			graph = strings.ReplaceAll(graph, predicate, lookup)
+		}
 	}
 	return deniedGraph +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +

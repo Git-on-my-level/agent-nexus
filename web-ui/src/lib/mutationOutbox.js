@@ -31,6 +31,7 @@ import {
   expiredReplayError,
   intentFingerprint,
   freshRequest,
+  autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
 
@@ -360,7 +361,7 @@ async function send(entry, lease = null) {
       if (!active(entry))
         throw new Error("The submitting identity is no longer active.");
       entry.request.autoDispatch = {
-        request_key: entry.request.autoDispatchKey || randomUUID(),
+        request_key: await autoApplyStageKey(entry, "autoDispatch"),
         if_revision: decision.revision,
         if_action_revision: base.revision,
       };
@@ -387,7 +388,7 @@ async function send(entry, lease = null) {
         if (!active(entry))
           throw new Error("The submitting identity is no longer active.");
         entry.request.autoReconcile = {
-          request_key: entry.request.autoReconcileKey || randomUUID(),
+          request_key: await autoApplyStageKey(entry, "autoReconcile"),
           if_revision: base.revision,
         };
         await persist(entry, lease);

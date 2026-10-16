@@ -62,7 +62,7 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 		if snapshot.epoch == cached.epoch {
 			snapshot.rows = cached.rows
 			cached.preparePointIndex()
-			snapshot.pointOnce.Do(func() { snapshot.pointIndex = cached.pointIndex })
+			snapshot.pointOnce.Do(func() { snapshot.pointIndex = cached.pointIndex; snapshot.pointSeriesCount = cached.pointSeriesCount })
 		} else {
 			if !rows.Valid {
 				return ctx, errOverviewSnapshotUnavailable

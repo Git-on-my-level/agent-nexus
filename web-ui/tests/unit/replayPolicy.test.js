@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   autoRetryMaxAgeMs,
+  autoApplyStageKey,
   replayExpired,
   replayPolicy,
   freshRequest,
@@ -152,4 +153,23 @@ it("computes identical SHA-256 digests and valid v4 UUIDs when crypto.subtle and
       value: prevSubtle,
     });
   }
+});
+
+it("two independent copies of a legacy auto-apply item recover the same stage keys", async () => {
+  const item = { key: "persisted-item-id", request: { autoApply: true } };
+  const first = JSON.parse(JSON.stringify(item));
+  const second = JSON.parse(JSON.stringify(item));
+  const dispatch = await autoApplyStageKey(first, "autoDispatch");
+  const reconcile = await autoApplyStageKey(first, "autoReconcile");
+  expect(await autoApplyStageKey(second, "autoDispatch")).toBe(dispatch);
+  expect(await autoApplyStageKey(second, "autoReconcile")).toBe(reconcile);
+  expect(dispatch).not.toBe(reconcile);
+  expect(
+    await autoApplyStageKey({ ...item, key: "another-item" }, "autoDispatch"),
+  ).not.toBe(dispatch);
+  first.request.autoDispatchKey = "persisted-seed";
+  expect(await autoApplyStageKey(first, "autoDispatch")).toBe("persisted-seed");
+  first.request.autoDispatch = { request_key: "already-sent" };
+  expect(await autoApplyStageKey(first, "autoDispatch")).toBe("already-sent");
+  expect(item.request).toEqual({ autoApply: true });
 });

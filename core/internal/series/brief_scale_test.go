@@ -76,22 +76,22 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 	if _, err = tx.Exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('scale-agent-other','scale-other-agent','actor-other','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}'),('scale-agent-reader','scale-reader-agent','agent-reader','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<=10000)
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
  INSERT INTO agent_sessions(id,agent_id,actor_id,provider,host_scope,native_session_id,native_session_id_kind,capabilities_json,activity,sequence,request_json,created_at,last_seen_at,expires_at)
  SELECT printf('sess-other-%05d',i),'scale-agent-other','actor-other','codex','host-1',printf('native-%05d',i),'opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<=10000)
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
  INSERT INTO work_participants(id,card_id,session_id,activity,sequence,request_json,created_at,last_seen_at,expires_at)
  SELECT printf('part-other-%05d',i),?,printf('sess-other-%05d',i),'active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`, ids[0]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<=10000)
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
  INSERT INTO agent_sessions(id,agent_id,actor_id,provider,host_scope,native_session_id,native_session_id_kind,capabilities_json,activity,sequence,request_json,created_at,last_seen_at,expires_at)
  SELECT printf('sess-reader-%05d',i),'scale-agent-reader','agent-reader','codex','host-1',printf('reader-native-%05d',i),'opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<=10000)
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
  INSERT INTO work_participants(id,card_id,session_id,activity,sequence,request_json,created_at,last_seen_at,expires_at)
  SELECT printf('part-reader-%05d',i),?,printf('sess-reader-%05d',i),'active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`, ids[1]); err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 						t.Fatalf("%s: unbounded agent ownership plan:\n%s", label, plan)
 					}
 				}
-				if !strings.Contains(plan, "idx_work_participants_actor_card_active") || !strings.Contains(plan, "idx_cards_assignee_id") {
+				if !strings.Contains(plan, "idx_work_participants_actor_card_active") {
 					t.Fatalf("%s: missing indexed agent ownership seek:\n%s", label, plan)
 				}
 			}
@@ -218,4 +218,34 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkReader("50-assigned-initiatives", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 50)
+	if _, err = s.DB.ExecContext(ctx, `UPDATE cards SET assignee='' WHERE id IN (SELECT value FROM json_each(?))`, string(encodedIDs)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Close the reader's 10,000 sessions without changing participant activity.
+	// Eligibility must use the open-session partial index, not probe history.
+	if _, err = s.DB.ExecContext(ctx, `UPDATE agent_sessions SET activity='closed' WHERE actor_id='agent-reader'`); err != nil {
+		t.Fatal(err)
+	}
+	checkReader("10k-closed-reader-sessions", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 0)
+
+	if _, err = s.DB.ExecContext(ctx, `UPDATE cards SET assignee='actor:agent-reader' WHERE id IN (SELECT value FROM json_each(?))`, string(encodedIDs)); err != nil {
+		t.Fatal(err)
+	}
+	checkReader("closed-history-plus-50-assigned", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 50)
+
+	// Scoped notes on an unrelated private card must add no history work.
+	for i := 0; i < 1000; i++ {
+		payload := map[string]any{"text": "Private note", "card_id": private["id"]}
+		if _, err = store.AppendEvent(ctx, "owner", map[string]any{
+			"type": "message_posted", "thread_id": private["thread_id"], "refs": []string{"card:" + fmt.Sprint(private["id"])}, "payload": payload,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var noteCount int
+	if err = s.DB.QueryRowContext(ctx, `SELECT count(*) FROM brief_notes WHERE card_id=?`, private["id"]).Scan(&noteCount); err != nil || noteCount != 1000 {
+		t.Fatalf("private-note fixture count=%d error=%v", noteCount, err)
+	}
+	checkReader("closed-assigned-plus-1000-private-notes", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 50)
 }
