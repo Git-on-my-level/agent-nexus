@@ -89,3 +89,84 @@ func TestWorkListNewestUpdatedFirstAndStableCursor(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	publicBoard, err := s.CreateBoard(ctx, "reader", map[string]any{"title": "Public Board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateBoard, err := s.CreateBoard(ctx, "other-owner", map[string]any{"title": "Private Board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PatchThread(ctx, "other-owner", privateBoard["thread_id"].(string), map[string]any{"pm_actor_id": "other-owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	base := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	var wantVisibleIDs []string
+	// Create 4 older visible cards.
+	for i := 0; i < 4; i++ {
+		card, err := s.CreateWork(ctx, "reader", publicBoard["id"].(string), map[string]any{"title": fmt.Sprintf("visible-%d", i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := card["id"].(string)
+		at := base.Add(time.Duration(i) * time.Minute)
+		if _, err := ws.DB().Exec(`UPDATE cards SET updated_at=? WHERE id=?`, at.Format(time.RFC3339Nano), id); err != nil {
+			t.Fatal(err)
+		}
+		wantVisibleIDs = append([]string{id}, wantVisibleIDs...)
+	}
+	// Create 10 newer PM-private cards that fill multiple pages of limit=2.
+	for i := 0; i < 10; i++ {
+		card, err := s.CreateWork(ctx, "other-owner", privateBoard["id"].(string), map[string]any{"title": fmt.Sprintf("private-%d", i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := card["id"].(string)
+		at := base.Add(time.Hour + time.Duration(i)*time.Minute)
+		if _, err := ws.DB().Exec(`UPDATE cards SET updated_at=? WHERE id=?`, at.Format(time.RFC3339Nano), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	visibleForReader := func(_ string, privateOwner string) bool {
+		return privateOwner == "" || privateOwner == "reader"
+	}
+	var gotIDs []string
+	cursor := ""
+	for pageNum := 0; pageNum < 10; pageNum++ {
+		page, err := s.ListWork(ctx, primitives.WorkListFilter{
+			Limit:   2,
+			Cursor:  cursor,
+			Visible: visibleForReader,
+		})
+		if err != nil {
+			t.Fatalf("page %d failed: %v", pageNum, err)
+		}
+		for _, item := range page.Work {
+			gotIDs = append(gotIDs, item["id"].(string))
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	if len(gotIDs) != len(wantVisibleIDs) {
+		t.Fatalf("got %d visible work items (%v), want %d (%v)", len(gotIDs), gotIDs, len(wantVisibleIDs), wantVisibleIDs)
+	}
+	for i := range wantVisibleIDs {
+		if gotIDs[i] != wantVisibleIDs[i] {
+			t.Fatalf("visible item %d = %s, want %s", i, gotIDs[i], wantVisibleIDs[i])
+		}
+	}
+}
