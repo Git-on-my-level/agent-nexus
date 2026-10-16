@@ -15,8 +15,8 @@
   let { goal, size = "spark", label = "" } = $props();
 
   let large = $derived(size === "large");
-  let width = $derived(large ? 640 : 300);
-  let height = $derived(large ? 180 : 56);
+  let width = $derived(large ? 960 : 300);
+  let height = $derived(large ? 220 : 56);
   let geo = $derived(
     goalGeometry(goal, { width, height, pad: large ? 10 : 4 }),
   );

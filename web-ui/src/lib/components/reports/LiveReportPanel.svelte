@@ -86,6 +86,18 @@
         }
       : null,
   );
+  const RUNS_SHOWN = 8;
+  let allRuns = $state(false);
+  let shownRuns = $derived(
+    oneLoop ? (allRuns ? oneLoop.runs : oneLoop.runs.slice(0, RUNS_SHOWN)) : [],
+  );
+  /** A run's metrics, minus the goal metric when the candidate score already shows it. */
+  const runMetrics = (run) =>
+    run.experiment?.after !== null && run.experiment?.after !== undefined
+      ? run.metrics.filter(
+          (metric) => metric.name !== oneLoop?.loop?.goal?.metric,
+        )
+      : run.metrics;
   const refHref = (ref) =>
     canNavigate && ref
       ? resolveRefLink(ref, { organizationSlug, workspaceSlug }).href || ""
@@ -299,6 +311,7 @@
         loop={oneLoop.loop}
         {now}
         source=""
+        chart={!(oneLoop.loop.goal?.points.length > 1)}
       />
       {#if oneLoop.loop.goal?.points.length > 1}
         <div class="mt-4" data-live-loop-climb>
@@ -313,7 +326,7 @@
       {/if}
       {#if oneLoop.runs.length}
         <ol class="mt-4 divide-y divide-line-subtle" data-live-loop-runs>
-          {#each oneLoop.runs as run, i (run.eventId || i)}
+          {#each shownRuns as run, i (run.eventId || i)}
             <li
               class="run-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-x-3 py-2"
             >
@@ -328,7 +341,7 @@
                 <p class="text-meta text-fg [overflow-wrap:anywhere]">
                   {run.summary || run.runId}
                 </p>
-                {#if run.experiment?.candidate || run.metrics.length || run.effectRefs.length}
+                {#if run.experiment?.candidate || runMetrics(run).length || run.effectRefs.length}
                   <p
                     class="mt-0.5 flex flex-wrap gap-x-2 text-micro text-fg-muted"
                   >
@@ -341,7 +354,7 @@
                           )}{/if}</span
                       >
                     {/if}
-                    {#each run.metrics as metric (metric.name)}
+                    {#each runMetrics(run) as metric (metric.name)}
                       <span class="tabular-nums"
                         >{metric.name}
                         {withUnit(
@@ -375,6 +388,17 @@
             </li>
           {/each}
         </ol>
+        {#if oneLoop.runs.length > RUNS_SHOWN}
+          <button
+            type="button"
+            class="mt-1 text-micro text-accent-text hover:underline"
+            aria-expanded={allRuns}
+            onclick={() => (allRuns = !allRuns)}
+            >{allRuns
+              ? "Show fewer runs"
+              : `Show all ${oneLoop.runs.length} runs`}</button
+          >
+        {/if}
       {/if}
     {:else}
       <p class="muted">This card has no cadence, goal or run receipts yet.</p>

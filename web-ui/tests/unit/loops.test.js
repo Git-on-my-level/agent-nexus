@@ -3,6 +3,7 @@ import {
   compareLoops,
   goalGap,
   goalGeometry,
+  isIncumbent,
   loopTotals,
   normalizeLoop,
   normalizeLoopStats,
@@ -107,6 +108,26 @@ describe("loops model", () => {
     // Lower is better: the best value is the first (0.6), so the line stays at its y.
     expect(new Set(downYs).size).toBe(1);
     expect(goalGeometry({ ...up, points: [] })).toBeNull();
+  });
+
+  it("does not let a rejected or reverted candidate raise the best line", () => {
+    const goal = {
+      direction: "up",
+      target: null,
+      points: [
+        { at: "2026-10-01T00:00:00Z", value: 1 },
+        { at: "2026-10-02T00:00:00Z", value: 5, decision: "rejected" },
+        { at: "2026-10-03T00:00:00Z", value: 4, decision: "reverted" },
+        { at: "2026-10-04T00:00:00Z", value: 2, decision: "kept" },
+      ],
+    };
+    const geo = goalGeometry(goal, { width: 100, height: 100, pad: 0 });
+    const ys = geo.best.split(" ").map((p) => Number(p.split(",")[1]));
+    // lo=1, hi=5: value 2 is y=75; the line never reaches 5 (y=0) or 4 (y=25).
+    expect(Math.min(...ys)).toBeCloseTo(75);
+    expect(isIncumbent({ decision: "kept" })).toBe(true);
+    expect(isIncumbent({ decision: null })).toBe(true);
+    expect(isIncumbent({ decision: "rejected" })).toBe(false);
   });
 
   it("handles a flat or single-point series without dividing by zero", () => {

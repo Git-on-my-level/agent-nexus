@@ -221,6 +221,11 @@ export function goalGap(goal) {
     : goal.target - goal.best;
 }
 
+/** A point the loop adopted (or measured without a candidate). */
+export function isIncumbent(point) {
+  return point?.decision !== "rejected" && point?.decision !== "reverted";
+}
+
 /**
  * Chart geometry for a goal's points, in a `width` × `height` box with
  * `pad` inside. Returns the raw polyline, the best-so-far step line, the
@@ -251,14 +256,16 @@ export function goalGeometry(goal, { width = 300, height = 64, pad = 4 } = {}) {
     pad + (1 - (value - lo) / (hi - lo)) * (height - 2 * pad);
   const better = (a, b) => (goal.direction === "down" ? a < b : a > b);
   const coords = points.map((point, index) => [x(index), y(point.value)]);
+  // Best so far follows the incumbent: a rejected or reverted candidate was
+  // measured but never adopted, so it is marked but does not raise the line.
   let best = null;
   const step = [];
   points.forEach((point, index) => {
-    if (best === null || better(point.value, best)) {
+    if (isIncumbent(point) && (best === null || better(point.value, best))) {
       if (best !== null) step.push([x(index), y(best)]);
       best = point.value;
     }
-    step.push([x(index), y(best)]);
+    if (best !== null) step.push([x(index), y(best)]);
   });
   const fmt = (pairs) =>
     pairs.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
