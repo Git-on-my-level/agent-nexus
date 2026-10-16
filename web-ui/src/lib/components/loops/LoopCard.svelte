@@ -105,7 +105,10 @@
         </p>
       {/if}
       {#if loop?.reason}
-        <p class="mt-0.5 text-micro text-fg-muted" data-source={source}>
+        <p
+          class="mt-0.5 text-micro text-fg-muted"
+          data-source={source || undefined}
+        >
           {loop.reason}
         </p>
       {/if}
@@ -113,8 +116,9 @@
     <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {@render badges?.()}
       {#if loop}
-        <span class="ui-badge ui-badge--{condition.tone}" data-source={source}
-          >{condition.text}</span
+        <span
+          class="ui-badge ui-badge--{condition.tone}"
+          data-source={source || undefined}>{condition.text}</span
         >
       {/if}
     </div>
@@ -124,7 +128,7 @@
     <div
       class="grid min-w-0 grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-end gap-x-4"
       data-loop-goal
-      data-source={source}
+      data-source={source || undefined}
     >
       <div class="min-w-0">
         <p class="truncate text-micro text-fg-muted" title={goal.metric}>
@@ -176,7 +180,10 @@
     >
       <LoopRuns runs={loop.recentRuns} {now} {source} />
       {#if counts.length}
-        <p class="text-micro tabular-nums text-fg-muted" data-source={source}>
+        <p
+          class="text-micro tabular-nums text-fg-muted"
+          data-source={source || undefined}
+        >
           7d: {counts.join(" · ")}
         </p>
       {:else if !loop.recentRuns.length}
@@ -186,7 +193,7 @@
     {#if footer.length}
       <p
         class="flex min-w-0 flex-wrap gap-x-1.5 text-micro text-fg-subtle"
-        data-source={source}
+        data-source={source || undefined}
       >
         {#each footer as part, i (i)}
           {#if i > 0}<span aria-hidden="true">·</span>{/if}<span>{part}</span>

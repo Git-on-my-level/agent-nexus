@@ -112,6 +112,12 @@ export function normalizeLoop(raw) {
       .map(normalizeRun)
       .filter(Boolean)
       .sort((a, b) => Date.parse(a.at) - Date.parse(b.at)),
+    // Runs that changed something: acted, or kept a candidate. Core counts
+    // this; older cores only send the outcome mix, so fall back to acted.
+    effects7d:
+      raw.effects_7d === undefined || raw.effects_7d === null
+        ? count(runs7d.acted)
+        : count(raw.effects_7d),
     runs7d: {
       acted: count(runs7d.acted),
       measured: count(runs7d.measured),
@@ -180,7 +186,7 @@ export function loopTotals(loops) {
     totals.loops += 1;
     for (const outcome of RUN_OUTCOMES)
       totals.runs7d[outcome] += loop.runs7d[outcome];
-    totals.effects7d += loop.runs7d.acted;
+    totals.effects7d += loop.effects7d;
     if (["failing", "overdue", "stalled"].includes(loop.condition))
       totals.needsAttention += 1;
   }
@@ -290,6 +296,24 @@ export function goalGeometry(goal, { width = 300, height = 64, pad = 4 } = {}) {
     lo,
     hi,
   };
+}
+
+/**
+ * Where an effect ref may link: an http(s) URL, or the in-app route the
+ * resolver gave for a typed ref. Anything else (`javascript:`, `data:`) is
+ * shown as text, never as a link.
+ */
+export function safeEffectHref(href) {
+  if (typeof href !== "string" || !href) return "";
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  try {
+    const url = new URL(href);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.href
+      : "";
+  } catch {
+    return "";
+  }
 }
 
 /** "every 1d · budget 7d" style cadence text. */
