@@ -14,6 +14,7 @@
   import { page } from "$app/stores";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
+    formatDay,
     formatMetricValue,
     formatSpan,
     initiativeLine,
@@ -51,6 +52,18 @@
     done: "ok",
   };
   let card = $derived(variant === "card");
+  let rich = $derived(variant === "rich");
+  let evidenceAge = $derived(formatAgo(initiative.lastEvidenceAt, now));
+  /** "in 3d", "today", "2d past": how far the promised date is from now. */
+  let promiseWhen = $derived.by(() => {
+    const at = Date.parse(initiative.promise?.at ?? "");
+    if (!Number.isFinite(at)) return "";
+    if (initiative.state === "past_promise")
+      return `${formatSpan(initiative.pastPromiseFor)} past`;
+    const days = Math.round((at - now) / 86_400_000);
+    if (days <= 0) return "today";
+    return days === 1 ? "tomorrow" : `in ${days}d`;
+  });
 </script>
 
 {#snippet badges()}
@@ -162,7 +175,80 @@
   {/if}
 {/snippet}
 
-{#if card}
+{#if rich}
+  <article
+    class="watch-rich flex min-w-0 flex-col gap-2.5 rounded-md border border-line bg-panel px-3.5 py-3 transition-colors hover:border-line-strong"
+    data-watch-row={initiative.ref}
+    data-watch-variant="rich"
+    data-watch-state={initiative.state}
+  >
+    <div class="flex min-w-0 items-start gap-3">
+      <a
+        {href}
+        class="line-clamp-2 min-w-0 flex-1 break-words text-body font-medium leading-snug text-fg hover:text-accent-text"
+        data-watch-title>{initiative.title}</a
+      >
+      <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        {@render badges()}
+      </div>
+    </div>
+    {#if initiative.progress}
+      <InitiativeProgress
+        progress={initiative.progress}
+        state={initiative.state}
+        title={initiative.title}
+        variant="card"
+      />
+    {/if}
+    {#if initiative.promise}
+      <div
+        class="flex min-w-0 items-baseline gap-2 text-meta"
+        data-source="computed:initiatives.promise"
+        data-watch-next
+      >
+        <span class="ui-label mb-0 shrink-0">Next</span>
+        <span class="min-w-0 flex-1 text-fg [overflow-wrap:anywhere]">
+          {#if initiative.promise.what}<MarkdownRenderer
+              inline
+              plain
+              source={initiative.promise.what}
+              organizationSlug={$page.params.organization}
+              workspaceSlug={$page.params.workspace}
+            />{:else}<span class="text-fg-muted">a progress note</span>{/if}
+        </span>
+        {#if initiative.promise.at}
+          <span
+            class="shrink-0 tabular-nums {initiative.state === 'past_promise'
+              ? 'text-warn-text'
+              : 'text-fg-muted'}"
+            title={initiative.promise.at}
+            >{formatDay(initiative.promise.at)}{#if promiseWhen}{" · "}<span
+                data-source={initiative.state === "past_promise"
+                  ? "computed:initiatives.past_promise_for"
+                  : "computed:initiatives.promise"}>{promiseWhen}</span
+              >{/if}</span
+          >
+        {/if}
+      </div>
+    {/if}
+    {@render note()}
+    {@render metricLine()}
+    <p
+      class="flex min-w-0 flex-wrap gap-x-1.5 text-micro text-fg-subtle"
+      data-watch-foot
+    >
+      <span data-source="computed:initiatives.last_evidence_at"
+        >{evidenceAge ? `evidence ${evidenceAge}` : "no evidence yet"}</span
+      >
+      {#if initiative.promiseMoves > 0}
+        <span aria-hidden="true">·</span>
+        <span data-source="computed:initiatives.promise_moves"
+          >promise moved {initiative.promiseMoves}×</span
+        >
+      {/if}
+    </p>
+  </article>
+{:else if card}
   <div
     class="watch-card rounded-md border border-line bg-panel transition-colors hover:border-line-strong hover:bg-panel-hover"
     data-watch-row={initiative.ref}

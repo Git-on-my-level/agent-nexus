@@ -1,7 +1,7 @@
 Past promise 1
-Battery measurement promised Oct 6·9d past·moved 2× Rig 4 is drifting; re-running overnight. — build-agent on host-1 · 10d ago 1 waiting on you 6/9
+Battery measurement 1 waiting on you 6/9 Next Oct 21 checkpoint Oct 6 · 9d past Rig 4 is drifting; re-running overnight. — build-agent on host-1 · 10d ago conversion 0.12 · 1h ago flat 4d evidence 10d ago · promise moved 2×
 Moving 2
-Fleet onboarding evidence 3h ago·next: enroll m6 · Oct 16 ⚑ 1blocked 1 waiting on you 4/7
-Observability evidence 1d ago·next: dashboards live · Oct 28 1/4
+Fleet onboarding ⚑ 1blocked 1 waiting on you 4/7 Next enroll m6 Oct 16 · tomorrow evidence 3h ago
+Observability 1/4 Next dashboards live Oct 28 · in 13d evidence 1d ago
 No promise 2
 Done 1
