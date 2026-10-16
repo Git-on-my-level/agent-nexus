@@ -197,7 +197,7 @@
           >· marked {setStatus.label.toLocaleLowerCase()}</span
         >
       {/if}
-      {#if density !== "row" && summary.sourceStatusShown}
+      {#if density !== "row" && density !== "badge" && summary.sourceStatusShown}
         <!--
           The source's own word for where this stands — "In UAT", "awaiting
           triage". It sits beside the computed status rather than replacing
@@ -237,7 +237,7 @@
           >· {waitingLabel}</span
         >
       {/if}
-      {#if density !== "row" && summary.freshness}
+      {#if density !== "row" && density !== "badge" && summary.freshness}
         <!-- On a page header the badge says what the date is about. A bare
              "yesterday" next to a status badge and a "Live · updated just
              now" chip is the one thing on the line a reader cannot place. -->

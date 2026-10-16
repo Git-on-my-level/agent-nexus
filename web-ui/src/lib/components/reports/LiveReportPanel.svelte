@@ -26,6 +26,7 @@
     canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
   );
   let live = $derived(panel.live);
+  const IMPACTS = new Set(["high", "normal", "low"]);
   /** Where an activity row's subject opens, or "" when it has no route. */
   const subjectHref = (subject) =>
     canNavigate && subject?.ref
@@ -188,7 +189,9 @@
         {#each items as item}
           {@const href = subjectHref(item.subject)}
           <li
-            class="activity-row impact--{item.impact || 'normal'}"
+            class="activity-row impact--{IMPACTS.has(item.impact)
+              ? item.impact
+              : 'normal'}"
             data-activity-impact={item.impact || ""}
           >
             <span class="impact-dot" aria-hidden="true"></span>
