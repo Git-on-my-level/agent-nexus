@@ -2,7 +2,7 @@
 
 package buildinfo
 
-var Current = "v0.13.5"
+var Current = "v0.13.6"
 
 // SourceRevision is populated by release builds or Go's embedded VCS metadata.
 var SourceRevision = "unknown"
