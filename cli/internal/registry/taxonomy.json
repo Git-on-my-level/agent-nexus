@@ -65,6 +65,7 @@
         "messages",
         "notifications",
         "reviews",
+        "runs",
         "topics"
       ]
     },
@@ -92,6 +93,7 @@
         "message_posted",
         "receipt_added",
         "review_completed",
+        "run_recorded",
         "topic_archived",
         "topic_created",
         "topic_restored",
@@ -198,6 +200,9 @@
       "receipt_added",
       "review_completed"
     ],
+    "runs": [
+      "run_recorded"
+    ],
     "topics": [
       "topic_archived",
       "topic_created",
@@ -269,6 +274,9 @@
     ],
     "review_completed": [
       "reviews"
+    ],
+    "run_recorded": [
+      "runs"
     ],
     "topic_archived": [
       "topics"

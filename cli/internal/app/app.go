@@ -258,6 +258,12 @@ func (a *App) Run(args []string) int {
 	if value == nil && result != nil && result.Text != "" {
 		value = map[string]any{"text": result.Text}
 	}
+	if identity.Command == "work receipt" && !resolved.JSON {
+		if id := anyString(asMap(asMap(value)["event"])["id"]); id != "" {
+			a.writeOutput(a.Stdout, id+"\n")
+			return 0
+		}
+	}
 	if identity.Command == "host token" && !resolved.JSON {
 		if token := anyString(asMap(value)["token"]); token != "" {
 			a.writeOutput(a.Stdout, token+"\n")

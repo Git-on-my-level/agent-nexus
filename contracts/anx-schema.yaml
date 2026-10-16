@@ -80,6 +80,7 @@ enums:
       - card_archived
       - card_trashed
       - card_resolved
+      - run_recorded
       - receipt_added
       - review_completed
       - exception_raised
@@ -96,6 +97,7 @@ enums:
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved]
       attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn]
       notifications: [agent_notification_read, agent_notification_dismissed]
+      runs: [run_recorded]
       reviews: [receipt_added, review_completed]
       exceptions: [exception_raised]
     backing_event_types:
@@ -121,7 +123,7 @@ enums:
 
   event_group:
     enum_policy: strict
-    values: [messages, topics, documents, boards, cards, attention, notifications, reviews, exceptions]
+    values: [messages, topics, documents, boards, cards, attention, notifications, runs, reviews, exceptions]
 
   provenance_source:
     enum_policy: open
@@ -753,6 +755,20 @@ reference_conventions:
       refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
       payload_must_include: ["resolution"]
 
+    run_recorded:
+      refs_must_include: ["card:<card_handle>"]
+      payload_must_include: ["run_id", "outcome"]
+      description: >
+        A generic recurring-work receipt. Exactly one subject card ref; card plus run_id
+        replays the original event atomically. Summary is one line, 1..280 characters.
+        Unknown payload/experiment keys are rejected. run_id is 1..200 characters;
+        outcome is acted, measured, no_op or infra_error. Optional started_at and
+        finished_at are RFC3339 (finished_at defaults to event time). metrics has at
+        most 16 series-name keys (120 characters) with finite numeric values.
+        experiment requires candidate (1..200) and decision (kept, reverted, rejected),
+        with optional finite score_before/score_after. effect_refs has at most 10
+        typed refs or HTTPS URLs.
+
     exception_raised:
       payload_must_include: ["subtype"]
 
@@ -940,7 +956,7 @@ work_tracking:
   observation_status: [reported, verified, uncertain, error]
   refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
-  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
+  local_annotations: [cadence, goal, labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
@@ -1107,7 +1123,7 @@ visual_report_layout:
 # Additive presentation format carried in existing document revisions.
 visual_report_live_panels:
   schema_version: 1
-  types: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline]
+  types: [live-loops, live-loop, live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline]
   query_schema: anx-openapi.yaml#/components/schemas/LiveReportQuery
   materialized_schema: anx-openapi.yaml#/components/schemas/LiveReportResponse
   rules:
@@ -1433,3 +1449,9 @@ brief:
     - "followed_recommendation is true when the response text equals the first response proposal."
     - "A decision with a batch field stands for every open member the reader can see. Its inbox_item_id is the single respond target: POST /inbox/{inbox_item_id}/respond with one response_text, outcome and notify_mode records that same answer on every still-open member in one transaction and replays on the same idempotency key. A filed batch (key filed:<batch_id>) uses the derived inbox id inbox:{kind}:{thread}:{batch_id}:{anchor_event_id}, the same id the inbox projection stores, so the atomic batch path runs. An accepted curation batch uses inbox:curation-batch:<key>. Each member lists its own inbox_item_id, subject_ref and the blocks the reader can see. Members the reader cannot see are not listed, counted, or revealed by the answer; a batch with a hidden open member is not answerable."
 
+
+  loop_rules:
+    - "Initiative loop is null unless cadence or goal exists or a run was recorded within 30 days."
+    - "Done, cancelled and archived cards retain loop data with health unknown and reason done."
+    - "Health precedence: two latest infra_error runs => failing; cadence missed by over twice every_seconds => overdue; no acted-or-kept effect within progress budget (default 7d) with runs => stalled; effect within budget => healthy; otherwise unknown. No-run cadence age starts at cadence assignment."
+    - "recent_runs newest first at most 12; goal points oldest first at most 60. Best follows goal direction; series_ref uses scoped UTC daily rollups instead of receipt metrics."

@@ -20,6 +20,12 @@ var reportTopicRefPattern = regexp.MustCompile(`^topic:[A-Za-z0-9][A-Za-z0-9._-]
 var reportCardRefPattern = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 var reportTemplates = []reportTemplate{
+	{name: "loops", purpose: "Recurring work health and recent effects.", title: "Loops", summary: "Cadence, goals and effects from run receipts.", build: func(_, _ string) []map[string]any {
+		return []map[string]any{liveReportPanel("loops", "live-loops", "Loops", map[string]any{}), liveReportPanel("movement", "live-activity", "What loops changed", map[string]any{"min_impact": "high", "limit": 15})}
+	}},
+	{name: "hill-climb", purpose: "One loop's goal, experiments and run receipts.", title: "Hill climb", summary: "Goal progress and experiment receipts for the selected card.", build: func(_, card string) []map[string]any {
+		return []map[string]any{liveReportPanel("loop", "live-loop", "Goal and runs", map[string]any{"card": card})}
+	}},
 	{
 		name: "workspace-overview", purpose: "Live asks, initiatives and recent activity.",
 		title: "Workspace overview", summary: "Current initiatives and movement from live workspace queries.",
@@ -153,7 +159,7 @@ func parseReportInitArgs(args []string) (reportInitArgs, error) {
 	if result.card != "" && !reportCardRefPattern.MatchString(result.card) {
 		return reportInitArgs{}, errnorm.Usage("invalid_request", "--card must be a card ref")
 	}
-	if result.template == "initiative" && result.card == "" {
+	if (result.template == "initiative" || result.template == "hill-climb") && result.card == "" {
 		return reportInitArgs{}, errnorm.Usage("invalid_request", "`initiative` requires --card card:<ref> so its plan and decision history use the same initiative")
 	}
 	return result, nil

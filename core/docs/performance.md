@@ -794,3 +794,38 @@ the thread-owner lookup index. No existing budget or plan exception is widened.
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core ./internal/primitives \
   -run '^TestPerformanceReportActivitySubjectsBudgetAndPlans$' -count=1 -v -timeout=6m
 ```
+
+## Initiative loop receipts
+
+Loop enrichment admits the existing brief page (at most 50 cards) with one
+primary-key card/work-metadata batch. A single indexed receipt-existence probe
+per candidate (within that statement) avoids enrichment for ordinary cards.
+Only loops enter the second statement. Its fixed subject prefixes use migration
+99's `idx_events_run_subject_ts`; last effect uses
+`idx_events_run_effect_ts`, and write replay uses `idx_events_run_identity`.
+Scoped event relations apply ownership before every aggregate and limit, so
+private effect provenance cannot leak via counts, scores or timestamps.
+
+Recent receipts return at most 50 rows per card (brief renders the first 12),
+and metric points return at most 60. Exact run/effect counts visit the indexed
+14-day receipt range; best comparisons visit the indexed 30-day metric range.
+Aggregate VM work therefore grows with receipt density for the admitted cards
+inside those windows, independently of unrelated workspace event history.
+No receipt history is materialized in Go. At most 50 goal series selectors use
+one shared metadata/visibility batch and one primary-key daily-rollup batch
+(31 days per summary table); series raw density adds no read work.
+
+The normal `/brief` budget is unchanged. Its 50-card/100-ref scale gate remains
+below 50,000 VM steps for both principals. The deliberately dense 10,000-receipt
+fixture is separate: `internal/server/testdata/loop_brief_budget.json` bounds the
+complete brief to 30 SQL calls, 100 returned SQL rows, 750,000 VM steps and one
+second. Native instrumentation measured 14 calls, 5 returned SQL rows, 644,728
+VM steps and zero full-scan steps; first latency was 114 ms, then 94–108 ms warm.
+The returned SQL row count includes packed bounded JSON; response detail caps
+are asserted separately. Uninstrumented first/warm readings were 39 / 38–48 ms.
+These are synthetic local measurements, not deployed latency claims.
+
+```sh
+go test -C core ./internal/server -run '^TestLoopBriefCost10KEvents$' -count=1 -v -timeout=5m
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+```

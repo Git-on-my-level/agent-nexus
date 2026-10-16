@@ -862,6 +862,13 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 		}
 		out = append(out, item)
 	}
+	loops, _, loopErr := b.s.loadLoopStates(b.ctx, ids, b.now)
+	if loopErr != nil {
+		return nil, false, loopErr
+	}
+	for i, id := range ids {
+		out[i]["loop"] = loops[id]
+	}
 	if err := b.initiativeSeries(ids, out); err != nil {
 		return nil, false, err
 	}

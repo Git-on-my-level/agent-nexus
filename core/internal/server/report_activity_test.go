@@ -24,6 +24,10 @@ func TestReportActivityImpact(t *testing.T) {
 		p                    map[string]any
 		impact, verb, detail string
 	}{
+		{"run acted", "run_recorded", map[string]any{"outcome": "acted"}, "high", "ran", "acted"},
+		{"run no-op", "run_recorded", map[string]any{"outcome": "no_op"}, "low", "ran", "no_op"},
+		{"run rejected", "run_recorded", map[string]any{"outcome": "no_op", "experiment": map[string]any{"decision": "rejected"}}, "normal", "rejected candidate", "no_op"},
+		{"run kept", "run_recorded", map[string]any{"outcome": "measured", "experiment": map[string]any{"decision": "kept"}}, "high", "kept candidate", "measured"},
 		{"completed", "card_moved", map[string]any{"from_column_key": "in_progress", "column_key": "done"}, "high", "completed", "In progress → Done"},
 		{"cancelled", "card_updated", map[string]any{"changed_fields": []string{"resolution"}, "previous_resolution": "done", "resolution": "cancelled"}, "high", "cancelled", "Done → Cancelled"},
 		{"reopened", "card_moved", map[string]any{"from_column_key": "done", "column_key": "ready"}, "high", "reopened", "Done → Ready"},

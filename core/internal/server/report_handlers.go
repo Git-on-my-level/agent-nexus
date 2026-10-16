@@ -410,6 +410,12 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			items = append(items, item)
 		}
 		return map[string]any{"items": items}, partial, nil
+	case "live-loops", "live-loop":
+		store, ok := reader.opts.primitiveStore.(*primitives.Store)
+		if !ok {
+			return nil, false, fmt.Errorf("loop store unavailable")
+		}
+		return store.LoopReport(reader.r.Context(), q.Board, q.Card, q.Health, q.Limit, reader.now)
 	case "live-asks":
 		return reader.asks(q)
 	case "live-activity":
@@ -439,7 +445,7 @@ func (reader *reportReader) loadEvents() {
 	}
 	cursor := ""
 	for count := 0; count < maxReportCandidates; {
-		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated", "card_created", "board_updated", "document_updated", "document_created", "topic_updated", "topic_created", "message_posted"}, Limit: 200, Cursor: cursor})
+		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"run_recorded", "human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated", "card_created", "board_updated", "document_updated", "document_created", "topic_updated", "topic_created", "message_posted"}, Limit: 200, Cursor: cursor})
 		if err != nil {
 			reader.eventsErr = err
 			return

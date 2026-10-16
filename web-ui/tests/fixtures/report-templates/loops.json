@@ -1,0 +1,333 @@
+{
+  "report": {
+    "kind": "anx.visual-report",
+    "schema_version": 1,
+    "generated_at": "2026-10-05T00:00:00Z",
+    "projects": [
+      {
+        "id": "workspace",
+        "title": "Workspace",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "outcome": "See current source data"
+      }
+    ],
+    "sources": [],
+    "title": "Loops",
+    "summary": "Cadence, goals and effects from run receipts.",
+    "panels": [
+      {
+        "id": "loops",
+        "project_id": "workspace",
+        "type": "live-loops",
+        "title": "Loops",
+        "author": "Agent Nexus template",
+        "provenance": "reported",
+        "observed_at": null,
+        "freshness": "unknown",
+        "source_ids": [],
+        "data": {}
+      },
+      {
+        "id": "movement",
+        "project_id": "workspace",
+        "type": "live-activity",
+        "title": "What loops changed",
+        "author": "Agent Nexus template",
+        "provenance": "reported",
+        "observed_at": null,
+        "freshness": "unknown",
+        "source_ids": [],
+        "data": {
+          "min_impact": "high",
+          "limit": 15
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "id": "loops",
+      "type": "live-loops",
+      "data": {
+        "stats": {
+          "loops": 6,
+          "effects_7d": 8,
+          "effects_prev_7d": 5,
+          "runs_7d": {
+            "acted": 8,
+            "measured": 12,
+            "no_op": 4,
+            "infra_error": 2
+          },
+          "improved_7d": 1,
+          "needs_attention": 3
+        },
+        "loops": [
+          {
+            "ref": "card:loop-0",
+            "title": "Daily archive",
+            "loop": {
+              "health": "failing",
+              "health_reason": "two consecutive infrastructure errors",
+              "every_seconds": 86400,
+              "progress_budget_seconds": 604800,
+              "stop_rule": null,
+              "last_run_at": "2026-10-05T00:00:00Z",
+              "last_effect_at": null,
+              "next_run_due_at": "2026-10-06T00:00:00Z",
+              "recent_runs": [],
+              "runs_7d": {
+                "acted": 3,
+                "measured": 2,
+                "no_op": 1,
+                "infra_error": 0
+              },
+              "goal": null
+            }
+          },
+          {
+            "ref": "card:loop-1",
+            "title": "Nightly report",
+            "loop": {
+              "health": "overdue",
+              "health_reason": "more than two cadences since last run",
+              "every_seconds": 86400,
+              "progress_budget_seconds": 604800,
+              "stop_rule": null,
+              "last_run_at": "2026-10-05T00:00:00Z",
+              "last_effect_at": null,
+              "next_run_due_at": "2026-10-06T00:00:00Z",
+              "recent_runs": [],
+              "runs_7d": {
+                "acted": 3,
+                "measured": 2,
+                "no_op": 1,
+                "infra_error": 0
+              },
+              "goal": null
+            }
+          },
+          {
+            "ref": "card:loop-2",
+            "title": "Search tuning",
+            "loop": {
+              "health": "stalled",
+              "health_reason": "no effect within progress budget",
+              "every_seconds": 86400,
+              "progress_budget_seconds": 604800,
+              "stop_rule": null,
+              "last_run_at": "2026-10-05T00:00:00Z",
+              "last_effect_at": null,
+              "next_run_due_at": "2026-10-06T00:00:00Z",
+              "recent_runs": [],
+              "runs_7d": {
+                "acted": 3,
+                "measured": 2,
+                "no_op": 1,
+                "infra_error": 0
+              },
+              "goal": null
+            }
+          },
+          {
+            "ref": "card:loop-3",
+            "title": "Optimizer",
+            "loop": {
+              "health": "healthy",
+              "health_reason": "effect within progress budget",
+              "every_seconds": 86400,
+              "progress_budget_seconds": 604800,
+              "stop_rule": "Stop when score exceeds 0.9",
+              "last_run_at": "2026-10-05T00:00:00Z",
+              "last_effect_at": "2026-10-05T00:00:00Z",
+              "next_run_due_at": "2026-10-06T00:00:00Z",
+              "recent_runs": [
+                {
+                  "at": "2026-10-05T00:00:00Z",
+                  "outcome": "acted",
+                  "decision": "kept"
+                }
+              ],
+              "runs_7d": {
+                "acted": 3,
+                "measured": 2,
+                "no_op": 1,
+                "infra_error": 0
+              },
+              "goal": {
+                "metric": "quality.score",
+                "direction": "up",
+                "target": 0.9,
+                "unit": "score",
+                "latest": 0.785,
+                "best": 0.785,
+                "baseline": 0.5,
+                "points": [
+                  {
+                    "at": "2026-09-10T12:00:00Z",
+                    "value": 0.5,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-11T12:00:00Z",
+                    "value": 0.515,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-12T12:00:00Z",
+                    "value": 0.53,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-13T12:00:00Z",
+                    "value": 0.545,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-14T12:00:00Z",
+                    "value": 0.56,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-15T12:00:00Z",
+                    "value": 0.575,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-16T12:00:00Z",
+                    "value": 0.59,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-17T12:00:00Z",
+                    "value": 0.605,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-18T12:00:00Z",
+                    "value": 0.62,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-19T12:00:00Z",
+                    "value": 0.635,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-20T12:00:00Z",
+                    "value": 0.65,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-21T12:00:00Z",
+                    "value": 0.665,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-22T12:00:00Z",
+                    "value": 0.68,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-23T12:00:00Z",
+                    "value": 0.695,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-24T12:00:00Z",
+                    "value": 0.71,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-25T12:00:00Z",
+                    "value": 0.725,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-26T12:00:00Z",
+                    "value": 0.74,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-27T12:00:00Z",
+                    "value": 0.755,
+                    "decision": "rejected"
+                  },
+                  {
+                    "at": "2026-09-28T12:00:00Z",
+                    "value": 0.77,
+                    "decision": "kept"
+                  },
+                  {
+                    "at": "2026-09-29T12:00:00Z",
+                    "value": 0.785,
+                    "decision": "rejected"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "ref": "card:loop-4",
+            "title": "Daily checks",
+            "loop": {
+              "health": "healthy",
+              "health_reason": "effect within progress budget",
+              "every_seconds": 86400,
+              "progress_budget_seconds": 604800,
+              "stop_rule": null,
+              "last_run_at": "2026-10-05T00:00:00Z",
+              "last_effect_at": "2026-10-05T00:00:00Z",
+              "next_run_due_at": "2026-10-06T00:00:00Z",
+              "recent_runs": [],
+              "runs_7d": {
+                "acted": 3,
+                "measured": 2,
+                "no_op": 1,
+                "infra_error": 0
+              },
+              "goal": null
+            }
+          },
+          {
+            "ref": "card:loop-5",
+            "title": "New recurring work",
+            "loop": {
+              "health": "unknown",
+              "health_reason": "no runs",
+              "every_seconds": 86400,
+              "progress_budget_seconds": 604800,
+              "stop_rule": null,
+              "last_run_at": null,
+              "last_effect_at": null,
+              "next_run_due_at": "2026-10-06T00:00:00Z",
+              "recent_runs": [],
+              "runs_7d": {
+                "acted": 3,
+                "measured": 2,
+                "no_op": 1,
+                "infra_error": 0
+              },
+              "goal": null
+            }
+          }
+        ]
+      },
+      "status": "ok",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "truncated": false,
+      "provenance_class": "live"
+    },
+    {
+      "id": "movement",
+      "type": "live-activity",
+      "data": {
+        "items": []
+      },
+      "status": "ok",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "truncated": false,
+      "provenance_class": "live"
+    }
+  ]
+}

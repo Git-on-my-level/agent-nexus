@@ -1115,6 +1115,24 @@ var migrations = []migration{
 	// A live note promise is the stated next. Existing briefs were folded
 	// when an earlier plan-step date could win, so requeue them once.
 	{Version: 98, AfterApply: requeueBriefPromiseFold},
+	{Version: 99, AfterApply: installRunReceiptIndexes},
+}
+
+func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "events")
+	if err != nil || !exists {
+		return err
+	}
+	for _, statement := range []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_run_identity ON events(json_extract(payload_json,'$.subject_ref'),json_extract(payload_json,'$.payload.run_id')) WHERE type='run_recorded'`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_subject_ts ON events(json_extract(payload_json,'$.subject_ref'),ts DESC,id DESC) WHERE type='run_recorded'`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_effect_ts ON events(json_extract(payload_json,'$.subject_ref'),ts DESC,id DESC) WHERE type='run_recorded' AND (json_extract(payload_json,'$.payload.outcome')='acted' OR json_extract(payload_json,'$.payload.experiment.decision')='kept')`,
+	} {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func installAskRequesterIndex(ctx context.Context, tx *sql.Tx) error {

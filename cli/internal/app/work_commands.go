@@ -27,6 +27,9 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"work cadence":               {method: "PATCH", summary: "Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear."},
+	"work goal":                  {method: "PATCH", summary: "Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear."},
+	"work receipt":               {method: "POST", summary: "Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay."},
 	"pm card":                    {method: "POST", summary: "Read any visible card in full under the requesting reader."},
 	"pm propose":                 {method: "POST", summary: "Propose a card status or note for human approval in Inbox."},
 	"pm disconnect":              {path: "/pm/disconnect", method: "POST", summary: "Reset workspace PM onboarding after explicit uninstall."},
@@ -95,6 +98,11 @@ func isWorkCommandRoot(root string) bool {
 // Parsing is shared by preflight and execution, so malformed requests fail before
 // identity resolution, token grant, file reads or network activity.
 func parseWorkCommand(args []string) (parsedWorkCommand, error) {
+	if len(args) >= 2 && isLoopWork(strings.Join(args[:2], " ")) {
+		name := strings.Join(args[:2], " ")
+		id, _, err := parseLoopWork(name, args[2:])
+		return parsedWorkCommand{name: name, id: id, spec: workCommands[name]}, err
+	}
 	out := parsedWorkCommand{query: url.Values{}}
 	if len(args) < 2 {
 		return out, errnorm.Usage("subcommand_required", "a subcommand is required; run anx help "+args[0])
@@ -205,6 +213,11 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 }
 
 func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) >= 2 && isLoopWork(strings.Join(args[:2], " ")) {
+		name := strings.Join(args[:2], " ")
+		result, err := a.runLoopWork(ctx, name, args[2:], cfg)
+		return result, name, err
+	}
 	if len(args) >= 2 && args[0] == "pm" {
 		switch args[1] {
 		case "propose":

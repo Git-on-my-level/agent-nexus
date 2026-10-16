@@ -11,12 +11,16 @@ import { liveDashboardExample } from "../../src/lib/fixtures/liveDashboardExampl
 import { seriesDashboardExample } from "../../src/lib/fixtures/seriesDashboardExample.js";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 import { validateReportLayout } from "../../src/lib/visualReportLayout.js";
+import loopsFixture from "../fixtures/report-templates/loops.json";
+import hillClimbFixture from "../fixtures/report-templates/hill-climb.json";
 const parse = (report) => parseVisualReport(JSON.stringify(report));
 describe("expressive composition", () => {
   it("dogfoods every supported panel type", () => {
     expect(
       new Set(
         [
+          loopsFixture.report,
+          hillClimbFixture.report,
           visualReportExample,
           swarmObservatoryReport,
           portfolioReviewReport,

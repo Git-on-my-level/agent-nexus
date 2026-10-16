@@ -1,0 +1,524 @@
+{
+  "report": {
+    "kind": "anx.visual-report",
+    "schema_version": 1,
+    "generated_at": "2026-10-05T00:00:00Z",
+    "projects": [
+      {
+        "id": "workspace",
+        "title": "Workspace",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "outcome": "See current source data"
+      }
+    ],
+    "sources": [],
+    "title": "Hill climb",
+    "summary": "Goal progress and experiment receipts for the selected card.",
+    "panels": [
+      {
+        "id": "loop",
+        "project_id": "workspace",
+        "type": "live-loop",
+        "title": "Goal and runs",
+        "author": "Agent Nexus template",
+        "provenance": "reported",
+        "observed_at": null,
+        "freshness": "unknown",
+        "source_ids": [],
+        "data": {
+          "card": "card:launch"
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "id": "loop",
+      "type": "live-loop",
+      "data": {
+        "ref": "card:launch",
+        "title": "Optimizer",
+        "loop": {
+          "health": "healthy",
+          "health_reason": "effect within progress budget",
+          "every_seconds": 86400,
+          "progress_budget_seconds": 604800,
+          "stop_rule": "Stop when score exceeds 0.9",
+          "last_run_at": "2026-10-05T00:00:00Z",
+          "last_effect_at": "2026-10-05T00:00:00Z",
+          "next_run_due_at": "2026-10-06T00:00:00Z",
+          "recent_runs": [
+            {
+              "at": "2026-10-05T00:00:00Z",
+              "outcome": "acted",
+              "decision": "kept"
+            }
+          ],
+          "runs_7d": {
+            "acted": 3,
+            "measured": 2,
+            "no_op": 1,
+            "infra_error": 0
+          },
+          "goal": {
+            "metric": "quality.score",
+            "direction": "up",
+            "target": 0.9,
+            "unit": "score",
+            "latest": 0.785,
+            "best": 0.785,
+            "baseline": 0.5,
+            "points": [
+              {
+                "at": "2026-09-10T12:00:00Z",
+                "value": 0.5,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-11T12:00:00Z",
+                "value": 0.515,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-12T12:00:00Z",
+                "value": 0.53,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-13T12:00:00Z",
+                "value": 0.545,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-14T12:00:00Z",
+                "value": 0.56,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-15T12:00:00Z",
+                "value": 0.575,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-16T12:00:00Z",
+                "value": 0.59,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-17T12:00:00Z",
+                "value": 0.605,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-18T12:00:00Z",
+                "value": 0.62,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-19T12:00:00Z",
+                "value": 0.635,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-20T12:00:00Z",
+                "value": 0.65,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-21T12:00:00Z",
+                "value": 0.665,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-22T12:00:00Z",
+                "value": 0.68,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-23T12:00:00Z",
+                "value": 0.695,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-24T12:00:00Z",
+                "value": 0.71,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-25T12:00:00Z",
+                "value": 0.725,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-26T12:00:00Z",
+                "value": 0.74,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-27T12:00:00Z",
+                "value": 0.755,
+                "decision": "rejected"
+              },
+              {
+                "at": "2026-09-28T12:00:00Z",
+                "value": 0.77,
+                "decision": "kept"
+              },
+              {
+                "at": "2026-09-29T12:00:00Z",
+                "value": 0.785,
+                "decision": "rejected"
+              }
+            ]
+          }
+        },
+        "runs": [
+          {
+            "at": "2026-09-29T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 19",
+            "run_id": "candidate-19",
+            "metrics": {
+              "quality.score": 0.785
+            },
+            "experiment": {
+              "candidate": "candidate-19",
+              "decision": "rejected",
+              "score_before": 0.77,
+              "score_after": 0.785
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-19"
+          },
+          {
+            "at": "2026-09-28T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 18",
+            "run_id": "candidate-18",
+            "metrics": {
+              "quality.score": 0.77
+            },
+            "experiment": {
+              "candidate": "candidate-18",
+              "decision": "kept",
+              "score_before": 0.755,
+              "score_after": 0.77
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-18"
+          },
+          {
+            "at": "2026-09-27T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 17",
+            "run_id": "candidate-17",
+            "metrics": {
+              "quality.score": 0.755
+            },
+            "experiment": {
+              "candidate": "candidate-17",
+              "decision": "rejected",
+              "score_before": 0.74,
+              "score_after": 0.755
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-17"
+          },
+          {
+            "at": "2026-09-26T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 16",
+            "run_id": "candidate-16",
+            "metrics": {
+              "quality.score": 0.74
+            },
+            "experiment": {
+              "candidate": "candidate-16",
+              "decision": "rejected",
+              "score_before": 0.725,
+              "score_after": 0.74
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-16"
+          },
+          {
+            "at": "2026-09-25T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 15",
+            "run_id": "candidate-15",
+            "metrics": {
+              "quality.score": 0.725
+            },
+            "experiment": {
+              "candidate": "candidate-15",
+              "decision": "kept",
+              "score_before": 0.71,
+              "score_after": 0.725
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-15"
+          },
+          {
+            "at": "2026-09-24T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 14",
+            "run_id": "candidate-14",
+            "metrics": {
+              "quality.score": 0.71
+            },
+            "experiment": {
+              "candidate": "candidate-14",
+              "decision": "rejected",
+              "score_before": 0.695,
+              "score_after": 0.71
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-14"
+          },
+          {
+            "at": "2026-09-23T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 13",
+            "run_id": "candidate-13",
+            "metrics": {
+              "quality.score": 0.695
+            },
+            "experiment": {
+              "candidate": "candidate-13",
+              "decision": "rejected",
+              "score_before": 0.6799999999999999,
+              "score_after": 0.695
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-13"
+          },
+          {
+            "at": "2026-09-22T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 12",
+            "run_id": "candidate-12",
+            "metrics": {
+              "quality.score": 0.68
+            },
+            "experiment": {
+              "candidate": "candidate-12",
+              "decision": "kept",
+              "score_before": 0.665,
+              "score_after": 0.68
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-12"
+          },
+          {
+            "at": "2026-09-21T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 11",
+            "run_id": "candidate-11",
+            "metrics": {
+              "quality.score": 0.665
+            },
+            "experiment": {
+              "candidate": "candidate-11",
+              "decision": "rejected",
+              "score_before": 0.65,
+              "score_after": 0.665
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-11"
+          },
+          {
+            "at": "2026-09-20T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 10",
+            "run_id": "candidate-10",
+            "metrics": {
+              "quality.score": 0.65
+            },
+            "experiment": {
+              "candidate": "candidate-10",
+              "decision": "rejected",
+              "score_before": 0.635,
+              "score_after": 0.65
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-10"
+          },
+          {
+            "at": "2026-09-19T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 9",
+            "run_id": "candidate-9",
+            "metrics": {
+              "quality.score": 0.635
+            },
+            "experiment": {
+              "candidate": "candidate-9",
+              "decision": "kept",
+              "score_before": 0.62,
+              "score_after": 0.635
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-9"
+          },
+          {
+            "at": "2026-09-18T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 8",
+            "run_id": "candidate-8",
+            "metrics": {
+              "quality.score": 0.62
+            },
+            "experiment": {
+              "candidate": "candidate-8",
+              "decision": "rejected",
+              "score_before": 0.605,
+              "score_after": 0.62
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-8"
+          },
+          {
+            "at": "2026-09-17T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 7",
+            "run_id": "candidate-7",
+            "metrics": {
+              "quality.score": 0.605
+            },
+            "experiment": {
+              "candidate": "candidate-7",
+              "decision": "rejected",
+              "score_before": 0.59,
+              "score_after": 0.605
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-7"
+          },
+          {
+            "at": "2026-09-16T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 6",
+            "run_id": "candidate-6",
+            "metrics": {
+              "quality.score": 0.59
+            },
+            "experiment": {
+              "candidate": "candidate-6",
+              "decision": "kept",
+              "score_before": 0.575,
+              "score_after": 0.59
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-6"
+          },
+          {
+            "at": "2026-09-15T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 5",
+            "run_id": "candidate-5",
+            "metrics": {
+              "quality.score": 0.575
+            },
+            "experiment": {
+              "candidate": "candidate-5",
+              "decision": "rejected",
+              "score_before": 0.5599999999999999,
+              "score_after": 0.575
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-5"
+          },
+          {
+            "at": "2026-09-14T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 4",
+            "run_id": "candidate-4",
+            "metrics": {
+              "quality.score": 0.56
+            },
+            "experiment": {
+              "candidate": "candidate-4",
+              "decision": "rejected",
+              "score_before": 0.545,
+              "score_after": 0.56
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-4"
+          },
+          {
+            "at": "2026-09-13T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 3",
+            "run_id": "candidate-3",
+            "metrics": {
+              "quality.score": 0.545
+            },
+            "experiment": {
+              "candidate": "candidate-3",
+              "decision": "kept",
+              "score_before": 0.53,
+              "score_after": 0.545
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-3"
+          },
+          {
+            "at": "2026-09-12T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 2",
+            "run_id": "candidate-2",
+            "metrics": {
+              "quality.score": 0.53
+            },
+            "experiment": {
+              "candidate": "candidate-2",
+              "decision": "rejected",
+              "score_before": 0.515,
+              "score_after": 0.53
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-2"
+          },
+          {
+            "at": "2026-09-11T12:00:00Z",
+            "outcome": "measured",
+            "summary": "Rejected candidate 1",
+            "run_id": "candidate-1",
+            "metrics": {
+              "quality.score": 0.515
+            },
+            "experiment": {
+              "candidate": "candidate-1",
+              "decision": "rejected",
+              "score_before": 0.5,
+              "score_after": 0.515
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-1"
+          },
+          {
+            "at": "2026-09-10T12:00:00Z",
+            "outcome": "acted",
+            "summary": "Kept candidate 0",
+            "run_id": "candidate-0",
+            "metrics": {
+              "quality.score": 0.5
+            },
+            "experiment": {
+              "candidate": "candidate-0",
+              "decision": "kept",
+              "score_before": 0.485,
+              "score_after": 0.5
+            },
+            "effect_refs": ["https://example.org/changes/42"],
+            "event_id": "run-0"
+          }
+        ]
+      },
+      "status": "ok",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "truncated": false,
+      "provenance_class": "live"
+    }
+  ]
+}

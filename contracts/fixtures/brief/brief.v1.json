@@ -201,7 +201,8 @@
         "flat": true,
         "for_seconds": 345600,
         "window_seconds": 604800
-      }
+      },
+      "loop": null
     },
     {
       "ref": "card:fleet-onboarding",
@@ -227,7 +228,8 @@
         "flagged": false
       },
       "series": [],
-      "metric_flat": null
+      "metric_flat": null,
+      "loop": null
     },
     {
       "ref": "card:observability",
@@ -253,7 +255,8 @@
         "flagged": false
       },
       "series": [],
-      "metric_flat": null
+      "metric_flat": null,
+      "loop": null
     },
     {
       "ref": "card:labels",
@@ -273,7 +276,8 @@
         "reason": "PR #212 and #214 merged since it last moved"
       },
       "series": [],
-      "metric_flat": null
+      "metric_flat": null,
+      "loop": null
     },
     {
       "ref": "card:ble-reliability",
@@ -295,7 +299,8 @@
         "flagged": false
       },
       "series": [],
-      "metric_flat": null
+      "metric_flat": null,
+      "loop": null
     },
     {
       "ref": "card:docs-refresh",
@@ -317,7 +322,8 @@
         "flagged": false
       },
       "series": [],
-      "metric_flat": null
+      "metric_flat": null,
+      "loop": null
     }
   ],
   "your_asks": [],

@@ -646,7 +646,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "brief.v1 reads materialized facts with indexed, limited seeks; at most 50 rows per section. Series enrichment adds at most three batch statements for 50 cards x two refs (admitted from at most 200 refs/64 KiB per card), 100 label candidates per ref and eight daily buckets per primary per summary table; primary-key seeks bound raw endpoints and daily ranges.",
+    "reason": "brief.v1 reads materialized facts with indexed, limited seeks; at most 50 rows per section. Series enrichment adds at most three batch statements for 50 cards x two refs (admitted from at most 200 refs/64 KiB per card), 100 label candidates per ref and eight daily buckets per primary per summary table; primary-key seeks bound raw endpoints and daily ranges. Loop admission adds one 50-card primary-key metadata batch and indexed receipt-existence checks; only admitted loops load subject/time-indexed receipts (details <=50, metric points <=60), with exact counts over 14 days and directional bests over 30 days. The dense 10k-receipt fixture has its own incremental measured budget in loop_brief_budget.json; normal brief ceilings are unchanged.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },

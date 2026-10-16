@@ -6744,6 +6744,7 @@ export const commandRegistry = [
                         "message_posted",
                         "receipt_added",
                         "review_completed",
+                        "run_recorded",
                         "topic_archived",
                         "topic_created",
                         "topic_restored",
@@ -13259,6 +13260,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "cadence",
+                    "type": "any"
+                },
+                {
                     "name": "definition_of_done",
                     "type": "list\u003cstring\u003e"
                 },
@@ -13273,6 +13278,10 @@ export const commandRegistry = [
                 {
                     "name": "executions",
                     "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "goal",
+                    "type": "any"
                 },
                 {
                     "name": "id",
@@ -13868,12 +13877,20 @@ export const commandRegistry = [
                     "type": "list\u003cstring\u003e"
                 },
                 {
+                    "name": "patch.cadence",
+                    "type": "any"
+                },
+                {
                     "name": "patch.due_at",
                     "type": "string"
                 },
                 {
                     "name": "patch.executions",
                     "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "patch.goal",
+                    "type": "any"
                 },
                 {
                     "name": "patch.labels",

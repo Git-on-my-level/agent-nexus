@@ -9010,7 +9010,7 @@ components:
       required: [id, type, status, observed_at, truncated, data, provenance_class]
       properties:
         id: {type: string}
-        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline, explanation, milestone-timeline, dependency-diagram, artifact-preview, callout, comparison, chart, metric, metric-strip, table, metric-chart, evidence-table]}
+        type: {type: string, enum: [live-loops, live-loop, live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline, explanation, milestone-timeline, dependency-diagram, artifact-preview, callout, comparison, chart, metric, metric-strip, table, metric-chart, evidence-table]}
         status: {type: string, enum: [ok, stale, unavailable]}
         observed_at: {type: string, format: date-time, nullable: true}
         truncated: {type: boolean}
@@ -9052,6 +9052,7 @@ components:
       type: object
       additionalProperties: false
       description: >
+        live-loops accepts board (default initiatives board), health (comma list), limit (1..48, default 24). live-loop requires card.
         Data-only query stored in a version 1 live panel's data field. Initiatives
         allow board_refs, project_ref, card_ref, limit, sort; work mix allows
         board_refs, project_ref, card_ref, group_by; asks allow card_ref, limit,
@@ -9061,6 +9062,9 @@ components:
         answered_only returns answered asks only and implies include_answered.
         live-cards allows board_refs, project_ref, card_ref, label, role, status, limit and sort (priority, updated, title). Its items use the initiative card shape without plan enrichment. live-timeline uses a series source binding with a range of at most 90d and no agg or fallback; it returns individual items (at, label, value), newest first, capped at 100. Authored panels are also returned with review metadata and their static data. No other field is allowed for that panel type.
       properties:
+        board: {type: string, pattern: '^board:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+        card: {type: string, pattern: '^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+        health: {type: string, description: "Comma-separated healthy, stalled, failing, overdue, unknown. live-loops only."}
         board_refs:
           type: array
           maxItems: 16
@@ -10798,10 +10802,31 @@ components:
             truncated: {type: boolean, description: Count is a lower bound when the candidate window is full.}
         attention_truncated: {type: boolean, description: Attention is sampled; scoped readers always receive this marker so private candidate counts cannot be inferred. Omitted asks may exist. When attention is absent and this is true, waiting status is unknown rather than zero.}
 
+    WorkCadence:
+      type: object
+      additionalProperties: false
+      required: [every_seconds]
+      properties:
+        every_seconds: {type: integer, minimum: 60, maximum: 3155760000}
+        progress_budget_seconds: {type: integer, minimum: 60, maximum: 3155760000, description: Must be at least every_seconds.}
+        stop_rule: {type: string, maxLength: 500}
+    WorkGoal:
+      type: object
+      additionalProperties: false
+      required: [metric, direction]
+      properties:
+        metric: {type: string, maxLength: 120, pattern: '^[a-z][a-z0-9_.-]{0,119}$'}
+        direction: {type: string, enum: [up, down]}
+        target: {type: number}
+        baseline: {type: number}
+        unit: {type: string, maxLength: 80}
+        series_ref: {type: string, maxLength: 2048, description: Existing series ref with optional label selectors.}
     Work:
       type: object
       additionalProperties: true
       properties:
+        cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
+        goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         plan_state: { $ref: '#/components/schemas/PlanState' }
@@ -11000,6 +11025,8 @@ components:
       type: object
       additionalProperties: true
       properties:
+        cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
+        goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         request_key:
           type: string
           maxLength: 256
@@ -11066,6 +11093,8 @@ components:
           type: object
           additionalProperties: true
           properties:
+            cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
+            goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
             labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
             roles: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
             source_refs: { $ref: '#/components/schemas/SourceRefs' }
@@ -13646,7 +13675,7 @@ components:
         at: { type: string, format: date-time }
     BriefInitiative:
       type: object
-      required: [ref, title, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot]
+      required: [ref, title, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot, loop]
       properties:
         ref: { type: string, description: "card:<handle-or-id>" }
         title: { type: string }
@@ -13677,6 +13706,7 @@ components:
             selectors retain authored labels with null last_value/last_at.
             Latest observations are bounded to the last 7 days.
           items: { $ref: '#/components/schemas/BriefSeries' }
+        loop: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefLoop' }] }
         metric_flat:
           nullable: true
           description: Null when no visible series is returned.
@@ -13690,6 +13720,61 @@ components:
             code: { type: string, description: "next_ask_decided when that rule flags the initiative." }
             ask_ref: { type: string, description: "event ref of the decided ask. Absent when the reader cannot see it; an invisible ask does not flag." }
             decided_at: { type: string, format: date-time }
+    BriefLoop:
+      type: object
+      required: [health, health_reason, every_seconds, progress_budget_seconds, stop_rule, last_run_at, last_effect_at, next_run_due_at, recent_runs, runs_7d, goal]
+      properties:
+        health: {type: string, enum: [healthy, stalled, failing, overdue, unknown]}
+        health_reason: {type: string}
+        every_seconds: {type: integer, nullable: true}
+        progress_budget_seconds: {type: integer, nullable: true}
+        stop_rule: {type: string, nullable: true}
+        last_run_at: {type: string, format: date-time, nullable: true}
+        last_effect_at: {type: string, format: date-time, nullable: true}
+        next_run_due_at: {type: string, format: date-time, nullable: true}
+        recent_runs:
+          type: array
+          maxItems: 12
+          items:
+            type: object
+            required: [at, outcome, decision]
+            properties:
+              at: {type: string, format: date-time}
+              outcome: {type: string, enum: [acted, measured, no_op, infra_error]}
+              decision: {type: string, nullable: true, enum: [kept, reverted, rejected]}
+        runs_7d: {$ref: '#/components/schemas/LoopRunCounts'}
+        goal:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/LoopGoal'}]
+    LoopRunCounts:
+      type: object
+      required: [acted, measured, no_op, infra_error]
+      properties:
+        acted: {type: integer}
+        measured: {type: integer}
+        no_op: {type: integer}
+        infra_error: {type: integer}
+    LoopGoal:
+      type: object
+      required: [metric, direction, target, unit, latest, best, baseline, points]
+      properties:
+        metric: {type: string}
+        direction: {type: string, enum: [up, down]}
+        target: {type: number, nullable: true}
+        unit: {type: string, nullable: true}
+        latest: {type: number, nullable: true}
+        best: {type: number, nullable: true}
+        baseline: {type: number, nullable: true}
+        points:
+          type: array
+          maxItems: 60
+          items:
+            type: object
+            required: [at, value, decision]
+            properties:
+              at: {type: string, format: date-time}
+              value: {type: number}
+              decision: {type: string, nullable: true, enum: [kept, reverted, rejected]}
     BriefSeries:
       type: object
       required: [ref, name, labels, last_value, last_at]

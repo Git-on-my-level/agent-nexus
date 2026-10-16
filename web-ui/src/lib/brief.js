@@ -46,6 +46,7 @@ export const DECISION_KIND_LABELS = {
  * `data-source="computed:<field>"` must name one of these (I1).
  */
 export const BRIEF_COMPUTED_FIELDS = new Set([
+  "initiatives.loop",
   "decisions.decide_by",
   "decisions.overdue_for",
   "decisions.blocks",

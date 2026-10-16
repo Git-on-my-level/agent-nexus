@@ -12,13 +12,13 @@ import (
 )
 
 func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
-	if len(reportTemplates) != 8 {
-		t.Fatalf("got %d templates, want 8", len(reportTemplates))
+	if len(reportTemplates) != 10 {
+		t.Fatalf("got %d templates, want 10", len(reportTemplates))
 	}
 	for _, template := range reportTemplates {
 		t.Run(template.name, func(t *testing.T) {
 			card := ""
-			if template.name == "initiative" {
+			if template.name == "initiative" || template.name == "hill-climb" {
 				card = "card:launch"
 			}
 			report := map[string]any{
@@ -101,9 +101,11 @@ func TestReportTemplateRendererFixturesMatchDefinitions(t *testing.T) {
 		t.Run(template.name, func(t *testing.T) {
 			card := ""
 			title := template.title
-			if template.name == "initiative" {
+			if template.name == "initiative" || template.name == "hill-climb" {
 				card = "card:launch"
-				title += " — launch"
+				if template.name == "initiative" {
+					title += " — launch"
+				}
 			}
 			expected := map[string]any{
 				"kind": visualreport.Kind, "schema_version": visualreport.Version,
@@ -208,13 +210,17 @@ func TestReportRecentChangesTemplateDefaultsAndDiscovery(t *testing.T) {
 			}
 			query := asMap(panel["data"])
 			want := "normal"
-			if template.name == "recent-changes" {
+			if template.name == "recent-changes" || template.name == "loops" {
 				want = "high"
 				if query["limit"] != 15 {
 					t.Fatal("recent history limit is not 15")
 				}
 			}
-			if query["min_impact"] != want || panel["title"] != "What changed" {
+			title := "What changed"
+			if template.name == "loops" {
+				title = "What loops changed"
+			}
+			if query["min_impact"] != want || panel["title"] != title {
 				t.Fatalf("%s: %#v", template.name, panel)
 			}
 		}

@@ -22,6 +22,9 @@ import (
 const MaxRows = 2000
 
 type Query struct {
+	Board               string   `json:"board,omitempty"`
+	Card                string   `json:"card,omitempty"`
+	Health              string   `json:"health,omitempty"`
 	MinImpact           string   `json:"min_impact,omitempty"`
 	BoardRefs           []string `json:"board_refs,omitempty"`
 	ProjectRef          string   `json:"project_ref,omitempty"`
@@ -57,7 +60,7 @@ var cardRef = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func IsLive(kind string) bool {
 	switch kind {
-	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline":
+	case "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline":
 		return true
 	}
 	return false
@@ -151,6 +154,11 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	}
 	allowed := map[string]bool{}
 	switch kind {
+	case "live-loops":
+		q.Limit = 24
+		allowed = map[string]bool{"board": true, "health": true, "limit": true}
+	case "live-loop":
+		allowed = map[string]bool{"card": true}
 	case "live-cards":
 		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "label": true, "role": true, "status": true, "limit": true, "sort": true}
 	case "live-initiatives":
@@ -192,6 +200,24 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	}
 	if q.Limit < 1 || q.Limit > 100 || len(q.BoardRefs) > 16 || q.AnsweredWithinHours < 1 || q.AnsweredWithinHours > 720 {
 		return q, fmt.Errorf("query exceeds limits")
+	}
+	if kind == "live-loops" {
+		if q.Limit > 48 {
+			return q, fmt.Errorf("loop limit exceeds 48")
+		}
+		if _, ok := fields["board"]; ok && !boardRef.MatchString(q.Board) {
+			return q, fmt.Errorf("board must be a board ref")
+		}
+		if _, ok := fields["health"]; ok {
+			for _, h := range strings.Split(q.Health, ",") {
+				if h != "healthy" && h != "stalled" && h != "failing" && h != "overdue" && h != "unknown" {
+					return q, fmt.Errorf("invalid loop health")
+				}
+			}
+		}
+	}
+	if kind == "live-loop" && !cardRef.MatchString(q.Card) {
+		return q, fmt.Errorf("card is required")
 	}
 	seen := map[string]bool{}
 	for _, ref := range q.BoardRefs {

@@ -125,6 +125,12 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
+	if typeValue == "run_recorded" {
+		if err := primitives.ValidateRunRecorded(req.Event); err != nil {
+			writeError(w, 400, "invalid_request", err.Error())
+			return
+		}
+	}
 	if typeValue == humanAttentionRequestedEventType {
 		payload, _ := req.Event["payload"].(map[string]any)
 		if code, message := validateAskText(payload); code != "" {

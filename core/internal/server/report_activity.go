@@ -229,6 +229,20 @@ func activityPhaseLabel(phase string) string {
 // Classification uses event facts, never summary string matching or current
 // state (which may have changed again since the event).
 func classifyReportActivity(kind string, p map[string]any) (verb, detail, impact string) {
+	if kind == "run_recorded" {
+		verb, impact = "ran", "normal"
+		decision := anyString(activityMap(p["experiment"])["decision"])
+		if decision != "" {
+			verb = decision + " candidate"
+		}
+		if p["outcome"] == "acted" || decision == "kept" {
+			impact = "high"
+		} else if p["outcome"] == "no_op" && decision == "" {
+			impact = "low"
+		}
+		return verb, anyString(p["outcome"]), impact
+	}
+
 	verb, impact = "edited", "low"
 	switch kind {
 	case "human_attention_requested":
