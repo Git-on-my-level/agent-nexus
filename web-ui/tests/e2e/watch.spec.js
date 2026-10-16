@@ -209,6 +209,8 @@ function loopsBrief() {
     possibly_moot: { flagged: false },
     note: null,
     metric_flat: null,
+    // Series-only loops: no cadence, goal or receipts.
+    loop: null,
     series: [
       {
         ref: `series:${id}`,
@@ -448,6 +450,7 @@ test("Loops says how to add one when there are none", async ({
         ...row,
         series: [],
         metric_flat: null,
+        loop: null,
       })),
     }),
   );
