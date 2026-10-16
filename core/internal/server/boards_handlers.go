@@ -12,6 +12,7 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -53,7 +54,7 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list boards")
+		writeInternalError(w, r, err, "failed to list boards")
 		return
 	}
 
@@ -128,7 +129,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		writeInternalError(w, r, err, "failed to load idempotency replay")
 		return
 	}
 	if replayed {
@@ -159,7 +160,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 						return
 					}
 					if replayErr != nil {
-						writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+						writeInternalError(w, r, replayErr, "failed to persist idempotency replay")
 						return
 					}
 					writeJSON(w, status, payload)
@@ -171,7 +172,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					return
 				}
 				if replayErr != nil {
-					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					writeInternalError(w, r, replayErr, "failed to persist idempotency replay")
 					return
 				}
 				writeJSON(w, status, payload)
@@ -179,16 +180,12 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			}
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board already exists")
 		default:
-			message := "failed to create board"
-			if opts.allowUnauthenticatedWrites {
-				message = fmt.Sprintf("%s: %v", message, err)
-			}
-			writeError(w, http.StatusInternalServerError, "internal_error", message)
+			writeInternalError(w, r, err, "failed to create board")
 		}
 		return
 	}
@@ -212,7 +209,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		writeInternalError(w, r, err, "failed to persist idempotency replay")
 		return
 	}
 	writeJSON(w, status, payload)
@@ -235,7 +232,7 @@ func handleGetBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 			writeError(w, http.StatusNotFound, "not_found", "board not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board")
+		writeInternalError(w, r, err, "failed to load board")
 		return
 	}
 
@@ -300,7 +297,7 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusNotFound, "not_found", "board not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board")
+		writeInternalError(w, r, err, "failed to load board")
 		return
 	}
 
@@ -320,14 +317,14 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or referenced document not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update board")
+			writeInternalError(w, r, err, "failed to update board")
 		}
 		return
 	}
@@ -359,7 +356,7 @@ func writeBoardLifecycleStoreError(w http.ResponseWriter, err error) bool {
 	case errors.Is(err, primitives.ErrAlreadyTrashed):
 		writeError(w, http.StatusConflict, "already_trashed", "board is trashed")
 		return true
-	case errors.Is(err, primitives.ErrInvalidBoardRequest):
+	case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return true
 	default:
@@ -400,7 +397,7 @@ func handleArchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		if writeBoardLifecycleStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive board")
+		writeInternalError(w, r, err, "failed to archive board")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": board})
@@ -431,7 +428,7 @@ func handleUnarchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOp
 		if writeBoardLifecycleStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive board")
+		writeInternalError(w, r, err, "failed to unarchive board")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": board})
@@ -463,7 +460,7 @@ func handleTrashBoard(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if writeBoardLifecycleStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash board")
+		writeInternalError(w, r, err, "failed to trash board")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": board})
@@ -494,7 +491,7 @@ func handleRestoreBoard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		if writeBoardLifecycleStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore board")
+		writeInternalError(w, r, err, "failed to restore board")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": board})
@@ -522,7 +519,7 @@ func handlePurgeBoard(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if writeBoardLifecycleStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete board")
+		writeInternalError(w, r, err, "failed to permanently delete board")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "board_id": boardID})
@@ -546,7 +543,7 @@ func handleGetBoardWorkspace(w http.ResponseWriter, r *http.Request, opts handle
 			writeError(w, http.StatusNotFound, "not_found", "board not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board workspace")
+		writeInternalError(w, r, err, "failed to load board workspace")
 		return
 	}
 
@@ -589,7 +586,7 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
 		ctx, finishRead, err := canonical.BeginResourceRead(r.Context())
 		if err != nil {
-			writeError(w, 500, "internal_error", "failed to load board card")
+			writeInternalError(w, r, err, "failed to load board card")
 			return
 		}
 		closeRead = finishRead
@@ -617,7 +614,7 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			writeError(w, http.StatusNotFound, "not_found", "board card not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board card")
+		writeInternalError(w, r, err, "failed to load board card")
 		return
 	}
 	if !enrichPlans(w, r, opts, []map[string]any{card}) {
@@ -685,7 +682,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		writeInternalError(w, r, err, "failed to load idempotency replay")
 		return
 	}
 	if replayed {
@@ -711,7 +708,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if key := strings.TrimSpace(req.RequestKey); key != "" {
 		hash, hashErr := hashJSONPayload(replayRequest)
 		if hashErr != nil {
-			writeError(w, 500, "internal_error", "failed to hash card create")
+			writeInternalError(w, r, hashErr, "failed to hash card create")
 			return
 		}
 		input.CreateReplay = &primitives.CardCreateReplay{Scope: idempotencyOp, Key: key, Hash: hash, Extras: hygiene.attach(map[string]any{})}
@@ -730,7 +727,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				return
 			}
 			if replayErr != nil {
-				writeError(w, 500, "internal_error", "failed to load card replay")
+				writeInternalError(w, r, replayErr, "failed to load card replay")
 				return
 			}
 			if replayed {
@@ -768,18 +765,14 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			}
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board, thread, or document not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board membership already exists or board has changed; refresh and retry")
 		default:
-			message := "failed to add board card"
-			if opts.allowUnauthenticatedWrites {
-				message = fmt.Sprintf("%s: %v", message, err)
-			}
-			writeError(w, http.StatusInternalServerError, "internal_error", message)
+			writeInternalError(w, r, err, "failed to add board card")
 		}
 		return
 	}
@@ -802,7 +795,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		writeInternalError(w, r, err, "failed to persist idempotency replay")
 		return
 	}
 	writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
@@ -902,7 +895,7 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		writeInternalError(w, r, err, "failed to load idempotency replay")
 		return
 	}
 	if replayed {
@@ -919,18 +912,14 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 			return
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board, thread, or document not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board membership already exists or board has changed; refresh and retry")
 		default:
-			message := "failed to create board cards batch"
-			if opts.allowUnauthenticatedWrites {
-				message = fmt.Sprintf("%s: %v", message, err)
-			}
-			writeError(w, http.StatusInternalServerError, "internal_error", message)
+			writeInternalError(w, r, err, "failed to create board cards batch")
 		}
 		return
 	}
@@ -957,7 +946,7 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		writeInternalError(w, r, err, "failed to persist idempotency replay")
 		return
 	}
 	writeJSON(w, status, normalizeBatchBoardCardCreatePayload(payload))
@@ -1036,7 +1025,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board card")
+		writeInternalError(w, r, err, "failed to load board card")
 		return
 	}
 	if len(changedFields) == 0 {
@@ -1046,7 +1035,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 				writeError(w, http.StatusNotFound, "not_found", "board or card not found")
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board")
+			writeInternalError(w, r, err, "failed to load board")
 			return
 		}
 		if !boardCardReplayPreconditionMatches(currentBoard, patchInput.IfBoardUpdatedAt) {
@@ -1066,14 +1055,14 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			return
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board, card, or document not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update board card")
+			writeInternalError(w, r, err, "failed to update board card")
 		}
 		return
 	}
@@ -1191,7 +1180,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 			writeError(w, http.StatusNotFound, "not_found", notFoundMessage)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board card")
+		writeInternalError(w, r, err, "failed to load board card")
 		return
 	}
 
@@ -1246,15 +1235,14 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		switch {
 		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
-			logUnmappedWorkError(w, r, err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to move board card")
+			writeInternalError(w, r, err, "failed to move board card")
 		}
 		return
 	}
@@ -1306,14 +1294,14 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		switch {
 		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to remove board card")
+			writeInternalError(w, r, err, "failed to remove board card")
 		}
 		return
 	}
@@ -1407,7 +1395,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		switch {
 		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
@@ -1416,7 +1404,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board, work version or latest observation has changed; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive board card")
+			writeInternalError(w, r, err, "failed to archive board card")
 		}
 		return
 	}
@@ -1470,14 +1458,14 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 		switch {
 		case writeStoreContentionError(w, r, err):
 		case writePrimitiveQuotaViolationError(w, err):
-		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash board card")
+			writeInternalError(w, r, err, "failed to trash board card")
 		}
 		return
 	}

@@ -34,3 +34,11 @@ func (w *serverTimingWriter) Write(body []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(body)
 }
+
+func (w *serverTimingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *serverTimingWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}

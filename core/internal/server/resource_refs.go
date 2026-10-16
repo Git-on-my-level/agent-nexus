@@ -23,7 +23,7 @@ func resolveHTTPResourceID(w http.ResponseWriter, r *http.Request, opts handlerO
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", label+" not found")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve "+label)
+			writeInternalError(w, r, err, "failed to resolve "+label)
 		}
 		return "", false
 	}
