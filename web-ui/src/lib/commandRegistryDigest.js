@@ -1,5 +1,5 @@
 import { commandRegistry } from "../../../contracts/gen/ts/dist/client.js";
-import { sha256Hex as sha256HexBytes } from "./replayPolicy.js";
+import { sha256Hex as sha256HexBytes } from "./cryptoFallback.js";
 
 function canonicalCommandRegistryEntries(commands = commandRegistry) {
   return [...commands]
