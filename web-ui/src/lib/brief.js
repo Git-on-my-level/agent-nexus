@@ -11,6 +11,7 @@
  */
 
 import { formatAgo } from "$lib/time/format.js";
+import { normalizeLoop } from "$lib/loops.js";
 
 /** The four computed initiative states, in attention order. */
 export const WATCH_STATES = ["past_promise", "moving", "no_promise", "done"];
@@ -46,6 +47,7 @@ export const DECISION_KIND_LABELS = {
  * `data-source="computed:<field>"` must name one of these (I1).
  */
 export const BRIEF_COMPUTED_FIELDS = new Set([
+  "initiatives.loop",
   "decisions.decide_by",
   "decisions.overdue_for",
   "decisions.blocks",
@@ -61,6 +63,7 @@ export const BRIEF_COMPUTED_FIELDS = new Set([
   "initiatives.waiting_on_you_count",
   "initiatives.series",
   "initiatives.metric_flat",
+  "initiatives.loop",
   "generated_at",
 ]);
 
@@ -258,6 +261,7 @@ function normalizeInitiative(raw) {
     note,
     series: Array.isArray(raw.series) ? raw.series : [],
     metricFlat: raw.metric_flat ?? null,
+    loop: normalizeLoop(raw.loop),
     possiblyMoot: raw.possibly_moot?.flagged
       ? { reason: text(raw.possibly_moot.reason) }
       : null,
@@ -367,24 +371,36 @@ export function groupWatch(initiatives) {
 }
 
 /**
- * Loops: initiatives that measure something (a `series:` ref). Watch's Loops
- * view groups them by what they need, first match wins: a decision waiting on
- * the reader, then silence (past its promise, or no evidence for
- * `LOOP_SILENT_SECONDS`), then a metric that has stopped moving, then the
+ * Loops: initiatives with a cadence, a goal or run receipts (core computes
+ * `initiatives.loop`), or that link a `series:` ref. Watch's Loops view
+ * groups them by what they need, first match wins: a decision waiting on the
+ * reader; a loop whose last runs failed; silence (an overdue cadence, past
+ * its promise, or no evidence for `LOOP_SILENT_SECONDS`); no progress (no
+ * effect within its budget, or a metric that has stopped moving); then the
  * rest. Finished loops fold away under Done.
  */
 export const LOOP_SILENT_SECONDS = 3 * 86_400;
-export const LOOP_GROUPS = ["waiting", "silent", "flat", "moving", "done"];
+export const LOOP_GROUPS = [
+  "waiting",
+  "failing",
+  "silent",
+  "flat",
+  "moving",
+  "done",
+];
 export const LOOP_GROUP_LABELS = {
   waiting: "Waiting on you",
+  failing: "Failing",
   silent: "Silent too long",
-  flat: "Metric flat",
+  flat: "Not improving",
   moving: "Moving",
   done: "Done",
 };
 
 export function isLoop(row) {
-  return Array.isArray(row?.series) && row.series.length > 0;
+  return (
+    Boolean(row?.loop) || (Array.isArray(row?.series) && row.series.length > 0)
+  );
 }
 
 /** Seconds since the last evidence, or null when there has been none (or it is unreadable). */
@@ -396,14 +412,17 @@ function silentFor(row, now) {
 export function loopGroup(row, now = Date.now()) {
   if (row.state === "done") return "done";
   if (row.waitingOnYouCount > 0) return "waiting";
+  const condition = row.loop?.condition;
+  if (condition === "failing") return "failing";
+  if (condition === "overdue") return "silent";
   // A loop with no evidence yet has not gone quiet; only a dated gap counts.
   const quiet = silentFor(row, now);
   if (
     row.state === "past_promise" ||
-    (quiet !== null && quiet >= LOOP_SILENT_SECONDS)
+    (!row.loop && quiet !== null && quiet >= LOOP_SILENT_SECONDS)
   )
     return "silent";
-  if (row.metricFlat?.flat) return "flat";
+  if (condition === "stalled" || row.metricFlat?.flat) return "flat";
   return "moving";
 }
 

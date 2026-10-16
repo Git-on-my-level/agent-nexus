@@ -9,9 +9,7 @@
     "name": "boards",
     "type": "live-initiatives",
     "data": {
-      "board_refs": [
-        "board:launch"
-      ],
+      "board_refs": ["board:launch"],
       "project_ref": "topic:launch",
       "sort": "updated",
       "limit": 100
@@ -142,9 +140,7 @@
     "name": "board-url",
     "type": "live-initiatives",
     "data": {
-      "board_refs": [
-        "https://example.test"
-      ]
+      "board_refs": ["https://example.test"]
     },
     "valid": false
   },
@@ -152,10 +148,7 @@
     "name": "board-duplicate",
     "type": "live-initiatives",
     "data": {
-      "board_refs": [
-        "board:a",
-        "board:a"
-      ]
+      "board_refs": ["board:a", "board:a"]
     },
     "valid": false
   },
@@ -214,15 +207,61 @@
       "answered_within_hours": 721
     },
     "valid": false
-  }
-,
- {"name":"invalid card ref", "type":"live-asks", "data":{"card_ref":"topic:launch"}, "valid":false},
- {"name":"answered only requires a supported query", "type":"live-activity", "data":{"answered_only":true}, "valid":false},
- {"name":"integral decimal limit", "type":"live-initiatives", "data":{"limit":10.0}, "valid":true},
- {"name":"integral exponent limit", "type":"live-activity", "data":{"limit":1e1}, "valid":true},
- {"name":"integral decimal answer window", "type":"live-asks", "data":{"answered_within_hours":168.0}, "valid":true},
- {"name":"empty fleet health query", "type":"live-fleet-health", "data":{}, "valid":true},
- {"name":"fleet health query rejects workspace scope", "type":"live-fleet-health", "data":{"project_ref":"topic:launch"}, "valid":false},
+  },
+  {
+    "name": "invalid card ref",
+    "type": "live-asks",
+    "data": {
+      "card_ref": "topic:launch"
+    },
+    "valid": false
+  },
+  {
+    "name": "answered only requires a supported query",
+    "type": "live-activity",
+    "data": {
+      "answered_only": true
+    },
+    "valid": false
+  },
+  {
+    "name": "integral decimal limit",
+    "type": "live-initiatives",
+    "data": {
+      "limit": 10.0
+    },
+    "valid": true
+  },
+  {
+    "name": "integral exponent limit",
+    "type": "live-activity",
+    "data": {
+      "limit": 10.0
+    },
+    "valid": true
+  },
+  {
+    "name": "integral decimal answer window",
+    "type": "live-asks",
+    "data": {
+      "answered_within_hours": 168.0
+    },
+    "valid": true
+  },
+  {
+    "name": "empty fleet health query",
+    "type": "live-fleet-health",
+    "data": {},
+    "valid": true
+  },
+  {
+    "name": "fleet health query rejects workspace scope",
+    "type": "live-fleet-health",
+    "data": {
+      "project_ref": "topic:launch"
+    },
+    "valid": false
+  },
   {
     "name": "cards empty",
     "type": "live-cards",
@@ -232,73 +271,164 @@
   {
     "name": "cards filters",
     "type": "live-cards",
-    "data": {"label": "release", "role": "design", "status": "in_progress", "limit": 5, "sort": "updated"},
+    "data": {
+      "label": "release",
+      "role": "design",
+      "status": "in_progress",
+      "limit": 5,
+      "sort": "updated"
+    },
     "valid": true
   },
   {
     "name": "cards board scope",
     "type": "live-cards",
-    "data": {"board_refs": ["board:launch"], "card_ref": "card:launch"},
+    "data": {
+      "board_refs": ["board:launch"],
+      "card_ref": "card:launch"
+    },
     "valid": true
   },
   {
     "name": "cards label at 128 bytes",
     "type": "live-cards",
-    "data": {"label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "data": {
+      "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
     "valid": true
   },
   {
     "name": "cards label over 128 bytes",
     "type": "live-cards",
-    "data": {"label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "data": {
+      "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
     "valid": false
   },
   {
     "name": "cards label 128 bytes of accents",
     "type": "live-cards",
-    "data": {"label": "\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc"},
+    "data": {
+      "label": "\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc"
+    },
     "valid": true
   },
   {
     "name": "cards label 140 bytes of accents",
     "type": "live-cards",
-    "data": {"label": "\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc"},
+    "data": {
+      "label": "\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc"
+    },
     "valid": false
   },
   {
     "name": "cards label blank",
     "type": "live-cards",
-    "data": {"label": "   "},
+    "data": {
+      "label": "   "
+    },
     "valid": false
   },
   {
     "name": "cards role blank",
     "type": "live-cards",
-    "data": {"role": ""},
+    "data": {
+      "role": ""
+    },
     "valid": false
   },
   {
     "name": "cards status not a string",
     "type": "live-cards",
-    "data": {"status": 7},
+    "data": {
+      "status": 7
+    },
     "valid": false
   },
   {
     "name": "cards unsupported field",
     "type": "live-cards",
-    "data": {"group_by": "phase"},
+    "data": {
+      "group_by": "phase"
+    },
     "valid": false
   },
   {
     "name": "cards sort invalid",
     "type": "live-cards",
-    "data": {"sort": "age"},
+    "data": {
+      "sort": "age"
+    },
     "valid": false
   },
   {
     "name": "cards limit out of range",
     "type": "live-cards",
-    "data": {"limit": 101},
+    "data": {
+      "limit": 101
+    },
+    "valid": false
+  },
+  {
+    "name": "loops default",
+    "type": "live-loops",
+    "data": {},
+    "valid": true
+  },
+  {
+    "name": "loops filter",
+    "type": "live-loops",
+    "data": {
+      "board": "board:initiatives",
+      "health": "failing,overdue",
+      "limit": 48
+    },
+    "valid": true
+  },
+  {
+    "name": "loops overflow",
+    "type": "live-loops",
+    "data": {
+      "limit": 49
+    },
+    "valid": false
+  },
+  {
+    "name": "loops bad health",
+    "type": "live-loops",
+    "data": {
+      "health": "green"
+    },
+    "valid": false
+  },
+  {
+    "name": "loop card",
+    "type": "live-loop",
+    "data": {
+      "card": "card:optimizer"
+    },
+    "valid": true
+  },
+  {
+    "name": "loop required card",
+    "type": "live-loop",
+    "data": {},
+    "valid": false
+  },
+  {
+    "name": "loop null",
+    "type": "live-loop",
+    "data": {
+      "card": null
+    },
+    "valid": false
+  },
+  {
+    "name": "loops null",
+    "type": "live-loops",
+    "data": {
+      "health": null
+    },
     "valid": false
   }
 ]

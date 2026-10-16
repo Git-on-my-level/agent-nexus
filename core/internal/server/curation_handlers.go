@@ -328,7 +328,11 @@ func handleCurationMetrics(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	metrics, err := store.CurationMetrics(r.Context(), time.Duration(days)*24*time.Hour, time.Now().UTC())
 	if err != nil {
-		workStoreError(w, r, err)
+		// Metrics returns read/storage failures, not work mutation errors. Keep
+		// contention classification, but retain the sanitized SQL cause for 500s.
+		if !writeStoreContentionError(w, r, err) {
+			writeInternalError(w, r, err, "work operation failed")
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics})

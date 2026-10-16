@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
 	"net/http"
@@ -140,41 +139,47 @@ func (s *noopAfterReceiptCursor) ReceiptStreamCursor(ctx context.Context, thread
 	return cursor, nil
 }
 
+// Capture protocol progress directly: setup/authorization must not spend a
+// three-second HTTP-client deadline under the default parallel test workload.
+// Cancellation on the second flush also requires the handler to join its scanner
+// before returning; no wall-clock race decides whether the assertion runs.
+type receiptFrameRecorder struct {
+	*httptest.ResponseRecorder
+	frames []string
+	offset int
+	cancel context.CancelFunc
+}
+
+func (w *receiptFrameRecorder) Flush() {
+	w.ResponseRecorder.Flush()
+	body := w.Body.String()
+	if len(body) == w.offset {
+		return
+	} // Header-only flush.
+	w.frames = append(w.frames, body[w.offset:])
+	w.offset = len(body)
+	if len(w.frames) >= 2 {
+		w.cancel()
+	}
+}
+
 func readNextReceiptStreamFrame(t *testing.T, store PrimitiveStore, threadID, resumeID string, poll time.Duration) string {
 	t.Helper()
-	done := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer close(done)
-		scoped := r.WithContext(primitives.WithAccessScope(r.Context(), primitives.AccessScope{ActorID: "owner"}))
-		handleAgentNotificationReceiptsStream(w, scoped, handlerOptions{primitiveStore: store, streamPollInterval: poll})
-	}))
-	defer srv.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/stream/agent-notification-receipts?thread_id="+threadID, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	req := httptest.NewRequest(http.MethodGet, "/stream/agent-notification-receipts?thread_id="+threadID, nil)
+	req = req.WithContext(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "owner"}))
 	req.Header.Set("Last-Event-ID", resumeID)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	recorder := &receiptFrameRecorder{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
+	handleAgentNotificationReceiptsStream(recorder, req, handlerOptions{primitiveStore: store, streamPollInterval: poll})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", recorder.Code, recorder.Body.String())
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", resp.StatusCode)
+	if len(recorder.frames) < 2 {
+		t.Fatalf("stream ended before second frame: %q", recorder.frames)
 	}
-	reader := bufio.NewReader(resp.Body)
-	if frame := round4SSEFrame(t, reader); frame != ": keepalive\n\n" {
-		t.Fatalf("initial frame: %q", frame)
+	if recorder.frames[0] != ": keepalive\n\n" {
+		t.Fatalf("initial frame: %q", recorder.frames[0])
 	}
-	frame := round4SSEFrame(t, reader)
-	cancel()
-	resp.Body.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("cancelled handler did not join scanner")
-	}
-	return frame
+	return recorder.frames[1]
 }

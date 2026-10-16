@@ -17,7 +17,7 @@ func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	available, err := opts.authStore.BootstrapRegistrationAvailable(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to determine bootstrap status")
+		writeInternalError(w, r, err, "failed to determine bootstrap status")
 		return
 	}
 
@@ -65,7 +65,7 @@ func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		case errors.Is(err, auth.ErrAuthRequired):
 			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create invite")
+			writeInternalError(w, r, err, "failed to create invite")
 		}
 		return
 	}
@@ -83,7 +83,7 @@ func handleListInvites(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	invites, err := opts.authStore.ListInvites(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list invites")
+		writeInternalError(w, r, err, "failed to list invites")
 		return
 	}
 
@@ -108,7 +108,7 @@ func handleRevokeInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		case errors.Is(err, auth.ErrInviteNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "invite not found")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to revoke invite")
+			writeInternalError(w, r, err, "failed to revoke invite")
 		}
 		return
 	}

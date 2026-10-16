@@ -46,7 +46,7 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 
 	userHandle, err := generatePasskeyUserHandle()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to generate passkey user handle")
+		writeInternalError(w, r, err, "failed to generate passkey user handle")
 		return
 	}
 
@@ -67,7 +67,7 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
 	)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to begin passkey registration")
+		writeInternalError(w, r, err, "failed to begin passkey registration")
 		return
 	}
 
@@ -166,7 +166,7 @@ func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts ha
 		case isOnboardingTokenError(err):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to register passkey agent")
+			writeInternalError(w, r, err, "failed to register passkey agent")
 		}
 		return
 	}
@@ -209,7 +209,7 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 
 		discoverableOptions, discoverableSessionData, err := webAuthn.BeginDiscoverableLogin()
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to begin passkey login")
+			writeInternalError(w, r, err, "failed to begin passkey login")
 			return
 		}
 		options = discoverableOptions
@@ -225,7 +225,7 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 				writeError(w, http.StatusNotFound, "not_found", "passkey user not found")
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load passkey identity")
+			writeInternalError(w, r, err, "failed to load passkey identity")
 			return
 		}
 		user := newPasskeyUser(identity)
@@ -237,7 +237,7 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 
 		loginOptions, loginSessionData, err := webAuthn.BeginLogin(user)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to begin passkey login")
+			writeInternalError(w, r, err, "failed to begin passkey login")
 			return
 		}
 		options = loginOptions
@@ -344,7 +344,7 @@ func handlePasskeyLoginVerify(w http.ResponseWriter, r *http.Request, opts handl
 		case errors.Is(err, auth.ErrPasskeyNotFound), errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "passkey could not be verified")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue passkey token")
+			writeInternalError(w, r, err, "failed to issue passkey token")
 		}
 		return
 	}
@@ -376,7 +376,7 @@ func handlePasskeyLookupError(w http.ResponseWriter, err error) {
 	case errors.Is(err, auth.ErrPasskeyNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "passkey user not found")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load passkey identity")
+		writeInternalError(w, nil, err, "failed to load passkey identity")
 	}
 }
 

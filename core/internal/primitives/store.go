@@ -251,6 +251,50 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 		return nil, err
 	}
 	defer tx.Rollback()
+	if prepared.Type == "run_recorded" {
+		if err := ValidateRunRecorded(event); err != nil {
+			return nil, err
+		}
+		refs, _ := normalizeStringSlice(event["refs"])
+		subject := ""
+		for i, ref := range refs {
+			if strings.HasPrefix(ref, "card:") {
+				resolved, err := resolveResourceRef(ctx, tx, ResourceRefInput{Type: "card", Ref: ref})
+				if err != nil {
+					return nil, err
+				}
+				subject = "card:" + resolved.ID
+				refs[i] = subject
+				var thread string
+				if err := tx.QueryRowContext(ctx, `SELECT COALESCE(thread_id,'') FROM cards WHERE id=?`, resolved.ID).Scan(&thread); err != nil {
+					return nil, err
+				}
+				prepared.Body["thread_id"] = thread
+			}
+		}
+		var original string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=? AND json_extract(payload_json,'$.payload.run_id')=?`, subject, workMap(event["payload"])["run_id"]).Scan(&original)
+		if err == nil {
+			tx.Rollback()
+			return s.GetEvent(ctx, original)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		prepared.Body["refs"] = refs
+		prepared.Body["subject_ref"] = subject
+		p := workMap(prepared.Body["payload"])
+		if _, ok := p["finished_at"]; !ok {
+			p["finished_at"] = prepared.Body["ts"]
+		}
+		prepared.Body["payload"] = p
+		at := prepared.Body["ts"]
+		prepared, err = prepareEventForInsert(actorID, prepared.Body)
+		prepared.Body["ts"] = at
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := insertPreparedEvent(ctx, tx, prepared); err != nil {
 		return nil, err
 	}

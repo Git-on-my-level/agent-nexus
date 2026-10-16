@@ -646,7 +646,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "brief.v1 reads materialized facts with indexed, limited seeks; at most 50 rows per section. Series enrichment adds at most three batch statements for 50 cards x two refs (admitted from at most 200 refs/64 KiB per card), 100 label candidates per ref and eight daily buckets per primary per summary table; primary-key seeks bound raw endpoints and daily ranges.",
+    "reason": "brief.v1 reads materialized facts with indexed, limited seeks; at most 50 rows per section. Series enrichment adds at most three batch statements for 50 cards x two refs (admitted from at most 200 refs/64 KiB per card), 100 label candidates per ref and eight daily buckets per primary per summary table; primary-key seeks bound raw endpoints and daily ranges. Loop admission adds one 50-card primary-key metadata batch and indexed receipt-existence checks; admitted loops read primary-key materialized facts alongside brief_initiatives, invalidated by brief_dirty and indexed time-window expiry. Cache visibility inherits every contributing receipt; dirty, expired or unauthorized cache entries use scoped subject/time-indexed receipt ranges (details <=50, metric points <=60, counts 14 days, bests 30 days). Canonical maintenance folds at most 200 dirty cards per chunk; receipt density affects maintenance and fallback, not valid cached reads. The dense 10k-receipt fixture is bounded by loop_brief_budget.json at 50k VM steps; normal brief ceilings are unchanged.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },

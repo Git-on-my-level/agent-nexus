@@ -12,6 +12,9 @@ import (
 // commandSideEffectClass is the CLI's command policy. New command families must
 // be added here before they are published in help or meta commands.
 func commandSideEffectClass(command string) string {
+	if isLoopWork(command) {
+		return "remote_coordination_write"
+	}
 	if command == "pm install" || command == "pm uninstall" {
 		return "local_operational_write"
 	}

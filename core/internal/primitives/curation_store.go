@@ -418,6 +418,9 @@ func curationAskRecord(id, ts, payloadJSON, resolution, resolutionTS, resolution
 	return rec
 }
 
+const curationOpenPromisesSQL = `SELECT bi.promise_at,bi.promise_moves,COALESCE(bi.last_evidence_at,'') FROM brief_initiatives bi INDEXED BY idx_brief_initiatives_page JOIN cards c ON c.id=bi.card_id
+ WHERE bi.open=1 AND bi.promise_at>=? AND bi.promise_at<=? ORDER BY bi.promise_at DESC LIMIT ?`
+
 // curationPromiseRecords reads the promises that came due in [start, now]
 // from core's materialized promise fold (brief_initiatives, brief_notes), never
 // from raw events. Two bounded, indexed reads feed it:
@@ -441,8 +444,7 @@ func (s *Store) curationPromiseRecords(ctx context.Context, start, now time.Time
 	out := []curation.PromiseRecord{}
 	truncated := false
 
-	rows, err := s.db.QueryContext(ctx, `SELECT promise_at,promise_moves,COALESCE(last_evidence_at,'') FROM brief_initiatives INDEXED BY idx_brief_initiatives_page
- WHERE open=1 AND promise_at>=? AND promise_at<=? ORDER BY promise_at DESC LIMIT ?`, lo, hi, curationMetricPromiseLimit+1)
+	rows, err := s.db.QueryContext(ctx, curationOpenPromisesSQL, lo, hi, curationMetricPromiseLimit+1)
 	if err != nil {
 		return nil, false, err
 	}
@@ -724,8 +726,9 @@ type CurationBatchMemberAsk struct {
 // member and cannot be loaded. A scope-hidden member still has a thread row:
 // the unscoped count includes it and the scoped list does not, which is the
 // partial-set signal. No INDEXED BY on threads: a scoped read shadows it.
+// Keep the bounded batch key as the driver before applying scoped ask filters.
 const openCurationMemberFrom = `FROM curation_batch_members m
-		JOIN brief_asks a ON a.ask_id=m.ask_id
+		CROSS JOIN brief_asks a ON a.ask_id=m.ask_id
 		JOIN events e ON e.id=m.ask_id
 		` + briefAnswerableAskJoin + `
 		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`

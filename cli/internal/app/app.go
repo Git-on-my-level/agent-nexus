@@ -258,6 +258,12 @@ func (a *App) Run(args []string) int {
 	if value == nil && result != nil && result.Text != "" {
 		value = map[string]any{"text": result.Text}
 	}
+	if identity.Command == "work receipt" && !resolved.JSON {
+		if id := anyString(asMap(asMap(value)["event"])["id"]); id != "" {
+			a.writeOutput(a.Stdout, id+"\n")
+			return 0
+		}
+	}
 	if identity.Command == "host token" && !resolved.JSON {
 		if token := anyString(asMap(value)["token"]); token != "" {
 			a.writeOutput(a.Stdout, token+"\n")
@@ -441,8 +447,9 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	if timeoutFlag.set {
 		overrides.Timeout = &timeoutFlag.value
 	}
-	captureTrailingJSONOverride(fs.Args(), &overrides)
-	remaining, err := normalizeTrailingGlobalFlags(fs.Args(), &overrides)
+	protectedValues := globalScanValueTokens(fs.Args())
+	captureTrailingJSONOverride(fs.Args(), &overrides, protectedValues)
+	remaining, err := normalizeTrailingGlobalFlags(fs.Args(), &overrides, protectedValues)
 	if err != nil {
 		return overrides, nil, false, err
 	}
@@ -458,8 +465,54 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	return overrides, remaining, helpRequested, nil
 }
 
-func captureTrailingJSONOverride(args []string, overrides *config.Overrides) {
-	for _, token := range args {
+// A separate token after a value-taking local flag belongs to that flag even
+// when it looks like a global option. Use the same command arity as preflight,
+// including parser-derived runtime flags, rather than guessing from its text.
+func globalScanValueTokens(args []string) []bool {
+	protected := make([]bool, len(args))
+	specs := preflightFlagSpecs()
+	var local map[string]preflightFlagSpec
+	path := []string{}
+	for i := 0; i < len(args); i++ {
+		token := args[i]
+		if token == "--" {
+			break
+		}
+		if !strings.HasPrefix(token, "-") {
+			if len(path) < 3 {
+				path = append(path, token)
+				if flags, ok := specs[strings.Join(path, " ")]; ok {
+					local = flags
+				}
+			}
+			continue
+		}
+		name, _, inline := strings.Cut(strings.TrimLeft(token, "-"), "=")
+		if inline {
+			continue
+		}
+		takesValue := false
+		if flag, ok := local[name]; ok {
+			takesValue = flag.kind != preflightFlagBool
+		} else {
+			switch name {
+			case "base-url", "workspace", "as", "config-dir", "timeout":
+				takesValue = true
+			}
+		}
+		if takesValue && i+1 < len(args) {
+			i++
+			protected[i] = true
+		}
+	}
+	return protected
+}
+
+func captureTrailingJSONOverride(args []string, overrides *config.Overrides, protectedValues []bool) {
+	for i, token := range args {
+		if protectedValues[i] {
+			continue
+		}
 		if strings.TrimSpace(token) == "--" {
 			break
 		}
@@ -479,10 +532,14 @@ func captureTrailingJSONOverride(args []string, overrides *config.Overrides) {
 	}
 }
 
-func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([]string, error) {
+func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides, protectedValues []bool) ([]string, error) {
 	filtered := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		token := args[i]
+		if protectedValues[i] {
+			filtered = append(filtered, token)
+			continue
+		}
 		if strings.TrimSpace(token) == "--" {
 			filtered = append(filtered, args[i:]...)
 			break

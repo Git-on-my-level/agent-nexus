@@ -194,3 +194,5 @@ embedded sidecar and starts by default with the workspace core.
 - Package-specific bridge runtime notes: `adapters/agent-bridge/README.md`
 
 Live dashboard data and declared push adapters: [guide](docs/live-series.md).
+
+Recurring work: [cadence, goals, receipts and loop reports](docs/recurring-work.md).

@@ -79,6 +79,9 @@ type WorkPage struct {
 
 func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID string, m map[string]any) error {
 	source := workMap(m["source"])
+	if m["cadence"] != nil {
+		m["cadence_set_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,connection_id,native_id,metadata_json,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)`, cardID, workString(source["authority"]), workString(source["connection_id"]), workString(source["native_id"]), workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actorID)
 	if err != nil {
 		return err
@@ -115,6 +118,9 @@ func workLocalInvalid(field, reason string) error {
 }
 
 func validateWorkLocal(m map[string]any) error {
+	if err := validateLoopMetadata(m); err != nil {
+		return err
+	}
 	for _, key := range []string{"labels", "roles"} {
 		if raw, exists := m[key]; exists && raw != nil {
 			values, err := normalizeStringSlice(raw)
@@ -450,7 +456,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
+	for _, key := range []string{"cadence", "goal", "source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -959,7 +965,7 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
+	return []string{"cadence", "goal", "labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.
@@ -1015,6 +1021,9 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 		m[k] = val
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, ok := patch["cadence"]; ok {
+		m["cadence_set_at"] = now
+	}
 	if _, ok := patch["next_action"]; ok {
 		m["next_action_at"] = now
 	}

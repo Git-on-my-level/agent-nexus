@@ -162,3 +162,50 @@ describe("Watch loops", () => {
     expect(formatMetricValue("NaN")).toBe("NaN");
   });
 });
+
+describe("Watch loops with computed loop state", () => {
+  const withLoop = (condition, overrides = {}) =>
+    loop({
+      series: [],
+      loop: { condition, recentRuns: [], runs7d: {} },
+      ...overrides,
+    });
+
+  it("counts a card with a computed loop even without a series", () => {
+    expect(isLoop(withLoop("healthy"))).toBe(true);
+  });
+
+  it("groups by the server's condition, after a waiting decision", () => {
+    expect(loopGroup(withLoop("failing", { waitingOnYouCount: 1 }), NOW)).toBe(
+      "waiting",
+    );
+    expect(loopGroup(withLoop("failing"), NOW)).toBe("failing");
+    expect(loopGroup(withLoop("overdue"), NOW)).toBe("silent");
+    expect(loopGroup(withLoop("stalled"), NOW)).toBe("flat");
+    expect(loopGroup(withLoop("healthy"), NOW)).toBe("moving");
+    expect(loopGroup(withLoop("unknown"), NOW)).toBe("moving");
+    expect(loopGroup(withLoop("failing", { state: "done" }), NOW)).toBe("done");
+  });
+
+  it("lets the cadence, not evidence age, decide silence for a receipt loop", () => {
+    // A daily loop with a fresh receipt is not silent just because the
+    // card's plan evidence is old.
+    expect(
+      loopGroup(
+        withLoop("healthy", { lastEvidenceAt: ago(LOOP_SILENT_SECONDS * 2) }),
+        NOW,
+      ),
+    ).toBe("moving");
+    expect(loopGroup(withLoop("healthy", { state: "past_promise" }), NOW)).toBe(
+      "silent",
+    );
+  });
+
+  it("puts failing loops first", () => {
+    const groups = groupLoops(
+      [withLoop("healthy", { id: "a" }), withLoop("failing", { id: "b" })],
+      NOW,
+    );
+    expect(groups.map((g) => g.group)).toEqual(["failing", "moving"]);
+  });
+});

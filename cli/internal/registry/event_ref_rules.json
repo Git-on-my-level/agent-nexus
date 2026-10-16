@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": false,
-  "rule_count": 24,
+  "rule_count": 25,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -135,6 +135,15 @@
     },
     "message_posted": {
       "thread_id": "required as thread_ref when the message belongs to a backing thread"
+    },
+    "run_recorded": {
+      "refs_must_include": [
+        "card:\u003ccard_handle\u003e"
+      ],
+      "payload_must_include": [
+        "run_id",
+        "outcome"
+      ]
     },
     "topic_archived": {
       "refs_must_include": [

@@ -2,6 +2,8 @@ import { withSeriesObservation } from "./seriesReports.js";
 import { formatAgeSeconds } from "./time/format.js";
 
 export const LIVE_REPORT_TYPES = Object.freeze([
+  "live-loops",
+  "live-loop",
   "live-initiatives",
   "live-asks",
   "live-work-mix",
@@ -49,6 +51,8 @@ const goTrimSpace = (value) => value.replace(GO_SPACE, "");
 export function validateLiveQuery(type, data) {
   const errors = [];
   const fields = {
+    "live-loops": ["board", "health", "limit"],
+    "live-loop": ["card"],
     "live-initiatives": [
       "board_refs",
       "project_ref",
@@ -79,6 +83,35 @@ export function validateLiveQuery(type, data) {
   }[type];
   if (!fields || !data || typeof data !== "object" || Array.isArray(data))
     return ["must be a live query object"];
+  if (type === "live-loops") {
+    if (
+      data.board !== undefined &&
+      (typeof data.board !== "string" ||
+        !/^board:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(data.board))
+    )
+      errors.push("invalid loop board");
+    if (
+      data.health !== undefined &&
+      (typeof data.health !== "string" ||
+        data.health
+          .split(",")
+          .some(
+            (h) =>
+              !["healthy", "stalled", "failing", "overdue", "unknown"].includes(
+                h,
+              ),
+          ))
+    )
+      errors.push("invalid loop health");
+    if (data.limit !== undefined && data.limit > 48)
+      errors.push("loop limit exceeds 48");
+  }
+  if (
+    type === "live-loop" &&
+    (typeof data.card !== "string" ||
+      !/^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(data.card))
+  )
+    errors.push("card is required");
   if (Object.keys(data).some((key) => !fields.includes(key)))
     errors.push("contains unsupported query fields");
   if (

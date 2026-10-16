@@ -302,7 +302,10 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `pm card` (command): Read any visible card in full under the requesting reader.
 - `pm propose` (command): Propose a card status or note for human approval in Inbox.
+- `work cadence` (command): Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
+- `work goal` (command): Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear.
+- `work receipt` (command): Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay.
 
 
 ## `ask`
@@ -2997,7 +3000,7 @@ Inputs:
   - body `event.provenance.notes` (string)
   - body `event.ref` (typed_ref)
   - body `event.thread_ref` (string)
-  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -4983,10 +4986,12 @@ Inputs:
   - body `actor_id` (string)
   - body `blockers` (list<string>)
   - body `board_ref` (string)
+  - body `cadence` (any)
   - body `definition_of_done` (list<string>)
   - body `document_ref` (string)
   - body `due_at` (string)
   - body `executions` (list<object>)
+  - body `goal` (any)
   - body `id` (string)
   - body `labels` (list<string>)
   - body `next_action` (string)
@@ -5132,8 +5137,10 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `patch.blockers` (list<string>)
+  - body `patch.cadence` (any)
   - body `patch.due_at` (string)
   - body `patch.executions` (list<object>)
+  - body `patch.goal` (any)
   - body `patch.labels` (list<string>)
   - body `patch.next_action` (string)
   - body `patch.next_actor` (string)
@@ -10467,6 +10474,26 @@ Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|re
 Proposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.
 ```
 
+## `work cadence`
+
+Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear.
+
+```text
+Local Help: work cadence
+
+Side effect class: remote_coordination_write
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear.
+
+Usage: anx work cadence
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `work freshness`
 
 Inspect last observed, source activity and meaningful progress independently.
@@ -10481,6 +10508,46 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 Inspect last observed, source activity and meaningful progress independently.
 
 Usage: anx work freshness <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work goal`
+
+Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear.
+
+```text
+Local Help: work goal
+
+Side effect class: remote_coordination_write
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear.
+
+Usage: anx work goal
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work receipt`
+
+Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay.
+
+```text
+Local Help: work receipt
+
+Side effect class: remote_coordination_write
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay.
+
+Usage: anx work receipt
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 

@@ -209,6 +209,8 @@ function loopsBrief() {
     possibly_moot: { flagged: false },
     note: null,
     metric_flat: null,
+    // Series-only loops: no cadence, goal or receipts.
+    loop: null,
     series: [
       {
         ref: `series:${id}`,
@@ -282,6 +284,160 @@ test("Loops lists measured initiatives by what they need", async ({
   ).toContainText("0.42");
 });
 
+/** Loops with run receipts: one per computed condition, one climbing a goal. */
+function receiptLoopsBrief() {
+  const now = Date.now();
+  const at = (s) => new Date(now + s * 1000).toISOString();
+  const DAY = 86400;
+  const base = loopsBrief();
+  const runs = (outcomes) =>
+    outcomes.map((outcome, i) => ({
+      at: at(-(outcomes.length - i) * DAY),
+      outcome: outcome.split(":")[0],
+      decision: outcome.split(":")[1] ?? null,
+    }));
+  const climb = Array.from({ length: 20 }, (_, i) => ({
+    at: at(-(20 - i) * DAY),
+    value: Number(
+      (0.55 + 0.3 * (1 - Math.exp(-i / 6)) + (i % 3 === 1 ? -0.03 : 0)).toFixed(
+        3,
+      ),
+    ),
+    decision: i % 3 === 0 ? "kept" : i % 3 === 1 ? "reverted" : null,
+  }));
+  const loopRow = (id, title, loop) => ({
+    ...base.initiatives.at(-1),
+    ref: `card:${id}`,
+    title,
+    series: [],
+    metric_flat: null,
+    waiting_on_you_count: 0,
+    loop,
+  });
+  return {
+    ...base,
+    initiatives: [
+      ...base.initiatives,
+      loopRow("avo-cleanup", "Disk cleanup optimizer", {
+        health: "healthy",
+        health_reason: "Kept a candidate 1d ago",
+        every_seconds: DAY,
+        progress_budget_seconds: 7 * DAY,
+        last_run_at: at(-DAY),
+        last_effect_at: at(-DAY),
+        next_run_due_at: at(5 * 3600),
+        recent_runs: runs([
+          "acted:kept",
+          "measured:reverted",
+          "no_op",
+          "acted:kept",
+          "measured:rejected",
+          "acted:kept",
+        ]),
+        runs_7d: { acted: 3, measured: 2, no_op: 1, infra_error: 0 },
+        goal: {
+          metric: "reclaimable_gb",
+          direction: "up",
+          target: 0.9,
+          unit: "",
+          latest: climb.at(-1).value,
+          best: Math.max(...climb.map((p) => p.value)),
+          baseline: 0.55,
+          points: climb,
+        },
+      }),
+      loopRow("cost-watch", "Cloud cost watchdog", {
+        health: "failing",
+        health_reason: "Last 2 runs hit infrastructure errors",
+        every_seconds: DAY,
+        last_run_at: at(-3600),
+        last_effect_at: at(-6 * DAY),
+        recent_runs: runs([
+          "measured",
+          "acted",
+          "measured",
+          "infra_error",
+          "infra_error",
+        ]),
+        runs_7d: { acted: 1, measured: 2, no_op: 0, infra_error: 2 },
+        goal: null,
+      }),
+      loopRow("pr-monitor", "PR completion monitor", {
+        health: "stalled",
+        health_reason: "No effect in 9d (budget 7d)",
+        every_seconds: 6 * 3600,
+        progress_budget_seconds: 7 * DAY,
+        last_run_at: at(-2 * 3600),
+        last_effect_at: at(-9 * DAY),
+        recent_runs: runs([
+          "no_op",
+          "no_op",
+          "measured",
+          "no_op",
+          "no_op",
+          "no_op",
+          "measured",
+          "no_op",
+        ]),
+        runs_7d: { acted: 0, measured: 2, no_op: 6, infra_error: 0 },
+        goal: null,
+      }),
+      loopRow("retention-check", "Retention check", {
+        health: "overdue",
+        health_reason: "No run in 3d (expected every 1d)",
+        every_seconds: DAY,
+        last_run_at: at(-3 * DAY),
+        last_effect_at: at(-3 * DAY),
+        next_run_due_at: at(-2 * DAY),
+        recent_runs: runs(["measured", "acted"]),
+        runs_7d: { acted: 1, measured: 1, no_op: 0, infra_error: 0 },
+        goal: null,
+      }),
+    ],
+  };
+}
+
+test("Loops with run receipts show cards, totals and the climb", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) => json(route, receiptLoopsBrief()));
+  await page.goto(`${WATCH}?view=loops`);
+  await expect(page.locator("[data-loop-totals]")).toBeVisible();
+  await expect(
+    page.locator(
+      '[data-watch-loop-group="failing"] [data-loop="card:cost-watch"]',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.locator(
+      '[data-watch-loop-group="silent"] [data-loop="card:retention-check"]',
+    ),
+  ).toContainText("run overdue by 2d");
+  await expect(
+    page.locator(
+      '[data-watch-loop-group="flat"] [data-loop="card:pr-monitor"]',
+    ),
+  ).toContainText("Stalled");
+  const climber = page.locator('[data-loop="card:avo-cleanup"]');
+  await expect(climber.locator("[data-loop-chart] polyline")).toHaveCount(2);
+  await expect(climber.locator("[data-loop-runs] li")).toHaveCount(6);
+  await expect(climber).toContainText("reclaimable_gb");
+  await expect(page.locator("[data-watch-loops]")).not.toContainText("NaN");
+  if (process.env.LOOP_SHOTS) {
+    await page.setViewportSize({ width: 1400, height: 1500 });
+    await page.screenshot({
+      path: `${process.env.LOOP_SHOTS}/watch-loops.png`,
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 1600 });
+    await page.screenshot({
+      path: `${process.env.LOOP_SHOTS}/watch-loops-mobile.png`,
+      fullPage: true,
+    });
+  }
+});
+
 test("Loops says how to add one when there are none", async ({
   page,
   context,
@@ -294,6 +450,7 @@ test("Loops says how to add one when there are none", async ({
         ...row,
         series: [],
         metric_flat: null,
+        loop: null,
       })),
     }),
   );

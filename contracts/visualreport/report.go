@@ -26,7 +26,7 @@ const (
 var panelTypes = []string{
 	"explanation", "evidence-table", "milestone-timeline", "dependency-diagram",
 	"metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison",
-	"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "metric", "table",
+	"live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "metric", "table",
 }
 
 // PanelTypes returns the panel types accepted by the shared visual-report contract.
@@ -456,7 +456,7 @@ func (v *validator) report(r map[string]any) {
 func (v *validator) panelData(panel map[string]any, path string, panelSources map[string]bool, reference func(any, string, map[string]bool)) {
 	data, dp := panel["data"], path+".data"
 	switch panel["type"] {
-	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards":
+	case "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards":
 		raw, _ := json.Marshal(data)
 		if _, err := ParseQuery(panel["type"].(string), raw); err != nil {
 			v.add(dp, err.Error())

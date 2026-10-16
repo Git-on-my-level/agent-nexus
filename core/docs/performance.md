@@ -794,3 +794,136 @@ the thread-owner lookup index. No existing budget or plan exception is widened.
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core ./internal/primitives \
   -run '^TestPerformanceReportActivitySubjectsBudgetAndPlans$' -count=1 -v -timeout=6m
 ```
+
+## Initiative loop receipts
+
+Loop enrichment admits the existing brief page (at most 50 cards) with one
+primary-key card/work-metadata batch and indexed receipt-existence probes.
+Migration 100 materializes per-card receipt facts beside `brief_initiatives`.
+`brief_dirty` invalidates insert/update/delete receipt changes and work metadata;
+maintenance folds at most 200 queued cards per transaction. Indexed expiry seeks
+queue facts at the next 7/14/30-day window transition or future receipt activation.
+The reader computes elapsed durations and health at request time.
+
+The serving `brief_loop_facts` view uses primary-key card lookups. Its synthetic
+ownership node inherits all contributing receipts; it does not restrict the
+canonical card. A private receipt denies reuse of the shared aggregate for that
+reader. The backing JSON and validity columns are also masked. Denial epochs
+apply immediately, independent of maintenance. Dirty, expired or unauthorized
+cache entries fall back to the same reader-scoped receipt query; filtered results
+never overwrite the shared canonical projection.
+
+Maintenance/fallback use migration 99's `idx_events_run_subject_ts` and
+`idx_events_run_effect_ts`; replay uses `idx_events_run_identity`. Their work
+grows with the admitted subjects' receipt density inside 14 days for exact
+counts and 30 days for directional incumbent bests, not unrelated workspace
+history. Incumbent seeks and aggregates exclude rejected/reverted decisions;
+one additional subject/time-indexed seek obtains the newest incumbent even
+when all 60 displayed candidate points were rejected. Migration 101 queues
+existing loop caches once so earlier candidate bests cannot survive the change.
+Packed result detail remains bounded to 50 runs (brief renders 12) and 60 goal
+points per card. Valid cached reads do not scan those receipt ranges. Goal
+series selectors share the existing bounded daily-rollup batches. The ordinary
+50-card/100-ref scale ceiling remains 50,000 VM steps for both principals.
+The dense 10,000-receipt complete-brief gate now also enforces 50,000 VM steps
+(previously 750,000), 30 SQL calls, 100 returned rows and a one-second safety cap.
+
+`live-loops` admission uses migration 102's two hints on the existing
+`brief_initiatives` rows, updated atomically by metadata and receipt triggers.
+`idx_brief_loop_annotated_recent` traverses annotation metadata update times
+(newest first), materialized atomically by migration 103;
+`idx_brief_loop_recent` traverses last-receipt timestamps newer than 30 days.
+Each arm returns at most 51 cards after scoped card, board, metadata and receipt
+checks. The reader deduplicates at most 102 IDs and retains the 50 most recent
+by annotation/receipt activity, enriches those loops and
+sorts this cohort by health before applying the display limit (at most 48).
+Ordinary cards never consume slots or require JSON scans. Candidate index work
+can grow with loops excluded by board/lifecycle/visibility; receipt admission is
+an indexed subject/time existence seek, with no receipt-density aggregation.
+The hints are internal selectors, never response facts or authorization: a
+private receipt alone cannot admit a public card, and mixed receipt visibility
+uses the ordinary scoped receipt query. Stats describe the admitted cohort;
+per-loop and aggregate `effects_7d` both count acted-or-kept runs once.
+
+`TestLoopReportAdmissionBudget` measures the complete report over 4,096 ordinary
+cards plus annotation/receipt loops, using `loop_report_budget.json` and requiring
+both admission indexes. Owner and non-owner reads each measured four SQL calls,
+six rows, 674 VM steps and zero full-scan steps. The existing complete-brief and
+series budgets remain unchanged. Migration 102 performs one indexed per-card
+backfill on upgrade; subsequent startup does no admission backfill.
+
+`TestLoopBriefComparison` is portable to main: copy that exact test file into an
+isolated main checkout. Every case seeds 10,000 otherwise-identical events on one
+cadence/goal card. The zero-receipt control changes only the type to
+`card_updated`. Setup and projection maintenance are excluded. Each sample uses
+a fresh actor access scope and pinned resource read; native SQL instrumentation
+is enabled in all cases. First latency and the median of 20 subsequent warm
+reads are reported. These local synthetic results are not deployed latency claims.
+
+Measured sequentially on this host (milliseconds; main at
+`42fd88cb22be86e2185d93269b8d7dbbc682c77d`):
+
+| Revision / receipt count                           |  First | Warm median (20 reads) |
+| -------------------------------------------------- | -----: | ---------------------: |
+| origin/main, 10,000 events                         | 16.117 |                  7.769 |
+| branch, zero run_recorded (10,000 ordinary events) | 16.026 |                  8.314 |
+| branch, 10,000 run_recorded                        | 16.412 |                  8.800 |
+
+The dense loop increment is 0.485 ms over the branch control, 1.031 ms over main.
+
+```sh
+# Run sequentially on an idle host; the same file/workload on main first.
+ANX_BRIEF_COMPARE=1 go test -C core ./internal/server -run '^TestLoopBriefComparison$' -count=1 -v -timeout=5m
+ANX_BRIEF_COMPARE=1 ANX_BRIEF_BENCH_MODE=ordinary go test -C core ./internal/server -run '^TestLoopBriefComparison$' -count=1 -v -timeout=5m
+go test -C core ./internal/server -run '^TestLoopBriefCost10KEvents$' -count=1 -v -timeout=5m
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```
+
+## Scoped curation promise reads
+
+`GET /curation/metrics` retains its existing bounded window and row limits.
+Open promises seek `idx_brief_initiatives_page` by `(open, promise_at)` and
+join the reader-scoped card relation by primary key before aggregation and
+pagination. The relation compiler removes this physical `INDEXED BY` hint when
+`brief_initiatives` is a scoped CTE; SQLite still pushes the range into the
+canonical table and uses that index. It must not materialize the entire
+initiative relation. No loop facts or receipt ranges are loaded by this query.
+The `brief_initiatives` shadow filters every column by card visibility, including
+promise text, evidence times and loop admission hints. Loop aggregates retain
+their additional contributor gate. `brief_notes` requires both card and source
+event visibility; ask/block projections require ask visibility. All brief shadows
+are `NOT MATERIALIZED` so the canonical index seeks precede filtering and limits.
+Physical `idx_brief_*` hints are removed under scope, including the cleared-note
+`idx_brief_notes_next_at` path. Direct promise-fold/note reads are safe without a
+caller-supplied cards join.
+
+Ask-block counts deduplicate at most two refs per admitted card before SQL.
+Their query starts from this bounded ref batch and seeks
+`idx_brief_ask_blocks_ref`, then asks/events/threads by primary key. Batch-member
+reads likewise start from the indexed batch key. Explicit `CROSS JOIN` order
+prevents the added projection visibility predicates from choosing a scan of all
+open asks instead. The existing primary-key/index-plan test consumes the
+production block-count SQL and retains its index and no-scan assertions.
+The populated brief gate measures 41,643 VM steps for the owner and 49,593 for
+the scoped reader against the unchanged 50,000 limit.
+
+`TestCurationMetricsScopedPromiseIndex` checks live and request-cached scopes,
+private-card exclusion, and the actual indexed query plan. The shared 50-card
+brief scale gate retains its 50,000-VM-step ceiling. Ask and cleared-note reads
+keep their existing type/time and next-at indexes and admission limits.
+
+```sh
+go test -C core ./internal/primitives -run '^Test(CurationMetricsScopedPromiseIndex|BriefProjectionRelationsFilterPrivateRows|LoopReportAdmissionRetainsRecentLoopsBeyondFifty)$' -count=1
+go test -C core ./internal/server -run '^Test(ResourceAccessRouteMatrix|CurationMetricsLogsSQLErrorCause|BriefProjectionsPrivateChangesDoNotAffectOtherReaders)$' -count=1
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+```
+
+The generic curation route gate currently fails its existing authorization
+budget on main as well as this branch. At main
+`42fd88cb22be86e2185d93269b8d7dbbc682c77d`, the denied-reader warm path uses
+66,461 VM steps; this fix uses 66,586 (six queries, three returned rows in both).
+Post-invalidation work is 1,761,675 versus 1,761,800 VM steps. The inherited
+closure/query-plan failures are recorded separately from the successful
+index-plan regression and brief scale checks. No budget or plan allowance was
+relaxed for this fix.

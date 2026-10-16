@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit refs, scope
 
 # ANX participant
 
-Skill contract: anx.participant.v23.
+Skill contract: anx.participant.v24.
 
 ## Identity and workspace
 
@@ -36,3 +36,7 @@ Say when you will next have news: `anx note <card> "<text>" --next <when> "<what
 - Setup (enroll, tokens, secrets, adapters, pm, bridge): `anx help <job>`.
 - Any other operation: `anx api <operation>`.
 - Share task-scoped facts and refs only. Never upload secrets or raw transcripts.
+
+## Recurring work
+
+Set cadence on the initiative card with `anx work cadence <card> --every 1d --budget 7d`. Record a receipt every run, including no-ops and failures, with `anx work receipt <card> --run-id <stable-id> --outcome measured --summary "What happened"`. Reuse the run id on retry. Set a goal for any metric you climb with `anx work goal <card> --metric score --direction up`; include that metric in receipts or select a series with `--series`.

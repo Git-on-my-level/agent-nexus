@@ -21,8 +21,25 @@ const templateNames = [
   "incident-review",
   "fleet-health",
   "recent-changes",
+  "loops",
+  "hill-climb",
 ];
 const fixtureText = {
+  loops: [
+    "Daily archive",
+    "Nightly report",
+    "Search tuning",
+    "Optimizer",
+    "Daily checks",
+    "New recurring work",
+    "No runs yet",
+  ],
+  "hill-climb": [
+    "Optimizer",
+    "quality.score",
+    "Kept candidate 18",
+    "Rejected candidate 19",
+  ],
   "workspace-overview": ["Launch", "Launch checklist updated"],
   initiative: [
     "Launch",
@@ -41,10 +58,9 @@ const fixtureText = {
   ],
 };
 
-test("browser renders every report template against live fixtures", async ({
-  request,
-}, testInfo) => {
-  void request;
+// Playwright requires fixture destructuring even when the renderer needs no fixtures.
+// eslint-disable-next-line no-empty-pattern
+test("browser renders every report template against live fixtures", async ({}, testInfo) => {
   test.setTimeout(300_000);
   for (const name of templateNames) {
     const fixture = JSON.parse(

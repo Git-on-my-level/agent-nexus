@@ -455,14 +455,24 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		Refs:           []string{"thread:" + otherThreadID, "event:" + otherTriggerEventID, "artifact:wake-receipt-stream-other"},
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	// Bound each stream wait, rather than the entire sequence of authenticated
+	// mutations plus reads. Default-parallel fixture work can consume the old
+	// shared eight-second budget even when every transition makes progress.
+	ctx, cancel := context.WithCancel(context.Background())
+	readReceipt := func(reader *bufio.Reader) notificationReceiptSSE {
+		deadline := time.AfterFunc(8*time.Second, cancel)
+		defer deadline.Stop()
+		return readNotificationReceiptSSE(t, reader)
+	}
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, env.server.URL+"/stream/agent-notification-receipts?thread_id="+threadID, nil)
 	if err != nil {
 		t.Fatalf("build receipt stream request: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+sender.AccessToken)
+	headerDeadline := time.AfterFunc(8*time.Second, cancel)
 	resp, err := http.DefaultClient.Do(req)
+	headerDeadline.Stop()
 	if err != nil {
 		t.Fatalf("open receipt stream: %v", err)
 	}
@@ -472,7 +482,7 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 	}
 	reader := bufio.NewReader(resp.Body)
 
-	initial := readNotificationReceiptSSE(t, reader)
+	initial := readReceipt(reader)
 	if initial.ID == "" || !strings.HasPrefix(initial.ID, "receipt:"+wakeupID+"@") {
 		t.Fatalf("expected deterministic receipt event id, got %#v", initial)
 	}
@@ -487,7 +497,7 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		"wakeup_id":          wakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
 	}, target).Body.Close()
-	claimed := readNotificationReceiptSSE(t, reader)
+	claimed := readReceipt(reader)
 	if got := asString(claimed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusClaimed {
 		t.Fatalf("expected claimed receipt, got %#v", claimed.Receipt)
 	}
@@ -502,7 +512,7 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		"wakeup_id":          wakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
 	}, target).Body.Close()
-	completed := readNotificationReceiptSSE(t, reader)
+	completed := readReceipt(reader)
 	if got := asString(completed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusCompleted {
 		t.Fatalf("expected completed receipt, got %#v", completed.Receipt)
 	}
@@ -520,7 +530,7 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		TriggerText:    "@receipt.target please check this",
 		Refs:           []string{"thread:" + threadID, "event:" + triggerEventID, "artifact:" + failedWakeupID},
 	})
-	added := readNotificationReceiptSSE(t, reader)
+	added := readReceipt(reader)
 	if added.Receipt["wakeup_id"] != failedWakeupID {
 		t.Fatalf("expected newly added failed wakeup receipt, got %#v", added.Receipt)
 	}
@@ -528,13 +538,13 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		"wakeup_id":          failedWakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
 	}, target).Body.Close()
-	readNotificationReceiptSSE(t, reader)
+	readReceipt(reader)
 	postNotificationWakeup(t, env.server.URL, "fail", map[string]any{
 		"wakeup_id":          failedWakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
 		"error":              "bridge failed",
 	}, target).Body.Close()
-	failed := readNotificationReceiptSSE(t, reader)
+	failed := readReceipt(reader)
 	if got := asString(failed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusFailed {
 		t.Fatalf("expected failed receipt, got %#v", failed.Receipt)
 	}
