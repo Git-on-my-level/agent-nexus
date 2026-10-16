@@ -56,6 +56,7 @@ func validStorageClassification(policy string) bool {
 		"scope:claim",
 		"scope:edge-endpoints",
 		"scope:inbox",
+		"scope:initiative-run-cache",
 		"scope:pm-closure",
 		"scope:presence",
 		"scope:progress",

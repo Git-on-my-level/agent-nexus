@@ -16,7 +16,7 @@ import (
 // Materialized brief facts (storage migration 89). Triggers record asks and
 // notes on write and queue touched cards in brief_dirty; RefreshBriefInitiatives
 // folds queued cards into brief_initiatives with plans.FoldPromise. The fold
-// is time-independent, so reads compute only durations.
+// preserves promise facts; loop receipts are folded with expiry at window boundaries.
 
 const briefRefreshBatch = 200
 
@@ -32,6 +32,9 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 		return false, err
 	}
 	defer cleanup()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives INDEXED BY idx_brief_loop_expiry WHERE loop_valid_until IS NOT NULL AND loop_valid_until<=? ORDER BY loop_valid_until,card_id LIMIT ? ON CONFLICT DO NOTHING`, time.Now().UTC().Format(time.RFC3339Nano), limit); err != nil {
+		return false, err
+	}
 	ids, err := queryStrings(ctx, tx, `SELECT card_id FROM brief_dirty ORDER BY card_id LIMIT ?`, limit)
 	if err != nil || len(ids) == 0 {
 		return len(ids) == 0, err
@@ -62,6 +65,9 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 			f.id, open, promiseAt, what, source, sourceRef, author, fold.Moves, lastEvidence, sig, stepChangeAt, now); err != nil {
 			return false, err
 		}
+	}
+	if err = foldLoopFacts(ctx, tx, ids, time.Now().UTC()); err != nil {
+		return false, err
 	}
 	// Cards that no longer exist leave the projection too.
 	if _, err = tx.ExecContext(ctx, `DELETE FROM brief_initiatives WHERE card_id IN (SELECT value FROM json_each(?)) AND card_id NOT IN (SELECT id FROM cards)`, string(encoded)); err != nil {

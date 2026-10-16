@@ -23,7 +23,7 @@ func handlePasskeyDevLookupError(w http.ResponseWriter, err error) {
 	case errors.Is(err, auth.ErrAmbiguousPasskeyPrincipal):
 		writeError(w, http.StatusBadRequest, "invalid_request", "multiple passkey principals match; specify username or display_name")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load passkey identity")
+		writeInternalError(w, nil, err, "failed to load passkey identity")
 	}
 }
 
@@ -61,13 +61,13 @@ func handlePasskeyDevRegister(w http.ResponseWriter, r *http.Request, opts handl
 
 	userHandle, err := generatePasskeyUserHandle()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to generate passkey user handle")
+		writeInternalError(w, r, err, "failed to generate passkey user handle")
 		return
 	}
 
 	synthetic, err := auth.DevSyntheticPasskeyCredential()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to generate synthetic passkey credential")
+		writeInternalError(w, r, err, "failed to generate synthetic passkey credential")
 		return
 	}
 
@@ -84,7 +84,7 @@ func handlePasskeyDevRegister(w http.ResponseWriter, r *http.Request, opts handl
 		case isOnboardingTokenError(err):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to register passkey agent")
+			writeInternalError(w, r, err, "failed to register passkey agent")
 		}
 		return
 	}
@@ -138,7 +138,7 @@ func handlePasskeyDevLogin(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 	if len(identity.Credentials) == 0 {
-		writeError(w, http.StatusInternalServerError, "internal_error", "passkey principal has no credentials")
+		writeInternalError(w, r, errors.New("passkey identity contains zero credentials"), "passkey principal has no credentials")
 		return
 	}
 
@@ -150,7 +150,7 @@ func handlePasskeyDevLogin(w http.ResponseWriter, r *http.Request, opts handlerO
 		case errors.Is(err, auth.ErrPasskeyNotFound), errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "passkey could not be verified")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue passkey token")
+			writeInternalError(w, r, err, "failed to issue passkey token")
 		}
 		return
 	}

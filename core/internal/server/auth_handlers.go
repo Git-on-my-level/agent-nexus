@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -119,7 +118,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			case errors.Is(exchangeErr, auth.ErrInvalidRequest):
 				writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
 			default:
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue token")
+				writeInternalError(w, r, exchangeErr, "failed to issue token")
 			}
 			return
 		}
@@ -163,7 +162,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			case errors.Is(exchangeErr, auth.ErrInvalidRequest):
 				writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
 			default:
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue token")
+				writeInternalError(w, r, exchangeErr, "failed to issue token")
 			}
 			return
 		}
@@ -190,7 +189,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		case errors.Is(err, auth.ErrKeyMismatch):
 			writeError(w, http.StatusUnauthorized, "key_mismatch", "key assertion could not be validated")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue token")
+			writeInternalError(w, r, err, "failed to issue token")
 		}
 		return
 	}
@@ -205,14 +204,14 @@ func handleGetCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	agent, err := opts.authStore.GetSelfPrincipal(r.Context(), principal.AgentID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve current principal")
+		writeInternalError(w, r, err, "failed to resolve current principal")
 		return
 	}
 	state := pm.Presence{State: "not_onboarded"}
 	if opts.pmRuntime != nil && opts.pmRuntime.Service != nil {
 		state, err = opts.pmRuntime.Service.Presence(r.Context(), pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == "human"})
 		if err != nil {
-			writeError(w, 500, "internal_error", "failed to read PM state")
+			writeInternalError(w, r, err, "failed to read PM state")
 			return
 		}
 	}
@@ -249,7 +248,7 @@ func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerO
 		case errors.Is(err, auth.ErrAuthRequired):
 			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to revoke principal")
+			writeInternalError(w, r, err, "failed to revoke principal")
 		}
 		return
 	}
@@ -363,7 +362,7 @@ func authenticatePrincipalFromHeader(w http.ResponseWriter, r *http.Request, opt
 		case errors.Is(err, auth.ErrAgentRevoked):
 			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to authenticate token")
+			writeInternalError(w, r, err, "failed to authenticate token")
 		}
 		return nil, false
 	}
@@ -404,12 +403,11 @@ func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if opts.actorRegistry != nil {
 		exists, err := opts.actorRegistry.Exists(r.Context(), requestedActorID)
 		if err != nil {
-			log.Printf("anx-core: actor registry Exists failed for %q: %v", requestedActorID, err)
+			message := "failed to validate actor_id"
 			if actorExistsDebugErrors() {
-				writeError(w, http.StatusInternalServerError, "internal_error", fmt.Sprintf("failed to validate actor_id: %v", err))
-				return "", false
+				message = sanitizeFaultText(fmt.Sprintf("failed to validate actor_id: %v", err), 240)
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to validate actor_id")
+			writeInternalError(w, r, err, message)
 			return "", false
 		}
 		if !exists {
@@ -467,7 +465,7 @@ func resolveOnboardingClaim(w http.ResponseWriter, r *http.Request, opts handler
 		case isOnboardingTokenError(err):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to validate onboarding token")
+			writeInternalError(w, r, err, "failed to validate onboarding token")
 		}
 		return auth.OnboardingClaim{}, false
 	}

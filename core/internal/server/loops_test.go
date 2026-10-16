@@ -130,12 +130,19 @@ func TestLoopBriefCost10KEvents(t *testing.T) {
 	if budget.Events != 10000 {
 		t.Fatal("fixture budget drift")
 	}
+	now = time.Now().UTC() // Read at/after the maintenance snapshot.
 	// Measure full Brief, not only the enrichment helper.
 	durations := []time.Duration{}
 	for i := 0; i < 6; i++ {
 		capture.Start()
 		start := time.Now()
-		result, err := measured.Brief(ctx, primitives.BriefReader{Kind: "human"}, now)
+		scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor-1"})
+		read, closeRead, err := measured.BeginResourceRead(scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := measured.Brief(read, primitives.BriefReader{ActorID: "actor-1", Kind: "human"}, now)
+		closeRead()
 		elapsed := time.Since(start)
 		statements, queries, returned := capture.Stop()
 		work := capture.Work()
@@ -149,7 +156,7 @@ func TestLoopBriefCost10KEvents(t *testing.T) {
 		if i == 0 {
 			found := false
 			for _, statement := range statements {
-				if !strings.Contains(statement.SQL, "best_before") {
+				if !strings.Contains(statement.SQL, "FROM brief_loop_facts f") {
 					continue
 				}
 				found = true
@@ -158,7 +165,7 @@ func TestLoopBriefCost10KEvents(t *testing.T) {
 					t.Fatal(err)
 				}
 				plan := strings.Join(details, "\n")
-				if !strings.Contains(plan, "idx_events_run_subject_ts") || !strings.Contains(plan, "idx_events_run_effect_ts") || strings.Contains(plan, "SCAN events") {
+				if !strings.Contains(plan, "sqlite_autoindex_brief_initiatives_1") || strings.Contains(plan, "SCAN events") {
 					t.Fatal(plan)
 				}
 			}
@@ -179,7 +186,7 @@ func TestLoopBriefCost10KEvents(t *testing.T) {
 			t.Fatal(loop)
 		}
 		if elapsed > time.Duration(budget.Latency)*time.Millisecond {
-			t.Fatalf("brief exceeded 1s: %s", elapsed)
+			t.Fatalf("brief exceeded %dms: %s", budget.Latency, elapsed)
 		}
 	}
 	t.Logf("full brief / 10k events: first=%s warm=%v", durations[0], durations[1:])
@@ -301,5 +308,84 @@ func TestLoopConcurrentReceiptReplay(t *testing.T) {
 		if r.id != original {
 			t.Fatal(original, r.id)
 		}
+	}
+}
+
+func TestLoopDoneArchivedAndNull(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	s := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	board, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Lifecycle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, annotated := range []bool{true, false} {
+		t.Run(fmt.Sprint(annotated), func(t *testing.T) {
+			input := map[string]any{"title": "Lifecycle card"}
+			if annotated {
+				input["cadence"] = map[string]any{"every_seconds": 3600}
+			}
+			card, err := s.CreateWork(ctx, "actor-1", anyString(board["id"]), input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := anyString(card["id"])
+			checkDetail := func() {
+				t.Helper()
+				data, _, err := s.LoopReport(ctx, "", id, "", 24, time.Now().UTC())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !annotated {
+					raw, _ := json.Marshal(data)
+					var decoded map[string]any
+					if err := json.Unmarshal(raw, &decoded); err != nil {
+						t.Fatal(err)
+					}
+					if decoded["loop"] != nil {
+						t.Fatal(data)
+					}
+					return
+				}
+				loop := data["loop"].(map[string]any)
+				if loop["health"] != "unknown" || loop["health_reason"] != "done" {
+					t.Fatal(loop)
+				}
+			}
+			proof, err := s.AppendEvent(ctx, "actor-1", map[string]any{"type": "card_updated", "summary": "Completed work", "refs": []string{anyString(card["ref"])}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			proofRefs := []string{"event:" + anyString(proof["id"])}
+			resolution := "done"
+			if _, err = s.MoveBoardCard(ctx, "actor-1", "", id, primitives.MoveBoardCardInput{ColumnKey: "done", Resolution: &resolution, ResolutionRefs: &proofRefs}); err != nil {
+				t.Fatal(err)
+			}
+			checkDetail()
+			brief := readBriefV1(t, s)
+			found := false
+			for _, raw := range brief["initiatives"].([]any) {
+				row := raw.(map[string]any)
+				if row["ref"] == card["ref"] {
+					found = true
+					if (row["loop"] != nil) != annotated {
+						t.Fatal(row)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("recent done card missing", brief)
+			}
+			if _, err = s.ArchiveBoardCard(ctx, "actor-1", "", id, primitives.RemoveBoardCardInput{}); err != nil {
+				t.Fatal(err)
+			}
+			checkDetail()
+			brief = readBriefV1(t, s)
+			for _, raw := range brief["initiatives"].([]any) {
+				if raw.(map[string]any)["ref"] == card["ref"] {
+					t.Fatal("archived card in brief", brief)
+				}
+			}
+		})
 	}
 }

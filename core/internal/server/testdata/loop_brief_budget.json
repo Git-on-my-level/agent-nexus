@@ -2,6 +2,6 @@
   "fixture_events": 10000,
   "max_queries": 30,
   "max_rows": 100,
-  "max_vm_steps": 750000,
+  "max_vm_steps": 50000,
   "max_latency_ms": 1000
 }

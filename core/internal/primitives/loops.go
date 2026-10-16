@@ -19,13 +19,15 @@ type loopCard struct {
 	metadata           map[string]any
 }
 type loopFacts struct {
-	Runs       []map[string]any `json:"runs"`
-	Points     []map[string]any `json:"points"`
-	Counts     []map[string]any `json:"counts"`
-	LastRun    *string          `json:"last_run"`
-	LastEffect *string          `json:"last_effect"`
-	BestBefore *float64         `json:"best_before"`
-	BestAfter  *float64         `json:"best_after"`
+	Runs        []map[string]any `json:"runs"`
+	Points      []map[string]any `json:"points"`
+	Counts      []map[string]any `json:"counts"`
+	LastRun     *string          `json:"last_run"`
+	LastEffect  *string          `json:"last_effect"`
+	BestBefore  *float64         `json:"best_before"`
+	BestAfter   *float64         `json:"best_after"`
+	NextRun     *string          `json:"next_run"`
+	Expirations []*string        `json:"expirations"`
 }
 
 // loadLoopStates admits only caller-selected cards (<=50). Reads canonical scoped
@@ -74,41 +76,28 @@ func (s *Store) loadLoopStates(ctx context.Context, ids []string, now time.Time)
 	if len(cards) == 0 {
 		return out, facts, nil
 	}
-	encoded, _ = json.Marshal(requests)
-	// The outer requested set is already capped. Each correlated index seek fixes
-	// the subject before date, order or limit; no workspace event scan or N+1 call.
-	rows, err = s.db.QueryContext(ctx, `WITH requested AS MATERIALIZED (
- SELECT json_extract(value,'$.id') id,json_extract(value,'$.subject') subject,json_extract(value,'$.metric') metric,json_extract(value,'$.direction') direction FROM json_each(?)
- ) SELECT r.id,json_object(
- 'last_run',(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 1),
- 'last_effect',(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND `+loopEffectPredicate+` AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 1),
- 'runs',(SELECT json_group_array(json_object('at',ts,'outcome',json_extract(payload_json,'$.payload.outcome'),'summary',json_extract(payload_json,'$.summary'),'run_id',json_extract(payload_json,'$.payload.run_id'),'metrics',json_extract(payload_json,'$.payload.metrics'),'experiment',json_extract(payload_json,'$.payload.experiment'),'effect_refs',json_extract(payload_json,'$.payload.effect_refs'),'event_id',id)) FROM (SELECT id,ts,payload_json FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 50)),
- 'counts',(SELECT json_group_array(json_object('outcome',outcome,'week',week,'n',n,'effects',effects)) FROM (SELECT json_extract(payload_json,'$.payload.outcome') outcome,ts>=? week,COUNT(*) n,SUM(CASE WHEN `+loopEffectPredicate+` THEN 1 ELSE 0 END) effects FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' GROUP BY outcome,week)),
- 'points',(SELECT json_group_array(json_object('at',ts,'value',value,'decision',decision)) FROM (SELECT ts,COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) value,json_extract(payload_json,'$.payload.experiment.decision') decision FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' AND COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) IS NOT NULL ORDER BY ts DESC,id DESC LIMIT 60)),
- 'best_before',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')=''),
- 'best_after',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')
- ) FROM requested r`, string(encoded), loopTS(now), loopTS(now), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now))
+
+	cached, err := s.cachedLoopFacts(ctx, ids, now)
 	if err != nil {
 		return nil, nil, err
 	}
-	for rows.Next() {
-		var id, raw string
-		if err = rows.Scan(&id, &raw); err != nil {
-			rows.Close()
-			return nil, nil, err
+	missing := []map[string]any{}
+	for _, request := range requests {
+		id := workString(request["id"])
+		if f, ok := cached[id]; ok {
+			facts[id] = f
+		} else {
+			missing = append(missing, request)
 		}
-		var f loopFacts
-		if err = json.Unmarshal([]byte(raw), &f); err != nil {
-			rows.Close()
-			return nil, nil, err
-		}
+	}
+	fresh, err := readLoopFacts(ctx, s.db, missing, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	for id, f := range fresh {
 		facts[id] = f
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, nil, err
-	}
+
 	for _, c := range cards {
 		out[c.id] = computeLoop(c, facts[c.id], now)
 	}
@@ -460,4 +449,51 @@ func loopTimeValue(v any) string {
 		return *s
 	}
 	return workString(v)
+}
+
+// readLoopFacts is used by canonical maintenance and the reader-scoped fallback.
+// Shared projections are never replaced with a principal's filtered results.
+func readLoopFacts(ctx context.Context, q briefQueryer, requests []map[string]any, now time.Time) (map[string]loopFacts, error) {
+	facts := map[string]loopFacts{}
+	if len(requests) == 0 {
+		return facts, nil
+	}
+	encoded, _ := json.Marshal(requests)
+	// The outer requested set is already capped. Each correlated index seek fixes
+	// the subject before date, order or limit; no workspace event scan or N+1 call.
+	rows, err := q.QueryContext(ctx, `WITH requested AS MATERIALIZED (
+ SELECT json_extract(value,'$.id') id,json_extract(value,'$.subject') subject,json_extract(value,'$.metric') metric,json_extract(value,'$.direction') direction FROM json_each(?)
+ ) SELECT r.id,json_object(
+ 'next_run',(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts,id LIMIT 1),
+ 'expirations',json_array((SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts,id LIMIT 1),(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts,id LIMIT 1),(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts,id LIMIT 1)),
+ 'last_run',(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 1),
+ 'last_effect',(SELECT ts FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND `+loopEffectPredicate+` AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 1),
+ 'runs',(SELECT json_group_array(json_object('at',ts,'outcome',json_extract(payload_json,'$.payload.outcome'),'summary',json_extract(payload_json,'$.summary'),'run_id',json_extract(payload_json,'$.payload.run_id'),'metrics',json_extract(payload_json,'$.payload.metrics'),'experiment',json_extract(payload_json,'$.payload.experiment'),'effect_refs',json_extract(payload_json,'$.payload.effect_refs'),'event_id',id)) FROM (SELECT id,ts,payload_json FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' ORDER BY ts DESC,id DESC LIMIT 50)),
+ 'counts',(SELECT json_group_array(json_object('outcome',outcome,'week',week,'n',n,'effects',effects)) FROM (SELECT json_extract(payload_json,'$.payload.outcome') outcome,ts>=? week,COUNT(*) n,SUM(CASE WHEN `+loopEffectPredicate+` THEN 1 ELSE 0 END) effects FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' GROUP BY outcome,week)),
+ 'points',(SELECT json_group_array(json_object('at',ts,'value',value,'decision',decision)) FROM (SELECT ts,COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) value,json_extract(payload_json,'$.payload.experiment.decision') decision FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='' AND COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after')) IS NOT NULL ORDER BY ts DESC,id DESC LIMIT 60)),
+ 'best_before',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')=''),
+ 'best_after',(SELECT CASE WHEN r.direction='down' THEN MIN(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) ELSE MAX(COALESCE(json_extract(payload_json,'$.payload.metrics."'||r.metric||'"'),json_extract(payload_json,'$.payload.experiment.score_after'))) END FROM events WHERE r.metric<>'' AND type='run_recorded' AND json_extract(payload_json,'$.subject_ref')=r.subject AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')
+ ) FROM requested r`, string(encoded), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now), loopTS(now), loopTS(now), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-14*24*time.Hour)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now), loopTS(now.Add(-loopWindow)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now.Add(-7*24*time.Hour)), loopTS(now))
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id, raw string
+		if err = rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		var f loopFacts
+		if err = json.Unmarshal([]byte(raw), &f); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		facts[id] = f
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return facts, nil
 }

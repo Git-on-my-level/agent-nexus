@@ -38,9 +38,13 @@ Core computes health in this order:
 5. Otherwise: **unknown**.
 
 An effect is an `acted` outcome or a `kept` experiment. The default progress
-budget is seven days. Done, cancelled and archived cards retain loop data with
-health `unknown` and reason `done`. A card without annotations is a loop only
-when it has a run receipt in the last 30 days. Brief shows at most 12 recent
+budget is seven days. Done and cancelled cards retain a non-null `loop` when
+they have cadence, a goal, or a run receipt in the last 30 days. Their health is
+`unknown` with reason `done`; completion alone does not create a loop. Brief
+includes only its bounded recent-done cohort. Archived cards are omitted entirely
+from brief and `live-loops`; explicit `live-loop` detail still returns their
+loop with `unknown` / `done`, under the same admission rule. In either lifecycle
+state, a card with neither annotation nor a recent receipt has `loop: null`. Brief shows at most 12 recent
 runs and 60 goal points, with best respecting direction. Receipt goal history
 uses a 30-day window; series goals use daily last values over the same window.
 The baseline is explicit when supplied, otherwise the first displayed point.

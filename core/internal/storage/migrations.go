@@ -1116,6 +1116,7 @@ var migrations = []migration{
 	// when an earlier plan-step date could win, so requeue them once.
 	{Version: 98, AfterApply: requeueBriefPromiseFold},
 	{Version: 99, AfterApply: installRunReceiptIndexes},
+	{Version: 100, AfterApply: installBriefLoopFacts},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

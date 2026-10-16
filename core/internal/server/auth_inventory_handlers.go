@@ -40,7 +40,7 @@ func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handl
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list auth principals")
+		writeInternalError(w, r, err, "failed to list auth principals")
 		return
 	}
 	now := time.Now().UTC()
@@ -50,7 +50,7 @@ func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handl
 
 	activeHumanCount, err := opts.authStore.CountActiveHumanPrincipals(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to count active human principals")
+		writeInternalError(w, r, err, "failed to count active human principals")
 		return
 	}
 
@@ -83,7 +83,7 @@ func handleListAuthAudit(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list auth audit events")
+		writeInternalError(w, r, err, "failed to list auth audit events")
 		return
 	}
 

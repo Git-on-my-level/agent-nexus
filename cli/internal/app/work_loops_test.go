@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -114,5 +115,39 @@ func TestLoopReceiptTextAndJSONOutput(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), env, nil, append([]string{"--json"}, args...)))
 	if asMap(asMap(payload["result"])["event"])["id"] != "original-event" {
 		t.Fatal(payload)
+	}
+}
+
+// The external optimizer adapter uses this full positional/flag grammar.
+func TestLoopAdapterFlags(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"receipt", []string{"card:optimizer", "--run-id", "r1", "--outcome", "acted", "--summary", "Kept candidate", "--metric", "quality=0.9", "--metric", "latency=10", "--candidate", "c1", "--decision", "kept", "--score-before", "0.8", "--score-after", "0.9", "--ref", "card:proof", "--ref", "https://example.org/change/1", "--started-at", "2026-10-16T00:00:00Z"}, `{"type":"run_recorded","summary":"Kept candidate","payload":{"run_id":"r1","outcome":"acted","metrics":{"quality":0.9,"latency":10},"experiment":{"candidate":"c1","decision":"kept","score_before":0.8,"score_after":0.9},"effect_refs":["card:proof","https://example.org/change/1"],"started_at":"2026-10-16T00:00:00Z"}}`},
+		{"cadence", []string{"card:optimizer", "--every", "1d", "--budget", "7d", "--stop-rule", "target reached"}, `{"cadence":{"every_seconds":86400,"progress_budget_seconds":604800,"stop_rule":"target reached"}}`},
+		{"goal", []string{"card:optimizer", "--metric", "quality", "--direction", "up", "--target", "0.9", "--baseline", "0", "--unit", "score", "--series", "series:quality?project=optimizer"}, `{"goal":{"metric":"quality","direction":"up","target":0.9,"baseline":0,"unit":"score","series_ref":"series:quality?project=optimizer"}}`},
+		{"cadence", []string{"card:optimizer", "--clear"}, `{"cadence":null}`},
+		{"goal", []string{"card:optimizer", "--clear"}, `{"goal":null}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+strings.Join(tc.args, " "), func(t *testing.T) {
+			card, got, err := parseLoopWork("work "+tc.name, tc.args)
+			if err != nil || card != "card:optimizer" {
+				t.Fatal(card, err)
+			}
+			raw, _ := json.Marshal(got)
+			var actual, want any
+			if err := json.Unmarshal(raw, &actual); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(tc.want), &want); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(actual, want) {
+				t.Fatalf("got %s want %s", raw, tc.want)
+			}
+		})
 	}
 }

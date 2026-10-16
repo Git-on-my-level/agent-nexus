@@ -40,7 +40,7 @@ func handleAuthAdminRoutes(w http.ResponseWriter, r *http.Request, opts handlerO
 			return
 		}
 		if err != nil {
-			writeError(w, 500, "internal_error", "failed to list auth admins")
+			writeInternalError(w, r, err, "failed to list auth admins")
 			return
 		}
 		writeJSON(w, 200, map[string]any{"admins": items.Admins, "next_cursor": items.NextCursor, "has_more": items.HasMore})
@@ -65,7 +65,7 @@ func handleAuthAdminRoutes(w http.ResponseWriter, r *http.Request, opts handlerO
 		case errors.Is(err, auth.ErrInvalidRequest):
 			writeError(w, 400, "invalid_request", "auth-admin grants require an active agent principal")
 		default:
-			writeError(w, 500, "internal_error", "failed to change auth-admin grant")
+			writeInternalError(w, r, err, "failed to change auth-admin grant")
 		}
 		return
 	}

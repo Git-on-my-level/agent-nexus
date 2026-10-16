@@ -118,6 +118,12 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	// An OR here scans every denied spelling for every candidate placement.
 	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id)")
 	add("resource_access_external_edges", "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.source_kind AND id=_row.source_id)")
+	if needed["brief_initiatives"] {
+		visible := denied("card", "_row.card_id") + " AND " + denied("brief_loop", "'loop-facts/'||_row.card_id")
+		graph += ", brief_initiatives AS (SELECT card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until FROM main.brief_initiatives _row)"
+	}
+
+	add("brief_loop_facts", denied("card", "_row.card_id")+" AND "+denied("brief_loop", "'loop-facts/'||_row.card_id"))
 	add("work_metadata", denied("card", "_row.card_id"))
 	add("work_observations", denied("card", "_row.card_id")+" AND "+denied("work_observation", "_row.id"))
 	add("work_evidence_records", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.id"))
@@ -245,7 +251,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
 		// One reference to the identities CTE avoids copying the recursive graph
 		// again during SQLite preparation just to emit the document synonym.
-		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT DISTINCT j.value FROM _anx_resource_refs r JOIN json_each(json_array(CASE WHEN r.kind='external_key' OR r.kind='card' AND (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%') THEN r.ref ELSE r.kind||':'||r.ref END,CASE WHEN r.kind='document' THEN 'doc:'||r.ref END)) j WHERE j.value IS NOT NULL), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND kind NOT LIKE 'filter/%')" + prose + graph
+		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT DISTINCT j.value FROM _anx_resource_refs r JOIN json_each(json_array(CASE WHEN r.kind='external_key' OR r.kind='card' AND (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%') THEN r.ref ELSE r.kind||':'||r.ref END,CASE WHEN r.kind='document' THEN 'doc:'||r.ref END)) j WHERE j.value IS NOT NULL), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('brief_loop','plan','work_evidence_record','work_evidence_alias','external_key') AND kind NOT LIKE 'filter/%')" + prose + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite
