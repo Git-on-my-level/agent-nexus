@@ -17,7 +17,7 @@ Skill contract: anx.participant.v24.
 - `anx orient`: your brief. Start here.
 - `anx context <ref>`: read a card before touching it.
 - `anx note <card> "<text>"`: report what changed, with evidence.
-- `anx ask "<title>?"`: request a human decision; `anx await <ask>` waits for it.
+- `anx ask "<title>?" --subject-ref card:<slug> --recommend "<answer>"`: request a human decision; `anx await <ask>` waits for it.
 - `anx done <card> --evidence <ref>`: finish.
 - `anx plan`: steps for an initiative; `anx series push`: live numbers.
 
@@ -25,7 +25,7 @@ Warnings on a write name the corrected command. Follow them.
 
 ## Asking well
 
-Ask only for a decision a human must make. One-line title, Markdown body, two or three proposals with your recommendation first, `--by <when>` for when you need the answer, and `--blocks <ref>` for every card waiting on it. Prefer withdrawing an ask over leaving it stale.
+Ask only for a decision a human must make. Pass `--subject-ref card:<slug>`, a one-line title, `--body "<markdown>"` (or `--body-file`), `--recommend "<option>"` first with one or two `--alt "<option>"` choices, `--by <when>` for when you need the answer, and `--blocks <ref>` for every card waiting on it. Prefer withdrawing an ask over leaving it stale.
 
 ## Promises
 
