@@ -37,6 +37,7 @@ type namedReadinessCheck struct {
 }
 
 type ActorRegistry interface {
+	DisplayNames(ctx context.Context, ids []string) (map[string]string, error)
 	Register(ctx context.Context, actor actors.Actor) (actors.Actor, error)
 	List(ctx context.Context, filter actors.ActorListFilter) ([]actors.Actor, string, error)
 	Exists(ctx context.Context, actorID string) (bool, error)

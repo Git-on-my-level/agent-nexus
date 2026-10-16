@@ -175,3 +175,28 @@ func TestReportActivityDoesNotMutateSharedDecisionCounts(t *testing.T) {
 		}
 	}
 }
+
+func TestReportActivityStandaloneAskSubjects(t *testing.T) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	reader := reportReader{eventsRead: true, events: []map[string]any{
+		{"id": "q1", "ref": "event:q1", "type": "human_attention_requested", "actor_id": "requester", "ts": now, "payload": map[string]any{"title": "Ship on Friday?"}},
+		{"ref": "event:a1", "type": "human_attention_responded", "actor_id": "human", "ts": now, "payload": map[string]any{"request_event_ref": "event:q1", "response_text": "Yes"}},
+		{"ref": "event:missing", "type": "human_attention_responded", "actor_id": "other", "ts": now, "payload": map[string]any{"request_event_ref": "event:outside-window"}},
+	}}
+	data, _, err := reader.activity(reports.Query{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range data["items"].([]map[string]any) {
+		subject := activityMap(item["subject"])
+		if item["ref"] == "event:missing" {
+			if subject != nil {
+				t.Fatalf("invented missing ask: %#v", item)
+			}
+			continue
+		}
+		if subject["kind"] != "ask" || subject["title"] != "Ship on Friday?" || subject["ref"] != "inbox:q1" {
+			t.Fatalf("ask subject: %#v", item)
+		}
+	}
+}

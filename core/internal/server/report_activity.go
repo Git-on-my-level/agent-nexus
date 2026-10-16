@@ -102,8 +102,12 @@ func (reader *reportReader) prepareActivity() error {
 				continue
 			}
 			kind := fact.Kind
-			if kind == "document" {
+			switch kind {
+			case "document":
 				kind = "doc"
+			case "card", "initiative", "board", "topic":
+			default:
+				continue
 			}
 			reader.activitySubjects[batch[i]] = map[string]any{"ref": fact.Ref, "title": fact.Title, "kind": kind}
 		}
@@ -124,11 +128,10 @@ func (reader *reportReader) prepareActivityActors(items []map[string]any) error 
 			seen[id] = true
 		}
 	}
-	if store, ok := reader.opts.actorRegistry.(interface {
-		DisplayNames(context.Context, []string) (map[string]string, error)
-	}); ok {
+
+	if reader.opts.actorRegistry != nil {
 		for start := 0; start < len(ids); start += maxReportCandidates {
-			names, err := store.DisplayNames(reader.r.Context(), ids[start:min(start+maxReportCandidates, len(ids))])
+			names, err := reader.opts.actorRegistry.DisplayNames(reader.r.Context(), ids[start:min(start+maxReportCandidates, len(ids))])
 			if err != nil {
 				return err
 			}
@@ -138,13 +141,8 @@ func (reader *reportReader) prepareActivityActors(items []map[string]any) error 
 				}
 			}
 		}
-	} else if reader.opts.actorRegistry != nil { // Compatibility for non-SQL registries.
-		for _, id := range ids {
-			if actor, err := reader.opts.actorRegistry.Get(reader.r.Context(), id); err == nil && actor.DisplayName != "" {
-				reader.actorLabels[id] = actor.DisplayName
-			}
-		}
 	}
+
 	for _, id := range ids {
 		if _, ok := reader.actorLabels[id]; !ok {
 			reader.actorLabels[id] = id
