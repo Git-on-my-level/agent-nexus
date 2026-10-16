@@ -15,6 +15,7 @@
     LOOP_CONDITION_TEXT,
     cadenceText,
     goalGap,
+    isIncumbent,
     withUnit,
     RUN_OUTCOME_TEXT,
   } from "$lib/loops.js";
@@ -30,6 +31,8 @@
     source = "computed:initiatives.loop",
     /** Badges beside the title (waiting on you, blocked). */
     badges = null,
+    /** Draw the inline sparkline (off where a full chart follows). */
+    chart = true,
     /** Content under the card body (legacy series line, note). */
     extra = null,
   } = $props();
@@ -39,7 +42,11 @@
       LOOP_CONDITION_TEXT.unknown,
   );
   let goal = $derived(loop?.goal ?? null);
-  let latest = $derived(goal?.latest ?? goal?.points?.at(-1)?.value ?? null);
+  let latest = $derived(
+    goal?.latest ??
+      goal?.points?.findLast((point) => isIncumbent(point))?.value ??
+      null,
+  );
   let gap = $derived(goalGap(goal));
   let reached = $derived(gap !== null && gap <= 0);
   let counts = $derived(
@@ -147,17 +154,19 @@
               )}{/if}{/if}
         </p>
       </div>
-      <div class="min-w-0 self-center">
-        {#if goal.points.length > 1}
-          <LoopChart {goal} label="{title}: {goal.metric}" />
-        {:else}
-          <p class="text-right text-micro text-fg-subtle">
-            {goal.points.length
-              ? "one measurement so far"
-              : "no measurements yet"}
-          </p>
-        {/if}
-      </div>
+      {#if chart}
+        <div class="w-full min-w-0 max-w-[22rem] self-center justify-self-end">
+          {#if goal.points.length > 1}
+            <LoopChart {goal} label="{title}: {goal.metric}" />
+          {:else}
+            <p class="text-right text-micro text-fg-subtle">
+              {goal.points.length
+                ? "one measurement so far"
+                : "no measurements yet"}
+            </p>
+          {/if}
+        </div>
+      {/if}
     </div>
   {/if}
 
