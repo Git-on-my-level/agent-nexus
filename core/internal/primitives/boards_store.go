@@ -411,6 +411,9 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 		revision.MetadataJSON,
 		resourceaccess.ContentReferenceAtomsJSON(string(revision.EncodedContent), "structured"),
 	); err != nil {
+		if isUniqueViolation(err) {
+			return ErrConflict
+		}
 		return fmt.Errorf("insert card artifact: %w", err)
 	}
 	revisionRefs, err := decodeStoredJSONList(revision.RefsJSON, "card_revision.refs")

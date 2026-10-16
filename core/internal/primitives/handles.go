@@ -376,22 +376,36 @@ func appendHandleSuffix(base, suffix string) string {
 	return base + suffix
 }
 
+// TombstoneHandleReservationSQL seeks purged identities by kind and ref.
+// EXISTS/LIMIT 1 stops at the first hit; the kind+ref index serves the collation.
+const TombstoneHandleReservationSQL = `SELECT EXISTS(SELECT 1 FROM resource_access_tombstones WHERE kind=? AND ref=? COLLATE NOCASE LIMIT 1)`
+
 func handleCandidateAvailable(ctx context.Context, q queryRower, table, typ, candidate string) (bool, error) {
-	var n int
-	if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> ''`, candidate).Scan(&n); err != nil {
+	checks := []struct {
+		query string
+		args  []any
+	}{
+		{`SELECT EXISTS(SELECT 1 FROM ` + table + ` WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> '' LIMIT 1)`, []any{candidate}},
+		{`SELECT EXISTS(SELECT 1 FROM ` + table + ` WHERE id = ? LIMIT 1)`, []any{candidate}},
+		{`SELECT EXISTS(SELECT 1 FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ? LIMIT 1)`, []any{typ, candidate}},
+		{TombstoneHandleReservationSQL, []any{typ, candidate}},
+	}
+	for _, check := range checks {
+		taken, err := probeExists(ctx, q, check.query, check.args...)
+		if err != nil {
+			return false, err
+		}
+		if taken {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func probeExists(ctx context.Context, q queryRower, query string, args ...any) (bool, error) {
+	var taken int
+	if err := q.QueryRowContext(ctx, query, args...).Scan(&taken); err != nil {
 		return false, err
 	}
-	var idN int
-	if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE id = ?`, candidate).Scan(&idN); err != nil {
-		return false, err
-	}
-	var aliasN int
-	if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, typ, candidate).Scan(&aliasN); err != nil {
-		return false, err
-	}
-	var retired int
-	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM resource_access_tombstones WHERE kind=? AND ref=? COLLATE NOCASE`, typ, candidate).Scan(&retired); err != nil {
-		return false, err
-	}
-	return n == 0 && idN == 0 && aliasN == 0 && retired == 0, nil
+	return taken != 0, nil
 }
