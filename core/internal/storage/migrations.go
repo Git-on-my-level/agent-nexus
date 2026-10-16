@@ -1130,6 +1130,7 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_resource_access_tombstones_kind_ref ON resource_access_tombstones(kind, ref COLLATE NOCASE)`,
 	}},
 	{Version: 105, AfterApply: installBriefAgentOwnershipIndexes},
+	{Version: 106, AfterApply: upgradeAgentSummaryAndBriefAskIndexes},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

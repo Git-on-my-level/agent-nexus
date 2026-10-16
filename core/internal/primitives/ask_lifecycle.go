@@ -12,8 +12,10 @@ import (
 )
 
 type askBackoffState struct {
-	until    time.Time
-	failures int
+	until            time.Time
+	failures         int
+	askCursor        string
+	passHadTransient bool
 }
 
 const askCloseQueueStepCards = 8
@@ -42,7 +44,31 @@ func (s *Store) askCloseCardBackedOff(card string, now time.Time) bool {
 	return ok && now.Before(state.until)
 }
 
-func (s *Store) recordAskCloseBackoff(card string, now time.Time) time.Duration {
+func (s *Store) nextAskCloseCardCursor(card string) string {
+	s.askLifecycleMu.Lock()
+	defer s.askLifecycleMu.Unlock()
+	return s.askCloseBackoff[card].askCursor
+}
+
+func (s *Store) advanceAskCloseCardCursor(card, askCursor string, hadTransient bool) {
+	s.askLifecycleMu.Lock()
+	defer s.askLifecycleMu.Unlock()
+	if s.askCloseBackoff == nil {
+		s.askCloseBackoff = map[string]askBackoffState{}
+	}
+	state := s.askCloseBackoff[card]
+	state.askCursor = askCursor
+	state.passHadTransient = state.passHadTransient || hadTransient
+	s.askCloseBackoff[card] = state
+}
+
+func (s *Store) askCloseCardPassHadTransient(card string) bool {
+	s.askLifecycleMu.Lock()
+	defer s.askLifecycleMu.Unlock()
+	return s.askCloseBackoff[card].passHadTransient
+}
+
+func (s *Store) recordAskCloseBackoff(card, askCursor string, now time.Time) time.Duration {
 	s.askLifecycleMu.Lock()
 	defer s.askLifecycleMu.Unlock()
 	if s.askCloseBackoff == nil {
@@ -59,6 +85,8 @@ func (s *Store) recordAskCloseBackoff(card string, now time.Time) time.Duration 
 		delay = time.Minute
 	}
 	state.until = now.Add(delay)
+	state.askCursor = askCursor
+	state.passHadTransient = false
 	s.askCloseBackoff[card] = state
 	return delay
 }
@@ -109,22 +137,41 @@ func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
 				continue
 			}
 			hadTransient = true
-			delay := s.recordAskCloseBackoff(firstNonEmptyString(card, p.id), time.Now())
-			log.Printf("ask lifecycle: backing off transient withdrawal failure ask=%s card=%s backoff=%s: %v", p.id, card, delay, err)
 			if card == "" {
+				delay := s.recordAskCloseBackoff(p.id, "", time.Now())
+				log.Printf("ask lifecycle: backing off transient withdrawal failure ask=%s card=%s backoff=%s: %v", p.id, card, delay, err)
 				if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET due_at=julianday('now')+(?/86400.0) WHERE ask_id=? AND open=1`, delay.Seconds(), p.id); uerr != nil {
 					return false, uerr
 				}
+			} else {
+				log.Printf("ask lifecycle: transient withdrawal failure ask=%s card=%s: %v", p.id, card, err)
 			}
 		}
 		return hadTransient, nil
 	}
 
+	queryCardBatch := func(targetCard, askCursor string) ([]pending, error) {
+		rows, err := s.db.QueryContext(ctx, `SELECT ask_id,requester,'subject_closed' FROM ask_subjects WHERE card_id=? AND open=1 AND ask_id>? ORDER BY ask_id LIMIT 200`, targetCard, askCursor)
+		if err != nil {
+			return nil, err
+		}
+		var batch []pending
+		for rows.Next() {
+			var p pending
+			if err = rows.Scan(&p.id, &p.actor, &p.reason); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			batch = append(batch, p)
+		}
+		err = rows.Err()
+		rows.Close()
+		return batch, err
+	}
+
 	cursor := s.nextAskCloseCursor()
 	wrapped := cursor == ""
 	visited := map[string]bool{}
-	var deferredCard string
-	processedCloseCard := false
 
 	for step := 0; step < askCloseQueueStepCards; step++ {
 		var card string
@@ -167,78 +214,50 @@ func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
 		}
 
 		if s.askCloseCardBackedOff(card, time.Now()) {
-			if deferredCard == "" {
-				deferredCard = card
-			}
 			continue
 		}
 
-		processCard := func(targetCard string) error {
-			rows, err := s.db.QueryContext(ctx, `SELECT ask_id,requester,'subject_closed' FROM ask_subjects WHERE card_id=? AND open=1 ORDER BY ask_id LIMIT 200`, targetCard)
+		askCursor := s.nextAskCloseCardCursor(card)
+		batch, err := queryCardBatch(card, askCursor)
+		if err != nil {
+			return err
+		}
+		if len(batch) == 0 && askCursor != "" {
+			askCursor = ""
+			batch, err = queryCardBatch(card, "")
 			if err != nil {
 				return err
 			}
-			var batch []pending
-			for rows.Next() {
-				var p pending
-				if err = rows.Scan(&p.id, &p.actor, &p.reason); err != nil {
-					rows.Close()
+		}
+		hadTransient, err := withdrawBatch(card, batch)
+		if err != nil {
+			return err
+		}
+		hasMoreAfter := false
+		lastAskID := ""
+		if len(batch) > 0 {
+			lastAskID = batch[len(batch)-1].id
+		}
+		if len(batch) == 200 {
+			var more int
+			if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM ask_subjects WHERE card_id=? AND open=1 AND ask_id>? LIMIT 1)`, card, lastAskID).Scan(&more); err != nil {
+				return err
+			}
+			if more > 0 {
+				hasMoreAfter = true
+				s.advanceAskCloseCardCursor(card, lastAskID, hadTransient)
+			}
+		}
+		if !hasMoreAfter {
+			if hadTransient || s.askCloseCardPassHadTransient(card) {
+				delay := s.recordAskCloseBackoff(card, lastAskID, time.Now())
+				log.Printf("ask lifecycle: backing off close-queue card=%s backoff=%s", card, delay)
+			} else {
+				if _, err = s.db.ExecContext(ctx, `DELETE FROM ask_subject_close_queue WHERE card_id=? AND NOT EXISTS(SELECT 1 FROM ask_subjects WHERE card_id=? AND open=1)`, card, card); err != nil {
 					return err
 				}
-				batch = append(batch, p)
+				s.clearAskCloseBackoff(card)
 			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				return err
-			}
-			hadTransient, err := withdrawBatch(targetCard, batch)
-			if err != nil {
-				return err
-			}
-			if !hadTransient && len(batch) < 200 {
-				if _, err = s.db.ExecContext(ctx, `DELETE FROM ask_subject_close_queue WHERE card_id=? AND NOT EXISTS(SELECT 1 FROM ask_subjects WHERE card_id=? AND open=1)`, targetCard, targetCard); err != nil {
-					return err
-				}
-				s.clearAskCloseBackoff(targetCard)
-			}
-			return nil
-		}
-
-		processedCloseCard = true
-		if err := processCard(card); err != nil {
-			return err
-		}
-	}
-
-	if !processedCloseCard && deferredCard != "" {
-		rows, err := s.db.QueryContext(ctx, `SELECT ask_id,requester,'subject_closed' FROM ask_subjects WHERE card_id=? AND open=1 ORDER BY ask_id LIMIT 200`, deferredCard)
-		if err != nil {
-			return err
-		}
-		var batch []pending
-		for rows.Next() {
-			var p pending
-			if err = rows.Scan(&p.id, &p.actor, &p.reason); err != nil {
-				rows.Close()
-				return err
-			}
-			batch = append(batch, p)
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return err
-		}
-		hadTransient, err := withdrawBatch(deferredCard, batch)
-		if err != nil {
-			return err
-		}
-		if !hadTransient && len(batch) < 200 {
-			if _, err = s.db.ExecContext(ctx, `DELETE FROM ask_subject_close_queue WHERE card_id=? AND NOT EXISTS(SELECT 1 FROM ask_subjects WHERE card_id=? AND open=1)`, deferredCard, deferredCard); err != nil {
-				return err
-			}
-			s.clearAskCloseBackoff(deferredCard)
 		}
 	}
 

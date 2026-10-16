@@ -283,9 +283,25 @@ func TestBriefV1UndatedAskCandidatePriorityAndAgentSummaryRecency(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	// 1. Seed 65 older low-priority undated asks with no blocks (exceeding the 60-candidate window).
+	// 1. Seed 65 older low-priority undated asks that each reference a completed blocker card
+	// (testing both asks filed before completion and asks filed after completion).
+	completedBeforeAsk, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Completed Before Ask"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.workspace.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, completedBeforeAsk["id"]); err != nil {
+		t.Fatal(err)
+	}
+	completedAfterAsk, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Completed After Ask"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 65; i++ {
-		title := fmt.Sprintf("Old low ask %02d", i)
+		title := fmt.Sprintf("Old stale-blocker ask %02d", i)
+		staleRef := completedBeforeAsk["ref"]
+		if i%2 == 1 {
+			staleRef = completedAfterAsk["ref"]
+		}
 		if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
 			"type":      "human_attention_requested",
 			"thread_id": subjectCard["thread_id"],
@@ -297,13 +313,17 @@ func TestBriefV1UndatedAskCandidatePriorityAndAgentSummaryRecency(t *testing.T) 
 				"subject_ref":        subjectCard["ref"],
 				"requester_actor_id": "agent-1",
 				"priority":           "low",
+				"blocks":             []any{staleRef},
 			},
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if _, err := h.workspace.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, completedAfterAsk["id"]); err != nil {
+		t.Fatal(err)
+	}
 
-	// Seed newer critical/blocking and high-priority undated asks after the 65 older asks.
+	// Seed newer critical/blocking and high-priority undated asks after the 65 stale-blocker asks.
 	if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
 		"type":      "human_attention_requested",
 		"thread_id": subjectCard["thread_id"],

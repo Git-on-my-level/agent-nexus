@@ -140,7 +140,7 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 	}
 	out.AgentID = agent
 	var n int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter WHERE d.revoked_at IS NULL AND d.deleted_at IS NULL`).Scan(&n); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM series_adapters d CROSS JOIN series_definitions s ON s.adapter=d.name WHERE d.revoked_at IS NULL AND d.deleted_at IS NULL LIMIT ?)`, MaxSeries+1).Scan(&n); err != nil {
 		return out, err
 	}
 	if n+len(d.Series) > MaxSeries {
@@ -366,15 +366,17 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 		return err
 	}
 	if n == 0 {
-		cutoff := now.Add(-Retention).UnixNano()
-		if _, err = tx.ExecContext(ctx, `DELETE FROM series_labels WHERE series=? AND NOT EXISTS (SELECT 1 FROM series_points p WHERE p.series=series_labels.series AND p.labels=series_labels.labels AND p.ts>=?) AND (EXISTS (SELECT 1 FROM series_points p WHERE p.series=series_labels.series AND p.labels=series_labels.labels) OR EXISTS (SELECT 1 FROM series_daily d WHERE d.series=series_labels.series AND d.labels=series_labels.labels))`, name, cutoff); err != nil {
-			return err
-		}
 		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_labels WHERE series=?`, name).Scan(&n); err != nil {
 			return err
 		}
 		if n >= MaxLabelSets {
-			return fmt.Errorf("%w: limit is 100 label sets per series", ErrCapacity)
+			cutoff := now.Add(-Retention).UnixNano()
+			if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM series_labels l WHERE l.series=? AND (EXISTS (SELECT 1 FROM series_points p WHERE p.series=l.series AND p.labels=l.labels AND p.ts>=?) OR (NOT EXISTS (SELECT 1 FROM series_points p WHERE p.series=l.series AND p.labels=l.labels) AND NOT EXISTS (SELECT 1 FROM series_daily d WHERE d.series=l.series AND d.labels=l.labels))) LIMIT ?)`, name, cutoff, MaxLabelSets).Scan(&n); err != nil {
+				return err
+			}
+			if n >= MaxLabelSets {
+				return fmt.Errorf("%w: limit is 100 label sets per series", ErrCapacity)
+			}
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO series_labels(series,labels) VALUES(?,?)`, name, labels); err != nil {
 			return err

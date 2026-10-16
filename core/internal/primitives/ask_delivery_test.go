@@ -756,15 +756,111 @@ func TestAskLifecycleProgressesPastPermanentAndTransientCloseQueueFailures(t *te
 		t.Fatalf("expired ask not processed while close queue had bad head: %#v err=%v", expiredOutcome, err)
 	}
 
-	// Once the transient failure clears, the backed-off card must succeed on retry.
+	// Once the transient failure clears, a card whose backoff deadline is in the future
+	// must NOT be retried until the deadline expires.
 	if _, err := ws.DB().Exec(`DROP TRIGGER fail_transient_ask_withdrawal`); err != nil {
 		t.Fatal(err)
 	}
+	transientCardID := anyStringValue(transientCard["id"])
+	s.askLifecycleMu.Lock()
+	state := s.askCloseBackoff[transientCardID]
+	state.until = time.Now().Add(time.Hour)
+	s.askCloseBackoff[transientCardID] = state
+	s.askLifecycleMu.Unlock()
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatalf("backed-off MaintainAskLifecycleBatch failed: %v", err)
+	}
+	stillOpenOutcome, err := s.AskOutcome(ctx, anyStringValue(transientAsk["ref"]))
+	if err != nil || stillOpenOutcome["status"] != "open" {
+		t.Fatalf("backed-off card was retried before deadline: %#v err=%v", stillOpenOutcome, err)
+	}
+
+	s.askLifecycleMu.Lock()
+	state = s.askCloseBackoff[transientCardID]
+	state.until = time.Now().Add(-time.Second)
+	s.askCloseBackoff[transientCardID] = state
+	s.askLifecycleMu.Unlock()
 	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
 		t.Fatalf("retry MaintainAskLifecycleBatch failed: %v", err)
 	}
 	transientOutcome, err := s.AskOutcome(ctx, anyStringValue(transientAsk["ref"]))
 	if err != nil || transientOutcome["status"] != "withdrawn" {
 		t.Fatalf("transient ask not withdrawn after recovery: %#v err=%v", transientOutcome, err)
+	}
+}
+
+func TestAskLifecycleAdvancesWithinCardPast200FailingAsksAndHonorsBackoffDeadline(t *testing.T) {
+	t.Parallel()
+	s, ws, firstCard, _ := askDeliveryFixture(t)
+	ctx := context.Background()
+	boardID := anyStringValue(firstCard["board_id"])
+	crowdedCard, err := s.CreateWork(ctx, "requester", boardID, map[string]any{"title": "Crowded close card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	crowdedCardID := anyStringValue(crowdedCard["id"])
+	crowdedThreadID := anyStringValue(crowdedCard["thread_id"])
+	crowdedRef := anyStringValue(crowdedCard["ref"])
+
+	for i := 0; i < 200; i++ {
+		askID := fmt.Sprintf("00000000-0000-0000-0000-000000000%03d", i)
+		if _, err := s.AppendEvent(ctx, "requester", map[string]any{
+			"id":        askID,
+			"type":      "human_attention_requested",
+			"thread_id": crowdedThreadID,
+			"refs":      []string{crowdedRef},
+			"payload":   map[string]any{"subject_ref": crowdedRef, "requester_actor_id": "requester"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	healthyAskID := "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz"
+	healthyAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"id":        healthyAskID,
+		"type":      "human_attention_requested",
+		"thread_id": crowdedThreadID,
+		"refs":      []string{crowdedRef},
+		"payload":   map[string]any{"subject_ref": crowdedRef, "requester_actor_id": "requester"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ws.DB().Exec(`CREATE TRIGGER fail_prefix_ask_withdrawals BEFORE INSERT ON events WHEN NEW.type='human_attention_withdrawn' AND json_extract(NEW.payload_json,'$.payload.request_event_id')<'zzzzzzzz' BEGIN SELECT RAISE(ABORT,'transient prefix failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, crowdedCardID); err != nil {
+		t.Fatal(err)
+	}
+
+	// First maintenance call processes the 200 failing prefix asks and advances the per-card ask cursor.
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Second maintenance call advances to the 201st ask (healthyAsk) and withdraws it.
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	healthyOutcome, err := s.AskOutcome(ctx, anyStringValue(healthyAsk["ref"]))
+	if err != nil || healthyOutcome["status"] != "withdrawn" {
+		t.Fatalf("healthy ask behind 200 failing asks was starved: %#v err=%v", healthyOutcome, err)
+	}
+
+	// With the card now backed off (deadline in the future) and no other card in the queue,
+	// dropping the failure trigger and calling MaintainAskLifecycleBatch must NOT retry before the deadline.
+	if _, err := ws.DB().Exec(`DROP TRIGGER fail_prefix_ask_withdrawals`); err != nil {
+		t.Fatal(err)
+	}
+	s.askLifecycleMu.Lock()
+	state := s.askCloseBackoff[crowdedCardID]
+	state.until = time.Now().Add(time.Hour)
+	s.askCloseBackoff[crowdedCardID] = state
+	s.askLifecycleMu.Unlock()
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var openRemaining int
+	if err := ws.DB().QueryRow(`SELECT COUNT(*) FROM ask_subjects WHERE card_id=? AND open=1`, crowdedCardID).Scan(&openRemaining); err != nil || openRemaining != 200 {
+		t.Fatalf("backed-off card retried before deadline: openRemaining=%d err=%v", openRemaining, err)
 	}
 }

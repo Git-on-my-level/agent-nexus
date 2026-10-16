@@ -914,6 +914,40 @@ func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (Re
 }
 
 const maxWorkAccessFilterPasses = 20
+const maxWorkFilterCursors = 256
+
+type workCursorPosition struct {
+	UpdatedAt time.Time
+	ID        string
+}
+
+func (s *Store) saveWorkFilterCursor(key string, updatedAt time.Time, id string) string {
+	if key == "" {
+		key = base64.RawURLEncoding.EncodeToString([]byte(uuid.NewString()))
+	}
+	s.workCursorMu.Lock()
+	defer s.workCursorMu.Unlock()
+	if s.workFilterCursors == nil {
+		s.workFilterCursors = map[string]workCursorPosition{}
+	}
+	if _, exists := s.workFilterCursors[key]; !exists {
+		if len(s.workFilterCursorIDs) >= maxWorkFilterCursors {
+			oldest := s.workFilterCursorIDs[0]
+			s.workFilterCursorIDs = s.workFilterCursorIDs[1:]
+			delete(s.workFilterCursors, oldest)
+		}
+		s.workFilterCursorIDs = append(s.workFilterCursorIDs, key)
+	}
+	s.workFilterCursors[key] = workCursorPosition{UpdatedAt: updatedAt, ID: id}
+	return key
+}
+
+func (s *Store) lookupWorkFilterCursor(key string) (workCursorPosition, bool) {
+	s.workCursorMu.Lock()
+	defer s.workCursorMu.Unlock()
+	pos, ok := s.workFilterCursors[key]
+	return pos, ok
+}
 
 func encodeWorkCursor(card map[string]any) (string, error) {
 	var cursor struct {
@@ -946,9 +980,14 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 		ID        string    `json:"id"`
 	}
 	if f.Cursor != "" {
-		b, err := base64.RawURLEncoding.DecodeString(f.Cursor)
-		if err != nil || json.Unmarshal(b, &before) != nil || before.ID == "" || before.UpdatedAt.IsZero() {
-			return page, ErrInvalidCursor
+		if pos, ok := s.lookupWorkFilterCursor(f.Cursor); ok {
+			before.UpdatedAt = pos.UpdatedAt
+			before.ID = pos.ID
+		} else {
+			b, err := base64.RawURLEncoding.DecodeString(f.Cursor)
+			if err != nil || json.Unmarshal(b, &before) != nil || before.ID == "" || before.UpdatedAt.IsZero() {
+				return page, ErrInvalidCursor
+			}
 		}
 	}
 	var cursorCard map[string]any
@@ -989,26 +1028,40 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 		if len(visible) > needed {
 			page.Work = append(page.Work, visible[:needed]...)
 			cursorCard = page.Work[len(page.Work)-1]
+			before.ID = workString(cursorCard["id"])
+			before.UpdatedAt, err = workTimestamp(cursorCard["updated_at"])
+			if err != nil {
+				return page, err
+			}
 			hasMore = true
 			break
 		}
 		page.Work = append(page.Work, visible...)
-		cursorCard = rawLast
-		hasMore = candidates.Truncated
-		if len(page.Work) == f.Limit || !candidates.Truncated {
-			break
+		if len(page.Work) > 0 {
+			cursorCard = page.Work[len(page.Work)-1]
 		}
+		hasMore = candidates.Truncated
 		before.ID = workString(rawLast["id"])
 		before.UpdatedAt, err = workTimestamp(rawLast["updated_at"])
 		if err != nil {
 			return page, err
 		}
+		if len(page.Work) == f.Limit || !candidates.Truncated {
+			break
+		}
 	}
-	if hasMore && cursorCard != nil {
-		var err error
-		page.NextCursor, err = encodeWorkCursor(cursorCard)
-		if err != nil {
-			return page, err
+	if hasMore {
+		if cursorCard != nil {
+			var err error
+			page.NextCursor, err = encodeWorkCursor(cursorCard)
+			if err != nil {
+				return page, err
+			}
+			if before.ID != "" && before.ID != workString(cursorCard["id"]) && !before.UpdatedAt.IsZero() {
+				s.saveWorkFilterCursor(page.NextCursor, before.UpdatedAt, before.ID)
+			}
+		} else if before.ID != "" && !before.UpdatedAt.IsZero() {
+			page.NextCursor = s.saveWorkFilterCursor("", before.UpdatedAt, before.ID)
 		}
 	}
 	return page, nil

@@ -2,7 +2,10 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"agent-nexus-core/internal/primitives"
 )
 
 func TestBriefLoopFactsUpgradeAndReceiptMutations(t *testing.T) {
@@ -215,4 +218,82 @@ func TestLoopAdmissionRecencyUpgradeAndMetadataWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("2026-10-16T11:00:00Z")
+}
+
+func TestUpgradeFrom103UpdatesAgentSummaryViewAndBriefAskIndex(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 103)
+	for _, query := range []string{
+		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('t','2026-10-16T00:00:00Z','owner','{}')`,
+		`INSERT INTO cards(id,handle,board_id,rank,title,summary,column_key,assignee,thread_id,created_at,created_by,updated_at,updated_by) VALUES('card-old','card-old','','','Old','','in_progress','agent-1','t','2026-10-16T00:00:00Z','owner','2026-10-16T00:01:00Z','owner'),('card-new','card-new','','','New','','in_progress','agent-1','t','2026-10-16T00:00:00Z','owner','2026-10-16T00:02:00Z','owner'),('card-done','card-done','','','Done','','done','other-agent','t','2026-10-16T00:00:00Z','owner','2026-10-16T00:03:00Z','owner')`,
+		`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('ask-stale','human_attention_requested','2026-10-16T00:00:00Z','agent-1','t','["thread:t"]','{"payload":{"kind":"ask","title":"Stale blocker","requester_actor_id":"agent-1","subject_ref":"card:card-old","blocks":["card:card-done"],"priority":"low"}}')`,
+	} {
+		if _, err := db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Pre-105 schema has no updated_at column in agent_summary_card_positions and counts the completed blocker in blocks_count.
+	if _, err := db.Query(`SELECT updated_at FROM agent_summary_card_positions LIMIT 1`); err == nil {
+		t.Fatal("expected pre-105 agent_summary_card_positions to lack updated_at")
+	}
+	var preBlocksCount int
+	if err := db.QueryRow(`SELECT blocks_count FROM brief_asks WHERE ask_id='ask-stale'`).Scan(&preBlocksCount); err != nil || preBlocksCount != 1 {
+		t.Fatalf("pre-105 blocks_count = %d, err = %v", preBlocksCount, err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+
+	store := primitives.NewTestStore(db, ws.Layout().ArtifactContentDir)
+	summaryCards, _, err := store.AgentSummaryCards(ctx, "actor:agent-1", nil)
+	if err != nil || len(summaryCards) != 2 || summaryCards[0]["id"] != "card-new" || summaryCards[1]["id"] != "card-old" {
+		t.Fatalf("AgentSummaryCards after upgrade = %#v err=%v", summaryCards, err)
+	}
+	var postBlocksCount int
+	if err := db.QueryRow(`SELECT blocks_count FROM brief_asks WHERE ask_id='ask-stale'`).Scan(&postBlocksCount); err != nil || postBlocksCount != 0 {
+		t.Fatalf("upgraded blocks_count for completed blocker = %d err=%v, want 0", postBlocksCount, err)
+	}
+
+	rows, err := db.Query(`EXPLAIN QUERY PLAN SELECT ask_id FROM brief_asks a WHERE a.state='open' AND a.decide_by IS NULL ORDER BY a.blocks_count DESC, CASE lower(trim(a.priority)) WHEN 'critical' THEN 0 WHEN 'p0' THEN 0 WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END, a.created_at, a.ask_id LIMIT 60`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	usedIndex := false
+	for rows.Next() {
+		var id, parent, notused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "USE TEMP B-TREE FOR ORDER BY") {
+			t.Fatalf("upgraded brief_asks query required temp b-tree sort: %s", detail)
+		}
+		if strings.Contains(detail, "idx_brief_asks_open_page") {
+			usedIndex = true
+		}
+	}
+	if !usedIndex {
+		t.Fatal("expected idx_brief_asks_open_page to be used after upgrade")
+	}
+
+	// Re-running migration 105 helper is idempotent.
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := upgradeAgentSummaryAndBriefAskIndexes(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }

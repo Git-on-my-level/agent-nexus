@@ -3,9 +3,11 @@ package primitives_test
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,15 +128,18 @@ func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
 		}
 		wantVisibleIDs = append([]string{id}, wantVisibleIDs...)
 	}
-	// Create 10 newer PM-private cards that fill multiple pages of limit=2.
-	for i := 0; i < 10; i++ {
-		card, err := s.CreateWork(ctx, "other-owner", privateBoard["id"].(string), map[string]any{"title": fmt.Sprintf("private-%d", i)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		id := card["id"].(string)
-		at := base.Add(time.Hour + time.Duration(i)*time.Minute)
-		if _, err := ws.DB().Exec(`UPDATE cards SET updated_at=? WHERE id=?`, at.Format(time.RFC3339Nano), id); err != nil {
+	// Create 1,010 newer PM-private cards that exceed the 20-pass filter budget at limit=2.
+	privateIDs := map[string]bool{}
+	privateTimestamps := map[string]bool{}
+	for i := 0; i < 1010; i++ {
+		cardID := fmt.Sprintf("private-card-%04d", i)
+		at := base.Add(time.Hour + time.Duration(i)*time.Second).Format(time.RFC3339Nano)
+		privateIDs[cardID] = true
+		privateTimestamps[at] = true
+		if _, err := ws.DB().Exec(
+			`INSERT INTO cards(id,handle,board_id,rank,title,summary,column_key,thread_id,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,'',?,'','backlog',?,?,?,?,'other-owner')`,
+			cardID, cardID, privateBoard["id"], cardID, privateBoard["thread_id"], at, "other-owner", at,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -152,6 +157,20 @@ func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("page %d failed: %v", pageNum, err)
+		}
+		if page.NextCursor != "" {
+			decoded, err := base64.RawURLEncoding.DecodeString(page.NextCursor)
+			if err != nil {
+				t.Fatalf("decode NextCursor: %v", err)
+			}
+			var payload struct {
+				ID        string `json:"id"`
+				UpdatedAt string `json:"updated_at"`
+			}
+			_ = json.Unmarshal(decoded, &payload)
+			if privateIDs[payload.ID] || privateTimestamps[payload.UpdatedAt] || strings.Contains(string(decoded), "private-card-") {
+				t.Fatalf("NextCursor exposed rejected card position: %s", string(decoded))
+			}
 		}
 		for _, item := range page.Work {
 			gotIDs = append(gotIDs, item["id"].(string))
