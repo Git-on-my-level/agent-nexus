@@ -72,3 +72,75 @@ func TestCurationMetricsScopedPromiseIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestBriefProjectionRelationsFilterPrivateRows(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	card, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Secret", "goal": map[string]any{"metric": "score", "direction": "up"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := workString(card["id"])
+	if _, err = s.PatchThread(ctx, "owner", workString(card["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.AppendEvent(ctx, "owner", map[string]any{"type": "message_posted", "thread_id": card["thread_id"], "refs": []string{workString(card["ref"])}, "payload": map[string]any{"text": "Secret note", "next": map[string]any{"at": "1d", "what": "Secret promise"}}}); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		done, err = s.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, actor := range []string{"owner", "stranger", "agent"} {
+		scope := WithRequestAccessScope(ctx, AccessScope{ActorID: actor})
+		for mode := 0; mode < 3; mode++ {
+			request := scope
+			closeRead := func() {}
+			if mode == 0 {
+				request = WithAccessScope(ctx, AccessScope{ActorID: actor})
+			}
+			if mode == 2 {
+				request, closeRead, err = s.BeginResourceRead(scope)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			want := 1
+			if actor != "owner" {
+				want = 0
+			}
+			folds, err := s.PromiseFolds(request, []string{id})
+			if err != nil || len(folds) != want {
+				t.Fatalf("%s folds=%v err=%v", actor, folds, err)
+			}
+			notes, err := s.PromiseNotesFor(request, []string{id})
+			if err != nil || len(notes[id]) != want {
+				t.Fatalf("%s notes=%v err=%v", actor, notes, err)
+			}
+			// SELECT * checks every current/future content column, including hints.
+			for _, query := range []string{`SELECT * FROM brief_initiatives INDEXED BY idx_brief_initiatives_page WHERE card_id=?`, `SELECT * FROM brief_notes INDEXED BY idx_brief_notes_next_at WHERE card_id=? AND next_at IS NOT NULL`} {
+				rows, err := s.db.QueryContext(request, query, id)
+				if err != nil {
+					t.Fatal(actor, err)
+				}
+				n := 0
+				for rows.Next() {
+					n++
+				}
+				err = rows.Err()
+				rows.Close()
+				if err != nil || n != want {
+					t.Fatal(actor, query, n, err)
+				}
+			}
+			closeRead()
+		}
+	}
+}

@@ -69,7 +69,9 @@ comma-separated `health`, and `limit` (default 24, maximum 48). Attention comes
 first: failing, overdue, stalled, then healthy by latest effect. `live-loop`
 requires `card` and includes the newest 50 run receipts. Statistics describe the
 visible admitted cohort (at most 50 loops, selected from annotation or recent-receipt
-indexes before enrichment); ordinary cards do not consume admission slots.
+indexes before enrichment, taking newest metadata updates and receipts first);
+ordinary cards do not consume admission slots. The merged cohort retains the 50
+most recent admitted loops before health ordering and the display limit.
 `truncated` signals additional visible loops or display rows. Effects compare the
 last seven days with the preceding seven. For improvement, `best_before` is the
 incumbent best in `[now - 30d, now - 7d)` and `best_after` is the incumbent best

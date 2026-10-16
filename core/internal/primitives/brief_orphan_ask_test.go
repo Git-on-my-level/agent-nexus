@@ -143,8 +143,7 @@ func TestBriefAskReadsSeekThreadByPrimaryKey(t *testing.T) {
 	decision := briefAskSelect + ` WHERE COALESCE(e.trashed_at,'')='' AND COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?) AND a.state='open' AND a.decide_by IS NOT NULL AND (a.recipient IN (?,?) OR a.recipient='') AND a.requester NOT IN (?,?) ORDER BY a.decide_by LIMIT ?`
 	subject := `SELECT a.subject_ref,a.recipient,a.requester FROM brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + `
 		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' AND COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?) LIMIT 1000`
-	blocks := `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k INDEXED BY idx_brief_ask_blocks_ref JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + `
-		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' AND COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?) GROUP BY k.ref`
+	blocks := briefAskBlockCountsSelect + `COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?) GROUP BY k.ref`
 	filed := `SELECT a.ask_id, a.kind, a.created_at FROM brief_asks a INDEXED BY idx_brief_asks_batch JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + ` WHERE a.batch_id=? AND a.batch_id<>'' ORDER BY a.created_at, a.ask_id LIMIT 1`
 	members := `SELECT a.ask_id,a.inbox_item_id,a.kind,a.title,a.subject_ref,COALESCE(e.thread_id,'') ` + openCurationMemberFrom + ` ORDER BY a.created_at,a.ask_id LIMIT ?`
 

@@ -45,6 +45,8 @@ func deniedRootSQL(scope AccessScope) string {
 	return "SELECT 'thread',id FROM main.threads WHERE COALESCE(json_extract(body_json,'$.pm_actor_id'),'')<>'' AND json_extract(body_json,'$.pm_actor_id')<>" + actor + " UNION SELECT kind,id FROM main.resource_access_tombstones WHERE owner<>" + actor + " UNION " + unknown
 }
 
+var briefIndexHint = regexp.MustCompile(`(?i)\s+INDEXED\s+BY\s+idx_brief_[A-Za-z0-9_]+\b`)
+
 var sqlIdentifiers = regexp.MustCompile(`[A-Za-z_][A-Za-z_0-9]*`)
 
 // Include relation shadows actually named by this SQL statement. Matching all
@@ -89,7 +91,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 		// denial relation is empty, including a cached empty request snapshot.
 		return "CASE WHEN EXISTS (SELECT 1 FROM _anx_denied) THEN NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")) ELSE 1 END"
 	}
-	add := func(table, where string) {
+	addColumns := func(table, columns, where string) {
 		if snapshot != nil && snapshot.mutation {
 			// A mutable transaction admits each operation afresh. If a caller's
 			// concurrent operation changes it during preparation, hide the entire
@@ -100,14 +102,15 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 			return
 		}
 		materialization := ""
-		if table == "document_search_postings" || table == "series_points" {
-			// Repeated posting/series endpoint probes must retain their indexed
-			// seeks through the privacy predicate. Materializing either
-			// shadow copies the whole workspace relation before selection.
+		if table == "document_search_postings" || table == "series_points" || strings.HasPrefix(table, "brief_") {
+			// Repeated endpoint and projection probes must retain indexed seeks
+			// through the privacy predicate. Materializing these shadows would
+			// copy workspace relations before candidate selection.
 			materialization = "NOT MATERIALIZED "
 		}
-		graph += ", " + table + " AS " + materialization + "(SELECT * FROM main." + table + " AS _row WHERE " + where + ")"
+		graph += ", " + table + " AS " + materialization + "(SELECT " + columns + " FROM main." + table + " AS _row WHERE " + where + ")"
 	}
+	add := func(table, where string) { addColumns(table, "*", where) }
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
 		add(resourceTables[kind], denied(kind, "_row.id"))
 	}
@@ -118,14 +121,20 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	// An OR here scans every denied spelling for every candidate placement.
 	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id)")
 	add("resource_access_external_edges", "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.source_kind AND id=_row.source_id)")
-	// Admission hints are internal index candidates, never response facts.
-	// LoopReport verifies scoped card metadata/receipts before its LIMIT.
+	// Filter the whole projection by card visibility, including routing hints,
+	// promises and evidence times. A caller need not remember a cards join.
+	// Receipt aggregates additionally inherit every contributing event.
 	if needed["brief_initiatives"] {
-		visible := denied("card", "_row.card_id") + " AND " + denied("brief_loop", "'loop-facts/'||_row.card_id")
-		graph += ", brief_initiatives AS (SELECT card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,loop_annotated,loop_last_run_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until FROM main.brief_initiatives _row)"
+		visible := denied("brief_loop", "'loop-facts/'||_row.card_id")
+		columns := "card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,loop_annotated,loop_annotated_at,loop_last_run_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until"
+		addColumns("brief_initiatives", columns, denied("card", "_row.card_id"))
 	}
-
+	add("brief_notes", denied("card", "_row.card_id")+" AND "+denied("event", "_row.event_id"))
+	add("brief_asks", denied("event", "_row.ask_id"))
+	add("brief_ask_blocks", denied("event", "_row.ask_id"))
+	add("brief_dirty", denied("card", "_row.card_id"))
 	add("brief_loop_facts", denied("card", "_row.card_id")+" AND "+denied("brief_loop", "'loop-facts/'||_row.card_id"))
+
 	add("work_metadata", denied("card", "_row.card_id"))
 	add("work_observations", denied("card", "_row.card_id")+" AND "+denied("work_observation", "_row.id"))
 	add("work_evidence_records", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.id"))
@@ -272,10 +281,10 @@ func scopeReadSnapshot(ctx context.Context, query string, snapshot *denialSnapsh
 	if !scoped {
 		return query
 	}
-	q := strings.TrimSpace(query)
+	q := briefIndexHint.ReplaceAllString(strings.TrimSpace(query), "")
 	// Scoped relation shadows have no named physical indexes. The optimizer
 	// still pushes candidate keys into the indexed canonical relations.
-	for _, index := range []string{"idx_brief_initiatives_page", "idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1"} {
+	for _, index := range []string{"idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1"} {
 		q = strings.ReplaceAll(q, " INDEXED BY "+index, "")
 	}
 	upper := strings.ToUpper(q)

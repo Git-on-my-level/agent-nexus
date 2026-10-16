@@ -830,10 +830,12 @@ The dense 10,000-receipt complete-brief gate now also enforces 50,000 VM steps
 
 `live-loops` admission uses migration 102's two hints on the existing
 `brief_initiatives` rows, updated atomically by metadata and receipt triggers.
-`idx_brief_loop_annotated` traverses annotated card IDs;
+`idx_brief_loop_annotated_recent` traverses annotation metadata update times
+(newest first), materialized atomically by migration 103;
 `idx_brief_loop_recent` traverses last-receipt timestamps newer than 30 days.
 Each arm returns at most 51 cards after scoped card, board, metadata and receipt
-checks. The reader deduplicates at most 102 IDs, enriches at most 50 loops and
+checks. The reader deduplicates at most 102 IDs and retains the 50 most recent
+by annotation/receipt activity, enriches those loops and
 sorts this cohort by health before applying the display limit (at most 48).
 Ordinary cards never consume slots or require JSON scans. Candidate index work
 can grow with loops excluded by board/lifecycle/visibility; receipt admission is
@@ -846,7 +848,7 @@ per-loop and aggregate `effects_7d` both count acted-or-kept runs once.
 `TestLoopReportAdmissionBudget` measures the complete report over 4,096 ordinary
 cards plus annotation/receipt loops, using `loop_report_budget.json` and requiring
 both admission indexes. Owner and non-owner reads each measured four SQL calls,
-six rows, 635 VM steps and zero full-scan steps. The existing complete-brief and
+six rows, 674 VM steps and zero full-scan steps. The existing complete-brief and
 series budgets remain unchanged. Migration 102 performs one indexed per-card
 backfill on upgrade; subsequent startup does no admission backfill.
 
@@ -887,6 +889,24 @@ pagination. The relation compiler removes this physical `INDEXED BY` hint when
 `brief_initiatives` is a scoped CTE; SQLite still pushes the range into the
 canonical table and uses that index. It must not materialize the entire
 initiative relation. No loop facts or receipt ranges are loaded by this query.
+The `brief_initiatives` shadow filters every column by card visibility, including
+promise text, evidence times and loop admission hints. Loop aggregates retain
+their additional contributor gate. `brief_notes` requires both card and source
+event visibility; ask/block projections require ask visibility. All brief shadows
+are `NOT MATERIALIZED` so the canonical index seeks precede filtering and limits.
+Physical `idx_brief_*` hints are removed under scope, including the cleared-note
+`idx_brief_notes_next_at` path. Direct promise-fold/note reads are safe without a
+caller-supplied cards join.
+
+Ask-block counts deduplicate at most two refs per admitted card before SQL.
+Their query starts from this bounded ref batch and seeks
+`idx_brief_ask_blocks_ref`, then asks/events/threads by primary key. Batch-member
+reads likewise start from the indexed batch key. Explicit `CROSS JOIN` order
+prevents the added projection visibility predicates from choosing a scan of all
+open asks instead. The existing primary-key/index-plan test consumes the
+production block-count SQL and retains its index and no-scan assertions.
+The populated brief gate measures 41,643 VM steps for the owner and 49,593 for
+the scoped reader against the unchanged 50,000 limit.
 
 `TestCurationMetricsScopedPromiseIndex` checks live and request-cached scopes,
 private-card exclusion, and the actual indexed query plan. The shared 50-card
@@ -894,16 +914,16 @@ brief scale gate retains its 50,000-VM-step ceiling. Ask and cleared-note reads
 keep their existing type/time and next-at indexes and admission limits.
 
 ```sh
-go test -C core ./internal/primitives -run '^TestCurationMetricsScopedPromiseIndex$' -count=1
-go test -C core ./internal/server -run '^TestResourceAccessRouteMatrix$|^TestCurationMetricsLogsSQLErrorCause$' -count=1
+go test -C core ./internal/primitives -run '^Test(CurationMetricsScopedPromiseIndex|BriefProjectionRelationsFilterPrivateRows|LoopReportAdmissionRetainsRecentLoopsBeyondFifty)$' -count=1
+go test -C core ./internal/server -run '^Test(ResourceAccessRouteMatrix|CurationMetricsLogsSQLErrorCause|BriefProjectionsPrivateChangesDoNotAffectOtherReaders)$' -count=1
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
 ```
 
 The generic curation route gate currently fails its existing authorization
 budget on main as well as this branch. At main
 `42fd88cb22be86e2185d93269b8d7dbbc682c77d`, the denied-reader warm path uses
-66,461 VM steps; this fix uses 66,524 (six queries, three returned rows in both).
-Post-invalidation work is 1,761,675 versus 1,761,738 VM steps. The inherited
+66,461 VM steps; this fix uses 66,586 (six queries, three returned rows in both).
+Post-invalidation work is 1,761,675 versus 1,761,800 VM steps. The inherited
 closure/query-plan failures are recorded separately from the successful
 index-plan regression and brief scale checks. No budget or plan allowance was
 relaxed for this fix.

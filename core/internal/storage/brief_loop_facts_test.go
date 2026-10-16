@@ -172,3 +172,47 @@ func TestLoopAdmissionUpgradeAndMutations(t *testing.T) {
 	}
 	check("c", 0, "")
 }
+
+func TestLoopAdmissionRecencyUpgradeAndMetadataWrites(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 102)
+	for _, query := range []string{
+		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('t','now','owner','{}')`,
+		`INSERT INTO cards(id,title,summary,column_key,thread_id,created_at,created_by,updated_at,updated_by) VALUES('c','Loop','','todo','t','now','owner','now','owner')`,
+		`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES('c','{"goal":{"metric":"score","direction":"up"}}','2026-10-15T10:00:00Z','owner')`,
+	} {
+		if _, err := db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+	check := func(want string) {
+		t.Helper()
+		var at string
+		if err := db.QueryRow(`SELECT loop_annotated_at FROM brief_initiatives WHERE card_id='c'`).Scan(&at); err != nil || at != want {
+			t.Fatal(at, want, err)
+		}
+	}
+	check("2026-10-15T10:00:00Z")
+	if _, err = db.Exec(`UPDATE work_metadata SET updated_at='2026-10-16T10:00:00Z' WHERE card_id='c'`); err != nil {
+		t.Fatal(err)
+	}
+	check("2026-10-16T10:00:00Z")
+	if _, err = db.Exec(`DELETE FROM work_metadata WHERE card_id='c'`); err != nil {
+		t.Fatal(err)
+	}
+	check("")
+	if _, err = db.Exec(`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES('c','{"cadence":{"every_seconds":60}}','2026-10-16T11:00:00Z','owner')`); err != nil {
+		t.Fatal(err)
+	}
+	check("2026-10-16T11:00:00Z")
+}

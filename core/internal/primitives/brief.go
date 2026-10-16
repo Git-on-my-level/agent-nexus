@@ -913,7 +913,7 @@ type briefAskCounts struct{ blocked, waiting int }
 
 // initiativeAskCounts counts open asks about each card (subject) and open asks
 // whose blocks name it. Subject lookups use idx_brief_asks_subject; blocks
-// are read from at most 500 open asks that declare any. Both counts use
+// seek at most two distinct refs per admitted card. Both counts use
 // briefAnswerableAskJoin, the same eligibility as the decision list.
 func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefAskCounts, error) {
 	out := map[string]briefAskCounts{}
@@ -924,7 +924,7 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	refs := []string{}
 	for _, r := range rows {
 		for _, ref := range []string{"card:" + r.cardID, "card:" + r.handle} {
-			if ref != "card:" {
+			if _, exists := byRef[ref]; ref != "card:" && !exists {
 				byRef[ref] = r.cardID
 				refs = append(refs, ref)
 			}
@@ -959,8 +959,7 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	if err = rows2.Err(); err != nil {
 		return nil, err
 	}
-	rows3, err := b.s.db.QueryContext(b.ctx, `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k INDEXED BY idx_brief_ask_blocks_ref JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+`
-		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' AND `+pred+` GROUP BY k.ref`, append([]any{string(encoded)}, predArgs...)...)
+	rows3, err := b.s.db.QueryContext(b.ctx, briefAskBlockCountsSelect+pred+` GROUP BY k.ref`, append([]any{string(encoded)}, predArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -980,6 +979,15 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 	}
 	return out, nil
 }
+
+// Bound the block lookup by the already-admitted card refs. CROSS JOIN keeps
+// scoped ask predicates from turning this into a scan of every open ask.
+// initiativeAskCounts deduplicates these bounded refs before encoding them.
+const briefAskBlockCountsSelect = `SELECT k.ref,COUNT(*) FROM json_each(?) requested
+ CROSS JOIN brief_ask_blocks k ON k.ref=requested.value
+ CROSS JOIN brief_asks a ON a.ask_id=k.ask_id
+ JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + `
+ WHERE a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' AND `
 
 // latestNotes reads the newest live note per card in one statement: one
 // indexed seek per card id through idx_brief_notes_card_ts, plus that note's

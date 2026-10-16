@@ -342,6 +342,7 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 	}
 	ids := []string{}
 	items := map[string]map[string]any{}
+	activity := map[string]string{}
 	partial := false
 	if card != "" {
 		c, err := s.getWorkCard(ctx, card)
@@ -364,20 +365,20 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 		// receipt predicates recheck scoped truth before LIMIT: hints can include
 		// private receipts, future runs, or metadata the reader cannot see.
 		for _, arm := range []struct {
-			predicate, order string
-			args             []any
+			predicate, activity string
+			args                []any
 		}{
-			{`bi.loop_annotated=1 AND EXISTS(SELECT 1 FROM work_metadata m WHERE m.card_id=c.id AND (json_type(m.metadata_json,'$.cadence')='object' OR json_type(m.metadata_json,'$.goal')='object'))`, `bi.card_id`, nil},
-			{`bi.loop_last_run_at>=? AND EXISTS(SELECT 1 FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')='card:'||c.id AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')`, `bi.loop_last_run_at DESC,bi.card_id`, []any{loopTS(now.Add(-loopWindow)), loopTS(now.Add(-loopWindow)), loopTS(now)}},
+			{`bi.loop_annotated=1 AND EXISTS(SELECT 1 FROM work_metadata m WHERE m.card_id=c.id AND (json_type(m.metadata_json,'$.cadence')='object' OR json_type(m.metadata_json,'$.goal')='object'))`, `bi.loop_annotated_at`, nil},
+			{`bi.loop_last_run_at>=? AND EXISTS(SELECT 1 FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')='card:'||c.id AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')`, `bi.loop_last_run_at`, []any{loopTS(now.Add(-loopWindow)), loopTS(now.Add(-loopWindow)), loopTS(now)}},
 		} {
 			args := append(arm.args, boardID, boardID, boardID)
-			rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),c.title FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE `+arm.predicate+` AND COALESCE(c.trashed_at,'')='' AND COALESCE(c.archived_at,'')='' AND ((?<>'' AND c.board_id=?) OR (?='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')))) ORDER BY `+arm.order+` LIMIT 51`, args...)
+			rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),c.title,`+arm.activity+` FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE `+arm.predicate+` AND COALESCE(c.trashed_at,'')='' AND COALESCE(c.archived_at,'')='' AND ((?<>'' AND c.board_id=?) OR (?='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')))) ORDER BY `+arm.activity+` DESC,bi.card_id LIMIT 51`, args...)
 			if err != nil {
 				return nil, false, err
 			}
 			for rows.Next() {
-				var id, ref, title string
-				if err = rows.Scan(&id, &ref, &title); err != nil {
+				var id, ref, title, at string
+				if err = rows.Scan(&id, &ref, &title, &at); err != nil {
 					rows.Close()
 					return nil, false, err
 				}
@@ -385,6 +386,9 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 					ids = append(ids, id)
 				}
 				items[id] = map[string]any{"ref": "card:" + ref, "title": title}
+				if at > activity[id] {
+					activity[id] = at
+				}
 			}
 			err = rows.Err()
 			rows.Close()
@@ -392,7 +396,12 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 				return nil, false, err
 			}
 		}
-		sort.Strings(ids)
+		sort.SliceStable(ids, func(i, j int) bool {
+			if activity[ids[i]] != activity[ids[j]] {
+				return activity[ids[i]] > activity[ids[j]]
+			}
+			return ids[i] < ids[j]
+		})
 		if len(ids) > 50 {
 			ids = ids[:50]
 			partial = true

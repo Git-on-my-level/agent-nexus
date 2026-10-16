@@ -16,6 +16,14 @@ func TestCurationMetricsLogsSQLErrorCause(t *testing.T) {
 	if _, err := f.env.workspace.DB().Exec(`DROP INDEX idx_brief_notes_next_at`); err != nil {
 		t.Fatal(err)
 	}
+	// An absent physical index must not become a "no such index" error on
+	// a scoped shadow. The optimizer can still serve this small fixture.
+	f.call(http.MethodGet, "/curation/metrics", f.human.AccessToken, nil, http.StatusOK)
+	// Scoped reads strip physical index hints and can recover from a missing
+	// index. Remove the serving relation to inject a genuine SQL failure.
+	if _, err := f.env.workspace.DB().Exec(`DROP TABLE brief_notes`); err != nil {
+		t.Fatal(err)
+	}
 	var output bytes.Buffer
 	previous := log.Writer()
 	log.SetOutput(&output)
@@ -36,7 +44,7 @@ func TestCurationMetricsLogsSQLErrorCause(t *testing.T) {
 		t.Fatal(response.StatusCode, body.String())
 	}
 	line := output.String()
-	if strings.Count(line, "anx-core: server error") != 1 || strings.Contains(line, "error_fingerprint=") || !strings.Contains(line, "route=/curation/metrics") || !strings.Contains(line, "no such index") || !strings.Contains(line, "idx_brief_notes_next_at") {
+	if strings.Count(line, "anx-core: server error") != 1 || strings.Contains(line, "error_fingerprint=") || !strings.Contains(line, "route=/curation/metrics") || !strings.Contains(line, "no such table") || !strings.Contains(line, "brief_notes") {
 		t.Fatal(line)
 	}
 	id := response.Header.Get("X-Request-ID")
@@ -48,7 +56,7 @@ func TestCurationMetricsLogsSQLErrorCause(t *testing.T) {
 			t.Fatalf("secret leaked: %s %s", line, body.String())
 		}
 	}
-	if strings.Contains(body.String(), "idx_brief") || strings.Contains(body.String(), "SQL logic") {
+	if strings.Contains(body.String(), "brief_notes") || strings.Contains(body.String(), "SQL logic") {
 		t.Fatal(body.String())
 	}
 }

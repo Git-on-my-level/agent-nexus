@@ -537,7 +537,7 @@ func TestLoopReportAdmissionBudget(t *testing.T) {
 		if queries > budget.Queries || returned > budget.Rows || work.VMSteps > budget.VM {
 			t.Fatalf("report exceeded budget: %+v", work)
 		}
-		for _, index := range []string{"idx_brief_loop_annotated", "idx_brief_loop_recent"} {
+		for _, index := range []string{"idx_brief_loop_annotated_recent", "idx_brief_loop_recent"} {
 			found := false
 			for _, statement := range statements {
 				if !strings.Contains(statement.SQL, "FROM brief_initiatives bi JOIN cards") {

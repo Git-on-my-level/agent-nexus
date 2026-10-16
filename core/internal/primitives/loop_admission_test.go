@@ -88,3 +88,62 @@ func TestLoopReportAdmitsLoopsBeforeLimit(t *testing.T) {
 	now = time.Now().UTC()
 	check("stranger", 24, 4, false)
 }
+
+func TestLoopReportAdmissionRetainsRecentLoopsBeyondFifty(t *testing.T) {
+	for _, kind := range []string{"annotation", "receipt", "mixed"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx := context.Background()
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ws.Close()
+			s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			if _, err = ws.DB().Exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('t','now','owner','{}')`); err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			for i := 0; i < 61; i++ {
+				id := fmt.Sprintf("loop-%02d", i)
+				if i == 60 {
+					id = "zz-latest-loop"
+				}
+				at := now.Add(-time.Duration(100-i) * time.Minute)
+				if _, err = ws.DB().Exec(`INSERT INTO cards(id,title,summary,column_key,thread_id,created_at,created_by,updated_at,updated_by) VALUES(?,?,'','todo','t',?,'owner',?,'owner')`, id, id, loopTS(at), loopTS(at)); err != nil {
+					t.Fatal(err)
+				}
+				if kind == "annotation" || kind == "mixed" && (i%2 == 0 || i == 60) {
+					if _, err = ws.DB().Exec(`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES(?,'{"goal":{"metric":"score","direction":"up"}}',?,'owner')`, id, loopTS(at)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if kind == "receipt" || kind == "mixed" && (i%2 == 1 || i == 60) {
+					runs := 1
+					if i == 60 {
+						runs = 2
+					}
+					for n := 0; n < runs; n++ {
+						e, err := s.AppendEvent(ctx, "owner", map[string]any{"type": "run_recorded", "summary": "Attempt", "refs": []string{"card:" + id}, "payload": map[string]any{"run_id": fmt.Sprint(n), "outcome": "infra_error"}})
+						if err != nil {
+							t.Fatal(err)
+						}
+						if _, err = ws.DB().Exec(`UPDATE events SET ts=? WHERE id=?`, loopTS(at.Add(time.Duration(n)*time.Second)), e["id"]); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			}
+			report, partial, err := s.LoopReport(WithRequestAccessScope(ctx, AccessScope{ActorID: "owner"}), "", "", "", 48, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows := report["loops"].([]map[string]any)
+			if !partial || workMap(report["stats"])["loops"] != 50 || len(rows) != 48 || rows[0]["title"] != "zz-latest-loop" {
+				t.Fatalf("latest loop lost: %v truncated=%v", report, partial)
+			}
+			if kind != "annotation" && workMap(rows[0]["loop"])["health"] != "failing" {
+				t.Fatal("attention sort lost", rows[0])
+			}
+		})
+	}
+}

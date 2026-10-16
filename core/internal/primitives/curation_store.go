@@ -726,8 +726,9 @@ type CurationBatchMemberAsk struct {
 // member and cannot be loaded. A scope-hidden member still has a thread row:
 // the unscoped count includes it and the scoped list does not, which is the
 // partial-set signal. No INDEXED BY on threads: a scoped read shadows it.
+// Keep the bounded batch key as the driver before applying scoped ask filters.
 const openCurationMemberFrom = `FROM curation_batch_members m
-		JOIN brief_asks a ON a.ask_id=m.ask_id
+		CROSS JOIN brief_asks a ON a.ask_id=m.ask_id
 		JOIN events e ON e.id=m.ask_id
 		` + briefAnswerableAskJoin + `
 		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`
