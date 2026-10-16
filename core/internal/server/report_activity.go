@@ -356,8 +356,9 @@ func promiseActivityDetail(field string, value any) string {
 }
 
 // The newest event anchors a fixed 30-minute window; a chain cannot absorb an
-// entire day. Events are already ordered newest first. Unknown subjects never
-// merge with one another unless a containing board is known.
+// entire day. Events are already ordered newest first. An unresolved card keeps
+// its original target identity and never falls back to a board; events without
+// any target identity do not coalesce.
 func coalesceReportActivity(items []map[string]any) []map[string]any {
 	out := []map[string]any{}
 	bursts := map[string]int{}
@@ -385,14 +386,8 @@ func coalesceReportActivity(items []map[string]any) []map[string]any {
 						existing[field] = item[field]
 					}
 				}
-				if newRank == oldRank && len(anyString(item["detail"])) > len(anyString(existing["detail"])) {
-					existing["detail"] = item["detail"]
-					existing["verb"] = item["verb"]
-					existing["summary"] = item["summary"]
-				}
-				if anyString(existing["detail"]) == "" || strings.HasSuffix(anyString(existing["detail"]), " edits") {
-					existing["detail"] = fmt.Sprintf("%d edits", existing["count"])
-				}
+				// Equal ranks retain the newest representative, even when its
+				// detail is empty. Older details must not overwrite its action.
 				continue
 			}
 		}

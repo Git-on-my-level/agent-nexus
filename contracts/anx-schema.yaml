@@ -1123,7 +1123,7 @@ visual_report_live_panels:
     - Activity min_impact accepts high, normal or low and defaults to low for existing panels. Filtering occurs after coalescing and before the response limit.
     - High impact includes creation of an initiative, completion/cancellation/reopening, column or phase moves, asks created or answered, completed plan steps and promise dates set or changed (including already-past dates). Promise notes use message_posted.next; plain messages are excluded. Elapsed time alone does not invent a new historical event.
     - Normal impact includes plan edits without a completed step or date change, meaningful card edits (title, priority, assignee, risk or summary), new cards and authorized PM decision proposals. Board metadata and cosmetic card edits are low impact.
-    - Activity bursts coalesce by actor and subject within thirty minutes of the newest event; unknown card subjects fall back to their board. Highest impact wins, counts sum, and the most informative detail survives. Equal-impact ties favor the newest event; output remains newest first. All reads retain the 200-candidate request budget.
+    - Activity bursts coalesce by actor and subject within thirty minutes of the newest event; unknown or inaccessible card subjects never fall back to their board. Highest impact wins and counts sum. Equal-impact ties keep the newest event's verb, summary and detail, including an empty detail; output remains newest first. All reads retain the 200-candidate request budget.
     - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.
 
 initiative_plan:

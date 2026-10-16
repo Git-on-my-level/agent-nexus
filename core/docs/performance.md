@@ -781,8 +781,8 @@ There are no added per-item queries or shared reader caches. Inherited privacy
 admission remains covered by the existing report HTTP scale gates. Enrichment
 cost grows with the fixed candidate page, independently of unrelated history.
 Coalescing/sorting runs over the bounded page; `min_impact` filters after
-coalescing and before the response limit. Highest impact and informative detail
-survive bursts anchored within 30 minutes of the newest event.
+coalescing and before the response limit. Highest impact wins; equal-impact ties keep the newest verb, summary and
+detail. Bursts remain anchored within 30 minutes of the newest event.
 
 The maximum-page scale guard runs owner/stranger reads with card refs and
 thread-only refs on the canonical 4,096-card fixture. Its checked-in incremental
