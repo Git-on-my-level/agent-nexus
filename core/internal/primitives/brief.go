@@ -191,7 +191,7 @@ func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	undated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NULL AND `+addressed+` ORDER BY a.created_at LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
+	undated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NULL AND `+addressed+` ORDER BY a.blocks_count DESC,`+briefPrioritySQL+`,a.created_at,a.ask_id LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}

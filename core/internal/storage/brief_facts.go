@@ -253,7 +253,8 @@ func installBriefAskBlocks(ctx context.Context, tx *sql.Tx) error {
  INSERT INTO brief_ask_blocks(ask_id, ref) SELECT NEW.ask_id, trim(j.value) FROM (SELECT value FROM json_each(NEW.blocks_json) LIMIT 20) j WHERE typeof(j.value)='text' AND trim(j.value)<>'' ON CONFLICT DO NOTHING;
  END`,
 		`INSERT OR IGNORE INTO brief_ask_blocks(ask_id, ref) SELECT a.ask_id, trim(j.value) FROM brief_asks a, json_each(a.blocks_json) j WHERE typeof(j.value)='text' AND trim(j.value)<>''`,
-		`CREATE INDEX IF NOT EXISTS idx_brief_asks_open_page ON brief_asks(state, decide_by, created_at)`,
+		`DROP INDEX IF EXISTS idx_brief_asks_open_page`,
+		`CREATE INDEX IF NOT EXISTS idx_brief_asks_open_page ON brief_asks(state, decide_by, blocks_count DESC, CASE lower(trim(priority)) WHEN 'critical' THEN 0 WHEN 'p0' THEN 0 WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END, created_at, ask_id)`,
 		`DROP INDEX IF EXISTS idx_brief_initiatives_promise`,
 		`DROP INDEX IF EXISTS idx_brief_initiatives_evidence`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_initiatives_page ON brief_initiatives(open, promise_at, last_evidence_at)`,

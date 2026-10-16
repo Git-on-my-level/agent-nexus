@@ -34,11 +34,11 @@ func (s *Store) AgentSummaryCards(ctx context.Context, actorRef string, refs []s
 	rows, err := s.db.QueryContext(ctx, `WITH
  referenced AS MATERIALIZED (SELECT COALESCE(
  (SELECT id FROM agent_summary_card_positions WHERE handle=json_extract(j.value,'$.handle') AND handle IS NOT NULL AND trim(handle)<>'' LIMIT 1),
- (SELECT id FROM agent_summary_card_positions WHERE id=json_extract(j.value,'$.value'))) AS id,CAST(j.key AS INTEGER) AS priority FROM json_each(?) j),
- assigned_raw AS MATERIALIZED (SELECT id FROM agent_summary_card_positions WHERE assignee=? ORDER BY id LIMIT 51),
- assigned_ref AS MATERIALIZED (SELECT id FROM agent_summary_card_positions WHERE assignee=? ORDER BY id LIMIT 51),
- candidates AS (SELECT id,priority FROM referenced WHERE id IS NOT NULL UNION ALL SELECT id,51 FROM assigned_raw UNION ALL SELECT id,51 FROM assigned_ref)
- SELECT id FROM candidates GROUP BY id ORDER BY min(priority),id LIMIT 51`, string(raw), strings.TrimPrefix(actorRef, "actor:"), actorRef)
+ (SELECT id FROM agent_summary_card_positions WHERE id=json_extract(j.value,'$.value'))) AS id,CAST(j.key AS INTEGER) AS priority,'' AS updated_at FROM json_each(?) j),
+ assigned_raw AS MATERIALIZED (SELECT id,51 AS priority,updated_at FROM agent_summary_card_positions WHERE assignee=? ORDER BY updated_at DESC,id LIMIT 51),
+ assigned_ref AS MATERIALIZED (SELECT id,51 AS priority,updated_at FROM agent_summary_card_positions WHERE assignee=? ORDER BY updated_at DESC,id LIMIT 51),
+ candidates AS (SELECT id,priority,updated_at FROM referenced WHERE id IS NOT NULL UNION ALL SELECT id,priority,updated_at FROM assigned_raw UNION ALL SELECT id,priority,updated_at FROM assigned_ref)
+ SELECT id FROM candidates GROUP BY id ORDER BY min(priority),max(updated_at) DESC,id LIMIT 51`, string(raw), strings.TrimPrefix(actorRef, "actor:"), actorRef)
 	if err != nil {
 		return nil, false, err
 	}
@@ -69,5 +69,18 @@ func (s *Store) AgentSummaryCards(ctx context.Context, actorRef string, refs []s
 		return []map[string]any{}, truncated, nil
 	}
 	cards, err := s.ListCards(ctx, CardListFilter{ids: ids})
-	return cards, truncated, err
+	if err != nil || len(cards) <= 1 {
+		return cards, truncated, err
+	}
+	byID := make(map[string]map[string]any, len(cards))
+	for _, card := range cards {
+		byID[anyStringValue(card["id"])] = card
+	}
+	ordered := make([]map[string]any, 0, len(cards))
+	for _, id := range ids {
+		if card, ok := byID[id]; ok {
+			ordered = append(ordered, card)
+		}
+	}
+	return ordered, truncated, nil
 }
