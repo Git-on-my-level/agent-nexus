@@ -242,6 +242,14 @@ func upsertDocumentFTSTx(ctx context.Context, tx documentFTSExecer, documentID, 
 	return nil
 }
 
+// DocumentHandleReservationSQL matches idx_documents_handle_unique. The partial
+// index is usable only when its WHERE predicates are present on the probe.
+const DocumentHandleReservationSQL = `SELECT EXISTS(SELECT 1 FROM documents WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> '' LIMIT 1)`
+
+// DocumentIDReservationSQL seeks the documents primary key on its own so the
+// handle probe does not become an OR that cannot use the partial index.
+const DocumentIDReservationSQL = `SELECT EXISTS(SELECT 1 FROM documents WHERE id = ? LIMIT 1)`
+
 func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, desired, fallbackSeed string) (string, error) {
 	ctx = CanonicalMaintenanceContext(ctx) // Handle namespace includes private and purged identities.
 	requested = strings.TrimSpace(requested)
@@ -256,7 +264,8 @@ func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, des
 		query string
 		args  []any
 	}{
-		{`SELECT EXISTS(SELECT 1 FROM documents WHERE handle = ? OR id = ? LIMIT 1)`, []any{candidate, candidate}},
+		{DocumentHandleReservationSQL, []any{candidate}},
+		{DocumentIDReservationSQL, []any{candidate}},
 		{`SELECT EXISTS(SELECT 1 FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ? LIMIT 1)`, []any{"document", candidate}},
 		{TombstoneHandleReservationSQL, []any{"document", candidate}},
 	} {

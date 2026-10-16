@@ -2019,7 +2019,7 @@
     "../primitives/docs_knowledge.go:*Store:UpdateDocumentComment": "fb9d121d4304b90df93b15d3e30987a2e8a3efad02d337eae3ad0f8f20ca1467",
     "../primitives/docs_knowledge.go:*Store:loadDocumentCommentEvent": "6fbbe0d7c31e697fa33bee4ecb50f9ee2cc7496bb2e87fc956c0040f68865145",
     "../primitives/docs_knowledge.go:*Store:searchAggregateDocuments": "6427712210b574a8bb1e2b6845eae372813093f82a0604ddfd4d546e307b9405",
-    "../primitives/docs_knowledge.go:allocateDocumentHandleTx": "66c2a53f130de0355fdccd1c603d8eb1451658eacfd4e5cb6c384decfbb375f0",
+    "../primitives/docs_knowledge.go:allocateDocumentHandleTx": "e5bf472e02283aabac77074aca35fdb984d6681a8a213c54477cfd64c8a420e6",
     "../primitives/docs_knowledge.go:documentCommentSearchText": "c3bec45f294160adc8d8baa32844f1a3aa393e08d0d4a7865d7ab0669ff694b8",
     "../primitives/docs_knowledge.go:upsertDocumentFTSTx": "6b1308fc8530b89f62a5e4571a143494606018bbc5d8f564f7ef3f317653bbd7",
     "../primitives/docs_store.go:*Store:ApplyDocumentLifecycle": "5a913d9bff07078f9a136050c4d4e019d7a16999f7fadaf0a430cd158ab2d297",

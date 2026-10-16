@@ -233,14 +233,101 @@ func TestLoopReceiptsRespectPrivateProvenance(t *testing.T) {
 			t.Fatal(actor, data)
 		}
 		if actor == "stranger" {
-			raw, _ := json.Marshal(data)
-			// Match the private score as JSON, not the digits inside a timestamp.
-			if strings.Contains(string(raw), "Private") || strings.Contains(string(raw), `"score":99`) || data["loop"].(map[string]any)["last_effect_at"].(*string) != nil {
+			raw, err := json.Marshal(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(raw), "Private") || data["loop"].(map[string]any)["last_effect_at"].(*string) != nil {
 				t.Fatal(string(raw))
+			}
+			const privateScore = 99.0
+			if err := assertStrangerLoopHidesPrivateScore(raw, privateScore); err != nil {
+				t.Fatal(err)
+			}
+			for _, field := range []string{"best", "latest", "baseline", "points"} {
+				mutated, err := withPrivateLoopScore(raw, field, privateScore)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := assertStrangerLoopHidesPrivateScore(mutated, privateScore); err == nil {
+					t.Fatalf("stranger goal.%s set to the private score was accepted", field)
+				}
 			}
 		}
 	}
 }
+func assertStrangerLoopHidesPrivateScore(raw []byte, private float64) error {
+	var body struct {
+		Loop struct {
+			Goal struct {
+				Best     *float64 `json:"best"`
+				Latest   *float64 `json:"latest"`
+				Baseline *float64 `json:"baseline"`
+				Points   []struct {
+					Value *float64 `json:"value"`
+				} `json:"points"`
+			} `json:"goal"`
+		} `json:"loop"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return err
+	}
+	g := body.Loop.Goal
+	for _, field := range []struct {
+		name string
+		v    *float64
+	}{
+		{"goal.best", g.Best},
+		{"goal.latest", g.Latest},
+		{"goal.baseline", g.Baseline},
+	} {
+		if field.v != nil && *field.v == private {
+			return fmt.Errorf("%s equals private score %v", field.name, private)
+		}
+	}
+	for i, point := range g.Points {
+		if point.Value != nil && *point.Value == private {
+			return fmt.Errorf("goal.points[%d].value equals private score %v", i, private)
+		}
+	}
+	return nil
+}
+
+func withPrivateLoopScore(raw []byte, field string, score float64) ([]byte, error) {
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return nil, err
+	}
+	loop, _ := body["loop"].(map[string]any)
+	if loop == nil {
+		loop = map[string]any{}
+		body["loop"] = loop
+	}
+	goal, _ := loop["goal"].(map[string]any)
+	if goal == nil {
+		goal = map[string]any{}
+		loop["goal"] = goal
+	}
+	switch field {
+	case "best", "latest", "baseline":
+		goal[field] = score
+	case "points":
+		points, _ := goal["points"].([]any)
+		if len(points) == 0 {
+			goal["points"] = []any{map[string]any{"value": score}}
+			break
+		}
+		point, _ := points[0].(map[string]any)
+		if point == nil {
+			return nil, fmt.Errorf("goal.points[0] is %T", points[0])
+		}
+		point["value"] = score
+	default:
+		return nil, fmt.Errorf("unknown goal field %q", field)
+	}
+	return json.Marshal(body)
+}
+
 func TestLoopReceiptHTTPValidationAndReplay(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	responseActor := postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
