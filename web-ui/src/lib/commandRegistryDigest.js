@@ -1,4 +1,5 @@
 import { commandRegistry } from "../../../contracts/gen/ts/dist/client.js";
+import { sha256Hex as sha256HexBytes } from "./replayPolicy.js";
 
 function canonicalCommandRegistryEntries(commands = commandRegistry) {
   return [...commands]
@@ -18,16 +19,8 @@ function canonicalCommandRegistryEntries(commands = commandRegistry) {
 }
 
 async function sha256Hex(value) {
-  const cryptoImpl = globalThis.crypto?.subtle;
-  if (!cryptoImpl) {
-    throw new Error("Web Crypto is unavailable for command registry checks.");
-  }
-
   const input = new TextEncoder().encode(value);
-  const digest = await cryptoImpl.digest("SHA-256", input);
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return sha256HexBytes(input);
 }
 
 let expectedCommandRegistryDigestPromise;

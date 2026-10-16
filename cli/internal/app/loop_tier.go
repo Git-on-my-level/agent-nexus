@@ -578,25 +578,39 @@ func orientMatchesPrincipal(raw any, principal map[string]any) bool {
 	pID := strings.TrimSpace(anyString(principal["id"]))
 	pBare := stripOrientPrincipalPrefix(pID)
 	pDisplay := strings.TrimSpace(anyString(principal["display"]))
-	matchStr := func(s string) bool {
+	matchID := func(s string) bool {
 		s = strings.TrimSpace(s)
-		if s == "" {
+		if s == "" || pID == "" {
 			return false
 		}
 		bare := stripOrientPrincipalPrefix(s)
-		if pID != "" && (s == pID || (pBare != "" && bare == pBare)) {
-			return true
+		return s == pID || (pBare != "" && bare == pBare)
+	}
+	matchDisplay := func(s string) bool {
+		s = strings.TrimSpace(s)
+		return s != "" && pDisplay != "" && s == pDisplay
+	}
+	matchScalar := func(s string) bool {
+		if pID != "" {
+			return matchID(s)
 		}
-		if pDisplay != "" && s == pDisplay {
-			return true
-		}
-		return false
+		return matchDisplay(s)
 	}
 	switch v := raw.(type) {
 	case string:
-		return matchStr(v)
+		return matchScalar(v)
 	case map[string]any:
-		return matchStr(anyString(v["id"])) || matchStr(anyString(v["actor_id"])) || matchStr(anyString(v["agent_id"])) || matchStr(anyString(v["display"]))
+		id := strings.TrimSpace(anyString(v["id"]))
+		actorID := strings.TrimSpace(anyString(v["actor_id"]))
+		agentID := strings.TrimSpace(anyString(v["agent_id"]))
+		if id != "" || actorID != "" || agentID != "" {
+			if pID != "" {
+				return matchID(id) || matchID(actorID) || matchID(agentID)
+			}
+			return matchDisplay(id) || matchDisplay(actorID) || matchDisplay(agentID) || matchDisplay(anyString(v["display"]))
+		}
+		display := strings.TrimSpace(anyString(v["display"]))
+		return matchID(display) || matchDisplay(display)
 	case []any:
 		for _, elem := range v {
 			if orientMatchesPrincipal(elem, principal) {
@@ -605,7 +619,7 @@ func orientMatchesPrincipal(raw any, principal map[string]any) bool {
 		}
 	case []string:
 		for _, elem := range v {
-			if matchStr(elem) {
+			if matchScalar(elem) {
 				return true
 			}
 		}

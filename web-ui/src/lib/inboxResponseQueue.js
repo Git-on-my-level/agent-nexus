@@ -3,7 +3,11 @@ import { get, writable } from "svelte/store";
 import { isInboxResponseOutcome } from "$lib/askDelivery.js";
 import { captureInboxResponseSender } from "$lib/coreClient";
 import { mutationFailure } from "$lib/mutationStatus.js";
-import { replayExpired, expiredReplayError } from "$lib/replayPolicy.js";
+import {
+  replayExpired,
+  expiredReplayError,
+  randomUUID,
+} from "$lib/replayPolicy.js";
 import {
   listLocalWork,
   loadLocalWork,
@@ -109,23 +113,28 @@ function persistedEntry(entry, state = "pending", failure = null) {
   };
 }
 
-function persistResponse(entry, state = "pending", failure = null) {
+function persistResponse(
+  entry,
+  state = "pending",
+  failure = null,
+  lease = null,
+) {
   return saveLocalWork(
     entry.identity,
     "inbox-send",
     entry.request.idempotency_key,
     persistedEntry(entry, state, failure),
-    { epoch: entry.localEpoch },
+    { epoch: entry.localEpoch, lease },
   );
 }
 
-function removePersistedResponse(entry, reason = "confirmed") {
+function removePersistedResponse(entry, reason = "confirmed", lease = null) {
   return saveLocalWork(
     entry.identity,
     "inbox-send",
     entry.request.idempotency_key,
     null,
-    { epoch: entry.localEpoch, deletionReason: reason },
+    { epoch: entry.localEpoch, deletionReason: reason, lease },
   );
 }
 
@@ -133,65 +142,75 @@ function removePersistedResponse(entry, reason = "confirmed") {
 async function durableSend(entry) {
   await entry.saved;
   if (navigator.onLine === false) throw new Error("The device is offline.");
-  return requestMutationSendLock(entry.identity, async () => {
-    if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
-      throw new Error("This identity has signed out.");
-    }
-    const record = await loadLocalWorkRecord(
-      entry.identity,
-      "inbox-send",
-      entry.request.idempotency_key,
-    );
-    if (record?.deleted && record.deletionReason === "confirmed") return {};
-    const stored = record && !record.deleted ? record.value : null;
-    if (record?.deletionReason === "undo" || stored?.state === "superseded") {
-      const error = new Error("This response was returned to a draft.");
-      error.cancelled = true;
-      throw error;
-    }
-    if (!stored)
-      throw new Error(
-        "The saved request could not be read. Keep the original response for retry.",
-      );
-    if (replayExpired(stored.createdAt)) throw expiredReplayError();
-    if (
-      stored.state === "retrying" &&
-      stored.nextAt > Date.now() &&
-      !entry.manualRetry
-    ) {
-      const error = new Error("Another tab scheduled the next retry.");
-      error.deferred = true;
-      throw error;
-    }
-    // An old timer cannot bypass another tab's definitive failure/backoff.
-    if (stored.state === "attention" && !entry.manualRetry) {
-      const error = new Error(
-        stored.failure?.detail || "Review this response before retrying.",
-      );
-      error.status = stored.failure?.status || 400;
-      throw error;
-    }
-    entry.attempts = (stored.attempts || 0) + 1;
-    await persistResponse(entry, "sending");
-    const result = await entry.send(entry.itemId, entry.request);
-    await removePersistedResponse(entry);
-    await consumeUploadedAttachments(
-      entry.identity,
-      entry.request.related_refs,
-      entry.localEpoch,
-    );
-    // Do not clear a newer draft written while this response was sending.
-    for (const field of ["reply", "context"]) {
-      const target = `inbox:${entry.itemId}:${field}`;
-      const draft = await loadLocalWork(entry.identity, "draft", target);
-      if (draft === entry.request.response_text) {
-        await saveLocalWork(entry.identity, "draft", target, null, {
-          epoch: entry.localEpoch,
-        });
+  try {
+    return await requestMutationSendLock(entry.identity, async (lease) => {
+      if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
+        throw new Error("This identity has signed out.");
       }
+      const record = await loadLocalWorkRecord(
+        entry.identity,
+        "inbox-send",
+        entry.request.idempotency_key,
+      );
+      if (record?.deleted && record.deletionReason === "confirmed") return {};
+      const stored = record && !record.deleted ? record.value : null;
+      if (record?.deletionReason === "undo" || stored?.state === "superseded") {
+        const error = new Error("This response was returned to a draft.");
+        error.cancelled = true;
+        throw error;
+      }
+      if (!stored)
+        throw new Error(
+          "The saved request could not be read. Keep the original response for retry.",
+        );
+      if (replayExpired(stored.createdAt)) throw expiredReplayError();
+      if (
+        stored.state === "retrying" &&
+        stored.nextAt > Date.now() &&
+        !entry.manualRetry
+      ) {
+        const error = new Error("Another tab scheduled the next retry.");
+        error.deferred = true;
+        throw error;
+      }
+      // An old timer cannot bypass another tab's definitive failure/backoff.
+      if (stored.state === "attention" && !entry.manualRetry) {
+        const error = new Error(
+          stored.failure?.detail || "Review this response before retrying.",
+        );
+        error.status = stored.failure?.status || 400;
+        throw error;
+      }
+      entry.attempts = (stored.attempts || 0) + 1;
+      await persistResponse(entry, "sending", null, lease);
+      const result = await entry.send(entry.itemId, entry.request);
+      await removePersistedResponse(entry, "confirmed", lease);
+      lease?.assertHeld();
+      await consumeUploadedAttachments(
+        entry.identity,
+        entry.request.related_refs,
+        entry.localEpoch,
+      );
+      // Do not clear a newer draft written while this response was sending.
+      for (const field of ["reply", "context"]) {
+        const target = `inbox:${entry.itemId}:${field}`;
+        const draft = await loadLocalWork(entry.identity, "draft", target);
+        if (draft === entry.request.response_text) {
+          await saveLocalWork(entry.identity, "draft", target, null, {
+            epoch: entry.localEpoch,
+            lease,
+          });
+        }
+      }
+      return result;
+    });
+  } catch (error) {
+    if (error?.leaseLost) {
+      error.deferred = true;
+      scheduleRecovery(250);
     }
-    return result;
-  });
+    throw error;
+  }
 }
 
 function scheduleRecovery(delay = 0) {
@@ -484,7 +503,7 @@ export function queueInboxResponse({
     identity: bound.identity,
     send: bound.send,
     request: JSON.parse(
-      JSON.stringify({ ...request, idempotency_key: crypto.randomUUID() }),
+      JSON.stringify({ ...request, idempotency_key: randomUUID() }),
     ),
     message: String(message ?? "Response sent"),
     restore: restore ?? null,

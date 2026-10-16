@@ -543,31 +543,135 @@ describe("PM operator interactions", () => {
       client.sendPmMessage.mock.calls[1][1],
     );
   });
-  it("drains a PM message through mutationOutbox when navigator.locks is unavailable", async () => {
+  it("drains a PM message through mutationOutbox when navigator.locks, crypto.randomUUID and crypto.subtle are unavailable", async () => {
+    const prevLocks = navigator.locks;
+    const prevRandomUUID = globalThis.crypto.randomUUID;
+    const prevSubtle = globalThis.crypto.subtle;
     Object.defineProperty(navigator, "locks", {
       configurable: true,
       value: undefined,
     });
-    state.route("/pm?conversation=conversation-one");
-    client.getPmConversation.mockResolvedValue({
-      conversation: { id: "conversation-one", title: "Sample discussion" },
-      turns: [],
+    Object.defineProperty(globalThis.crypto, "randomUUID", {
+      configurable: true,
+      value: undefined,
     });
-    client.sendPmMessage.mockResolvedValueOnce({
-      id: "turn-fallback",
-      status: "sending",
+    Object.defineProperty(globalThis.crypto, "subtle", {
+      configurable: true,
+      value: undefined,
     });
-    render(PMPage);
-    await screen.findByText("Sample discussion");
-    const input = screen.getByLabelText("Message PM");
-    await fireEvent.input(input, {
-      target: { value: "Sent over plain HTTP LAN" },
+    try {
+      state.route("/pm?conversation=conversation-one");
+      client.getPmConversation.mockResolvedValue({
+        conversation: { id: "conversation-one", title: "Sample discussion" },
+        turns: [],
+      });
+      client.sendPmMessage.mockResolvedValueOnce({
+        id: "turn-fallback",
+        status: "sending",
+      });
+      render(PMPage);
+      await screen.findByText("Sample discussion");
+      const input = screen.getByLabelText("Message PM");
+      await fireEvent.input(input, {
+        target: { value: "Sent over plain HTTP LAN" },
+      });
+      await fireEvent.submit(input.closest("form"));
+      await waitFor(() =>
+        expect(client.sendPmMessage).toHaveBeenCalledTimes(1),
+      );
+      expect(client.sendPmMessage.mock.calls[0][1]).toMatchObject({
+        text: "Sent over plain HTTP LAN",
+        request_key: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
+        replay_key: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
+      });
+    } finally {
+      Object.defineProperty(navigator, "locks", {
+        configurable: true,
+        value: prevLocks,
+      });
+      Object.defineProperty(globalThis.crypto, "randomUUID", {
+        configurable: true,
+        value: prevRandomUUID,
+      });
+      Object.defineProperty(globalThis.crypto, "subtle", {
+        configurable: true,
+        value: prevSubtle,
+      });
+    }
+  });
+  it("fences mutationOutbox checkpoint writes if another tab steals the lease during send", async () => {
+    const prevLocks = navigator.locks;
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: undefined,
     });
-    await fireEvent.submit(input.closest("form"));
-    await waitFor(() => expect(client.sendPmMessage).toHaveBeenCalledTimes(1));
-    expect(client.sendPmMessage.mock.calls[0][1]).toMatchObject({
-      text: "Sent over plain HTTP LAN",
-    });
+    try {
+      state.route("/pm?conversation=conversation-one");
+      client.getPmConversation.mockResolvedValue({
+        conversation: { id: "conversation-one", title: "Sample discussion" },
+        turns: [],
+      });
+      let resolveNetwork;
+      const networkGate = new Promise((resolve) => {
+        resolveNetwork = resolve;
+      });
+      client.sendPmMessage.mockImplementationOnce(async () => {
+        await networkGate;
+        return { id: "turn-late", status: "sending" };
+      });
+      render(PMPage);
+      await screen.findByText("Sample discussion");
+      const input = screen.getByLabelText("Message PM");
+      await fireEvent.input(input, {
+        target: { value: "Fenced message" },
+      });
+      await fireEvent.submit(input.closest("form"));
+      await waitFor(() =>
+        expect(client.sendPmMessage).toHaveBeenCalledTimes(1),
+      );
+      const sentKey = client.sendPmMessage.mock.calls[0][1].request_key;
+      const { localWorkScope } =
+        await import("../../src/lib/localWorkScope.js");
+      const { loadLocalWorkRecord, saveLocalWork } =
+        await import("../../src/lib/localWorkStore.js");
+      const scope = getStore(localWorkScope);
+      const leaseKey = `anx:mutation-lock:anx:mutation-send:${scope}`;
+      // Simulate another tab stealing the lease and marking the entry attention.
+      localStorage.setItem(
+        leaseKey,
+        JSON.stringify({
+          owner: "other-tab",
+          token: "other-token",
+          expiresAt: Date.now() + 60_000,
+        }),
+      );
+      const currentRecord = await loadLocalWorkRecord(
+        scope,
+        "mutation",
+        sentKey,
+      );
+      await saveLocalWork(scope, "mutation", sentKey, {
+        ...currentRecord.value,
+        state: "attention",
+        stolenBy: "other-tab",
+      });
+      resolveNetwork();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const afterRecord = await loadLocalWorkRecord(scope, "mutation", sentKey);
+      expect(afterRecord.deleted).toBe(false);
+      expect(afterRecord.value.stolenBy).toBe("other-tab");
+      localStorage.removeItem(leaseKey);
+      await saveLocalWork(scope, "mutation", sentKey, null);
+    } finally {
+      Object.defineProperty(navigator, "locks", {
+        configurable: true,
+        value: prevLocks,
+      });
+    }
   });
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");

@@ -5,7 +5,10 @@ import {
   replayExpired,
   replayPolicy,
   freshRequest,
+  intentFingerprint,
+  randomUUID,
   requestIntent,
+  sha256Hex,
 } from "../../src/lib/replayPolicy.js";
 
 it("stops recovery at the shared cutoff, before receipt collection", () => {
@@ -92,4 +95,57 @@ it("renewing auto-apply rotates only the unconfirmed stage and retains its revis
   expect(fresh.autoReconcile.request_key).not.toBe("uncertain");
   expect(fresh.autoReconcile.if_revision).toBe(3);
   expect(requestIntent(fresh)).toEqual(requestIntent(request));
+});
+
+it("computes identical SHA-256 digests and valid v4 UUIDs when crypto.subtle and crypto.randomUUID are unavailable", async () => {
+  const vectors = [
+    ["", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
+    ["abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+    [
+      "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+      "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+    ],
+  ];
+  for (const [input, expected] of vectors) {
+    const bytes = new TextEncoder().encode(input);
+    expect(await sha256Hex(bytes, { forceFallback: true })).toBe(expected);
+    if (globalThis.crypto?.subtle) {
+      expect(await sha256Hex(bytes, { forceFallback: true })).toBe(
+        await sha256Hex(bytes),
+      );
+    }
+  }
+
+  const sampleRequest = {
+    body: { request_key: "k1", title: "Plain HTTP Tailnet", count: 42 },
+  };
+  const subtleDigest = await intentFingerprint(sampleRequest);
+
+  const prevRandomUUID = globalThis.crypto.randomUUID;
+  const prevSubtle = globalThis.crypto.subtle;
+  Object.defineProperty(globalThis.crypto, "randomUUID", {
+    configurable: true,
+    value: undefined,
+  });
+  Object.defineProperty(globalThis.crypto, "subtle", {
+    configurable: true,
+    value: undefined,
+  });
+  try {
+    const id = randomUUID();
+    expect(id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(randomUUID()).not.toBe(id);
+    expect(await intentFingerprint(sampleRequest)).toBe(subtleDigest);
+  } finally {
+    Object.defineProperty(globalThis.crypto, "randomUUID", {
+      configurable: true,
+      value: prevRandomUUID,
+    });
+    Object.defineProperty(globalThis.crypto, "subtle", {
+      configurable: true,
+      value: prevSubtle,
+    });
+  }
 });

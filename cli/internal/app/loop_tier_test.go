@@ -74,11 +74,12 @@ func TestOrientAgentReaderScopesInitiativesAndWaitingOnHuman(t *testing.T) {
 				"title":                    "Unrelated overdue",
 				"state":                    "past_promise",
 				"past_promise_for_seconds": float64(86400),
+				"yours":                    false,
 				"promise": map[string]any{
 					"at":     "2026-10-10T00:00:00Z",
 					"what":   "other agent checkpoint",
 					"source": "note",
-					"author": map[string]any{"id": "agent:other", "display": "other-agent", "kind": "agent"},
+					"author": map[string]any{"id": "agent:other", "display": "worker on host-1", "kind": "agent"},
 				},
 			},
 			map[string]any{

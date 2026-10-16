@@ -1,3 +1,5 @@
+import { randomUUID } from "./replayPolicy.js";
+
 /** Device-only user work. IndexedDB is authoritative; a synchronous journal
  * closes the keystroke/tab-close gap and also serves as the fallback. One key
  * per record prevents unrelated tabs from overwriting each other's work. */
@@ -11,117 +13,335 @@ const epochs = new Map();
 const appliedRevocations = new Map();
 const uncheckpointed = new Map();
 const preparing = new Map();
-const inTabLocks = new Map();
-const lockWaiters = new Set();
-const lockTabId =
-  typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random()}`;
 const LOCK_LEASE_TTL_MS = 30_000;
 const LOCK_POLL_MS = 40;
+const LOCK_SETTLE_MIN_MS = 4;
+const LOCK_SETTLE_MAX_MS = 12;
 
-function notifyLockWaiters() {
-  for (const wake of lockWaiters) wake();
+export function createMutationSendLocker({
+  tabId = randomUUID(),
+  storage = () =>
+    typeof localStorage !== "undefined" ? localStorage : undefined,
+  channel: customChannel,
+  locks = () => globalThis.navigator?.locks,
+  now = () => Date.now(),
+  leaseTtlMs = LOCK_LEASE_TTL_MS,
+  heartbeatIntervalMs = Math.min(
+    10_000,
+    Math.max(10, Math.floor(leaseTtlMs / 3)),
+  ),
+  pollMs = LOCK_POLL_MS,
+  settleMinMs,
+  settleMaxMs,
+  warn = (message, error) => console.warn(message, error),
+} = {}) {
+  const explicitSettle = settleMinMs !== undefined || settleMaxMs !== undefined;
+  const effectiveSettleMinMs = settleMinMs ?? LOCK_SETTLE_MIN_MS;
+  const effectiveSettleMaxMs = settleMaxMs ?? LOCK_SETTLE_MAX_MS;
+  const inTabLocks = new Map();
+  const lockWaiters = new Set();
+  const resolveStorage = () =>
+    typeof storage === "function" ? storage() : storage;
+  const resolveLocks = () => (typeof locks === "function" ? locks() : locks);
+  const resolveChannel = () =>
+    customChannel !== undefined ? customChannel : channel;
+
+  function notifyLockWaiters() {
+    for (const wake of lockWaiters) wake();
+  }
+
+  const ch = resolveChannel();
+  if (ch && ch !== channel) {
+    const prevOnMessage = ch.onmessage;
+    ch.onmessage = (event) => {
+      if (event.data?.lockReleased) {
+        notifyLockWaiters();
+        return;
+      }
+      prevOnMessage?.(event);
+    };
+  }
+
+  function createInTabOnlyLease() {
+    let released = false;
+    return {
+      isHeld: () => !released,
+      assertHeld: () => {
+        if (released) {
+          const error = new Error("Mutation send lock was released.");
+          error.leaseLost = true;
+          throw error;
+        }
+      },
+      release: () => {
+        released = true;
+      },
+    };
+  }
+
+  async function acquireCrossTabLease(name) {
+    const store = resolveStorage();
+    if (!store) {
+      warn(
+        "Cross-tab mutation lock storage is unavailable; falling back to in-tab exclusion.",
+      );
+      return createInTabOnlyLease();
+    }
+    const leaseKey = `anx:mutation-lock:${name}`;
+    while (true) {
+      const currentNow = now();
+      let current = null;
+      try {
+        const raw = store.getItem(leaseKey);
+        current = raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        warn(
+          "Cross-tab mutation lock storage is unavailable; falling back to in-tab exclusion.",
+          error,
+        );
+        return createInTabOnlyLease();
+      }
+      if (
+        !current ||
+        current.owner === tabId ||
+        !(current.expiresAt > currentNow)
+      ) {
+        const token = randomUUID();
+        const candidate = {
+          owner: tabId,
+          token,
+          expiresAt: currentNow + leaseTtlMs,
+        };
+        try {
+          store.setItem(leaseKey, JSON.stringify(candidate));
+          const immediateRaw = store.getItem(leaseKey);
+          const immediate = immediateRaw ? JSON.parse(immediateRaw) : null;
+          if (
+            !immediate ||
+            immediate.owner !== tabId ||
+            immediate.token !== token
+          ) {
+            current = immediate;
+          } else {
+            const settleSpan = Math.max(
+              0,
+              effectiveSettleMaxMs - effectiveSettleMinMs,
+            );
+            const settleMs =
+              effectiveSettleMinMs +
+              Math.floor(Math.random() * (settleSpan + 1));
+            if (
+              settleMs > 0 &&
+              (explicitSettle || !globalThis.setTimeout?.clock)
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, settleMs));
+            } else {
+              await Promise.resolve();
+            }
+            const verifyRaw = store.getItem(leaseKey);
+            const verify = verifyRaw ? JSON.parse(verifyRaw) : null;
+            if (
+              verify &&
+              verify.owner === tabId &&
+              verify.token === token &&
+              verify.expiresAt > now()
+            ) {
+              let released = false;
+              let lost = false;
+              let heartbeatTimer = null;
+              const clearHeartbeat = () => {
+                if (heartbeatTimer !== null) {
+                  clearInterval(heartbeatTimer);
+                  heartbeatTimer = null;
+                }
+              };
+              const renew = () => {
+                if (released || lost) return false;
+                try {
+                  const latestRaw = store.getItem(leaseKey);
+                  const latest = latestRaw ? JSON.parse(latestRaw) : null;
+                  if (
+                    !latest ||
+                    latest.owner !== tabId ||
+                    latest.token !== token
+                  ) {
+                    lost = true;
+                    clearHeartbeat();
+                    return false;
+                  }
+                  const refreshed = {
+                    owner: tabId,
+                    token,
+                    expiresAt: now() + leaseTtlMs,
+                  };
+                  store.setItem(leaseKey, JSON.stringify(refreshed));
+                  const checkRaw = store.getItem(leaseKey);
+                  const check = checkRaw ? JSON.parse(checkRaw) : null;
+                  if (
+                    !check ||
+                    check.owner !== tabId ||
+                    check.token !== token
+                  ) {
+                    lost = true;
+                    clearHeartbeat();
+                    return false;
+                  }
+                  return true;
+                } catch (error) {
+                  warn(
+                    "Cross-tab mutation lock renewal failed; fencing further checkpoint writes.",
+                    error,
+                  );
+                  lost = true;
+                  clearHeartbeat();
+                  return false;
+                }
+              };
+              if (heartbeatIntervalMs > 0) {
+                heartbeatTimer = setInterval(renew, heartbeatIntervalMs);
+              }
+              const isHeld = () => {
+                if (released || lost) return false;
+                try {
+                  const latestRaw = store.getItem(leaseKey);
+                  const latest = latestRaw ? JSON.parse(latestRaw) : null;
+                  if (
+                    !latest ||
+                    latest.owner !== tabId ||
+                    latest.token !== token ||
+                    !(latest.expiresAt > now())
+                  ) {
+                    lost = true;
+                    clearHeartbeat();
+                    return false;
+                  }
+                  return true;
+                } catch {
+                  lost = true;
+                  clearHeartbeat();
+                  return false;
+                }
+              };
+              const assertHeld = () => {
+                if (!isHeld()) {
+                  const error = new Error(
+                    "Cross-tab mutation send lease was lost.",
+                  );
+                  error.leaseLost = true;
+                  throw error;
+                }
+              };
+              const release = () => {
+                released = true;
+                clearHeartbeat();
+                try {
+                  const latestRaw = store.getItem(leaseKey);
+                  const latest = latestRaw ? JSON.parse(latestRaw) : null;
+                  if (
+                    latest &&
+                    latest.owner === tabId &&
+                    latest.token === token
+                  ) {
+                    store.removeItem(leaseKey);
+                  }
+                } catch {
+                  /* Best-effort cross-tab lease release. */
+                }
+                resolveChannel()?.postMessage({ lockReleased: name });
+                notifyLockWaiters();
+              };
+              return { isHeld, assertHeld, release };
+            }
+            current = verify;
+          }
+        } catch (error) {
+          warn(
+            "Cross-tab mutation lock storage is unavailable; falling back to in-tab exclusion.",
+            error,
+          );
+          return createInTabOnlyLease();
+        }
+      }
+      const waitNow = now();
+      const waitMs = Math.min(
+        pollMs,
+        Math.max(10, (current?.expiresAt ?? waitNow + pollMs) - waitNow),
+      );
+      await new Promise((resolve) => {
+        let timer;
+        const wake = () => {
+          clearTimeout(timer);
+          lockWaiters.delete(wake);
+          resolve();
+        };
+        lockWaiters.add(wake);
+        timer = setTimeout(wake, waitMs);
+      });
+    }
+  }
+
+  function requestLock(scope, callback) {
+    const name = `anx:mutation-send:${scope}`;
+    const locksApi = resolveLocks();
+    if (locksApi?.request) {
+      const webLease = createInTabOnlyLease();
+      return locksApi.request(name, async () => {
+        try {
+          return await callback(webLease);
+        } finally {
+          webLease.release();
+        }
+      });
+    }
+    const previous = inTabLocks.get(name) ?? Promise.resolve();
+    const run = previous
+      .catch(() => {})
+      .then(async () => {
+        const lease = await acquireCrossTabLease(name);
+        try {
+          return await callback(lease);
+        } catch (error) {
+          if (error && typeof error === "object" && !lease.isHeld()) {
+            error.leaseLost = true;
+          }
+          throw error;
+        } finally {
+          lease.release();
+        }
+      });
+    const settled = run.then(
+      () => {},
+      () => {},
+    );
+    inTabLocks.set(name, settled);
+    settled.then(() => {
+      if (inTabLocks.get(name) === settled) inTabLocks.delete(name);
+    });
+    return run;
+  }
+
+  return {
+    requestMutationSendLock: requestLock,
+    notifyLockWaiters,
+  };
 }
 
-async function acquireCrossTabLease(name) {
-  if (typeof localStorage === "undefined") return () => {};
-  const leaseKey = `anx:mutation-lock:${name}`;
-  const token =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random()}`;
-  while (true) {
-    const now = Date.now();
-    let current = null;
-    try {
-      const raw = localStorage.getItem(leaseKey);
-      current = raw ? JSON.parse(raw) : null;
-    } catch {
-      return () => {};
-    }
-    if (!current || current.owner === lockTabId || !(current.expiresAt > now)) {
-      const lease = {
-        owner: lockTabId,
-        token,
-        expiresAt: now + LOCK_LEASE_TTL_MS,
-      };
-      try {
-        localStorage.setItem(leaseKey, JSON.stringify(lease));
-        const verifyRaw = localStorage.getItem(leaseKey);
-        const verify = verifyRaw ? JSON.parse(verifyRaw) : null;
-        if (!verify || (verify.owner === lockTabId && verify.token === token)) {
-          return () => {
-            try {
-              const latestRaw = localStorage.getItem(leaseKey);
-              const latest = latestRaw ? JSON.parse(latestRaw) : null;
-              if (
-                latest &&
-                latest.owner === lockTabId &&
-                latest.token === token
-              ) {
-                localStorage.removeItem(leaseKey);
-              }
-            } catch {
-              /* Best-effort cross-tab lease release. */
-            }
-            channel?.postMessage({ lockReleased: name });
-            notifyLockWaiters();
-          };
-        }
-      } catch {
-        // Storage quota or access error: proceed under the in-tab mutex.
-        return () => {};
-      }
-    }
-    const waitMs = Math.min(
-      LOCK_POLL_MS,
-      Math.max(10, (current?.expiresAt ?? now + LOCK_POLL_MS) - now),
-    );
-    await new Promise((resolve) => {
-      let timer;
-      const wake = () => {
-        clearTimeout(timer);
-        lockWaiters.delete(wake);
-        resolve();
-      };
-      lockWaiters.add(wake);
-      timer = setTimeout(wake, waitMs);
-    });
+let defaultLocker;
+function getDefaultLocker() {
+  if (!defaultLocker) {
+    defaultLocker = createMutationSendLocker();
   }
+  return defaultLocker;
 }
 
 /**
  * Serialize sends for a scope across tabs via Web Locks when available, and
- * fall back to an in-tab promise mutex plus a best-effort cross-tab
+ * fall back to an in-tab promise mutex plus a heartbeat-renewed, fenced
  * localStorage/BroadcastChannel lease on non-secure origins (e.g. plain-HTTP
  * LAN or Tailnet).
  */
 export function requestMutationSendLock(scope, callback) {
-  const name = `anx:mutation-send:${scope}`;
-  if (globalThis.navigator?.locks?.request) {
-    return globalThis.navigator.locks.request(name, callback);
-  }
-  const previous = inTabLocks.get(name) ?? Promise.resolve();
-  const run = previous
-    .catch(() => {})
-    .then(async () => {
-      const release = await acquireCrossTabLease(name);
-      try {
-        return await callback();
-      } finally {
-        release();
-      }
-    });
-  const settled = run.then(
-    () => {},
-    () => {},
-  );
-  inTabLocks.set(name, settled);
-  settled.then(() => {
-    if (inTabLocks.get(name) === settled) inTabLocks.delete(name);
-  });
-  return run;
+  return getDefaultLocker().requestMutationSendLock(scope, callback);
 }
 
 // File selection needs async byte reading. Warn until it has a durable checkpoint.
@@ -321,13 +541,14 @@ if (typeof window !== "undefined") {
         /* Ignore malformed storage events. */
       }
     }
-    if (event.key?.startsWith("anx:mutation-lock:")) notifyLockWaiters();
+    if (event.key?.startsWith("anx:mutation-lock:"))
+      defaultLocker?.notifyLockWaiters();
     if (event.key?.startsWith(PREFIX)) notify();
   });
   if (channel)
     channel.onmessage = (event) => {
       if (event.data?.lockReleased) {
-        notifyLockWaiters();
+        defaultLocker?.notifyLockWaiters();
         return;
       }
       if (event.data?.purge) {
@@ -335,12 +556,14 @@ if (typeof window !== "undefined") {
         const principal = localWorkPrincipal(event.data.scope);
         if (appliedRevocations.get(principal) === event.data.epoch) return;
         let current;
+        let storageAvailable = false;
         try {
           current = localStorage.getItem(epochKey(principal));
+          storageAvailable = true;
         } catch {
           /* The channel remains usable without localStorage. */
         }
-        if (current && current !== event.data.epoch) return;
+        if (storageAvailable && current !== event.data.epoch) return;
         void clearPrincipalLocalWork(event.data.scope, {
           epoch: event.data.epoch,
           broadcast: false,
@@ -366,10 +589,14 @@ export function saveLocalWork(
     deletionReason = "",
     confirmation = null,
     submission = null,
+    lease = null,
   } = {},
 ) {
   if (epoch !== localWorkEpoch(scope)) {
     throw new Error("The identity that authored this work has signed out.");
+  }
+  if (lease) {
+    lease.assertHeld();
   }
   const key = localWorkKey(scope, kind, target);
   lastWrite = Math.max(Date.now(), lastWrite + 1);
@@ -405,6 +632,9 @@ export function saveLocalWork(
   const saved = serialized(async () => {
     if (epoch !== localWorkEpoch(scope)) {
       throw new Error("The identity that authored this work has signed out.");
+    }
+    if (lease) {
+      lease.assertHeld();
     }
     try {
       await transaction("readwrite", (store) => store.put(storedRecord));
@@ -503,7 +733,7 @@ export async function loadLocalWork(scope, kind, target) {
  * deletion runs after queued saves, so an old save cannot resurrect a draft. */
 export function clearPrincipalLocalWork(
   scope,
-  { epoch = crypto.randomUUID(), broadcast = true } = {},
+  { epoch = randomUUID(), broadcast = true } = {},
 ) {
   const principal = localWorkPrincipal(scope);
   if (!principal) return Promise.resolve();

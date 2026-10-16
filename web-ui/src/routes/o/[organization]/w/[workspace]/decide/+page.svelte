@@ -76,7 +76,7 @@
   let selectedParam = $derived(
     requestedParam
       ? (findDecision({ decisions: all }, requestedParam)?.inboxItemId ??
-          requestedParam)
+          "__unmatched__")
       : "",
   );
 

@@ -172,6 +172,25 @@ func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	participating, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Participating"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sqlStmt := range []string{
+		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('ag-1','worker-1','agent-1','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}'),('ag-2','worker-2','agent-2','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}')`,
+		`INSERT INTO agent_sessions(id,agent_id,actor_id,provider,host_scope,native_session_id,native_session_id_kind,capabilities_json,activity,sequence,request_json,created_at,last_seen_at,expires_at) VALUES('s-ag-1','ag-1','agent-1','codex','h1','n1','opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z'),('s-ag-2','ag-2','agent-2','codex','h1','n2','opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z')`,
+	} {
+		if _, err := h.workspace.DB().ExecContext(ctx, sqlStmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seq := int64(1)
+	if _, err := store.UpsertWorkParticipant(ctx, "ag-1", anyString(participating["id"]), primitives.WorkParticipantRegistration{SessionID: "s-ag-1", Activity: "active", Sequence: &seq}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertWorkParticipant(ctx, "ag-2", anyString(unrelated["id"]), primitives.WorkParticipantRegistration{SessionID: "s-ag-2", Activity: "active", Sequence: &seq}); err != nil {
+		t.Fatal(err)
+	}
 	for drained := false; !drained; {
 		if drained, err = store.RefreshBriefInitiatives(ctx, 200); err != nil {
 			t.Fatal(err)
@@ -190,6 +209,9 @@ func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
 	}
 	if !yoursByRef[anyString(promised["ref"])] {
 		t.Fatalf("promised card should have yours=true: %#v", brief["initiatives"])
+	}
+	if !yoursByRef[anyString(participating["ref"])] {
+		t.Fatalf("participating card should have yours=true: %#v", brief["initiatives"])
 	}
 	if yoursByRef[anyString(unrelated["ref"])] {
 		t.Fatalf("unrelated card must not have yours=true: %#v", brief["initiatives"])

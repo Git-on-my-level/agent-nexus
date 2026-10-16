@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   clearPrincipalLocalWork,
+  createMutationSendLocker,
   listLocalWork,
   loadLocalWork,
   localWorkEpoch,
@@ -209,4 +210,214 @@ it("serializes sends across tabs via a localStorage lease when navigator.locks i
       value: prevLocks,
     });
   }
+});
+
+function createSharedTabEnvironment({ dropFirstCollision = false } = {}) {
+  const store = new Map();
+  const peers = new Set();
+  let firstReads = 0;
+  function makeStorage() {
+    return {
+      getItem(key) {
+        if (dropFirstCollision && firstReads < 2) {
+          firstReads += 1;
+          return null;
+        }
+        return store.has(key) ? store.get(key) : null;
+      },
+      setItem(key, value) {
+        store.set(key, String(value));
+      },
+      removeItem(key) {
+        store.delete(key);
+      },
+    };
+  }
+  function makeChannel() {
+    const channel = {
+      onmessage: null,
+      postMessage(data) {
+        for (const peer of peers) {
+          if (peer !== channel && typeof peer.onmessage === "function") {
+            peer.onmessage({ data });
+          }
+        }
+      },
+    };
+    peers.add(channel);
+    return channel;
+  }
+  return { store, makeStorage, makeChannel };
+}
+
+it("prevents concurrent entry on simultaneous acquisition and renews the lease across a long callback", async () => {
+  const env = createSharedTabEnvironment({ dropFirstCollision: true });
+  const tabA = createMutationSendLocker({
+    tabId: "tab-a",
+    storage: env.makeStorage(),
+    channel: env.makeChannel(),
+    locks: null,
+    leaseTtlMs: 60,
+    heartbeatIntervalMs: 15,
+    pollMs: 10,
+    settleMinMs: 5,
+    settleMaxMs: 12,
+  });
+  const tabB = createMutationSendLocker({
+    tabId: "tab-b",
+    storage: env.makeStorage(),
+    channel: env.makeChannel(),
+    locks: null,
+    leaseTtlMs: 60,
+    heartbeatIntervalMs: 15,
+    pollMs: 10,
+    settleMinMs: 5,
+    settleMaxMs: 12,
+  });
+
+  let activeCount = 0;
+  let maxConcurrent = 0;
+  const events = [];
+
+  const runTab = (label, locker, holdMs) =>
+    locker.requestMutationSendLock(scope, async (lease) => {
+      activeCount += 1;
+      maxConcurrent = Math.max(maxConcurrent, activeCount);
+      events.push(`enter:${label}`);
+      await new Promise((resolve) => setTimeout(resolve, holdMs));
+      expect(lease.isHeld()).toBe(true);
+      events.push(`exit:${label}`);
+      activeCount -= 1;
+      return label;
+    });
+
+  // Hold the first callback for 160ms (> 2.5x the 60ms TTL) so heartbeat renewal is required.
+  const [first, second] = await Promise.all([
+    runTab("A", tabA, 160),
+    runTab("B", tabB, 20),
+  ]);
+  expect([first, second].sort()).toEqual(["A", "B"]);
+  expect(maxConcurrent).toBe(1);
+  expect(events).toHaveLength(4);
+  expect(events[0].startsWith("enter:")).toBe(true);
+  expect(events[1]).toBe(`exit:${events[0].slice(6)}`);
+});
+
+it("fences checkpoint writes when a tab loses its lease during a stalled callback", async () => {
+  const env = createSharedTabEnvironment();
+  let stallHeartbeatA = false;
+  const storageA = {
+    getItem: (key) => env.makeStorage().getItem(key),
+    setItem: (key, value) => {
+      if (stallHeartbeatA) return;
+      env.makeStorage().setItem(key, value);
+    },
+    removeItem: (key) => env.makeStorage().removeItem(key),
+  };
+  const tabA = createMutationSendLocker({
+    tabId: "tab-a",
+    storage: storageA,
+    channel: env.makeChannel(),
+    locks: null,
+    leaseTtlMs: 50,
+    heartbeatIntervalMs: 15,
+    pollMs: 10,
+    settleMinMs: 2,
+    settleMaxMs: 5,
+  });
+  const tabB = createMutationSendLocker({
+    tabId: "tab-b",
+    storage: env.makeStorage(),
+    channel: env.makeChannel(),
+    locks: null,
+    leaseTtlMs: 50,
+    heartbeatIntervalMs: 15,
+    pollMs: 10,
+    settleMinMs: 2,
+    settleMaxMs: 5,
+  });
+
+  let releaseStalledA;
+  const stalledGateA = new Promise((resolve) => {
+    releaseStalledA = resolve;
+  });
+  let enteredA;
+  const enteredGateA = new Promise((resolve) => {
+    enteredA = resolve;
+  });
+
+  const promiseA = tabA.requestMutationSendLock(scope, async (lease) => {
+    await saveLocalWork(
+      scope,
+      "mutation",
+      "m-fenced",
+      { state: "sending", by: "A" },
+      { lease },
+    );
+    stallHeartbeatA = true;
+    enteredA();
+    await stalledGateA;
+    // Lease was stolen by tab B while A was stalled; checkpoint must be fenced.
+    await saveLocalWork(
+      scope,
+      "mutation",
+      "m-fenced",
+      { state: "sending", by: "A-stale" },
+      { lease },
+    );
+  });
+
+  await enteredGateA;
+  // Wait for A's unrenewed 50ms lease to expire, then let B acquire and checkpoint.
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  await tabB.requestMutationSendLock(scope, async (lease) => {
+    await saveLocalWork(
+      scope,
+      "mutation",
+      "m-fenced",
+      { state: "confirmed", by: "B" },
+      { lease },
+    );
+  });
+
+  releaseStalledA();
+  await expect(promiseA).rejects.toMatchObject({ leaseLost: true });
+  expect(await loadLocalWork(scope, "mutation", "m-fenced")).toEqual({
+    state: "confirmed",
+    by: "B",
+  });
+});
+
+it("logs a warning and falls back to in-tab exclusion when lock storage throws", async () => {
+  const warn = vi.fn();
+  const brokenStorage = {
+    getItem() {
+      throw new Error("storage disabled");
+    },
+    setItem() {
+      throw new Error("storage disabled");
+    },
+    removeItem() {},
+  };
+  const locker = createMutationSendLocker({
+    tabId: "tab-broken",
+    storage: brokenStorage,
+    channel: null,
+    locks: null,
+    warn,
+  });
+  const order = [];
+  await Promise.all([
+    locker.requestMutationSendLock(scope, async () => {
+      order.push("start:1");
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      order.push("end:1");
+    }),
+    locker.requestMutationSendLock(scope, async () => {
+      order.push("start:2");
+      order.push("end:2");
+    }),
+  ]);
+  expect(order).toEqual(["start:1", "end:1", "start:2", "end:2"]);
+  expect(warn).toHaveBeenCalled();
 });

@@ -104,9 +104,12 @@ Undo transfers the request back to a draft. Editing retains the older request
 as recovery history and a newly submitted correction uses a new key.
 
 Web Locks serialize sends across tabs for one scope when available. On non-secure
-origins without Web Locks (such as plain-HTTP LAN or Tailnet hosts), an in-tab
-promise mutex plus a best-effort localStorage/BroadcastChannel lease serializes
-sends instead of failing. BroadcastChannel and storage events synchronize saved
+origins without Web Locks, `crypto.randomUUID`, or `crypto.subtle` (such as
+plain-HTTP LAN or Tailnet hosts), an in-tab promise mutex plus a
+localStorage/BroadcastChannel lease with randomized settle-and-recheck
+acquisition, periodic heartbeat renewal, and token fencing before checkpoint
+writes serializes sends (with `crypto.getRandomValues` UUID v4 and pure-JS
+SHA-256 fallbacks). BroadcastChannel and storage events synchronize saved
 changes and privacy revocation.
 The next adapters must use the same scope-wide lock; do not create independently
 draining per-surface queues.

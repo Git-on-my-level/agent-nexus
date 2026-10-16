@@ -878,12 +878,16 @@ var migrations = []migration{
 			);`,
 			`CREATE TABLE work_participants (
 				id TEXT PRIMARY KEY, card_id TEXT NOT NULL REFERENCES cards(id), session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+				actor_id TEXT NOT NULL DEFAULT '',
 				activity TEXT NOT NULL CHECK(activity IN ('active','idle','left')),
 				sequence INTEGER NOT NULL CHECK(sequence >= 0), request_json TEXT NOT NULL,
 				created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, expires_at TEXT NOT NULL,
 				UNIQUE(card_id,session_id)
 			);`,
 			`CREATE INDEX idx_work_participants_card_id ON work_participants(card_id,id);`,
+			`CREATE INDEX idx_work_participants_actor_card_active ON work_participants(actor_id, card_id, session_id, id) WHERE activity <> 'left' AND actor_id <> '';`,
+			`CREATE TRIGGER work_participants_actor_insert AFTER INSERT ON work_participants WHEN NEW.actor_id = '' OR NEW.actor_id LIKE 'actor:%' BEGIN UPDATE work_participants SET actor_id = COALESCE((SELECT CASE WHEN trim(s.actor_id) LIKE 'actor:%' THEN substr(trim(s.actor_id),7) ELSE trim(s.actor_id) END FROM agent_sessions s WHERE s.id = NEW.session_id), '') WHERE id = NEW.id; END;`,
+			`CREATE TRIGGER work_participants_actor_update AFTER UPDATE OF session_id ON work_participants BEGIN UPDATE work_participants SET actor_id = COALESCE((SELECT CASE WHEN trim(s.actor_id) LIKE 'actor:%' THEN substr(trim(s.actor_id),7) ELSE trim(s.actor_id) END FROM agent_sessions s WHERE s.id = NEW.session_id), '') WHERE id = NEW.id; END;`,
 		},
 	},
 	{Version: 43, AfterApply: applyMigration43ReportIndexes},
@@ -1125,6 +1129,7 @@ var migrations = []migration{
 	{Version: 104, Statements: []string{
 		`CREATE INDEX IF NOT EXISTS idx_resource_access_tombstones_kind_ref ON resource_access_tombstones(kind, ref COLLATE NOCASE)`,
 	}},
+	{Version: 105, AfterApply: installBriefAgentOwnershipIndexes},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

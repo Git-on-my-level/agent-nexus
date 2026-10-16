@@ -764,43 +764,69 @@ describe("inbox response queue", () => {
     ).toBe("none");
   });
 
-  it("falls back to an in-tab mutex and cross-tab lease when navigator.locks is unavailable", async () => {
+  it("falls back to an in-tab mutex and cross-tab lease when navigator.locks, crypto.randomUUID and crypto.subtle are unavailable", async () => {
+    const prevLocks = navigator.locks;
+    const prevRandomUUID = globalThis.crypto.randomUUID;
+    const prevSubtle = globalThis.crypto.subtle;
     Object.defineProperty(navigator, "locks", {
       configurable: true,
       value: undefined,
     });
-    const order = [];
-    let releaseFirst;
-    const firstGate = new Promise((resolve) => {
-      releaseFirst = resolve;
+    Object.defineProperty(globalThis.crypto, "randomUUID", {
+      configurable: true,
+      value: undefined,
     });
-    client.respondInboxItem.mockImplementation(async (id) => {
-      order.push(`start:${id}`);
-      if (id === "inbox:a") await firstGate;
-      order.push(`end:${id}`);
-      return { event: { id: `resp-${id}` } };
+    Object.defineProperty(globalThis.crypto, "subtle", {
+      configurable: true,
+      value: undefined,
     });
+    try {
+      const order = [];
+      let releaseFirst;
+      const firstGate = new Promise((resolve) => {
+        releaseFirst = resolve;
+      });
+      client.respondInboxItem.mockImplementation(async (id) => {
+        order.push(`start:${id}`);
+        if (id === "inbox:a") await firstGate;
+        order.push(`end:${id}`);
+        return { event: { id: `resp-${id}` } };
+      });
 
-    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
-    const firstFlush = flushInboxResponse();
-    await vi.waitFor(() => expect(order).toEqual(["start:inbox:a"]));
+      queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+      const firstFlush = flushInboxResponse();
+      await vi.waitFor(() => expect(order).toEqual(["start:inbox:a"]));
 
-    queueInboxResponse({ itemId: "inbox:b", request, message: "B" });
-    const secondFlush = flushInboxResponse();
-    // Second send must wait for the first in-tab lock holder to finish.
-    await Promise.resolve();
-    expect(order).toEqual(["start:inbox:a"]);
+      queueInboxResponse({ itemId: "inbox:b", request, message: "B" });
+      const secondFlush = flushInboxResponse();
+      // Second send must wait for the first in-tab lock holder to finish.
+      await Promise.resolve();
+      expect(order).toEqual(["start:inbox:a"]);
 
-    releaseFirst();
-    await Promise.all([firstFlush, secondFlush]);
-    expect(order).toEqual([
-      "start:inbox:a",
-      "end:inbox:a",
-      "start:inbox:b",
-      "end:inbox:b",
-    ]);
-    expect(get(inboxResponseFailures)).toEqual({});
-    expect(get(inboxUnsentResponses)).toEqual([]);
+      releaseFirst();
+      await Promise.all([firstFlush, secondFlush]);
+      expect(order).toEqual([
+        "start:inbox:a",
+        "end:inbox:a",
+        "start:inbox:b",
+        "end:inbox:b",
+      ]);
+      expect(get(inboxResponseFailures)).toEqual({});
+      expect(get(inboxUnsentResponses)).toEqual([]);
+    } finally {
+      Object.defineProperty(navigator, "locks", {
+        configurable: true,
+        value: prevLocks,
+      });
+      Object.defineProperty(globalThis.crypto, "randomUUID", {
+        configurable: true,
+        value: prevRandomUUID,
+      });
+      Object.defineProperty(globalThis.crypto, "subtle", {
+        configurable: true,
+        value: prevSubtle,
+      });
+    }
   });
 });
 

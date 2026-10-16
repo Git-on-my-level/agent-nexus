@@ -1,4 +1,5 @@
 import { enqueueLocalMutation } from "$lib/mutationOutbox.js";
+import { randomUUID } from "$lib/replayPolicy.js";
 
 /** One device-only draft per principal and workspace; the local work scope
  * already carries both, so the target names only the resource. */
@@ -126,7 +127,7 @@ export function enqueueNotificationSettings(draft, options = {}) {
   const frozen = JSON.parse(JSON.stringify(draft));
   return enqueueLocalMutation({
     ...options,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: NOTIFICATION_SETTINGS_OPERATION,
     request: { body: settingsBody(frozen) },
     target: NOTIFICATION_SETTINGS_TARGET,

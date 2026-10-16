@@ -903,21 +903,82 @@ func (b *briefBuild) agentInitiativeCards(ids []string) (map[string]bool, error)
 	if b.reader.human() || strings.TrimSpace(b.reader.ActorID) == "" || len(ids) == 0 {
 		return out, nil
 	}
+	admitted := make(map[string]bool, len(ids))
+	for _, cardID := range ids {
+		admitted[cardID] = true
+	}
 	id, prefixed := b.readerIDs()
-	encoded, _ := json.Marshal(ids)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT c.id FROM cards c WHERE c.id IN (SELECT value FROM json_each(?)) AND (c.assignee IN (?,?) OR EXISTS(SELECT 1 FROM work_participants p JOIN agent_sessions s ON s.id=p.session_id WHERE p.card_id=c.id AND p.activity<>'left' AND s.actor_id IN (?,?)))`, string(encoded), id, prefixed, id, prefixed)
+	const window = BriefSectionLimit + 1
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT 'c', id FROM (SELECT c.id FROM cards c WHERE c.assignee IN (?,?) LIMIT ?)
+		UNION ALL
+		SELECT 'p', card_id FROM (SELECT p.card_id FROM work_participants p JOIN agent_sessions s ON s.id=p.session_id WHERE p.actor_id=? AND p.actor_id<>'' AND p.activity<>'left' AND s.activity<>'closed' AND s.actor_id IN (?,?) LIMIT ?)`, id, prefixed, window, id, id, prefixed, window)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	var assignedCount, participantCount int
 	for rows.Next() {
-		var cardID string
-		if err = rows.Scan(&cardID); err != nil {
+		var kind, cardID string
+		if err = rows.Scan(&kind, &cardID); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		out[cardID] = true
+		if kind == "c" {
+			assignedCount++
+		} else {
+			participantCount++
+		}
+		if admitted[cardID] {
+			out[cardID] = true
+		}
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	if assignedCount < window && participantCount < window {
+		return out, nil
+	}
+	encoded, _ := json.Marshal(ids)
+	if assignedCount >= window {
+		more, err := b.s.db.QueryContext(b.ctx, `SELECT c.id FROM cards c WHERE c.assignee IN (?,?) AND c.id IN (SELECT value FROM json_each(?))`, id, prefixed, string(encoded))
+		if err != nil {
+			return nil, err
+		}
+		for more.Next() {
+			var cardID string
+			if err = more.Scan(&cardID); err != nil {
+				more.Close()
+				return nil, err
+			}
+			out[cardID] = true
+		}
+		if err = more.Err(); err != nil {
+			more.Close()
+			return nil, err
+		}
+		more.Close()
+	}
+	if participantCount >= window {
+		more, err := b.s.db.QueryContext(b.ctx, `SELECT p.card_id FROM work_participants p JOIN agent_sessions s ON s.id=p.session_id WHERE p.actor_id=? AND p.actor_id<>'' AND p.activity<>'left' AND p.card_id IN (SELECT value FROM json_each(?)) AND s.activity<>'closed' AND s.actor_id IN (?,?)`, id, string(encoded), id, prefixed)
+		if err != nil {
+			return nil, err
+		}
+		for more.Next() {
+			var cardID string
+			if err = more.Scan(&cardID); err != nil {
+				more.Close()
+				return nil, err
+			}
+			out[cardID] = true
+		}
+		if err = more.Err(); err != nil {
+			more.Close()
+			return nil, err
+		}
+		more.Close()
+	}
+	return out, nil
 }
 
 func briefPlacement(phase string) string {

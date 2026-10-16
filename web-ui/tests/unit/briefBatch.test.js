@@ -61,26 +61,57 @@ describe("brief batch decisions", () => {
     expect(findDecision(brief, "")).toBeNull();
   });
 
-  it("resolves event:<id> escalation refs against canonical, short and grouped inbox ids", () => {
-    const withCanonical = normalizeBrief({
+  it("matches only authoritative event identities and rejects suffix or ambiguous matches", () => {
+    const withSuffixes = normalizeBrief({
       decisions: [
         ...brief.decisions,
         {
+          ref: "inbox:ask:thread-1:tenant:42",
+          inbox_item_id: "inbox:ask:thread-1:tenant:42",
+          kind: "ask",
+          title: "Tenant 42 suffix",
+        },
+        {
+          ref: "inbox:ask:thread-1:none:42",
+          inbox_item_id: "inbox:ask:thread-1:none:42",
+          kind: "ask",
+          title: "Bare 42 suffix",
+        },
+        {
           ref: "inbox:ask:thread-1:req-9:evt-99",
           inbox_item_id: "inbox:ask:thread-1:req-9:evt-99",
+          event_ref: "event:evt-99",
           kind: "ask",
-          title: "Canonical event ask",
+          title: "Authoritative event ask",
         },
       ],
     });
-    expect(findDecision(withCanonical, "event:evt-99")?.title).toBe(
-      "Canonical event ask",
+    expect(findDecision(withSuffixes, "event:42")).toBeNull();
+    expect(findDecision(withSuffixes, "event:2")).toBeNull();
+    expect(findDecision(withSuffixes, "event:evt-99")?.title).toBe(
+      "Authoritative event ask",
     );
-    expect(findDecision(withCanonical, "event:solo")?.title).toBe("Solo");
-    expect(findDecision(withCanonical, "event:2")?.inboxItemId).toBe(
-      "inbox:curation-batch:k",
-    );
-    expect(findDecision(withCanonical, "event:missing")).toBeNull();
+    expect(findDecision(withSuffixes, "event:solo")?.title).toBe("Solo");
+    expect(findDecision(withSuffixes, "event:missing")).toBeNull();
+
+    const ambiguous = normalizeBrief({
+      decisions: [
+        {
+          ref: "inbox:dup",
+          inbox_item_id: "dup",
+          kind: "ask",
+          title: "First duplicate",
+        },
+        {
+          ref: "inbox:dup",
+          inbox_item_id: "dup",
+          kind: "ask",
+          title: "Second duplicate",
+        },
+      ],
+    });
+    expect(findDecision(ambiguous, "inbox:dup")).toBeNull();
+    expect(findDecision(ambiguous, "event:dup")).toBeNull();
   });
 
   it("includes a batch when any member subject or block matches", () => {

@@ -31,6 +31,7 @@ import {
   expiredReplayError,
   intentFingerprint,
   freshRequest,
+  randomUUID,
 } from "$lib/replayPolicy.js";
 
 export const mutationOutbox = writable([]);
@@ -45,15 +46,16 @@ const active = (entry) =>
   entry.scope === get(localWorkScope) &&
   canUseLocalWorkScope(entry.scope) &&
   entry.epoch === localWorkEpoch(entry.scope);
-const persist = (entry) =>
+const persist = (entry, lease = null) =>
   saveLocalWork(entry.scope, "mutation", entry.key, entry, {
     epoch: entry.epoch,
+    lease,
   });
 const visible = (entry) => entry.state !== "superseded";
 
 /** Only audited adapters belong here. A new endpoint must first prove atomic
  * mutation/replay and changed-body key rejection in real core tests. */
-async function send(entry) {
+async function send(entry, lease = null) {
   if (!active(entry))
     throw new Error("The submitting identity is no longer active.");
   if (replayExpired(entry.createdAt)) throw expiredReplayError();
@@ -115,7 +117,7 @@ async function send(entry) {
           },
         ],
       };
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
@@ -178,7 +180,7 @@ async function send(entry) {
             .map((candidate) => ({ id: candidate.id, result })),
         ],
       };
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
@@ -220,7 +222,7 @@ async function send(entry) {
           { id: item.id, result },
         ],
       };
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
@@ -304,6 +306,7 @@ async function send(entry) {
     });
     if (!result?.artifact?.id)
       throw new Error("Attachment receipt is incomplete.");
+    lease?.assertHeld();
     await saveUploadedAttachment(entry, result);
     return result;
   }
@@ -319,7 +322,7 @@ async function send(entry) {
         throw new Error("Conversation receipt is incomplete.");
       id = conversation.id;
       entry.receipt = { ...entry.receipt, conversationId: id };
-      await persist(entry);
+      await persist(entry, lease);
     }
     if (!active(entry))
       throw new Error("The submitting identity is no longer active.");
@@ -336,7 +339,7 @@ async function send(entry) {
       ));
     if (!decision.id) throw new Error("Decision receipt is incomplete.");
     entry.receipt = { ...entry.receipt, decision };
-    await persist(entry);
+    await persist(entry, lease);
     commitInboxView(entry.scope, { decision });
     if (!entry.request.autoApply) return { decision };
     if (!active(entry))
@@ -355,11 +358,11 @@ async function send(entry) {
       if (!active(entry))
         throw new Error("The submitting identity is no longer active.");
       entry.request.autoDispatch = {
-        request_key: crypto.randomUUID(),
+        request_key: randomUUID(),
         if_revision: decision.revision,
         if_action_revision: base.revision,
       };
-      await persist(entry);
+      await persist(entry, lease);
     }
     let action = entry.receipt.dispatchedAction;
     if (!action) {
@@ -370,7 +373,7 @@ async function send(entry) {
       if (action.id !== decision.action_id)
         throw new Error("Action receipt is incomplete.");
       entry.receipt = { ...entry.receipt, dispatchedAction: action };
-      await persist(entry);
+      await persist(entry, lease);
     }
     if (action.status !== "failed") {
       if (!active(entry))
@@ -382,10 +385,10 @@ async function send(entry) {
         if (!active(entry))
           throw new Error("The submitting identity is no longer active.");
         entry.request.autoReconcile = {
-          request_key: crypto.randomUUID(),
+          request_key: randomUUID(),
           if_revision: base.revision,
         };
-        await persist(entry);
+        await persist(entry, lease);
       }
       action =
         entry.receipt.reconciledAction ||
@@ -396,7 +399,7 @@ async function send(entry) {
       if (action.id !== decision.action_id)
         throw new Error("Read-back receipt is incomplete.");
       entry.receipt = { ...entry.receipt, reconciledAction: action };
-      await persist(entry);
+      await persist(entry, lease);
     }
     return { decision, action };
   }
@@ -421,7 +424,7 @@ function confirm(entry, result = null) {
 }
 
 export function enqueueDiscussionMessage({ event, ...options }) {
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   return enqueueLocalMutation({
     ...options,
     key,
@@ -442,7 +445,7 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
     ].includes(operation)
   )
     throw new Error("This authoring operation has not been audited.");
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   const draft = options.draft || {};
   const preview =
     options.preview ??
@@ -504,7 +507,7 @@ export function enqueueInboxControls({ draft, ...options }) {
       )
     )
       throw new Error("Review the saved inbox control.");
-    const body = { ...item.body, request_key: crypto.randomUUID() };
+    const body = { ...item.body, request_key: randomUUID() };
     if (
       item.action === "read"
         ? body.group_ref !== item.id ||
@@ -528,7 +531,7 @@ export function enqueueInboxControls({ draft, ...options }) {
   });
   return enqueueLocalMutation({
     ...options,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: "inbox.controls",
     request: { items },
     draft,
@@ -564,7 +567,7 @@ export function enqueueEventLifecycle({ draft, ...options }) {
   return enqueueLocalMutation({
     ...options,
     draft,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: "events.lifecycle",
     title: "Saved event action",
     preview: `${draft.action}: ${events.map((event) => event.title).join(", ")}\n${draft.reason || ""}`,
@@ -577,7 +580,7 @@ export function enqueueEventLifecycle({ draft, ...options }) {
         action: draft.action,
         body: {
           actor_id,
-          request_key: crypto.randomUUID(),
+          request_key: randomUUID(),
           if_lifecycle: event.if_lifecycle,
           ...(draft.action === "trash" ? { reason: draft.reason || "" } : {}),
         },
@@ -606,7 +609,7 @@ export function enqueueDocumentLifecycle({ draft, ...options }) {
     throw new Error(
       "A saved request already includes this document. Confirm or edit that request first.",
     );
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   return enqueueLocalMutation({
     ...options,
     draft,
@@ -620,7 +623,7 @@ export function enqueueDocumentLifecycle({ draft, ...options }) {
         action: draft.action,
         body: {
           actor_id,
-          request_key: crypto.randomUUID(),
+          request_key: randomUUID(),
           if_updated_at: doc.updated_at,
           ...(["trash", "restore"].includes(draft.action)
             ? { reason: draft.reason || "" }
@@ -650,7 +653,7 @@ export async function enqueueAttachment({ file, refs, target, href }) {
       raw += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
     if (scope !== get(localWorkScope) || epoch !== localWorkEpoch(scope))
       throw new Error("The identity selecting this file is no longer active.");
-    const key = crypto.randomUUID();
+    const key = randomUUID();
     return await enqueueLocalMutation({
       key,
       operation: "artifacts.attachments.create",
@@ -674,7 +677,7 @@ export function enqueuePmMessage({
   text,
   workRef = "",
   contextRefs = [],
-  key = crypto.randomUUID(),
+  key = randomUUID(),
   ...options
 }) {
   const actor_id = JSON.parse(get(localWorkScope))[3];
@@ -687,8 +690,8 @@ export function enqueuePmMessage({
       ...(!conversationId
         ? {
             creation: {
-              request_key: crypto.randomUUID(),
-              replay_key: crypto.randomUUID(),
+              request_key: randomUUID(),
+              replay_key: randomUUID(),
               actor_id,
               title: text.slice(0, 100),
               ...(workRef ? { work_ref: workRef } : {}),
@@ -700,7 +703,7 @@ export function enqueuePmMessage({
       // bodies verbatim, including legacy entries without receipt keys.
       message: {
         request_key: key,
-        replay_key: crypto.randomUUID(),
+        replay_key: randomUUID(),
         actor_id,
         text,
       },
@@ -716,7 +719,7 @@ export function enqueuePmDecisionAnswer({
   autoApply = false,
   ...options
 }) {
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   const actor_id = JSON.parse(get(localWorkScope))[3];
   return enqueueLocalMutation({
     ...options,
@@ -737,7 +740,7 @@ export function enqueuePmDecisionAnswer({
 export function enqueueCurationUngroup({ key: batchKey, ...options }) {
   return enqueueLocalMutation({
     ...options,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: "curation.ungroup",
     request: { body: { key: batchKey } },
   });
@@ -802,7 +805,7 @@ export async function enqueueLocalMutation({
 async function attempt(entry) {
   if (!active(entry) || navigator.onLine === false) return;
   try {
-    await requestMutationSendLock(entry.scope, async () => {
+    await requestMutationSendLock(entry.scope, async (lease) => {
       if (!active(entry)) return;
       const latest = await loadLocalWorkRecord(
         entry.scope,
@@ -853,25 +856,29 @@ async function attempt(entry) {
         if ((await intentFingerprint(other.request)) !== fingerprint) continue;
         // Another tab owns the identical persisted submission. Adopt its
         // active request, including its original keys and checkpoints.
-        await persist({
-          ...entry,
-          state: "superseded",
-          adoptedKey: other.key,
-        });
+        await persist(
+          {
+            ...entry,
+            state: "superseded",
+            adoptedKey: other.key,
+          },
+          lease,
+        );
         volatile.delete(entry.key);
         return;
       }
       entry.state = "sending";
       entry.attempts += 1;
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
       if (!active(entry)) return;
-      const result = adopted ? adopted.confirmation : await send(entry);
+      const result = adopted ? adopted.confirmation : await send(entry, lease);
       if (entry.epoch !== localWorkEpoch(entry.scope)) return;
       await saveLocalWork(entry.scope, "mutation", entry.key, null, {
         epoch: entry.epoch,
+        lease,
         deletionReason: "confirmed",
         confirmation: result,
         submission: {
@@ -896,18 +903,27 @@ async function attempt(entry) {
           null,
           {
             epoch: entry.epoch,
+            lease,
           },
         );
-      if (entry.operation === "events.create")
+      if (entry.operation === "events.create") {
+        lease?.assertHeld();
         await consumeUploadedAttachments(
           entry.scope,
           entry.request.event.refs,
           entry.epoch,
         );
+      }
       confirm(entry, result);
     });
   } catch (error) {
     if (!active(entry)) return;
+    if (error?.leaseLost) {
+      volatile.delete(entry.key);
+      clearTimeout(timer);
+      timer = setTimeout(requestRecovery, 250);
+      return;
+    }
     if (
       entry.operation === "pm.decisions.create" &&
       isPmNotOnboardedRefusal(error)
@@ -1115,7 +1131,7 @@ export async function retryMutation(key, { asNew = false } = {}) {
     }
     const replacement = {
       ...snapshot(entry),
-      key: crypto.randomUUID(),
+      key: randomUUID(),
       request: freshRequest(entry.request, entry.operation, entry.receipt),
       createdAt: Date.now(),
       state: "pending",
