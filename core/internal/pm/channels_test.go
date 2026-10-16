@@ -321,3 +321,99 @@ func TestExplicitDeliveryRetryRequiresVerifiedNonDelivery(t *testing.T) {
 		t.Fatalf("retry approval replay reopened send %+v %v", replay, err)
 	}
 }
+
+func TestDeliverPendingMarksZeroMessageRepliesDoneAndUsesIndexedOutbox(t *testing.T) {
+	s, st, p, _ := fixture(t)
+	ctx := context.Background()
+	o := Origin{Transport: "telegram", TenantID: "bot", ChannelID: "chat", ExternalUserID: "42"}
+	bind(t, s, p, o, false)
+	convID := stableID("conversation", p.WorkspaceID, p.ActorID, bindingID(o))
+
+	// Create the channel conversation via a first turn, then seed 60 delivered
+	// turns whose replies split into zero messages (exceeding the 50-row LIMIT).
+	first, err := s.ReceiveChannel(ctx, o, "seed-0", "Status?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = claimAndComplete(t, s, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, first.ID, "initial", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE pm_records SET body=CAST(json_set(body,'$.response','') AS BLOB) WHERE kind='turn' AND id=?`, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < 60; i++ {
+		turnID := stableID("turn", convID, "empty", strconv.Itoa(i))
+		emptyTurn := Turn{
+			ID:             turnID,
+			ConversationID: convID,
+			WorkspaceID:    p.WorkspaceID,
+			ActorID:        p.ActorID,
+			Text:           "Status?",
+			Response:       "",
+			Status:         Delivered,
+			AgentActorID:   "pm-agent",
+			Origin:         &o,
+			CreatedAt:      time.Now().UTC(),
+			Deadline:       time.Now().UTC().Add(time.Minute),
+			Revision:       2,
+		}
+		if _, err := st.insert(ctx, "turn", turnID, p.WorkspaceID, p.ActorID, convID, emptyTurn); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	realTurn, err := s.ReceiveChannel(ctx, o, "real-turn", "What now?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = claimAndComplete(t, s, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, realTurn.ID, "Actionable reply", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var sent []string
+	sender := sendFunc(func(_ context.Context, d Delivery) (Receipt, error) {
+		sent = append(sent, d.Text)
+		return Receipt{Status: Delivered, ExternalID: "msg-" + strconv.Itoa(len(sent))}, nil
+	})
+	drained, err := s.DeliverPending(ctx, sender, 50)
+	if err != nil {
+		t.Fatalf("DeliverPending failed: %v", err)
+	}
+	if len(drained) != 1 || len(sent) != 1 || sent[0] != "Actionable reply" {
+		t.Fatalf("expected real turn delivery past 60 empty turns, got drained=%+v sent=%v", drained, sent)
+	}
+
+	var unqueued int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status')='delivered' AND COALESCE(json_extract(body,'$.delivery_queued'),0)=0`, p.WorkspaceID).Scan(&unqueued); err != nil {
+		t.Fatal(err)
+	}
+	if unqueued != 0 {
+		t.Fatalf("expected all delivered turns marked delivery_queued=1, found %d unqueued", unqueued)
+	}
+
+	rows, err := st.db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+deliverPendingTurnsSQL, p.WorkspaceID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	usedOutboxIndex := false
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "SCAN") || strings.Contains(detail, "TEMP B-TREE") {
+			t.Fatalf("unbounded outbox turn query plan: %s", detail)
+		}
+		if strings.Contains(detail, "pm_records_turn_outbox") {
+			usedOutboxIndex = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !usedOutboxIndex {
+		t.Fatal("expected deliverPendingTurnsSQL to use pm_records_turn_outbox index")
+	}
+}
