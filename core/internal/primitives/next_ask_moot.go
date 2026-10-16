@@ -14,11 +14,13 @@ import (
 // brief_asks and, for handle spellings, idx_events_handle_unique. The handle
 // predicate matches that partial index, so the plan uses it without an
 // INDEXED BY hint. A hint would fail signed-in reads: scopeRead rewrites
-// events into a relation shadow that has no physical indexes. The bound
-// is the page (at most nextAskRefsPerNote refs per note, briefMootRefBudget
-// refs in all), never workspace size. An ask the scoped events relation or
-// visible hides is omitted, so its decision cannot flag the card or appear
-// in the evidence.
+// events and threads into relation shadows that have no physical indexes.
+// The bound is the page (at most nextAskRefsPerNote refs per note,
+// briefMootRefBudget refs in all), never workspace size. An ask the scoped
+// events relation, the threads inner join, or visible hides is omitted, so
+// its decision cannot flag the card or appear in the evidence. A missing
+// thread is not public: the join is briefAnswerableAskJoin, the same
+// eligibility as the brief.
 func (s *Store) nextAskMootFromNotes(ctx context.Context, notes map[string]string, visible func(string, string) bool, now time.Time) (map[string]PossiblyMoot, error) {
 	out := map[string]PossiblyMoot{}
 	refsByCard := map[string][]string{}
@@ -78,23 +80,23 @@ func (s *Store) visibleCitedAsks(ctx context.Context, tokens []string, visible f
 	return out, nil
 }
 
-func (s *Store) visibleCitedAsksBatch(ctx context.Context, tokens []string, visible func(string, string) bool) (map[string]citedAsk, error) {
-	encoded, err := json.Marshal(tokens)
-	if err != nil {
-		return nil, err
-	}
-	// ask_id is the brief_asks primary key. Handle spellings resolve through
-	// the partial unique handle index, then the same primary key. Both sides
-	// of the union are bounded by this batch.
-	rows, err := s.db.QueryContext(ctx, `SELECT a.ask_id, COALESCE(e.handle,''), a.kind, a.state, COALESCE(a.answered_at,''),
+// citedAskSelect resolves a page of event refs to asks the reader can see.
+// ask_id is the brief_asks primary key. Handle spellings resolve through the
+// partial unique handle index, then the same primary key. Both sides of the
+// union are bounded by the batch. briefAnswerableAskJoin drops an ask whose
+// thread row is missing; a correlated threads lookup would turn that miss
+// into pm_actor_id ” and the PM rule would treat it as public. No INDEXED
+// BY on threads or events: scoped reads shadow both relations.
+const citedAskSelect = `SELECT a.ask_id, COALESCE(e.handle,''), a.kind, a.state, COALESCE(a.answered_at,''),
 		COALESCE(e.thread_id,''),
-		COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=e.thread_id),''),
+		COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),''),
 		COALESCE(json_extract(e.payload_json,'$.payload.expires_at'),''),
 		e.payload_json,
 		COALESCE(json_extract(r.payload_json,'$.payload.outcome'),''),
 		COALESCE(json_extract(r.payload_json,'$.payload.reason'),'')
 		FROM brief_asks a
 		JOIN events e ON e.id=a.ask_id
+		` + briefAnswerableAskJoin + `
 		LEFT JOIN events r ON r.id=a.response_event_id AND a.response_event_id<>''
 		WHERE COALESCE(e.trashed_at,'')=''
 		AND a.ask_id IN (
@@ -102,7 +104,14 @@ func (s *Store) visibleCitedAsksBatch(ctx context.Context, tokens []string, visi
 			UNION
 			SELECT ev.id FROM events ev
 			WHERE ev.handle IN (SELECT value FROM json_each(?)) AND ev.handle IS NOT NULL AND trim(ev.handle)<>''
-		)`, string(encoded), string(encoded))
+		)`
+
+func (s *Store) visibleCitedAsksBatch(ctx context.Context, tokens []string, visible func(string, string) bool) (map[string]citedAsk, error) {
+	encoded, err := json.Marshal(tokens)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, citedAskSelect, string(encoded), string(encoded))
 	if err != nil {
 		return nil, err
 	}

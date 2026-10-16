@@ -713,6 +713,18 @@ type CurationBatchMemberAsk struct {
 	RequesterActor, RequesterAgent, RequesterLabel, Delivery string
 }
 
+// openCurationMemberFrom is the open-member eligibility inbox respond uses.
+// briefAnswerableAskJoin drops a member whose thread row is missing, on both
+// the scoped list and the unscoped count, so an orphan is not a hidden
+// member and cannot be loaded. A scope-hidden member still has a thread row:
+// the unscoped count includes it and the scoped list does not, which is the
+// partial-set signal. No INDEXED BY on threads: a scoped read shadows it.
+const openCurationMemberFrom = `FROM curation_batch_members m
+		JOIN brief_asks a ON a.ask_id=m.ask_id
+		JOIN events e ON e.id=m.ask_id
+		` + briefAnswerableAskJoin + `
+		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`
+
 // OpenCurationBatchMembers lists open members of a curation batch.
 // hidden is true when any open member is outside the caller's scoped events
 // relation: the caller must not answer a partial set, and the bool carries
@@ -727,14 +739,11 @@ func (s *Store) OpenCurationBatchMembers(ctx context.Context, key string) ([]Cur
 		COALESCE(json_extract(e.payload_json,'$.payload.requester_agent_id'),''),
 		COALESCE(json_extract(e.payload_json,'$.payload.requester_label'),''),
 		COALESCE(json_extract(e.payload_json,'$.payload.delivery'),'')
-		FROM curation_batch_members m
-		JOIN brief_asks a ON a.ask_id=m.ask_id
-		JOIN events e ON e.id=m.ask_id
-		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''
+		` + openCurationMemberFrom + `
 		ORDER BY a.created_at,a.ask_id
 		LIMIT ?`
 	var total int
-	if err := s.db.QueryRowContext(curationInternal(ctx), `SELECT COUNT(*) FROM curation_batch_members m JOIN brief_asks a ON a.ask_id=m.ask_id JOIN events e ON e.id=m.ask_id WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`, key).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(curationInternal(ctx), `SELECT COUNT(*) `+openCurationMemberFrom, key).Scan(&total); err != nil {
 		return nil, false, err
 	}
 	if total > curation.MaxBatchMembers {
