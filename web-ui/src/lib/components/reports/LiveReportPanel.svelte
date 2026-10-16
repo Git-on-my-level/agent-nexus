@@ -8,6 +8,7 @@
   import Time from "$lib/time/Time.svelte";
   import { formatElapsed, instantIso, instantMs } from "$lib/time/format.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
+  import { resolveRefLink } from "$lib/refLinkModel";
   let {
     panel,
     /** Reference time, so a row's age ticks with the rest of the report. */
@@ -25,6 +26,13 @@
     canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
   );
   let live = $derived(panel.live);
+  const IMPACTS = new Set(["high", "normal", "low"]);
+  /** Where an activity row's subject opens, or "" when it has no route. */
+  const subjectHref = (subject) =>
+    canNavigate && subject?.ref
+      ? resolveRefLink(subject.ref, { organizationSlug, workspaceSlug }).href ||
+        ""
+      : "";
   let items = $derived(live?.data?.items ?? []);
   /*
    * Does a row need to say which state it is in?
@@ -174,18 +182,43 @@
     {:else}<p class="muted">No open work in this view.</p>{/if}
   {:else if panel.type === "live-activity"}
     {#if items.length}
-      <ol class="rows">
+      <!-- Who did what, on which item, and how much it matters. A row
+           without core's subject (an older core) falls back to its summary
+           sentence. -->
+      <ol class="activity">
         {#each items as item}
-          <li>
-            <p>{item.summary}</p>
-            <p class="muted">
+          {@const href = subjectHref(item.subject)}
+          <li
+            class="activity-row impact--{IMPACTS.has(item.impact)
+              ? item.impact
+              : 'normal'}"
+            data-activity-impact={item.impact || ""}
+          >
+            <span class="impact-dot" aria-hidden="true"></span>
+            <div class="activity-body">
+              {#if item.subject?.title && item.verb}
+                <p class="activity-line">
+                  <span class="actor">{item.actor_label || item.actor_id}</span>
+                  {item.verb}
+                  {#if href}<a {href} class="subject" data-activity-subject
+                      >{item.subject.title}</a
+                    >{:else}<span class="subject" data-activity-subject
+                      >{item.subject.title}</span
+                    >{/if}
+                </p>
+              {:else}
+                <p class="activity-line">{item.summary}</p>
+              {/if}
+              {#if item.detail}<p class="activity-detail">{item.detail}</p>{/if}
+            </div>
+            <span class="activity-time">
               {#if instantIso(item.ts)}<Time
                   value={item.ts}
                   {now}
                 />{:else}<UnavailableValue
                   reason="This activity row carries no timestamp."
                 />{/if}
-            </p>
+            </span>
           </li>
         {/each}
       </ol>
@@ -323,6 +356,68 @@
     color: var(--fg-muted);
     font-size: 11px;
   }
+  .activity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .activity-row {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line-subtle);
+  }
+  .activity-row:last-child {
+    border-bottom: 0;
+  }
+  .impact-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--fg-subtle);
+    transform: translateY(-1px);
+  }
+  .impact--high .impact-dot {
+    background: var(--accent-solid);
+  }
+  .impact--low {
+    opacity: 0.75;
+  }
+  .activity-line {
+    margin: 0;
+    color: var(--fg-muted);
+    font-size: 12px;
+  }
+  .activity-line .actor {
+    color: var(--fg);
+  }
+  .activity-line .subject {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .activity-line a.subject:hover {
+    color: var(--accent-text);
+    text-decoration: underline;
+  }
+  .activity-detail {
+    margin: 2px 0 0;
+    color: var(--fg-muted);
+    font-size: 11px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .activity-time {
+    color: var(--fg-subtle);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
   .partial {
     color: var(--warn-text);
     margin-top: 12px;

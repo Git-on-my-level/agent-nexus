@@ -1109,6 +1109,16 @@ function liveObservation() {
               summary: "Onboarding moved to review",
               ts: OBSERVED_AT,
               count: 1,
+              actor_id: "agent-reviewer",
+              actor_label: "reviewer on host-1",
+              verb: "moved",
+              subject: {
+                ref: "card:onboarding",
+                title: "Onboarding",
+                kind: "initiative",
+              },
+              detail: "In progress → Review",
+              impact: "high",
             },
             {
               ref: "event:burst",
@@ -1166,15 +1176,25 @@ for (const viewport of [
     ).toBeVisible();
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs Alex: choose the launch date");
+    // Activity names the item it happened on, links it, and marks impact;
+    // a row from an older core still reads as its summary sentence.
+    const moved = report.locator('[data-activity-impact="high"]');
+    await expect(moved).toContainText("reviewer on host-1 moved Onboarding");
+    await expect(moved).toContainText("In progress → Review");
+    await expect(moved.locator("a[data-activity-subject]")).toHaveAttribute(
+      "href",
+      /onboarding/,
+    );
+    await expect(report).toContainText("claude updated Initiatives · 7 edits");
     /*
-     * The initiative's state, through the one `WorkSummary` Watch and
-     * the initiatives table also render: a badge reading the label rather than this
-     * panel's own lowercased copy of the raw state token.
+     * The initiative's state: one badge reading the label rather than this
+     * panel's own lowercased copy of the raw state token, beside the same
+     * progress bar Watch draws.
      */
     await expect(
       report
         .locator('[data-report-initiative="card:launch"]')
-        .locator("[data-work-summary] [data-health='in_progress']"),
+        .locator("[data-initiative-state] [data-health='in_progress']"),
     ).toContainText("In progress");
     const initiative = report.locator('[data-report-initiative="card:launch"]');
     const initiativePlan = initiative.locator("[data-initiative-plan]");

@@ -43,7 +43,11 @@
 
   let {
     summary = null,
-    /** `row` | `card` | `header` */
+    /**
+     * `row` | `card` | `header` | `badge`. `badge` is the status line alone
+     * (status and the moot flag) for a host that draws its own progress and
+     * has no room for owner, due or asks — a dashboard panel's header.
+     */
     density = "row",
     /** The card's title, for the accessible name of the progress bar only. */
     title = "",
@@ -185,7 +189,7 @@
           <span class="summary__label">Possibly moot</span>
         </span>
       {/if}
-      {#if setStatus}
+      {#if setStatus && density !== "badge"}
         <!-- Core sends the stored phase only when it disagrees with what it
              computed. Saying both is the point: "Blocked · marked in
              progress" tells the reader the board is wrong, not the card. -->
@@ -193,7 +197,7 @@
           >· marked {setStatus.label.toLocaleLowerCase()}</span
         >
       {/if}
-      {#if density !== "row" && summary.sourceStatusShown}
+      {#if density !== "row" && density !== "badge" && summary.sourceStatusShown}
         <!--
           The source's own word for where this stands — "In UAT", "awaiting
           triage". It sits beside the computed status rather than replacing
@@ -233,7 +237,7 @@
           >· {waitingLabel}</span
         >
       {/if}
-      {#if density !== "row" && summary.freshness}
+      {#if density !== "row" && density !== "badge" && summary.freshness}
         <!-- On a page header the badge says what the date is about. A bare
              "yesterday" next to a status badge and a "Live · updated just
              now" chip is the one thing on the line a reader cannot place. -->
@@ -248,201 +252,205 @@
       {/if}
     </span>
 
-    {#if density === "header" && status.reason}
-      <span class="summary__reason" data-summary-reason>{status.reason}</span>
-    {/if}
+    {#if density !== "badge"}
+      {#if density === "header" && status.reason}
+        <span class="summary__reason" data-summary-reason>{status.reason}</span>
+      {/if}
 
-    {#if hints.length}
-      <!-- Quiet, and under the status rather than beside it: a note about
+      {#if hints.length}
+        <!-- Quiet, and under the status rather than beside it: a note about
            the card, not a second opinion on what state it is in. -->
-      <span class="summary__hints" data-summary-hints>
-        {#each hints as hint (hint.key)}
-          <span data-summary-hint={hint.key}>{hint.label}</span>
-        {/each}
-      </span>
-    {/if}
+        <span class="summary__hints" data-summary-hints>
+          {#each hints as hint (hint.key)}
+            <span data-summary-hint={hint.key}>{hint.label}</span>
+          {/each}
+        </span>
+      {/if}
 
-    {#if progress && density !== "header"}
-      {#if density === "card"}
-        <span class="summary__viz" data-summary-shape={summary.shape || null}>
-          {#if summary.segments.length}
-            <!--
+      {#if progress && density !== "header"}
+        {#if density === "card"}
+          <span class="summary__viz" data-summary-shape={summary.shape || null}>
+            {#if summary.segments.length}
+              <!--
               One row of segments, in plan order. The plan's real shape lives
               on the task page; at card size it became a block of colour that
               said less than naming the shape does.
             -->
-            <span
-              class="summary__bar"
-              style:--summary-segments={summary.segments.length}
-              role="img"
-              aria-label={progressLabel}
-            >
-              {#each summary.segments as segment (segment.key)}
-                <span
-                  class="seg"
-                  data-status={segment.status}
-                  class:seg--critical={segment.onCriticalPath}
-                ></span>
-              {/each}
-            </span>
-          {:else}
-            <progress
-              value={progress.done}
-              max={progress.total}
-              aria-label={progressLabel}
-            ></progress>
-          {/if}
-          <span class="summary__meta">
-            <span class="summary__count" data-summary-progress
-              >{progress.count}</span
-            >
-            {#if progress.truncated}
               <span
-                class="summary__partial"
-                use:tooltip={"Some linked work could not be read, so this is a lower bound."}
-                >at least</span
+                class="summary__bar"
+                style:--summary-segments={summary.segments.length}
+                role="img"
+                aria-label={progressLabel}
               >
+                {#each summary.segments as segment (segment.key)}
+                  <span
+                    class="seg"
+                    data-status={segment.status}
+                    class:seg--critical={segment.onCriticalPath}
+                  ></span>
+                {/each}
+              </span>
+            {:else}
+              <progress
+                value={progress.done}
+                max={progress.total}
+                aria-label={progressLabel}
+              ></progress>
             {/if}
-            {#if summary.shapeLabel}
-              <span class="summary__shape">{summary.shapeLabel}</span>
-            {/if}
-            {#if summary.overflow}<span>+{summary.overflow} more</span>{/if}
+            <span class="summary__meta">
+              <span class="summary__count" data-summary-progress
+                >{progress.count}</span
+              >
+              {#if progress.truncated}
+                <span
+                  class="summary__partial"
+                  use:tooltip={"Some linked work could not be read, so this is a lower bound."}
+                  >at least</span
+                >
+              {/if}
+              {#if summary.shapeLabel}
+                <span class="summary__shape">{summary.shapeLabel}</span>
+              {/if}
+              {#if summary.overflow}<span>+{summary.overflow} more</span>{/if}
+            </span>
           </span>
-        </span>
-      {:else}
-        <!--
+        {:else}
+          <!--
           `3/7` reads as a date to a screen reader, so the compact densities
           carry the sentence as the accessible name: this is the only progress
           element they render, where card density has the labelled bar.
         -->
-        <span
-          class="summary__count"
-          data-summary-progress
-          role="img"
-          aria-label={progressLabel}
-          use:tooltip={progressLabel}
-          >{density === "header" ? progress.label : progress.count}</span
-        >
+          <span
+            class="summary__count"
+            data-summary-progress
+            role="img"
+            aria-label={progressLabel}
+            use:tooltip={progressLabel}
+            >{density === "header" ? progress.label : progress.count}</span
+          >
+        {/if}
       {/if}
-    {/if}
 
-    {#if density === "card"}
-      <!--
+      {#if density === "card"}
+        <!--
         What landed, what is moving, what is next. Three short lists instead
         of one "Next" line, because the question a reader opens a dashboard
         with is "where is this" and a single next step answers a third of it.
         Core bounds each list to three rows and counts the rest; a core that
         computes no digest falls back to the one next step it does send.
       -->
-      {#if summary.steps?.groups.length}
-        <span class="summary__steps" data-tile-steps>
-          {#each summary.steps.groups as list (list.key)}
-            <span class="step-label" data-tile-step-group={list.key}
-              >{list.label}</span
-            >
-            <span class="step-rows">
-              {#each list.items as step (step.key)}
-                <span class="step-row" data-tile-step={step.id}>
-                  <span class="step-title">{step.title}</span>
-                  {#if step.status === "blocked"}
-                    <span class="step-flag" data-tile-step-blocked>blocked</span
-                    >
-                  {/if}
-                  {#if step.at}
-                    <!--
+        {#if summary.steps?.groups.length}
+          <span class="summary__steps" data-tile-steps>
+            {#each summary.steps.groups as list (list.key)}
+              <span class="step-label" data-tile-step-group={list.key}
+                >{list.label}</span
+              >
+              <span class="step-rows">
+                {#each list.items as step (step.key)}
+                  <span class="step-row" data-tile-step={step.id}>
+                    <span class="step-title">{step.title}</span>
+                    {#if step.status === "blocked"}
+                      <span class="step-flag" data-tile-step-blocked
+                        >blocked</span
+                      >
+                    {/if}
+                    {#if step.at}
+                      <!--
                       The span, not the `class` prop: a class handed to a
                       child component never picks up this file's scope, so
                       `.step-age` matched nothing and the date wrapped onto
                       its own line inside a 17rem card.
                     -->
-                    <span class="step-age">
-                      <Time value={step.at} {now} verb="moved" />
-                    </span>
-                  {/if}
-                </span>
-              {/each}
-              {#if list.more}
-                <span class="step-row step-more" data-tile-step-more={list.key}
-                  >+{list.more} more</span
-                >
+                      <span class="step-age">
+                        <Time value={step.at} {now} verb="moved" />
+                      </span>
+                    {/if}
+                  </span>
+                {/each}
+                {#if list.more}
+                  <span
+                    class="step-row step-more"
+                    data-tile-step-more={list.key}>+{list.more} more</span
+                  >
+                {/if}
+              </span>
+            {/each}
+          </span>
+        {:else if summary.next}
+          <span class="summary__foot">
+            <span class="summary__next" data-tile-next
+              >Next: {summary.next.title}{summary.next.more
+                ? ` +${summary.next.more}`
+                : ""}</span
+            >
+          </span>
+        {/if}
+      {/if}
+
+      {#if summary?.metrics?.length}
+        <span class="summary__foot" data-summary-metrics>
+          {#each summary.metrics as metric (metric.ref)}
+            <span
+              data-summary-metric={metric.ref}
+              title={metric.observed_at
+                ? ageTitle(metric.observed_at, "observed", now)
+                : ""}
+            >
+              {metric.name}: {metric.latest?.state ??
+                metric.latest?.value ??
+                metric.status}{metric.unit ? ` ${metric.unit}` : ""}
+              {#if metric.baseline}
+                <span>vs {metric.baseline.state ?? metric.baseline.value}</span>
+                {#if metric.change != null}<span
+                    >({metric.change > 0 ? "+" : ""}{metric.change})</span
+                  >{/if}
               {/if}
+              {#if metric.observed_at}<span
+                  >· {formatAge(metric.observed_at, now)}</span
+                >{/if}
+              {#if metric.stale}<span>· stale</span>{/if}
             </span>
           {/each}
-        </span>
-      {:else if summary.next}
-        <span class="summary__foot">
-          <span class="summary__next" data-tile-next
-            >Next: {summary.next.title}{summary.next.more
-              ? ` +${summary.next.more}`
-              : ""}</span
-          >
+          {#if summary.metricsTruncated}<span>More metrics omitted</span>{/if}
         </span>
       {/if}
-    {/if}
 
-    {#if summary?.metrics?.length}
-      <span class="summary__foot" data-summary-metrics>
-        {#each summary.metrics as metric (metric.ref)}
-          <span
-            data-summary-metric={metric.ref}
-            title={metric.observed_at
-              ? ageTitle(metric.observed_at, "observed", now)
-              : ""}
-          >
-            {metric.name}: {metric.latest?.state ??
-              metric.latest?.value ??
-              metric.status}{metric.unit ? ` ${metric.unit}` : ""}
-            {#if metric.baseline}
-              <span>vs {metric.baseline.state ?? metric.baseline.value}</span>
-              {#if metric.change != null}<span
-                  >({metric.change > 0 ? "+" : ""}{metric.change})</span
-                >{/if}
-            {/if}
-            {#if metric.observed_at}<span
-                >· {formatAge(metric.observed_at, now)}</span
-              >{/if}
-            {#if metric.stale}<span>· stale</span>{/if}
-          </span>
-        {/each}
-        {#if summary.metricsTruncated}<span>More metrics omitted</span>{/if}
-      </span>
-    {/if}
-
-    {#if ownerLabel || placeLabel || summary?.due || attention || attentionUnknown}
-      <span class="summary__foot" data-summary-foot>
-        {#if ownerLabel}<span class="summary__owner" data-summary-owner
-            >{ownerLabel}</span
-          >{/if}
-        {#if placeLabel}<span data-summary-place>{placeLabel}</span>{/if}
-        {#if summary?.due}
-          <span class="summary__due" data-summary-due
-            >Due <Time value={summary.due} {now} /></span
-          >
-        {/if}
-        {#if density === "header" && openedAt}
-          <!-- A page header has room to say how long this has been open,
+      {#if ownerLabel || placeLabel || summary?.due || attention || attentionUnknown}
+        <span class="summary__foot" data-summary-foot>
+          {#if ownerLabel}<span class="summary__owner" data-summary-owner
+              >{ownerLabel}</span
+            >{/if}
+          {#if placeLabel}<span data-summary-place>{placeLabel}</span>{/if}
+          {#if summary?.due}
+            <span class="summary__due" data-summary-due
+              >Due <Time value={summary.due} {now} /></span
+            >
+          {/if}
+          {#if density === "header" && openedAt}
+            <!-- A page header has room to say how long this has been open,
                which the age badge beside the status does not answer. -->
-          <span class="summary__due" data-summary-age
-            >Opened <Time value={openedAt} {now} verb="opened" /></span
-          >
-        {/if}
-        {#if attention}
-          <span
-            class="ui-badge ui-badge--warn summary__badge"
-            data-summary-attention={attention.count}
-            aria-label={attentionTitle}
-            use:tooltip={attentionTitle}
-            >{attention.label} · {attentionWaitingLabel}</span
-          >
-        {:else if attentionUnknown}
-          <span
-            class="ui-badge ui-badge--neutral summary__badge"
-            data-summary-attention-unknown
-            use:tooltip={"The bounded ask sample is incomplete. Open asks may be outside the visible sample."}
-            >Waiting status unknown</span
-          >
-        {/if}
-      </span>
+            <span class="summary__due" data-summary-age
+              >Opened <Time value={openedAt} {now} verb="opened" /></span
+            >
+          {/if}
+          {#if attention}
+            <span
+              class="ui-badge ui-badge--warn summary__badge"
+              data-summary-attention={attention.count}
+              aria-label={attentionTitle}
+              use:tooltip={attentionTitle}
+              >{attention.label} · {attentionWaitingLabel}</span
+            >
+          {:else if attentionUnknown}
+            <span
+              class="ui-badge ui-badge--neutral summary__badge"
+              data-summary-attention-unknown
+              use:tooltip={"The bounded ask sample is incomplete. Open asks may be outside the visible sample."}
+              >Waiting status unknown</span
+            >
+          {/if}
+        </span>
+      {/if}
     {/if}
   </span>
 {/if}
@@ -457,7 +465,8 @@
   }
   /* One line that wraps, for a table cell or a board card. */
   .summary--row,
-  .summary--header {
+  .summary--header,
+  .summary--badge {
     display: flex;
     flex-wrap: wrap;
     align-items: center;

@@ -4,6 +4,23 @@
       "data": {
         "items": [
           {
+            "ref": "event:ev-1",
+            "type": "card_moved",
+            "summary": "Card moved: Launch",
+            "actor_id": "agent-1",
+            "actor_label": "build-agent on host-1",
+            "subject": {
+              "ref": "card:launch",
+              "title": "Launch",
+              "kind": "initiative"
+            },
+            "verb": "moved",
+            "detail": "Ready → In progress",
+            "impact": "high",
+            "ts": "2026-10-05T00:00:00Z",
+            "count": 1
+          },
+          {
             "summary": "Launch checklist updated",
             "ts": "2026-10-05T00:00:00Z"
           }
@@ -68,7 +85,8 @@
       {
         "author": "Agent Nexus template",
         "data": {
-          "limit": 12
+          "limit": 12,
+          "min_impact": "normal"
         },
         "freshness": "unknown",
         "id": "movement",
@@ -76,7 +94,7 @@
         "project_id": "workspace",
         "provenance": "reported",
         "source_ids": [],
-        "title": "What moved",
+        "title": "What changed",
         "type": "live-activity"
       },
       {

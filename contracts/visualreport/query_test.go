@@ -48,3 +48,24 @@ func TestChecklistSummary(t *testing.T) {
 		t.Fatalf("%q %#v %#v", first, progress, needs)
 	}
 }
+
+func TestReportActivityMinimumImpact(t *testing.T) {
+	for _, impact := range []string{"high", "normal", "low"} {
+		q, err := ParseQuery("live-activity", []byte(`{"min_impact":"`+impact+`"}`))
+		if err != nil || q.MinImpact != impact {
+			t.Fatalf("%s: %+v %v", impact, q, err)
+		}
+	}
+	q, err := ParseQuery("live-activity", []byte(`{}`))
+	if err != nil || q.MinImpact != "low" {
+		t.Fatalf("default: %+v %v", q, err)
+	}
+	for _, raw := range []string{`{"min_impact":"urgent"}`, `{"min_impact":""}`, `{"min_impact":null}`, `{"min_impact":1}`} {
+		if _, err := ParseQuery("live-activity", []byte(raw)); err == nil {
+			t.Fatalf("accepted %s", raw)
+		}
+	}
+	if _, err := ParseQuery("live-asks", []byte(`{"min_impact":"high"}`)); err == nil {
+		t.Fatal("accepted activity option on asks")
+	}
+}

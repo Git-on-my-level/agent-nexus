@@ -74,7 +74,7 @@ export function validateLiveQuery(type, data) {
       "answered_within_hours",
       "card_ref",
     ],
-    "live-activity": ["limit"],
+    "live-activity": ["limit", "min_impact"],
     "live-fleet-health": [],
   }[type];
   if (!fields || !data || typeof data !== "object" || Array.isArray(data))
@@ -133,6 +133,11 @@ export function validateLiveQuery(type, data) {
         utf8Length(data[key]) > 128)
     )
       errors.push("invalid card filter");
+  if (
+    data.min_impact !== undefined &&
+    !["high", "normal", "low"].includes(data.min_impact)
+  )
+    errors.push("min_impact must be high, normal or low");
   if (
     data.include_answered !== undefined &&
     typeof data.include_answered !== "boolean"

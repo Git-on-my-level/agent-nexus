@@ -27,7 +27,18 @@ var reportTemplates = []reportTemplate{
 			return []map[string]any{
 				liveReportPanel("initiatives", "live-initiatives", "Initiatives", reportWorkQuery(topic, "", map[string]any{"limit": 8, "sort": "priority"})),
 				liveReportPanel("asks", "live-asks", "Open asks", reportAskQuery("", map[string]any{"limit": 8})),
-				liveReportPanel("movement", "live-activity", "Recent movement", map[string]any{"limit": 8}),
+				liveReportPanel("movement", "live-activity", "What changed", map[string]any{"limit": 8, "min_impact": "normal"}),
+			}
+		},
+	},
+	{
+		name: "recent-changes", purpose: "High-impact changes across a longer recent history, alongside open asks and initiatives.",
+		title: "Recent changes", summary: "The latest important outcomes, moves, decisions and promises from bounded workspace history.",
+		build: func(topic, card string) []map[string]any {
+			return []map[string]any{
+				liveReportPanel("movement", "live-activity", "What changed", map[string]any{"limit": 15, "min_impact": "high"}),
+				liveReportPanel("asks", "live-asks", "Open asks", reportAskQuery(card, map[string]any{"limit": 8})),
+				liveReportPanel("initiatives", "live-initiatives", "Initiatives", reportWorkQuery(topic, card, map[string]any{"limit": 8, "sort": "updated"})),
 			}
 		},
 	},
@@ -46,7 +57,7 @@ var reportTemplates = []reportTemplate{
 		title: "Weekly review", summary: "Recent movement, plan health, and answered asks from the last week.",
 		build: func(topic, card string) []map[string]any {
 			return []map[string]any{
-				liveReportPanel("movement", "live-activity", "What moved", map[string]any{"limit": 12}),
+				liveReportPanel("movement", "live-activity", "What changed", map[string]any{"limit": 12, "min_impact": "normal"}),
 				liveReportPanel("initiatives", "live-initiatives", "Initiatives and plan health", reportWorkQuery(topic, card, map[string]any{"limit": 10, "sort": "updated"})),
 				liveReportPanel("decisions", "live-asks", "Answered asks", reportAskQuery(card, map[string]any{"answered_only": true, "answered_within_hours": 168, "limit": 10})),
 			}
@@ -67,7 +78,7 @@ var reportTemplates = []reportTemplate{
 		title: "Incident review", summary: "An evidence-led timeline with live movement and action asks.",
 		build: func(_ string, card string) []map[string]any {
 			return []map[string]any{
-				liveReportPanel("movement", "live-activity", "Recent incident movement", map[string]any{"limit": 20}),
+				liveReportPanel("movement", "live-activity", "What changed", map[string]any{"limit": 20, "min_impact": "normal"}),
 				liveReportPanel("actions", "live-asks", "Action items", reportAskQuery(card, map[string]any{"limit": 12})),
 			}
 		},

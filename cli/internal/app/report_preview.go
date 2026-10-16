@@ -130,6 +130,9 @@ func reportPreviewText(report map[string]any, outputPath string, rendered bool, 
 	for i, raw := range panels {
 		panel := asMap(raw)
 		text += fmt.Sprintf("%d. %s | what: %s | source: %s | freshness: %s\n", i+1, panel["title"], panel["what"], panel["source"], panel["freshness"])
+		for _, line := range asSlice(panel["activity"]) {
+			text += "   " + reportStringValue(line) + "\n"
+		}
 	}
 	return text
 }
@@ -195,7 +198,7 @@ func summarizeReportPanels(report map[string]any, observations []any) []any {
 		data := asMap(panel["data"])
 		observation := observed[id]
 		what, source, freshness := reportPanelSummary(kind, panel, data, observation)
-		result = append(result, map[string]any{"id": id, "title": reportStringValue(panel["title"]), "type": kind, "what": what, "source": source, "freshness": freshness})
+		result = append(result, map[string]any{"id": id, "title": reportStringValue(panel["title"]), "type": kind, "what": what, "source": source, "freshness": freshness, "activity": reportActivityPreview(kind, observation)})
 	}
 	return result
 }
@@ -331,4 +334,35 @@ func findReportRendererRoot() string {
 		current = parent
 	}
 	return ""
+}
+
+// PNG rendering receives the original observations; text uses the same fields.
+func reportActivityPreview(kind string, observation map[string]any) []any {
+	lines := []any{}
+	if kind != "live-activity" || observation["status"] != "ok" {
+		return lines
+	}
+	for _, raw := range asSlice(asMap(observation["data"])["items"]) {
+		item := asMap(raw)
+		subject := asMap(item["subject"])
+		title := reportStringValue(subject["title"])
+		line := reportStringValue(item["summary"])
+		if verb := reportStringValue(item["verb"]); verb != "" {
+			line = strings.TrimSpace(firstNonEmpty(reportStringValue(item["actor_label"]), reportStringValue(item["actor_id"])) + " " + verb + " " + title)
+		}
+		if ref := reportStringValue(subject["ref"]); ref != "" {
+			line += " [" + ref + "]"
+		}
+		if detail := reportStringValue(item["detail"]); detail != "" {
+			line += " · " + detail
+		}
+		if impact := reportStringValue(item["impact"]); impact != "" {
+			line += " · " + impact
+		}
+		if ts := reportStringValue(item["ts"]); ts != "" {
+			line += " · " + ts
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }

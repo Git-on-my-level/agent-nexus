@@ -52,7 +52,7 @@ func TestReportTemplatesAndInitAreLocalAndProduceValidReports(t *testing.T) {
 	home := t.TempDir()
 	templates := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "report", "templates"}))
 	items := asSlice(asMap(templates["result"])["templates"])
-	if len(items) != 7 {
+	if len(items) != 8 {
 		t.Fatalf("templates=%#v", items)
 	}
 

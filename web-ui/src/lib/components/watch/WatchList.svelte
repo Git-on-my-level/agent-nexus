@@ -6,6 +6,9 @@
   let { initiatives = [], now = Date.now() } = $props();
 
   const COLLAPSED = new Set(["no_promise", "done"]);
+  /* Groups worth a full card each: what is moving or has slipped. The rest
+     stay compact rows, folded until asked for. */
+  const RICH = new Set(["moving", "past_promise"]);
   let groups = $derived(groupWatch(initiatives));
   let opened = $state({});
   const isOpen = (state) => opened[state] ?? !COLLAPSED.has(state);
@@ -14,13 +17,24 @@
 </script>
 
 {#snippet rows(group)}
-  <div
-    class="divide-y divide-line-subtle rounded-md border border-line bg-panel [&>*:first-child]:rounded-t-md [&>*:last-child]:rounded-b-md"
-  >
-    {#each group.rows as row (row.ref)}
-      <WatchRow initiative={row} variant="row" {now} />
-    {/each}
-  </div>
+  {#if RICH.has(group.state)}
+    <div
+      class="grid grid-cols-1 gap-3 xl:grid-cols-2"
+      data-watch-cards={group.state}
+    >
+      {#each group.rows as row (row.ref)}
+        <WatchRow initiative={row} variant="rich" {now} metrics />
+      {/each}
+    </div>
+  {:else}
+    <div
+      class="divide-y divide-line-subtle rounded-md border border-line bg-panel [&>*:first-child]:rounded-t-md [&>*:last-child]:rounded-b-md"
+    >
+      {#each group.rows as row (row.ref)}
+        <WatchRow initiative={row} variant="row" {now} />
+      {/each}
+    </div>
+  {/if}
 {/snippet}
 
 <div class="space-y-5" data-watch-list>

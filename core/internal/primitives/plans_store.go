@@ -60,6 +60,12 @@ const maxPlanRefBudget = 4000
 // readRefFacts accepts bounded batches of at most 200 refs. It never
 // fetches arbitrary URLs, nor interprets missing evidence as completed work.
 func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(string, string) bool) ([]RefPreview, error) {
+	return s.readRefProjection(ctx, refs, visible, false)
+}
+
+// Presentation-only readers share title and visibility resolution but do not
+// hydrate movement, due dates or assignee display metadata they never render.
+func (s *Store) readRefProjection(ctx context.Context, refs []string, visible func(string, string) bool, presentationOnly bool) ([]RefPreview, error) {
 	if visible != nil {
 		if _, scoped := accessScopeFrom(ctx); !scoped {
 			return nil, invalidBoardRequest("principal read access scope is required for visibility-filtered resolution")
@@ -102,6 +108,13 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 		var query string
 		switch kind {
 		case "card":
+			prioritySQL := `COALESCE(json_extract(m.metadata_json,'$.priority'),'none')`
+			cardOwnerSQL := `CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN CASE WHEN COALESCE(c.assignee,'')='' THEN '' WHEN c.assignee LIKE '%:%' THEN c.assignee ELSE 'actor:'||c.assignee END ELSE COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),'') END`
+			ownerDisplaySQL := `COALESCE((SELECT display_name FROM actors WHERE id=CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN replace(c.assignee,'actor:','') ELSE replace(COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),''),'actor:','') END),'')`
+			activitySQL, dueSQL, messageSQL, planSQL := effectiveCardActivitySQL, effectiveCardDueSQL, cardMessageTimeSQL(ctx), `COALESCE((SELECT p.updated_at FROM card_plans p WHERE p.card_id=c.id),'')`
+			if presentationOnly {
+				activitySQL, dueSQL, messageSQL, planSQL, ownerDisplaySQL, cardOwnerSQL, prioritySQL = "''", "''", "''", "''", "''", "''", "''"
+			}
 			args = []any{string(encoded), "", string(encoded), "", string(encoded), ""}
 			query = `WITH requested_cards AS (
  SELECT cards.id FROM cards INDEXED BY sqlite_autoindex_cards_1 WHERE id IN (SELECT value FROM json_each(?)) AND id>? AND cards.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM boards lifecycle_board WHERE lifecycle_board.id=cards.board_id AND lifecycle_board.trashed_at IS NOT NULL)
@@ -110,13 +123,13 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
  ORDER BY id LIMIT 200
  ) SELECT c.id,COALESCE(c.handle,''),CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.title ELSE COALESCE(json_extract(o.body_json,'$.facts.title'),json_extract(m.metadata_json,'$.title'),c.title) END,
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),'unknown') END,
-			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN CASE WHEN COALESCE(c.assignee,'')='' THEN '' WHEN c.assignee LIKE '%:%' THEN c.assignee ELSE 'actor:'||c.assignee END ELSE COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),'') END,
+			 ` + cardOwnerSQL + `,
 			 COALESCE(json_extract(m.metadata_json,'$.source.url'),''),COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id),''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))),''),
-			 ` + effectiveCardActivitySQL + `,
- COALESCE(json_extract(m.metadata_json,'$.priority'),'none'),
+			 ` + activitySQL + `,
+ ` + prioritySQL + `,
  COALESCE(NULLIF(b.handle,''),b.id,''),COALESCE(b.title,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),
- COALESCE((SELECT display_name FROM actors WHERE id=CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN replace(c.assignee,'actor:','') ELSE replace(COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),''),'actor:','') END),'')
-			 , c.created_at, ` + effectiveCardDueSQL + `, ` + cardMessageTimeSQL(ctx) + `,COALESCE((SELECT p.updated_at FROM card_plans p WHERE p.card_id=c.id),''),COALESCE(c.trashed_at,''),COALESCE(b.trashed_at,'')
+ ` + ownerDisplaySQL + `
+			 , c.created_at, ` + dueSQL + `, ` + messageSQL + `,` + planSQL + `,COALESCE(c.trashed_at,''),COALESCE(b.trashed_at,'')
  FROM requested_cards r JOIN cards c ON c.id=r.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
  LEFT JOIN boards b ON b.id=c.board_id
  LEFT JOIN threads bt ON bt.id=b.thread_id

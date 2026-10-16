@@ -1,0 +1,134 @@
+{
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 15,
+          "min_impact": "high"
+        },
+        "freshness": "unknown",
+        "id": "movement",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "What changed",
+        "type": "live-activity"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 8
+        },
+        "freshness": "unknown",
+        "id": "asks",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Open asks",
+        "type": "live-asks"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 8,
+          "project_ref": "topic:launch",
+          "sort": "updated"
+        },
+        "freshness": "unknown",
+        "id": "initiatives",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Initiatives",
+        "type": "live-initiatives"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "The latest important outcomes, moves, decisions and promises from bounded workspace history.",
+    "title": "Recent changes"
+  },
+  "observations": [
+    {
+      "data": {
+        "items": [
+          {
+            "ref": "event:ev-1",
+            "type": "card_moved",
+            "summary": "Card moved: Launch",
+            "actor_id": "agent-1",
+            "actor_label": "build-agent on host-1",
+            "subject": {
+              "ref": "card:launch",
+              "title": "Launch",
+              "kind": "initiative"
+            },
+            "verb": "moved",
+            "detail": "Ready → In progress",
+            "impact": "high",
+            "ts": "2026-10-05T00:00:00Z",
+            "count": 1
+          },
+          {
+            "summary": "Launch checklist updated",
+            "ts": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "movement",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-activity"
+    },
+    {
+      "id": "asks",
+      "type": "live-asks",
+      "status": "ok",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "truncated": false,
+      "data": {
+        "items": []
+      }
+    },
+    {
+      "data": {
+        "items": [
+          {
+            "board_ref": "board:work",
+            "needs": [],
+            "phase": "in_progress",
+            "priority": "p1",
+            "progress": {
+              "done": 2,
+              "total": 3
+            },
+            "ref": "card:launch",
+            "summary": "Ready to ship",
+            "title": "Launch",
+            "updated_at": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "initiatives",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-initiatives"
+    }
+  ]
+}

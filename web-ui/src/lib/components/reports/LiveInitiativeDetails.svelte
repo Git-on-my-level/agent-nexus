@@ -1,6 +1,7 @@
 <script>
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
+  import InitiativeProgress from "$lib/components/watch/InitiativeProgress.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
@@ -45,19 +46,32 @@
     {@const assignees = item.assignee_refs ?? []}
     <li data-report-initiative={item.ref}>
       <header>
+        <!-- A dashboard is a glance: title on the left; on the right, one
+             status, the moot flag when core raised it, and the plan's
+             progress bar — the same bar Watch draws, so the two read alike.
+             The full summary (owner, due, asks) lives on the initiative. -->
         <div class="heading">
-          {#if canNavigate}<a
-              href={workspaceHref(
-                `/initiatives/${encodeURIComponent(item.ref)}`,
-              )}>{item.title}</a
-            >{:else}<strong>{item.title}</strong>{/if}
-          <span class="meta">
-            {#if item.priority}<span>{item.priority}</span>{/if}
-            <!-- The shared summary, so a report panel and the Overview card
-                 for the same initiative cannot disagree. Priority stays
-                 beside it: it is not a state. -->
-            <WorkSummary {summary} density="row" title={item.title} {now} />
-          </span>
+          <div class="title">
+            {#if canNavigate}<a
+                href={workspaceHref(
+                  `/initiatives/${encodeURIComponent(item.ref)}`,
+                )}>{item.title}</a
+              >{:else}<strong>{item.title}</strong>{/if}
+            {#if item.priority}<span class="priority">{item.priority}</span
+              >{/if}
+          </div>
+          <div class="state" data-initiative-state={summary.status?.state}>
+            {#if summary.status && summary.status.state !== "unknown"}
+              <WorkSummary {summary} density="badge" title={item.title} {now} />
+            {/if}
+            {#if summary.progress}
+              <InitiativeProgress
+                progress={summary.progress}
+                state={summary.status?.state}
+                title={item.title}
+              />
+            {/if}
+          </div>
         </div>
         {#if workProse(item)}
           <!-- Authored markdown, like every other body in the product. A
@@ -143,28 +157,47 @@
   .heading {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
-    gap: 6px 12px;
+    gap: 8px 16px;
   }
-  .heading a,
-  .heading strong {
+  .title {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 16rem;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .title a,
+  .title strong {
     color: var(--fg);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     overflow-wrap: anywhere;
   }
-  .heading a:hover {
+  .title a:hover {
     color: var(--accent-text);
     text-decoration: underline;
   }
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+  .priority {
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 5px;
     color: var(--fg-muted);
     font-size: 10px;
-    text-transform: capitalize;
+    font-weight: 600;
+    line-height: 16px;
+    text-transform: uppercase;
+  }
+  .state {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    max-width: 100%;
   }
   .assignees,
   .muted {

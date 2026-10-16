@@ -51,6 +51,7 @@
     done: "ok",
   };
   let card = $derived(variant === "card");
+  let rich = $derived(variant === "rich");
 </script>
 
 {#snippet badges()}
@@ -162,7 +163,40 @@
   {/if}
 {/snippet}
 
-{#if card}
+{#if rich}
+  <article
+    class="watch-rich flex min-w-0 flex-col gap-2.5 rounded-md border border-line bg-panel px-3.5 py-3 transition-colors hover:border-line-strong"
+    data-watch-row={initiative.ref}
+    data-watch-variant="rich"
+    data-watch-state={initiative.state}
+  >
+    <div class="flex min-w-0 items-start gap-3">
+      <a
+        {href}
+        class="line-clamp-2 min-w-0 flex-1 break-words text-body font-medium leading-snug text-fg hover:text-accent-text"
+        data-watch-title>{initiative.title}</a
+      >
+      <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        {@render badges()}
+      </div>
+    </div>
+    {#if initiative.progress}
+      <InitiativeProgress
+        progress={initiative.progress}
+        state={initiative.state}
+        title={initiative.title}
+        variant="card"
+      />
+    {/if}
+    <!-- The same tagged sentence the row and the by-stage card print, so
+         the three cannot disagree about the promise; a card gives it room. -->
+    <div class="text-meta [&_p]:text-meta [&_p]:text-fg" data-watch-next>
+      {@render computedLine()}
+    </div>
+    {@render note()}
+    {@render metricLine()}
+  </article>
+{:else if card}
   <div
     class="watch-card rounded-md border border-line bg-panel transition-colors hover:border-line-strong hover:bg-panel-hover"
     data-watch-row={initiative.ref}
