@@ -191,6 +191,24 @@ func TestAccessRequestInboxDecisionsAndForgedMetadata(t *testing.T) {
 	if forgedInboxID == "" {
 		t.Fatal("ordinary review missing")
 	}
+	status, briefBody := hostHTTP(t, "GET", base+"/brief", human, nil)
+	hostStatus(t, status, 200, briefBody)
+	realBriefKind, forgedBriefKind := "", ""
+	for _, raw := range briefBody["decisions"].([]any) {
+		item := raw.(map[string]any)
+		switch item["inbox_item_id"] {
+		case request["inbox_item_id"]:
+			realBriefKind = anyString(item["kind"])
+		case forgedInboxID:
+			forgedBriefKind = anyString(item["kind"])
+		}
+	}
+	if realBriefKind != "access" {
+		t.Fatalf("real access request brief kind = %q, want access (decisions=%#v)", realBriefKind, briefBody["decisions"])
+	}
+	if forgedBriefKind != "review" {
+		t.Fatalf("forged review brief kind = %q, want review (decisions=%#v)", forgedBriefKind, briefBody["decisions"])
+	}
 	status, p = hostHTTP(t, "POST", base+"/inbox/"+url.PathEscape(forgedInboxID)+"/respond", human, map[string]any{"response_text": "Reviewed", "outcome": "approved", "notify_mode": "none"})
 	hostStatus(t, status, 201, p)
 	status, p = hostHTTP(t, "GET", base+"/auth/admins", other.AccessToken, nil)

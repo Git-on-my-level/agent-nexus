@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
@@ -64,9 +65,10 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	note(battery, map[string]any{"next": map[string]any{"at": "2026-01-01", "what": "bench data"}})
 	note(battery, map[string]any{"next": map[string]any{"at": "2026-01-02", "what": "bench data"}})
 	note(report, map[string]any{"next": map[string]any{"at": "30d", "what": "draft"}, "evidence_refs": []string{"https://example.test/pr/1"}})
-	if _, err = store.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": battery["thread_id"], "refs": []string{"thread:" + anyString(battery["thread_id"])}, "summary": "Merge calibration?",
+	askEvt, err := store.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": battery["thread_id"], "refs": []string{"thread:" + anyString(battery["thread_id"])}, "summary": "Merge calibration?",
 		"payload": map[string]any{"kind": "ask", "title": "Merge calibration?", "subject_ref": battery["ref"], "requester_actor_id": "agent-1", "response_proposals": []any{"Merge", "Hold"},
-			"by": "2026-01-01", "blocks": []any{report["ref"], done["ref"]}, "priority": "p1"}}); err != nil {
+			"by": "2026-01-01", "blocks": []any{report["ref"], done["ref"]}, "priority": "p1"}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	proof, err := store.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": done["thread_id"], "refs": []string{anyString(done["ref"]), "thread:" + anyString(done["thread_id"])}, "payload": map[string]any{"text": "shipped"}})
@@ -91,6 +93,9 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 		t.Fatalf("decisions = %v", decisions)
 	}
 	d := decisions[0].(map[string]any)
+	if d["event_ref"] != "event:"+anyString(askEvt["id"]) {
+		t.Fatalf("decision event_ref = %v, want event:%s", d["event_ref"], anyString(askEvt["id"]))
+	}
 	if d["decide_by"] != "2026-01-01T23:59:59Z" || d["overdue_for_seconds"].(float64) <= 0 || d["priority"] != "p1" || d["kind"] != "ask" {
 		t.Fatalf("decision = %v", d)
 	}
@@ -140,6 +145,83 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	}
 }
 
+func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
+	t.Parallel()
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	db, _ := testsql.Open("file:" + h.workspace.Layout().DatabasePath)
+	t.Cleanup(func() { db.Close() })
+	store := primitives.NewTestStore(db, h.workspace.Layout().ArtifactContentDir)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{"title": "Portfolio"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	boardID := anyString(board["id"])
+	assigned, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Assigned", "owner": "actor:agent-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	promised, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Promised"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
+		"type": "message_posted", "thread_id": promised["thread_id"],
+		"refs":    []string{anyString(promised["ref"]), "thread:" + anyString(promised["thread_id"])},
+		"payload": map[string]any{"text": "on it", "next": map[string]any{"at": "2d", "what": "land PR"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	unrelated, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Unrelated", "owner": "actor:agent-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	participating, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Participating"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sqlStmt := range []string{
+		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('ag-1','worker-1','agent-1','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}'),('ag-2','worker-2','agent-2','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}')`,
+		`INSERT INTO agent_sessions(id,agent_id,actor_id,provider,host_scope,native_session_id,native_session_id_kind,capabilities_json,activity,sequence,request_json,created_at,last_seen_at,expires_at) VALUES('s-ag-1','ag-1','agent-1','codex','h1','n1','opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z'),('s-ag-2','ag-2','agent-2','codex','h1','n2','opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z')`,
+	} {
+		if _, err := h.workspace.DB().ExecContext(ctx, sqlStmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seq := int64(1)
+	if _, err := store.UpsertWorkParticipant(ctx, "ag-1", anyString(participating["id"]), primitives.WorkParticipantRegistration{SessionID: "s-ag-1", Activity: "active", Sequence: &seq}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertWorkParticipant(ctx, "ag-2", anyString(unrelated["id"]), primitives.WorkParticipantRegistration{SessionID: "s-ag-2", Activity: "active", Sequence: &seq}); err != nil {
+		t.Fatal(err)
+	}
+	for drained := false; !drained; {
+		if drained, err = store.RefreshBriefInitiatives(ctx, 200); err != nil {
+			t.Fatal(err)
+		}
+	}
+	brief, err := store.Brief(ctx, primitives.BriefReader{ActorID: "agent-1", Kind: "agent", Display: "worker"}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	yoursByRef := map[string]bool{}
+	for _, raw := range brief["initiatives"].([]map[string]any) {
+		yoursByRef[anyString(raw["ref"])] = raw["yours"] == true
+	}
+	if !yoursByRef[anyString(assigned["ref"])] {
+		t.Fatalf("assigned card should have yours=true: %#v", brief["initiatives"])
+	}
+	if !yoursByRef[anyString(promised["ref"])] {
+		t.Fatalf("promised card should have yours=true: %#v", brief["initiatives"])
+	}
+	if !yoursByRef[anyString(participating["ref"])] {
+		t.Fatalf("participating card should have yours=true: %#v", brief["initiatives"])
+	}
+	if yoursByRef[anyString(unrelated["ref"])] {
+		t.Fatalf("unrelated card must not have yours=true: %#v", brief["initiatives"])
+	}
+}
+
 // I7 (core side): the live brief uses only fields the shared fixture that
 // Decide, Watch and orient render from also uses, plus the optional ones.
 func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
@@ -152,7 +234,7 @@ func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
 	if err = json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true}
+	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true, "yours": true}
 	for key := range body {
 		if _, ok := fixture[key]; !ok {
 			t.Errorf("brief field %q is not in the shared fixture", key)

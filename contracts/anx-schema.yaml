@@ -1447,6 +1447,7 @@ brief:
     - "Reads are bounded: indexed lookups, at most section_limit rows per section, truncated flags when more exist."
     - "decide_by is derived from human_attention_requested payload.by; overdue_for is now minus decide_by when positive, 0 before, null without decide_by."
     - "followed_recommendation is true when the response text equals the first response proposal."
+    - "For agent readers, an initiative carries yours: true when the calling agent is assigned to the card, participates in it, or authored its counted promise."
     - "A decision with a batch field stands for every open member the reader can see. Its inbox_item_id is the single respond target: POST /inbox/{inbox_item_id}/respond with one response_text, outcome and notify_mode records that same answer on every still-open member in one transaction and replays on the same idempotency key. A filed batch (key filed:<batch_id>) uses the derived inbox id inbox:{kind}:{thread}:{batch_id}:{anchor_event_id}, the same id the inbox projection stores, so the atomic batch path runs. An accepted curation batch uses inbox:curation-batch:<key>. Each member lists its own inbox_item_id, subject_ref and the blocks the reader can see. Members the reader cannot see are not listed, counted, or revealed by the answer; a batch with a hidden open member is not answerable."
 
 

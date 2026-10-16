@@ -58,7 +58,7 @@ func parsePromiseWhen(raw string, from time.Time) (time.Time, bool) {
 		}
 		unit := map[string]time.Duration{"s": time.Second, "m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
 		d := time.Duration(n) * unit
-		if d <= 0 || d > 3650*24*time.Hour {
+		if d <= 0 || d > 3650*24*time.Hour || d/unit != time.Duration(n) {
 			return time.Time{}, false
 		}
 		return from.Add(d).UTC(), true
@@ -67,7 +67,9 @@ func parsePromiseWhen(raw string, from time.Time) (time.Time, bool) {
 		return at.UTC(), true
 	}
 	if at, err := time.Parse("2006-01-02", raw); err == nil {
-		return at, true
+		// A calendar date is the whole day: "by Oct 15" is still open until
+		// 23:59:59 UTC, matching core's plans.ParseWhen.
+		return at.Add(24*time.Hour - time.Second).UTC(), true
 	}
 	return time.Time{}, false
 }
@@ -407,10 +409,13 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	// Resume-mode asks need a resident executor; say so when nothing on this
 	// host will deliver their answers. One bounded agent read, best effort.
 	var warnings []output.Warning
-	if _, detail, agentErr := a.dailyAgent(ctx, cfg); agentErr == nil {
+	var agent, detail map[string]any
+	if ag, det, agentErr := a.dailyAgent(ctx, cfg); agentErr == nil {
+		agent, detail = ag, det
 		_, warnings = a.orientDeliveryHealth(cfg, asSlice(detail["open_asks"]))
 	}
 	if !cfg.JSON {
+		markOrientAgentInitiatives(brief, agent, detail)
 		text := renderOrientText(brief, a.orientIdentityLine(cfg))
 		for _, w := range warnings {
 			text += "warn: " + w.Message + "\n"
@@ -479,9 +484,6 @@ func renderOrientText(brief map[string]any, identity string) string {
 	}
 	waiting := asSlice(brief["your_asks"])
 	if len(waiting) == 0 {
-		waiting = asSlice(brief["decisions"])
-	}
-	if len(waiting) == 0 {
 		b.WriteString("waiting on human:  none\n")
 	}
 	for _, raw := range waiting {
@@ -502,22 +504,24 @@ func renderOrientText(brief map[string]any, identity string) string {
 		b.WriteString(line + "\n")
 	}
 	initiatives := asSlice(brief["initiatives"])
-	if len(initiatives) == 0 {
+	agentReader := strings.EqualFold(anyString(principal["kind"]), "agent")
+	var yours, workspace []map[string]any
+	for _, raw := range initiatives {
+		item := asMap(raw)
+		if !agentReader || orientInitiativeIsYours(item, principal) {
+			yours = append(yours, item)
+		} else {
+			workspace = append(workspace, item)
+		}
+	}
+	if len(yours) == 0 {
 		b.WriteString("your initiatives:  none\n")
 	}
 	next := ""
-	for _, raw := range initiatives {
-		item := asMap(raw)
+	for _, item := range yours {
 		ref := anyString(item["ref"])
 		state := anyString(item["state"])
-		line := fmt.Sprintf("your initiatives:  %s  %s", strings.TrimPrefix(ref, "card:"), briefStateLabel(item))
-		if moves := briefSeconds(item["promise_moves"]); moves > 0 {
-			line += fmt.Sprintf(" · moved %d×", moves)
-		}
-		if asMap(item["possibly_moot"])["flagged"] == true {
-			line += " · possibly moot"
-		}
-		b.WriteString(line + "\n")
+		b.WriteString(formatOrientInitiativeLine("your initiatives:", item) + "\n")
 		if next == "" {
 			switch state {
 			case "past_promise":
@@ -526,6 +530,9 @@ func renderOrientText(brief map[string]any, identity string) string {
 				next = "anx note " + ref + " --next <date> \"<what>\""
 			}
 		}
+	}
+	for _, item := range workspace {
+		b.WriteString(formatOrientInitiativeLine("workspace:", item) + "\n")
 	}
 	if next == "" {
 		for _, raw := range answered {
@@ -540,6 +547,135 @@ func renderOrientText(brief map[string]any, identity string) string {
 	}
 	b.WriteString("next: " + next + "\n")
 	return b.String()
+}
+
+func formatOrientInitiativeLine(heading string, item map[string]any) string {
+	ref := anyString(item["ref"])
+	line := fmt.Sprintf("%s  %s  %s", heading, strings.TrimPrefix(ref, "card:"), briefStateLabel(item))
+	if moves := briefSeconds(item["promise_moves"]); moves > 0 {
+		line += fmt.Sprintf(" · moved %d×", moves)
+	}
+	if asMap(item["possibly_moot"])["flagged"] == true {
+		line += " · possibly moot"
+	}
+	return line
+}
+
+func stripOrientPrincipalPrefix(raw string) string {
+	raw = strings.TrimSpace(raw)
+	for _, prefix := range []string{"actor:", "agent:", "human:"} {
+		if strings.HasPrefix(raw, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(raw, prefix))
+		}
+	}
+	return raw
+}
+
+func orientMatchesPrincipal(raw any, principal map[string]any) bool {
+	if raw == nil || principal == nil {
+		return false
+	}
+	pID := strings.TrimSpace(anyString(principal["id"]))
+	pBare := stripOrientPrincipalPrefix(pID)
+	pDisplay := strings.TrimSpace(anyString(principal["display"]))
+	matchID := func(s string) bool {
+		s = strings.TrimSpace(s)
+		if s == "" || pID == "" {
+			return false
+		}
+		bare := stripOrientPrincipalPrefix(s)
+		return s == pID || (pBare != "" && bare == pBare)
+	}
+	matchDisplay := func(s string) bool {
+		s = strings.TrimSpace(s)
+		return s != "" && pDisplay != "" && s == pDisplay
+	}
+	matchScalar := func(s string) bool {
+		if pID != "" {
+			return matchID(s)
+		}
+		return matchDisplay(s)
+	}
+	switch v := raw.(type) {
+	case string:
+		return matchScalar(v)
+	case map[string]any:
+		id := strings.TrimSpace(anyString(v["id"]))
+		actorID := strings.TrimSpace(anyString(v["actor_id"]))
+		agentID := strings.TrimSpace(anyString(v["agent_id"]))
+		if id != "" || actorID != "" || agentID != "" {
+			if pID != "" {
+				return matchID(id) || matchID(actorID) || matchID(agentID)
+			}
+			return matchDisplay(id) || matchDisplay(actorID) || matchDisplay(agentID) || matchDisplay(anyString(v["display"]))
+		}
+		display := strings.TrimSpace(anyString(v["display"]))
+		return matchID(display) || matchDisplay(display)
+	case []any:
+		for _, elem := range v {
+			if orientMatchesPrincipal(elem, principal) {
+				return true
+			}
+		}
+	case []string:
+		for _, elem := range v {
+			if matchScalar(elem) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func orientInitiativeIsYours(item map[string]any, principal map[string]any) bool {
+	if item == nil {
+		return false
+	}
+	if yours, ok := item["yours"].(bool); ok && yours {
+		return true
+	}
+	if promise := asMap(item["promise"]); promise != nil && orientMatchesPrincipal(promise["author"], principal) {
+		return true
+	}
+	for _, field := range []string{"assignee", "owner", "assignee_refs", "participants", "participant_refs"} {
+		if orientMatchesPrincipal(item[field], principal) {
+			return true
+		}
+	}
+	return false
+}
+
+func markOrientAgentInitiatives(brief, agent, detail map[string]any) {
+	if brief == nil || (agent == nil && detail == nil) {
+		return
+	}
+	ownedRefs := map[string]bool{}
+	addRef := func(r string) {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			return
+		}
+		ownedRefs[r] = true
+		if !strings.HasPrefix(r, "card:") {
+			ownedRefs["card:"+r] = true
+		}
+	}
+	addRef(anyString(agent["current_card_ref"]))
+	for _, raw := range asSlice(detail["recent_cards"]) {
+		c := asMap(raw)
+		addRef(anyString(c["ref"]))
+		addRef(anyString(c["id"]))
+		addRef(anyString(c["handle"]))
+	}
+	if len(ownedRefs) == 0 {
+		return
+	}
+	for _, raw := range asSlice(brief["initiatives"]) {
+		item := asMap(raw)
+		if item != nil && ownedRefs[anyString(item["ref"])] {
+			item["yours"] = true
+		}
+	}
 }
 
 func briefShortRef(item map[string]any) string {

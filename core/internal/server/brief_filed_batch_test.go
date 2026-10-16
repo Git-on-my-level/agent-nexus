@@ -83,6 +83,9 @@ func TestBriefV1CollapsesFiledAskBatch(t *testing.T) {
 			if s, _ := mm["inbox_item_id"].(string); s == "" {
 				t.Fatalf("member without inbox_item_id: %#v", mm)
 			}
+			if ev, _ := mm["event_ref"].(string); !strings.HasPrefix(ev, "event:") || len(ev) <= len("event:") {
+				t.Fatalf("member without authoritative event_ref: %#v", mm)
+			}
 		}
 	}
 	if singles != 1 {

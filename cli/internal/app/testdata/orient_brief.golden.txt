@@ -1,10 +1,6 @@
 you: build-agent on host-1 · workspace demo
 answered for you:  ask/80 "Ship rig firmware 1.4?" → "Hold a week" (not your recommendation)
-waiting on human:  ask/91 "Merge battery-v2 calibration?" 2d · by Oct 17 · blocks 2
-waiting on human:  ask/93 "Withdraw \"pick label scheme\"?" 2m
-waiting on human:  ask/88 "Review fleet onboarding runbook" 5d · by Oct 14 · overdue 1d · blocks 1
-waiting on human:  ask/95 "Give fleet-agent access to this workspace" 3h
-waiting on human:  decision:pm_7 "Move \"BLE reliability\" to In progress?" 2h
+waiting on human:  none
 your initiatives:  battery-measurement  PAST PROMISE 9d (Oct 6 Oct 21 checkpoint) · moved 2×
 your initiatives:  fleet-onboarding  moving · next Oct 16 enroll m6
 your initiatives:  observability  moving · next Oct 28 dashboards live

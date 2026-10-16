@@ -16,18 +16,19 @@ import (
 type denialTarget struct{ kind, id string }
 
 type denialSnapshot struct {
-	mutation    bool
-	pointOnce   sync.Once
-	pointIndex  map[denialTarget]struct{}
-	pointToken  int64
-	epoch       int64
-	epochTable  string
-	refs        string
-	refOnce     sync.Once
-	refIndex    map[string]struct{}
-	rows        string
-	indexOnce   sync.Once
-	targetIndex map[denialTarget]struct{}
+	mutation         bool
+	pointOnce        sync.Once
+	pointIndex       map[denialTarget]struct{}
+	pointToken       int64
+	pointSeriesCount int
+	epoch            int64
+	epochTable       string
+	refs             string
+	refOnce          sync.Once
+	refIndex         map[string]struct{}
+	rows             string
+	indexOnce        sync.Once
+	targetIndex      map[denialTarget]struct{}
 }
 
 // deniesAtom uses the canonical exact-atom and identity indexes. Preparing

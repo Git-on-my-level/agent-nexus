@@ -13613,6 +13613,9 @@ components:
             and an accepted curation batch uses inbox:curation-batch:{key}.
             POST /inbox/{inbox_item_id}/respond with response_text, outcome and notify_mode
             records that answer on every still-open member in one transaction.
+        event_ref:
+          type: string
+          description: "Authoritative ask event reference (event:<id>) when backed by a canonical ask event."
         kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
         title: { type: string }
         body: { type: string }
@@ -13650,6 +13653,7 @@ components:
                 properties:
                   ref: { type: string }
                   inbox_item_id: { type: string }
+                  event_ref: { type: string, description: "Authoritative ask event reference (event:<id>) for this member." }
                   title: { type: string }
                   subject_ref: { type: string, description: "Subject of this member ask, when it has one." }
                   blocks:
@@ -13720,6 +13724,9 @@ components:
             code: { type: string, description: "next_ask_decided when that rule flags the initiative." }
             ask_ref: { type: string, description: "event ref of the decided ask. Absent when the reader cannot see it; an invisible ask does not flag." }
             decided_at: { type: string, format: date-time }
+        yours:
+          type: boolean
+          description: "Present for agent readers when the calling agent is assigned to this initiative, participates in it, or authored its counted promise."
     BriefLoop:
       type: object
       required: [health, health_reason, every_seconds, progress_budget_seconds, stop_rule, last_run_at, last_effect_at, next_run_due_at, recent_runs, runs_7d, effects_7d, goal]

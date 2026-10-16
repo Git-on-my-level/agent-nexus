@@ -13,6 +13,7 @@ import {
   localWorkPrincipal,
   onLocalWorkChanged,
   protectLocalWorkPreparation,
+  requestMutationSendLock,
 } from "$lib/localWorkStore.js";
 import {
   attachmentFile,
@@ -30,29 +31,35 @@ import {
   expiredReplayError,
   intentFingerprint,
   freshRequest,
+  autoApplyStageKey,
+  randomUUID,
 } from "$lib/replayPolicy.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
 const volatile = new Map();
+const inFlightInTab = new Set();
+const confirmedInTab = new Map();
 let timer;
 let running = false;
 let requested = false;
 
 const snapshot = (value) => JSON.parse(JSON.stringify(value));
+const inTabKey = (entry) => `${entry.scope}\0${entry.epoch}\0${entry.key}`;
 const active = (entry) =>
   entry.scope === get(localWorkScope) &&
   canUseLocalWorkScope(entry.scope) &&
   entry.epoch === localWorkEpoch(entry.scope);
-const persist = (entry) =>
+const persist = (entry, lease = null) =>
   saveLocalWork(entry.scope, "mutation", entry.key, entry, {
     epoch: entry.epoch,
+    lease,
   });
 const visible = (entry) => entry.state !== "superseded";
 
 /** Only audited adapters belong here. A new endpoint must first prove atomic
  * mutation/replay and changed-body key rejection in real core tests. */
-async function send(entry) {
+async function send(entry, lease = null) {
   if (!active(entry))
     throw new Error("The submitting identity is no longer active.");
   if (replayExpired(entry.createdAt)) throw expiredReplayError();
@@ -114,7 +121,7 @@ async function send(entry) {
           },
         ],
       };
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
@@ -177,7 +184,7 @@ async function send(entry) {
             .map((candidate) => ({ id: candidate.id, result })),
         ],
       };
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
@@ -219,7 +226,7 @@ async function send(entry) {
           { id: item.id, result },
         ],
       };
-      await persist(entry);
+      await persist(entry, lease);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
@@ -298,7 +305,7 @@ async function send(entry) {
   if (entry.operation === "artifacts.attachments.create") {
     const result = await client.createArtifactAttachment({
       refs: entry.request.refs,
-      request_key: entry.key,
+      request_key: entry.request.request_key || entry.key,
       file: attachmentFile(entry.request),
     });
     if (!result?.artifact?.id)
@@ -318,7 +325,7 @@ async function send(entry) {
         throw new Error("Conversation receipt is incomplete.");
       id = conversation.id;
       entry.receipt = { ...entry.receipt, conversationId: id };
-      await persist(entry);
+      await persist(entry, lease);
     }
     if (!active(entry))
       throw new Error("The submitting identity is no longer active.");
@@ -335,7 +342,7 @@ async function send(entry) {
       ));
     if (!decision.id) throw new Error("Decision receipt is incomplete.");
     entry.receipt = { ...entry.receipt, decision };
-    await persist(entry);
+    await persist(entry, lease);
     commitInboxView(entry.scope, { decision });
     if (!entry.request.autoApply) return { decision };
     if (!active(entry))
@@ -354,11 +361,11 @@ async function send(entry) {
       if (!active(entry))
         throw new Error("The submitting identity is no longer active.");
       entry.request.autoDispatch = {
-        request_key: crypto.randomUUID(),
+        request_key: await autoApplyStageKey(entry, "autoDispatch"),
         if_revision: decision.revision,
         if_action_revision: base.revision,
       };
-      await persist(entry);
+      await persist(entry, lease);
     }
     let action = entry.receipt.dispatchedAction;
     if (!action) {
@@ -369,7 +376,7 @@ async function send(entry) {
       if (action.id !== decision.action_id)
         throw new Error("Action receipt is incomplete.");
       entry.receipt = { ...entry.receipt, dispatchedAction: action };
-      await persist(entry);
+      await persist(entry, lease);
     }
     if (action.status !== "failed") {
       if (!active(entry))
@@ -381,10 +388,10 @@ async function send(entry) {
         if (!active(entry))
           throw new Error("The submitting identity is no longer active.");
         entry.request.autoReconcile = {
-          request_key: crypto.randomUUID(),
+          request_key: await autoApplyStageKey(entry, "autoReconcile"),
           if_revision: base.revision,
         };
-        await persist(entry);
+        await persist(entry, lease);
       }
       action =
         entry.receipt.reconciledAction ||
@@ -395,7 +402,7 @@ async function send(entry) {
       if (action.id !== decision.action_id)
         throw new Error("Read-back receipt is incomplete.");
       entry.receipt = { ...entry.receipt, reconciledAction: action };
-      await persist(entry);
+      await persist(entry, lease);
     }
     return { decision, action };
   }
@@ -420,7 +427,7 @@ function confirm(entry, result = null) {
 }
 
 export function enqueueDiscussionMessage({ event, ...options }) {
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   return enqueueLocalMutation({
     ...options,
     key,
@@ -441,7 +448,7 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
     ].includes(operation)
   )
     throw new Error("This authoring operation has not been audited.");
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   const draft = options.draft || {};
   const preview =
     options.preview ??
@@ -503,7 +510,7 @@ export function enqueueInboxControls({ draft, ...options }) {
       )
     )
       throw new Error("Review the saved inbox control.");
-    const body = { ...item.body, request_key: crypto.randomUUID() };
+    const body = { ...item.body, request_key: randomUUID() };
     if (
       item.action === "read"
         ? body.group_ref !== item.id ||
@@ -527,7 +534,7 @@ export function enqueueInboxControls({ draft, ...options }) {
   });
   return enqueueLocalMutation({
     ...options,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: "inbox.controls",
     request: { items },
     draft,
@@ -563,7 +570,7 @@ export function enqueueEventLifecycle({ draft, ...options }) {
   return enqueueLocalMutation({
     ...options,
     draft,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: "events.lifecycle",
     title: "Saved event action",
     preview: `${draft.action}: ${events.map((event) => event.title).join(", ")}\n${draft.reason || ""}`,
@@ -576,7 +583,7 @@ export function enqueueEventLifecycle({ draft, ...options }) {
         action: draft.action,
         body: {
           actor_id,
-          request_key: crypto.randomUUID(),
+          request_key: randomUUID(),
           if_lifecycle: event.if_lifecycle,
           ...(draft.action === "trash" ? { reason: draft.reason || "" } : {}),
         },
@@ -605,7 +612,7 @@ export function enqueueDocumentLifecycle({ draft, ...options }) {
     throw new Error(
       "A saved request already includes this document. Confirm or edit that request first.",
     );
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   return enqueueLocalMutation({
     ...options,
     draft,
@@ -619,7 +626,7 @@ export function enqueueDocumentLifecycle({ draft, ...options }) {
         action: draft.action,
         body: {
           actor_id,
-          request_key: crypto.randomUUID(),
+          request_key: randomUUID(),
           if_updated_at: doc.updated_at,
           ...(["trash", "restore"].includes(draft.action)
             ? { reason: draft.reason || "" }
@@ -649,7 +656,7 @@ export async function enqueueAttachment({ file, refs, target, href }) {
       raw += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
     if (scope !== get(localWorkScope) || epoch !== localWorkEpoch(scope))
       throw new Error("The identity selecting this file is no longer active.");
-    const key = crypto.randomUUID();
+    const key = randomUUID();
     return await enqueueLocalMutation({
       key,
       operation: "artifacts.attachments.create",
@@ -660,6 +667,7 @@ export async function enqueueAttachment({ file, refs, target, href }) {
       request: {
         composerTarget: target,
         refs,
+        request_key: key,
         file: { name: file.name, type: file.type, bytes: btoa(raw) },
       },
     });
@@ -673,7 +681,7 @@ export function enqueuePmMessage({
   text,
   workRef = "",
   contextRefs = [],
-  key = crypto.randomUUID(),
+  key = randomUUID(),
   ...options
 }) {
   const actor_id = JSON.parse(get(localWorkScope))[3];
@@ -686,8 +694,8 @@ export function enqueuePmMessage({
       ...(!conversationId
         ? {
             creation: {
-              request_key: crypto.randomUUID(),
-              replay_key: crypto.randomUUID(),
+              request_key: randomUUID(),
+              replay_key: randomUUID(),
               actor_id,
               title: text.slice(0, 100),
               ...(workRef ? { work_ref: workRef } : {}),
@@ -699,7 +707,7 @@ export function enqueuePmMessage({
       // bodies verbatim, including legacy entries without receipt keys.
       message: {
         request_key: key,
-        replay_key: crypto.randomUUID(),
+        replay_key: randomUUID(),
         actor_id,
         text,
       },
@@ -715,7 +723,7 @@ export function enqueuePmDecisionAnswer({
   autoApply = false,
   ...options
 }) {
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   const actor_id = JSON.parse(get(localWorkScope))[3];
   return enqueueLocalMutation({
     ...options,
@@ -724,6 +732,12 @@ export function enqueuePmDecisionAnswer({
     request: {
       decision_id: decisionId,
       autoApply,
+      ...(autoApply
+        ? {
+            autoDispatchKey: randomUUID(),
+            autoReconcileKey: randomUUID(),
+          }
+        : {}),
       answer: { request_key: key, actor_id, revision, approve, text },
     },
   });
@@ -736,7 +750,7 @@ export function enqueuePmDecisionAnswer({
 export function enqueueCurationUngroup({ key: batchKey, ...options }) {
   return enqueueLocalMutation({
     ...options,
-    key: crypto.randomUUID(),
+    key: randomUUID(),
     operation: "curation.ungroup",
     request: { body: { key: batchKey } },
   });
@@ -798,97 +812,126 @@ export async function enqueueLocalMutation({
   return entry;
 }
 
+/**
+ * Drain one persisted outbox item. Cross-tab lease acquisition is a best-effort
+ * optimization only; if two tabs enter send concurrently for the same item,
+ * both transmit the request_key / replay_key persisted when the item was
+ * enqueued, so server-side replay produces at most one effect. If storage is
+ * unavailable during/after send, in-tab tracking (inFlightInTab,
+ * confirmedInTab) still sends at most once per tab with the persisted key.
+ */
 async function attempt(entry) {
   if (!active(entry) || navigator.onLine === false) return;
+  const tabKey = inTabKey(entry);
+  if (confirmedInTab.has(tabKey) || inFlightInTab.has(tabKey)) return;
   try {
-    if (!navigator.locks)
-      throw Object.assign(new Error("Web Locks are unavailable"), {
-        status: 400,
-        publicMessage:
-          "Sending is paused in this browser. Your text is saved here.",
-      });
-    await navigator.locks.request(
-      `anx:mutation-send:${entry.scope}`,
-      async () => {
-        if (!active(entry)) return;
-        const latest = await loadLocalWorkRecord(
-          entry.scope,
-          "mutation",
-          entry.key,
-        );
-        if (!latest || latest.deleted || latest.value.state === "superseded") {
+    await requestMutationSendLock(entry.scope, async (lease) => {
+      if (
+        !active(entry) ||
+        confirmedInTab.has(tabKey) ||
+        inFlightInTab.has(tabKey)
+      )
+        return;
+      const latest = await loadLocalWorkRecord(
+        entry.scope,
+        "mutation",
+        entry.key,
+      );
+      if (latest?.deleted) {
+        if (latest.deletionReason === "confirmed") {
+          confirmedInTab.set(tabKey, latest.confirmation ?? null);
           volatile.delete(entry.key);
-          return;
+          confirm(entry, latest.confirmation ?? null);
+        } else {
+          volatile.delete(entry.key);
         }
-        const saved = latest.value;
-        if (saved.state === "attention" || saved.nextAt > Date.now()) return;
-        entry = saved;
-        if (replayExpired(entry.createdAt)) throw expiredReplayError();
-        const fingerprint = await intentFingerprint(entry.request);
-        const records = await listLocalWork(entry.scope, "mutation", {
-          includeDeleted: true,
-        });
-        let adopted = null;
-        for (const record of records) {
-          if (record.target === entry.key) continue;
-          if (record.deleted) {
-            if (
-              record.deletionReason === "confirmed" &&
-              record.submission?.confirmedAt >= entry.createdAt &&
-              record.submission?.target === entry.target &&
-              record.submission.operation === entry.operation &&
-              record.submission.fingerprint === fingerprint
-            ) {
-              adopted = record;
-              break;
-            }
-            continue;
+        return;
+      }
+      if (!latest || latest.value.state === "superseded") {
+        volatile.delete(entry.key);
+        return;
+      }
+      const saved = latest.value;
+      if (saved.state === "attention" || saved.nextAt > Date.now()) return;
+      entry = saved;
+      if (replayExpired(entry.createdAt)) throw expiredReplayError();
+      const fingerprint = await intentFingerprint(entry.request);
+      const records = await listLocalWork(entry.scope, "mutation", {
+        includeDeleted: true,
+      });
+      let adopted = null;
+      for (const record of records) {
+        if (record.target === entry.key) continue;
+        if (record.deleted) {
+          if (
+            record.deletionReason === "confirmed" &&
+            record.submission?.confirmedAt >= entry.createdAt &&
+            record.submission?.target === entry.target &&
+            record.submission.operation === entry.operation &&
+            record.submission.fingerprint === fingerprint
+          ) {
+            adopted = record;
+            break;
           }
-          const other = record.value;
-          if (
-            !visible(other) ||
-            replayExpired(other.createdAt) ||
-            other.target !== entry.target ||
-            other.operation !== entry.operation
-          )
-            continue;
-          if (
-            other.createdAt > entry.createdAt ||
-            (other.createdAt === entry.createdAt && other.key > entry.key)
-          )
-            continue;
-          if ((await intentFingerprint(other.request)) !== fingerprint)
-            continue;
-          // Another tab owns the identical persisted submission. Adopt its
-          // active request, including its original keys and checkpoints.
-          await persist({
+          continue;
+        }
+        const other = record.value;
+        if (
+          !visible(other) ||
+          replayExpired(other.createdAt) ||
+          other.target !== entry.target ||
+          other.operation !== entry.operation
+        )
+          continue;
+        if (
+          other.createdAt > entry.createdAt ||
+          (other.createdAt === entry.createdAt && other.key > entry.key)
+        )
+          continue;
+        if ((await intentFingerprint(other.request)) !== fingerprint) continue;
+        // Another tab owns the identical persisted submission. Adopt its
+        // active request, including its original keys and checkpoints.
+        await persist(
+          {
             ...entry,
             state: "superseded",
             adoptedKey: other.key,
-          });
-          volatile.delete(entry.key);
-          return;
-        }
-        entry.state = "sending";
-        entry.attempts += 1;
-        await persist(entry);
-        mutationOutbox.update((rows) =>
-          rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
-        );
-        if (!active(entry)) return;
-        const result = adopted ? adopted.confirmation : await send(entry);
-        if (entry.epoch !== localWorkEpoch(entry.scope)) return;
-        await saveLocalWork(entry.scope, "mutation", entry.key, null, {
-          epoch: entry.epoch,
-          deletionReason: "confirmed",
-          confirmation: result,
-          submission: {
-            target: entry.target,
-            operation: entry.operation,
-            fingerprint,
-            confirmedAt: Date.now(),
           },
-        });
+          lease,
+        );
+        volatile.delete(entry.key);
+        return;
+      }
+      entry.state = "sending";
+      entry.attempts += 1;
+      await persist(entry, lease);
+      inFlightInTab.add(tabKey);
+      mutationOutbox.update((rows) =>
+        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
+      );
+      try {
+        if (!active(entry)) return;
+        const result = adopted
+          ? adopted.confirmation
+          : await send(entry, lease);
+        confirmedInTab.set(tabKey, result);
+        if (entry.epoch !== localWorkEpoch(entry.scope)) return;
+        try {
+          await saveLocalWork(entry.scope, "mutation", entry.key, null, {
+            epoch: entry.epoch,
+            lease,
+            deletionReason: "confirmed",
+            confirmation: result,
+            submission: {
+              target: entry.target,
+              operation: entry.operation,
+              fingerprint,
+              confirmedAt: Date.now(),
+            },
+          });
+        } catch (confirmSaveErr) {
+          if (!confirmSaveErr?.localPersistence) throw confirmSaveErr;
+        }
         volatile.delete(entry.key);
         // Preserve any newer composer contents, even in another tab.
         const current = await loadLocalWork(
@@ -896,27 +939,66 @@ async function attempt(entry) {
           "draft",
           entry.draftTarget || entry.target,
         );
-        if (JSON.stringify(current) === JSON.stringify(entry.draft))
-          await saveLocalWork(
-            entry.scope,
-            "draft",
-            entry.draftTarget || entry.target,
-            null,
-            {
-              epoch: entry.epoch,
-            },
-          );
-        if (entry.operation === "events.create")
+        if (JSON.stringify(current) === JSON.stringify(entry.draft)) {
+          try {
+            await saveLocalWork(
+              entry.scope,
+              "draft",
+              entry.draftTarget || entry.target,
+              null,
+              {
+                epoch: entry.epoch,
+                lease,
+              },
+            );
+          } catch (draftErr) {
+            if (draftErr?.leaseLost) throw draftErr;
+          }
+        }
+        if (entry.operation === "events.create") {
+          lease?.assertHeld();
           await consumeUploadedAttachments(
             entry.scope,
             entry.request.event.refs,
             entry.epoch,
           );
+        }
         confirm(entry, result);
-      },
-    );
+      } finally {
+        inFlightInTab.delete(tabKey);
+      }
+    });
   } catch (error) {
     if (!active(entry)) return;
+    if (error?.leaseLost) {
+      confirmedInTab.delete(tabKey);
+      const latest = await loadLocalWorkRecord(
+        entry.scope,
+        "mutation",
+        entry.key,
+      );
+      if (latest?.deleted && latest.deletionReason === "confirmed") {
+        confirmedInTab.set(tabKey, latest.confirmation ?? null);
+        volatile.delete(entry.key);
+        confirm(entry, latest.confirmation ?? null);
+        return;
+      }
+      volatile.delete(entry.key);
+      clearTimeout(timer);
+      timer = setTimeout(requestRecovery, 250);
+      return;
+    }
+    const latest = await loadLocalWorkRecord(
+      entry.scope,
+      "mutation",
+      entry.key,
+    );
+    if (latest?.deleted && latest.deletionReason === "confirmed") {
+      confirmedInTab.set(tabKey, latest.confirmation ?? null);
+      volatile.delete(entry.key);
+      confirm(entry, latest.confirmation ?? null);
+      return;
+    }
     if (
       entry.operation === "pm.decisions.create" &&
       isPmNotOnboardedRefusal(error)
@@ -1029,7 +1111,10 @@ export async function recoverMutations() {
       });
       const rows = new Map(
         records
-          .filter((record) => !record.deleted)
+          .filter(
+            (record) =>
+              !record.deleted && !confirmedInTab.has(inTabKey(record.value)),
+          )
           .map((record) => [record.target, record.value]),
       );
       for (const [key, entry] of volatile) {
@@ -1124,7 +1209,7 @@ export async function retryMutation(key, { asNew = false } = {}) {
     }
     const replacement = {
       ...snapshot(entry),
-      key: crypto.randomUUID(),
+      key: randomUUID(),
       request: freshRequest(entry.request, entry.operation, entry.receipt),
       createdAt: Date.now(),
       state: "pending",

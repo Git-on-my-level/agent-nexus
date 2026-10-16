@@ -1,8 +1,12 @@
+import { randomUUID, sha256Hex } from "./cryptoFallback.js";
 import policy from "../../../core/internal/replaypolicy/policy.json";
 
 export const replayPolicy = Object.freeze(policy);
 export const autoRetryMaxAgeMs =
   policy.autoRetryMaxAgeDays * 24 * 60 * 60 * 1000;
+
+export { randomUUID, sha256Hex };
+
 export function replayExpired(createdAt, now = Date.now()) {
   return (
     !Number.isFinite(createdAt) ||
@@ -24,6 +28,8 @@ export function expiredReplayError() {
 // Strip only transport key locations, never keys inside authored JSON content.
 export function requestIntent(request) {
   const value = JSON.parse(JSON.stringify(request));
+  delete value.autoDispatchKey;
+  delete value.autoReconcileKey;
   for (const body of [
     value,
     value.body,
@@ -55,10 +61,23 @@ export async function intentFingerprint(request) {
   const bytes = new TextEncoder().encode(
     JSON.stringify(canonical(requestIntent(request))),
   );
-  const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return sha256Hex(bytes);
+}
+
+// Legacy saved items predate persisted stage seeds. Derive their fallback
+// from the durable outbox identity, so independent recovery copies agree.
+export async function autoApplyStageKey(entry, stage) {
+  if (!["autoDispatch", "autoReconcile"].includes(stage))
+    throw new Error("Unknown auto-apply stage.");
+  const saved =
+    entry.request[stage]?.request_key || entry.request[`${stage}Key`];
+  if (saved) return saved;
+  if (!entry.key) throw new Error("Saved mutation identity is missing.");
+  return sha256Hex(
+    new TextEncoder().encode(
+      JSON.stringify(["anx:auto-apply:v1", entry.key, stage]),
+    ),
+  );
 }
 
 export function freshRequest(request, operation = "", receipt = null) {
@@ -89,7 +108,15 @@ export function freshRequest(request, operation = "", receipt = null) {
     )
       continue;
     for (const field of ["request_key", "replay_key"]) {
-      if (field in body) body[field] = crypto.randomUUID();
+      if (field in body) body[field] = randomUUID();
+    }
+  }
+  if (operation === "pm.decision.answer") {
+    if ("autoDispatchKey" in value && !receipt?.dispatchedAction) {
+      value.autoDispatchKey = randomUUID();
+    }
+    if ("autoReconcileKey" in value && !receipt?.reconciledAction) {
+      value.autoReconcileKey = randomUUID();
     }
   }
   // This is an explicit new intent, not recovery of the old body. Legacy PM
@@ -97,8 +124,8 @@ export function freshRequest(request, operation = "", receipt = null) {
   if (operation === "pm.chat.send") {
     for (const body of [value.creation, value.message]) {
       if (!body) continue;
-      body.request_key ||= crypto.randomUUID();
-      body.replay_key ||= crypto.randomUUID();
+      body.request_key ||= randomUUID();
+      body.replay_key ||= randomUUID();
     }
   }
   return value;

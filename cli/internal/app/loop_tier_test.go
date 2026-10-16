@@ -51,6 +51,80 @@ func TestOrientTextRendersSharedBriefFixture(t *testing.T) {
 	}
 }
 
+func TestOrientAgentReaderScopesInitiativesAndWaitingOnHuman(t *testing.T) {
+	brief := map[string]any{
+		"schema": "brief.v1",
+		"principal": map[string]any{
+			"id":      "agent:worker",
+			"display": "worker on host-1",
+			"kind":    "agent",
+		},
+		"decisions": []any{
+			map[string]any{
+				"ref":           "inbox:ask-incoming",
+				"inbox_item_id": "ask-incoming",
+				"title":         "Incoming ask for reader",
+			},
+		},
+		"your_asks":        []any{},
+		"answered_for_you": []any{},
+		"initiatives": []any{
+			map[string]any{
+				"ref":                      "card:unrelated-overdue",
+				"title":                    "Unrelated overdue",
+				"state":                    "past_promise",
+				"past_promise_for_seconds": float64(86400),
+				"yours":                    false,
+				"promise": map[string]any{
+					"at":     "2026-10-10T00:00:00Z",
+					"what":   "other agent checkpoint",
+					"source": "note",
+					"author": map[string]any{"id": "agent:other", "display": "worker on host-1", "kind": "agent"},
+				},
+			},
+			map[string]any{
+				"ref":   "card:assigned-no-promise",
+				"title": "Assigned card",
+				"state": "no_promise",
+				"yours": true,
+			},
+			map[string]any{
+				"ref":   "card:authored-promise",
+				"title": "Authored promise",
+				"state": "moving",
+				"promise": map[string]any{
+					"at":     "2026-10-18T00:00:00Z",
+					"what":   "ship fix",
+					"source": "note",
+					"author": map[string]any{"id": "agent:worker", "display": "worker on host-1", "kind": "agent"},
+				},
+			},
+		},
+	}
+	got := renderOrientText(brief, "worker on host-1 · workspace demo")
+	if strings.Contains(got, "Incoming ask for reader") {
+		t.Fatalf("orient must not fall back from your_asks to decisions:\n%s", got)
+	}
+	if !strings.Contains(got, "waiting on human:  none\n") {
+		t.Fatalf("expected waiting on human:  none, got:\n%s", got)
+	}
+	if strings.Contains(got, "your initiatives:  unrelated-overdue") {
+		t.Fatalf("unrelated initiative must not be labeled your initiatives:\n%s", got)
+	}
+	if !strings.Contains(got, "workspace:  unrelated-overdue  PAST PROMISE") {
+		t.Fatalf("unrelated initiative should appear under workspace:\n%s", got)
+	}
+	if !strings.Contains(got, "your initiatives:  assigned-no-promise  no promise\n") {
+		t.Fatalf("assigned initiative missing from your initiatives:\n%s", got)
+	}
+	if !strings.Contains(got, "your initiatives:  authored-promise  moving") {
+		t.Fatalf("promise-authored initiative missing from your initiatives:\n%s", got)
+	}
+	if !strings.Contains(got, "next: anx note card:assigned-no-promise --next <date> \"<what>\"\n") {
+		t.Fatalf("next: must pick from the agent's own initiatives, got:\n%s", got)
+	}
+}
+
 func briefServer(t *testing.T, brief []byte) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -111,18 +185,28 @@ func TestPromiseWhenGrammar(t *testing.T) {
 	for raw, want := range map[string]time.Time{
 		"2d":                   now.Add(48 * time.Hour),
 		"36h":                  now.Add(36 * time.Hour),
-		"2026-10-20":           time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC),
+		"2026-10-20":           time.Date(2026, 10, 20, 23, 59, 59, 0, time.UTC),
 		"2026-10-20T10:00:00Z": time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC),
 	} {
 		got, ok := parsePromiseWhen(raw, now)
 		if !ok || !got.Equal(want) {
-			t.Fatalf("%s: got %v ok=%v", raw, got, ok)
+			t.Fatalf("%s: got %v ok=%v, want %v", raw, got, ok, want)
 		}
 	}
 	for _, raw := range []string{"", "0d", "-1d", "2w", "tomorrow", "2026-13-01", "3651d"} {
 		if _, ok := parsePromiseWhen(raw, now); ok {
 			t.Fatalf("%q must be rejected", raw)
 		}
+	}
+	// Date-only promise in `anx note` resolves to 23:59:59 UTC (matching core's
+	// plans.ParseWhen), so repeating the same instant as RFC3339 without
+	// evidence is not flagged as a move.
+	doc, _ := runNoteForTest(t, "2026-10-16T23:59:59Z", "card:x", "Still on track", "--next", "2026-10-16", "checkpoint")
+	if gotAt := anyString(asMap(asMap(doc["result"])["next"])["at"]); gotAt != "2026-10-16T23:59:59Z" {
+		t.Fatalf("result.next.at = %q, want 2026-10-16T23:59:59Z", gotAt)
+	}
+	if _, ok := warningCodes(doc)["note_moved_without_evidence"]; ok {
+		t.Fatalf("same end-of-day UTC instant must not warn as a move: %#v", doc["warnings"])
 	}
 }
 

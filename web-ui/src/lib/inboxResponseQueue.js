@@ -3,7 +3,11 @@ import { get, writable } from "svelte/store";
 import { isInboxResponseOutcome } from "$lib/askDelivery.js";
 import { captureInboxResponseSender } from "$lib/coreClient";
 import { mutationFailure } from "$lib/mutationStatus.js";
-import { replayExpired, expiredReplayError } from "$lib/replayPolicy.js";
+import {
+  replayExpired,
+  expiredReplayError,
+  randomUUID,
+} from "$lib/replayPolicy.js";
 import {
   listLocalWork,
   loadLocalWork,
@@ -12,6 +16,7 @@ import {
   localWorkEpoch,
   clearPrincipalLocalWork,
   onLocalWorkChanged,
+  requestMutationSendLock,
   saveLocalWork,
 } from "$lib/localWorkStore.js";
 import { canUseLocalWorkScope } from "$lib/localWorkScope.js";
@@ -108,23 +113,28 @@ function persistedEntry(entry, state = "pending", failure = null) {
   };
 }
 
-function persistResponse(entry, state = "pending", failure = null) {
+function persistResponse(
+  entry,
+  state = "pending",
+  failure = null,
+  lease = null,
+) {
   return saveLocalWork(
     entry.identity,
     "inbox-send",
     entry.request.idempotency_key,
     persistedEntry(entry, state, failure),
-    { epoch: entry.localEpoch },
+    { epoch: entry.localEpoch, lease },
   );
 }
 
-function removePersistedResponse(entry, reason = "confirmed") {
+function removePersistedResponse(entry, reason = "confirmed", lease = null) {
   return saveLocalWork(
     entry.identity,
     "inbox-send",
     entry.request.idempotency_key,
     null,
-    { epoch: entry.localEpoch, deletionReason: reason },
+    { epoch: entry.localEpoch, deletionReason: reason, lease },
   );
 }
 
@@ -132,18 +142,8 @@ function removePersistedResponse(entry, reason = "confirmed") {
 async function durableSend(entry) {
   await entry.saved;
   if (navigator.onLine === false) throw new Error("The device is offline.");
-  if (!globalThis.navigator?.locks) {
-    const error = new Error(
-      "Web Locks are unavailable; cross-tab sending is paused.",
-    );
-    error.status = 400;
-    error.publicMessage =
-      "Sending is paused in this browser. Your text is saved here. Copy it before sending from another browser.";
-    throw error;
-  }
-  return navigator.locks.request(
-    `anx:mutation-send:${entry.identity}`,
-    async () => {
+  try {
+    return await requestMutationSendLock(entry.identity, async (lease) => {
       if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
         throw new Error("This identity has signed out.");
       }
@@ -182,9 +182,9 @@ async function durableSend(entry) {
         throw error;
       }
       entry.attempts = (stored.attempts || 0) + 1;
-      await persistResponse(entry, "sending");
+      await persistResponse(entry, "sending", null, lease);
       const result = await entry.send(entry.itemId, entry.request);
-      await removePersistedResponse(entry);
+      await removePersistedResponse(entry, "confirmed");
       await consumeUploadedAttachments(
         entry.identity,
         entry.request.related_refs,
@@ -201,8 +201,14 @@ async function durableSend(entry) {
         }
       }
       return result;
-    },
-  );
+    });
+  } catch (error) {
+    if (error?.leaseLost) {
+      error.deferred = true;
+      scheduleRecovery(250);
+    }
+    throw error;
+  }
 }
 
 function scheduleRecovery(delay = 0) {
@@ -495,7 +501,7 @@ export function queueInboxResponse({
     identity: bound.identity,
     send: bound.send,
     request: JSON.parse(
-      JSON.stringify({ ...request, idempotency_key: crypto.randomUUID() }),
+      JSON.stringify({ ...request, idempotency_key: randomUUID() }),
     ),
     message: String(message ?? "Response sent"),
     restore: restore ?? null,

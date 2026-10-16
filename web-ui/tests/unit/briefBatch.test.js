@@ -22,12 +22,14 @@ const brief = normalizeBrief({
           {
             ref: "inbox:ask:1",
             inbox_item_id: "inbox:ask:1",
+            event_ref: "event:evt-batch-1",
             title: "One",
             subject_ref: "card:head",
           },
           {
             ref: "inbox:ask:2",
             inbox_item_id: "inbox:ask:2",
+            event_ref: "event:evt-batch-2",
             title: "Two",
             subject_ref: "card:other",
             blocks: [{ ref: "card:blocked", title: "Blocked" }],
@@ -38,6 +40,7 @@ const brief = normalizeBrief({
     {
       ref: "inbox:solo",
       inbox_item_id: "inbox:solo",
+      event_ref: "event:solo",
       kind: "ask",
       title: "Solo",
       subject: { ref: "card:solo", title: "Solo" },
@@ -59,6 +62,62 @@ describe("brief batch decisions", () => {
     );
     expect(findDecision(brief, "missing")).toBeNull();
     expect(findDecision(brief, "")).toBeNull();
+  });
+
+  it("matches only authoritative event identities and rejects suffix or ambiguous matches", () => {
+    const withSuffixes = normalizeBrief({
+      decisions: [
+        ...brief.decisions,
+        {
+          ref: "inbox:ask:thread-1:tenant:42",
+          inbox_item_id: "inbox:ask:thread-1:tenant:42",
+          kind: "ask",
+          title: "Tenant 42 suffix",
+        },
+        {
+          ref: "inbox:ask:thread-1:none:42",
+          inbox_item_id: "inbox:ask:thread-1:none:42",
+          kind: "ask",
+          title: "Bare 42 suffix",
+        },
+        {
+          ref: "inbox:ask:t:req:evt-99",
+          inbox_item_id: "inbox:ask:t:req:evt-99",
+          event_ref: "event:evt-99",
+          kind: "ask",
+          title: "Authoritative event ask",
+        },
+      ],
+    });
+    expect(findDecision(withSuffixes, "event:42")).toBeNull();
+    expect(findDecision(withSuffixes, "event:2")).toBeNull();
+    expect(findDecision(withSuffixes, "event:evt-99")?.title).toBe(
+      "Authoritative event ask",
+    );
+    expect(findDecision(withSuffixes, "event:evt-batch-2")?.inboxItemId).toBe(
+      "inbox:curation-batch:k",
+    );
+    expect(findDecision(withSuffixes, "event:solo")?.title).toBe("Solo");
+    expect(findDecision(withSuffixes, "event:missing")).toBeNull();
+
+    const ambiguous = normalizeBrief({
+      decisions: [
+        {
+          ref: "inbox:dup",
+          inbox_item_id: "dup",
+          kind: "ask",
+          title: "First duplicate",
+        },
+        {
+          ref: "inbox:dup",
+          inbox_item_id: "dup",
+          kind: "ask",
+          title: "Second duplicate",
+        },
+      ],
+    });
+    expect(findDecision(ambiguous, "inbox:dup")).toBeNull();
+    expect(findDecision(ambiguous, "event:dup")).toBeNull();
   });
 
   it("includes a batch when any member subject or block matches", () => {

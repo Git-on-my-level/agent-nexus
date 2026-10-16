@@ -927,3 +927,41 @@ Post-invalidation work is 1,761,675 versus 1,761,800 VM steps. The inherited
 closure/query-plan failures are recorded separately from the successful
 index-plan regression and brief scale checks. No budget or plan allowance was
 relaxed for this fix.
+
+## Agent brief ownership and hidden history
+
+`agentInitiativeCards` admits at most 50 distinct card IDs. Assignment uses card
+primary-key seeks; participation uses
+`idx_work_participants_actor_card_active(actor_id,card_id,session_id,id)` with
+`activity <> 'left'`, nonempty actor and `session_active=1` before scoped
+participant/session checks. Migration 105 backfills the normalized session flag
+once and maintains it on participant insert/rebind and session close/reopen or
+actor change. Session-side updates seek `idx_work_participants_session(session_id,id)`
+and touch only that session's participants. Closed history never enters the
+serving participation index. Installation is idempotent and retains canonical
+participant activity.
+
+The brief no longer probes globally for visible assignments, participants,
+plans, notes, asks, blocks or work metadata before reading its candidates.
+Notes seek `idx_brief_notes_card_ts` for the admitted cards; ask subjects and
+blocks start from at most two distinct refs per admitted card and seek their
+subject/ref indexes. Metadata and plan hydration use card primary keys.
+Unrelated hidden rows cannot make an empty candidate result scan those tables.
+
+Pinned series reads reuse the admitted immutable point proof for stream
+identity checks. Empty label objects contain no authored references and skip
+atom/prose extraction; arbitrary label JSON retains the canonical reference
+policy. Unknown legacy provenance uses `(series,labels)` primary-key seeks.
+The unknown-ledger empty check is an unscoped physical first-row seek on internal
+authorization metadata, so hidden business rows cannot turn it into a scan.
+Missing or expired proof tokens fail closed. Ordinary unpinned reads retain the
+canonical policy, and the series differential regression compares both paths
+for private labels, private historical state, unknown provenance, grants,
+revocations, and shared proof-cache reuse.
+
+`TestPerformanceBriefSeriesBudget` retains its 50,000 VM-step, 100-query and
+1,024-row ceilings. It covers 10,000 reader-owned open sessions, 10,000 closed
+sessions with still-active participants, a full assigned page, and 1,000 notes
+on an unrelated private card. All variants include 50 initiatives, 100 admitted
+metric refs and over 10,000 metric observations. Read admission and fixture
+construction are outside the measured serving phase.

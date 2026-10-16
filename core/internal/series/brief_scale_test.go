@@ -71,6 +71,31 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
  INSERT INTO series_points SELECT 'metric000','{}',?-i,10,NULL,0 FROM n`, now.UnixNano()); err != nil {
 		t.Fatal(err)
 	}
+	// Dense participant history from other principals on an admitted card must
+	// not walk participant/session history when an agent reader loads /brief.
+	if _, err = tx.Exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('scale-agent-other','scale-other-agent','actor-other','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}'),('scale-agent-reader','scale-reader-agent','agent-reader','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','{}')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+ INSERT INTO agent_sessions(id,agent_id,actor_id,provider,host_scope,native_session_id,native_session_id_kind,capabilities_json,activity,sequence,request_json,created_at,last_seen_at,expires_at)
+ SELECT printf('sess-other-%05d',i),'scale-agent-other','actor-other','codex','host-1',printf('native-%05d',i),'opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+ INSERT INTO work_participants(id,card_id,session_id,activity,sequence,request_json,created_at,last_seen_at,expires_at)
+ SELECT printf('part-other-%05d',i),?,printf('sess-other-%05d',i),'active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+ INSERT INTO agent_sessions(id,agent_id,actor_id,provider,host_scope,native_session_id,native_session_id_kind,capabilities_json,activity,sequence,request_json,created_at,last_seen_at,expires_at)
+ SELECT printf('sess-reader-%05d',i),'scale-agent-reader','agent-reader','codex','host-1',printf('reader-native-%05d',i),'opaque','{"resume":"unsupported","history":"unsupported","logs":"unsupported"}','active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+ INSERT INTO work_participants(id,card_id,session_id,activity,sequence,request_json,created_at,last_seen_at,expires_at)
+ SELECT printf('part-reader-%05d',i),?,printf('sess-reader-%05d',i),'active',1,'{}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-12-31T00:00:00Z' FROM n`, ids[1]); err != nil {
+		t.Fatal(err)
+	}
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -91,30 +116,43 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 	}
 	defer db.Close()
 	measured := primitives.NewTestStore(db, "")
-	for _, actor := range []string{"owner", "human"} {
+	checkReader := func(label string, reader primitives.BriefReader, wantYours int) {
+		t.Helper()
+		actor := reader.ActorID
 		scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor})
 		scope, closeRead, e := measured.BeginResourceRead(scope)
 		if e != nil {
 			t.Fatal(e)
 		}
 		capture.Start()
-		body, e := measured.Brief(scope, primitives.BriefReader{ActorID: actor, Kind: "human"}, now)
+		body, e := measured.Brief(scope, reader, now)
 		statements, queries, rows := capture.Stop()
 		work := capture.Work()
 		closeRead()
 		if e != nil || capture.WorkError() != nil {
-			t.Fatalf("brief=%v capture=%v", e, capture.WorkError())
+			t.Fatalf("%s: brief=%v capture=%v", label, e, capture.WorkError())
 		}
 		if queries > 100 || rows > 1024 || work.VMSteps > 50000 {
-			t.Errorf("actor=%s SQL=%d rows=%d VM=%d", actor, queries, rows, work.VMSteps)
+			t.Errorf("%s actor=%s kind=%s SQL=%d rows=%d VM=%d", label, actor, reader.Kind, queries, rows, work.VMSteps)
 		}
 		initiatives := body["initiatives"].([]map[string]any)
 		if len(initiatives) != 50 {
-			t.Fatalf("got %d initiatives", len(initiatives))
+			t.Fatalf("%s: got %d initiatives", label, len(initiatives))
+		}
+		if reader.Kind == "agent" {
+			yoursCount := 0
+			for _, item := range initiatives {
+				if item["yours"] == true {
+					yoursCount++
+				}
+			}
+			if yoursCount != wantYours {
+				t.Fatalf("%s: agent-reader yoursCount=%d, want %d", label, yoursCount, wantYours)
+			}
 		}
 		raw, _ := json.Marshal(initiatives)
 		if !strings.Contains(string(raw), `"flat":true`) {
-			t.Fatal("populated flat control missing")
+			t.Fatalf("%s: populated flat control missing", label)
 		}
 		metricQueries := 0
 		for _, statement := range statements {
@@ -129,7 +167,7 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 			plan := strings.Join(details, "\n")
 			for _, table := range []string{"series_points", "series_live_daily", "series_daily"} {
 				if strings.Contains(plan, "SCAN "+table) || strings.Contains(plan, "MATERIALIZE "+table) {
-					t.Fatalf("unbounded metric plan: %s", plan)
+					t.Fatalf("%s: unbounded metric plan: %s", label, plan)
 				}
 			}
 			if !strings.Contains(plan, "USING INDEX sqlite_autoindex_series_points_1") && !strings.Contains(plan, "USING INDEX sqlite_autoindex_series_live_daily_1") {
@@ -137,8 +175,77 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 			}
 		}
 		if metricQueries != 2 {
-			t.Fatalf("expected one ref batch + one daily batch, got %d", metricQueries)
+			t.Fatalf("%s: expected one ref batch + one daily batch, got %d", label, metricQueries)
 		}
-		t.Logf("actor=%s full 50-card/100-admitted-ref/12000-point brief SQL=%d rows=%d VM=%d metric batches=%d", actor, queries, rows, work.VMSteps, metricQueries)
+		if reader.Kind == "agent" {
+			participantQueries := 0
+			for _, statement := range statements {
+				if !strings.Contains(statement.SQL, "work_participants") {
+					continue
+				}
+				participantQueries++
+				details, e := perfguard.Explain(ctx, s.DB, statement)
+				if e != nil {
+					t.Fatal(e)
+				}
+				plan := strings.Join(details, "\n")
+				for _, table := range []string{"work_participants", "agent_sessions", "cards"} {
+					if strings.Contains(plan, "SCAN "+table) || strings.Contains(plan, "MATERIALIZE "+table) {
+						t.Fatalf("%s: unbounded agent ownership plan:\n%s", label, plan)
+					}
+				}
+				if !strings.Contains(plan, "idx_work_participants_actor_card_active") {
+					t.Fatalf("%s: missing indexed agent ownership seek:\n%s", label, plan)
+				}
+			}
+			if participantQueries != 1 {
+				t.Fatalf("%s: expected 1 agent ownership query, got %d", label, participantQueries)
+			}
+		}
+		t.Logf("variant=%s actor=%s full 50-card/100-admitted-ref/12000-point brief SQL=%d rows=%d VM=%d metric batches=%d", label, actor, queries, rows, work.VMSteps, metricQueries)
 	}
+
+	for _, reader := range []primitives.BriefReader{
+		{ActorID: "owner", Kind: "human"},
+		{ActorID: "human", Kind: "human"},
+		{ActorID: "agent-reader", Kind: "agent"},
+	} {
+		checkReader("dense-reader-session-history", reader, 1)
+	}
+
+	encodedIDs, _ := json.Marshal(ids)
+	if _, err = s.DB.ExecContext(ctx, `UPDATE cards SET assignee='actor:agent-reader' WHERE id IN (SELECT value FROM json_each(?))`, string(encodedIDs)); err != nil {
+		t.Fatal(err)
+	}
+	checkReader("50-assigned-initiatives", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 50)
+	if _, err = s.DB.ExecContext(ctx, `UPDATE cards SET assignee='' WHERE id IN (SELECT value FROM json_each(?))`, string(encodedIDs)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Close the reader's 10,000 sessions without changing participant activity.
+	// Eligibility must use the open-session partial index, not probe history.
+	if _, err = s.DB.ExecContext(ctx, `UPDATE agent_sessions SET activity='closed' WHERE actor_id='agent-reader'`); err != nil {
+		t.Fatal(err)
+	}
+	checkReader("10k-closed-reader-sessions", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 0)
+
+	if _, err = s.DB.ExecContext(ctx, `UPDATE cards SET assignee='actor:agent-reader' WHERE id IN (SELECT value FROM json_each(?))`, string(encodedIDs)); err != nil {
+		t.Fatal(err)
+	}
+	checkReader("closed-history-plus-50-assigned", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 50)
+
+	// Scoped notes on an unrelated private card must add no history work.
+	for i := 0; i < 1000; i++ {
+		payload := map[string]any{"text": "Private note", "card_id": private["id"]}
+		if _, err = store.AppendEvent(ctx, "owner", map[string]any{
+			"type": "message_posted", "thread_id": private["thread_id"], "refs": []string{"card:" + fmt.Sprint(private["id"])}, "payload": payload,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var noteCount int
+	if err = s.DB.QueryRowContext(ctx, `SELECT count(*) FROM brief_notes WHERE card_id=?`, private["id"]).Scan(&noteCount); err != nil || noteCount != 1000 {
+		t.Fatalf("private-note fixture count=%d error=%v", noteCount, err)
+	}
+	checkReader("closed-assigned-plus-1000-private-notes", primitives.BriefReader{ActorID: "agent-reader", Kind: "agent"}, 50)
 }

@@ -1,6 +1,7 @@
 import { get } from "svelte/store";
 import { localWorkScope } from "$lib/localWorkScope.js";
 import { enqueueLocalMutation } from "$lib/mutationOutbox.js";
+import { randomUUID } from "$lib/replayPolicy.js";
 import { createStatusChangeDecisionPayload } from "$lib/taskBoardMove.js";
 import {
   cardIdFromWork,
@@ -84,7 +85,7 @@ export function taskMoveError(error) {
 }
 
 export function enqueueTaskMove(draft, options = {}) {
-  const key = crypto.randomUUID();
+  const key = randomUUID();
   const actor = JSON.parse(get(localWorkScope))[3];
   return enqueueLocalMutation({
     ...options,

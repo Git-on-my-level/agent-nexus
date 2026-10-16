@@ -112,10 +112,16 @@ function normalizeDecision(raw) {
   const ref = text(raw?.ref);
   if (!ref) return null;
   const kind = text(raw.kind) || "ask";
+  const eventRef =
+    text(raw.event_ref) ||
+    text(raw.eventRef) ||
+    (text(raw.event_id) ? `event:${text(raw.event_id)}` : "");
   return {
     ref,
     kind,
-    inboxItemId: text(raw.inbox_item_id) || text(raw.id) || ref,
+    inboxItemId:
+      text(raw.inbox_item_id) || text(raw.inboxItemId) || text(raw.id) || ref,
+    ...(eventRef ? { eventRef } : {}),
     workspace: text(raw.workspace),
     title: text(raw.title) || ref,
     body: String(raw.body ?? ""),
@@ -160,15 +166,22 @@ function normalizeBatch(raw) {
   if (!key) return null;
   const members = (Array.isArray(raw.members) ? raw.members : [])
     .filter((member) => member && typeof member === "object")
-    .map((member) => ({
-      ref: text(member.ref),
-      inboxItemId: text(member.inbox_item_id),
-      title: text(member.title),
-      subjectRef: text(member.subject_ref),
-      blocks: (Array.isArray(member.blocks) ? member.blocks : [])
-        .map(refTitle)
-        .filter(Boolean),
-    }))
+    .map((member) => {
+      const eventRef =
+        text(member.event_ref) ||
+        text(member.eventRef) ||
+        (text(member.event_id) ? `event:${text(member.event_id)}` : "");
+      return {
+        ref: text(member.ref),
+        inboxItemId: text(member.inbox_item_id) || text(member.inboxItemId),
+        ...(eventRef ? { eventRef } : {}),
+        title: text(member.title),
+        subjectRef: text(member.subject_ref) || text(member.subjectRef),
+        blocks: (Array.isArray(member.blocks) ? member.blocks : [])
+          .map(refTitle)
+          .filter(Boolean),
+      };
+    })
     .filter((member) => member.ref || member.title);
   return {
     key,
@@ -645,25 +658,36 @@ export function decisionsForInitiative(brief, ref) {
   );
 }
 
+function itemMatchesTarget(item, wanted) {
+  const ref = text(item?.ref);
+  const inboxItemId = text(item?.inboxItemId);
+  const eventRef = text(item?.eventRef);
+  return (
+    ref === wanted ||
+    inboxItemId === wanted ||
+    (eventRef !== "" && eventRef === wanted)
+  );
+}
+
 function decisionMatchesId(decision, wanted) {
-  if (decision.ref === wanted || decision.inboxItemId === wanted) return true;
-  return (decision.batch?.members ?? []).some(
-    (member) => member.ref === wanted || member.inboxItemId === wanted,
+  if (itemMatchesTarget(decision, wanted)) return true;
+  return (decision.batch?.members ?? []).some((member) =>
+    itemMatchesTarget(member, wanted),
   );
 }
 
 /**
  * Find one decision by its ref or inbox item id, or by a grouped member's
- * ref or inbox item id. A member permalink opens the group.
+ * ref or inbox item id. A member permalink opens the group. Ambiguous matches
+ * return null rather than guessing between distinct items.
  */
 export function findDecision(brief, id) {
   const wanted = text(id);
   if (!wanted) return null;
-  return (
-    (brief?.decisions ?? []).find((decision) =>
-      decisionMatchesId(decision, wanted),
-    ) ?? null
+  const matches = (brief?.decisions ?? []).filter((decision) =>
+    decisionMatchesId(decision, wanted),
   );
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function overlayCoversDecision(decision, overlay) {
