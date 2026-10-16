@@ -47,6 +47,24 @@ func threadAccessible(r *http.Request, opts handlerOptions, threadID string) boo
 	thread, err := opts.primitiveStore.GetThread(r.Context(), threadID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
+			// GetThread returns not-found both for a row that was never written
+			// and for a private thread the scoped relation hid. CheckResourceValues
+			// separates those: a denied id fails closed, and an id that is not a
+			// denied root stays allowed here.
+			//
+			// Ask reads and writes do not use this allowance. A missing thread is
+			// not an answerable ask: the brief, cited-moot lookup, curation
+			// members, and filed-batch anchors inner-join threads, and inbox
+			// respond 404s because the projection writes no row when GetThread
+			// misses. Denying every not-found in this helper would also 404
+			// event, artifact, and stream filters that address a thread id with
+			// no row, and GET of an artifact that only refs such an id. Those
+			// callers are not ask eligibility.
+			//
+			// A thread inserted on the caller's connection is visible to GetThread
+			// in that same transaction. Board and card creates commit the backing
+			// thread with the parent, so later reads find the row; this allowance
+			// is not what makes that create succeed.
 			if store, ok := opts.primitiveStore.(*primitives.Store); ok {
 				return store.CheckResourceValues(r.Context(), []string{threadID}) == nil
 			}

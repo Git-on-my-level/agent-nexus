@@ -477,9 +477,13 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 }
 
 // filedBatchAnchors reads the oldest member of each filed batch that this
-// page collapses. One indexed seek per batch (idx_brief_asks_batch, LIMIT 1),
-// at most one per decision on the page. The row is the anchor even when it
-// is withdrawn or outside the page; the query returns only its id and kind.
+// page collapses, skipping a member whose thread row is missing. The inbox
+// projection is per thread and writes nothing when GetThread misses, so that
+// member is not an answerable anchor. One indexed seek per batch
+// (idx_brief_asks_batch, LIMIT 1), at most one per decision on the page,
+// then the event and thread primary keys. No INDEXED BY on threads: a scoped
+// read shadows that relation. The row is the anchor even when it is
+// withdrawn or outside the page; the query returns only its id and kind.
 func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]briefDecisionMeta, error) {
 	out := map[string]briefDecisionMeta{}
 	for key, group := range groups {
@@ -488,7 +492,7 @@ func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]brie
 			continue
 		}
 		var askID, kind, created string
-		err := b.s.db.QueryRowContext(b.ctx, `SELECT ask_id, kind, created_at FROM brief_asks INDEXED BY idx_brief_asks_batch WHERE batch_id=? AND batch_id<>'' ORDER BY created_at, ask_id LIMIT 1`, batchID).Scan(&askID, &kind, &created)
+		err := b.s.db.QueryRowContext(b.ctx, `SELECT a.ask_id, a.kind, a.created_at FROM brief_asks a INDEXED BY idx_brief_asks_batch JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+` WHERE a.batch_id=? AND a.batch_id<>'' ORDER BY a.created_at, a.ask_id LIMIT 1`, batchID).Scan(&askID, &kind, &created)
 		if err == sql.ErrNoRows {
 			continue
 		}

@@ -94,7 +94,9 @@ func (s *Store) CurationCandidates(ctx context.Context, visible func(string, str
 
 // curationOpenAsks reads one indexed page of open subject asks (ask_subjects
 // keeps open current through its resolution trigger), then hydrates only
-// those rows. Restricted asks are dropped, not flagged.
+// those rows. briefAnswerableAskJoin drops an ask whose thread row is
+// missing, so a missing thread is not an empty owner the strict filter
+// would keep. Restricted asks are dropped, not flagged.
 func (s *Store) curationOpenAsks(ctx context.Context, visible func(string, string) bool) ([]curation.AskInfo, bool, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT ask_id FROM ask_subjects WHERE open=1 ORDER BY due_at,ask_id LIMIT ?`, curationAskLimit+1)
 	if err != nil {
@@ -121,8 +123,8 @@ func (s *Store) curationOpenAsks(ctx context.Context, visible func(string, strin
 		return nil, false, nil
 	}
 	encoded, _ := json.Marshal(ids)
-	rows, err = s.db.QueryContext(ctx, `SELECT e.id,COALESCE(e.thread_id,''),e.ts,e.payload_json,COALESCE(json_extract(t.body_json,'$.pm_actor_id'),'')
- FROM events e LEFT JOIN threads t ON t.id=e.thread_id
+	rows, err = s.db.QueryContext(ctx, `SELECT e.id,COALESCE(e.thread_id,''),e.ts,e.payload_json,COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
+ FROM events e `+briefAnswerableAskJoin+`
  WHERE e.id IN (SELECT value FROM json_each(?)) AND e.type='human_attention_requested' AND COALESCE(e.trashed_at,'')=''
  AND NOT EXISTS (SELECT 1 FROM human_attention_request_resolutions r WHERE r.request_event_id=e.id)`, string(encoded))
 	if err != nil {
@@ -333,10 +335,12 @@ func (s *Store) ResolveCurationProposal(ctx context.Context, key, status string)
 // accepted a curation proposal for it (invariant I4: the human decides, the
 // proposal only proposed). It shares the requester path's atomic resolution
 // claim, so a racing answer and this withdrawal never both resolve the ask.
-// Access-request asks are never withdrawable.
+// Access-request asks are never withdrawable. briefAnswerableAskJoin is the
+// same eligibility as candidate hydration: an ask whose thread row is missing
+// is not a target, so accepting the proposal cannot resolve an orphan ask.
 func (s *Store) WithdrawAskByProposal(ctx context.Context, humanActorID, askEventID, proposalEventID, reason string) (map[string]any, error) {
 	var requester string
-	err := s.db.QueryRowContext(ctx, `SELECT trim(COALESCE(json_extract(payload_json,'$.payload.requester_actor_id'),'')) FROM events WHERE id=? AND type='human_attention_requested'`, askEventID).Scan(&requester)
+	err := s.db.QueryRowContext(ctx, `SELECT trim(COALESCE(json_extract(e.payload_json,'$.payload.requester_actor_id'),'')) FROM events e `+briefAnswerableAskJoin+` WHERE e.id=? AND e.type='human_attention_requested'`, askEventID).Scan(&requester)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -693,14 +697,15 @@ func (s *Store) askResolutionIs(ctx context.Context, askID, resolution string) b
 // ReadableCurationProposal returns the proposal for key only when the
 // caller's scoped events relation and the PM-private thread rule admit its
 // ask; otherwise ErrNotFound, so an unreadable key is indistinguishable from
-// an unknown one.
+// an unknown one. A missing proposal thread is not public: the inner join
+// returns no row and the key is denied, including when visible is nil.
 func (s *Store) ReadableCurationProposal(ctx context.Context, key string, visible func(string, string) bool) (CurationProposalRecord, error) {
 	rec, err := s.CurationProposal(ctx, key)
 	if err != nil {
 		return rec, err
 	}
 	var thread, owner string
-	err = s.db.QueryRowContext(ctx, `SELECT COALESCE(e.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=e.thread_id),'') FROM events e WHERE e.id=? AND COALESCE(e.trashed_at,'')=''`, rec.ProposalEventID).Scan(&thread, &owner)
+	err = s.db.QueryRowContext(ctx, `SELECT COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') FROM events e `+briefAnswerableAskJoin+` WHERE e.id=? AND COALESCE(e.trashed_at,'')=''`, rec.ProposalEventID).Scan(&thread, &owner)
 	if err == sql.ErrNoRows || (err == nil && visible != nil && !visible(thread, owner)) {
 		return CurationProposalRecord{}, ErrNotFound
 	}
@@ -712,6 +717,18 @@ type CurationBatchMemberAsk struct {
 	AskID, InboxItemID, Kind, Title, SubjectRef, ThreadID    string
 	RequesterActor, RequesterAgent, RequesterLabel, Delivery string
 }
+
+// openCurationMemberFrom is the open-member eligibility inbox respond uses.
+// briefAnswerableAskJoin drops a member whose thread row is missing, on both
+// the scoped list and the unscoped count, so an orphan is not a hidden
+// member and cannot be loaded. A scope-hidden member still has a thread row:
+// the unscoped count includes it and the scoped list does not, which is the
+// partial-set signal. No INDEXED BY on threads: a scoped read shadows it.
+const openCurationMemberFrom = `FROM curation_batch_members m
+		JOIN brief_asks a ON a.ask_id=m.ask_id
+		JOIN events e ON e.id=m.ask_id
+		` + briefAnswerableAskJoin + `
+		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`
 
 // OpenCurationBatchMembers lists open members of a curation batch.
 // hidden is true when any open member is outside the caller's scoped events
@@ -727,14 +744,11 @@ func (s *Store) OpenCurationBatchMembers(ctx context.Context, key string) ([]Cur
 		COALESCE(json_extract(e.payload_json,'$.payload.requester_agent_id'),''),
 		COALESCE(json_extract(e.payload_json,'$.payload.requester_label'),''),
 		COALESCE(json_extract(e.payload_json,'$.payload.delivery'),'')
-		FROM curation_batch_members m
-		JOIN brief_asks a ON a.ask_id=m.ask_id
-		JOIN events e ON e.id=m.ask_id
-		WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''
+		` + openCurationMemberFrom + `
 		ORDER BY a.created_at,a.ask_id
 		LIMIT ?`
 	var total int
-	if err := s.db.QueryRowContext(curationInternal(ctx), `SELECT COUNT(*) FROM curation_batch_members m JOIN brief_asks a ON a.ask_id=m.ask_id JOIN events e ON e.id=m.ask_id WHERE m.batch_key=? AND a.state='open' AND COALESCE(e.trashed_at,'')=''`, key).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(curationInternal(ctx), `SELECT COUNT(*) `+openCurationMemberFrom, key).Scan(&total); err != nil {
 		return nil, false, err
 	}
 	if total > curation.MaxBatchMembers {
