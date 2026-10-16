@@ -14,9 +14,11 @@ import (
 const BriefSectionLimit = 50
 
 const (
-	briefAskCandidates  = 60
-	briefDoneLimit      = 10
-	briefAnsweredWindow = 7 * 24 * time.Hour
+	briefAskCandidates = 60
+	// Overfetch a fixed window before ranking effective (reader-visible) blockers.
+	briefUndatedAskCandidates = 4 * briefAskCandidates
+	briefDoneLimit            = 10
+	briefAnsweredWindow       = 7 * 24 * time.Hour
 )
 
 // BriefReader is the principal a brief is computed for.
@@ -191,11 +193,11 @@ func (b *briefBuild) decisions() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	undated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NULL AND `+addressed+` ORDER BY a.created_at LIMIT ?`, id, prefixed, id, prefixed, briefAskCandidates)
+	undated, err := b.queryAsks(`a.state='open' AND a.decide_by IS NULL AND `+addressed+` ORDER BY a.blocks_count DESC,`+briefPrioritySQL+`,a.created_at,a.ask_id LIMIT ?`, id, prefixed, id, prefixed, briefUndatedAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}
-	items, metas, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefAskCandidates)
+	items, metas, truncated, err := b.renderAsks(append(dated, undated...), len(dated) == briefAskCandidates || len(undated) == briefUndatedAskCandidates)
 	if err != nil {
 		return nil, false, err
 	}

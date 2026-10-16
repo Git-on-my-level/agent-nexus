@@ -4,9 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
+
+const deliverPendingTurnsSQL = `SELECT t.id, COALESCE(json_extract(c.body,'$.origin') IS NOT NULL,0), EXISTS(SELECT 1 FROM pm_records d WHERE d.kind='delivery' AND d.workspace_id=t.workspace_id AND d.parent_id=t.id)
+ FROM pm_records t LEFT JOIN pm_records c ON c.kind='conversation' AND c.id=t.parent_id
+ WHERE t.kind='turn' AND t.workspace_id=? AND json_extract(t.body,'$.status')='delivered' AND COALESCE(json_extract(t.body,'$.delivery_queued'),0)=0
+ ORDER BY t.rowid LIMIT ?`
 
 // QueueTurnDeliveries atomically persists every plain-text fragment. A crash
 // cannot mark a multi-part reply queued while losing the remaining fragments.
@@ -59,6 +65,9 @@ func (s *Service) QueueTurnDeliveries(ctx context.Context, turnID string) ([]Del
 			return nil, err
 		}
 	}
+	if _, err = tx.ExecContext(ctx, `UPDATE pm_records SET body=CAST(json_set(body,'$.delivery_queued',1) AS BLOB) WHERE kind='turn' AND id=?`, t.ID); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -66,6 +75,9 @@ func (s *Service) QueueTurnDeliveries(ctx context.Context, turnID string) ([]Del
 }
 func splitReply(text string, maxBytes int) []string {
 	out := make([]string, 0)
+	if strings.TrimSpace(text) == "" {
+		return out
+	}
 	for len(text) > maxBytes {
 		n := maxBytes
 		for n > 0 && !utf8.RuneStart(text[n]) {
@@ -87,42 +99,63 @@ func (s *Service) DeliverPending(ctx context.Context, sender Sender, limit int) 
 	if limit < 1 || limit > 50 {
 		return nil, ErrInvalid
 	}
-	rows, err := s.store.database().QueryContext(ctx, `SELECT t.id FROM pm_records t JOIN pm_records c ON c.kind='conversation' AND c.id=t.parent_id
- WHERE t.kind='turn' AND t.workspace_id=? AND json_extract(t.body,'$.status')='delivered'
- AND json_extract(c.body,'$.origin') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pm_records d WHERE d.kind='delivery' AND d.parent_id=t.id)
- ORDER BY t.rowid LIMIT ?`, s.cfg.WorkspaceID, limit)
-	if err != nil {
-		return nil, err
+	type turnCandidate struct {
+		id          string
+		hasOrigin   bool
+		hasDelivery bool
 	}
-	ids := make([]string, 0)
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+	queuedTurns := 0
+	for pass := 0; pass < 20 && queuedTurns < limit; pass++ {
+		rows, err := s.store.database().QueryContext(ctx, deliverPendingTurnsSQL, s.cfg.WorkspaceID, limit)
+		if err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range ids {
-		if _, err = s.QueueTurnDeliveries(ctx, id); err != nil {
+		batch := make([]turnCandidate, 0, limit)
+		for rows.Next() {
+			var c turnCandidate
+			if err = rows.Scan(&c.id, &c.hasOrigin, &c.hasDelivery); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			batch = append(batch, c)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
 			return nil, err
 		}
+		if len(batch) == 0 {
+			break
+		}
+		for _, c := range batch {
+			if !c.hasOrigin || c.hasDelivery {
+				if _, err = s.store.database().ExecContext(ctx, `UPDATE pm_records SET body=CAST(json_set(body,'$.delivery_queued',1) AS BLOB) WHERE kind='turn' AND id=?`, c.id); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			ds, err := s.QueueTurnDeliveries(ctx, c.id)
+			if err != nil {
+				return nil, err
+			}
+			if len(ds) > 0 {
+				queuedTurns++
+			}
+		}
+		if len(batch) < limit {
+			break
+		}
 	}
-	rows, err = s.store.database().QueryContext(ctx, `SELECT d.id FROM pm_records d WHERE d.kind='delivery' AND d.workspace_id=?
+	rows, err := s.store.database().QueryContext(ctx, `SELECT d.id FROM pm_records d WHERE d.kind='delivery' AND d.workspace_id=?
  AND json_extract(d.body,'$.status')='pending_delivery'
  AND (json_extract(d.body,'$.next_retry_at') IS NULL OR json_extract(d.body,'$.next_retry_at') <= ?)
- AND NOT EXISTS(SELECT 1 FROM pm_records prior WHERE prior.kind='delivery' AND prior.parent_id=d.parent_id
+ AND NOT EXISTS(SELECT 1 FROM pm_records prior WHERE prior.kind='delivery' AND prior.workspace_id=d.workspace_id AND prior.parent_id=d.parent_id
  AND prior.rowid<d.rowid AND json_extract(prior.body,'$.status') IN ('sending','unknown','failed'))
  ORDER BY d.rowid LIMIT ?`, s.cfg.WorkspaceID, time.Now().UTC().Format(time.RFC3339Nano), limit)
 	if err != nil {
 		return nil, err
 	}
-	ids = ids[:0]
+	ids := make([]string, 0)
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
@@ -141,7 +174,7 @@ func (s *Service) DeliverPending(ctx context.Context, sender Sender, limit int) 
 		// A preceding fragment can become unknown during this drain. Recheck it
 		// before every network call, not only when selecting the batch.
 		var blocked int
-		err = s.store.database().QueryRowContext(ctx, `SELECT count(*) FROM pm_records d JOIN pm_records prior ON prior.kind='delivery' AND prior.parent_id=d.parent_id AND prior.rowid<d.rowid WHERE d.kind='delivery' AND d.id=? AND json_extract(prior.body,'$.status')!='delivered'`, id).Scan(&blocked)
+		err = s.store.database().QueryRowContext(ctx, `SELECT count(*) FROM pm_records d JOIN pm_records prior ON prior.kind='delivery' AND prior.workspace_id=d.workspace_id AND prior.parent_id=d.parent_id AND prior.rowid<d.rowid WHERE d.kind='delivery' AND d.id=? AND json_extract(prior.body,'$.status')!='delivered'`, id).Scan(&blocked)
 		if err != nil {
 			return out, err
 		}

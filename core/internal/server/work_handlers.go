@@ -154,20 +154,32 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		if !ok {
 			return
 		}
-		page, err := store.ListWork(r.Context(), primitives.WorkListFilter{ProjectRef: q.Get("project_ref"), Source: q.Get("source"), Owner: q.Get("owner"), Phase: q.Get("phase"), Freshness: q.Get("freshness"), Query: q.Get("q"), Limit: limit, Cursor: q.Get("cursor"), Visible: planVisibility(r, opts)})
-		if err != nil {
-			workStoreError(w, r, err)
+		cursor := q.Get("cursor")
+		collected := make([]map[string]any, 0, limit)
+		nextCursor := ""
+		for pass := 0; pass < 20; pass++ {
+			remaining := limit - len(collected)
+			page, err := store.ListWork(r.Context(), primitives.WorkListFilter{ProjectRef: q.Get("project_ref"), Source: q.Get("source"), Owner: q.Get("owner"), Phase: q.Get("phase"), Freshness: q.Get("freshness"), Query: q.Get("q"), Limit: remaining, Cursor: cursor, Visible: planVisibility(r, opts)})
+			if err != nil {
+				workStoreError(w, r, err)
+				return
+			}
+			filtered, ok := filterPlanCards(w, r, opts, page.Work)
+			if !ok {
+				return
+			}
+			collected = append(collected, filtered...)
+			nextCursor = page.NextCursor
+			if len(collected) >= limit || nextCursor == "" {
+				break
+			}
+			cursor = nextCursor
+		}
+		if !enrichPlans(w, r, opts, collected) {
 			return
 		}
-		page.Work, ok = filterPlanCards(w, r, opts, page.Work)
-		if !ok {
-			return
-		}
-		if !enrichPlans(w, r, opts, page.Work) {
-			return
-		}
-		items := make([]map[string]any, 0, len(page.Work))
-		for _, item := range page.Work {
+		items := make([]map[string]any, 0, len(collected))
+		for _, item := range collected {
 			items = append(items, publicWork(item))
 		}
 		archivedRefs := []string{}
@@ -198,7 +210,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			}
 			sort.Strings(archivedRefs)
 		}
-		writeJSON(w, 200, map[string]any{"work": items, "next_cursor": page.NextCursor, "archived_refs": archivedRefs})
+		writeJSON(w, 200, map[string]any{"work": items, "next_cursor": nextCursor, "archived_refs": archivedRefs})
 		return
 	}
 	var raw map[string]any

@@ -192,6 +192,9 @@ type Store struct {
 	contentUsageMu       sync.Mutex
 	contentUsageBytes    int64
 	contentUsageAt       time.Time
+	askLifecycleMu       sync.Mutex
+	askCloseCursor       string
+	askCloseBackoff      map[string]askBackoffState
 }
 
 type eventExec interface {

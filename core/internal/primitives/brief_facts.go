@@ -310,6 +310,8 @@ func scanBriefAsks(rows *sql.Rows) ([]BriefAsk, error) {
 	return out, rows.Err()
 }
 
+const briefPrioritySQL = `CASE lower(trim(a.priority)) WHEN 'critical' THEN 0 WHEN 'p0' THEN 0 WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END`
+
 var briefPriorityRank = map[string]int{"critical": 0, "p0": 0, "urgent": 0, "high": 1, "p1": 1, "medium": 2, "p2": 2, "normal": 2, "low": 3, "p3": 3}
 
 func briefPriority(p string) int {

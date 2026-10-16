@@ -913,6 +913,8 @@ func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (Re
 	return page, rows.Err()
 }
 
+const maxWorkAccessFilterPasses = 20
+
 func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error) {
 	page := WorkPage{Work: []map[string]any{}}
 	if f.Limit == 0 {
@@ -921,39 +923,80 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 	if f.Limit < 1 || f.Limit > 200 {
 		return page, workInvalid("limit must be 1..200")
 	}
-	var before struct {
-		UpdatedAt time.Time `json:"updated_at"`
-		ID        string    `json:"id"`
-	}
-	if f.Cursor != "" {
-		b, err := base64.RawURLEncoding.DecodeString(f.Cursor)
-		if err != nil || json.Unmarshal(b, &before) != nil || before.ID == "" || before.UpdatedAt.IsZero() {
-			return page, ErrInvalidCursor
-		}
-	}
-	candidates, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: f.Limit, IncludeClosed: true, WorkList: &f, ProjectRef: f.ProjectRef, BeforeUpdated: strings.TrimSuffix(before.UpdatedAt.UTC().Format(time.RFC3339Nano), "Z"), BeforeID: before.ID})
+	codec, binding, err := s.workCursorCodec(ctx, f)
 	if err != nil {
 		return page, err
 	}
-	if f.Visible != nil {
-		candidates.Work, err = s.FilterCardAccess(ctx, candidates.Work, f.Visible)
-		if err != nil {
-			return page, err
+	before := workContinuation{}
+	if f.Cursor != "" {
+		if codec.OpenContinuation(f.Cursor, &before) != nil || before.Version != 1 || before.Binding != binding || before.ExpiresAt <= time.Now().Unix() || before.ID == "" || before.UpdatedAt.IsZero() {
+			return page, ErrInvalidCursor
 		}
 	}
-	page.Work = candidates.Work
-	if candidates.Truncated && len(page.Work) > 0 {
-		last := page.Work[len(page.Work)-1]
-		before.ID = workString(last["id"])
-		before.UpdatedAt, err = workTimestamp(last["updated_at"])
+	hasMore := false
+	for pass := 0; pass < maxWorkAccessFilterPasses; pass++ {
+		batchLimit := f.Limit
+		if pass > 0 && batchLimit < 50 {
+			batchLimit = 50
+		}
+		beforeUpdated := ""
+		if !before.UpdatedAt.IsZero() {
+			beforeUpdated = strings.TrimSuffix(before.UpdatedAt.UTC().Format(time.RFC3339Nano), "Z")
+		}
+		candidates, err := s.ListReportWork(ctx, ReportWorkFilter{
+			Limit:         batchLimit,
+			IncludeClosed: true,
+			WorkList:      &f,
+			ProjectRef:    f.ProjectRef,
+			BeforeUpdated: beforeUpdated,
+			BeforeID:      before.ID,
+		})
 		if err != nil {
 			return page, err
 		}
-		raw, err := json.Marshal(before)
+		if len(candidates.Work) == 0 {
+			hasMore = false
+			break
+		}
+		rawLast := candidates.Work[len(candidates.Work)-1]
+		visible := candidates.Work
+		if f.Visible != nil {
+			visible, err = s.FilterCardAccess(ctx, visible, f.Visible)
+			if err != nil {
+				return page, err
+			}
+		}
+		needed := f.Limit - len(page.Work)
+		if len(visible) > needed {
+			page.Work = append(page.Work, visible[:needed]...)
+			cursorCard := page.Work[len(page.Work)-1]
+			before.ID = workString(cursorCard["id"])
+			before.UpdatedAt, err = workTimestamp(cursorCard["updated_at"])
+			if err != nil {
+				return page, err
+			}
+			hasMore = true
+			break
+		}
+		page.Work = append(page.Work, visible...)
+		hasMore = candidates.Truncated
+		before.ID = workString(rawLast["id"])
+		before.UpdatedAt, err = workTimestamp(rawLast["updated_at"])
 		if err != nil {
 			return page, err
 		}
-		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+		if len(page.Work) == f.Limit || !candidates.Truncated {
+			break
+		}
+	}
+	if hasMore && before.ID != "" && !before.UpdatedAt.IsZero() {
+		before.Version = 1
+		before.Binding = binding
+		before.ExpiresAt = time.Now().Add(24 * time.Hour).Unix()
+		page.NextCursor, err = codec.SealContinuation(before)
+		if err != nil {
+			return page, err
+		}
 	}
 	return page, nil
 }

@@ -108,7 +108,7 @@ func TestDailyQueriesEqualRawForRandomRollingWindows(t *testing.T) {
 	}
 	defer tx.Rollback()
 	for _, name := range []string{"builds", "health"} {
-		if _, err := tx.Exec(`INSERT INTO series_labels VALUES(?,'{}')`, name); err != nil {
+		if _, err := tx.Exec(`INSERT INTO series_labels(series,labels) VALUES(?,'{}')`, name); err != nil {
 			t.Fatal(err)
 		}
 		// Include exact window/UTC-day boundaries and future observations, in
@@ -164,7 +164,7 @@ func TestDailyEdgeBudgetBoundsConcentratedBackfill(t *testing.T) {
 	s, _, _, _ := fixtureAt(t, root)
 	now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
 	removeRecentRollupMigration(t, s)
-	if _, err := s.DB.Exec(`INSERT INTO series_labels VALUES('builds','{}')`); err != nil {
+	if _, err := s.DB.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.DB.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<?)
@@ -244,7 +244,7 @@ func BenchmarkDailyEdgeSafetyCapacity(b *testing.B) {
 	defer tx.Rollback()
 	for label := 0; label < MaxLabelSets; label++ {
 		l := fmt.Sprintf(`{"slot":"%03d"}`, label)
-		if _, err := tx.Exec(`INSERT INTO series_labels VALUES('builds',?)`, l); err != nil {
+		if _, err := tx.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds',?)`, l); err != nil {
 			b.Fatal(err)
 		}
 		if _, err := tx.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<?)

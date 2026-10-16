@@ -627,3 +627,240 @@ func TestAskEffectiveWorkLookupPlans(t *testing.T) {
 		rows.Close()
 	}
 }
+
+func TestAskLifecycleProgressesPastPermanentAndTransientCloseQueueFailures(t *testing.T) {
+	t.Parallel()
+	s, ws, firstCard, _ := askDeliveryFixture(t)
+	ctx := context.Background()
+	boardID := anyStringValue(firstCard["board_id"])
+
+	// 1. Seed a card at the lexicographic head of ask_subject_close_queue whose
+	// ask fails permanently with ErrNotFound (purged card) and another with ErrForbidden.
+	headNotFoundCard := "00000000-0000-0000-0000-000000000001"
+	headForbiddenCard := "00000000-0000-0000-0000-000000000002"
+	transientCard, err := s.CreateWork(ctx, "requester", boardID, map[string]any{"title": "Transient close card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	goodClosedCard, err := s.CreateWork(ctx, "requester", boardID, map[string]any{"title": "Good closed card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	openExpiredCard, err := s.CreateWork(ctx, "requester", boardID, map[string]any{"title": "Open card with expired ask"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	notFoundAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": firstCard["thread_id"],
+		"refs":      []string{"card:" + headNotFoundCard},
+		"payload":   map[string]any{"subject_ref": "card:" + headNotFoundCard, "requester_actor_id": "requester"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forbiddenAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": firstCard["thread_id"],
+		"refs":      []string{anyStringValue(firstCard["ref"])},
+		"payload":   map[string]any{"subject_ref": firstCard["ref"], "requester_actor_id": "other-actor"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE ask_subjects SET card_id=?, open=1 WHERE ask_id=?`, headNotFoundCard, notFoundAsk["id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE ask_subjects SET card_id=?, requester='requester', open=1 WHERE ask_id=?`, headForbiddenCard, forbiddenAsk["id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`INSERT INTO ask_subject_close_queue(card_id) VALUES(?),(?) ON CONFLICT DO NOTHING`, headNotFoundCard, headForbiddenCard); err != nil {
+		t.Fatal(err)
+	}
+
+	transientAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": transientCard["thread_id"],
+		"refs":      []string{anyStringValue(transientCard["ref"])},
+		"payload":   map[string]any{"subject_ref": transientCard["ref"], "requester_actor_id": "requester"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	goodClosedAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": goodClosedCard["thread_id"],
+		"refs":      []string{anyStringValue(goodClosedCard["ref"])},
+		"payload":   map[string]any{"subject_ref": goodClosedCard["ref"], "requester_actor_id": "requester"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": openExpiredCard["thread_id"],
+		"refs":      []string{anyStringValue(openExpiredCard["ref"])},
+		"payload": map[string]any{
+			"subject_ref":        openExpiredCard["ref"],
+			"requester_actor_id": "requester",
+			"expires_at":         time.Now().Add(-time.Hour).Format(time.RFC3339Nano),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a transient failure when withdrawing transientAsk.
+	if _, err := ws.DB().Exec(`CREATE TRIGGER fail_transient_ask_withdrawal BEFORE INSERT ON events WHEN NEW.type='human_attention_withdrawn' AND json_extract(NEW.payload_json,'$.payload.request_event_id')='` + anyStringValue(transientAsk["id"]) + `' BEGIN SELECT RAISE(ABORT,'transient withdrawal failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE cards SET column_key='done' WHERE id IN (?,?)`, transientCard["id"], goodClosedCard["id"]); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatalf("MaintainAskLifecycleBatch failed: %v", err)
+	}
+
+	// Permanent failures must be dead-lettered with recorded reasons and removed from close queue.
+	for _, tc := range []struct {
+		askID  string
+		cardID string
+		reason string
+	}{
+		{anyStringValue(notFoundAsk["id"]), headNotFoundCard, "not_found"},
+		{anyStringValue(forbiddenAsk["id"]), headForbiddenCard, "forbidden"},
+	} {
+		var open int
+		var reason string
+		if err := ws.DB().QueryRow(`SELECT open, close_reason FROM ask_subjects WHERE ask_id=?`, tc.askID).Scan(&open, &reason); err != nil {
+			t.Fatal(err)
+		}
+		if open != 0 || reason != tc.reason {
+			t.Fatalf("ask %s dead-letter state: open=%d reason=%q want open=0 reason=%q", tc.askID, open, reason, tc.reason)
+		}
+		var queued int
+		if err := ws.DB().QueryRow(`SELECT COUNT(*) FROM ask_subject_close_queue WHERE card_id=?`, tc.cardID).Scan(&queued); err != nil || queued != 0 {
+			t.Fatalf("card %s still in close queue: count=%d err=%v", tc.cardID, queued, err)
+		}
+	}
+
+	// Good closed card and expired ask must both be processed despite permanent and transient failures ahead of them.
+	goodOutcome, err := s.AskOutcome(ctx, anyStringValue(goodClosedAsk["ref"]))
+	if err != nil || goodOutcome["status"] != "withdrawn" {
+		t.Fatalf("good closed ask not withdrawn: %#v err=%v", goodOutcome, err)
+	}
+	expiredOutcome, err := s.AskOutcome(ctx, anyStringValue(expiredAsk["ref"]))
+	if err != nil || expiredOutcome["status"] != "expired" {
+		t.Fatalf("expired ask not processed while close queue had bad head: %#v err=%v", expiredOutcome, err)
+	}
+
+	// Once the transient failure clears, a card whose backoff deadline is in the future
+	// must NOT be retried until the deadline expires.
+	if _, err := ws.DB().Exec(`DROP TRIGGER fail_transient_ask_withdrawal`); err != nil {
+		t.Fatal(err)
+	}
+	transientCardID := anyStringValue(transientCard["id"])
+	s.askLifecycleMu.Lock()
+	state := s.askCloseBackoff[transientCardID]
+	state.until = time.Now().Add(time.Hour)
+	s.askCloseBackoff[transientCardID] = state
+	s.askLifecycleMu.Unlock()
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatalf("backed-off MaintainAskLifecycleBatch failed: %v", err)
+	}
+	stillOpenOutcome, err := s.AskOutcome(ctx, anyStringValue(transientAsk["ref"]))
+	if err != nil || stillOpenOutcome["status"] != "open" {
+		t.Fatalf("backed-off card was retried before deadline: %#v err=%v", stillOpenOutcome, err)
+	}
+
+	s.askLifecycleMu.Lock()
+	state = s.askCloseBackoff[transientCardID]
+	state.until = time.Now().Add(-time.Second)
+	s.askCloseBackoff[transientCardID] = state
+	s.askLifecycleMu.Unlock()
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatalf("retry MaintainAskLifecycleBatch failed: %v", err)
+	}
+	transientOutcome, err := s.AskOutcome(ctx, anyStringValue(transientAsk["ref"]))
+	if err != nil || transientOutcome["status"] != "withdrawn" {
+		t.Fatalf("transient ask not withdrawn after recovery: %#v err=%v", transientOutcome, err)
+	}
+}
+
+func TestAskLifecycleAdvancesWithinCardPast200FailingAsksAndHonorsBackoffDeadline(t *testing.T) {
+	t.Parallel()
+	s, ws, firstCard, _ := askDeliveryFixture(t)
+	ctx := context.Background()
+	boardID := anyStringValue(firstCard["board_id"])
+	crowdedCard, err := s.CreateWork(ctx, "requester", boardID, map[string]any{"title": "Crowded close card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	crowdedCardID := anyStringValue(crowdedCard["id"])
+	crowdedThreadID := anyStringValue(crowdedCard["thread_id"])
+	crowdedRef := anyStringValue(crowdedCard["ref"])
+
+	for i := 0; i < 200; i++ {
+		askID := fmt.Sprintf("00000000-0000-0000-0000-000000000%03d", i)
+		if _, err := s.AppendEvent(ctx, "requester", map[string]any{
+			"id":        askID,
+			"type":      "human_attention_requested",
+			"thread_id": crowdedThreadID,
+			"refs":      []string{crowdedRef},
+			"payload":   map[string]any{"subject_ref": crowdedRef, "requester_actor_id": "requester"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	healthyAskID := "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz"
+	healthyAsk, err := s.AppendEvent(ctx, "requester", map[string]any{
+		"id":        healthyAskID,
+		"type":      "human_attention_requested",
+		"thread_id": crowdedThreadID,
+		"refs":      []string{crowdedRef},
+		"payload":   map[string]any{"subject_ref": crowdedRef, "requester_actor_id": "requester"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ws.DB().Exec(`CREATE TRIGGER fail_prefix_ask_withdrawals BEFORE INSERT ON events WHEN NEW.type='human_attention_withdrawn' AND json_extract(NEW.payload_json,'$.payload.request_event_id')<'zzzzzzzz' BEGIN SELECT RAISE(ABORT,'transient prefix failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, crowdedCardID); err != nil {
+		t.Fatal(err)
+	}
+
+	// First maintenance call processes the 200 failing prefix asks and advances the per-card ask cursor.
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Second maintenance call advances to the 201st ask (healthyAsk) and withdraws it.
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	healthyOutcome, err := s.AskOutcome(ctx, anyStringValue(healthyAsk["ref"]))
+	if err != nil || healthyOutcome["status"] != "withdrawn" {
+		t.Fatalf("healthy ask behind 200 failing asks was starved: %#v err=%v", healthyOutcome, err)
+	}
+
+	// With the card now backed off (deadline in the future) and no other card in the queue,
+	// dropping the failure trigger and calling MaintainAskLifecycleBatch must NOT retry before the deadline.
+	if _, err := ws.DB().Exec(`DROP TRIGGER fail_prefix_ask_withdrawals`); err != nil {
+		t.Fatal(err)
+	}
+	s.askLifecycleMu.Lock()
+	state := s.askCloseBackoff[crowdedCardID]
+	state.until = time.Now().Add(time.Hour)
+	s.askCloseBackoff[crowdedCardID] = state
+	s.askLifecycleMu.Unlock()
+	if err := s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var openRemaining int
+	if err := ws.DB().QueryRow(`SELECT COUNT(*) FROM ask_subjects WHERE card_id=? AND open=1`, crowdedCardID).Scan(&openRemaining); err != nil || openRemaining != 200 {
+		t.Fatalf("backed-off card retried before deadline: openRemaining=%d err=%v", openRemaining, err)
+	}
+}

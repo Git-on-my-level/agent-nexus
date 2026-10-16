@@ -415,12 +415,12 @@ func TestResourceAccessMigrationRepairsLegacyProseAndUnknownRollups(t *testing.T
 			}
 			for _, sql := range []string{
 				`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES('legacy','collector','state','state')`,
-				`INSERT INTO series_labels VALUES('legacy','{}')`,
+				`INSERT INTO series_labels(series,labels) VALUES('legacy','{}')`,
 				// Raw private then public state was compacted before provenance existed.
 				`INSERT INTO series_daily(series,labels,day,n,last_ts,last_state) VALUES('legacy','{}',0,2,2,'public')`,
 				`DELETE FROM resource_access_series_refs`,
 				`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES('ledger','collector','state','state')`,
-				`INSERT INTO series_labels VALUES('ledger','{}')`,
+				`INSERT INTO series_labels(series,labels) VALUES('ledger','{}')`,
 				`INSERT INTO series_points(series,labels,ts,state,received_day) VALUES('ledger','{}',1,'public',0)`,
 				`DELETE FROM series_live_daily WHERE series='ledger'`,
 				`INSERT INTO resource_access_series_refs VALUES('ledger','{}','Earlier copied from document:[]')`,

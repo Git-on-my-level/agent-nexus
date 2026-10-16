@@ -33,7 +33,7 @@ func TestDailyMultiDayBucketsPreserveWeightedAggregatesAndLabels(t *testing.T) {
 	day := time.Now().UTC().Truncate(24 * time.Hour)
 	now := day
 	for _, label := range []string{`{"cohort":"a"}`, `{"cohort":"b"}`} {
-		if _, err := s.DB.Exec(`INSERT INTO series_labels VALUES('builds',?)`, label); err != nil {
+		if _, err := s.DB.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds',?)`, label); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -87,7 +87,7 @@ func BenchmarkDailyQuerySafetyCapacity(b *testing.B) {
 	}
 	for i := 0; i < MaxLabelSets; i++ {
 		label := fmt.Sprintf(`{"cohort":"%03d"}`, i)
-		if _, err := tx.Exec(`INSERT INTO series_labels VALUES('builds',?)`, label); err != nil {
+		if _, err := tx.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds',?)`, label); err != nil {
 			b.Fatal(err)
 		}
 		for d := 0; d < MaxDailyQueryRows/MaxLabelSets; d++ {
@@ -133,7 +133,7 @@ func BenchmarkRawQuerySafetyCapacity(b *testing.B) {
 		b.Fatal(err)
 	}
 	for i := 0; i < MaxLabelSets; i++ {
-		if _, err := tx.Exec(`INSERT INTO series_labels VALUES('builds',?)`, fmt.Sprintf(`{"cohort":"%03d"}`, i)); err != nil {
+		if _, err := tx.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds',?)`, fmt.Sprintf(`{"cohort":"%03d"}`, i)); err != nil {
 			b.Fatal(err)
 		}
 	}

@@ -3,9 +3,11 @@ package series
 import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/storage"
+	"agent-nexus-core/internal/testutil/perfguard"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -450,4 +452,155 @@ func TestWorkspaceSeriesCapAndScopedDeclarationDenial(t *testing.T) {
 	if _, err = s.Declare(ctx, d, human); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("series cap: %v", err)
 	}
+}
+
+func TestExpiredLabelSetsAndRevokedAdaptersReleaseCapacity(t *testing.T) {
+	ctx := context.Background()
+	s, human, owner, writer := fixture(t)
+	base := time.Now().UTC().Truncate(time.Second)
+	oldNow := base.Add(-Retention - 24*time.Hour)
+
+	// 1. Push MaxLabelSets-1 historical label sets that will expire, plus 1 live label set.
+	for i := 0; i < MaxLabelSets-1; i++ {
+		p := Point{
+			Value:  number(float64(i + 1)),
+			TS:     oldNow.Format(time.RFC3339Nano),
+			Labels: map[string]string{"ephemeral": fmt.Sprintf("old-%03d", i)},
+		}
+		if err := s.Push(ctx, "builds", p, writer, oldNow); err != nil {
+			t.Fatalf("seed historical label set %d: %v", i, err)
+		}
+	}
+	livePoint := Point{
+		Value:  number(42),
+		TS:     base.Format(time.RFC3339Nano),
+		Labels: map[string]string{"ephemeral": "live-keep"},
+	}
+	if err := s.Push(ctx, "builds", livePoint, writer, base); err != nil {
+		t.Fatalf("seed live label set: %v", err)
+	}
+	if err := s.Compact(ctx, base); err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+
+	// Pushing a new label set after the 99 old label sets expired must succeed,
+	// while preserving both the live label set and historical discovery for the compacted streams.
+	freshPoint := Point{
+		Value:  number(99),
+		TS:     base.Format(time.RFC3339Nano),
+		Labels: map[string]string{"ephemeral": "fresh-after-expiry"},
+	}
+	if err := s.Push(ctx, "builds", freshPoint, writer, base); err != nil {
+		t.Fatalf("push new label set after expiry failed: %v", err)
+	}
+	res, err := s.Query(ctx, "builds", map[string]string{"ephemeral": "live-keep"}, time.Hour, time.Minute, "last", base)
+	if err != nil || len(res.Streams) != 1 || len(res.Streams[0].Points) != 1 || *res.Streams[0].Points[0].Value != 42 {
+		t.Fatalf("live label set lost: %#v err=%v", res, err)
+	}
+	compactedRes, err := s.Query(ctx, "builds", map[string]string{"ephemeral": "old-000"}, 100*24*time.Hour, 24*time.Hour, "last", base)
+	if err != nil || len(compactedRes.Streams) != 1 || len(compactedRes.Streams[0].Points) != 1 || *compactedRes.Streams[0].Points[0].Value != 1 {
+		t.Fatalf("compacted historical stream lost after new label push on active adapter: %#v err=%v", compactedRes, err)
+	}
+
+	// 2. Fill MaxSeries on the active collector adapter, then revoke collector
+	// without deleting its historical data; declaring a new adapter must succeed.
+	tx, err := s.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 2; i < MaxSeries; i++ {
+		if _, err = tx.Exec(`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES(printf('s%d',?),'collector','items','gauge')`, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	replacement := Declaration{
+		Name:             "replacement",
+		Description:      "Replacement collector",
+		AgentID:          owner.AgentID,
+		ExpectedInterval: "1m",
+		Series:           []Definition{{Name: "fresh_series", Kind: "gauge", Unit: "items"}},
+	}
+	if _, err := s.Declare(ctx, replacement, human); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("expected active series cap before revocation, got: %v", err)
+	}
+	if err := s.Remove(ctx, "collector", false, human); err != nil {
+		t.Fatalf("revoke collector: %v", err)
+	}
+	if _, err := s.Declare(ctx, replacement, human); err != nil {
+		t.Fatalf("declare after revoking old adapter failed: %v", err)
+	}
+	// Historical data on the revoked adapter must remain queryable.
+	oldRes, err := s.Query(ctx, "builds", map[string]string{"ephemeral": "live-keep"}, time.Hour, time.Minute, "last", base)
+	if err != nil || oldRes.RevokedAt == nil || len(oldRes.Streams) != 1 {
+		t.Fatalf("revoked adapter series data not preserved: %#v err=%v", oldRes, err)
+	}
+}
+
+func TestRevokedSeriesCapacityScaleAndPlan(t *testing.T) {
+	ctx := context.Background()
+	s, human, owner, _ := fixture(t)
+	if err := s.Remove(ctx, "collector", false, human); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.DB.Exec(`
+		INSERT INTO series_adapters(name,description,agent_id,host_id,expected_interval,created_at,revoked_at)
+		VALUES('retired-bulk','Retired bulk adapter','owner','host',60,?,?);
+		WITH RECURSIVE cnt(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM cnt WHERE x<100000)
+		INSERT INTO series_definitions(name,adapter,unit,kind)
+		SELECT printf('retired_%06d',x),'retired-bulk','items','gauge' FROM cnt;
+	`, now, now); err != nil {
+		t.Fatal(err)
+	}
+
+	var seq int
+	var dbName, path string
+	if err := s.DB.QueryRow(`PRAGMA database_list`).Scan(&seq, &dbName, &path); err != nil {
+		t.Fatal(err)
+	}
+	instrumentedDB, capture, err := perfguard.Open("file:" + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer instrumentedDB.Close()
+
+	instrumentedStore := Store{DB: instrumentedDB, Auth: auth.NewStore(instrumentedDB)}
+	capture.Start()
+	_, err = instrumentedStore.Declare(ctx, Declaration{
+		Name:             "active-after-100k-retired",
+		Description:      "Active collector after 100k retired definitions",
+		AgentID:          owner.AgentID,
+		ExpectedInterval: "1m",
+		Series:           []Definition{{Name: "active_metric", Kind: "gauge", Unit: "items"}},
+	}, human)
+	statements, _, _ := capture.Stop()
+	work := capture.Work()
+	if err != nil || capture.WorkError() != nil {
+		t.Fatalf("Declare failed: err=%v workErr=%v", err, capture.WorkError())
+	}
+	if work.VMSteps > 5000 || work.FullScanSteps > 0 {
+		t.Fatalf("Declare over 100k retired definitions exceeded budget: VMSteps=%d FullScanSteps=%d", work.VMSteps, work.FullScanSteps)
+	}
+	foundCountPlan := false
+	for _, stmt := range statements {
+		if !strings.Contains(stmt.SQL, "SUM(definition_count)") {
+			continue
+		}
+		foundCountPlan = true
+		details, err := perfguard.Explain(ctx, s.DB, stmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		joined := strings.Join(details, "\n")
+		if !strings.Contains(joined, "idx_series_adapters_capacity") {
+			t.Fatalf("unexpected active series count plan:\n%s", joined)
+		}
+	}
+	if !foundCountPlan {
+		t.Fatal("active series count statement not captured")
+	}
+	t.Logf("Declare over 100k retired definitions: VMSteps=%d FullScanSteps=%d", work.VMSteps, work.FullScanSteps)
 }

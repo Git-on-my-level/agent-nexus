@@ -264,3 +264,134 @@ func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
 		}
 	}
 }
+
+func TestBriefV1UndatedAskCandidatePriorityAndAgentSummaryRecency(t *testing.T) {
+	t.Parallel()
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	store := h.primitiveStore.(*primitives.Store)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{"title": "Portfolio"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjectCard, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Subject Card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockedCard, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Blocked Initiative"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Seed 65 older low-priority undated asks that each reference a completed blocker card
+	// (testing both asks filed before completion and asks filed after completion).
+	completedBeforeAsk, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Completed Before Ask"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.workspace.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, completedBeforeAsk["id"]); err != nil {
+		t.Fatal(err)
+	}
+	completedAfterAsk, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": "Completed After Ask"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 65; i++ {
+		title := fmt.Sprintf("Old stale-blocker ask %02d", i)
+		staleRef := completedBeforeAsk["ref"]
+		if i%2 == 1 {
+			staleRef = completedAfterAsk["ref"]
+		}
+		if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
+			"type":      "human_attention_requested",
+			"thread_id": subjectCard["thread_id"],
+			"refs":      []string{"thread:" + anyString(subjectCard["thread_id"])},
+			"summary":   title,
+			"payload": map[string]any{
+				"kind":               "ask",
+				"title":              title,
+				"subject_ref":        subjectCard["ref"],
+				"requester_actor_id": "agent-1",
+				"priority":           "low",
+				"blocks":             []any{staleRef},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.workspace.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, completedAfterAsk["id"]); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed newer critical/blocking and high-priority undated asks after the 65 stale-blocker asks.
+	if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": subjectCard["thread_id"],
+		"refs":      []string{"thread:" + anyString(subjectCard["thread_id"])},
+		"summary":   "Urgent non-blocking ask",
+		"payload": map[string]any{
+			"kind":               "ask",
+			"title":              "Urgent non-blocking ask",
+			"subject_ref":        subjectCard["ref"],
+			"requester_actor_id": "agent-1",
+			"priority":           "critical",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AppendEvent(ctx, "agent-1", map[string]any{
+		"type":      "human_attention_requested",
+		"thread_id": subjectCard["thread_id"],
+		"refs":      []string{"thread:" + anyString(subjectCard["thread_id"])},
+		"summary":   "Critical blocking ask",
+		"payload": map[string]any{
+			"kind":               "ask",
+			"title":              "Critical blocking ask",
+			"subject_ref":        subjectCard["ref"],
+			"requester_actor_id": "agent-1",
+			"priority":           "low",
+			"blocks":             []any{blockedCard["ref"]},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := readBriefV1(t, store)
+	decisions := body["decisions"].([]any)
+	if len(decisions) != primitives.BriefSectionLimit {
+		t.Fatalf("decisions len = %d, want %d", len(decisions), primitives.BriefSectionLimit)
+	}
+	firstTitle := anyString(decisions[0].(map[string]any)["title"])
+	secondTitle := anyString(decisions[1].(map[string]any)["title"])
+	if firstTitle != "Critical blocking ask" || secondTitle != "Urgent non-blocking ask" {
+		t.Fatalf("top decisions = [%q, %q], want [\"Critical blocking ask\", \"Urgent non-blocking ask\"]", firstTitle, secondTitle)
+	}
+
+	// 2. Seed 60 assigned cards where lexicographically larger IDs have newer updated_at timestamps.
+	for i := 0; i < 60; i++ {
+		cardID := fmt.Sprintf("card-order-%02d", i)
+		updatedAt := fmt.Sprintf("2026-10-16T00:%02d:00Z", i)
+		if _, err := h.workspace.DB().Exec(
+			`INSERT INTO cards(id,handle,board_id,rank,title,summary,column_key,assignee,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,'',?,'','in_progress','agent-recency',?,'actor-1',?,'actor-1')`,
+			cardID, cardID, board["id"], cardID, updatedAt, updatedAt,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	summaryCards, truncated, err := store.AgentSummaryCards(ctx, "actor:agent-recency", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !truncated || len(summaryCards) != 50 {
+		t.Fatalf("AgentSummaryCards len=%d truncated=%v, want len=50 truncated=true", len(summaryCards), truncated)
+	}
+	if got := anyString(summaryCards[0]["id"]); got != "card-order-59" {
+		t.Fatalf("first summary card = %q, want card-order-59 (most recently updated)", got)
+	}
+	if got := anyString(summaryCards[len(summaryCards)-1]["id"]); got != "card-order-10" {
+		t.Fatalf("last summary card = %q, want card-order-10", got)
+	}
+}
+
+// I7 (core side): the live brief uses only fields the shared fixture that
+// Decide, Watch and orient render from also uses, plus the optional ones.
