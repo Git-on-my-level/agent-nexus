@@ -91,6 +91,9 @@ func (s *Store) withdrawHumanAttention(ctx context.Context, actorID, withdrawnBy
 		}
 		var closed bool
 		e = tx.QueryRowContext(ctx, `SELECT `+workprojection.ClosedSQL()+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id=?`, resolved.ID).Scan(&closed)
+		if e == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
 		if e != nil {
 			return nil, e
 		}
