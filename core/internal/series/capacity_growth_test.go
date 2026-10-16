@@ -128,9 +128,12 @@ func TestExpiredLabelReactivationHonorsCapacity(t *testing.T) {
 		}
 	}
 	s = reopenStore(t, s, root)
-	if err := s.Push(ctx, "builds", expired, writer, now); !errors.Is(err, ErrCapacity) {
+	measured, capture := measuredCapacityStore(t, s)
+	capture.Start()
+	if err := measured.Push(ctx, "builds", expired, writer, now); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("reactivation at cap: %v", err)
 	}
+	checkCapacityBudget(t, capture, s.DB, "push")
 	var count int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM series_labels WHERE series='builds' AND last_point_ts>=?`, now.Add(-Retention).UnixNano()).Scan(&count); err != nil || count != MaxLabelSets {
 		t.Fatal(count, err)
