@@ -391,8 +391,9 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 	}, stagedContent, nil
 }
 
-func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID, cardID, threadID string, revision cardRevisionInsert) error {
-	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "card-revision", "artifact-"+revision.ArtifactID)
+func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID, cardID, cardHandle, threadID string, revision cardRevisionInsert) error {
+	parent := firstNonEmpty(strings.TrimSpace(cardHandle), cardID)
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", revisionArtifactDesiredHandle(parent, revision.RevisionNumber), "artifact-"+revision.ArtifactID)
 	if err != nil {
 		return fmt.Errorf("allocate card artifact handle: %w", err)
 	}
@@ -707,7 +708,7 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 		return boardRow, boardCardRow{}, stagedContent, fmt.Errorf("insert card: %w", err)
 	}
 
-	if err := s.insertCardRevisionTx(ctx, tx, actorID, cardID, backingThreadID, revision); err != nil {
+	if err := s.insertCardRevisionTx(ctx, tx, actorID, cardID, cardHandle, backingThreadID, revision); err != nil {
 		return boardRow, boardCardRow{}, stagedContent, err
 	}
 
@@ -3291,7 +3292,7 @@ func (s *Store) createCardRevision(ctx context.Context, actorID, cardID string, 
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
-	if err := s.insertCardRevisionTx(ctx, tx, actorID, cardRow.CardID, threadID, revision); err != nil {
+	if err := s.insertCardRevisionTx(ctx, tx, actorID, cardRow.CardID, cardRow.Handle.String, threadID, revision); err != nil {
 		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
