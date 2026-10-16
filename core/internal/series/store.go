@@ -140,7 +140,7 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 	}
 	out.AgentID = agent
 	var n int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_definitions`).Scan(&n); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter WHERE d.revoked_at IS NULL AND d.deleted_at IS NULL`).Scan(&n); err != nil {
 		return out, err
 	}
 	if n+len(d.Series) > MaxSeries {
@@ -366,6 +366,10 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 		return err
 	}
 	if n == 0 {
+		cutoff := now.Add(-Retention).UnixNano()
+		if _, err = tx.ExecContext(ctx, `DELETE FROM series_labels WHERE series=? AND NOT EXISTS (SELECT 1 FROM series_points p WHERE p.series=series_labels.series AND p.labels=series_labels.labels AND p.ts>=?) AND (EXISTS (SELECT 1 FROM series_points p WHERE p.series=series_labels.series AND p.labels=series_labels.labels) OR EXISTS (SELECT 1 FROM series_daily d WHERE d.series=series_labels.series AND d.labels=series_labels.labels))`, name, cutoff); err != nil {
+			return err
+		}
 		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_labels WHERE series=?`, name).Scan(&n); err != nil {
 			return err
 		}

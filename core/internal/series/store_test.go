@@ -451,3 +451,84 @@ func TestWorkspaceSeriesCapAndScopedDeclarationDenial(t *testing.T) {
 		t.Fatalf("series cap: %v", err)
 	}
 }
+
+func TestExpiredLabelSetsAndRevokedAdaptersReleaseCapacity(t *testing.T) {
+	ctx := context.Background()
+	s, human, owner, writer := fixture(t)
+	base := time.Now().UTC().Truncate(time.Second)
+	oldNow := base.Add(-Retention - 24*time.Hour)
+
+	// 1. Push MaxLabelSets-1 historical label sets that will expire, plus 1 live label set.
+	for i := 0; i < MaxLabelSets-1; i++ {
+		p := Point{
+			Value:  number(float64(i + 1)),
+			TS:     oldNow.Format(time.RFC3339Nano),
+			Labels: map[string]string{"ephemeral": fmt.Sprintf("old-%03d", i)},
+		}
+		if err := s.Push(ctx, "builds", p, writer, oldNow); err != nil {
+			t.Fatalf("seed historical label set %d: %v", i, err)
+		}
+	}
+	livePoint := Point{
+		Value:  number(42),
+		TS:     base.Format(time.RFC3339Nano),
+		Labels: map[string]string{"ephemeral": "live-keep"},
+	}
+	if err := s.Push(ctx, "builds", livePoint, writer, base); err != nil {
+		t.Fatalf("seed live label set: %v", err)
+	}
+	if err := s.Compact(ctx, base); err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+
+	// Pushing a new label set after the 99 old label sets expired must succeed,
+	// while preserving the live label set.
+	freshPoint := Point{
+		Value:  number(99),
+		TS:     base.Format(time.RFC3339Nano),
+		Labels: map[string]string{"ephemeral": "fresh-after-expiry"},
+	}
+	if err := s.Push(ctx, "builds", freshPoint, writer, base); err != nil {
+		t.Fatalf("push new label set after expiry failed: %v", err)
+	}
+	res, err := s.Query(ctx, "builds", map[string]string{"ephemeral": "live-keep"}, time.Hour, time.Minute, "last", base)
+	if err != nil || len(res.Streams) != 1 || len(res.Streams[0].Points) != 1 || *res.Streams[0].Points[0].Value != 42 {
+		t.Fatalf("live label set lost: %#v err=%v", res, err)
+	}
+
+	// 2. Fill MaxSeries on the active collector adapter, then revoke collector
+	// without deleting its historical data; declaring a new adapter must succeed.
+	tx, err := s.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 2; i < MaxSeries; i++ {
+		if _, err = tx.Exec(`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES(printf('s%d',?),'collector','items','gauge')`, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	replacement := Declaration{
+		Name:             "replacement",
+		Description:      "Replacement collector",
+		AgentID:          owner.AgentID,
+		ExpectedInterval: "1m",
+		Series:           []Definition{{Name: "fresh_series", Kind: "gauge", Unit: "items"}},
+	}
+	if _, err := s.Declare(ctx, replacement, human); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("expected active series cap before revocation, got: %v", err)
+	}
+	if err := s.Remove(ctx, "collector", false, human); err != nil {
+		t.Fatalf("revoke collector: %v", err)
+	}
+	if _, err := s.Declare(ctx, replacement, human); err != nil {
+		t.Fatalf("declare after revoking old adapter failed: %v", err)
+	}
+	// Historical data on the revoked adapter must remain queryable.
+	oldRes, err := s.Query(ctx, "builds", map[string]string{"ephemeral": "live-keep"}, time.Hour, time.Minute, "last", base)
+	if err != nil || oldRes.RevokedAt == nil || len(oldRes.Streams) != 1 {
+		t.Fatalf("revoked adapter series data not preserved: %#v err=%v", oldRes, err)
+	}
+}
