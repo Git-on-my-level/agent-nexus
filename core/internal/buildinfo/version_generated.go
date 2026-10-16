@@ -2,4 +2,4 @@
 
 package buildinfo
 
-var Current = "v0.13.9"
+var Current = "v0.13.10"
