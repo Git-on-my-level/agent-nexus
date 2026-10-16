@@ -37,11 +37,14 @@ import {
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
 const volatile = new Map();
+const inFlightInTab = new Set();
+const confirmedInTab = new Map();
 let timer;
 let running = false;
 let requested = false;
 
 const snapshot = (value) => JSON.parse(JSON.stringify(value));
+const inTabKey = (entry) => `${entry.scope}\0${entry.epoch}\0${entry.key}`;
 const active = (entry) =>
   entry.scope === get(localWorkScope) &&
   canUseLocalWorkScope(entry.scope) &&
@@ -301,12 +304,11 @@ async function send(entry, lease = null) {
   if (entry.operation === "artifacts.attachments.create") {
     const result = await client.createArtifactAttachment({
       refs: entry.request.refs,
-      request_key: entry.key,
+      request_key: entry.request.request_key || entry.key,
       file: attachmentFile(entry.request),
     });
     if (!result?.artifact?.id)
       throw new Error("Attachment receipt is incomplete.");
-    lease?.assertHeld();
     await saveUploadedAttachment(entry, result);
     return result;
   }
@@ -358,7 +360,7 @@ async function send(entry, lease = null) {
       if (!active(entry))
         throw new Error("The submitting identity is no longer active.");
       entry.request.autoDispatch = {
-        request_key: randomUUID(),
+        request_key: entry.request.autoDispatchKey || randomUUID(),
         if_revision: decision.revision,
         if_action_revision: base.revision,
       };
@@ -385,7 +387,7 @@ async function send(entry, lease = null) {
         if (!active(entry))
           throw new Error("The submitting identity is no longer active.");
         entry.request.autoReconcile = {
-          request_key: randomUUID(),
+          request_key: entry.request.autoReconcileKey || randomUUID(),
           if_revision: base.revision,
         };
         await persist(entry, lease);
@@ -664,6 +666,7 @@ export async function enqueueAttachment({ file, refs, target, href }) {
       request: {
         composerTarget: target,
         refs,
+        request_key: key,
         file: { name: file.name, type: file.type, bytes: btoa(raw) },
       },
     });
@@ -728,6 +731,12 @@ export function enqueuePmDecisionAnswer({
     request: {
       decision_id: decisionId,
       autoApply,
+      ...(autoApply
+        ? {
+            autoDispatchKey: randomUUID(),
+            autoReconcileKey: randomUUID(),
+          }
+        : {}),
       answer: { request_key: key, actor_id, revision, approve, text },
     },
   });
@@ -802,17 +811,42 @@ export async function enqueueLocalMutation({
   return entry;
 }
 
+/**
+ * Drain one persisted outbox item. Cross-tab lease acquisition is a best-effort
+ * optimization only; if two tabs enter send concurrently for the same item,
+ * both transmit the request_key / replay_key persisted when the item was
+ * enqueued, so server-side replay produces at most one effect. If storage is
+ * unavailable during/after send, in-tab tracking (inFlightInTab,
+ * confirmedInTab) still sends at most once per tab with the persisted key.
+ */
 async function attempt(entry) {
   if (!active(entry) || navigator.onLine === false) return;
+  const tabKey = inTabKey(entry);
+  if (confirmedInTab.has(tabKey) || inFlightInTab.has(tabKey)) return;
   try {
     await requestMutationSendLock(entry.scope, async (lease) => {
-      if (!active(entry)) return;
+      if (
+        !active(entry) ||
+        confirmedInTab.has(tabKey) ||
+        inFlightInTab.has(tabKey)
+      )
+        return;
       const latest = await loadLocalWorkRecord(
         entry.scope,
         "mutation",
         entry.key,
       );
-      if (!latest || latest.deleted || latest.value.state === "superseded") {
+      if (latest?.deleted) {
+        if (latest.deletionReason === "confirmed") {
+          confirmedInTab.set(tabKey, latest.confirmation ?? null);
+          volatile.delete(entry.key);
+          confirm(entry, latest.confirmation ?? null);
+        } else {
+          volatile.delete(entry.key);
+        }
+        return;
+      }
+      if (!latest || latest.value.state === "superseded") {
         volatile.delete(entry.key);
         return;
       }
@@ -870,58 +904,98 @@ async function attempt(entry) {
       entry.state = "sending";
       entry.attempts += 1;
       await persist(entry, lease);
+      inFlightInTab.add(tabKey);
       mutationOutbox.update((rows) =>
         rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
       );
-      if (!active(entry)) return;
-      const result = adopted ? adopted.confirmation : await send(entry, lease);
-      if (entry.epoch !== localWorkEpoch(entry.scope)) return;
-      await saveLocalWork(entry.scope, "mutation", entry.key, null, {
-        epoch: entry.epoch,
-        lease,
-        deletionReason: "confirmed",
-        confirmation: result,
-        submission: {
-          target: entry.target,
-          operation: entry.operation,
-          fingerprint,
-          confirmedAt: Date.now(),
-        },
-      });
-      volatile.delete(entry.key);
-      // Preserve any newer composer contents, even in another tab.
-      const current = await loadLocalWork(
-        entry.scope,
-        "draft",
-        entry.draftTarget || entry.target,
-      );
-      if (JSON.stringify(current) === JSON.stringify(entry.draft))
-        await saveLocalWork(
+      try {
+        if (!active(entry)) return;
+        const result = adopted
+          ? adopted.confirmation
+          : await send(entry, lease);
+        confirmedInTab.set(tabKey, result);
+        if (entry.epoch !== localWorkEpoch(entry.scope)) return;
+        try {
+          await saveLocalWork(entry.scope, "mutation", entry.key, null, {
+            epoch: entry.epoch,
+            lease,
+            deletionReason: "confirmed",
+            confirmation: result,
+            submission: {
+              target: entry.target,
+              operation: entry.operation,
+              fingerprint,
+              confirmedAt: Date.now(),
+            },
+          });
+        } catch (confirmSaveErr) {
+          if (!confirmSaveErr?.localPersistence) throw confirmSaveErr;
+        }
+        volatile.delete(entry.key);
+        // Preserve any newer composer contents, even in another tab.
+        const current = await loadLocalWork(
           entry.scope,
           "draft",
           entry.draftTarget || entry.target,
-          null,
-          {
-            epoch: entry.epoch,
-            lease,
-          },
         );
-      if (entry.operation === "events.create") {
-        lease?.assertHeld();
-        await consumeUploadedAttachments(
-          entry.scope,
-          entry.request.event.refs,
-          entry.epoch,
-        );
+        if (JSON.stringify(current) === JSON.stringify(entry.draft)) {
+          try {
+            await saveLocalWork(
+              entry.scope,
+              "draft",
+              entry.draftTarget || entry.target,
+              null,
+              {
+                epoch: entry.epoch,
+                lease,
+              },
+            );
+          } catch (draftErr) {
+            if (draftErr?.leaseLost) throw draftErr;
+          }
+        }
+        if (entry.operation === "events.create") {
+          lease?.assertHeld();
+          await consumeUploadedAttachments(
+            entry.scope,
+            entry.request.event.refs,
+            entry.epoch,
+          );
+        }
+        confirm(entry, result);
+      } finally {
+        inFlightInTab.delete(tabKey);
       }
-      confirm(entry, result);
     });
   } catch (error) {
     if (!active(entry)) return;
     if (error?.leaseLost) {
+      confirmedInTab.delete(tabKey);
+      const latest = await loadLocalWorkRecord(
+        entry.scope,
+        "mutation",
+        entry.key,
+      );
+      if (latest?.deleted && latest.deletionReason === "confirmed") {
+        confirmedInTab.set(tabKey, latest.confirmation ?? null);
+        volatile.delete(entry.key);
+        confirm(entry, latest.confirmation ?? null);
+        return;
+      }
       volatile.delete(entry.key);
       clearTimeout(timer);
       timer = setTimeout(requestRecovery, 250);
+      return;
+    }
+    const latest = await loadLocalWorkRecord(
+      entry.scope,
+      "mutation",
+      entry.key,
+    );
+    if (latest?.deleted && latest.deletionReason === "confirmed") {
+      confirmedInTab.set(tabKey, latest.confirmation ?? null);
+      volatile.delete(entry.key);
+      confirm(entry, latest.confirmation ?? null);
       return;
     }
     if (
@@ -1036,7 +1110,10 @@ export async function recoverMutations() {
       });
       const rows = new Map(
         records
-          .filter((record) => !record.deleted)
+          .filter(
+            (record) =>
+              !record.deleted && !confirmedInTab.has(inTabKey(record.value)),
+          )
           .map((record) => [record.target, record.value]),
       );
       for (const [key, entry] of volatile) {

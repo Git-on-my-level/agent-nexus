@@ -28,6 +28,8 @@ export function expiredReplayError() {
 // Strip only transport key locations, never keys inside authored JSON content.
 export function requestIntent(request) {
   const value = JSON.parse(JSON.stringify(request));
+  delete value.autoDispatchKey;
+  delete value.autoReconcileKey;
   for (const body of [
     value,
     value.body,
@@ -91,6 +93,14 @@ export function freshRequest(request, operation = "", receipt = null) {
       continue;
     for (const field of ["request_key", "replay_key"]) {
       if (field in body) body[field] = randomUUID();
+    }
+  }
+  if (operation === "pm.decision.answer") {
+    if ("autoDispatchKey" in value && !receipt?.dispatchedAction) {
+      value.autoDispatchKey = randomUUID();
+    }
+    if ("autoReconcileKey" in value && !receipt?.reconciledAction) {
+      value.autoReconcileKey = randomUUID();
     }
   }
   // This is an explicit new intent, not recovery of the old body. Legacy PM

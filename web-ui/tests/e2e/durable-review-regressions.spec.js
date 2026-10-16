@@ -103,6 +103,100 @@ test("simultaneous identical composer submissions create one entity even with cr
   expect(bodies).toHaveLength(1);
 });
 
+test("two plain-HTTP tabs entering the send path for the same outbox item send the same request_key and produce one server effect", async ({
+  page,
+  context,
+}) => {
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      get: () => undefined,
+    });
+    // Isolate lease storage per tab so both plain-HTTP tabs acquire their own
+    // lease and enter the send callback concurrently for the same persisted item.
+    const tabLeaseStore = new Map();
+    const rawGetItem = Storage.prototype.getItem;
+    const rawSetItem = Storage.prototype.setItem;
+    const rawRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.getItem = function (key) {
+      if (typeof key === "string" && key.startsWith("anx:mutation-lock:")) {
+        return tabLeaseStore.has(key) ? tabLeaseStore.get(key) : null;
+      }
+      return rawGetItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key, value) {
+      if (typeof key === "string" && key.startsWith("anx:mutation-lock:")) {
+        tabLeaseStore.set(key, String(value));
+        return;
+      }
+      return rawSetItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key) {
+      if (typeof key === "string" && key.startsWith("anx:mutation-lock:")) {
+        tabLeaseStore.delete(key);
+        return;
+      }
+      return rawRemoveItem.call(this, key);
+    };
+  });
+
+  const seenKeys = [];
+  const byKey = new Map();
+  let releaseBoth;
+  const bothEntered = new Promise((resolve) => {
+    releaseBoth = resolve;
+  });
+
+  await discussionSetup(context, async (route, events) => {
+    const body = route.request().postDataJSON();
+    seenKeys.push(body.request_key);
+    if (seenKeys.length >= 2) releaseBoth();
+    await bothEntered;
+    if (!byKey.has(body.request_key)) {
+      const event = {
+        ...body.event,
+        id: `posted-${events.length + 1}`,
+        ts: new Date().toISOString(),
+      };
+      events.push(event);
+      byKey.set(body.request_key, { event });
+    }
+    return json(route, byKey.get(body.request_key));
+  });
+
+  const other = await context.newPage();
+  await Promise.all([page.goto(discussionURL), other.goto(discussionURL)]);
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "onLine", {
+      configurable: true,
+      get: () => false,
+    }),
+  );
+  await page.locator("#message-text").fill(text);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(async () => (await saved(page, "mutation")).length).toBe(1);
+
+  await Promise.all([
+    page.evaluate(async () => {
+      Object.defineProperty(navigator, "onLine", {
+        configurable: true,
+        get: () => true,
+      });
+      const outbox = await import("/src/lib/mutationOutbox.js");
+      await outbox.recoverMutations();
+    }),
+    other.evaluate(async () => {
+      const outbox = await import("/src/lib/mutationOutbox.js");
+      await outbox.recoverMutations();
+    }),
+  ]);
+
+  expect(seenKeys.length).toBeGreaterThanOrEqual(2);
+  expect(new Set(seenKeys).size).toBe(1);
+  expect(byKey.size).toBe(1);
+  await expect.poll(async () => (await saved(page, "mutation")).length).toBe(0);
+});
+
 test("distinct persisted bodies for the same composer remain separate intents", async ({
   page,
   context,

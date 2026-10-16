@@ -275,6 +275,9 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			"age_seconds": int64(b.now.Sub(a.CreatedAt) / time.Second), "decide_by": nil, "overdue_for_seconds": nil,
 			"blocks": a.blocksJSON(subjects), "blocks_count": a.BlocksCount, "proposals": briefProposals(payload),
 		}
+		if a.AskID != "" {
+			item["event_ref"] = "event:" + a.AskID
+		}
 		b.actors[stripActor(a.Requester)] = true
 		if body := strings.TrimSpace(anyStringValue(payload["body"])); body != "" {
 			item["body"] = body
@@ -520,6 +523,11 @@ func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]brie
 
 func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]any {
 	member := map[string]any{"ref": item["ref"], "inbox_item_id": item["inbox_item_id"], "title": item["title"]}
+	if eventRef := strings.TrimSpace(anyStringValue(item["event_ref"])); eventRef != "" {
+		member["event_ref"] = eventRef
+	} else if meta.askID != "" {
+		member["event_ref"] = "event:" + meta.askID
+	}
 	if meta.subject != "" {
 		member["subject_ref"] = meta.subject
 	}
@@ -769,16 +777,22 @@ func (b *briefBuild) answered() ([]map[string]any, bool, error) {
 type briefCardRow struct {
 	briefInitiativeRow
 	handle, title, phase, thread, owner, plan string
+	loopAnnotated                             int
+	loopLastRunAt                             string
 }
 
-const briefInitiativeSelect = `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
-	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),''),COALESCE(p.body_json,'')
-	FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id
-	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')) AND `
-
 func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow, error) {
+	ownerExpr := "''"
+	if b.reader.Visible != nil {
+		ownerExpr = `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'')`
+	}
+	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
+	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')
+	FROM (SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1) AS has_role, EXISTS(SELECT 1 FROM card_plans LIMIT 1) AS has_plans) br
+	CROSS JOIN brief_initiatives bi JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON br.has_plans AND p.card_id=c.id
+	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND (NOT br.has_role OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')) AND `
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
-	rows, err := b.s.db.QueryContext(b.ctx, briefInitiativeSelect+pred+` AND `+where, append(predArgs, args...)...)
+	rows, err := b.s.db.QueryContext(b.ctx, selectSQL+pred+` AND `+where, append(predArgs, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -786,7 +800,7 @@ func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow
 	out := []briefCardRow{}
 	for rows.Next() {
 		var r briefCardRow
-		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan); err != nil {
+		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan, &r.loopAnnotated, &r.loopLastRunAt); err != nil {
 			return nil, err
 		}
 		if b.reader.Visible != nil && !b.reader.Visible(r.thread, r.owner) {
@@ -883,7 +897,14 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 		}
 		out = append(out, item)
 	}
-	loops, _, loopErr := b.s.loadLoopStates(b.ctx, ids, b.now)
+	loopIDs := make([]string, 0, len(rows))
+	loopCutoff := loopTS(b.now.Add(-loopWindow))
+	for _, r := range rows {
+		if r.loopAnnotated != 0 || r.loopLastRunAt >= loopCutoff {
+			loopIDs = append(loopIDs, r.cardID)
+		}
+	}
+	loops, _, loopErr := b.s.loadLoopStates(b.ctx, loopIDs, b.now)
 	if loopErr != nil {
 		return nil, false, loopErr
 	}
@@ -903,82 +924,46 @@ func (b *briefBuild) agentInitiativeCards(ids []string) (map[string]bool, error)
 	if b.reader.human() || strings.TrimSpace(b.reader.ActorID) == "" || len(ids) == 0 {
 		return out, nil
 	}
-	admitted := make(map[string]bool, len(ids))
-	for _, cardID := range ids {
-		admitted[cardID] = true
+	seen := make(map[string]bool, len(ids))
+	candidates := make([]string, 0, min(len(ids), BriefSectionLimit))
+	for _, raw := range ids {
+		cardID := strings.TrimSpace(raw)
+		if cardID == "" || seen[cardID] {
+			continue
+		}
+		seen[cardID] = true
+		candidates = append(candidates, cardID)
+		if len(candidates) >= BriefSectionLimit {
+			break
+		}
+	}
+	if len(candidates) == 0 {
+		return out, nil
 	}
 	id, prefixed := b.readerIDs()
-	const window = BriefSectionLimit + 1
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT 'c', id FROM (SELECT c.id FROM cards c WHERE c.assignee IN (?,?) LIMIT ?)
-		UNION ALL
-		SELECT 'p', card_id FROM (SELECT p.card_id FROM work_participants p JOIN agent_sessions s ON s.id=p.session_id WHERE p.actor_id=? AND p.actor_id<>'' AND p.activity<>'left' AND s.activity<>'closed' AND s.actor_id IN (?,?) LIMIT ?)`, id, prefixed, window, id, id, prefixed, window)
+	encoded, _ := json.Marshal(candidates)
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT j.value FROM (SELECT 1 FROM cards c WHERE c.assignee=? LIMIT 1) CROSS JOIN json_each(?) j
+		WHERE EXISTS(SELECT 1 FROM cards c WHERE c.assignee=? AND c.id BETWEEN j.value AND j.value LIMIT 1)
+		UNION
+		SELECT j.value FROM (SELECT 1 FROM cards c WHERE c.assignee=? LIMIT 1) CROSS JOIN json_each(?) j
+		WHERE EXISTS(SELECT 1 FROM cards c WHERE c.assignee=? AND c.id BETWEEN j.value AND j.value LIMIT 1)
+		UNION
+		SELECT j.value FROM (SELECT 1 FROM work_participants p WHERE p.actor_id=? AND p.actor_id<>'' AND p.activity<>'left' LIMIT 1) CROSS JOIN json_each(?) j
+		WHERE EXISTS(SELECT 1 FROM work_participants p WHERE p.actor_id=? AND p.actor_id<>'' AND p.card_id=j.value AND p.activity<>'left'
+			AND EXISTS(SELECT 1 FROM agent_sessions s WHERE s.id=p.session_id AND s.activity<>'closed' AND +s.actor_id IN (?,?) LIMIT 1) LIMIT 1)`,
+		id, string(encoded), id, prefixed, string(encoded), prefixed, id, string(encoded), id, id, prefixed)
 	if err != nil {
 		return nil, err
 	}
-	var assignedCount, participantCount int
+	defer rows.Close()
 	for rows.Next() {
-		var kind, cardID string
-		if err = rows.Scan(&kind, &cardID); err != nil {
-			rows.Close()
+		var cardID string
+		if err = rows.Scan(&cardID); err != nil {
 			return nil, err
 		}
-		if kind == "c" {
-			assignedCount++
-		} else {
-			participantCount++
-		}
-		if admitted[cardID] {
-			out[cardID] = true
-		}
+		out[cardID] = true
 	}
-	if err = rows.Err(); err != nil {
-		rows.Close()
-		return nil, err
-	}
-	rows.Close()
-	if assignedCount < window && participantCount < window {
-		return out, nil
-	}
-	encoded, _ := json.Marshal(ids)
-	if assignedCount >= window {
-		more, err := b.s.db.QueryContext(b.ctx, `SELECT c.id FROM cards c WHERE c.assignee IN (?,?) AND c.id IN (SELECT value FROM json_each(?))`, id, prefixed, string(encoded))
-		if err != nil {
-			return nil, err
-		}
-		for more.Next() {
-			var cardID string
-			if err = more.Scan(&cardID); err != nil {
-				more.Close()
-				return nil, err
-			}
-			out[cardID] = true
-		}
-		if err = more.Err(); err != nil {
-			more.Close()
-			return nil, err
-		}
-		more.Close()
-	}
-	if participantCount >= window {
-		more, err := b.s.db.QueryContext(b.ctx, `SELECT p.card_id FROM work_participants p JOIN agent_sessions s ON s.id=p.session_id WHERE p.actor_id=? AND p.actor_id<>'' AND p.activity<>'left' AND p.card_id IN (SELECT value FROM json_each(?)) AND s.activity<>'closed' AND s.actor_id IN (?,?)`, id, string(encoded), id, prefixed)
-		if err != nil {
-			return nil, err
-		}
-		for more.Next() {
-			var cardID string
-			if err = more.Scan(&cardID); err != nil {
-				more.Close()
-				return nil, err
-			}
-			out[cardID] = true
-		}
-		if err = more.Err(); err != nil {
-			more.Close()
-			return nil, err
-		}
-		more.Close()
-	}
-	return out, nil
+	return out, rows.Err()
 }
 
 func briefPlacement(phase string) string {
@@ -1043,7 +1028,7 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 		human = 1
 	}
 	pred, predArgs := b.askThreadOwnerSQL()
-	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT a.subject_ref,a.recipient,a.requester FROM brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+`
+	rows2, err := b.s.db.QueryContext(b.ctx, `SELECT a.subject_ref,a.recipient,a.requester FROM (SELECT 1 FROM brief_asks WHERE state='open' LIMIT 1) CROSS JOIN brief_asks a INDEXED BY idx_brief_asks_subject JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+`
 		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' AND `+pred+` LIMIT 1000`, append([]any{string(encoded)}, predArgs...)...)
 	if err != nil {
 		return nil, err
@@ -1089,7 +1074,8 @@ func (b *briefBuild) initiativeAskCounts(rows []briefCardRow) (map[string]briefA
 // Bound the block lookup by the already-admitted card refs. CROSS JOIN keeps
 // scoped ask predicates from turning this into a scan of every open ask.
 // initiativeAskCounts deduplicates these bounded refs before encoding them.
-const briefAskBlockCountsSelect = `SELECT k.ref,COUNT(*) FROM json_each(?) requested
+const briefAskBlockCountsSelect = `SELECT k.ref,COUNT(*) FROM (SELECT 1 FROM brief_ask_blocks LIMIT 1)
+ CROSS JOIN json_each(?) requested
  CROSS JOIN brief_ask_blocks k ON k.ref=requested.value
  CROSS JOIN brief_asks a ON a.ask_id=k.ask_id
  JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + `
@@ -1106,7 +1092,7 @@ func (b *briefBuild) latestNotes(cardIDs []string) (map[string]map[string]any, m
 		return out, texts, nil
 	}
 	encoded, _ := json.Marshal(cardIDs)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT n.card_id,n.author,n.ts,n.excerpt,e.payload_json FROM json_each(?) j JOIN brief_notes n ON n.event_id=(
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT n.card_id,n.author,n.ts,n.excerpt,e.payload_json FROM (SELECT 1 FROM brief_notes LIMIT 1) CROSS JOIN json_each(?) j JOIN brief_notes n ON n.event_id=(
 		SELECT x.event_id FROM brief_notes x JOIN events ev ON ev.id=x.event_id WHERE x.card_id=j.value AND COALESCE(ev.trashed_at,'')='' ORDER BY x.ts DESC LIMIT 1)
 		JOIN events e ON e.id=n.event_id`, string(encoded))
 	if err != nil {
@@ -1225,7 +1211,7 @@ func (b *briefBuild) possiblyMoot(rows []briefCardRow, noteText map[string]strin
 	facts := map[string]plans.Fact{}
 	if len(parked) > 0 {
 		encoded, _ := json.Marshal(parked)
-		rows2, err := b.s.db.QueryContext(b.ctx, `SELECT card_id,COALESCE(json_extract(metadata_json,'$.related_refs'),'[]') FROM work_metadata WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
+		rows2, err := b.s.db.QueryContext(b.ctx, `SELECT card_id,COALESCE(json_extract(metadata_json,'$.related_refs'),'[]') FROM (SELECT 1 FROM work_metadata LIMIT 1) CROSS JOIN work_metadata WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
 		if err != nil {
 			return nil, err
 		}

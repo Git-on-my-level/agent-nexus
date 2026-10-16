@@ -184,8 +184,7 @@ async function durableSend(entry) {
       entry.attempts = (stored.attempts || 0) + 1;
       await persistResponse(entry, "sending", null, lease);
       const result = await entry.send(entry.itemId, entry.request);
-      await removePersistedResponse(entry, "confirmed", lease);
-      lease?.assertHeld();
+      await removePersistedResponse(entry, "confirmed");
       await consumeUploadedAttachments(
         entry.identity,
         entry.request.related_refs,
@@ -198,7 +197,6 @@ async function durableSend(entry) {
         if (draft === entry.request.response_text) {
           await saveLocalWork(entry.identity, "draft", target, null, {
             epoch: entry.localEpoch,
-            lease,
           });
         }
       }

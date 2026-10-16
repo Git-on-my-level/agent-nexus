@@ -15,9 +15,18 @@ const uncheckpointed = new Map();
 const preparing = new Map();
 const LOCK_LEASE_TTL_MS = 30_000;
 const LOCK_POLL_MS = 40;
-const LOCK_SETTLE_MIN_MS = 4;
-const LOCK_SETTLE_MAX_MS = 12;
 
+/**
+ * Coordinate mutation sends for a scope. Web Locks serialize across tabs on
+ * secure origins; on plain-HTTP origins, the localStorage/BroadcastChannel
+ * lease is a best-effort optimization only (localStorage cannot provide an
+ * atomic cross-tab mutex). Duplicate sends across tabs are harmless because
+ * every outbox item generates its idempotency key (request_key / replay_key)
+ * once when enqueued and persists it with the item, so concurrent sends carry
+ * the same key and produce at most one server effect. When storage is
+ * unavailable, in-tab serialization and confirmation tracking ensure each tab
+ * sends an item at most once with its persisted key.
+ */
 export function createMutationSendLocker({
   tabId = randomUUID(),
   storage = () =>
@@ -31,13 +40,8 @@ export function createMutationSendLocker({
     Math.max(10, Math.floor(leaseTtlMs / 3)),
   ),
   pollMs = LOCK_POLL_MS,
-  settleMinMs,
-  settleMaxMs,
   warn = (message, error) => console.warn(message, error),
 } = {}) {
-  const explicitSettle = settleMinMs !== undefined || settleMaxMs !== undefined;
-  const effectiveSettleMinMs = settleMinMs ?? LOCK_SETTLE_MIN_MS;
-  const effectiveSettleMaxMs = settleMaxMs ?? LOCK_SETTLE_MAX_MS;
   const inTabLocks = new Map();
   const lockWaiters = new Set();
   const resolveStorage = () =>
@@ -114,146 +118,117 @@ export function createMutationSendLocker({
         };
         try {
           store.setItem(leaseKey, JSON.stringify(candidate));
-          const immediateRaw = store.getItem(leaseKey);
-          const immediate = immediateRaw ? JSON.parse(immediateRaw) : null;
+          const verifyRaw = store.getItem(leaseKey);
+          const verify = verifyRaw ? JSON.parse(verifyRaw) : null;
           if (
-            !immediate ||
-            immediate.owner !== tabId ||
-            immediate.token !== token
+            verify &&
+            verify.owner === tabId &&
+            verify.token === token &&
+            verify.expiresAt > now()
           ) {
-            current = immediate;
-          } else {
-            const settleSpan = Math.max(
-              0,
-              effectiveSettleMaxMs - effectiveSettleMinMs,
-            );
-            const settleMs =
-              effectiveSettleMinMs +
-              Math.floor(Math.random() * (settleSpan + 1));
-            if (
-              settleMs > 0 &&
-              (explicitSettle || !globalThis.setTimeout?.clock)
-            ) {
-              await new Promise((resolve) => setTimeout(resolve, settleMs));
-            } else {
-              await Promise.resolve();
-            }
-            const verifyRaw = store.getItem(leaseKey);
-            const verify = verifyRaw ? JSON.parse(verifyRaw) : null;
-            if (
-              verify &&
-              verify.owner === tabId &&
-              verify.token === token &&
-              verify.expiresAt > now()
-            ) {
-              let released = false;
-              let lost = false;
-              let heartbeatTimer = null;
-              const clearHeartbeat = () => {
-                if (heartbeatTimer !== null) {
-                  clearInterval(heartbeatTimer);
-                  heartbeatTimer = null;
-                }
-              };
-              const renew = () => {
-                if (released || lost) return false;
-                try {
-                  const latestRaw = store.getItem(leaseKey);
-                  const latest = latestRaw ? JSON.parse(latestRaw) : null;
-                  if (
-                    !latest ||
-                    latest.owner !== tabId ||
-                    latest.token !== token
-                  ) {
-                    lost = true;
-                    clearHeartbeat();
-                    return false;
-                  }
-                  const refreshed = {
-                    owner: tabId,
-                    token,
-                    expiresAt: now() + leaseTtlMs,
-                  };
-                  store.setItem(leaseKey, JSON.stringify(refreshed));
-                  const checkRaw = store.getItem(leaseKey);
-                  const check = checkRaw ? JSON.parse(checkRaw) : null;
-                  if (
-                    !check ||
-                    check.owner !== tabId ||
-                    check.token !== token
-                  ) {
-                    lost = true;
-                    clearHeartbeat();
-                    return false;
-                  }
-                  return true;
-                } catch (error) {
-                  warn(
-                    "Cross-tab mutation lock renewal failed; fencing further checkpoint writes.",
-                    error,
-                  );
-                  lost = true;
-                  clearHeartbeat();
-                  return false;
-                }
-              };
-              if (heartbeatIntervalMs > 0) {
-                heartbeatTimer = setInterval(renew, heartbeatIntervalMs);
+            let released = false;
+            let lost = false;
+            let heartbeatTimer = null;
+            const clearHeartbeat = () => {
+              if (heartbeatTimer !== null) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
               }
-              const isHeld = () => {
-                if (released || lost) return false;
-                try {
-                  const latestRaw = store.getItem(leaseKey);
-                  const latest = latestRaw ? JSON.parse(latestRaw) : null;
-                  if (
-                    !latest ||
-                    latest.owner !== tabId ||
-                    latest.token !== token ||
-                    !(latest.expiresAt > now())
-                  ) {
-                    lost = true;
-                    clearHeartbeat();
-                    return false;
-                  }
-                  return true;
-                } catch {
+            };
+            const renew = () => {
+              if (released || lost) return false;
+              try {
+                const latestRaw = store.getItem(leaseKey);
+                const latest = latestRaw ? JSON.parse(latestRaw) : null;
+                if (
+                  !latest ||
+                  latest.owner !== tabId ||
+                  latest.token !== token
+                ) {
                   lost = true;
                   clearHeartbeat();
                   return false;
                 }
-              };
-              const assertHeld = () => {
-                if (!isHeld()) {
-                  const error = new Error(
-                    "Cross-tab mutation send lease was lost.",
-                  );
-                  error.leaseLost = true;
-                  throw error;
+                const refreshed = {
+                  owner: tabId,
+                  token,
+                  expiresAt: now() + leaseTtlMs,
+                };
+                store.setItem(leaseKey, JSON.stringify(refreshed));
+                const checkRaw = store.getItem(leaseKey);
+                const check = checkRaw ? JSON.parse(checkRaw) : null;
+                if (!check || check.owner !== tabId || check.token !== token) {
+                  lost = true;
+                  clearHeartbeat();
+                  return false;
                 }
-              };
-              const release = () => {
-                released = true;
+                return true;
+              } catch (error) {
+                warn(
+                  "Cross-tab mutation lock renewal failed; fencing further checkpoint writes.",
+                  error,
+                );
+                lost = true;
                 clearHeartbeat();
-                try {
-                  const latestRaw = store.getItem(leaseKey);
-                  const latest = latestRaw ? JSON.parse(latestRaw) : null;
-                  if (
-                    latest &&
-                    latest.owner === tabId &&
-                    latest.token === token
-                  ) {
-                    store.removeItem(leaseKey);
-                  }
-                } catch {
-                  /* Best-effort cross-tab lease release. */
-                }
-                resolveChannel()?.postMessage({ lockReleased: name });
-                notifyLockWaiters();
-              };
-              return { isHeld, assertHeld, release };
+                return false;
+              }
+            };
+            if (heartbeatIntervalMs > 0) {
+              heartbeatTimer = setInterval(renew, heartbeatIntervalMs);
             }
-            current = verify;
+            const isHeld = () => {
+              if (released || lost) return false;
+              try {
+                const latestRaw = store.getItem(leaseKey);
+                const latest = latestRaw ? JSON.parse(latestRaw) : null;
+                if (
+                  !latest ||
+                  latest.owner !== tabId ||
+                  latest.token !== token ||
+                  !(latest.expiresAt > now())
+                ) {
+                  lost = true;
+                  clearHeartbeat();
+                  return false;
+                }
+                return true;
+              } catch {
+                lost = true;
+                clearHeartbeat();
+                return false;
+              }
+            };
+            const assertHeld = () => {
+              if (!isHeld()) {
+                const error = new Error(
+                  "Cross-tab mutation send lease was lost.",
+                );
+                error.leaseLost = true;
+                throw error;
+              }
+            };
+            const release = () => {
+              released = true;
+              clearHeartbeat();
+              try {
+                const latestRaw = store.getItem(leaseKey);
+                const latest = latestRaw ? JSON.parse(latestRaw) : null;
+                if (
+                  latest &&
+                  latest.owner === tabId &&
+                  latest.token === token
+                ) {
+                  store.removeItem(leaseKey);
+                }
+              } catch {
+                /* Best-effort cross-tab lease release. */
+              }
+              resolveChannel()?.postMessage({ lockReleased: name });
+              notifyLockWaiters();
+            };
+            return { isHeld, assertHeld, release };
           }
+          current = verify;
         } catch (error) {
           warn(
             "Cross-tab mutation lock storage is unavailable; falling back to in-tab exclusion.",
@@ -335,10 +310,10 @@ function getDefaultLocker() {
 }
 
 /**
- * Serialize sends for a scope across tabs via Web Locks when available, and
- * fall back to an in-tab promise mutex plus a heartbeat-renewed, fenced
- * localStorage/BroadcastChannel lease on non-secure origins (e.g. plain-HTTP
- * LAN or Tailnet).
+ * Coordinate mutation sends for a scope. Uses Web Locks when available and a
+ * best-effort localStorage lease + in-tab mutex fallback on plain-HTTP origins;
+ * server-side replay of each item's persisted request_key / replay_key ensures
+ * duplicate cross-tab sends produce at most one effect.
  */
 export function requestMutationSendLock(scope, callback) {
   return getDefaultLocker().requestMutationSendLock(scope, callback);
@@ -621,8 +596,21 @@ export function saveLocalWork(
     // Svelte state proxies are not structured-cloneable. The request/draft
     // values here are JSON; freeze the same representation as the journal.
     storedRecord = JSON.parse(checkpoint);
-    localStorage.setItem(PREFIX + key, checkpoint);
-    journalSaved = true;
+    const existingRaw = localStorage.getItem(PREFIX + key);
+    const existing = existingRaw ? JSON.parse(existingRaw) : null;
+    if (
+      value !== null &&
+      (kind === "mutation" || kind === "inbox-send") &&
+      existing?.epoch === epoch &&
+      existing?.deleted &&
+      existing?.deletionReason === "confirmed"
+    ) {
+      storedRecord = existing;
+      journalSaved = true;
+    } else {
+      localStorage.setItem(PREFIX + key, checkpoint);
+      journalSaved = true;
+    }
   } catch {
     // IndexedDB is the primary backend and can succeed despite journal quota.
   }
@@ -637,6 +625,18 @@ export function saveLocalWork(
       lease.assertHeld();
     }
     try {
+      if (value !== null && (kind === "mutation" || kind === "inbox-send")) {
+        const current = await transaction("readonly", (store) =>
+          store.get(key),
+        );
+        if (
+          current?.epoch === epoch &&
+          current?.deleted &&
+          current?.deletionReason === "confirmed"
+        ) {
+          return current;
+        }
+      }
       await transaction("readwrite", (store) => store.put(storedRecord));
     } catch {
       if (!journalSaved) {
@@ -649,7 +649,7 @@ export function saveLocalWork(
     }
     notify();
     channel?.postMessage({ changed: key });
-    return record;
+    return storedRecord;
   });
   void saved.then(
     () => {

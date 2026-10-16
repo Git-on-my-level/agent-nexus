@@ -79,6 +79,8 @@ it("renewing an expired inbox batch keeps confirmed member keys and frozen remai
 it("renewing auto-apply rotates only the unconfirmed stage and retains its revision", () => {
   const request = {
     answer: { request_key: "answered", revision: 2 },
+    autoDispatchKey: "dispatch-seed",
+    autoReconcileKey: "reconcile-seed",
     autoDispatch: {
       request_key: "admitted",
       if_revision: 3,
@@ -92,6 +94,8 @@ it("renewing auto-apply rotates only the unconfirmed stage and retains its revis
   });
   expect(fresh.answer).toEqual(request.answer);
   expect(fresh.autoDispatch).toEqual(request.autoDispatch);
+  expect(fresh.autoDispatchKey).toBe("dispatch-seed");
+  expect(fresh.autoReconcileKey).not.toBe("reconcile-seed");
   expect(fresh.autoReconcile.request_key).not.toBe("uncertain");
   expect(fresh.autoReconcile.if_revision).toBe(3);
   expect(requestIntent(fresh)).toEqual(requestIntent(request));

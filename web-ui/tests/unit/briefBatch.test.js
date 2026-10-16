@@ -22,12 +22,14 @@ const brief = normalizeBrief({
           {
             ref: "inbox:ask:1",
             inbox_item_id: "inbox:ask:1",
+            event_ref: "event:evt-batch-1",
             title: "One",
             subject_ref: "card:head",
           },
           {
             ref: "inbox:ask:2",
             inbox_item_id: "inbox:ask:2",
+            event_ref: "event:evt-batch-2",
             title: "Two",
             subject_ref: "card:other",
             blocks: [{ ref: "card:blocked", title: "Blocked" }],
@@ -38,6 +40,7 @@ const brief = normalizeBrief({
     {
       ref: "inbox:solo",
       inbox_item_id: "inbox:solo",
+      event_ref: "event:solo",
       kind: "ask",
       title: "Solo",
       subject: { ref: "card:solo", title: "Solo" },
@@ -78,8 +81,8 @@ describe("brief batch decisions", () => {
           title: "Bare 42 suffix",
         },
         {
-          ref: "inbox:ask:thread-1:req-9:evt-99",
-          inbox_item_id: "inbox:ask:thread-1:req-9:evt-99",
+          ref: "inbox:ask:t:req:evt-99",
+          inbox_item_id: "inbox:ask:t:req:evt-99",
           event_ref: "event:evt-99",
           kind: "ask",
           title: "Authoritative event ask",
@@ -90,6 +93,9 @@ describe("brief batch decisions", () => {
     expect(findDecision(withSuffixes, "event:2")).toBeNull();
     expect(findDecision(withSuffixes, "event:evt-99")?.title).toBe(
       "Authoritative event ask",
+    );
+    expect(findDecision(withSuffixes, "event:evt-batch-2")?.inboxItemId).toBe(
+      "inbox:curation-batch:k",
     );
     expect(findDecision(withSuffixes, "event:solo")?.title).toBe("Solo");
     expect(findDecision(withSuffixes, "event:missing")).toBeNull();

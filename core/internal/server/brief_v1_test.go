@@ -65,9 +65,10 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 	note(battery, map[string]any{"next": map[string]any{"at": "2026-01-01", "what": "bench data"}})
 	note(battery, map[string]any{"next": map[string]any{"at": "2026-01-02", "what": "bench data"}})
 	note(report, map[string]any{"next": map[string]any{"at": "30d", "what": "draft"}, "evidence_refs": []string{"https://example.test/pr/1"}})
-	if _, err = store.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": battery["thread_id"], "refs": []string{"thread:" + anyString(battery["thread_id"])}, "summary": "Merge calibration?",
+	askEvt, err := store.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": battery["thread_id"], "refs": []string{"thread:" + anyString(battery["thread_id"])}, "summary": "Merge calibration?",
 		"payload": map[string]any{"kind": "ask", "title": "Merge calibration?", "subject_ref": battery["ref"], "requester_actor_id": "agent-1", "response_proposals": []any{"Merge", "Hold"},
-			"by": "2026-01-01", "blocks": []any{report["ref"], done["ref"]}, "priority": "p1"}}); err != nil {
+			"by": "2026-01-01", "blocks": []any{report["ref"], done["ref"]}, "priority": "p1"}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	proof, err := store.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": done["thread_id"], "refs": []string{anyString(done["ref"]), "thread:" + anyString(done["thread_id"])}, "payload": map[string]any{"text": "shipped"}})
@@ -92,6 +93,9 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 		t.Fatalf("decisions = %v", decisions)
 	}
 	d := decisions[0].(map[string]any)
+	if d["event_ref"] != "event:"+anyString(askEvt["id"]) {
+		t.Fatalf("decision event_ref = %v, want event:%s", d["event_ref"], anyString(askEvt["id"]))
+	}
 	if d["decide_by"] != "2026-01-01T23:59:59Z" || d["overdue_for_seconds"].(float64) <= 0 || d["priority"] != "p1" || d["kind"] != "ask" {
 		t.Fatalf("decision = %v", d)
 	}

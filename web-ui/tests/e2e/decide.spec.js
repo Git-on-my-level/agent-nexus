@@ -416,7 +416,32 @@ test("a failed read shows a banner with Retry, never the raw body (I5)", async (
 });
 
 test("old Inbox links land on Decide", async ({ page, context }) => {
-  await setup(context);
+  await setup(context, {
+    briefRoute: (route) =>
+      json(route, {
+        ...brief,
+        generated_at: new Date().toISOString(),
+        decisions: [
+          ...brief.decisions,
+          {
+            ref: "inbox:ask:t:req:evt-99",
+            inbox_item_id: "inbox:ask:t:req:evt-99",
+            event_ref: "event:evt-99",
+            kind: "ask",
+            title: "Escalation with canonical inbox item id",
+            body: "Targets event:evt-99.",
+            requested_by: { id: "agent:codex", display: "codex" },
+            created_at: "2026-10-15T08:00:00Z",
+            decide_by: null,
+            overdue_for_seconds: null,
+            blocks: [],
+            blocks_count: 0,
+            age_seconds: 3600,
+            proposals: ["Acknowledge"],
+          },
+        ],
+      }),
+  });
   await page.goto("/o/local/w/local/inbox/ask-91");
   await expect(page).toHaveURL(/\/decide\/ask-91$/);
   await expect(page.locator("[data-decision-ref]")).toHaveCount(1);
@@ -429,6 +454,25 @@ test("old Inbox links land on Decide", async ({ page, context }) => {
   await expect(
     page.locator('[data-variant="pane"][data-decision-ref="inbox:ask-93"]'),
   ).toBeVisible();
+
+  await page.goto("/o/local/w/local/decide?ref=event:evt-99");
+  await expect(
+    page.locator(
+      '[data-decide-row="inbox:ask:t:req:evt-99"][aria-current="true"]',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.locator(
+      '[data-variant="pane"][data-decision-ref="inbox:ask:t:req:evt-99"]',
+    ),
+  ).toBeVisible();
+
+  await page.goto("/o/local/w/local/decide?ref=event:missing");
+  await expect(page.locator("[data-decide-not-found]")).toBeVisible();
+  await expect(page.locator('[data-variant="pane"]')).toHaveCount(0);
+  await expect(
+    page.locator('[data-decide-row][aria-current="true"]'),
+  ).toHaveCount(0);
 });
 
 test("a refused answer comes back with its recovery controls", async ({

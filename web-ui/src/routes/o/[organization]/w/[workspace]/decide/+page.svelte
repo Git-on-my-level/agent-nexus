@@ -150,8 +150,13 @@
   let proposalCount = $derived(Math.min(5, selected?.proposals?.length ?? 0));
 
   // Keep a selection: the URL's, else the one we had, else the first row.
+  // An unmatched URL target shows a not-found state instead of another item.
   $effect(() => {
     if (!decisions.length) return;
+    if (selectedParam === "__unmatched__") {
+      if (selectedId !== "") selectedId = "";
+      return;
+    }
     if (
       selectedParam &&
       decisions.some((d) => d.inboxItemId === selectedParam)
@@ -643,6 +648,18 @@
               onclick={() => (helpOpen = true)}
               ><kbd class="decide-kbd">?</kbd> all shortcuts</button
             >
+          </div>
+        {:else if selectedParam === "__unmatched__"}
+          <div
+            class="flex flex-1 flex-col items-center justify-center gap-1 px-5 py-12 text-center"
+            data-decide-not-found
+            data-decide-gone
+          >
+            <p class="text-body font-medium text-fg">Decision not found.</p>
+            <p class="text-meta text-fg-muted">
+              This decision is no longer waiting on you.
+              <a class="ui-prose-link" href={itemHref("")}>Back to Decide</a>
+            </p>
           </div>
         {/if}
       </section>

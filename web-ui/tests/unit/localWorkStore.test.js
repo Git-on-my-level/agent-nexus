@@ -5,6 +5,7 @@ import {
   createMutationSendLocker,
   listLocalWork,
   loadLocalWork,
+  loadLocalWorkRecord,
   localWorkEpoch,
   requestMutationSendLock,
   saveLocalWork,
@@ -212,17 +213,12 @@ it("serializes sends across tabs via a localStorage lease when navigator.locks i
   }
 });
 
-function createSharedTabEnvironment({ dropFirstCollision = false } = {}) {
+function createSharedTabEnvironment() {
   const store = new Map();
   const peers = new Set();
-  let firstReads = 0;
   function makeStorage() {
     return {
       getItem(key) {
-        if (dropFirstCollision && firstReads < 2) {
-          firstReads += 1;
-          return null;
-        }
         return store.has(key) ? store.get(key) : null;
       },
       setItem(key, value) {
@@ -250,8 +246,8 @@ function createSharedTabEnvironment({ dropFirstCollision = false } = {}) {
   return { store, makeStorage, makeChannel };
 }
 
-it("prevents concurrent entry on simultaneous acquisition and renews the lease across a long callback", async () => {
-  const env = createSharedTabEnvironment({ dropFirstCollision: true });
+it("renews the best-effort cross-tab lease across a long callback", async () => {
+  const env = createSharedTabEnvironment();
   const tabA = createMutationSendLocker({
     tabId: "tab-a",
     storage: env.makeStorage(),
@@ -260,8 +256,6 @@ it("prevents concurrent entry on simultaneous acquisition and renews the lease a
     leaseTtlMs: 60,
     heartbeatIntervalMs: 15,
     pollMs: 10,
-    settleMinMs: 5,
-    settleMaxMs: 12,
   });
   const tabB = createMutationSendLocker({
     tabId: "tab-b",
@@ -271,36 +265,199 @@ it("prevents concurrent entry on simultaneous acquisition and renews the lease a
     leaseTtlMs: 60,
     heartbeatIntervalMs: 15,
     pollMs: 10,
-    settleMinMs: 5,
-    settleMaxMs: 12,
   });
 
   let activeCount = 0;
   let maxConcurrent = 0;
   const events = [];
+  let enteredA;
+  const gateA = new Promise((resolve) => {
+    enteredA = resolve;
+  });
 
-  const runTab = (label, locker, holdMs) =>
-    locker.requestMutationSendLock(scope, async (lease) => {
-      activeCount += 1;
-      maxConcurrent = Math.max(maxConcurrent, activeCount);
-      events.push(`enter:${label}`);
-      await new Promise((resolve) => setTimeout(resolve, holdMs));
-      expect(lease.isHeld()).toBe(true);
-      events.push(`exit:${label}`);
-      activeCount -= 1;
-      return label;
-    });
+  const runA = tabA.requestMutationSendLock(scope, async (lease) => {
+    activeCount += 1;
+    maxConcurrent = Math.max(maxConcurrent, activeCount);
+    events.push("enter:A");
+    enteredA();
+    // Hold for 160ms (> 2.5x the 60ms TTL) so heartbeat renewal is required.
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(lease.isHeld()).toBe(true);
+    events.push("exit:A");
+    activeCount -= 1;
+    return "A";
+  });
+  await gateA;
+  const runB = tabB.requestMutationSendLock(scope, async (lease) => {
+    activeCount += 1;
+    maxConcurrent = Math.max(maxConcurrent, activeCount);
+    events.push("enter:B");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(lease.isHeld()).toBe(true);
+    events.push("exit:B");
+    activeCount -= 1;
+    return "B";
+  });
 
-  // Hold the first callback for 160ms (> 2.5x the 60ms TTL) so heartbeat renewal is required.
-  const [first, second] = await Promise.all([
-    runTab("A", tabA, 160),
-    runTab("B", tabB, 20),
-  ]);
-  expect([first, second].sort()).toEqual(["A", "B"]);
+  const [first, second] = await Promise.all([runA, runB]);
+  expect([first, second]).toEqual(["A", "B"]);
   expect(maxConcurrent).toBe(1);
-  expect(events).toHaveLength(4);
-  expect(events[0].startsWith("enter:")).toBe(true);
-  expect(events[1]).toBe(`exit:${events[0].slice(6)}`);
+  expect(events).toEqual(["enter:A", "exit:A", "enter:B", "exit:B"]);
+});
+
+it("two tabs entering the send path for the same outbox item send the same persisted key and produce one server effect", async () => {
+  const env = createSharedTabEnvironment();
+  const persistedKey = "req-shared-outbox-item-1";
+  await saveLocalWork(scope, "mutation", persistedKey, {
+    key: persistedKey,
+    scope,
+    epoch: localWorkEpoch(scope),
+    operation: "events.create",
+    state: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+    nextAt: Date.now(),
+    request: {
+      request_key: persistedKey,
+      event: {
+        type: "message_posted",
+        thread_id: "thread-1",
+        refs: ["thread:thread-1"],
+        summary: "Shared outbox item",
+        payload: { text: "Shared outbox item" },
+      },
+    },
+  });
+
+  // Simulate Tab B pausing right after its initial empty lease read, letting
+  // Tab A acquire and enter its callback, then resuming Tab B so BOTH tabs
+  // enter the send callback concurrently for the same persisted item.
+  const rawStorageB = env.makeStorage();
+  let bFirstRead = true;
+  const storageB = {
+    getItem(key) {
+      if (bFirstRead && key.startsWith("anx:mutation-lock:")) {
+        bFirstRead = false;
+        return null;
+      }
+      return rawStorageB.getItem(key);
+    },
+    setItem: (key, value) => rawStorageB.setItem(key, value),
+    removeItem: (key) => rawStorageB.removeItem(key),
+  };
+
+  const tabA = createMutationSendLocker({
+    tabId: "tab-a",
+    storage: env.makeStorage(),
+    channel: env.makeChannel(),
+    locks: null,
+  });
+  const tabB = createMutationSendLocker({
+    tabId: "tab-b",
+    storage: storageB,
+    channel: env.makeChannel(),
+    locks: null,
+  });
+
+  const serverEffects = [];
+  const serverReplays = new Map();
+  const seenKeys = [];
+  async function mockServerCreateEvent(body) {
+    seenKeys.push(body.request_key);
+    if (!serverReplays.has(body.request_key)) {
+      const created = {
+        event: {
+          ...body.event,
+          id: `evt-${serverEffects.length + 1}`,
+        },
+      };
+      serverEffects.push(created.event);
+      serverReplays.set(body.request_key, created);
+    }
+    return serverReplays.get(body.request_key);
+  }
+
+  let enteredA;
+  const gateEnteredA = new Promise((resolve) => {
+    enteredA = resolve;
+  });
+  let bothInSend;
+  const gateBothInSend = new Promise((resolve) => {
+    bothInSend = resolve;
+  });
+
+  let activeSenders = 0;
+  let maxConcurrentSenders = 0;
+
+  const drainInTab = (locker, label) =>
+    locker
+      .requestMutationSendLock(scope, async (lease) => {
+        activeSenders += 1;
+        maxConcurrentSenders = Math.max(maxConcurrentSenders, activeSenders);
+        if (label === "A") {
+          enteredA();
+          await gateBothInSend;
+        } else {
+          bothInSend();
+        }
+        const record = await loadLocalWorkRecord(
+          scope,
+          "mutation",
+          persistedKey,
+        );
+        const item = record.value;
+        const result = await mockServerCreateEvent(item.request);
+        activeSenders -= 1;
+        await saveLocalWork(scope, "mutation", persistedKey, null, {
+          epoch: item.epoch,
+          lease,
+          deletionReason: "confirmed",
+          confirmation: result,
+        });
+        return result;
+      })
+      .catch(async (error) => {
+        if (!error?.leaseLost) throw error;
+        const latest = await loadLocalWorkRecord(
+          scope,
+          "mutation",
+          persistedKey,
+        );
+        return latest?.confirmation;
+      });
+
+  const sendA = drainInTab(tabA, "A");
+  await gateEnteredA;
+  const sendB = drainInTab(tabB, "B");
+  const [resA, resB] = await Promise.all([sendA, sendB]);
+
+  expect(maxConcurrentSenders).toBe(2);
+  expect(seenKeys).toEqual([persistedKey, persistedKey]);
+  expect(serverEffects).toHaveLength(1);
+  expect(resB).toEqual({
+    event: {
+      type: "message_posted",
+      thread_id: "thread-1",
+      refs: ["thread:thread-1"],
+      summary: "Shared outbox item",
+      payload: { text: "Shared outbox item" },
+      id: "evt-1",
+    },
+  });
+  if (resA) expect(resA).toEqual(resB);
+
+  // A late unconfirmed checkpoint write from a racing tab must not resurrect a confirmed item.
+  await saveLocalWork(scope, "mutation", persistedKey, {
+    key: persistedKey,
+    state: "sending",
+  });
+  const finalRecord = await loadLocalWorkRecord(
+    scope,
+    "mutation",
+    persistedKey,
+  );
+  expect(finalRecord?.deleted).toBe(true);
+  expect(finalRecord?.deletionReason).toBe("confirmed");
 });
 
 it("fences checkpoint writes when a tab loses its lease during a stalled callback", async () => {
@@ -322,8 +479,6 @@ it("fences checkpoint writes when a tab loses its lease during a stalled callbac
     leaseTtlMs: 50,
     heartbeatIntervalMs: 15,
     pollMs: 10,
-    settleMinMs: 2,
-    settleMaxMs: 5,
   });
   const tabB = createMutationSendLocker({
     tabId: "tab-b",
@@ -333,8 +488,6 @@ it("fences checkpoint writes when a tab loses its lease during a stalled callbac
     leaseTtlMs: 50,
     heartbeatIntervalMs: 15,
     pollMs: 10,
-    settleMinMs: 2,
-    settleMaxMs: 5,
   });
 
   let releaseStalledA;
@@ -388,7 +541,7 @@ it("fences checkpoint writes when a tab loses its lease during a stalled callbac
   });
 });
 
-it("logs a warning and falls back to in-tab exclusion when lock storage throws", async () => {
+it("logs a warning, falls back to in-tab exclusion, and sends at most once per tab with the persisted key when storage is unavailable", async () => {
   const warn = vi.fn();
   const brokenStorage = {
     getItem() {
@@ -406,18 +559,22 @@ it("logs a warning and falls back to in-tab exclusion when lock storage throws",
     locks: null,
     warn,
   });
+  const persistedKey = "req-persisted-no-storage";
+  const confirmedInTab = new Set();
+  const sentKeys = [];
   const order = [];
-  await Promise.all([
+  const attemptInTab = (id) =>
     locker.requestMutationSendLock(scope, async () => {
-      order.push("start:1");
-      await new Promise((resolve) => setTimeout(resolve, 15));
-      order.push("end:1");
-    }),
-    locker.requestMutationSendLock(scope, async () => {
-      order.push("start:2");
-      order.push("end:2");
-    }),
-  ]);
+      order.push(`start:${id}`);
+      if (!confirmedInTab.has(persistedKey)) {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        sentKeys.push(persistedKey);
+        confirmedInTab.add(persistedKey);
+      }
+      order.push(`end:${id}`);
+    });
+  await Promise.all([attemptInTab(1), attemptInTab(2)]);
   expect(order).toEqual(["start:1", "end:1", "start:2", "end:2"]);
+  expect(sentKeys).toEqual([persistedKey]);
   expect(warn).toHaveBeenCalled();
 });

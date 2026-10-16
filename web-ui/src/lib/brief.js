@@ -114,11 +114,13 @@ function normalizeDecision(raw) {
   const kind = text(raw.kind) || "ask";
   const eventRef =
     text(raw.event_ref) ||
+    text(raw.eventRef) ||
     (text(raw.event_id) ? `event:${text(raw.event_id)}` : "");
   return {
     ref,
     kind,
-    inboxItemId: text(raw.inbox_item_id) || text(raw.id) || ref,
+    inboxItemId:
+      text(raw.inbox_item_id) || text(raw.inboxItemId) || text(raw.id) || ref,
     ...(eventRef ? { eventRef } : {}),
     workspace: text(raw.workspace),
     title: text(raw.title) || ref,
@@ -167,13 +169,14 @@ function normalizeBatch(raw) {
     .map((member) => {
       const eventRef =
         text(member.event_ref) ||
+        text(member.eventRef) ||
         (text(member.event_id) ? `event:${text(member.event_id)}` : "");
       return {
         ref: text(member.ref),
-        inboxItemId: text(member.inbox_item_id),
+        inboxItemId: text(member.inbox_item_id) || text(member.inboxItemId),
         ...(eventRef ? { eventRef } : {}),
         title: text(member.title),
-        subjectRef: text(member.subject_ref),
+        subjectRef: text(member.subject_ref) || text(member.subjectRef),
         blocks: (Array.isArray(member.blocks) ? member.blocks : [])
           .map(refTitle)
           .filter(Boolean),
@@ -659,16 +662,11 @@ function itemMatchesTarget(item, wanted) {
   const ref = text(item?.ref);
   const inboxItemId = text(item?.inboxItemId);
   const eventRef = text(item?.eventRef);
-  if (
+  return (
     ref === wanted ||
     inboxItemId === wanted ||
-    (eventRef && eventRef === wanted)
-  ) {
-    return true;
-  }
-  const eventId = wanted.startsWith("event:") ? wanted.slice(6).trim() : "";
-  if (!eventId) return false;
-  return inboxItemId === eventId || ref === `inbox:${eventId}`;
+    (eventRef !== "" && eventRef === wanted)
+  );
 }
 
 function decisionMatchesId(decision, wanted) {
