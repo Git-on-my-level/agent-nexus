@@ -13,11 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/schema"
 )
 
 var ErrInvalidBoardRequest = errors.New("invalid board request")
@@ -528,6 +530,41 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 	if err := rejectReservedCardAssignee(assignee); err != nil {
 		return boardCardInsertPrep{}, err
 	}
+	if err := validateBoardCardClientText("title", title); err != nil {
+		return boardCardInsertPrep{}, err
+	}
+	if err := validateBoardCardClientText("body", body); err != nil {
+		return boardCardInsertPrep{}, err
+	}
+	if err := validateBoardCardClientText("resolution", resolution); err != nil {
+		return boardCardInsertPrep{}, err
+	}
+	for i, item := range definitionOfDone {
+		if err := validateBoardCardClientText(fmt.Sprintf("definition_of_done[%d]", i), item); err != nil {
+			return boardCardInsertPrep{}, err
+		}
+	}
+	if assignee != nil {
+		if err := validateBoardCardClientText("assignee", *assignee); err != nil {
+			return boardCardInsertPrep{}, err
+		}
+	}
+	if dueAt != nil {
+		if err := validateBoardCardClientText("due_at", *dueAt); err != nil {
+			return boardCardInsertPrep{}, err
+		}
+	}
+	if pinnedDocumentID != nil {
+		if err := validateBoardCardClientText("pinned_document_id", *pinnedDocumentID); err != nil {
+			return boardCardInsertPrep{}, err
+		}
+	}
+	if err := validateBoardCardTypedRefs("refs", refs); err != nil {
+		return boardCardInsertPrep{}, err
+	}
+	if err := validateBoardCardTypedRefs("resolution_refs", resolutionRefs); err != nil {
+		return boardCardInsertPrep{}, err
+	}
 
 	return boardCardInsertPrep{
 		CardID:               cardID,
@@ -557,6 +594,9 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 		if err := validateResolutionRefs(ctx, tx, prep.ResolutionRefs); err != nil {
 			return boardRow, boardCardRow{}, nil, err
 		}
+	}
+	if err := ensureBoardColumnAllowed(boardRow, prep.ColumnKey); err != nil {
+		return boardRow, boardCardRow{}, nil, err
 	}
 	cardID := prep.CardID
 	columnKey := prep.ColumnKey
@@ -1706,12 +1746,13 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card create transaction: %w", err)
 	}
-	// The transaction now holds the workspace writer: from here any
-	// failure leaves the outcome unknown unless it is a deterministic
-	// request rejection.
+	// A statement that fails before Commit, once Rollback succeeds, changed
+	// nothing. Leave that error intact so the handler can log it as a 500
+	// (or 503 when SQLite is busy or locked). Only Commit and the
+	// post-commit blob promote are unknown outcomes.
 	defer func() {
 		if mutationErr != nil {
-			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+			mutationErr = classifyBoardCardRequestError(mutationErr)
 		}
 	}()
 	defer tx.Rollback()
@@ -1806,11 +1847,11 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
-		return BoardCardMutationResult{}, fmt.Errorf("commit board card create transaction: %w", err)
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card create transaction: %w", err)}
 	}
 	if stagedContent != nil {
 		if err := stagedContent.Promote(); err != nil {
-			return BoardCardMutationResult{}, fmt.Errorf("finalize card content: %w", err)
+			return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", err)}
 		}
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap, ReplayCommitted: input.CreateReplay != nil}, nil
@@ -1852,12 +1893,11 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 	if err != nil {
 		return nil, fmt.Errorf("begin board cards batch transaction: %w", err)
 	}
-	// The transaction now holds the workspace writer: from here any
-	// failure leaves the outcome unknown unless it is a deterministic
-	// request rejection.
+	// Same rule as CreateBoardCard: a rolled-back statement is not an
+	// unknown outcome. Commit and post-commit promote are.
 	defer func() {
 		if mutationErr != nil {
-			mutationErr = mutationOutcomeAfterBegin(mutationErr)
+			mutationErr = classifyBoardCardRequestError(mutationErr)
 		}
 	}()
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
@@ -1923,11 +1963,11 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
-		return nil, fmt.Errorf("commit board cards batch transaction: %w", err)
+		return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board cards batch transaction: %w", err)}
 	}
 	for _, staged := range stagedWrites {
 		if err := staged.Promote(); err != nil {
-			return nil, fmt.Errorf("finalize card content: %w", err)
+			return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", err)}
 		}
 	}
 	return results, nil
@@ -5112,6 +5152,59 @@ func decodeBoardColumnSchema(raw string) ([]map[string]any, error) {
 		return defaultBoardColumnSchema(), nil
 	}
 	return items, nil
+}
+
+func ensureBoardColumnAllowed(board boardRow, columnKey string) error {
+	columns, err := decodeBoardColumnSchema(board.ColumnSchemaJSON)
+	if err != nil {
+		return err
+	}
+	for _, column := range columns {
+		if strings.TrimSpace(anyStringValue(column["key"])) == columnKey {
+			return nil
+		}
+	}
+	return invalidBoardRequest("column_key is not on this board")
+}
+
+func validateBoardCardClientText(field, value string) error {
+	if strings.ContainsRune(value, 0) || !utf8.ValidString(value) {
+		return invalidBoardRequest(field + " must be valid UTF-8 text without NUL")
+	}
+	return nil
+}
+
+func validateBoardCardTypedRefs(field string, refs []string) error {
+	for i, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if _, _, err := schema.SplitTypedRef(ref); err != nil {
+			return invalidBoardRequest(fmt.Sprintf("%s[%d] %s", field, i, err.Error()))
+		}
+	}
+	return nil
+}
+
+// classifyBoardCardRequestError turns client mistakes that surface inside the
+// card-create transaction into the sentinels the HTTP layer already maps to
+// 4xx. Other failures stay untouched so the outcome-unknown wrap still applies.
+func classifyBoardCardRequestError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
+		if errors.Is(err, ErrInvalidBoardRequest) {
+			return err
+		}
+		return fmt.Errorf("%w: %w", ErrInvalidBoardRequest, err)
+	case errors.Is(err, sql.ErrNoRows):
+		return ErrNotFound
+	default:
+		return err
+	}
 }
 
 func validateBoardColumnKey(columnKey string) error {

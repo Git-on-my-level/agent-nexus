@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"agent-nexus-core/internal/plans"
@@ -72,19 +74,88 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 }
 
 // RunBriefMaintenance drains the brief dirty queue in bounded batches.
+// SQLITE_BUSY and SQLITE_LOCKED from the 0ms admission wait are the designed
+// yield and are not reported. Every other error is reported at most once a
+// minute per distinct text.
 func (s *Store) RunBriefMaintenance(ctx context.Context, report func(error)) {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
+	gate := newBriefMaintenanceGate(time.Minute)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			if _, err := s.RefreshBriefInitiatives(ctx, briefRefreshBatch); err != nil && report != nil && ctx.Err() == nil {
-				report(err)
+		case now := <-ticker.C:
+			if _, err := s.RefreshBriefInitiatives(ctx, briefRefreshBatch); err != nil && ctx.Err() == nil {
+				gate.maybe(err, now, report)
 			}
 		}
 	}
+}
+
+type briefMaintenanceGate struct {
+	mu       sync.Mutex
+	last     map[string]time.Time
+	interval time.Duration
+}
+
+func newBriefMaintenanceGate(interval time.Duration) *briefMaintenanceGate {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	return &briefMaintenanceGate{last: map[string]time.Time{}, interval: interval}
+}
+
+func (g *briefMaintenanceGate) maybe(err error, now time.Time, emit func(error)) {
+	if g == nil || err == nil || emit == nil || sqliteBusyOrLocked(err) {
+		return
+	}
+	key := err.Error()
+	if len(key) > 240 {
+		key = key[:240]
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.last == nil {
+		g.last = map[string]time.Time{}
+	}
+	if prev, ok := g.last[key]; ok && now.Sub(prev) < g.interval {
+		return
+	}
+	for seen, at := range g.last {
+		if now.Sub(at) >= g.interval {
+			delete(g.last, seen)
+		}
+	}
+	if len(g.last) >= briefMaintenanceReportLimit {
+		var oldestKey string
+		var oldest time.Time
+		first := true
+		for seen, at := range g.last {
+			if first || at.Before(oldest) {
+				oldestKey, oldest, first = seen, at, false
+			}
+		}
+		if !first {
+			delete(g.last, oldestKey)
+		}
+	}
+	g.last[key] = now
+	emit(err)
+}
+
+const briefMaintenanceReportLimit = 32
+
+// sqliteBusyOrLocked matches the primary BUSY (5) and LOCKED (6) codes,
+// including extended codes. Error text is not consulted: a submitted value can
+// mention those words without being the admission yield.
+func sqliteBusyOrLocked(err error) bool {
+	var coded interface{ Code() int }
+	if !errors.As(err, &coded) {
+		return false
+	}
+	code := coded.Code() & 255
+	return code == 5 || code == 6
 }
 
 type briefQueryer interface {

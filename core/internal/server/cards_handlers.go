@@ -170,7 +170,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card")
+		writeInternalError(w, r, err, "failed to load card")
 		return
 	}
 
@@ -185,13 +185,13 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card timeline")
+		writeInternalError(w, r, err, "failed to load card timeline")
 		return
 	}
 
 	events, err := opts.primitiveStore.ListEventsByThread(r.Context(), threadID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card timeline")
+		writeInternalError(w, r, err, "failed to load card timeline")
 		return
 	}
 
@@ -208,7 +208,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	exp, err := hydrateTimelineExpansion(r.Context(), opts, filtered)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card timeline")
+		writeInternalError(w, r, err, "failed to load card timeline")
 		return
 	}
 
@@ -274,7 +274,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 				if errors.Is(err, primitives.ErrNotFound) {
 					continue
 				}
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related cards")
+				writeInternalError(w, r, err, "failed to load related cards")
 				return
 			}
 			cards = append(cards, loaded)
@@ -305,7 +305,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 			if errors.Is(err, primitives.ErrNotFound) {
 				continue
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related threads")
+			writeInternalError(w, r, err, "failed to load related threads")
 			return
 		}
 		if !canAccessPMThread(r, opts, thread) {
@@ -348,7 +348,7 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revisions")
+		writeInternalError(w, r, err, "failed to load card revisions")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revisions": publicCardRevisionsView(revisions)})
@@ -371,7 +371,7 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revision")
+		writeInternalError(w, r, err, "failed to load card revision")
 		return
 	}
 	revisionID = strings.TrimSpace(revisionID)
@@ -449,7 +449,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 				if errors.Is(err, primitives.ErrNotFound) {
 					writeError(w, http.StatusNotFound, "not_found", "card not found")
 				} else {
-					writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card")
+					writeInternalError(w, r, err, "failed to load card")
 				}
 			}
 			return
@@ -501,7 +501,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "card revision conflict")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create card revision")
+			writeInternalError(w, r, err, "failed to create card revision")
 		}
 		return
 	}
@@ -568,7 +568,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 			writeError(w, http.StatusNotFound, "not_found", "card not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card")
+		writeInternalError(w, r, err, "failed to load card")
 		return
 	}
 
@@ -619,7 +619,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "card has been updated; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch card")
+			writeInternalError(w, r, err, "failed to patch card")
 		}
 		return
 	}
@@ -700,7 +700,7 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore card")
+			writeInternalError(w, r, err, "failed to restore card")
 		}
 		return
 	}
@@ -762,7 +762,7 @@ func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handle
 		if writeBoardCardPurgeStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete card")
+		writeInternalError(w, r, err, "failed to permanently delete card")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "card_id": cardID})

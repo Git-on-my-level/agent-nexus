@@ -700,6 +700,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
+			w = &faultResponseWriter{ResponseWriter: w, r: r}
 			timed := r.Method == http.MethodGet && (r.URL.Path == "/overview" || r.URL.Path == "/inbox" || r.URL.Path == "/inbox/summary")
 			if timed {
 				w = &serverTimingWriter{ResponseWriter: w, started: started}
@@ -762,6 +763,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				defer closeRead()
 				r = r.WithContext(ctx)
 			}
+			if fault := faultFrom(w); fault != nil {
+				fault.r = r
+			}
 			handler(w, r)
 		})
 	}
@@ -770,6 +774,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			opts.routeObserver(stream.Prefix+sub, classify)
 		}
 		stream.Mount(mux, sub, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w = &faultResponseWriter{ResponseWriter: w, r: r}
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
@@ -789,6 +794,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
 				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			if fault := faultFrom(w); fault != nil {
+				fault.r = r
 			}
 			handler(w, r)
 		}))
@@ -2961,6 +2969,9 @@ func handleListActors(w http.ResponseWriter, r *http.Request, actorRegistry Acto
 }
 
 func writeError(w http.ResponseWriter, status int, code string, message string) {
+	if status >= 500 {
+		emitServerFault(w, nil, status, nil, message)
+	}
 	writeJSON(w, status, map[string]any{
 		"error": errorPayload(code, message),
 	})
@@ -2970,6 +2981,8 @@ func writeJSON(w http.ResponseWriter, status int, payload map[string]any) {
 	started := time.Now()
 	body, err := json.Marshal(payload)
 	if err != nil {
+		// Marshal errors can echo payload values. Log the failure, not the text.
+		emitServerFault(w, nil, http.StatusInternalServerError, errors.New("failed to encode response"), "failed to encode response")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"failed to encode response","recoverable":false,"hint":"Retry once; if it persists, escalate with logs and request context."}}`))
 		return
