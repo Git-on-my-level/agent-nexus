@@ -592,15 +592,15 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, err
 	}
-	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "document-revision", "artifact-"+artifactID)
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)
-	}
 	documentHandle, err := allocateDocumentHandleTx(ctx, tx, requestedHandle, firstNonEmpty(slug, title), "document-"+documentID)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate document handle: %w", err)
+	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", revisionArtifactDesiredHandle(documentHandle, revisionNumber), "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)
 	}
 
 	if _, err := tx.ExecContext(
@@ -1232,7 +1232,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		return nil, nil, err
 	}
-	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "document-revision", "artifact-"+artifactID)
+	documentHandle := firstNonEmpty(strings.TrimSpace(doc.Handle.String), documentID)
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", revisionArtifactDesiredHandle(documentHandle, nextRevisionNumber), "artifact-"+artifactID)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)

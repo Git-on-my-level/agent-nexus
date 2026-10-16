@@ -2,9 +2,12 @@ package primitives
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"agent-nexus-core/internal/handles"
@@ -213,6 +216,20 @@ func revisionHandle(parentHandle string, revisionNumber int) string {
 	return strings.TrimSpace(parentHandle) + "-r" + fmt.Sprintf("%d", revisionNumber)
 }
 
+// revisionArtifactDesiredHandle is the artifact handle for a card or document
+// revision. It uses the same parent-rN shape as revisionHandle, fitted to
+// handles.MaxLength so a long parent keeps the revision suffix.
+func revisionArtifactDesiredHandle(parentHandle string, revisionNumber int) string {
+	if revisionNumber < 1 {
+		revisionNumber = 1
+	}
+	parent := handles.Normalize(parentHandle)
+	if parent == "" {
+		parent = "revision"
+	}
+	return appendHandleSuffix(parent, "-r"+strconv.Itoa(revisionNumber))
+}
+
 func resolveResourceByColumn(ctx context.Context, q queryRower, typ, table, column, value string) (ResolvedResourceRef, error) {
 	var id string
 	var handle sql.NullString
@@ -241,6 +258,16 @@ func rowExistsByID(ctx context.Context, q queryRower, table, id string) bool {
 	return q.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE id = ?`, strings.TrimSpace(id)).Scan(&one) == nil
 }
 
+const (
+	// handleSequentialAttempts keeps the historical names base, base-2, … base-8.
+	handleSequentialAttempts = 8
+	// Hash suffixes start at 8 hex chars and grow by 4, through 12 and beyond.
+	handleHashSuffixStart = 8
+	handleHashSuffixStep  = 4
+	// Further digests if every length of sha256(fallbackSeed) is already taken.
+	handleHashExtendRounds = 8
+)
+
 func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSeed string) (string, error) {
 	ctx = CanonicalMaintenanceContext(ctx) // Namespace uniqueness includes inaccessible resources.
 
@@ -249,39 +276,122 @@ func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSee
 		return "", fmt.Errorf("unknown handle resource type %q", typ)
 	}
 	base := handles.Candidate(desired, fallbackSeed)
-	for i := 0; i < 1000; i++ {
-		candidate := base
-		if i > 0 {
-			suffix := fmt.Sprintf("-%d", i+1)
-			cut := handles.MaxLength - len(suffix)
-			if cut < 1 {
-				cut = 1
-			}
-			if len(base) > cut {
-				candidate = strings.TrimRight(base[:cut], "-") + suffix
-			} else {
-				candidate = base + suffix
-			}
+	seen := make(map[string]struct{})
+	for attempt := 0; ; attempt++ {
+		candidate, ok := handleAllocationCandidate(base, fallbackSeed, attempt)
+		if !ok {
+			return "", fmt.Errorf("%w: %s", ErrHandleAllocation, typ)
 		}
-		var n int
-		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> ''`, candidate).Scan(&n); err != nil {
+		if _, dup := seen[candidate]; dup {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		// Sequential names stay byte-for-byte with the previous allocator.
+		// Hash candidates must round-trip through Normalize so refs resolve.
+		if attempt >= handleSequentialAttempts && handles.Normalize(candidate) != candidate {
+			continue
+		}
+		free, err := handleCandidateAvailable(ctx, q, table, typ, candidate)
+		if err != nil {
 			return "", err
 		}
-		var idN int
-		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE id = ?`, candidate).Scan(&idN); err != nil {
-			return "", err
-		}
-		var aliasN int
-		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, typ, candidate).Scan(&aliasN); err != nil {
-			return "", err
-		}
-		var retired int
-		if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM resource_access_tombstones WHERE kind=? AND ref=? COLLATE NOCASE`, typ, candidate).Scan(&retired); err != nil {
-			return "", err
-		}
-		if n == 0 && idN == 0 && aliasN == 0 && retired == 0 {
+		if free {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("%w: %s", ErrHandleAllocation, typ)
+}
+
+func handleAllocationCandidate(base, seed string, attempt int) (string, bool) {
+	if attempt < 0 {
+		return "", false
+	}
+	if attempt < handleSequentialAttempts {
+		if attempt == 0 {
+			return base, true
+		}
+		return appendHandleSuffix(base, fmt.Sprintf("-%d", attempt+1)), true
+	}
+	lengths := handleHashSuffixLengths()
+	if len(lengths) == 0 {
+		return "", false
+	}
+	hashAttempt := attempt - handleSequentialAttempts
+	if hashAttempt < len(lengths) {
+		return appendHandleSuffix(base, "-"+handleDigestHex(seed, 0)[:lengths[hashAttempt]]), true
+	}
+	ext := hashAttempt - len(lengths)
+	if ext >= handleHashExtendRounds {
+		return "", false
+	}
+	n := 16
+	if n > lengths[len(lengths)-1] {
+		n = lengths[len(lengths)-1]
+	}
+	return appendHandleSuffix(base, "-"+handleDigestHex(seed, ext+1)[:n]), true
+}
+
+func handleHashSuffixLengths() []int {
+	maxHex := handles.MaxLength - 2 // one base character plus the dash
+	if maxHex > sha256.Size*2 {
+		maxHex = sha256.Size * 2
+	}
+	if maxHex < 1 {
+		return nil
+	}
+	start := handleHashSuffixStart
+	if start > maxHex {
+		start = maxHex
+	}
+	step := handleHashSuffixStep
+	if step < 1 {
+		step = 1
+	}
+	lengths := make([]int, 0, (maxHex-start)/step+2)
+	for n := start; n <= maxHex; n += step {
+		lengths = append(lengths, n)
+	}
+	if lengths[len(lengths)-1] != maxHex {
+		lengths = append(lengths, maxHex)
+	}
+	return lengths
+}
+
+func handleDigestHex(seed string, round int) string {
+	material := seed
+	if round > 0 {
+		material = seed + "\x00" + strconv.Itoa(round)
+	}
+	sum := sha256.Sum256([]byte(material))
+	return hex.EncodeToString(sum[:])
+}
+
+func appendHandleSuffix(base, suffix string) string {
+	cut := handles.MaxLength - len(suffix)
+	if cut < 1 {
+		cut = 1
+	}
+	if len(base) > cut {
+		return strings.TrimRight(base[:cut], "-") + suffix
+	}
+	return base + suffix
+}
+
+func handleCandidateAvailable(ctx context.Context, q queryRower, table, typ, candidate string) (bool, error) {
+	var n int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> ''`, candidate).Scan(&n); err != nil {
+		return false, err
+	}
+	var idN int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE id = ?`, candidate).Scan(&idN); err != nil {
+		return false, err
+	}
+	var aliasN int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, typ, candidate).Scan(&aliasN); err != nil {
+		return false, err
+	}
+	var retired int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM resource_access_tombstones WHERE kind=? AND ref=? COLLATE NOCASE`, typ, candidate).Scan(&retired); err != nil {
+		return false, err
+	}
+	return n == 0 && idN == 0 && aliasN == 0 && retired == 0, nil
 }
