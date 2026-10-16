@@ -27,7 +27,23 @@ func TestResumeDeliveryFiresExecutorAfterAskingSessionCloses(t *testing.T) {
 
 	execDir := t.TempDir()
 	scriptPath := filepath.Join(execDir, "fake-executor.sh")
-	script := fmt.Sprintf("#!/bin/sh\ncat > %s/answer.json\nenv | grep '^ANX_' | sort > %s/answer-env.txt\n", execDir, execDir)
+	// Publish env before the answer, and only via rename, so a visible
+	// answer.json means answer-env.txt is already complete. A plain redirect
+	// creates the destination immediately, which the poll can observe empty.
+	script := fmt.Sprintf(`#!/bin/sh
+set -e
+env | grep '^ANX_' | sort > %q
+mv %q %q
+cat > %q
+mv %q %q
+`,
+		filepath.Join(execDir, "answer-env.txt.tmp"),
+		filepath.Join(execDir, "answer-env.txt.tmp"),
+		filepath.Join(execDir, "answer-env.txt"),
+		filepath.Join(execDir, "answer.json.tmp"),
+		filepath.Join(execDir, "answer.json.tmp"),
+		filepath.Join(execDir, "answer.json"),
+	)
 	if err := os.WriteFile(scriptPath, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -97,21 +113,25 @@ func TestResumeDeliveryFiresExecutorAfterAskingSessionCloses(t *testing.T) {
 	}, "debug", "inbox", "respond", "--from-file", "-")
 
 	deadline = time.Now().Add(30 * time.Second)
+	answerPath := filepath.Join(execDir, "answer.json")
+	envPath := filepath.Join(execDir, "answer-env.txt")
 	for {
-		answer, readErr := os.ReadFile(filepath.Join(execDir, "answer.json"))
-		if readErr == nil && len(answer) > 0 {
-			if !strings.Contains(string(answer), "Ship it") {
-				t.Fatalf("executor got unexpected answer payload: %s", answer)
-			}
-			envText, envErr := os.ReadFile(filepath.Join(execDir, "answer-env.txt"))
-			if envErr != nil || !strings.Contains(string(envText), "ANX_ASK_ID="+askID) || !strings.Contains(string(envText), "ANX_OUTCOME=answered") {
-				t.Fatalf("executor env incomplete: %s err=%v", envText, envErr)
-			}
+		answer, answerErr := os.ReadFile(answerPath)
+		envText, envErr := os.ReadFile(envPath)
+		answerReady := answerErr == nil && strings.Contains(string(answer), "Ship it")
+		envReady := envErr == nil && strings.Contains(string(envText), "ANX_ASK_ID="+askID) && strings.Contains(string(envText), "ANX_OUTCOME=answered")
+		if answerReady && envReady {
 			return
+		}
+		// The executor renames answer.json into place only after the body is
+		// fully written, so a visible payload that is not the answer is a real
+		// mismatch rather than a partial write.
+		if answerErr == nil && len(answer) > 0 && !answerReady {
+			t.Fatalf("executor got unexpected answer payload: %s", answer)
 		}
 		if time.Now().After(deadline) {
 			logTail, _ := os.ReadFile(filepath.Join(execDir, "bridge.log"))
-			t.Fatalf("executor never fired for %s; bridge log tail: %s; rows: %s", askID, logTail, debugDeliveryRows(t, h))
+			t.Fatalf("executor output incomplete for %s; answer=%q err=%v env=%q err=%v; bridge log tail: %s; rows: %s", askID, answer, answerErr, envText, envErr, logTail, debugDeliveryRows(t, h))
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
