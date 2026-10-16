@@ -49,9 +49,11 @@ func TestPlanWriteRollsBackWhenEventCannotBeStored(t *testing.T) {
 	if _, err := h.workspace.DB().Exec(`CREATE TRIGGER reject_plan_event BEFORE INSERT ON events WHEN json_extract(NEW.payload_json,'$.payload.plan') IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture event failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	// The ledger maps SQLite constraint rejection to conflict. Regardless of
-	// error classification, the plan and card token must roll back together.
-	planRequest(t, "PUT", endpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": before["if_updated_at"], "plan": map[string]any{"steps": []any{}}}, 409)
+	// RAISE(ABORT) fails the event insert before Commit, and Rollback leaves
+	// nothing stored. That is an internal error, not a unique-constraint
+	// conflict and not an unknown outcome. Only a failed Commit or blob
+	// Promote is 409 outcome_unknown.
+	planRequest(t, "PUT", endpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": before["if_updated_at"], "plan": map[string]any{"steps": []any{}}}, 500)
 	after := workGetJSON(t, endpoint, 200)
 	if after["plan"] != nil || after["if_updated_at"] != before["if_updated_at"] {
 		t.Fatal("partial mutation survived:", after)
