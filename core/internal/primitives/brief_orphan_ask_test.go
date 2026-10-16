@@ -2,11 +2,13 @@ package primitives
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/curation"
 )
 
 // The production ask is a human_attention_requested event whose thread_id has
@@ -143,26 +145,38 @@ func TestBriefAskReadsSeekThreadByPrimaryKey(t *testing.T) {
 		WHERE a.subject_ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND COALESCE(e.trashed_at,'')='' AND COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?) LIMIT 1000`
 	blocks := `SELECT k.ref,COUNT(*) FROM brief_ask_blocks k INDEXED BY idx_brief_ask_blocks_ref JOIN brief_asks a ON a.ask_id=k.ask_id JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + `
 		WHERE k.ref IN (SELECT value FROM json_each(?)) AND a.state='open' AND a.subject_ref<>k.ref AND COALESCE(e.trashed_at,'')='' AND COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'') IN ('', ?) GROUP BY k.ref`
+	filed := `SELECT a.ask_id, a.kind, a.created_at FROM brief_asks a INDEXED BY idx_brief_asks_batch JOIN events e ON e.id=a.ask_id ` + briefAnswerableAskJoin + ` WHERE a.batch_id=? AND a.batch_id<>'' ORDER BY a.created_at, a.ask_id LIMIT 1`
+	members := `SELECT a.ask_id,a.inbox_item_id,a.kind,a.title,a.subject_ref,COALESCE(e.thread_id,'') ` + openCurationMemberFrom + ` ORDER BY a.created_at,a.ask_id LIMIT ?`
 
+	// The events shadow is a plain CTE, not NOT MATERIALIZED. SQLite may
+	// materialize a CTE a statement names more than once. decisions names
+	// events for the ask and the response; cited names it for those two and
+	// the handle union. Both already did that before the orphan-ask join, so
+	// that materialization is pre-existing and out of scope: those explains
+	// only have to keep the thread join on the threads primary key. waiting,
+	// blocks, filed anchors, and open curation members name events once.
 	scope := WithAccessScope(ctx, AccessScope{ActorID: "reader"})
 	for _, tc := range []struct {
 		name, query string
 		args        []any
 		index       string
+		multi       bool
 	}{
-		{"decisions", decision, []any{"reader", "reader", "actor:reader", "reader", "actor:reader", briefAskCandidates}, "idx_brief_asks_open_"},
-		{"waiting", subject, []any{`["card:battery"]`, "reader"}, "idx_brief_asks_subject"},
-		{"blocks", blocks, []any{`["card:report"]`, "reader"}, "idx_brief_ask_blocks_ref"},
-		{"cited", citedAskSelect, []any{`["event-1"]`, `["event-1"]`}, "sqlite_autoindex_brief_asks_1"},
+		{"decisions", decision, []any{"reader", "reader", "actor:reader", "reader", "actor:reader", briefAskCandidates}, "idx_brief_asks_open_", true},
+		{"waiting", subject, []any{`["card:battery"]`, "reader"}, "idx_brief_asks_subject", false},
+		{"blocks", blocks, []any{`["card:report"]`, "reader"}, "idx_brief_ask_blocks_ref", false},
+		{"cited", citedAskSelect, []any{`["event-1"]`, `["event-1"]`}, "sqlite_autoindex_brief_asks_1", true},
+		{"filed", filed, []any{"batch-1"}, "idx_brief_asks_batch", false},
+		{"members", members, []any{"batch-1", 10}, "idx_curation_batch_members_key", false},
 	} {
 		raw := explainQueryPlan(t, workspace.DB(), tc.query, tc.args...)
-		assertAskPlan(t, tc.name+" raw", raw, tc.index)
+		assertAskPlan(t, tc.name+" raw", raw, tc.index, tc.multi)
 		scoped := explainQueryPlan(t, workspace.DB(), scopeRead(scope, tc.query), tc.args...)
-		assertAskPlan(t, tc.name+" scoped", scoped, tc.index)
+		assertAskPlan(t, tc.name+" scoped", scoped, tc.index, tc.multi)
 	}
 }
 
-func assertAskPlan(t *testing.T, name, plan, index string) {
+func assertAskPlan(t *testing.T, name, plan, index string, multi bool) {
 	t.Helper()
 	if !strings.Contains(plan, index) {
 		t.Fatalf("%s plan did not use %s:\n%s", name, index, plan)
@@ -171,12 +185,12 @@ func assertAskPlan(t *testing.T, name, plan, index string) {
 		t.Fatalf("%s plan did not seek threads by primary key:\n%s", name, plan)
 	}
 	for _, line := range strings.Split(plan, "\n") {
-		// The ask's event is one primary-key seek (SEARCH e / SEARCH _row
-		// USING sqlite_autoindex_events_1). A scoped read inlines the events
-		// shadow, so neither the raw nor the scoped plan materializes it.
-		// Naming threads does materialize the ownership graph (_anx_denied);
-		// that scan is the access policy, not the ask lookup.
-		if strings.Contains(line, "SCAN events") || strings.Contains(line, "SCAN main.events") || strings.Contains(line, "MATERIALIZE events") {
+		// A single events reference must stay a primary-key seek. A statement
+		// that names events more than once may materialize the shadow; that
+		// is pre-existing and not asserted here. Naming threads does
+		// materialize the ownership graph (_anx_denied); that scan is the
+		// access policy, not the ask lookup.
+		if strings.Contains(line, "SCAN main.events") || (!multi && (strings.Contains(line, "SCAN events") || strings.Contains(line, "MATERIALIZE events"))) {
 			t.Fatalf("%s plan scanned or materialized events:\n%s", name, plan)
 		}
 		if !strings.Contains(strings.ToUpper(line), "SCAN") {
@@ -404,5 +418,125 @@ func TestOpenCurationBatchOmitsMemberWhoseThreadIsMissing(t *testing.T) {
 	}
 	if hidden || len(members) != 1 || members[0].AskID != live || members[0].Title != "Live member" {
 		t.Fatalf("members hidden=%v %#v", hidden, members)
+	}
+}
+
+// An ask whose thread row is missing is not a curation candidate, and
+// accepting a withdraw proposal does not resolve it. A proposal event whose
+// own thread is missing is not readable, including when the caller has no
+// visibility predicate that would otherwise treat an empty owner as public.
+func TestCurationOmitsAskWhoseThreadIsMissing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workspace.Close()
+	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{"title": "Portfolio", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := func(title string) map[string]any {
+		t.Helper()
+		card, err := store.CreateWork(ctx, "actor-1", anyStringValue(board["id"]), map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return card
+	}
+	subject := work("Battery")
+	done := work("Landed")
+	if _, err = workspace.DB().ExecContext(ctx, `UPDATE cards SET column_key='done' WHERE id=?`, anyStringValue(done["id"])); err != nil {
+		t.Fatal(err)
+	}
+	ask := func(threadID, title string) string {
+		t.Helper()
+		event, err := store.AppendEvent(ctx, "agent-1", map[string]any{
+			"type": "human_attention_requested", "thread_id": threadID, "summary": title,
+			"refs": []string{"thread:" + threadID, anyStringValue(done["ref"])},
+			"payload": map[string]any{
+				"kind": "ask", "title": title, "requester_actor_id": "agent-1",
+				"subject_ref": anyStringValue(subject["ref"]), "related_refs": []any{done["ref"]},
+				"response_proposals": []any{"Proceed", "Wait"},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return anyStringValue(event["id"])
+	}
+	const orphanThread = "ac17545a-6113-47bc-b33c-4b0df6b0df6968893"
+	liveID := ask(anyStringValue(subject["thread_id"]), "Authorize the merge?")
+	orphanID := ask(orphanThread, "Orphan ask")
+
+	candidates, _, err := store.CurationCandidates(ctx, nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	withdrawn := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate.Action != curation.ActionWithdraw {
+			continue
+		}
+		for _, target := range candidate.Targets {
+			withdrawn[target] = true
+		}
+	}
+	if withdrawn["event:"+orphanID] {
+		t.Fatalf("orphan ask is a curation candidate: %#v", candidates)
+	}
+	if !withdrawn["event:"+liveID] {
+		t.Fatalf("live moot ask was not a withdraw candidate: %#v", candidates)
+	}
+
+	file := func(threadID, target string) CurationProposalRecord {
+		t.Helper()
+		candidate := curation.Candidate{
+			Key: curation.Key(curation.ActionWithdraw, []string{"event:" + target}), Action: curation.ActionWithdraw,
+			Targets: []string{"event:" + target}, Title: "Withdraw " + target, ThreadID: threadID,
+			SubjectRef: anyStringValue(subject["ref"]), ResponseProposals: []string{"Withdraw"},
+		}
+		event := map[string]any{
+			"type": "human_attention_requested", "thread_id": threadID, "summary": candidate.Title,
+			"refs":       []string{"thread:" + threadID, candidate.SubjectRef, "event:" + target},
+			"provenance": map[string]any{"sources": []string{"inferred"}},
+			"payload": map[string]any{
+				"kind": "ask", "title": candidate.Title, "subject_ref": candidate.SubjectRef,
+				"requester_actor_id": "reader", "response_proposals": candidate.ResponseProposals,
+				"curation": map[string]any{"action": "withdraw", "targets": candidate.Targets, "key": candidate.Key},
+			},
+		}
+		rec, created, err := store.FileCurationProposal(ctx, "reader", candidate, "formula", event)
+		if err != nil || !created {
+			t.Fatalf("file proposal: created=%v err=%v", created, err)
+		}
+		return rec
+	}
+	orphanProposal := file(anyStringValue(subject["thread_id"]), orphanID)
+	if _, _, err = store.ApplyCurationAction(ctx, "human", orphanProposal.ProposalEventID, orphanProposal); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("accepting a withdraw of an orphan ask: %v", err)
+	}
+	if store.askResolutionIs(ctx, orphanID, "withdrawn") {
+		t.Fatal("orphan ask was withdrawn")
+	}
+	liveProposal := file(anyStringValue(subject["thread_id"]), liveID)
+	if _, _, err = store.ApplyCurationAction(ctx, "human", liveProposal.ProposalEventID, liveProposal); err != nil {
+		t.Fatal(err)
+	}
+	if !store.askResolutionIs(ctx, liveID, "withdrawn") {
+		t.Fatal("live ask was not withdrawn")
+	}
+
+	const missingProposalThread = "ac17545a-6113-47bc-b33c-4b0df6b0df6968894"
+	missing := file(missingProposalThread, liveID+"-gone")
+	for _, visible := range []func(string, string) bool{nil, func(string, string) bool { return true }} {
+		if _, err = store.ReadableCurationProposal(ctx, missing.Key, visible); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("proposal with a missing thread is readable: %v", err)
+		}
+	}
+	if _, err = store.ReadableCurationProposal(ctx, liveProposal.Key, nil); err != nil {
+		t.Fatalf("proposal on a present thread: %v", err)
 	}
 }
