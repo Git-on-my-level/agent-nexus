@@ -6,7 +6,7 @@ import (
 )
 
 // Retain historical discovery rows while indexing only the capacity-bearing
-// population. Backfills run once in migration 105, never on serving paths.
+// population. Backfills run once in migration 106, never on serving paths.
 func upgradeSeriesCapacityIndexes(ctx context.Context, tx *sql.Tx) error {
 	for _, field := range []struct{ table, column, definition string }{
 		{"series_adapters", "definition_count", "INTEGER NOT NULL DEFAULT 0"},

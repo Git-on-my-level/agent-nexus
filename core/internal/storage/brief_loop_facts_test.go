@@ -233,13 +233,13 @@ func TestUpgradeFrom103UpdatesAgentSummaryViewAndBriefAskIndex(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Pre-105 schema has no updated_at column in agent_summary_card_positions and counts the completed blocker in blocks_count.
+	// Pre-106 schema has no updated_at column in agent_summary_card_positions and counts the completed blocker in blocks_count.
 	if _, err := db.Query(`SELECT updated_at FROM agent_summary_card_positions LIMIT 1`); err == nil {
-		t.Fatal("expected pre-105 agent_summary_card_positions to lack updated_at")
+		t.Fatal("expected pre-106 agent_summary_card_positions to lack updated_at")
 	}
 	var preBlocksCount int
 	if err := db.QueryRow(`SELECT blocks_count FROM brief_asks WHERE ask_id='ask-stale'`).Scan(&preBlocksCount); err != nil || preBlocksCount != 1 {
-		t.Fatalf("pre-105 blocks_count = %d, err = %v", preBlocksCount, err)
+		t.Fatalf("pre-106 blocks_count = %d, err = %v", preBlocksCount, err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
@@ -285,7 +285,7 @@ func TestUpgradeFrom103UpdatesAgentSummaryViewAndBriefAskIndex(t *testing.T) {
 		t.Fatal("expected idx_brief_asks_open_page to be used after upgrade")
 	}
 
-	// Re-running migration 105 helper is idempotent.
+	// Re-running migration 106 helper is idempotent.
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -298,10 +298,10 @@ func TestUpgradeFrom103UpdatesAgentSummaryViewAndBriefAskIndex(t *testing.T) {
 	}
 }
 
-func TestUpgrade105SeriesCapacityBackfill(t *testing.T) {
+func TestUpgrade106SeriesCapacityBackfill(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
-	db := mainHistoryDatabase(t, root, 104)
+	db := mainHistoryDatabase(t, root, 105)
 	_, err := db.Exec(`INSERT INTO series_adapters(name,description,agent_id,host_id,expected_interval,created_at) VALUES('active','Active','owner','host',60,'2026-10-16T00:00:00Z');
  INSERT INTO series_definitions(name,adapter,kind,unit) VALUES('historical','active','gauge','items'),('raw','active','gauge','items');
  INSERT INTO series_labels(series,labels) VALUES('historical','{}'),('raw','{}');
