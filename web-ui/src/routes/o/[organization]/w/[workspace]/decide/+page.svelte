@@ -8,6 +8,7 @@
     ageSeconds,
     decisionDeadline,
     decisionsForInitiative,
+    findDecision,
     formatSpan,
     freshnessLabel,
     sortDecisions,
@@ -62,11 +63,21 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   let initiative = $derived($page.url.searchParams.get("initiative") ?? "");
-  let selectedParam = $derived($page.url.searchParams.get("item") ?? "");
+  let requestedParam = $derived(
+    $page.url.searchParams.get("item") ||
+      $page.url.searchParams.get("ref") ||
+      "",
+  );
   let all = $derived(
     initiative
       ? decisionsForInitiative($brief.data, initiative)
       : sortDecisions($brief.data?.decisions ?? []),
+  );
+  let selectedParam = $derived(
+    requestedParam
+      ? (findDecision({ decisions: all }, requestedParam)?.inboxItemId ??
+          requestedParam)
+      : "",
   );
 
   /*
@@ -202,6 +213,7 @@
 
   function itemHref(id) {
     const params = new URLSearchParams($page.url.searchParams);
+    params.delete("ref");
     if (id) params.set("item", id);
     else params.delete("item");
     const query = params.toString();

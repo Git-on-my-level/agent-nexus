@@ -185,7 +185,7 @@
     // Core wakes only an agent requester; a human or unknown-kind requester
     // reads the answer from their asks, so "original" would be a 409 dead end.
     const notifyMode =
-      decision.requestedBy?.kind === "human" ? "none" : "original";
+      decision.requestedBy?.kind === "agent" ? "original" : "none";
     const who =
       notifyMode === "original" ? decision.requestedBy?.display || "" : "";
     queueInboxResponse({

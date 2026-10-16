@@ -645,10 +645,23 @@ export function decisionsForInitiative(brief, ref) {
   );
 }
 
+function itemMatchesTarget(ref, inboxItemId, wanted) {
+  if (ref === wanted || inboxItemId === wanted) return true;
+  const eventId = wanted.startsWith("event:") ? wanted.slice(6).trim() : "";
+  if (!eventId) return false;
+  return (
+    inboxItemId === eventId ||
+    ref === `inbox:${eventId}` ||
+    inboxItemId.endsWith(`:${eventId}`) ||
+    ref.endsWith(`:${eventId}`)
+  );
+}
+
 function decisionMatchesId(decision, wanted) {
-  if (decision.ref === wanted || decision.inboxItemId === wanted) return true;
-  return (decision.batch?.members ?? []).some(
-    (member) => member.ref === wanted || member.inboxItemId === wanted,
+  if (itemMatchesTarget(decision.ref, decision.inboxItemId, wanted))
+    return true;
+  return (decision.batch?.members ?? []).some((member) =>
+    itemMatchesTarget(member.ref, member.inboxItemId, wanted),
   );
 }
 

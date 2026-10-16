@@ -420,6 +420,15 @@ test("old Inbox links land on Decide", async ({ page, context }) => {
   await page.goto("/o/local/w/local/inbox/ask-91");
   await expect(page).toHaveURL(/\/decide\/ask-91$/);
   await expect(page.locator("[data-decision-ref]")).toHaveCount(1);
+
+  await page.goto("/o/local/w/local/inbox?ref=event:ask-93");
+  await expect(page).toHaveURL(/\/decide\?ref=event:ask-93$/);
+  await expect(
+    page.locator('[data-decide-row="ask-93"][aria-current="true"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-variant="pane"][data-decision-ref="inbox:ask-93"]'),
+  ).toBeVisible();
 });
 
 test("a refused answer comes back with its recovery controls", async ({

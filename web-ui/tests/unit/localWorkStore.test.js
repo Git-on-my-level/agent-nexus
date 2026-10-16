@@ -5,6 +5,7 @@ import {
   listLocalWork,
   loadLocalWork,
   localWorkEpoch,
+  requestMutationSendLock,
   saveLocalWork,
 } from "../../src/lib/localWorkStore.js";
 import { mutationFailure } from "../../src/lib/mutationStatus.js";
@@ -170,4 +171,42 @@ it("preserves new-session work when the same cross-tab purge is delivered again"
   await saveLocalWork(scope, "draft", "reply", "After sign-in");
   await clearPrincipalLocalWork(scope, { epoch, broadcast: false });
   expect(await loadLocalWork(scope, "draft", "reply")).toBe("After sign-in");
+});
+
+it("serializes sends across tabs via a localStorage lease when navigator.locks is unavailable", async () => {
+  const prevLocks = navigator.locks;
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: undefined,
+  });
+  try {
+    const leaseKey = `anx:mutation-lock:anx:mutation-send:${scope}`;
+    localStorage.setItem(
+      leaseKey,
+      JSON.stringify({
+        owner: "other-tab",
+        token: "other-token",
+        expiresAt: Date.now() + 5_000,
+      }),
+    );
+    let entered = false;
+    const locked = requestMutationSendLock(scope, async () => {
+      entered = true;
+      return "ok";
+    });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(entered).toBe(false);
+    localStorage.removeItem(leaseKey);
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: leaseKey, newValue: null }),
+    );
+    expect(await locked).toBe("ok");
+    expect(entered).toBe(true);
+    expect(localStorage.getItem(leaseKey)).toBeNull();
+  } finally {
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: prevLocks,
+    });
+  }
 });

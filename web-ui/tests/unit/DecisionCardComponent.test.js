@@ -111,6 +111,23 @@ describe("DecisionCard", () => {
     expect(queue.queueInboxResponse.mock.calls[0][0].request.notify_mode).toBe(
       "none",
     );
+    cleanup();
+    queue.queueInboxResponse.mockClear();
+    const unknownKind = normalizeBrief({
+      decisions: [
+        {
+          ...fixture.decisions[0],
+          requested_by: { id: "u1", display: "Unknown" },
+        },
+      ],
+    }).decisions[0];
+    render(DecisionCard, { decision: unknownKind, now: NOW });
+    await fireEvent.click(
+      document.querySelector("[data-decision-proposal='1']"),
+    );
+    expect(queue.queueInboxResponse.mock.calls[0][0].request.notify_mode).toBe(
+      "none",
+    );
   });
 
   it("shows blocked titles, not slugs, and the deadline as computed", () => {

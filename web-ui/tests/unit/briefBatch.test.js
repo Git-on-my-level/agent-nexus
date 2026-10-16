@@ -61,6 +61,28 @@ describe("brief batch decisions", () => {
     expect(findDecision(brief, "")).toBeNull();
   });
 
+  it("resolves event:<id> escalation refs against canonical, short and grouped inbox ids", () => {
+    const withCanonical = normalizeBrief({
+      decisions: [
+        ...brief.decisions,
+        {
+          ref: "inbox:ask:thread-1:req-9:evt-99",
+          inbox_item_id: "inbox:ask:thread-1:req-9:evt-99",
+          kind: "ask",
+          title: "Canonical event ask",
+        },
+      ],
+    });
+    expect(findDecision(withCanonical, "event:evt-99")?.title).toBe(
+      "Canonical event ask",
+    );
+    expect(findDecision(withCanonical, "event:solo")?.title).toBe("Solo");
+    expect(findDecision(withCanonical, "event:2")?.inboxItemId).toBe(
+      "inbox:curation-batch:k",
+    );
+    expect(findDecision(withCanonical, "event:missing")).toBeNull();
+  });
+
   it("includes a batch when any member subject or block matches", () => {
     const ids = (ref) =>
       decisionsForInitiative(brief, ref).map(

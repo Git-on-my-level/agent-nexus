@@ -543,6 +543,32 @@ describe("PM operator interactions", () => {
       client.sendPmMessage.mock.calls[1][1],
     );
   });
+  it("drains a PM message through mutationOutbox when navigator.locks is unavailable", async () => {
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: undefined,
+    });
+    state.route("/pm?conversation=conversation-one");
+    client.getPmConversation.mockResolvedValue({
+      conversation: { id: "conversation-one", title: "Sample discussion" },
+      turns: [],
+    });
+    client.sendPmMessage.mockResolvedValueOnce({
+      id: "turn-fallback",
+      status: "sending",
+    });
+    render(PMPage);
+    await screen.findByText("Sample discussion");
+    const input = screen.getByLabelText("Message PM");
+    await fireEvent.input(input, {
+      target: { value: "Sent over plain HTTP LAN" },
+    });
+    await fireEvent.submit(input.closest("form"));
+    await waitFor(() => expect(client.sendPmMessage).toHaveBeenCalledTimes(1));
+    expect(client.sendPmMessage.mock.calls[0][1]).toMatchObject({
+      text: "Sent over plain HTTP LAN",
+    });
+  });
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");
     client.getPmConversation

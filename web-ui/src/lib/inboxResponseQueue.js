@@ -12,6 +12,7 @@ import {
   localWorkEpoch,
   clearPrincipalLocalWork,
   onLocalWorkChanged,
+  requestMutationSendLock,
   saveLocalWork,
 } from "$lib/localWorkStore.js";
 import { canUseLocalWorkScope } from "$lib/localWorkScope.js";
@@ -132,77 +133,65 @@ function removePersistedResponse(entry, reason = "confirmed") {
 async function durableSend(entry) {
   await entry.saved;
   if (navigator.onLine === false) throw new Error("The device is offline.");
-  if (!globalThis.navigator?.locks) {
-    const error = new Error(
-      "Web Locks are unavailable; cross-tab sending is paused.",
+  return requestMutationSendLock(entry.identity, async () => {
+    if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
+      throw new Error("This identity has signed out.");
+    }
+    const record = await loadLocalWorkRecord(
+      entry.identity,
+      "inbox-send",
+      entry.request.idempotency_key,
     );
-    error.status = 400;
-    error.publicMessage =
-      "Sending is paused in this browser. Your text is saved here. Copy it before sending from another browser.";
-    throw error;
-  }
-  return navigator.locks.request(
-    `anx:mutation-send:${entry.identity}`,
-    async () => {
-      if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
-        throw new Error("This identity has signed out.");
-      }
-      const record = await loadLocalWorkRecord(
-        entry.identity,
-        "inbox-send",
-        entry.request.idempotency_key,
+    if (record?.deleted && record.deletionReason === "confirmed") return {};
+    const stored = record && !record.deleted ? record.value : null;
+    if (record?.deletionReason === "undo" || stored?.state === "superseded") {
+      const error = new Error("This response was returned to a draft.");
+      error.cancelled = true;
+      throw error;
+    }
+    if (!stored)
+      throw new Error(
+        "The saved request could not be read. Keep the original response for retry.",
       );
-      if (record?.deleted && record.deletionReason === "confirmed") return {};
-      const stored = record && !record.deleted ? record.value : null;
-      if (record?.deletionReason === "undo" || stored?.state === "superseded") {
-        const error = new Error("This response was returned to a draft.");
-        error.cancelled = true;
-        throw error;
-      }
-      if (!stored)
-        throw new Error(
-          "The saved request could not be read. Keep the original response for retry.",
-        );
-      if (replayExpired(stored.createdAt)) throw expiredReplayError();
-      if (
-        stored.state === "retrying" &&
-        stored.nextAt > Date.now() &&
-        !entry.manualRetry
-      ) {
-        const error = new Error("Another tab scheduled the next retry.");
-        error.deferred = true;
-        throw error;
-      }
-      // An old timer cannot bypass another tab's definitive failure/backoff.
-      if (stored.state === "attention" && !entry.manualRetry) {
-        const error = new Error(
-          stored.failure?.detail || "Review this response before retrying.",
-        );
-        error.status = stored.failure?.status || 400;
-        throw error;
-      }
-      entry.attempts = (stored.attempts || 0) + 1;
-      await persistResponse(entry, "sending");
-      const result = await entry.send(entry.itemId, entry.request);
-      await removePersistedResponse(entry);
-      await consumeUploadedAttachments(
-        entry.identity,
-        entry.request.related_refs,
-        entry.localEpoch,
+    if (replayExpired(stored.createdAt)) throw expiredReplayError();
+    if (
+      stored.state === "retrying" &&
+      stored.nextAt > Date.now() &&
+      !entry.manualRetry
+    ) {
+      const error = new Error("Another tab scheduled the next retry.");
+      error.deferred = true;
+      throw error;
+    }
+    // An old timer cannot bypass another tab's definitive failure/backoff.
+    if (stored.state === "attention" && !entry.manualRetry) {
+      const error = new Error(
+        stored.failure?.detail || "Review this response before retrying.",
       );
-      // Do not clear a newer draft written while this response was sending.
-      for (const field of ["reply", "context"]) {
-        const target = `inbox:${entry.itemId}:${field}`;
-        const draft = await loadLocalWork(entry.identity, "draft", target);
-        if (draft === entry.request.response_text) {
-          await saveLocalWork(entry.identity, "draft", target, null, {
-            epoch: entry.localEpoch,
-          });
-        }
+      error.status = stored.failure?.status || 400;
+      throw error;
+    }
+    entry.attempts = (stored.attempts || 0) + 1;
+    await persistResponse(entry, "sending");
+    const result = await entry.send(entry.itemId, entry.request);
+    await removePersistedResponse(entry);
+    await consumeUploadedAttachments(
+      entry.identity,
+      entry.request.related_refs,
+      entry.localEpoch,
+    );
+    // Do not clear a newer draft written while this response was sending.
+    for (const field of ["reply", "context"]) {
+      const target = `inbox:${entry.itemId}:${field}`;
+      const draft = await loadLocalWork(entry.identity, "draft", target);
+      if (draft === entry.request.response_text) {
+        await saveLocalWork(entry.identity, "draft", target, null, {
+          epoch: entry.localEpoch,
+        });
       }
-      return result;
-    },
-  );
+    }
+    return result;
+  });
 }
 
 function scheduleRecovery(delay = 0) {

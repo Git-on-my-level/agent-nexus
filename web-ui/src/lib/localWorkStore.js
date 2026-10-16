@@ -11,6 +11,119 @@ const epochs = new Map();
 const appliedRevocations = new Map();
 const uncheckpointed = new Map();
 const preparing = new Map();
+const inTabLocks = new Map();
+const lockWaiters = new Set();
+const lockTabId =
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
+const LOCK_LEASE_TTL_MS = 30_000;
+const LOCK_POLL_MS = 40;
+
+function notifyLockWaiters() {
+  for (const wake of lockWaiters) wake();
+}
+
+async function acquireCrossTabLease(name) {
+  if (typeof localStorage === "undefined") return () => {};
+  const leaseKey = `anx:mutation-lock:${name}`;
+  const token =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
+  while (true) {
+    const now = Date.now();
+    let current = null;
+    try {
+      const raw = localStorage.getItem(leaseKey);
+      current = raw ? JSON.parse(raw) : null;
+    } catch {
+      return () => {};
+    }
+    if (!current || current.owner === lockTabId || !(current.expiresAt > now)) {
+      const lease = {
+        owner: lockTabId,
+        token,
+        expiresAt: now + LOCK_LEASE_TTL_MS,
+      };
+      try {
+        localStorage.setItem(leaseKey, JSON.stringify(lease));
+        const verifyRaw = localStorage.getItem(leaseKey);
+        const verify = verifyRaw ? JSON.parse(verifyRaw) : null;
+        if (!verify || (verify.owner === lockTabId && verify.token === token)) {
+          return () => {
+            try {
+              const latestRaw = localStorage.getItem(leaseKey);
+              const latest = latestRaw ? JSON.parse(latestRaw) : null;
+              if (
+                latest &&
+                latest.owner === lockTabId &&
+                latest.token === token
+              ) {
+                localStorage.removeItem(leaseKey);
+              }
+            } catch {
+              /* Best-effort cross-tab lease release. */
+            }
+            channel?.postMessage({ lockReleased: name });
+            notifyLockWaiters();
+          };
+        }
+      } catch {
+        // Storage quota or access error: proceed under the in-tab mutex.
+        return () => {};
+      }
+    }
+    const waitMs = Math.min(
+      LOCK_POLL_MS,
+      Math.max(10, (current?.expiresAt ?? now + LOCK_POLL_MS) - now),
+    );
+    await new Promise((resolve) => {
+      let timer;
+      const wake = () => {
+        clearTimeout(timer);
+        lockWaiters.delete(wake);
+        resolve();
+      };
+      lockWaiters.add(wake);
+      timer = setTimeout(wake, waitMs);
+    });
+  }
+}
+
+/**
+ * Serialize sends for a scope across tabs via Web Locks when available, and
+ * fall back to an in-tab promise mutex plus a best-effort cross-tab
+ * localStorage/BroadcastChannel lease on non-secure origins (e.g. plain-HTTP
+ * LAN or Tailnet).
+ */
+export function requestMutationSendLock(scope, callback) {
+  const name = `anx:mutation-send:${scope}`;
+  if (globalThis.navigator?.locks?.request) {
+    return globalThis.navigator.locks.request(name, callback);
+  }
+  const previous = inTabLocks.get(name) ?? Promise.resolve();
+  const run = previous
+    .catch(() => {})
+    .then(async () => {
+      const release = await acquireCrossTabLease(name);
+      try {
+        return await callback();
+      } finally {
+        release();
+      }
+    });
+  const settled = run.then(
+    () => {},
+    () => {},
+  );
+  inTabLocks.set(name, settled);
+  settled.then(() => {
+    if (inTabLocks.get(name) === settled) inTabLocks.delete(name);
+  });
+  return run;
+}
+
 // File selection needs async byte reading. Warn until it has a durable checkpoint.
 export function protectLocalWorkPreparation(scope) {
   const token = Symbol();
@@ -208,10 +321,15 @@ if (typeof window !== "undefined") {
         /* Ignore malformed storage events. */
       }
     }
+    if (event.key?.startsWith("anx:mutation-lock:")) notifyLockWaiters();
     if (event.key?.startsWith(PREFIX)) notify();
   });
   if (channel)
     channel.onmessage = (event) => {
+      if (event.data?.lockReleased) {
+        notifyLockWaiters();
+        return;
+      }
       if (event.data?.purge) {
         // A delayed channel message must not replace a newer revocation.
         const principal = localWorkPrincipal(event.data.scope);
