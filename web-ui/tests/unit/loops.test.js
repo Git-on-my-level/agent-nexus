@@ -169,3 +169,34 @@ describe("loops model", () => {
     expect(withUnit("3", "GB")).toBe("3 GB");
   });
 });
+
+describe("loop links and effects", () => {
+  it("links only http(s) URLs and in-app routes", async () => {
+    const { safeEffectHref } = await import("../../src/lib/loops.js");
+    expect(safeEffectHref("https://github.com/o/r/pull/1")).toBe(
+      "https://github.com/o/r/pull/1",
+    );
+    expect(safeEffectHref("/o/x/w/y/initiatives/a")).toBe(
+      "/o/x/w/y/initiatives/a",
+    );
+    expect(safeEffectHref("javascript:alert(1)")).toBe("");
+    expect(safeEffectHref("JavaScript:alert(1)")).toBe("");
+    expect(safeEffectHref("data:text/html,x")).toBe("");
+    expect(safeEffectHref("//evil.example")).toBe("");
+    expect(safeEffectHref("")).toBe("");
+  });
+
+  it("counts kept candidates as effects when core sends effects_7d", async () => {
+    const { normalizeLoop, loopTotals } =
+      await import("../../src/lib/loops.js");
+    const kept = normalizeLoop({
+      health: "healthy",
+      effects_7d: 2,
+      runs_7d: { acted: 0, measured: 2 },
+    });
+    const legacy = normalizeLoop({ health: "healthy", runs_7d: { acted: 1 } });
+    expect(kept.effects7d).toBe(2);
+    expect(legacy.effects7d).toBe(1);
+    expect(loopTotals([kept, legacy]).effects7d).toBe(3);
+  });
+});

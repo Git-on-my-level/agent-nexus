@@ -15,6 +15,7 @@
     normalizeLoopStats,
     normalizeRunReceipt,
     runText,
+    safeEffectHref,
     withUnit,
   } from "$lib/loops.js";
   import { formatMetricValue } from "$lib/brief.js";
@@ -366,16 +367,15 @@
                       >
                     {/each}
                     {#each run.effectRefs as ref (ref)}
-                      {@const href = /^https?:\/\//.test(ref)
-                        ? ref
-                        : refHref(ref)}
+                      {@const href = safeEffectHref(
+                        /^https?:\/\//.test(ref) ? ref : refHref(ref),
+                      )}
+                      {@const external = /^https?:/.test(href)}
                       {#if href}<a
                           class="text-accent-text hover:underline"
                           {href}
-                          rel={/^https?:/.test(ref)
-                            ? "noopener noreferrer"
-                            : undefined}
-                          target={/^https?:/.test(ref) ? "_blank" : undefined}
+                          rel={external ? "noopener noreferrer" : undefined}
+                          target={external ? "_blank" : undefined}
                           >{ref.replace(/^https?:\/\/(www\.)?/, "")}</a
                         >{:else}<span>{ref}</span>{/if}
                     {/each}
