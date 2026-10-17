@@ -309,6 +309,49 @@ func TestUnsafeInputsAndPathReplacement(t *testing.T) {
 			if len(f.calls) != 0 {
 				t.Fatal("unsafe entry sent")
 			}
+			intake, e := os.ReadDir(filepath.Join(f.project, ".anx/intake"))
+			if e != nil || len(intake) != 0 {
+				t.Fatal("unsafe claim not terminal", intake, e)
+			}
+			failed, e := os.ReadDir(filepath.Join(f.project, ".anx/outbox/.failed"))
+			if e != nil || len(failed) != 2 {
+				t.Fatal("missing quarantined object and receipt", failed, e)
+			}
+			var object string
+			for _, item := range failed {
+				p := filepath.Join(f.project, ".anx/outbox/.failed", item.Name())
+				if strings.HasSuffix(item.Name(), ".receipt.json") {
+					receipt, err := os.ReadFile(p)
+					if err != nil || !strings.Contains(string(receipt), "unsafe_or_oversize_entry") {
+						t.Fatal(string(receipt), err)
+					}
+				} else {
+					object = p
+				}
+			}
+			before, err := os.Lstat(object)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if kind == "symlink" {
+				if target, err := os.Readlink(object); err != nil || target != outside {
+					t.Fatal(target, err)
+				}
+			}
+			if kind == "oversize" && before.Size() != MaxEntry+1 {
+				t.Fatal("original truncated", before)
+			}
+			f.write(f.entry())
+			f.tick()
+			f.tick()
+			if len(f.calls) != 1 {
+				t.Fatal("terminal claim blocked later valid entry", f.calls)
+			}
+			after, err := os.Lstat(object)
+			if err != nil || !os.SameFile(before, after) {
+				t.Fatal("quarantined object replaced", err)
+			}
+
 			b, e := os.ReadFile(outside)
 			if e != nil || string(b) != "unchanged" {
 				t.Fatal("sentinel changed", e)

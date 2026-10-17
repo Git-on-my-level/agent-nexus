@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,4 +229,119 @@ func TestFileJobRevocationClearsEveryRegisteredDirectory(t *testing.T) {
 			t.Fatal("revoked directory mirror retained", project, e)
 		}
 	}
+}
+
+func TestFileCardHTTPDenialIsTerminalAndOtherCardsKeepFlowing(t *testing.T) {
+	for _, status := range []int32{403, 404} {
+		for _, phase := range []string{"prepare", "send"} {
+			t.Run(fmt.Sprintf("%d/%s", status, phase), func(t *testing.T) {
+				f := newHookFixture(t)
+				project, e := filepath.EvalSymlinks(f.root)
+				if e != nil {
+					t.Fatal(e)
+				}
+				t.Cleanup(func() {
+					_ = filepath.WalkDir(project, func(p string, d os.DirEntry, e error) error {
+						if e == nil && d.IsDir() {
+							return os.Chmod(p, 0700)
+						}
+						return e
+					})
+				})
+				f.run(t, "sync", "enable", project, "--card-id", "card:work", "--card-id", "card:other")
+				reg, e := hostbridge.Load(hostbridge.Root(f.home))
+				if e != nil {
+					t.Fatal(e)
+				}
+				w := reg.Workspaces[0]
+				a := w.Agents[0]
+				dir := a.FileDirs[0]
+				now := time.Now().UTC()
+				if _, e = filetransport.Tick(context.Background(), dir, now, f.a.fileCallbacks(w, a)); e != nil {
+					t.Fatal(e)
+				}
+				if phase == "prepare" {
+					f.fileCardStatus.Store(status)
+				} else {
+					f.fileSendStatus.Store(status)
+				}
+				for i, card := range []string{"card:work", "card:other"} {
+					in := filetransport.Entry{Version: 1, ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", i), Card: card, Text: "Scoped card note", Evidence: []string{}}
+					if e = os.WriteFile(filepath.Join(project, ".anx/outbox", in.ID+".json"), integrations.JSON(in), 0600); e != nil {
+						t.Fatal(e)
+					}
+				}
+				s, e := filetransport.Tick(context.Background(), dir, now, f.a.fileCallbacks(w, a))
+				if e == nil || len(s.Pending) != 0 || s.Failed != 1 {
+					t.Fatal(s, e)
+				}
+				receipt, e := os.ReadFile(filepath.Join(project, ".anx/outbox/.failed/00000000-0000-4000-8000-000000000000.receipt.json"))
+				if e != nil || !strings.Contains(string(receipt), "forbidden") {
+					t.Fatal(string(receipt), e)
+				}
+				if _, e = os.Stat(filepath.Join(project, ".anx/cards/card-id.md")); !os.IsNotExist(e) {
+					t.Fatal("denied card retained", e)
+				}
+				if _, e = os.Stat(filepath.Join(project, ".anx/cards/other-id.md")); e != nil {
+					t.Fatal("other card removed", e)
+				}
+				f.mu.Lock()
+				bodies := append([]string{}, f.bodies...)
+				f.mu.Unlock()
+				if len(bodies) != 1 || !strings.Contains(bodies[0], "other-thread") {
+					t.Fatal("wrong card posted", bodies)
+				}
+			})
+		}
+	}
+}
+
+func TestFileCapacityIsVisibleInSyncStatusAndBridgeDoctor(t *testing.T) {
+	f := newHookFixture(t)
+	project, e := filepath.EvalSymlinks(f.root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(project, func(p string, d os.DirEntry, e error) error {
+			if e == nil && d.IsDir() {
+				return os.Chmod(p, 0700)
+			}
+			return e
+		})
+	})
+	f.run(t, "sync", "enable", project, "--card-id", "card:work")
+	dir := filetransport.StateDir(f.dir, project)
+	s, e := filetransport.Load(dir)
+	if e != nil {
+		t.Fatal(e)
+	}
+	s.LastCode = "capacity"
+	if e = filetransport.Save(dir, s); e != nil {
+		t.Fatal(e)
+	}
+	status := f.run(t, "sync", "status", project)
+	if status["last_error_code"] != "capacity" || status["inspection_ok"] != false {
+		t.Fatal(status)
+	}
+	oldRun, oldProcesses := bridgeCommandRun, bridgeProcesses
+	t.Cleanup(func() { bridgeCommandRun, bridgeProcesses = oldRun, oldProcesses })
+	bridgeCommandRun = func(context.Context, string, ...string) (string, string, error) {
+		t.Fatal("unexpected service manager call")
+		return "", "", nil
+	}
+	bridgeProcesses = func(context.Context) ([]hostbridge.Process, error) { return nil, nil }
+	result, e := f.a.inspectHostBridge(context.Background(), true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, check := range asMap(result.Data)["checks"].([]map[string]any) {
+		if check["check"] == "file_transport" {
+			if check["ok"] != false || asMap(check["status"])["last_error_code"] != "capacity" {
+				t.Fatal(check)
+			}
+			return
+		}
+	}
+	t.Fatal("doctor omitted file transport")
 }

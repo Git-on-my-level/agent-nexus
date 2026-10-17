@@ -1,8 +1,8 @@
 # Optional context hooks and Git progress
 
 Everything here is off until enabled. The bridge is optional: hooks read core
-directly, and Git capture works with post-commit or manual sync. Background drain,
-host-service consolidation and file transport belong to subsequent changes.
+directly, and Git capture works with post-commit or manual sync. Background drain runs inside the optional [host bridge](host-bridge.md);
+[scoped file transport](file-transport.md) is a separate, default-off bridge job.
 
 ## Context
 

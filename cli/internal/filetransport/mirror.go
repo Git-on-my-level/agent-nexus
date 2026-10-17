@@ -34,7 +34,7 @@ func publish(f *FS, s State, views []Snapshot, now time.Time, revoked bool) erro
 	if e := f.mkdir(build + "/cards"); e != nil {
 		return e
 	}
-	status := Status{Version: 1, Generation: id, AsOf: now, LastContact: s.LastContact, StaleAfter: s.LastContact.Add(StaleAfter), Stale: !s.Enabled || s.LastContact.IsZero() || now.Sub(s.LastContact) >= StaleAfter, Enabled: s.Enabled, Pending: len(s.Pending), Failed: s.Failed, LastCode: s.LastCode}
+	status := Status{Version: 1, Generation: id, AsOf: now, LastContact: s.LastContact, StaleAfter: ExpiresAt(s.LastContact), Stale: !s.Enabled || s.LastContact.IsZero() || !now.Before(ExpiresAt(s.LastContact)), Enabled: s.Enabled, Pending: len(s.Pending), Failed: s.Failed, LastCode: s.LastCode}
 	var index strings.Builder
 	fmt.Fprintf(&index, "# ANX card mirror\n\nGeneration: %s\nAs of: %s\nStale after: %s\n\nThis is a read-only cache. Compare stale_after with your current clock; a stopped bridge cannot update this banner.\n\n", id, now.Format(time.RFC3339Nano), status.StaleAfter.Format(time.RFC3339Nano))
 	if !s.Enabled {
@@ -42,11 +42,11 @@ func publish(f *FS, s State, views []Snapshot, now time.Time, revoked bool) erro
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].Card.ID < views[j].Card.ID })
 	for _, v := range views {
-		if _, ok := s.Binding.Card(v.Card.ID); !ok || !cardIDPattern.MatchString(v.Card.ID) {
+		if allowed, ok := s.Binding.Card(v.Card.Ref); !ok || allowed != v.Card || !cardIDPattern.MatchString(v.Card.ID) {
 			return ErrUnsafe
 		}
-		stale := !s.Enabled || now.Sub(v.AsOf) >= StaleAfter
-		body := fmt.Sprintf("# %s\n\nas_of: %s\nstale_after: %s\nresource_version: %s\nstale: %t\ngeneration: %s\n\nRead-only cache; check stale_after against your clock.\n\n%s\n", v.Card.Ref, v.AsOf.Format(time.RFC3339Nano), v.AsOf.Add(StaleAfter).Format(time.RFC3339Nano), cleanText(v.Version), stale, id, v.Body)
+		stale := !s.Enabled || !now.Before(ExpiresAt(v.AsOf))
+		body := fmt.Sprintf("# %s\n\nas_of: %s\nstale_after: %s\nresource_version: %s\nstale: %t\ngeneration: %s\n\nRead-only cache; check stale_after against your clock.\n\n%s\n", v.Card.Ref, v.AsOf.Format(time.RFC3339Nano), ExpiresAt(v.AsOf).Format(time.RFC3339Nano), cleanText(v.Version), stale, id, v.Body)
 		if e := f.write(build+"/cards/"+v.Card.ID+".md", []byte(body), 0400); e != nil {
 			return e
 		}

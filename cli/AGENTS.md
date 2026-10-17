@@ -129,5 +129,6 @@ installer restores original legacy units on failure.
 File jobs are independently opt-in through `sync enable` with canonical cards and
 pinned enrollment. Producers receive only the mounted outbox, never credentials,
 intake or frozen state. Preserve producer UUIDs, original bytes and replay keys;
-clear generated mirrors on access denial. Test sandbox delivery against a fresh
+remove denied cards from generated mirrors and clear all caches on identity denial.
+Test sandbox delivery against a fresh
 core with sandbox-exec/bubblewrap; never install the real host service for tests.

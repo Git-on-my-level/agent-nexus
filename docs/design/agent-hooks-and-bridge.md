@@ -180,9 +180,12 @@ and retains originals. `sync status` and bridge doctor inspect without sending.
 
 Key: `anx-file-v1-<directory_uuid>-<entry_uuid>`. Edited IDs conflict. Lock/fsync
 intake, reject symlinks/path escape, preserve failed bytes. Refresh validates access;
-403/404 removes cached card/index data. Identity changes remove generated caches
-but preserve unconfirmed writes for explicit export/repair. Readers compare times:
-a dead bridge cannot rewrite stale banners.
+Card 403/404 fails only that entry to `.failed`, removes only that card's cache
+and old copies, and lets other cards drain. Identity changes clear all generated
+caches but retain unconfirmed writes. Capacity pauses admission, never replay;
+unsafe objects become terminal quarantined originals with receipts. Public
+`card_ref` matches exactly. Mirror expiry derives from five host heartbeat
+intervals; readers compare times because a dead bridge cannot rewrite banners.
 
 ## Implementation plan
 

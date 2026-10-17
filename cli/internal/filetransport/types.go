@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"agent-nexus-cli/internal/bridge"
 	"agent-nexus-cli/internal/integrations"
 )
 
@@ -26,7 +27,10 @@ const MaxPending = 100
 const MaxRecords = 10000
 const MaxCards = 100
 const ReplayCutoff = 25 * 24 * time.Hour
-const StaleAfter = 5 * time.Minute
+
+// ExpiresAt shares the host presence lifetime: five heartbeat intervals.
+// This is cache freshness, never a promise/progress or authorization threshold.
+func ExpiresAt(asOf time.Time) time.Time { return asOf.Add(5 * bridge.HeartbeatInterval) }
 
 var ErrUnsafe = errors.New("unsafe_file_transport_path")
 var ErrCapacity = errors.New("file_transport_capacity")
@@ -79,17 +83,19 @@ func (b Binding) Validate() error {
 		return ErrUnsafe
 	}
 	seen := map[string]bool{}
+	refs := map[string]bool{}
 	for _, c := range b.Cards {
-		if !cardIDPattern.MatchString(c.ID) || !strings.HasPrefix(c.Ref, "card:") || seen[c.ID] {
+		if !cardIDPattern.MatchString(c.ID) || !strings.HasPrefix(c.Ref, "card:") || seen[c.ID] || refs[c.Ref] {
 			return ErrUnsafe
 		}
 		seen[c.ID] = true
+		refs[c.Ref] = true
 	}
 	return nil
 }
 func (b Binding) Card(ref string) (Card, bool) {
 	for _, c := range b.Cards {
-		if c.Ref == ref || c.ID == ref || "card:"+c.ID == ref {
+		if c.Ref == ref {
 			return c, true
 		}
 	}
@@ -97,6 +103,7 @@ func (b Binding) Card(ref string) (Card, bool) {
 }
 
 type Record struct {
+	Quarantined  string                 `json:"original_object,omitempty"`
 	ID           string                 `json:"id"`
 	Hash         string                 `json:"sha256"`
 	Raw          []byte                 `json:"original_bytes"`

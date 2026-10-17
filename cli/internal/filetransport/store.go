@@ -3,6 +3,7 @@ package filetransport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -312,42 +313,79 @@ func intake(dir string, f *FS, s *State, now time.Time) error {
 		return e
 	}
 	sort.Strings(recovered)
+	// Repair orphan records and finalize terminal claims before budgeting arrivals.
+	if e = intakeClaims(dir, f, s, recovered, now); e != nil {
+		return e
+	}
 	fresh, e := f.names("outbox", MaxRecords+MaxPending)
+	if errors.Is(e, ErrCapacity) {
+		// Overflow is admission backpressure, never a reason to stop durable replay.
+		s.LastCode = "capacity"
+		return Save(dir, *s)
+	}
 	if e != nil {
 		return e
 	}
 	sort.Strings(fresh)
-	// Recover claimed originals first; a crash before journal publication never loses input.
-	claims := append([]string{}, recovered...)
+	admitted := 0
 	for _, name := range fresh {
-		if strings.HasPrefix(name, ".") {
+		if strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		if !strings.HasSuffix(name, ".json") {
-			continue
-		} // producer temp files are not complete entries
-		if len(s.Pending)+len(claims) >= MaxPending || s.Records+len(claims) >= MaxRecords {
+		// Pending originals still in intake are already counted in Pending.
+		if len(s.Pending) >= MaxPending || s.Records >= MaxRecords || admitted >= MaxPending {
 			s.LastCode = "capacity"
 			break
 		}
-		claim := strings.TrimSuffix(name, ".json") + "." + UUID() + ".json"
-		if len(name) > 128 {
-			s.LastCode = "invalid_filename"
-			continue
+		sourceID := strings.TrimSuffix(name, ".json")
+		if !ValidUUID(sourceID) {
+			sourceID = "invalid-" + UUID()
 		}
+		claim := sourceID + "." + UUID() + ".json"
 		if e = f.rename("outbox/"+name, "intake/"+claim); e != nil {
 			return e
 		}
-		claims = append(claims, claim)
+		admitted++
+		if e = intakeClaims(dir, f, s, []string{claim}, now); e != nil {
+			return e
+		}
 	}
-	// The fresh list is lexical filename order; recovery keeps stored sequence.
+	return Save(dir, *s)
+}
+func intakeClaims(dir string, f *FS, s *State, claims []string, now time.Time) error {
+	// Recovery keeps each already-persisted sequence.
 	for _, name := range claims {
 		path := "intake/" + name
 		raw, e := f.read(path, MaxEntry)
 		if e != nil {
 			s.LastCode = "unsafe_or_oversize_entry"
+			// Preserve the object without reading, following or chmodding it.
+			// Unique claim IDs keep rejected duplicates separate from valid intent.
+			target := "outbox/.failed/" + name + ".object"
+			id := claimID(name)
+			rejected, err := readRecord(dir, id)
+			if os.IsNotExist(err) {
+				rejected = Record{ID: id, Hash: Digest(nil), Sequence: s.Sequence + 1, Received: now, State: "failed", Reason: s.LastCode, Quarantined: target}
+				if err = saveRecord(dir, rejected); err != nil {
+					return err
+				}
+			} else if err != nil {
+				return err
+			}
+			if e = f.write(target+".receipt.json", integrations.JSON(map[string]any{"state": "failed", "reason": s.LastCode, "original_object": name + ".object"}), 0600); e != nil {
+				return e
+			}
+			if e = f.rename(path, target); e != nil {
+				return e
+			}
+			s.Sequence = max(s.Sequence, rejected.Sequence)
+			s.Records = max(s.Records, int(rejected.Sequence))
+			s.Failed++
+			if e = Save(dir, *s); e != nil {
+				return e
+			}
 			continue
-		} // retained, never followed or executed
+		}
 		sourceID := strings.Split(name, ".")[0]
 		entry, parseErr := Decode(raw)
 		if !ValidUUID(sourceID) {
@@ -445,6 +483,30 @@ func archive(f *FS, claim, id string, raw []byte, state, reason, receipt string,
 	}
 	return f.remove(claim)
 }
+
+// A definitive failure must leave its original and reason inspectable immediately.
+func archiveRecord(f *FS, r Record) error {
+	claims, e := f.names("intake", MaxPending*2)
+	if e != nil {
+		return e
+	}
+	for _, name := range claims {
+		if !strings.HasPrefix(name, r.ID+".") {
+			continue
+		}
+		raw, err := f.read("intake/"+name, MaxEntry)
+		if err != nil {
+			return err
+		}
+		if Digest(raw) != r.Hash {
+			return ErrConflict
+		}
+		if err = archive(f, "intake/"+name, r.ID, raw, r.State, r.Reason, r.Receipt, r.Warnings); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func Tick(ctx context.Context, dir string, now time.Time, c Callbacks) (State, error) {
 	unlock, e := integrations.Lock(ctx, dir+".lock")
 	if e != nil {
@@ -476,6 +538,7 @@ func Tick(ctx context.Context, dir string, now time.Time, c Callbacks) (State, e
 	s.LastContact = now
 	s.LastCode = ""
 	var tickErr error
+	deniedCards := map[string]bool{}
 	if e = intake(dir, f, &s, now); e != nil {
 		return s, e
 	}
@@ -535,25 +598,52 @@ func Tick(ctx context.Context, dir string, now time.Time, c Callbacks) (State, e
 			}
 			if e = c.Validate(ctx, s.Binding); e == nil {
 				r.Receipt, e = c.Send(ctx, s.Binding, *r.Delivery)
+			} else if classify(c, e) == "denied" {
+				e = integrations.ErrIdentityChanged
 			}
 		}
 		if e != nil {
 			tickErr = e
 			r.Reason = code(c, e)
 			s.LastCode = r.Reason
-			if kind := classify(c, e); kind == "invalid" {
-				r.State = "failed"
-				s.Failed++
-			} else if kind == "denied" || kind == "identity" {
+			kind := classify(c, e)
+			if kind == "identity" {
 				if ie := invalidate(dir, f, &s, r.Reason, now); ie != nil {
 					return s, ie
+				}
+			} else if kind == "invalid" || kind == "denied" {
+				r.State = "failed"
+				s.Failed++
+				if kind == "denied" {
+					card, ok := s.Binding.Card(r.Input.Card)
+					if !ok {
+						return s, ErrUnsafe
+					}
+					// Remove old copies of this card without discarding other caches.
+					if e = purgeMirror(f); e != nil {
+						return s, e
+					}
+					if e = os.Remove(snapshotPath(dir, card.ID)); e != nil && !os.IsNotExist(e) {
+						return s, e
+					}
+					deniedCards[card.ID] = true
 				}
 			}
 			if e = saveRecord(dir, r); e != nil {
 				return s, e
 			}
-			if kind := classify(c, tickErr); kind == "identity" || kind == "denied" {
+			if kind == "identity" {
 				return s, tickErr
+			}
+			if r.State == "failed" {
+				if e = archiveRecord(f, r); e != nil {
+					return s, e
+				}
+				s.Pending = s.Pending[1:]
+				if e = Save(dir, s); e != nil {
+					return s, e
+				}
+				continue
 			}
 			break
 		}
@@ -568,11 +658,14 @@ func Tick(ctx context.Context, dir string, now time.Time, c Callbacks) (State, e
 		}
 	}
 	// Refresh only an explicit admitted cohort, never enumerate workspace cards.
-	revoked := false
+	revoked := len(deniedCards) > 0
 	for n := 0; n < min(10, len(s.Binding.Cards)) && ctx.Err() == nil; n++ {
 		i := s.RefreshCursor % len(s.Binding.Cards)
 		s.RefreshCursor = (i + 1) % len(s.Binding.Cards)
 		card := s.Binding.Cards[i]
+		if deniedCards[card.ID] {
+			continue
+		}
 		view, err := c.Refresh(ctx, s.Binding, card)
 		if err != nil {
 			s.LastCode = code(c, err)
@@ -628,7 +721,7 @@ func Inspect(dir string, now time.Time) (map[string]any, error) {
 	if e != nil {
 		return nil, e
 	}
-	out := map[string]any{"enabled": s.Enabled, "directory_uuid": s.Binding.ID, "pending": len(s.Pending), "failed": s.Failed, "last_error_code": s.LastCode, "last_server_contact": s.LastContact, "stale_after": s.LastContact.Add(StaleAfter), "stale": !s.Enabled || s.LastContact.IsZero() || now.Sub(s.LastContact) >= StaleAfter}
+	out := map[string]any{"enabled": s.Enabled, "directory_uuid": s.Binding.ID, "pending": len(s.Pending), "failed": s.Failed, "last_error_code": s.LastCode, "last_server_contact": s.LastContact, "stale_after": ExpiresAt(s.LastContact), "stale": !s.Enabled || s.LastContact.IsZero() || !now.Before(ExpiresAt(s.LastContact))}
 	f, e := openBinding(s.Binding)
 	if e != nil {
 		return out, e
@@ -676,7 +769,7 @@ func Inspect(dir string, now time.Time) (map[string]any, error) {
 	if s.LastCode != "" {
 		return out, fmt.Errorf("file transport degraded: %s", s.LastCode)
 	}
-	if s.Enabled && (s.LastContact.IsZero() || now.Sub(s.LastContact) >= StaleAfter || !status.Enabled || status.Stale || !now.Before(status.StaleAfter)) {
+	if s.Enabled && (s.LastContact.IsZero() || !now.Before(ExpiresAt(s.LastContact)) || !status.Enabled || status.Stale || !now.Before(status.StaleAfter)) {
 		return out, fmt.Errorf("file transport mirror is stale")
 	}
 	return out, nil

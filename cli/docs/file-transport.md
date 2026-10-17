@@ -50,7 +50,8 @@ characters. Horizon/moved-without-evidence warning codes are retained in the
 private record and receipt. Evidence follows the same
 validation, at most eight refs. Entries are at most 64 KiB; note text at most 4 KiB.
 Unknown/duplicate JSON keys, unsupported operations and filename/ID disagreement
-fail without sending. No actor, credentials, URL override or command is accepted.
+fail without sending. `card_ref` must exactly match a canonical public ref in
+the binding; raw IDs and `card:<internal-id>` aliases are not accepted. No actor, credentials, URL override or command is accepted.
 
 The bridge atomically claims completed files into protected `.anx/intake/` before
 reading them. Disappearance from `outbox` means **accepted for inspection**, not
@@ -64,6 +65,9 @@ ordering matters. Manual/Git writes and other directories remain independent.
 
 `outbox/.done/<uuid>.json` retains original bytes only after confirmation, beside
 `<uuid>.receipt.json`. `.failed` retains definitive failures with a bounded reason.
+Unsafe/oversize claims are quarantined as unchanged `.object` entries with a
+failed receipt and private terminal record; symlinks and FIFOs are never followed
+or opened for content. These objects leave intake and free pending capacity.
 Changed UUID bytes conflict and both versions survive; they never replace a frozen
 request. Request key is `anx-file-v1-<directory_uuid>-<entry_uuid>`, actor-scoped by
 core. Network/timeouts/429/5xx retry the same body. Identity changes never reroute
@@ -72,7 +76,10 @@ against core before repairing retained state. Never reset an uncertain request's
 identity, first attempt or key to force a resend.
 
 Limits: 100 pending entries and 10,000 lifetime records per directory. Capacity
-leaves producer files untouched and becomes visible in status. There is no silent
+leaves new producer files untouched and becomes visible in status/doctor. An
+outbox scan over 10,100 entries (including junk names) pauses admission only;
+already-admitted work continues draining with its original replay key. Intake
+originals count once toward the pending limit; failed entries do not count. There is no silent
 eviction or automatic directory-UUID replacement. Archive/export confirmed history
 and reconcile pending work before intentionally creating a new directory binding.
 
@@ -89,10 +96,14 @@ STATUS includes `schema_version`, `generation`, `as_of`, `last_server_contact`,
 Cards include summary, promise, bounded plan and ten recent notes, per-card
 `as_of`, `stale_after` and resource version. No invented global sequence is exposed.
 A dead bridge cannot update banners: **readers must compare stale_after with their
-own clock**. Refresh admits ten allowlisted cards per tick; it never lists a
+own clock**. Expiry uses five host heartbeat intervals (currently five minutes),
+the existing host-presence freshness window, without a separate staleness knob.
+It never labels work/promise health. Refresh admits ten allowlisted cards per tick; it never lists a
 workspace's cards. Large/offline bindings may be stale while other jobs continue.
 
-403/404 removes that card's cached content and old generations. Host/actor
+A card 403/404 definitively fails only that note, preserving its original and
+reason in `.failed`, and removes only that card's cache and old mirror copies.
+Other card caches survive and their queued notes continue in the same tick. Host/actor
 revocation or a changed enrollment clears generated caches but retains pending
 writes. Offline revocation cannot be observed until contact resumes, and already
 copied/opened files cannot be recalled. Disable clears generated content and

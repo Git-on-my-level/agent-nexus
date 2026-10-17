@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// HeartbeatInterval is the host presence publication cadence.
+const HeartbeatInterval = 60 * time.Second
+
 type Runner func(context.Context, Workspace, Agent, string) error
 type Reporter func(context.Context, Registry)
 type runningJob struct {
@@ -30,7 +33,7 @@ func Supervise(parent context.Context, root string, run Runner, report Reporter)
 	}()
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
-	heartbeat := time.NewTicker(60 * time.Second)
+	heartbeat := time.NewTicker(HeartbeatInterval)
 	defer heartbeat.Stop()
 	reports := make(chan Registry, 1)
 	wg.Add(1)

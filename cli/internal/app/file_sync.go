@@ -208,7 +208,7 @@ func (a *App) runFileSync(ctx context.Context, args []string, cfg config.Resolve
 }
 func fileSyncStatus(dir string, s filetransport.State, now time.Time) map[string]any {
 	detail, inspectErr := filetransport.Inspect(dir, now)
-	return map[string]any{"inspection": detail, "inspection_ok": inspectErr == nil, "directory_uuid": s.Binding.ID, "binding": s.Binding, "enabled": s.Enabled, "pending": len(s.Pending), "failed": s.Failed, "records": s.Records, "last_server_contact": s.LastContact, "stale_after": s.LastContact.Add(filetransport.StaleAfter), "stale": !s.Enabled || s.LastContact.IsZero() || now.Sub(s.LastContact) >= filetransport.StaleAfter, "last_error_code": s.LastCode, "state_path": dir}
+	return map[string]any{"inspection": detail, "inspection_ok": inspectErr == nil, "directory_uuid": s.Binding.ID, "binding": s.Binding, "enabled": s.Enabled, "pending": len(s.Pending), "failed": s.Failed, "records": s.Records, "last_server_contact": s.LastContact, "stale_after": filetransport.ExpiresAt(s.LastContact), "stale": !s.Enabled || s.LastContact.IsZero() || !now.Before(filetransport.ExpiresAt(s.LastContact)), "last_error_code": s.LastCode, "state_path": dir}
 }
 func excludeFileTransport(ctx context.Context, directory string, write bool) error {
 	root, common, e := integrations.Repo(ctx, directory)
@@ -312,7 +312,10 @@ func fileErrorClass(e error) string {
 			return "identity"
 		}
 		status := fileHTTPStatus(typed)
-		if status == 401 || status == 403 || status == 404 {
+		if status == 401 {
+			return "identity"
+		}
+		if status == 403 || status == 404 {
 			return "denied"
 		}
 		if status == 400 || status == 409 || status == 422 || typed.Kind == errnorm.KindUsage {
