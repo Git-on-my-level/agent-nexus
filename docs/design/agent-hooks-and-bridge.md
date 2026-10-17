@@ -1,6 +1,6 @@
 # Agent hooks, Git capture and a first-class bridge
 
-Status: coordinator decisions accepted (2026-10-17). Owner: coordinator.
+Status: coordinator decisions accepted; single-host bridge supersedes earlier runtime split (2026-10-17).
 **Documentation only: implementation waits for [PR #429](https://github.com/Git-on-my-level/agent-nexus/pull/429)
 to merge, then rebases on main.** Main proposal: about five minutes; appendix:
 implementation details.
@@ -11,18 +11,21 @@ implementation details.
 - Git trailers publish notes **and optional next promises**; never step/status/card completion.
 - One explicitly elected capture writer per repo; same-writer deduplication accepted.
 - File transport's explicit directory/card trust boundary is accepted.
-- Bridge installation is the **recommended next step**, never a prerequisite.
-  Per-machine liveness must be obvious, including hosts with no agents.
+- **One bridge service/unit per host**, covering all configured workspaces and
+  registered agents; answers, wake routing, Git, files and drain are independent jobs.
+- Installation is the **recommended next step**, never a prerequisite. Per-machine
+  liveness must be obvious, including hosts with no agents. No runtime/API
+  compatibility is required; migration must preserve registered work.
 - Core remains authoritative; Git transports claims; mirrors are caches.
   Everything is optional and OSS-generic. No transcript ingestion or core-side remote fetching.
 
-## What exists
+## What exists before consolidation
 
 | Area             | Current behavior / implication                                                                                                            |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | CLI integrations | One Claude recipe/adapter. Extend parsing/rendering, preserve installs. Spool freezes requests but prunes entries: not a lossless outbox. |
-| Go `bridge run`  | Per-agent answers and actor lock; default install writes its unit. Crash recovery can repeat executors.                                   |
-| Python bridge    | Host wake router, full-roster validation; legacy install flags plus `start`, `stop`, `status`, `doctor --config`.                         |
+| Go `bridge run`  | Per-agent answers and actor lock; default install writes its unit. Replace these units; crash recovery can repeat executors.              |
+| Python bridge    | Host wake router; fold dispatch into Go, then delete package and legacy lifecycle/install paths.                                          |
 | Core hosts       | Existing bridge instance/check-in/expiry columns drive `bridge_online`; no general host last-seen.                                        |
 | Setup/UI         | `anx help <job>`; discovery means availability, not hook support. Host badges infer child-agent status and miss zero-agent hosts.         |
 
@@ -102,47 +105,51 @@ make new objects; reverts append information. Persist frozen bodies/identity bef
 sending; never prune unsent durable work. Keep visible backpressure and failed
 requests; stop uncertain retries before server receipt expiry (appendix).
 
-## Bridge: strongly recommended, never required
+## One host bridge: strongly recommended, never required
 
-Setup help, `host enroll` output, `orient` and the participant skill prominently
-recommend **`anx bridge install`**, with resolved agent/workspace, dry-run preview
-and heartbeat-enabled option. Explain degradation: unattended resume callbacks
-wait; Git sync/drain are manual and file delivery unavailable without enabled jobs.
-Await/batch/manual reads still work. No silent install or blocking dependency.
-Orient keeps its actor-lock check and recommends installation when absent.
+`anx bridge install` installs **one** host unit, independent of workspace/agent.
+`anx bridge add --as <agent> [--workspace <alias>]` registers an enrolled agent,
+enabling its answer job; optional wake/runtime, Git, files and spool jobs are
+configured independently. Add every intended agent/workspace; adding one never
+creates another unit. `run` is the same host supervisor in the foreground and
+shares its singleton lock. Start/stop/status/doctor operate this service only.
+No per-agent flags on run and no Python runtime install mode remain.
 
-Add an independent host-jobs mode/unit of `bridge run` (`--jobs git,spool`, later
-files, explicit writer), locked per workspace/host. Existing per-agent answer
-units stay valid. Jobs/heartbeat must not starve during long executors. Extend
-no-config Go status/doctor; preserve Python --config behavior; add log rotation.
+The local registry pins workspace ID/base URL, enrollment/config directory,
+agent actor ID, enabled jobs, resume-registry roots and execution policy. It
+references existing credentials; never copies keys/tokens. All configured
+workspaces share one scheduler with isolated per-workspace/agent queues, bounded
+workers and an independent heartbeat timer. Long executors or one offline
+workspace cannot block others. One wake dispatcher partitions ask-delivery wakes
+from ordinary runtime wakes, so the two jobs cannot claim the same work.
 
-### Presence contract
+There is one host presence lifecycle. Because workspace APIs/host enrollments are
+local to each deployment, its heartbeat timer sends **one signed, workspace-only
+projection per configured workspace**, not one request exposing the whole fleet.
+Each projection contains host identity/version plus registered-agent/job readiness.
+Core stores one host presence row and normalized agent/job rows; see appendix.
+An agent is wake-online only when its own wake job is enabled/ready under fresh
+host presence. Answers alone cannot imply wake routing, including for unregistered
+agents. This rule also replaces the host-wide auth/roster online inference.
 
-Extend signed `POST /hosts/{host_id}/bridge/check-in` with optional
-`service:{kind,actor_id,version,jobs}`, kind answer or host-jobs. Keep legacy
-`{bridge_instance_id,checked_in_at,expires_at}`, proof headers and wake behavior.
-New mode uses server receipt time plus five-minute expiry, never updates legacy
-`hosts.bridge_*`/agent `bridge_online`, and never treats token grants as presence.
-Verify active signing host/key and its non-excluded actor transactionally.
+Agents/Access show per-host Live / Stale (last seen…) / Not reported badges,
+including zero-agent hosts, with agent/job detail. Age expiry without reload;
+coalesce visible-host reads. Only workspace-local identity/version/jobs/times
+leave the host; queue counts, paths, errors and resume commands stay local.
 
-Next migration: `host_bridge_services(host_id,kind,actor_id,instance_id,version,
-jobs_json,signed_at,last_seen_at,expires_at)`, PK `(host_id,kind,actor_id)`, host FK.
-Upsert one slot; reject older signed observations. No history/backfill. Response
-retains `{bridge:{host_id,bridge_instance_id,checked_in_at,expires_at}}`, adding
-`bridge.service:{kind,actor_id,version,jobs,last_seen_at}` only for new mode.
+Setup help, host-enroll output, orient and the participant skill prominently
+recommend `anx bridge install`, then the relevant `bridge add` command. Explain
+that unattended resumes wait without the answer job; Git/drain become manual
+and file delivery unavailable without their jobs. Await/batch/manual reads work.
+Replace orient's per-agent lock probe with host-service readiness **for that
+workspace/actor/job**, not merely a live daemon. No mandatory or silent install.
 
-Authenticated read-only `POST /hosts/bridge-status` accepts `{host_ids:[]}` and
-returns `{as_of,hosts:[{host_id,revoked_at,wake,services,services_truncated}]}`;
-wake is null or `{last_seen_at,expires_at}`, services contain
-`{kind,actor_id,version,jobs,last_seen_at,expires_at}`. Read legacy wake times
-directly; no fabricated general host last-seen. Unknown/inaccessible hosts disclose
-nothing; revocation overrides presence.
-
-Agents/Access show **per-host badges**, including zero-agent hosts: Live,
-Stale (last seen…), Not reported, with separate wake/answer/jobs. Missing telemetry
-cannot prove absence. Age expiry without reload; coalesce visible-host reads on
-roster/focus/reconnect. Authenticated readers see only version/jobs/times;
-counts/errors/paths/cards/sessions stay local.
+Install is also the migration entry point: preview/import old registrations,
+quiesce proven old units/processes, activate the sole new unit, verify every
+imported namespace and print replacements. Accept arbitrary verified labels and
+wrapper-managed children, including the owner's three-workspace example; never
+hardcode harness names. No successful install while old bridge supervisors remain.
+The migration journal, ownership checks and loss-prevention gates are below.
 
 ## File transport
 
@@ -168,27 +175,31 @@ a dead bridge cannot rewrite stale banners.
 
 Three opt-in PRs, all after #429; contracts first for API changes.
 
-| PR                                | Files/packages                                                                                                                                                                                                                                                | Acceptance                                                                                                                                                                                                                                                                                                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Hooks + Git notes/promises     | CLI integrations; app integration/identity/note/message/dispatch/preflight/output/help/registry; local-command metadata; CLI integration fixtures, docs and participant bundle.                                                                               | Harness goldens and model-visible start/compact smoke; settings preservation, card isolation/timeouts. Real Git/CLI/core: writer mismatch/handoff, trailers/time normalization, ordered promises with two authors, uncertain retry, backfill/rewrite, crash/restart and backpressure.                                                              |
-| 2. Bridge jobs + visible liveness | Canonical OpenAPI/schema and generated consumers; core auth/server/storage/resourceaccess + migration/inventories; app bridge/ask-delivery/host-enroll/orient/setup/unit lifecycle; UI status store, client, Agents/Access components/pages; skills/runbooks. | Proof/revocation/server-clock/back-compat/migration/scale tests; long executor cannot starve jobs. Playwright agents/access: not reported → live → expiry without reload → stale → recovery → revoked; zero-agent host, answer-only versus wake routing. Check prominent recommendations in all four CLI/skill surfaces and bridge-free operation. |
-| 3. Files                          | Reuse integrations delivery; new CLI sync intake/mirror package; app commands/job wiring, integration fixtures, skill/catalog/bundle and security docs.                                                                                                       | Filesystem races/symlinks/disk-full/identity/replay-cutoff tests; atomic mirrors/privacy. Sandbox E2E: mounted outbox → bridge → one note/promise → mirror, with no producer network/token.                                                                                                                                                        |
+| PR                             | Files/packages                                                                                                                                                                                                                                                                                                                                                                                   | Acceptance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Hooks + Git notes/promises  | CLI integrations; app integration/identity/note/message/dispatch/preflight/output/help/registry; local-command metadata; CLI integration fixtures, docs and participant bundle.                                                                                                                                                                                                                  | Harness goldens and model-visible start/compact smoke; settings preservation, card isolation/timeouts. Real Git/CLI/core: writer mismatch/handoff, trailers/time normalization, ordered promises with two authors, uncertain retry, backfill/rewrite, crash/restart and backpressure.                                                                                                                                                                                                                                                                |
+| 2. One host service + liveness | Canonical contracts/generated consumers; core auth/server/storage/resourceaccess/commandcenter + migration/inventories; new `cli/internal/bridge/` supervisor/registry/migrator, rewrite bridge commands/units/ask delivery/enrollment/orient; port wake dispatch/run ingestion, remove Python/lifecycle code and update build/version/docs/tests; UI status store/client/Agents/Access; skills. | Multi-agent × multi-workspace isolation/fairness and callback recovery; signed heartbeat, per-agent wake truth, scale/privacy. Migration fixtures for launchd/systemd, custom wrappers/labels, duplicate config roots, in-flight/acknowledged resumes, crash rollback and exactly one supervisor. Real CLI/core E2E after migration: answer each of three workspaces exactly once where outcome is known. Playwright: host live/stale/recovery/revoked, zero-agent and answer-only/unserved agents; prominent setup guidance, bridge-free operation. |
+| 3. Files                       | Reuse integrations delivery; new CLI sync intake/mirror package; host-supervisor job wiring, integration fixtures, skill/catalog/bundle and security docs.                                                                                                                                                                                                                                       | Filesystem races/symlinks/disk-full/identity/replay-cutoff tests; atomic mirrors/privacy. Sandbox E2E: mounted outbox → bridge → one note/promise → mirror, with no producer network/token.                                                                                                                                                                                                                                                                                                                                                          |
 
-PR2 extends check-in/adds read-only bridge-status; PR1/3 reuse events/scoped
-reads. List changed routes; add privacy classifications, indexed page budgets and
-[performance/migration gates](../../core/docs/performance.md). Do not expand
-SCA-663 host baselines or add overview counts.
+PR2 replaces host check-in/status contracts, changes agent/host/principal wake
+projections and signals, and reuses existing wake/ask/run routes; list exact changed
+routes in the PR. PR1/3 reuse events/scoped reads. Add privacy classifications,
+indexed page budgets and [performance/migration gates](../../core/docs/performance.md);
+never expand SCA-663 baselines to justify new scans.
 
-New features default off; setup recommendations default prominent. Probe status
-support before new heartbeat fields; old core falls back. Rollback retains unsent
-work/schema, removes owned hooks/units only. Update participant/catalog/bundle;
-run focused tests, module/test-fast/contract checks and affected Playwright, then
-terminal exact-head ci-ok (no polling). No implementation now.
+Install opts into the single presence reporter; add/import explicitly enables jobs.
+New Git/hooks/files remain off until enabled. Release matching core/CLI/UI together;
+no legacy runtime/API compatibility. Advertise `host_bridge_v1` in the handshake;
+preflight every workspace before stopping old services. Rollback preserves unit/config snapshots, registry files and unsent work;
+never start both supervisors or automatically repeat uncertain callbacks. Update
+participant/catalog/bundle, setup/release docs and module guides. Run focused tests,
+module/test-fast/contract checks and affected Playwright, then terminal exact-head
+ci-ok (no polling). No implementation until #429 merges.
 
-Cuts: step/status/card completion, patch-ID deduplication, command-text inference,
-recursive watchers, runtime unification, duplicate installer/setup wizard, remote
-counters/errors, fleet counts, update auto-restart, event-log mirrors/editable
-frontmatter, FSKit/FUSE/MCP. **Coordinator questions resolved; none remain.**
+Cuts retained: completion/status trailers, patch-ID deduplication, command-text
+inference, recursive watchers, duplicate installer, remote counters/errors, fleet
+counts, update auto-restart, event-log mirrors/editable frontmatter, FSKit/FUSE/MCP.
+Runtime consolidation is approved and belongs in PR2; no owner questions remain.
 
 ## Appendix: adapters, bounds and failures
 
@@ -206,10 +217,111 @@ prompts or compaction summaries. Pin supported versions/fixtures against the
 [Cursor](https://cursor.com/docs/hooks) contracts checked 2026-10-17.
 Unsupported versions retain manual `anx context` / generic hooks.
 
-Host proof uses `X-ANX-Host-Key-Id`, `X-ANX-Host-Signed-At`,
-`X-ANX-Host-Signature` over
-`anx-host-bridge-check-in|host_id|signed_at|base64url(SHA256(raw_body))`.
-Keep existing skew/replay/revoked-key checks; legacy responses remain unchanged.
+### Host registry and heartbeat contract (PR2)
+
+- Canonical owner-only local `bridge/registry.json` under the installation's ANX
+  root: `{schema_version:1,revision,workspaces:[{workspace_id,base_url,host_id,
+config_dir,agents:[{name,actor_id,jobs,registry_dirs,execution_policy}]}]}`.
+  Exact runtime argv/cwd and resume policy stay local. Pin resolved identities,
+  not mutable default aliases. Different config roots register into this same
+  installation; alternate invocation flags cannot create another service/lock.
+- One launchd label `io.agent-nexus.bridge` or systemd user unit
+  `anx-bridge.service`, owned by the enrolled OS user. Canonical per-host install
+  record/socket/lock applies across workspace/config roots; a second run attaches
+  or reports already running. Cross-user ownership conflicts stop install rather
+  than quietly creating another host bridge. No root/system-wide authority added.
+- Replace `POST /hosts/{host_id}/bridge/check-in` request with
+  `{instance_id,sequence,config_revision,version,agents:[{actor_id,jobs:[{kind,enabled,ready}]}]}`;
+  kinds `answers,wake,git,files,spool`. Full workspace-local snapshot; omission
+  clears old coverage, zero agents valid. `ready` is self-reported job readiness,
+  not proof of completed delivery. Disabled/degraded jobs cannot imply wake-online.
+- Existing three host-proof headers sign
+  `anx-host-bridge-check-in|host_id|signed_at|base64url(SHA256(raw_body))`;
+  retain skew/replay/revocation checks, no bearer. Check every actor belongs to
+  this active enrollment and is not excluded; only registered jobs are advertised.
+  Derive a workspace-scoped instance ID from the local daemon incarnation; never
+  export a machine-global correlation identifier or another workspace's config.
+- Server times govern presence. Atomically accept a newer sequence for the same
+  instance, or a newly signed replacement instance; reject older signed snapshots
+  and stale-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
+sequence,config_revision,version,signed_at,last_seen_at,expires_at)` and
+  `host_bridge_jobs(host_id,actor_id,kind,enabled,ready)`, PK `(host_id,actor_id,kind)`
+  with presence FK. Replace that host's bounded job snapshot transactionally.
+  Return `{bridge:{host_id,instance_id,sequence,last_seen_at,expires_at}}`.
+- Next migration creates these tables, removes obsolete `hosts.bridge_*`
+  columns/readers/writers and classifies privacy fields; no historical live-state
+  backfill. Auth principal enrichment, commandcenter, host and agent responses use
+  indexed per-actor wake-job joins instead of shared host expiry. Fresh parent
+  presence + enabled/ready wake job + non-revoked host/actor is required everywhere,
+  including PM readiness and mention routing. Config/revocation publishes the
+  existing agents-change signal; reads evaluate expiry at request time and UI
+  ages locally, without a new expiry sweep or progress event.
+- Authenticated read-only `POST /hosts/bridge-status` input `{host_ids:[]}`;
+  output `{as_of,hosts:[{host_id,revoked_at,bridge:null|{version,last_seen_at,
+expires_at},agents:[{actor_id,jobs:[{kind,enabled,ready}]}],agents_truncated}]}`.
+  Unknown/inaccessible hosts disclose nothing. One host badge is independent of
+  agent count; job detail is workspace-local. Never use these observations as
+  authorization. All changed response shapes/consumers update together.
+
+### Install migration and dependency inventory (PR2)
+
+1. `install --dry-run` lists candidate OS units, loaded jobs, owner-verified process
+   trees and workspace/config/registry bindings; normal install prints the same
+   replacement plan. Inspect effective argv, executable identity, UID, parent/unit
+   ownership and process start time, not label prefixes or process names alone.
+   A custom shell wrapper may own several actual `anx … bridge run` children;
+   inspect those without executing arbitrary scripts or reading secrets/env files.
+   Unresolved ownership/argv is a reported blocker; do not kill it or claim success.
+2. Build and fsync an owner-only migration manifest and rollback snapshots before
+   stopping anything. Import every discovered agent/workspace, timeout/attempt
+   policy, cwd/config root and Python runtime argv/callback wiring. Resolve
+   workspace aliases once; enumerate configured enrollments too. Unsupported
+   settings must be reported for repair, never silently dropped.
+3. Preserve existing resume namespaces **in place**:
+   `<config-dir>/answer-resumes/SHA256(trimmed_base_url + newline + actor_id)[:16]`
+   (hex), source registry files plus cursor. Keep command bytes, cwd, subscription,
+   attempts, delivered/acknowledged state and outstanding wake/claim instance IDs.
+   Deduplicate identical physical roots; conflicting duplicate asks pause that
+   namespace for reconciliation. New ask writes use the same registered namespace;
+   preserve concurrent arrivals instead of moving/deleting the directory.
+4. Quiesce old launchers and wait for callbacks to settle before handoff. Recheck
+   PID identity before signaling and disable restart sources. Already delivered
+   commands retry acknowledgement only. Interrupted attempts with unknown effects
+   remain visible/paused for reconciliation, never blindly replayed. Persist the
+   final cutover snapshot after old writers stop; resume pending wakes with their
+   original claims or an explicit host-authorized claim transfer.
+5. Stage one disabled unit, atomically publish merged registry, activate it, and
+   verify readiness for every imported namespace with the host singleton held.
+   Confirm exactly one bridge unit/supervisor and no surviving legacy consumers;
+   runtime/resume child commands are allowed, extra bridge daemons are not. Print
+   replaced labels/PIDs, imported workspace/agent/registry counts and unresolved
+   items, never raw callback commands. Re-running install is idempotent.
+6. Journal each phase. Before activation failure restores the saved plan where
+   safe; after callbacks may have run, rollback first stops the new consumer and
+   reconciles durable outcomes, not simultaneous old/new execution. Retain source
+   state and backups. Do not return success on partial coverage or unsafe leftovers.
+
+Owner acceptance fixture (generic discovery, no hardcoded label):
+`io.agent-nexus.hermes-answer.anx` owns three
+`anx --as hermes --workspace {personal,anx,omi} bridge run --command-timeout 30m`
+processes. Import all three as answers-enabled registrations under one unit,
+preserve all three resume namespaces and 30m policy, then retire the wrapper and
+its children. Test actual argv arrays for each alias, not shell brace expansion;
+repeat equivalent launchd/systemd and custom-config-root cases.
+
+Repository audit found no active dependency that requires retaining the Python
+bridge. Do not delete capabilities along with the package:
+
+| Dependency                                                                                             | Consolidation action                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Python bridge / CLI lifecycle / wake E2E                                                               | Port wake packet reads, claims/outcomes, exact runtime launch, optional agentctl run + runs-ingest callbacks and retry receipts into Go jobs; then remove `adapters/agent-bridge/`, `bridge_lifecycle*`, Python installer/probes and per-agent unit rendering. Replace tests with unified-service integration coverage. |
+| Makefile, version sync/managed-files scripts, hook fixtures, release docs, deterministic-bridge script | Remove Python build/version targets; replace the deterministic fixture (its referenced examples are already absent), update inventories/generated help and test selection.                                                                                                                                              |
+| `adapters/pm/pm_adapter.py`                                                                            | Independent subprocess protocol wrapper, no import from the removed package: retain its PM limits/isolation contract. README's example module `anx_agent_bridge.adapters.hermes_acp` is absent already; replace stale guidance with generic registered runtime wiring.                                                  |
+| Core router/PM/auth + guides                                                                           | Preserve workspace-side wake/PM contracts; fix the stale models.py comment, consume per-agent readiness, update root/module guides, README and both ask-delivery docs. No separate PM bridge daemon required.                                                                                                           |
+
+If implementation reveals an additional dependency that cannot be folded, report
+it and leave that component intact pending resolution; do not substitute a second
+bridge service silently. This turn only records the removal plan.
 
 Event body: `{actor_id,request_key,event:{type,actor_id,thread_ref,refs,summary,payload,provenance}}`.
 Reuse the card-message builder's subject/card/thread/board fields, optional
@@ -223,8 +335,8 @@ Reuse the card-message builder's subject/card/thread/board fields, optional
 | Next        | First token UTC YYYY-MM-DD (end of day) or zoned RFC3339; remainder required text. Accept note duration grammar too, resolved once from commit committer time, not sync time. Reuse note's 160-rune text truncation, positive duration ≤3650d and two-day-horizon / moved-without-evidence warnings. Freeze normalized RFC3339 at; note+promise atomic, never a separate patch. Missing Next is not a clear. Preserve core's per-author fold and ordinary evidence-reset rules.                                                                                                     |
 | Git walk    | Snapshot selected local refs; ≤100 commits / five seconds per tick; durable continuation/outcomes before cursor. Ordered per-card lane includes ordinary notes (evidence can affect promises). Missing/shallow objects pause; overflow explicit backfill; no fetch. Check writer on intake/drain; callbacks/scanners use the same binding.                                                                                                                                                                                                                                          |
 | Spool       | Existing 3 s hook, 100 pending+dead, 1,000 receipts, 30-day pruning is not sufficient for durable intake. Version new payloads, read old queues unchanged; no unsent eviction, reject capacity before sending and retain source. Frozen identity/key/body; four sends/tick, 1 s HTTP, jittered 1–60 s retry. Network/timeout/429/5xx retain; 401/403/404 pause; 400/422/409 inspectable failure. FIFO promise lane does not rotate failed predecessors behind newer commits. Stop uncertain auto-retry at 25 days before 30-day receipt GC; reconcile explicitly after loss/expiry. |
-| Heartbeat   | 60 s jittered independent cadence, 2 s HTTP, fresh proof per retry at most cadence-rate. Required wire duration positive ≤300 s; server fixes new expiry to 300 s. Version ≤64 ASCII, instance ≤128; unique compatible jobs ≤4: answers/git/spool/files. Existing host proof signs exact body; no bearer, arbitrary metadata, public/dev bypass or external telemetry.                                                                                                                                                                                                              |
-| Status cost | ≤100 unique hosts; authorize first, PK-seek ≤33 service candidates/host, emit ≤32 with truncation; omit revoked/excluded actors without refill. Partial results never prove absence. Indexed heartbeat validation/upsert; no full GetHost/roster, history scan, N+1 calls or ownership-graph rebuild.                                                                                                                                                                                                                                                                               |
+| Heartbeat   | One timer; each workspace receives its own signed projection every 60 s with jitter, 2 s HTTP, fixed server expiry 300 s. Workspace-local monotonic sequence; fresh proof per retry. Version ≤64 ASCII, instance ≤128; ≤256 registered actors × five unique compatible jobs, body ≤256 KiB; reject oversized configuration before enabling, never truncate a heartbeat snapshot. No arbitrary metadata, public/dev bypass or external telemetry.                                                                                                                                    |
+| Status cost | ≤100 hosts; authorize first, admit ≤33 actor groups by `(host_id,actor_id,kind)` index (five rows/group), emit ≤32 with truncation; omit revoked/excluded without refill. Partial results never prove absence. Presence PK seek + bounded job snapshot replace/joins; O(admitted agents/jobs), no workspace/roster/history scan or graph rebuild. Batch scope/revocation checks; add native read/write budgets and query-plan tests.                                                                                                                                                |
 | Files       | ≤100 allowlisted cards, ten refreshes/tick, ten notes/card, bounded plans; entry ≤64 KiB, evidence ≤8 with note validation. Next optional, normalized/frozen once at durable intake; preserve file order per directory/card before newer promises. No tracked destination, credential export, symlink/path traversal, arbitrary actor/base URL or shell. Atomic generation+manifest; raw errors/counters stay local.                                                                                                                                                                |
 
 Success checks: model-visible context, recovery tokens, commit→confirmed
