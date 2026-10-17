@@ -32,10 +32,10 @@ export function bridgeBadge(
 
 /** What each bridge state means for the reader, for tooltips and hints. */
 export const BRIDGE_STATE_HELP = {
-  live: "This machine's bridge is checking in: answers reach its agents automatically, and its enabled jobs run.",
+  live: "This machine's bridge is checking in. Check each agent's jobs to see which deliveries are enabled.",
   stale:
-    "This machine's bridge has stopped checking in. Answers and captured commits wait until it is back.",
-  none: "No bridge on this machine. ANX still works here, but answers are not delivered automatically and commits are not captured.",
+    "This machine's bridge has stopped checking in. Its enabled jobs may wait until it returns.",
+  none: "No bridge on this machine. ANX still works here. Use the bridge for unattended answers, Git retries and file sync.",
   revoked: "This machine's access was revoked.",
   loading: "Checking this machine's bridge.",
   unknown: "Bridge status could not be read from this workspace.",
@@ -47,6 +47,7 @@ export const BRIDGE_JOB_LABELS = {
   wake: "Wake on mention",
   git: "Git capture",
   spool: "Delivery retries",
+  files: "File sync",
 };
 
 /**

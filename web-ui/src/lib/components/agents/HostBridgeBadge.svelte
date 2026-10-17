@@ -121,7 +121,7 @@
     >
       <span class="text-fg-muted"
         >{badge.state === "none"
-          ? "Answers aren't delivered automatically and commits aren't captured."
+          ? "Automatic answer delivery, Git retries and file sync need the bridge."
           : "Restart it on that machine, or reinstall:"}</span
       >
       <code class="rounded bg-panel-hover px-1.5 py-0.5 text-fg"

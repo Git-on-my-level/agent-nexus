@@ -5,11 +5,11 @@ description: Keep substantive Agent Nexus work visible with explicit refs, scope
 
 # ANX participant
 
-Skill contract: anx.participant.v27.
+Skill contract: anx.participant.v28.
 
 ## Daily loop
 
-Pass `--as <name>` or set `ANX_AS`; enroll the host once (`anx help enroll`). Select `--workspace <alias>`, a directory rule (`anx config map`), or default (`anx config use`). Never hardcode URLs.
+Set `--as <name>` / `ANX_AS`; enroll once (`anx help enroll`). Select `--workspace <alias>` or configured directory/default routing. Never hardcode URLs.
 
 - `anx orient`: start with your brief.
 - `anx context <ref>`: read before changing a card.
@@ -25,14 +25,16 @@ Use `anx ask "<decision>?" --subject-ref card:<slug> --body "<context>" --recomm
 
 ## Optional automation
 
-Everything defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`; choose a card explicitly, through session binding or directory mapping. Hooks restore bounded context without transcripts or presence writes. Claude/Codex support start/compaction; Cursor retains manual context fallback. Stale cache remains opt-in.
+Everything defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`; choose a card explicitly or by session/directory binding. Hooks restore bounded context without transcripts/presence writes. Unsupported harness events retain manual context fallback.
 
-Elect one repo writer with `anx git enable --writer`; distribute its exported binding. Other hosts report `not_capture_writer`. `Anx-Card`, `Anx-Note`, `Anx-Next` trailers publish notes/promises, never completion/status. Inspect `anx git status`; use `anx git sync` for delivery. Rewrites/failures require reconciliation; see `anx help git`.
+Elect one repo writer: `anx git enable --writer`; share its exported binding. Other hosts report `not_capture_writer`. `Anx-Card`, `Anx-Note`, `Anx-Next` publish notes/promises, never completion/status. Inspect `anx git status`; deliver with `anx git sync`; reconcile failures.
 
-Recommended next step: preview `anx bridge install --dry-run`, explicitly install the one host service, then register each agent/workspace with `anx bridge add --as <name> --workspace <alias>`. Answers are enabled by registration; Git capture, spool drain and exact runtime wake commands are independent opt-ins. Without their jobs, unattended resumes wait and Git/drain are manual. Await/batch/direct reads need no bridge. Never alter services merely for a code task.
+Recommended next step: preview `anx bridge install --dry-run`, install the one host service, then `anx bridge add --as <name> --workspace <alias>` for each agent/workspace. Answers, Git, spool and wake are independent jobs. Without them, unattended resumes wait and Git/drain are manual. Await/batch/direct commands need no bridge. Never alter services merely for coding.
+
+Sandbox files: preview `anx sync enable <directory> --card-id card:<handle> --dry-run`; enable the reviewed allowlist/files job. Mount only `.anx/outbox` writable, without token/config/network access. Immutable UUID JSON submits notes/next promises only. Inspect `.done`/`.failed` receipts and `anx sync status <directory>`; preserve uncertain originals/keys. Mount mirror read-only; compare `stale_after` with your clock. `anx sync disable <directory>` stops delivery. See `anx help sync`.
 
 ## Recurring work and discovery
 
-Set cadence with `anx work cadence`; record every run, including no-ops/failures, with `anx work receipt`, reusing its run ID on retry. Track metrics with `anx work goal` or a series.
+Use `anx work cadence`, `anx work receipt` (same run ID on retry, including no-ops/failures), and `anx work goal`.
 
 Use `anx help <job>` or `anx api <operation>` for everything else. Share task-scoped facts/refs only; never secrets or raw transcripts.

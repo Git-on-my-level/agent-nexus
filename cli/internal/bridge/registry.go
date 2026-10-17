@@ -37,6 +37,7 @@ type Agent struct {
 	ActorID      string          `json:"actor_id"`
 	Jobs         map[string]bool `json:"jobs"`
 	RegistryDirs []string        `json:"registry_dirs"`
+	FileDirs     []string        `json:"file_dirs,omitempty"`
 	Policy       Policy          `json:"execution_policy"`
 	Runtime      *Runtime        `json:"runtime,omitempty"`
 }
@@ -100,16 +101,22 @@ func (r Registry) Validate() error {
 				return fmt.Errorf("invalid or duplicate bridge agent")
 			}
 			seen[k] = true
-			for kind, enabled := range a.Jobs {
+			for kind := range a.Jobs {
 				switch kind {
-				case "answers", "wake", "git", "spool":
-				case "files":
-					if enabled {
-						return fmt.Errorf("file transport is not enabled in this release")
-					}
+				case "answers", "wake", "git", "spool", "files":
 				default:
 					return fmt.Errorf("unknown bridge job")
 				}
+			}
+			if len(a.FileDirs) > 16 || a.Jobs["files"] && len(a.FileDirs) == 0 {
+				return fmt.Errorf("files job needs 1..16 private binding roots")
+			}
+			seenFiles := map[string]bool{}
+			for _, d := range a.FileDirs {
+				if !filepath.IsAbs(d) || seenFiles[d] {
+					return fmt.Errorf("invalid file binding root")
+				}
+				seenFiles[d] = true
 			}
 			if len(a.RegistryDirs) > 16 {
 				return fmt.Errorf("too many resume namespace roots")
@@ -178,6 +185,13 @@ func Register(r *Registry, w Workspace, a Agent) error {
 				if !found {
 					a.RegistryDirs = append(a.RegistryDirs, dir)
 				}
+			}
+			if len(old.FileDirs) > 0 {
+				a.FileDirs = append([]string{}, old.FileDirs...)
+				if a.Jobs == nil {
+					a.Jobs = map[string]bool{}
+				}
+				a.Jobs["files"] = old.Jobs["files"]
 			}
 			*old = a
 			return nil

@@ -290,6 +290,11 @@ jobs:
         working-directory: cli
         run: go test ./...
 
+      - name: Install file-transport sandbox
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Run CLI integration tests
         working-directory: cli
         # Give the full real-core suite an explicit package budget below the

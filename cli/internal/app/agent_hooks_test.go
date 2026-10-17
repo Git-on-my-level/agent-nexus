@@ -39,6 +39,10 @@ type hookFixture struct {
 	readGate             chan struct{}
 	readStarted          chan struct{}
 	calls                atomic.Int32
+	identityDenied       atomic.Bool
+	filePlan             atomic.Bool
+	fileCardStatus       atomic.Int32
+	fileSendStatus       atomic.Int32
 }
 
 func newHookFixture(t *testing.T) *hookFixture {
@@ -67,6 +71,13 @@ func newHookFixture(t *testing.T) *hookFixture {
 			_ = json.NewDecoder(r.Body).Decode(&grant)
 			agent := anyString(grant["agent_name"])
 			fmt.Fprintf(w, `{"agent":{"id":%q,"actor_id":%q,"handle":%q},"tokens":{"access_token":"fixture-token","expires_in":3600}}`, agent, "actor-"+agent, agent+".fixture")
+		case r.URL.Path == "/agents/me":
+			if f.identityDenied.Load() {
+				w.WriteHeader(403)
+				fmt.Fprint(w, `{"error":{"code":"host_revoked","message":"fixture revoked"}}`)
+				return
+			}
+			fmt.Fprint(w, `{"agent":{"id":"worker","actor_id":"actor-worker"}}`)
 		case r.URL.Path == "/meta/handshake":
 			if f.handshakeUnsupported.Load() {
 				fmt.Fprint(w, `{"workspace_id":"ws","min_cli_version":"0.0.0"}`)
@@ -87,8 +98,17 @@ func newHookFixture(t *testing.T) *hookFixture {
 				fmt.Fprint(w, `{"work":{"ref":"card:work","title":"Scoped fixture context","phase":"in_progress","promise":{"what":"Verify behavior"}}}`)
 			}
 		case strings.HasPrefix(r.URL.Path, "/cards/") && strings.HasSuffix(r.URL.Path, "/plan"):
+			if f.filePlan.Load() {
+				fmt.Fprint(w, `{"plan_health":{"promise":{"at":"2026-10-20T00:00:00Z","what":"Verify behavior"}},"plan":{"steps":[{"id":"review","title":"Read scoped note","ref":"card:linked"}]},"plan_state":{"steps":[{"id":"review","status":"active"}]}}`)
+				return
+			}
 			fmt.Fprint(w, `{"plan_health":{"promise":{"at":"2026-10-20T00:00:00Z","what":"Verify behavior"}},"plan":{"steps":[]}}`)
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
+			if r.URL.Path == "/cards/card-id" && f.fileCardStatus.Load() != 0 {
+				w.WriteHeader(int(f.fileCardStatus.Load()))
+				fmt.Fprint(w, `{"error":{"code":"forbidden","message":"card unavailable"}}`)
+				return
+			}
 			if strings.HasSuffix(r.URL.Path, "card:blocked") {
 				f.prepareCalls.Add(1)
 				if status := f.prepareStatus.Load(); status != 0 {
@@ -105,8 +125,8 @@ func newHookFixture(t *testing.T) *hookFixture {
 					return
 				}
 			}
-			if strings.HasSuffix(r.URL.Path, "card:other") {
-				fmt.Fprint(w, `{"card":{"id":"other-id","thread_id":"other-thread"}}`)
+			if strings.HasSuffix(r.URL.Path, "card:other") || strings.HasSuffix(r.URL.Path, "/other-id") {
+				fmt.Fprint(w, `{"card":{"id":"other-id","ref":"card:other","thread_id":"other-thread"}}`)
 				return
 			}
 			fmt.Fprint(w, `{"card":{"id":"card-id","ref":"card:work","title":"Fixture","thread_id":"thread-id","column_key":"in_progress"}}`)
@@ -114,6 +134,11 @@ func newHookFixture(t *testing.T) *hookFixture {
 			fmt.Fprint(w, `{"events":[]}`)
 		case r.URL.Path == "/events" && r.Method == "POST":
 			b, _ := io.ReadAll(r.Body)
+			if status := f.fileSendStatus.Load(); status != 0 && strings.Contains(string(b), "thread-id") {
+				w.WriteHeader(int(status))
+				fmt.Fprint(w, `{"error":{"code":"forbidden","message":"card unavailable"}}`)
+				return
+			}
 			f.mu.Lock()
 			f.bodies = append(f.bodies, string(b))
 			fail := f.failFirst && len(f.bodies) == 1

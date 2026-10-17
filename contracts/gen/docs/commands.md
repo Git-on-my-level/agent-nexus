@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `257`
+- Commands: `260`
 
 ## `actors.create`
 
@@ -2956,6 +2956,51 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
 - Output: Returns `SessionResponse`.
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+
+## `sync.disable`
+
+- CLI path: `sync disable`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Disable a directory file transport while preserving original work.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `file_transport_capacity`
+- Output: Envelope v2 with local file binding and health.
+- Agent notes: Offline local operation. Clears generated caches, disables the directory job and retains unconfirmed originals and frozen requests.
+- Examples:
+  - Disable a directory file transport while preserving original work.: `anx sync disable ./project`
+
+## `sync.enable`
+
+- CLI path: `sync enable`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Opt into directory-scoped file notes and a read-only card mirror.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `file_transport_capacity`
+- Output: Envelope v2 with local file binding and health.
+- Agent notes: Explicit workspace/host/actor and at most 100 cards. Registers a files-only host job; never installs a service. Producer UUIDs and notes plus optional next only; no credentials in the mounted outbox.
+- Examples:
+  - Opt into directory-scoped file notes and a read-only card mirror.: `anx sync enable ./project --card-id card:work --dry-run`
+
+## `sync.status`
+
+- CLI path: `sync status`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Inspect a directory file binding, retained queue and mirror freshness.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `file_transport_capacity`
+- Output: Envelope v2 with local file binding and health.
+- Agent notes: Offline bounded local inspection; shows pending head, first attempt, retry time, capacity and stale_after. Never drains or sends.
+- Examples:
+  - Inspect a directory file binding, retained queue and mirror freshness.: `anx sync status ./project`
 
 ## `threads.context`
 

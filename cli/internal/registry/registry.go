@@ -333,6 +333,12 @@ func sideEffectClass(cmd Command) string {
 		return "local_operational_write"
 	}
 
+	if strings.HasPrefix(cmd.CLIPath, "sync ") {
+		if cmd.CLIPath == "sync status" {
+			return "read_only"
+		}
+		return "local_operational_write"
+	}
 	if cmd.CLIPath == "git sync" || cmd.CLIPath == "hook" {
 		return "remote_coordination_write"
 	}

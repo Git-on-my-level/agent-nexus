@@ -177,3 +177,11 @@ note ref and resolved promise date/text. Suggestions render as one shell command
 JSON preserves their argument arrays.
 
 Optional context hooks and Git notes/promises are off by default. See [agent hooks](docs/agent-hooks.md) for harness installation, explicit capture-writer binding, atomic `Anx-Next` promises and offline recovery.
+
+### Optional sandbox file transport
+
+`anx sync enable <directory> --card-id card:<handle> --dry-run` previews an explicit
+outbox/mirror binding. Enabling registers a default-off files job in the one host
+bridge; it never installs a service. A sandbox needs only the writable outbox and
+no credentials or network. Notes and optional next promises only; mirror timestamps
+must be checked by readers. See [File transport](docs/file-transport.md).

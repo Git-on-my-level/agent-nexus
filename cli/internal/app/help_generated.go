@@ -29,6 +29,7 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "sync", Description: "Opt-in file notes and read-only card mirror"},
 	{Path: "git", Description: "Opt-in Git notes and promises"},
 	{Path: "hook", Description: "Bounded opt-in harness hook entrypoint"},
 	{Path: "integrations", Description: "Discover and opt into optional harness hooks"},
@@ -1174,6 +1175,9 @@ func qualifyDiagnosticExamples(text string) string {
 }
 
 func helpTopicTextRaw(topic string) (string, bool) {
+	if topic == "sync" || strings.HasPrefix(topic, "sync ") {
+		return "Local Help: " + topic + "\n\n" + syncHelp, true
+	}
 	if topic == "git" || strings.HasPrefix(topic, "git ") {
 		return "Local Help: " + topic + "\n\n" + gitCaptureHelp, true
 	}

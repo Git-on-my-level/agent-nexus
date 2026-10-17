@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `40`
+- Groups: `41`
 
 ## `topics`
 
@@ -429,6 +429,14 @@ Generated from `contracts/anx-openapi.yaml`.
 - Command IDs:
   - `sessions.get` (`sessions get`)
   - `sessions.register` (`sessions register`)
+
+## `sync`
+
+- Commands: `3`
+- Command IDs:
+  - `sync.disable` (`sync disable`)
+  - `sync.enable` (`sync enable`)
+  - `sync.status` (`sync status`)
 
 ## `usage`
 

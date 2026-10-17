@@ -45,7 +45,10 @@ test("machine bridge liveness ages, recovers and stays distinct from wake covera
           ? [
               {
                 actor_id: "actor-worker",
-                jobs: [{ kind: "answers", enabled: true, ready: true }],
+                jobs: [
+                  { kind: "answers", enabled: true, ready: true },
+                  { kind: "files", enabled: true, ready: true },
+                ],
               },
             ]
           : [],
@@ -111,6 +114,8 @@ test("machine bridge liveness ages, recovers and stays distinct from wake covera
     );
     await expect(badge("zero")).toHaveAttribute("data-bridge-state", "live");
     await expect(badge("live")).toContainText("Live on bridge");
+    await badge("live").locator("summary").click();
+    await expect(badge("live")).toContainText("File sync");
     await expect(badge("none")).toContainText("anx bridge install");
     await expect(badge("live")).not.toContainText("anx bridge install");
     await expect(

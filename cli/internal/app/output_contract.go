@@ -157,6 +157,12 @@ func commandSideEffectClass(command string) string {
 		}
 		return "local_operational_write"
 	}
+	if parts[0] == "sync" && len(parts) > 1 {
+		if parts[1] == "status" {
+			return "read_only"
+		}
+		return "local_operational_write"
+	}
 	if parts[0] == "bridge" && len(parts) > 1 {
 		switch parts[1] {
 		case "install", "add", "remove", "stop":

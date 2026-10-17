@@ -81,6 +81,15 @@ hosted_default_commands:
   - "work.observations.list"
   - "work.refresh.get"
 commands:
+  "sync.enable":
+    classification: unsupported_shell_shaped
+    reason: "Local directory and host-job configuration; never a remote MCP action."
+  "sync.disable":
+    classification: unsupported_shell_shaped
+    reason: "Local directory and host-job configuration; never a remote MCP action."
+  "sync.status":
+    classification: unsupported_shell_shaped
+    reason: "Local directory and host-job configuration; never a remote MCP action."
   "bridge.remove":
     classification: unsupported_shell_shaped
     reason: "host service and execution registration stay on the local CLI"
