@@ -108,22 +108,16 @@ func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 		return m, errors.New("refs is not supported; use related_refs and topic_ref")
 	}
 
-	// Public create spellings select a handle; internal IDs are server-owned.
-	for _, obj := range []map[string]any{raw, cardObj} {
-		for _, key := range []string{"handle", "id", "card_id"} {
-			value, present := obj[key]
-			if !present {
-				continue
-			}
-			handle, ok := value.(string)
-			if !ok || !handles.ValidSlug(handle) {
-				return m, errors.New("card." + key + " must be a canonical lowercase slug of 1-64 characters, excluding reserved names and UUIDs")
-			}
-			if m.Handle != "" && m.Handle != handle {
-				return m, errors.New("card handle, id and card_id must agree when combined")
-			}
-			m.Handle = handle
+	m.CardID = strings.TrimSpace(anyString(pick("card_id")))
+	if m.CardID == "" {
+		m.CardID = strings.TrimSpace(anyString(pick("id")))
+	}
+	if hasBoardCardField(raw, cardObj, "handle") {
+		handle, ok := pick("handle").(string)
+		if !ok || !handles.ValidSlug(handle) {
+			return m, errors.New("card.handle must be a canonical lowercase slug of 1-64 characters, excluding reserved names and UUIDs")
 		}
+		m.Handle = handle
 	}
 	m.Title = strings.TrimSpace(anyString(pick("title")))
 	m.Body = strings.TrimSpace(anyString(pick("summary")))

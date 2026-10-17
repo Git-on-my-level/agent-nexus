@@ -12094,13 +12094,11 @@ components:
         handle:
           $ref: '#/components/schemas/CardHandle'
         id:
-          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
-          deprecated: true
-          description: Deprecated compatibility alias for `handle`; same slug validation and conflict behavior, never an internal storage id. Multiple handle spellings must agree.
+          type: string
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         card_id:
-          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
-          deprecated: true
-          description: Deprecated compatibility alias for handle; same slug validation and conflict behavior, never a storage id. Multiple handle spellings must agree.
+          type: string
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
@@ -12454,15 +12452,13 @@ components:
       properties:
         card: { $ref: '#/components/schemas/CardCreateInput' }
         card_id:
-          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
-          deprecated: true
-          description: Deprecated compatibility alias for `handle`; same slug validation and conflict behavior, never a storage id. Multiple handle spellings must agree.
+          type: string
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         handle:
           $ref: '#/components/schemas/CardHandle'
         id:
-          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
-          deprecated: true
-          description: Deprecated compatibility alias for `handle`; same slug validation and conflict behavior, never a storage id. Multiple handle spellings must agree.
+          type: string
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         title: { type: string }
         summary: { type: string }
         column_key:

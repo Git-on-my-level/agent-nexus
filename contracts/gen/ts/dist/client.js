@@ -3811,7 +3811,7 @@ export const commandRegistry = [
                 },
                 {
                     "name": "card.card_id",
-                    "type": "any"
+                    "type": "string"
                 },
                 {
                     "name": "card.column_key",
@@ -3843,7 +3843,7 @@ export const commandRegistry = [
                 },
                 {
                     "name": "card.id",
-                    "type": "any"
+                    "type": "string"
                 },
                 {
                     "name": "card.provenance.by_field",

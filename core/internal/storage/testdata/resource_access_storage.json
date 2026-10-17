@@ -2686,7 +2686,7 @@
     "../server/auth_passkey_handlers.go:handlePasskeyRegisterOptions": "4962f8a46272b92c8cf6c04656b51fa82179d5356b3028c9fdb9eadc13ad9f7f",
     "../server/auth_passkey_handlers.go:handlePasskeyRegisterVerify": "af98b2a6e47f4c8fb33e2f2c39b9a75eafef6ff40d9e1e209baf6f0a7695805a",
     "../server/auth_passkey_handlers.go:requirePasskeyAuthDeps": "be4257ceaf813c96166552be70224e2e6382f333cb08f5129cfecc84c3a67b81",
-    "../server/board_card_request_parse.go:mergeAddBoardCardRaw": "f7e3b88698f17cf56b99e0d2d242e4ccd039c1fdf9db58893c12fc4501309742",
+    "../server/board_card_request_parse.go:mergeAddBoardCardRaw": "f54cbcb38574335355b5b023def983a61687bcab4930900fc7e2877453e08bc5",
     "../server/board_card_request_parse.go:parseAddBoardCardJSON": "78bd42f840557e2b4f0645b5c988b58675891e5b576bf8002ffdd00e7060252a",
     "../server/board_card_request_parse.go:rejectMixedBoardCardPatchAliases": "94c3532fa013780cfc12fe98a1ba84256d484f467fbfa146a4de29fc526aec13",
     "../server/boards_handlers.go:addBoardCardFromRaw": "fccfb304d15d07dac6db09546291e9f485422f9a5d4e0033c698a4d9a387b2a1",

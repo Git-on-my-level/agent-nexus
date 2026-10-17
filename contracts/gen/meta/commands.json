@@ -3817,7 +3817,7 @@
           },
           {
             "name": "card.card_id",
-            "type": "any"
+            "type": "string"
           },
           {
             "name": "card.column_key",
@@ -3849,7 +3849,7 @@
           },
           {
             "name": "card.id",
-            "type": "any"
+            "type": "string"
           },
           {
             "name": "card.provenance.by_field",

@@ -179,10 +179,10 @@ identity_concepts:
       Client-chosen card handles use lowercase ASCII letters and digits separated
       by single hyphens, 1-64 characters; reserved resource names and UUIDs are
       rejected. Existing handles and aliases remain reserved (409 conflict).
-      CardCreateInput and board batch id/card_id are deprecated aliases of handle,
-      never storage IDs. Multiple handle spellings must agree; storage IDs are
-      server-owned on these routes. WorkCreateRequest.id retains its separate
-      documented caller-selected internal ID semantics.
+      CardCreateInput and board batch id/card_id select the internal storage ID,
+      including UUIDs, independently of handle; card_id takes precedence over id.
+      Only handle selects the public slug. Existing storage-ID validation and
+      request-key replay behavior are unchanged, as is WorkCreateRequest.id.
       Omitted handles derive from the title, at most 40 characters on a word
       boundary where possible; no existing handles are rewritten.
   InternalResourceUUID:

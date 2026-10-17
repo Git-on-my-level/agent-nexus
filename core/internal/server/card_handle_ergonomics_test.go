@@ -58,107 +58,123 @@ func TestCardCreateRequestParsesHandle(t *testing.T) {
 	}
 }
 
-func TestCardCreateHandleAliasesNeverSelectStorageID(t *testing.T) {
+// Exercise the unchanged storage-ID bodies on every create entry point, including
+// replay after parsing. Storage IDs must never acquire handle slug constraints.
+func TestCardCreateStorageIDAndHandleReplay(t *testing.T) {
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Writer","created_at":"2026-03-04T10:00:00Z"}}`, 201)
-	initial := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Alias fixtures"}`, 201)
+	initial := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Storage ID fixtures"}`, 201)
 	board := asString(initial["work"].(map[string]any)["board_ref"])
+	sequence := 0
 	for _, route := range []string{"global", "board", "batch"} {
 		for _, nested := range []bool{false, true} {
-			for _, field := range []string{"handle", "id", "card_id"} {
-				slug := fmt.Sprintf("alias-%s-%t-%s", route, nested, strings.ReplaceAll(field, "_", "-"))
-				card := map[string]any{field: slug, "title": "Different title from chosen slug"}
-				body := map[string]any{"actor_id": "actor-1"}
-				if nested {
-					body["card"] = card
-				} else {
-					for k, v := range card {
-						body[k] = v
+			for _, mode := range []string{"uuid-card-id", "id-and-handle", "handle-only", "legacy-storage-id"} {
+				t.Run(fmt.Sprintf("%s/nested-%t/%s", route, nested, mode), func(t *testing.T) {
+					sequence++
+					slug := fmt.Sprintf("storage-case-%d", sequence)
+					card := map[string]any{"title": slug}
+					storageID := ""
+					switch mode {
+					case "uuid-card-id":
+						storageID = fmt.Sprintf("550e8400-e29b-41d4-a716-%012d", sequence)
+						card["card_id"] = storageID
+					case "id-and-handle":
+						storageID = fmt.Sprintf("stable-row-%d", sequence)
+						card["id"] = storageID
+						card["handle"] = slug
+					case "handle-only":
+						card["handle"] = slug
+					case "legacy-storage-id":
+						storageID = fmt.Sprintf("UPPER_row.%d", sequence)
+						card["card_id"] = storageID
 					}
-				}
-				endpoint := h.baseURL + "/boards/" + board + "/cards"
-				if route == "global" {
-					endpoint = h.baseURL + "/cards"
-					body["board_ref"] = board
-				}
-				if route == "batch" {
-					endpoint += "/batch"
-					item := map[string]any{}
+					body := map[string]any{"actor_id": "actor-1"}
 					if nested {
-						item["card"] = card
+						body["card"] = card
 					} else {
-						item = card
+						for k, v := range card {
+							body[k] = v
+						}
 					}
-					body = map[string]any{"actor_id": "actor-1", "items": []any{item}}
-				}
-				body["request_key"] = slug + "-request"
-				raw, _ := json.Marshal(body)
-				response := workPostJSON(t, endpoint, string(raw), 201)
-				result := response["card"]
-				if route == "batch" {
-					result = response["cards"].([]any)[0]
-				}
-				replay := workPostJSON(t, endpoint, string(raw), 201)
-
-				row := result.(map[string]any)
-				if wrapped, ok := row["card"].(map[string]any); ok {
-					row = wrapped
-				}
-				replayResult := replay["card"]
-				if route == "batch" {
-					replayResult = replay["cards"].([]any)[0]
-				}
-				replayRow := replayResult.(map[string]any)
-				for _, key := range []string{"id", "ref", "handle"} {
-					if replayRow[key] != row[key] {
-						t.Fatalf("alias replay changed %s: %#v vs %#v", key, row, replayRow)
+					endpoint := h.baseURL + "/boards/" + board + "/cards"
+					if route == "global" {
+						endpoint = h.baseURL + "/cards"
+						body["board_ref"] = board
 					}
-				}
-				if row["handle"] != slug || row["ref"] != "card:"+slug || row["id"] == slug {
-					t.Fatalf("%s: %#v", slug, row)
-				}
-				fetched, err := http.Get(h.baseURL + "/cards/card:" + slug)
-				if err != nil {
-					t.Fatal(err)
-				}
-				var loaded map[string]any
-				json.NewDecoder(fetched.Body).Decode(&loaded)
-				fetched.Body.Close()
-				if fetched.StatusCode != 200 || loaded["card"].(map[string]any)["id"] != row["id"] {
-					t.Fatalf("ref doesn't resolve: %#v", loaded)
-				}
-				duplicate, _ := json.Marshal(map[string]any{"actor_id": "actor-1", "board_ref": board, "card": map[string]any{"handle": slug, "title": "Duplicate"}})
-				workPostJSON(t, h.baseURL+"/cards", string(duplicate), 409)
+					if route == "batch" {
+						endpoint += "/batch"
+						item := card
+						if nested {
+							item = map[string]any{"card": card}
+						}
+						body = map[string]any{"actor_id": "actor-1", "items": []any{item}}
+					}
+					body["request_key"] = slug + "-request"
+					raw, err := json.Marshal(body)
+					if err != nil {
+						t.Fatal(err)
+					}
+					cardFrom := func(response map[string]any) map[string]any {
+						if route == "batch" {
+							return response["cards"].([]any)[0].(map[string]any)
+						}
+						return response["card"].(map[string]any)
+					}
+					row := cardFrom(workPostJSON(t, endpoint, string(raw), 201))
+					replay := cardFrom(workPostJSON(t, endpoint, string(raw), 201))
+					for _, key := range []string{"id", "ref", "handle"} {
+						if replay[key] != row[key] {
+							t.Fatalf("same-body replay changed %s: %#v vs %#v", key, row, replay)
+						}
+					}
+					if storageID != "" && row["id"] != storageID {
+						t.Fatalf("storage ID changed: want %q, got %#v", storageID, row)
+					}
+					if asString(row["id"]) == "" || row["id"] == slug || row["handle"] != slug || row["ref"] != "card:"+slug {
+						t.Fatalf("storage ID and public handle were conflated: %#v", row)
+					}
+					fetched, err := http.Get(h.baseURL + "/cards/card:" + slug)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer fetched.Body.Close()
+					var loaded map[string]any
+					if err := json.NewDecoder(fetched.Body).Decode(&loaded); err != nil {
+						t.Fatal(err)
+					}
+					if fetched.StatusCode != 200 || loaded["card"].(map[string]any)["id"] != row["id"] {
+						t.Fatalf("ref does not resolve to storage ID: %#v", loaded)
+					}
+				})
 			}
 		}
 	}
 }
 
-func TestCardHandleAliasesValidateAndAgree(t *testing.T) {
-	for _, field := range []string{"handle", "id", "card_id"} {
-		for _, bad := range []any{nil, 42, "", "UPPER", "cards", "two--dashes", "550e8400-e29b-41d4-a716-446655440000"} {
-			if _, err := mergeAddBoardCardRaw(map[string]any{"title": "Ship", field: bad}); err == nil {
-				t.Fatalf("accepted %s=%v", field, bad)
+func TestCardCreateStorageIDParsingCompatibility(t *testing.T) {
+	const uuid = "550e8400-e29b-41d4-a716-446655440000"
+	for _, tc := range []struct {
+		name   string
+		raw    map[string]any
+		id     string
+		handle string
+	}{
+		{"uuid card_id", map[string]any{"card_id": uuid}, uuid, ""},
+		{"uuid id", map[string]any{"id": uuid}, uuid, ""},
+		{"independent handle", map[string]any{"id": "stable-row", "handle": "ship-fix"}, "stable-row", "ship-fix"},
+		{"handle only", map[string]any{"handle": "ship-fix"}, "", "ship-fix"},
+		{"non slug", map[string]any{"card_id": "UPPER_row.123"}, "UPPER_row.123", ""},
+		{"card_id precedence", map[string]any{"card_id": "primary", "id": "fallback", "handle": "chosen"}, "primary", "chosen"},
+		{"empty card_id fallback", map[string]any{"card_id": " ", "id": "fallback"}, "fallback", ""},
+		{"nested id precedence", map[string]any{"id": "flat", "card": map[string]any{"id": uuid, "handle": "chosen"}}, uuid, "chosen"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.raw["title"] = "Ship"
+			got, err := mergeAddBoardCardRaw(tc.raw)
+			if err != nil || got.CardID != tc.id || got.Handle != tc.handle || addBoardCardStoreInput(got).CardID != tc.id {
+				t.Fatalf("want id=%q handle=%q, got %#v: %v", tc.id, tc.handle, got, err)
 			}
-		}
-	}
-	for _, raw := range []map[string]any{
-		{"title": "Ship", "id": "same", "card_id": "same", "card": map[string]any{"handle": "same"}},
-		{"title": "Ship", "handle": "same", "card": map[string]any{"handle": "same"}},
-	} {
-		got, err := mergeAddBoardCardRaw(raw)
-		if err != nil || got.Handle != "same" || got.CardID != "" {
-			t.Fatalf("%#v %v", got, err)
-		}
-	}
-	for _, raw := range []map[string]any{
-		{"title": "Ship", "id": "different", "handle": "chosen"},
-		{"title": "Ship", "card_id": "different", "card": map[string]any{"handle": "chosen"}},
-		{"title": "Ship", "handle": "different", "card": map[string]any{"handle": "chosen"}},
-	} {
-		if _, err := mergeAddBoardCardRaw(raw); err == nil {
-			t.Fatalf("accepted conflicting aliases: %#v", raw)
-		}
+		})
 	}
 }
