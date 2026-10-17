@@ -409,3 +409,32 @@ func assertUniqueArtifactHandle(t *testing.T, ctx context.Context, db *sql.DB, h
 		t.Fatalf("artifact handle %q count = %d", handle, n)
 	}
 }
+
+func TestChosenCardHandleReservesAliasesAndTombstones(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	for _, query := range []string{
+		`INSERT INTO resource_handle_aliases(id,resource_type,alias_handle,resource_id,canonical_handle,created_at) VALUES('kept-card-alias','card','kept-name','card-kept','current-name','2026-01-01T00:00:00Z')`,
+		`INSERT INTO resource_access_tombstones(kind,id,ref,owner) VALUES('card','retired-card','retired-name','owner')`,
+	} {
+		if _, err := ws.DB().ExecContext(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, requested := range []string{"kept-name", "retired-name"} {
+		q := &countingRower{queryRower: ws.DB()}
+		_, err := allocateCardHandleTx(ctx, q, requested, "Ignored title", "seed")
+		if !errors.Is(err, ErrCardHandleConflict) || q.queries > 4 {
+			t.Fatalf("%s: %v queries=%d", requested, err, q.queries)
+		}
+	}
+	q := &countingRower{queryRower: ws.DB()}
+	got, err := allocateCardHandleTx(ctx, q, strings.Repeat("x", 64), "Ignored title", "seed")
+	if err != nil || got != strings.Repeat("x", 64) || q.queries != 4 {
+		t.Fatalf("%q %v queries=%d", got, err, q.queries)
+	}
+}

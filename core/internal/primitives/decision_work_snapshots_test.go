@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -21,7 +22,7 @@ func TestDecisionWorkSnapshotsRetainPlacementAndPrivacy(t *testing.T) {
 	}
 	work := map[string]map[string]any{}
 	for _, handle := range []string{"public_snapshot", "private_snapshot", "missing_placement", "archived_snapshot"} {
-		work[handle], err = s.CreateWork(ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": handle, "handle": handle})
+		work[handle], err = s.CreateWork(ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": handle, "handle": strings.ReplaceAll(handle, "_", "-")})
 		if err != nil {
 			t.Fatal(err)
 		}

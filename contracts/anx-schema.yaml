@@ -173,6 +173,14 @@ identity_concepts:
       Public, kind-scoped resource handle. A handle is stable enough for URLs,
       command arguments, and human-readable references, but clients should carry
       the full typed `ref` whenever the resource kind is not otherwise known.
+  CardHandle:
+    type: string
+    description: >
+      Client-chosen card handles use lowercase ASCII letters and digits separated
+      by single hyphens, 1-64 characters; reserved resource names and UUIDs are
+      rejected. Existing handles and aliases remain reserved (409 conflict).
+      Omitted handles derive from the title, at most 40 characters on a word
+      boundary where possible; no existing handles are rewritten.
   InternalResourceUUID:
     type: string
     description: >

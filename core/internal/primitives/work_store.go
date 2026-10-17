@@ -300,6 +300,12 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	id := workString(m["id"])
 	moveID := workString(workMap(m["workspace_move"])["move_id"])
 	delete(m, "id")
+	if value, present := m["handle"]; present {
+		h, ok := value.(string)
+		if !ok || !handles.ValidSlug(h) {
+			return nil, workInvalid("handle must be a canonical lowercase slug of 1-64 characters, excluding reserved names and UUIDs")
+		}
+	}
 	title := workString(m["title"])
 	if title == "" {
 		return nil, workInvalid("title required")
@@ -369,7 +375,7 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		risk = &raw
 	}
 	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{
-		CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
+		Handle: workString(m["handle"]), CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
 		DefinitionOfDone: dod, Assignee: assignee, DueAt: dueAt, PinnedDocumentID: pinnedDocumentID,
 		Risk: risk, Refs: uniqueSortedStrings(refs), WorkMetadata: m,
 	})

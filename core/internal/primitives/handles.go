@@ -269,16 +269,20 @@ const (
 )
 
 func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSeed string) (string, error) {
+	return uniqueHandleLimitTx(ctx, q, typ, desired, fallbackSeed, handles.MaxLength)
+}
+
+func uniqueHandleLimitTx(ctx context.Context, q queryRower, typ, desired, fallbackSeed string, limit int) (string, error) {
 	ctx = CanonicalMaintenanceContext(ctx) // Namespace uniqueness includes inaccessible resources.
 
 	table := resourceTables[typ]
 	if table == "" {
 		return "", fmt.Errorf("unknown handle resource type %q", typ)
 	}
-	base := handles.Candidate(desired, fallbackSeed)
+	base := handles.ShortCandidate(desired, fallbackSeed, limit)
 	seen := make(map[string]struct{})
 	for attempt := 0; ; attempt++ {
-		candidate, ok := handleAllocationCandidate(base, fallbackSeed, attempt)
+		candidate, ok := handleAllocationCandidateLimit(base, fallbackSeed, attempt, limit)
 		if !ok {
 			return "", fmt.Errorf("%w: %s", ErrHandleAllocation, typ)
 		}
@@ -302,6 +306,24 @@ func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSee
 }
 
 func handleAllocationCandidate(base, seed string, attempt int) (string, bool) {
+	return handleAllocationCandidateLimit(base, seed, attempt, handles.MaxLength)
+}
+
+func handleAllocationCandidateLimit(base, seed string, attempt, limit int) (string, bool) {
+	appendSuffix := func(suffix string) string {
+		if len(suffix) > limit-1 {
+			suffix = suffix[:limit-1]
+		}
+		cut := limit - len(suffix)
+		prefix := base
+		if len(prefix) > cut {
+			prefix = strings.TrimRight(prefix[:cut], "-")
+		}
+		if prefix == "" {
+			prefix = "c"
+		}
+		return prefix + suffix
+	}
 	if attempt < 0 {
 		return "", false
 	}
@@ -309,7 +331,7 @@ func handleAllocationCandidate(base, seed string, attempt int) (string, bool) {
 		if attempt == 0 {
 			return base, true
 		}
-		return appendHandleSuffix(base, fmt.Sprintf("-%d", attempt+1)), true
+		return appendSuffix(fmt.Sprintf("-%d", attempt+1)), true
 	}
 	lengths := handleHashSuffixLengths()
 	if len(lengths) == 0 {
@@ -317,7 +339,7 @@ func handleAllocationCandidate(base, seed string, attempt int) (string, bool) {
 	}
 	hashAttempt := attempt - handleSequentialAttempts
 	if hashAttempt < len(lengths) {
-		return appendHandleSuffix(base, "-"+handleDigestHex(seed, 0)[:lengths[hashAttempt]]), true
+		return appendSuffix("-" + handleDigestHex(seed, 0)[:lengths[hashAttempt]]), true
 	}
 	ext := hashAttempt - len(lengths)
 	if ext >= handleHashExtendRounds {
@@ -327,7 +349,7 @@ func handleAllocationCandidate(base, seed string, attempt int) (string, bool) {
 	if n > lengths[len(lengths)-1] {
 		n = lengths[len(lengths)-1]
 	}
-	return appendHandleSuffix(base, "-"+handleDigestHex(seed, ext+1)[:n]), true
+	return appendSuffix("-" + handleDigestHex(seed, ext+1)[:n]), true
 }
 
 func handleHashSuffixLengths() []int {
@@ -408,4 +430,23 @@ func probeExists(ctx context.Context, q queryRower, query string, args ...any) (
 		return false, err
 	}
 	return taken != 0, nil
+}
+
+var ErrCardHandleConflict = fmt.Errorf("%w: card handle is already reserved; choose another handle", ErrConflict)
+
+func allocateCardHandleTx(ctx context.Context, tx queryRower, requested, title, seed string) (string, error) {
+	if requested == "" {
+		return uniqueHandleLimitTx(ctx, tx, "card", title, seed, 40)
+	}
+	if !handles.ValidSlug(requested) {
+		return "", invalidBoardRequest("card.handle must be a canonical lowercase slug of 1-64 characters, excluding reserved names and UUIDs")
+	}
+	free, err := handleCandidateAvailable(CanonicalMaintenanceContext(ctx), tx, "cards", "card", requested)
+	if err != nil {
+		return "", err
+	}
+	if !free {
+		return "", ErrCardHandleConflict
+	}
+	return requested, nil
 }

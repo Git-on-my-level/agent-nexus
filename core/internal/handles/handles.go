@@ -89,3 +89,23 @@ func Candidate(raw, fallbackSeed string) string {
 	}
 	return Fallback(fallbackSeed)
 }
+
+// ValidSlug accepts canonical handles without silently normalizing user input.
+func ValidSlug(raw string) bool {
+	return raw != "" && len(raw) <= MaxLength && Normalize(raw) == raw
+}
+
+// ShortCandidate caps newly derived names without changing normalization of existing refs.
+func ShortCandidate(raw, seed string, limit int) string {
+	value := Candidate(raw, seed)
+	if len(value) <= limit {
+		return value
+	}
+	cut := value[:limit]
+	if value[limit] != '-' {
+		if i := strings.LastIndex(cut, "-"); i > 0 {
+			cut = cut[:i]
+		}
+	}
+	return strings.TrimRight(cut, "-")
+}

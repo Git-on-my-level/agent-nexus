@@ -8845,6 +8845,10 @@
                 "type": "any"
               },
               {
+                "name": "handle",
+                "type": "string"
+              },
+              {
                 "name": "id",
                 "type": "string"
               },
@@ -15560,6 +15564,10 @@
               {
                 "name": "goal",
                 "type": "any"
+              },
+              {
+                "name": "handle",
+                "type": "string"
               },
               {
                 "name": "id",

@@ -13335,6 +13335,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "any"
         },
         {
+          "name": "handle",
+          "type": "string"
+        },
+        {
           "name": "id",
           "type": "string"
         },

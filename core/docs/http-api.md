@@ -736,3 +736,13 @@ the configured limit before resubmitting; archiving alone need not reclaim quota
 Request-body transport safety bounds continue to return `413 request_too_large`
 independently of configured workspace/upload quotas. Unconfigured quotas have no
 impact on writes. Formatting the error adds no store queries or workspace scans.
+
+Card creation accepts `card.handle` on `POST /cards` and
+`POST /boards/{board_id}/cards`, and per item on
+`POST /boards/{board_id}/cards/batch`. `POST /work` accepts top-level `handle`.
+An explicit handle must be a canonical lowercase ASCII slug of 1-64 characters,
+with single hyphens between alphanumeric groups, excluding reserved resource names
+and UUIDs. Invalid handles return 400; handles reserved by existing cards, aliases,
+or tombstones return 409. Auto-derived card handles are capped at 40 characters,
+cut at a word boundary where possible, with collision suffixes inside that bound.
+Existing handles are unchanged.

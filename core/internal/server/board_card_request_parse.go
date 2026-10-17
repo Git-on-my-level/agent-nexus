@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/primitives"
 )
 
 // addBoardCardMerged is the normalized board card create request after merging the
 // contract `card` envelope with the canonical top-level transport fields.
 type addBoardCardMerged struct {
+	Handle           string
 	ActorID          string
 	RequestKey       string
 	CardID           string
@@ -46,7 +48,7 @@ func mixedBoardCardAliasError(canonicalField string, legacyFields ...string) str
 func firstPresentBoardCardValue(raw map[string]any, cardObj map[string]any, key string) any {
 	if cardObj != nil {
 		if v, ok := cardObj[key]; ok && v != nil {
-			if s, ok := v.(string); !ok || strings.TrimSpace(s) != "" || key == "summary" || key == "title" {
+			if s, ok := v.(string); !ok || strings.TrimSpace(s) != "" || key == "summary" || key == "title" || key == "handle" {
 				return v
 			}
 		}
@@ -111,6 +113,13 @@ func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 		m.CardID = strings.TrimSpace(anyString(pick("id")))
 	}
 
+	if value := pick("handle"); hasBoardCardField(raw, cardObj, "handle") {
+		handle, ok := value.(string)
+		if !ok || !handles.ValidSlug(handle) {
+			return m, errors.New("card.handle must be a canonical lowercase slug of 1-64 characters, excluding reserved names and UUIDs")
+		}
+		m.Handle = handle
+	}
 	m.Title = strings.TrimSpace(anyString(pick("title")))
 	m.Body = strings.TrimSpace(anyString(pick("summary")))
 
@@ -315,6 +324,7 @@ func assigneeStringPtr(v any) *string {
 
 func addBoardCardStoreInput(m addBoardCardMerged) primitives.AddBoardCardInput {
 	return primitives.AddBoardCardInput{
+		Handle:           m.Handle,
 		CardID:           m.CardID,
 		Title:            m.Title,
 		Body:             m.Body,

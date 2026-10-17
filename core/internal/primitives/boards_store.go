@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
@@ -210,6 +211,7 @@ type CardCreateReplay struct {
 }
 
 type AddBoardCardInput struct {
+	Handle string
 	// CreateReplay is internal request metadata, committed with the card.
 	CreateReplay *CardCreateReplay
 
@@ -276,6 +278,7 @@ type BoardCardMutationResult struct {
 const maxBoardCardsBatchSize = 100
 
 type boardCardInsertPrep struct {
+	Handle               string
 	CardID               string
 	ColumnKey            string
 	Title                string
@@ -451,6 +454,9 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 }
 
 func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error) {
+	if input.Handle != "" && !handles.ValidSlug(input.Handle) {
+		return boardCardInsertPrep{}, invalidBoardRequest("card.handle must be a canonical lowercase slug of 1-64 characters, excluding reserved names and UUIDs")
+	}
 	cardID := strings.TrimSpace(input.CardID)
 	if cardID == "" {
 		cardID = uuid.NewString()
@@ -571,6 +577,7 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 	}
 
 	return boardCardInsertPrep{
+		Handle:               input.Handle,
 		CardID:               cardID,
 		ColumnKey:            columnKey,
 		Title:                title,
@@ -667,7 +674,7 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 	if err != nil {
 		return boardRow, boardCardRow{}, nil, err
 	}
-	cardHandle, err := uniqueHandleTx(ctx, tx, "card", title, "card-"+cardID)
+	cardHandle, err := allocateCardHandleTx(ctx, tx, prep.Handle, title, "card-"+cardID)
 	if err != nil {
 		return boardRow, boardCardRow{}, stagedContent, fmt.Errorf("allocate card handle: %w", err)
 	}

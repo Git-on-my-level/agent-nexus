@@ -13284,6 +13284,10 @@ export const commandRegistry = [
                     "type": "any"
                 },
                 {
+                    "name": "handle",
+                    "type": "string"
+                },
+                {
                     "name": "id",
                     "type": "string"
                 },

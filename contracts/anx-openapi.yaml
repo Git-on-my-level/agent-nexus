@@ -11025,6 +11025,7 @@ components:
       type: object
       additionalProperties: true
       properties:
+        handle: {$ref: '#/components/schemas/CardHandle'}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         request_key:
@@ -12080,11 +12081,18 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
 
+    CardHandle:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+      description: Canonical lowercase slug; reserved resource names and UUIDs are rejected. Conflicts return HTTP 409. Omit to derive a word-bounded handle of at most 40 characters from the title; existing handles are unchanged.
+
     CardCreateInput:
       type: object
       properties:
         handle:
-          $ref: '#/components/schemas/ResourceHandle'
+          $ref: '#/components/schemas/CardHandle'
         id:
           type: string
           deprecated: true
@@ -12446,7 +12454,7 @@ components:
           deprecated: true
           description: Deprecated compatibility alias for `handle`.
         handle:
-          $ref: '#/components/schemas/ResourceHandle'
+          $ref: '#/components/schemas/CardHandle'
         id:
           type: string
           deprecated: true
