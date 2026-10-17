@@ -3,6 +3,7 @@
   import LocalSaveWarning from "$lib/components/LocalSaveWarning.svelte";
   import {
     recoverStaleChunk,
+    staleChunkRecoveryNeeded,
     isStaleChunkError,
     warnOverviewRecovery,
   } from "$lib/chunkRecovery.js";
@@ -50,8 +51,12 @@
     hostedSession,
     loadHostedSession,
   } from "$lib/extensions/accountSession.js";
-  import { coreClient } from "$lib/coreClient";
+  import {
+    coreClient,
+    createWorkspaceActivationTransport,
+  } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
+  import WorkspaceRouteContent from "$lib/components/layout/WorkspaceRouteContent.svelte";
   import WorkspacePageSkeleton from "$lib/components/layout/WorkspacePageSkeleton.svelte";
   import {
     getDestinationSkeleton,
@@ -149,7 +154,18 @@
   let hydratedWorkspaceSlug = $state("");
   let activationError = $state("");
   let activationPending = $state(false);
-  const hydration = { attemptPath: "", sequence: 0 };
+  const ACTIVATION_DEADLINE_MS = 15_000;
+  const hydration = {
+    attemptPath: "",
+    sequence: 0,
+    key: "",
+    timer: null,
+    controller: null,
+    resumeKey: "",
+    resumedAt: -Infinity,
+    startedAt: 0,
+    expire: null,
+  };
   /** Which workspace the dev fixture personas have been read for. */
   const devPersonaLoad = { attempted: "" };
   let workspacePickerOpen = $state(false);
@@ -496,7 +512,11 @@
     setCurrentCoreBaseUrl(activeWorkspace?.coreBaseUrl ?? "");
     const workspaceKey = `${activeOrganizationSlug}/${workspaceSlug}`;
     if (hydratedWorkspaceSlug === workspaceKey) {
-      hydration.sequence += 1;
+      if (hydration.key !== workspaceKey) {
+        hydration.sequence += 1;
+        hydration.controller?.abort();
+        clearTimeout(hydration.timer);
+      }
       activationError = "";
       activationPending = false;
       return;
@@ -504,8 +524,50 @@
 
     const attemptPath = `${workspaceKey}:${$page.url.pathname}`;
     if (hydration.attemptPath === attemptPath) return;
-    hydration.attemptPath = attemptPath;
-    void activateCurrentWorkspace();
+    // Activation records its path; do not track its single-flight state here.
+    untrack(() => void activateCurrentWorkspace());
+  });
+
+  $effect(() => {
+    if (!browser) return;
+    const resumeActivation = () => {
+      const key = `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
+      if (
+        document.hidden ||
+        !navigator.onLine ||
+        !activeWorkspaceSlug ||
+        hydratedWorkspaceSlug === key
+      )
+        return;
+      const now = Date.now();
+      if (
+        activationPending &&
+        hydration.key === key &&
+        now - hydration.startedAt >= ACTIVATION_DEADLINE_MS
+      )
+        hydration.expire?.();
+      if (activationPending) return;
+      // Event bursts share one attempt, with at most one automatic retry per
+      // workspace every 15 seconds. There is no timer-driven retry loop.
+      if (
+        hydration.resumeKey === key &&
+        now - hydration.resumedAt < ACTIVATION_DEADLINE_MS
+      )
+        return;
+      hydration.resumeKey = key;
+      hydration.resumedAt = now;
+      hydration.attemptPath = "";
+      void activateCurrentWorkspace();
+    };
+    document.addEventListener("visibilitychange", resumeActivation);
+    window.addEventListener("online", resumeActivation);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeActivation);
+      window.removeEventListener("online", resumeActivation);
+      hydration.sequence += 1;
+      hydration.controller?.abort();
+      clearTimeout(hydration.timer);
+    };
   });
 
   /*
@@ -667,68 +729,106 @@
   }
 
   async function activateCurrentWorkspace() {
-    const sequence = ++hydration.sequence;
     const key = `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
+    if (!activeWorkspaceSlug || (activationPending && hydration.key === key))
+      return;
+    const sequence = ++hydration.sequence;
+    hydration.controller?.abort();
+    clearTimeout(hydration.timer);
+    const controller = new AbortController();
+    hydration.controller = controller;
+    // Bootstrap flags are shared by the active workspace. If navigation
+    // returns to an earlier workspace mid-activation, it must hydrate again.
+    hydratedWorkspaceSlug = "";
+    hydration.key = key;
+    hydration.attemptPath = `${key}:${$page.url.pathname}`;
+    const isCurrent = () =>
+      sequence === hydration.sequence &&
+      key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
     activationError = "";
     activationPending = true;
+    hydration.startedAt = Date.now();
+    const expire = () => {
+      if (!isCurrent()) return;
+      // Retire the ticket before aborting: late failures and results cannot
+      // overwrite the timeout or a subsequent successful activation.
+      hydration.sequence += 1;
+      controller.abort();
+      activationPending = false;
+      activationError =
+        "Opening this workspace took too long. Please try again.";
+    };
+    hydration.expire = expire;
+    const timer = setTimeout(expire, ACTIVATION_DEADLINE_MS);
+    hydration.timer = timer;
     try {
-      const result = await hydrateWorkspace(activeWorkspaceSlug, (message) => {
-        if (
-          sequence === hydration.sequence &&
-          key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`
-        )
-          activationError = message;
-      });
-      if (
-        sequence === hydration.sequence &&
-        key === `${activeOrganizationSlug}/${activeWorkspaceSlug}` &&
-        result !== false
-      ) {
+      const result = await hydrateWorkspace(
+        activeWorkspaceSlug,
+        (message) => {
+          if (isCurrent()) activationError = message;
+        },
+        { isCurrent, signal: controller.signal },
+      );
+      if (!isCurrent()) return;
+      if (result === false) {
+        activationError = "Could not open this workspace. Please try again.";
+      } else {
         hydratedWorkspaceSlug = key;
         activationError = "";
       }
     } catch {
-      if (
-        sequence === hydration.sequence &&
-        key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`
-      )
+      if (isCurrent())
         activationError = "Could not open this workspace. Please try again.";
     } finally {
-      if (sequence === hydration.sequence) activationPending = false;
+      clearTimeout(timer);
+      if (isCurrent()) activationPending = false;
     }
   }
 
-  async function hydrateWorkspace(workspaceSlug, onActivationRetry = () => {}) {
+  async function hydrateWorkspace(
+    workspaceSlug,
+    onActivationRetry = () => {},
+    { isCurrent = () => true, signal } = {},
+  ) {
+    const { client, fetchFn } = createWorkspaceActivationTransport(signal);
     return hydrateWorkspaceBootstrap({
+      isCurrent,
+      signal,
+      fetchFn,
       onActivationRetry,
       workspaceSlug,
       hostedSession: hostedMode ? $page.data.workspaceSession : undefined,
       workspaceHeader: WORKSPACE_HEADER,
       organizationSlug: activeOrganizationSlug,
-      coreClient,
+      coreClient: client,
       storage: localStorage,
       onActorError: (message) => {
-        actorError = message;
+        if (isCurrent()) actorError = message;
       },
       onLoadingActors: (loading) => {
-        loadingActors = loading;
+        if (isCurrent()) loadingActors = loading;
       },
       onDevPersonaBusy: (busy) => {
-        devPersonaBusy = busy;
+        if (isCurrent()) devPersonaBusy = busy;
       },
       onDevFixturePersonas: (personas) => {
-        devFixturePersonas = personas;
+        if (isCurrent()) devFixturePersonas = personas;
       },
-      refreshActors,
+      refreshActors: (slug) => refreshActors(slug, client, isCurrent),
     });
   }
 
-  async function refreshActors(workspaceSlug = activeWorkspaceSlug) {
+  async function refreshActors(
+    workspaceSlug = activeWorkspaceSlug,
+    client = coreClient,
+    isCurrent = () => true,
+  ) {
     loadingActors = true;
     actorError = "";
 
     try {
-      const response = await coreClient.listActors();
+      const response = await client.listActors();
+      if (!isCurrent()) return [];
       const actors = response.actors ?? [];
       replaceActorRegistry(actors, workspaceSlug);
       setActorDirectoryIncomplete(
@@ -740,13 +840,14 @@
       );
       return actors;
     } catch (error) {
+      if (!isCurrent()) return [];
       const reason = error instanceof Error ? error.message : String(error);
       actorError = `Failed to load actors: ${reason}`;
       replaceActorRegistry([], workspaceSlug);
       setActorDirectoryIncomplete(true, workspaceSlug);
       return [];
     } finally {
-      loadingActors = false;
+      if (isCurrent()) loadingActors = false;
     }
   }
 
@@ -1526,11 +1627,21 @@
             class={`shell-content shell-content--${shellContentConfig.mode}`}
             style={`--shell-content-max: ${shellContentConfig.maxWidth}`}
           >
+            {#if $staleChunkRecoveryNeeded}
+              <div class="p-6" role="alert" data-workspace-update-error>
+                <p>This page could not be loaded. Reload to try again.</p>
+                <button
+                  class="btn-secondary mt-3"
+                  type="button"
+                  onclick={() => window.location.reload()}>Retry</button
+                >
+              </div>
+            {/if}
             {#if activationError}
               <div class="p-6" role="alert" data-workspace-activation-error>
                 <p>{activationError}</p>
                 <button
-                  class="btn-secondary mt-3"
+                  class="ui-btn-secondary mt-3"
                   type="button"
                   disabled={activationPending}
                   onclick={() => void activateCurrentWorkspace()}
@@ -1540,37 +1651,47 @@
               </div>
             {:else if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
               <div aria-label="Loading workspace content" aria-busy="true">
+                <p class="sr-only" role="status">Loading workspace…</p>
                 {#if destinationSkeleton}
                   <WorkspacePageSkeleton
                     title={destinationSkeleton.title}
                     rows={destinationSkeleton.rows}
                   />
                 {:else}
-                  <div class="p-6">
-                    <div class="h-6 w-48 rounded bg-slate-200/20"></div>
-                    <div class="mt-6 h-40 rounded bg-slate-200/10"></div>
+                  <div class="space-y-5 p-6">
+                    <p class="text-meta text-fg-muted">Loading workspace…</p>
+                    <div
+                      class="h-6 w-48 animate-pulse rounded bg-panel-hover"
+                      aria-hidden="true"
+                    ></div>
+                    <div
+                      class="h-40 animate-pulse rounded-md border border-line bg-panel"
+                      aria-hidden="true"
+                    ></div>
                   </div>
                 {/if}
               </div>
             {:else}
               {#key $readerScope}
-                <svelte:boundary onerror={onWorkspaceRenderError}>
-                  {@render children?.()}
-                  {#snippet failed(error, reset)}
-                    <div class="p-6" role="alert" data-workspace-render-error>
-                      <p>This page could not be displayed.</p>
-                      <button
-                        class="btn-secondary mt-3"
-                        type="button"
-                        onclick={() => {
-                          recoverStaleChunk(error);
-                          clearWorkspaceViews();
-                          reset();
-                        }}>Retry</button
-                      >
-                    </div>
-                  {/snippet}
-                </svelte:boundary>
+                <WorkspaceRouteContent>
+                  <svelte:boundary onerror={onWorkspaceRenderError}>
+                    {@render children?.()}
+                    {#snippet failed(error, reset)}
+                      <div class="p-6" role="alert" data-workspace-render-error>
+                        <p>This page could not be displayed.</p>
+                        <button
+                          class="btn-secondary mt-3"
+                          type="button"
+                          onclick={() => {
+                            recoverStaleChunk(error);
+                            clearWorkspaceViews();
+                            reset();
+                          }}>Retry</button
+                        >
+                      </div>
+                    {/snippet}
+                  </svelte:boundary>
+                </WorkspaceRouteContent>
               {/key}
             {/if}
           </div>

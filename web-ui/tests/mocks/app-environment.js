@@ -11,3 +11,5 @@ export function __setDev(value) {
 }
 
 export { _dev as dev };
+
+export const version = "test-build";

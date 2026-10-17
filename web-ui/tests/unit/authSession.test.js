@@ -338,6 +338,32 @@ describe("authSession", () => {
     expect(observed).not.toContain(false);
   });
 
+  it("retires an aborted activation flight before an immediate Retry and ignores its late response", async () => {
+    const controller = new AbortController();
+    let finish;
+    const pending = initializeAuthSession({
+      workspaceSlug: "alpha",
+      signal: controller.signal,
+      fetchFn: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    });
+    controller.abort();
+    const retryFetch = async () =>
+      Response.json({
+        agent: { agent_id: "new-session", actor_id: "new-actor" },
+      });
+    const next = await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: retryFetch,
+    });
+    expect(next.agent_id).toBe("new-session");
+    finish(Response.json({ agent: { agent_id: "retired-session" } }));
+    await pending;
+    expect(get(authenticatedAgent)?.agent_id).toBe("new-session");
+  });
+
   it("logs out through the same-origin session endpoint", async () => {
     const calls = [];
     completeAuthSession(

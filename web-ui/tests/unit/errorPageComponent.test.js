@@ -34,7 +34,8 @@ it.each([false, true])(
   (dev) => {
     support.enabled = false;
     __setDev(dev);
-    const { container } = render(ErrorPage, { data: {} });
+    const { container, getByRole } = render(ErrorPage, { data: {} });
+    expect(getByRole("button", { name: "Try again" })).toBeTruthy();
     expect(container.textContent).toContain("Contact your administrator");
     expect(container.textContent).not.toContain("Technical troubleshooting");
     if (!dev) expect(container.textContent).not.toContain("make serve");

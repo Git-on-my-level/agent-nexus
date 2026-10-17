@@ -156,7 +156,7 @@
           </Button>
         {/if}
       </div>
-    {:else if isTransient}
+    {:else if isTransient || !friendly}
       <div
         class="mt-6 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-center"
       >
@@ -178,7 +178,8 @@
           </Button>
         {/if}
       </div>
-    {:else if !friendly}
+    {/if}
+    {#if !isCallbackSurface && !friendly}
       <p class="mt-3 text-[13px] text-fg-muted">
         The backend may be unavailable. Contact your administrator or check the
         service status.
