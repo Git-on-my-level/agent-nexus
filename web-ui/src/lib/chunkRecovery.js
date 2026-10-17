@@ -1,4 +1,8 @@
-const RELOAD_KEY = "anx.chunk-recovery.v1";
+import { version } from "$app/environment";
+import { writable } from "svelte/store";
+
+const RELOAD_KEY = "anx.chunk-recovery.v2";
+export const staleChunkRecoveryNeeded = writable(false);
 let attempted = false;
 
 export function isStaleChunkError(error) {
@@ -22,17 +26,30 @@ export function warnOverviewRecovery(kind, updatedAt = null, error = null) {
   });
 }
 
-/** At most one automatic reload per tab; blocked storage fails closed. */
-export function recoverStaleChunk(error, browser = globalThis.window) {
-  if (!browser || attempted || !isStaleChunkError(error)) return false;
+/** One automatic reload per loaded build, including across bootstraps.
+ * A newer build gets a new allowance; a broken/cached build cannot loop.
+ * Storage denial requires an explicit user retry instead of an unsafe reload.
+ */
+export function recoverStaleChunk(
+  error,
+  browser = globalThis.window,
+  buildVersion = version,
+) {
+  if (!browser || !isStaleChunkError(error)) return false;
+  const blocked = () => {
+    staleChunkRecoveryNeeded.set(true);
+    return false;
+  };
+  if (attempted) return blocked();
   attempted = true;
   if (/(?:^|\/)overview\/?$/.test(browser.location.pathname || ""))
     warnOverviewRecovery("chunk-load", null, error);
   try {
-    if (browser.sessionStorage.getItem(RELOAD_KEY)) return false;
-    browser.sessionStorage.setItem(RELOAD_KEY, "1");
+    const build = String(buildVersion);
+    if (browser.sessionStorage.getItem(RELOAD_KEY) === build) return blocked();
+    browser.sessionStorage.setItem(RELOAD_KEY, build);
   } catch {
-    return false;
+    return blocked();
   }
   browser.location.reload();
   return true;

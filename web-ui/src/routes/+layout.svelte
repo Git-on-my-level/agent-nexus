@@ -3,6 +3,7 @@
   import LocalSaveWarning from "$lib/components/LocalSaveWarning.svelte";
   import {
     recoverStaleChunk,
+    staleChunkRecoveryNeeded,
     isStaleChunkError,
     warnOverviewRecovery,
   } from "$lib/chunkRecovery.js";
@@ -52,6 +53,7 @@
   } from "$lib/extensions/accountSession.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
+  import WorkspaceRouteContent from "$lib/components/layout/WorkspaceRouteContent.svelte";
   import WorkspacePageSkeleton from "$lib/components/layout/WorkspacePageSkeleton.svelte";
   import {
     getDestinationSkeleton,
@@ -1526,6 +1528,16 @@
             class={`shell-content shell-content--${shellContentConfig.mode}`}
             style={`--shell-content-max: ${shellContentConfig.maxWidth}`}
           >
+            {#if $staleChunkRecoveryNeeded}
+              <div class="p-6" role="alert" data-workspace-update-error>
+                <p>This page could not be loaded. Reload to try again.</p>
+                <button
+                  class="btn-secondary mt-3"
+                  type="button"
+                  onclick={() => window.location.reload()}>Retry</button
+                >
+              </div>
+            {/if}
             {#if activationError}
               <div class="p-6" role="alert" data-workspace-activation-error>
                 <p>{activationError}</p>
@@ -1554,23 +1566,25 @@
               </div>
             {:else}
               {#key $readerScope}
-                <svelte:boundary onerror={onWorkspaceRenderError}>
-                  {@render children?.()}
-                  {#snippet failed(error, reset)}
-                    <div class="p-6" role="alert" data-workspace-render-error>
-                      <p>This page could not be displayed.</p>
-                      <button
-                        class="btn-secondary mt-3"
-                        type="button"
-                        onclick={() => {
-                          recoverStaleChunk(error);
-                          clearWorkspaceViews();
-                          reset();
-                        }}>Retry</button
-                      >
-                    </div>
-                  {/snippet}
-                </svelte:boundary>
+                <WorkspaceRouteContent>
+                  <svelte:boundary onerror={onWorkspaceRenderError}>
+                    {@render children?.()}
+                    {#snippet failed(error, reset)}
+                      <div class="p-6" role="alert" data-workspace-render-error>
+                        <p>This page could not be displayed.</p>
+                        <button
+                          class="btn-secondary mt-3"
+                          type="button"
+                          onclick={() => {
+                            recoverStaleChunk(error);
+                            clearWorkspaceViews();
+                            reset();
+                          }}>Retry</button
+                        >
+                      </div>
+                    {/snippet}
+                  </svelte:boundary>
+                </WorkspaceRouteContent>
               {/key}
             {/if}
           </div>
