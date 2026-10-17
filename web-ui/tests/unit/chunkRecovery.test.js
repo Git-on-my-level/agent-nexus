@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   isStaleChunkError,
   recoverStaleChunk,
@@ -9,6 +9,8 @@ beforeEach(() => {
   sessionStorage.clear();
   vi.resetModules();
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 const chunkError = new TypeError(
   "Failed to fetch dynamically imported module: /_app/old.js",
@@ -24,6 +26,7 @@ it("does not recover ordinary errors", () => {
 });
 
 it("limits a broken build across events and bootstraps but recovers later deploys", async () => {
+  const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
   const browser = { sessionStorage, location: { reload: vi.fn() } };
   const first = await import("../../src/lib/chunkRecovery.js");
   expect(first.recoverStaleChunk(chunkError, browser, "build-a")).toBe(true);
@@ -39,11 +42,36 @@ it("limits a broken build across events and bootstraps but recovers later deploy
     true,
   );
   vi.resetModules();
+  now.mockReturnValue(160_001);
   const thirdBuild = await import("../../src/lib/chunkRecovery.js");
   expect(thirdBuild.recoverStaleChunk(chunkError, browser, "build-c")).toBe(
     true,
   );
   expect(browser.location.reload).toHaveBeenCalledTimes(3);
+});
+
+it("stops alternating broken builds across reloads and allows later deployments", async () => {
+  const { get } = await import("svelte/store");
+  const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+  const browser = { sessionStorage, location: { reload: vi.fn() } };
+  for (const [build, expected] of [
+    ["a", true],
+    ["b", true],
+    ["a", false],
+    ["b", false],
+  ]) {
+    vi.resetModules();
+    const recovery = await import("../../src/lib/chunkRecovery.js");
+    expect(recovery.recoverStaleChunk(chunkError, browser, build)).toBe(
+      expected,
+    );
+    if (!expected) expect(get(recovery.staleChunkRecoveryNeeded)).toBe(true);
+  }
+  expect(browser.location.reload).toHaveBeenCalledTimes(2);
+  now.mockReturnValue(160_001);
+  vi.resetModules();
+  const later = await import("../../src/lib/chunkRecovery.js");
+  expect(later.recoverStaleChunk(chunkError, browser, "c")).toBe(true);
 });
 
 it("ignores the legacy lifetime marker", async () => {

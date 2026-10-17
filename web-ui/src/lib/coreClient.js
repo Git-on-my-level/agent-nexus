@@ -87,6 +87,25 @@ export function createLocalMutationClient(scope) {
   });
 }
 
+/** Activation reads keep live auth context while sharing one cancellation scope. */
+export function createWorkspaceActivationTransport(signal) {
+  const fetchFn = (url, init = {}) =>
+    browserReadFetch(url, {
+      ...init,
+      ...(signal
+        ? {
+            signal: init.signal
+              ? AbortSignal.any([signal, init.signal])
+              : signal,
+          }
+        : {}),
+    });
+  return {
+    fetchFn,
+    client: createAnxCoreClient({ ...getBrowserCoreClientOptions(), fetchFn }),
+  };
+}
+
 /** Bind reads to one reader/workspace and propagate cancellation to fetch. */
 export function createWorkspaceReadClient(signal) {
   const fetchFn = browserReadFetch;

@@ -2,6 +2,9 @@ import { version } from "$app/environment";
 import { writable } from "svelte/store";
 
 const RELOAD_KEY = "anx.chunk-recovery.v2";
+const BUDGET_KEY = "anx.chunk-recovery-budget.v1";
+const RELOAD_WINDOW_MS = 60_000;
+const MAX_WINDOW_RELOADS = 2;
 export const staleChunkRecoveryNeeded = writable(false);
 let attempted = false;
 
@@ -27,7 +30,8 @@ export function warnOverviewRecovery(kind, updatedAt = null, error = null) {
 }
 
 /** One automatic reload per loaded build, including across bootstraps.
- * A newer build gets a new allowance; a broken/cached build cannot loop.
+ * A newer build gets a new allowance. A shared two-reload/minute budget
+ * also stops alternating broken builds; further failures need manual Retry.
  * Storage denial requires an explicit user retry instead of an unsafe reload.
  */
 export function recoverStaleChunk(
@@ -47,6 +51,21 @@ export function recoverStaleChunk(
   try {
     const build = String(buildVersion);
     if (browser.sessionStorage.getItem(RELOAD_KEY) === build) return blocked();
+    const now = Date.now();
+    const stored = browser.sessionStorage.getItem(BUDGET_KEY);
+    let budget = stored ? JSON.parse(stored) : { at: now, count: 0 };
+    if (
+      !Number.isFinite(budget?.at) ||
+      !Number.isInteger(budget?.count) ||
+      budget.count < 0
+    )
+      return blocked();
+    if (now - budget.at >= RELOAD_WINDOW_MS) budget = { at: now, count: 0 };
+    if (budget.count >= MAX_WINDOW_RELOADS) return blocked();
+    browser.sessionStorage.setItem(
+      BUDGET_KEY,
+      JSON.stringify({ at: budget.at, count: budget.count + 1 }),
+    );
     browser.sessionStorage.setItem(RELOAD_KEY, build);
   } catch {
     return blocked();

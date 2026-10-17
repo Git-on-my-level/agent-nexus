@@ -441,7 +441,10 @@ export async function hydrateWorkspaceBootstrap({
   onDevPersonaBusy = () => {},
   onDevFixturePersonas = () => {},
   refreshActors,
+  isCurrent = () => true,
+  signal,
 }) {
+  if (!isCurrent()) return false;
   // Adapter-managed activation runs independently of optional directories.
   if (hostedSession !== undefined) {
     // Actual activation only: cached/preloaded route data is never an auth authority.
@@ -451,9 +454,10 @@ export async function hydrateWorkspaceBootstrap({
       input: { organizationSlug, workspaceSlug },
       fetchFn,
       onRetry: onActivationRetry,
-      isCurrent: () => epoch === getSessionEpoch(),
+      isCurrent: () => isCurrent() && epoch === getSessionEpoch(),
     });
-    if (!hostedSession || epoch !== getSessionEpoch()) return false;
+    if (!isCurrent() || !hostedSession || epoch !== getSessionEpoch())
+      return false;
     initializeActorSession(storage, workspaceSlug);
     completeAuthSession(hostedSession.agent, workspaceSlug, {
       organizationSlug,
@@ -472,13 +476,16 @@ export async function hydrateWorkspaceBootstrap({
   initializeActorSession(storage, workspaceSlug);
   let agent = await initializeAuthSession({
     fetchFn,
+    signal,
     workspaceSlug,
     authDriver: "layout",
   });
+  if (!isCurrent()) return false;
   replacePrincipalRegistry(agent ? [agent] : [], workspaceSlug);
 
   try {
     const handshake = await coreClient.getHandshake();
+    if (!isCurrent()) return false;
     const devActorModeEnabled = handshake.dev_actor_mode === true;
     setDevActorMode(devActorModeEnabled);
     let devFixturePersonas = [];
@@ -489,6 +496,7 @@ export async function hydrateWorkspaceBootstrap({
         workspaceSlug,
         workspaceHeader,
       });
+      if (!isCurrent()) return false;
       onDevFixturePersonas(devFixturePersonas);
     } else {
       onDevFixturePersonas([]);
@@ -504,6 +512,7 @@ export async function hydrateWorkspaceBootstrap({
         fetchFn,
         onDevPersonaBusy,
       });
+      if (!isCurrent()) return false;
       if (reissued) {
         agent = reissued;
         replacePrincipalRegistry([agent], workspaceSlug);
@@ -518,6 +527,7 @@ export async function hydrateWorkspaceBootstrap({
         fetchFn,
         onDevPersonaBusy,
       });
+      if (!isCurrent()) return false;
       if (agent) {
         replacePrincipalRegistry([agent], workspaceSlug);
         chooseActor(agent.actor_id, storage, workspaceSlug);
@@ -526,6 +536,7 @@ export async function hydrateWorkspaceBootstrap({
 
     if (devActorModeEnabled || agent) {
       const actors = await refreshActors(workspaceSlug);
+      if (!isCurrent()) return false;
       reconcileDevActorSelection({
         workspaceSlug,
         agent,
@@ -539,13 +550,14 @@ export async function hydrateWorkspaceBootstrap({
       replaceActorRegistry([], workspaceSlug);
     }
   } catch {
+    if (!isCurrent()) return false;
     setDevActorMode(false);
     onActorError("");
     onLoadingActors(false);
     onDevFixturePersonas([]);
     replaceActorRegistry([], workspaceSlug);
   } finally {
-    setDevActorModeReady(true);
+    if (isCurrent()) setDevActorModeReady(true);
   }
 }
 

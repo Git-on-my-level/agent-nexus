@@ -172,7 +172,7 @@ function wait(ms) {
 
 async function requestJSON(
   pathname,
-  { fetchFn, method = "GET", body, baseUrl, headers } = {},
+  { fetchFn, method = "GET", body, baseUrl, headers, signal } = {},
 ) {
   const mergedHeaders = {
     ...(browser
@@ -189,7 +189,9 @@ async function requestJSON(
   };
   const response = await resolveFetch(fetchFn)(buildUrl(pathname, baseUrl), {
     method,
-    signal: AbortSignal.timeout(15_000),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+      : AbortSignal.timeout(15_000),
     headers: mergedHeaders,
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -308,12 +310,14 @@ export function clearAuthSession(
 
 export async function initializeAuthSession({
   fetchFn,
+  signal,
   baseUrl = "",
   workspaceSlug = getCurrentWorkspaceSlug(),
   organizationSlug = getCurrentOrganizationSlug(),
   /** @type {"layout" | "login" | string | undefined} */
   authDriver,
 } = {}) {
+  signal?.throwIfAborted();
   const slug = String(workspaceSlug ?? "").trim();
   if (authDriver) {
     const prev = authDriverByWorkspace.get(`${organizationSlug}/${slug}`);
@@ -339,24 +343,36 @@ export async function initializeAuthSession({
     return state.initInflight;
   }
 
+  const retire = () => {
+    if (state.initInflight !== promise) return;
+    state.generation += 1;
+    state.initInflight = null;
+  };
   const promise = runInitializeAuthSession({
     fetchFn,
+    signal,
     baseUrl,
     workspaceSlug,
     organizationSlug,
     state,
   }).finally(() => {
+    signal?.removeEventListener("abort", retire);
     if (state.initInflight === promise) {
       state.initInflight = null;
     }
   });
 
   state.initInflight = promise;
+  // The activation owns this flight. Retire it synchronously on cancellation
+  // so an immediate Retry starts a fresh request, even before fetch rejects.
+  signal?.addEventListener("abort", retire, { once: true });
+  if (signal?.aborted) retire();
   return promise;
 }
 
 async function runInitializeAuthSession({
   fetchFn,
+  signal,
   baseUrl,
   workspaceSlug,
   organizationSlug,
@@ -391,6 +407,7 @@ async function runInitializeAuthSession({
     try {
       const result = await requestJSON("/auth/session", {
         fetchFn,
+        signal,
         baseUrl,
         workspaceSlug,
         headers: {

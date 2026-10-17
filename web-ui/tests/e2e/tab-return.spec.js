@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { deferred } from "../helpers/workspaceApiMock.js";
 import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const WORKSPACE = "/o/local/w/local";
@@ -151,6 +152,7 @@ for (const scenario of [
           ?.value,
       ).toBe("refreshed-token");
     }
+    await expect(page.locator("[data-workspace-empty-error]")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }
@@ -253,3 +255,101 @@ test("an empty child route shows Retry on tab return (fault injection)", async (
     page.getByRole("heading", { name: "Docs", exact: true }),
   ).toBeVisible();
 });
+
+for (const resume of ["tab return", "overdue tab return", "online", "Retry"]) {
+  test(`stalled activation recovers on ${resume} without a reload`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await installPage(page);
+    await page.clock.install({ time: new Date("2030-01-01T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2030-01-01T00:00:01Z"));
+    const stalled = deferred();
+    let handshakes = 0;
+    let documents = 0;
+    page.on("request", (request) => {
+      if (request.isNavigationRequest()) documents++;
+    });
+    await page.route("**/meta/handshake", async (route) => {
+      handshakes++;
+      if (handshakes === 1) await stalled.promise;
+      return route.fallback();
+    });
+    try {
+      await page.goto(PATH);
+      await expect.poll(() => handshakes).toBe(1);
+      const loading = page.getByLabel("Loading workspace content");
+      await expect(loading).toBeVisible();
+      await expect(loading.locator("p.text-meta")).toBeVisible();
+      if (resume === "Retry") {
+        const path = testInfo.outputPath("workspace-loading.png");
+        await page.screenshot({ path });
+        await testInfo.attach("workspace-loading", {
+          path,
+          contentType: "image/png",
+        });
+      }
+      await expect(loading.getByRole("status")).toContainText(
+        "Loading workspace",
+      );
+      if (resume.includes("tab return")) await visibility(page, "hidden");
+      await page.clock.runFor(14_999);
+      const error = page.locator("[data-workspace-activation-error]");
+      await expect(error).toHaveCount(0);
+      if (resume === "overdue tab return") {
+        // Advance wall time without firing timers: a frozen background tab
+        // must retire an overdue flight in its visibility handler itself.
+        await page.clock.setSystemTime(new Date("2030-01-01T06:00:01Z"));
+        await visibility(page, "visible");
+      } else {
+        await page.clock.runFor(2);
+        await expect(error).toContainText("took too long");
+        await expect(
+          error.getByRole("button", { name: "Retry", exact: true }),
+        ).toBeEnabled();
+        if (resume === "Retry") {
+          const path = testInfo.outputPath("workspace-timeout.png");
+          await page.screenshot({ path });
+          await testInfo.attach("workspace-timeout", {
+            path,
+            contentType: "image/png",
+          });
+        }
+      }
+      if (resume === "tab return") await visibility(page, "visible");
+      else if (resume === "online")
+        await page.evaluate(() => window.dispatchEvent(new Event("online")));
+      else if (resume === "Retry")
+        await error.getByRole("button", { name: "Retry", exact: true }).click();
+      await expect(
+        page.getByRole("heading", {
+          name: "Return test initiative",
+          exact: true,
+        }),
+      ).toBeVisible();
+      expect(handshakes).toBe(2);
+      expect(documents).toBe(1);
+      await expect(error).toHaveCount(0);
+      await expect(page.locator("[data-workspace-empty-error]")).toHaveCount(0);
+      // A retired response cannot undo the successful retry. Event bursts on
+      // an already hydrated workspace must not start extra activations.
+      stalled.resolve();
+      await page.evaluate(() => {
+        for (let index = 0; index < 10; index++) {
+          document.dispatchEvent(new Event("visibilitychange"));
+          window.dispatchEvent(new Event("online"));
+        }
+      });
+      await page.clock.runFor(100);
+      expect(handshakes).toBe(2);
+      await expect(
+        page.getByRole("heading", {
+          name: "Return test initiative",
+          exact: true,
+        }),
+      ).toBeVisible();
+    } finally {
+      stalled.resolve();
+    }
+  });
+}
