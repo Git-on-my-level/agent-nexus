@@ -559,6 +559,9 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 			return nil, e
 		}
 		if c.State == "confirmed" || c.State == "skipped" {
+			if c.State == "confirmed" {
+				applyCaptureReceipt(&s, c)
+			}
 			s.Pending = s.Pending[1:]
 			if e = integrations.PrivateWrite(path, integrations.CaptureJSON(s)); e != nil {
 				return nil, e
@@ -619,11 +622,8 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 		if e = integrations.SaveCommit(path, c); e != nil {
 			return nil, e
 		}
-		if c.Next != "" {
-			s.PromiseCheckpoint[c.Card] = c.Sequence
-		}
+		applyCaptureReceipt(&s, c)
 		s.Pending = s.Pending[1:]
-		s.Confirmed++
 		if e = integrations.PrivateWrite(path, integrations.CaptureJSON(s)); e != nil {
 			return nil, e
 		}
@@ -636,6 +636,18 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 		data["next"] = "anx git sync"
 	}
 	return data, nil
+}
+
+// One atomic state save applies the FIFO receipt, counters and promise checkpoint.
+// A crash after the per-commit confirmation is repaired without another send.
+func applyCaptureReceipt(s *integrations.CaptureState, c integrations.CommitCapture) {
+	if c.Sequence > s.ConfirmedSequence {
+		s.Confirmed++
+		s.ConfirmedSequence = c.Sequence
+	}
+	if c.Next != "" && c.Sequence > s.PromiseCheckpoint[c.Card] {
+		s.PromiseCheckpoint[c.Card] = c.Sequence
+	}
 }
 func captureFailureReason(e error) string {
 	var n *errnorm.Error

@@ -445,3 +445,37 @@ func TestGitCaptureFullQueuePreservesFailedBytesAndScan(t *testing.T) {
 		t.Fatal("full/failed queue sent new work")
 	}
 }
+
+func TestGitCaptureRepairsReceiptSavedBeforeQueueState(t *testing.T) {
+	f := newHookFixture(t)
+	f.failFirst = true
+	fixtureGit(t, f.root, "init", "-q")
+	fixtureGit(t, f.root, "commit", "--allow-empty", "-m", "seed")
+	f.run(t, "git", "enable", "--writer")
+	fixtureGit(t, f.root, "commit", "--allow-empty", "-m", "Progress\n\nAnx-Card: card:work\nAnx-Next: 2d Check receipt")
+	f.a.Run([]string{"--json", "git", "sync"})
+	_, gd, _ := integrations.Repo(context.Background(), f.root)
+	path := integrations.CapturePath(f.dir, gd)
+	s, e := integrations.LoadCapture(path)
+	if e != nil || len(s.Pending) != 1 {
+		t.Fatal(s, e)
+	}
+	c, e := integrations.LoadCommit(path, s.Pending[0])
+	if e != nil {
+		t.Fatal(e)
+	}
+	c.State = "confirmed"
+	if e = integrations.SaveCommit(path, c); e != nil {
+		t.Fatal(e)
+	}
+	f.run(t, "git", "sync")
+	s, e = integrations.LoadCapture(path)
+	if e != nil || len(s.Pending) != 0 || s.Confirmed != 1 || s.PromiseCheckpoint[c.Card] != c.Sequence {
+		t.Fatal(s, e)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.bodies) != 1 {
+		t.Fatal("confirmed receipt was resent")
+	}
+}

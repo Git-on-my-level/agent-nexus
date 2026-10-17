@@ -54,6 +54,7 @@ type CaptureState struct {
 	CommitURL         string           `json:"commit_url,omitempty"`
 	HookPath          string           `json:"hook_path,omitempty"`
 	HookBody          string           `json:"hook_body,omitempty"`
+	ConfirmedSequence int64            `json:"confirmed_sequence"`
 	Confirmed         int              `json:"confirmed"`
 	Quarantined       int              `json:"quarantined"`
 }
