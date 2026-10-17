@@ -1,302 +1,232 @@
 # Agent hooks, Git capture and a first-class bridge
 
-Status: reviewed proposal (2026-10-17). Owner: coordinator. Implementer: Codex.
-**Implementation waits for [PR #429](https://github.com/Git-on-my-level/agent-nexus/pull/429)
-to merge, then rebases on main. This turn is documentation only.**
+Status: coordinator decisions accepted (2026-10-17). Owner: coordinator.
+**Documentation only: implementation waits for [PR #429](https://github.com/Git-on-my-level/agent-nexus/pull/429)
+to merge, then rebases on main.** Main proposal: about five minutes; appendix:
+implementation details.
 
-## Purpose
+## Decisions
 
-Inject a small ANX brief at session start and after compaction, capture optional
-Git progress notes, and let credential-less agents submit notes through files.
-Keep the bridge first class, visible per machine and **never required**.
-Core remains authoritative; Git transports authored claims; mirrors are caches.
-No repository mirroring, core-side remote fetches, hosted-specific logic,
-transcript ingestion, live mounts or new orchestration layer.
+- Inject a bounded ANX brief at session start and after compaction where supported.
+- Git trailers publish notes **and optional next promises**; never step/status/card completion.
+- One explicitly elected capture writer per repo; same-writer deduplication accepted.
+- File transport's explicit directory/card trust boundary is accepted.
+- Bridge installation is the **recommended next step**, never a prerequisite.
+  Per-machine liveness must be obvious, including hosts with no agents.
+- Core remains authoritative; Git transports claims; mirrors are caches.
+  Everything is optional and OSS-generic. No transcript ingestion or core-side remote fetching.
 
-| Layer     | Without a bridge                                        | Bridge adds                                    |
-| --------- | ------------------------------------------------------- | ---------------------------------------------- |
-| Context   | `anx context`, generic hook, supported harness adapters | Nothing required                               |
-| Git notes | Git post-commit hook or manual `anx git sync`           | Periodic sync and offline drain                |
-| Files     | Original source files remain readable                   | Scoped mirror and credentialed outbox delivery |
+## What exists
 
-## What exists (and corrections)
+| Area             | Current behavior / implication                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI integrations | One Claude recipe/adapter. Extend parsing/rendering, preserve installs. Spool freezes requests but prunes entries: not a lossless outbox. |
+| Go `bridge run`  | Per-agent answers and actor lock; default install writes its unit. Crash recovery can repeat executors.                                   |
+| Python bridge    | Host wake router, full-roster validation; legacy install flags plus `start`, `stop`, `status`, `doctor --config`.                         |
+| Core hosts       | Existing bridge instance/check-in/expiry columns drive `bridge_online`; no general host last-seen.                                        |
+| Setup/UI         | `anx help <job>`; discovery means availability, not hook support. Host badges infer child-agent status and miss zero-agent hosts.         |
 
-| Code                                                            | Current behavior; design consequence                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli/internal/integrations/`                                    | One recipe, `claude-code-suggested-tasks`; one Claude settings adapter. Recipe embeds harness/event/parser; adapter owns settings only. Generalize parsing/rendering as well as settings. `enable` has no `--harness` today. Preserve existing recipe behavior.                                                                                                                                                                       |
-| `cli/internal/app/integrations.go`, `integrations/spool.go`     | 3 s fail-open hook; frozen URL/agent/host/principal/body before send. Limits: 100 pending + dead letters, 1,000 receipts, 30 days, four sends/drain. Pruning can delete unsent entries: this is not a lossless user outbox.                                                                                                                                                                                                           |
-| `bridge_commands.go`, `ask_bridge.go`, `bridge_unit_install.go` | Default `bridge install` installs Go `bridge run` per derived agent. Local workspace/actor lock proves answer-consumer presence. Locally registered shell commands receive answer JSON on stdin; five attempts / 30 min default. Success persists before acknowledgement, but a crash after execution and before persistence can repeat the executor.                                                                                 |
-| `bridge_lifecycle.go`, `adapters/agent-bridge/`                 | Legacy `install --ref/--python/...` and `start                                                                                                                                                                                                                                                                                                                                                                                        | stop | status | doctor --config` manage the separate Python host wake router. It validates the complete runtime roster before signed host check-in. These lifecycle commands do not manage Go answer units today. |
-| Core auth/host storage                                          | `hosts.bridge_instance_id`, `bridge_checked_in_at`, `bridge_expires_at` already exist. Signed `POST /hosts/{host_id}/bridge/check-in` drives agents' `bridge_online`. Host responses omit those times; there is no general host last-seen.                                                                                                                                                                                            |
-| Setup, identity, UI                                             | Setup is `anx help <job>`, not an `anx setup` wizard. `host discover` reports optional agentctl identity/availability, not hook capability. Directory workspace rules do not select cards. `orient` already warns about undeliverable resume asks. Agents/Access already render bridge indicators; `HostCard` infers status from child agents, missing zero-agent hosts. Participant source is `cli/skills/anx-participant/SKILL.md`. |
+Preserve [ask delivery](../ask-delivery.md): bridge presence supplies no resume
+command or host-wide wake capability. Await/batch/none remain valid.
 
-Preserve [ask delivery](../ask-delivery.md): a live bridge alone supplies no
-resume command; `await`, `batch` and explicit `none` remain supported. An answer
-consumer must not set host-wide `bridge_online` or imply mentions can wake every
-agent. Keep Python routing operational; runtime unification is out of scope.
+## Hooks
 
-## 1. Hooks and card resolution
+Extend integrations with `context.inject`, `git.capture` and
+`anx hook <event> [--harness <name>]`. Generic events: `session.start`,
+`context.compacted`, `tool.after`, `git.commit` (from Git, never shell text).
+Generic input: `{schema_version:1,cwd,session_id?,card_ref?,tool?:{name}}`;
+absolute cwd required. Output: `{schema_version:1,context,card_ref,as_of,stale}`
+(nullable ref/time). Harness output follows its protocol; other CLI output stays v2.
 
-Add `context.inject` and `git.capture` recipes through integrations, plus
-`anx hook <event> [--harness <name>]`. Generic stdin is one object, ≤64 KiB:
+Claude/Codex inject on SessionStart (including compact); Cursor supports
+asynchronous sessionStart, with no post-compaction guarantee. Git post-commit
+preserves existing hooks. Tool-after only hints a scan. Adapter settings/payloads
+are specified in the appendix; never read transcripts, prompts or tool output.
+Unsupported versions retain manual/generic paths.
 
-```json
-{
-  "schema_version": 1,
-  "session_id": "opaque-local-id",
-  "cwd": "/absolute/project",
-  "card_ref": "card:hook-work",
-  "tool": { "name": "Bash" }
-}
-```
+Card resolution: explicit `--card-id`, then payload ref → explicit local session
+binding (`integrations bind --card-id`, workspace/principal/provider/session hash)
+→ worktree default / longest directory card rule → none. Workspace rules select
+only workspaces. No reverse session→cards API exists: validate known candidates
+with scoped reads. No card enumeration, inaccessible-target fallback or implicit
+participation/presence writes.
 
-Only `schema_version` and absolute `cwd` are required. Generic events:
-`session.start`, `context.compacted`, `tool.after`, `git.commit`. The last comes
-from Git itself, never command-text matching. Generic stdout:
-`{schema_version:1,context:string,card_ref:string|null,as_of:string|null,stale:boolean}`.
-Harness mode uses its wire protocol instead of CLI envelopes; ordinary
-install/status/sync commands retain envelope v2 and standard exit codes.
+Use existing context reads and an end-to-end deadline; fail open with a sanitized
+diagnostic. Stale cache fallback remains explicit opt-in. Extend
+`integrations enable --harness … --dry-run`, preserving backups and owned-hook
+removal. Do not add a second hook installer.
 
-| Adapter     | Settings / selected input                                                                                                                                                        | Events / stdout                                                                                                                                                                                                             |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code | Existing user/project/local settings paths; `session_id,cwd,hook_event_name,source`; tool hooks also `tool_name,tool_use_id`                                                     | `SessionStart` startup/resume/clear → start; source `compact` → compacted. Return `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`. PostToolUse only hints a bounded repo scan, no output. |
-| Codex       | User or trusted project `.codex/hooks.json`; preserve inline TOML hooks. Same selected fields as Claude                                                                          | `SessionStart`, including source `compact`, returns the same context wrapper. Do not inject through PreCompact/PostCompact. Harness hook trust review remains required.                                                     |
-| Cursor      | User/project `.cursor/hooks.json`, `{version:1,hooks:{…}}`; `session_id` (fallback `conversation_id`), `workspace_roots,hook_event_name`; require a selected root when ambiguous | `sessionStart` returns `{"additional_context":"…"}` asynchronously. No promised post-compaction injection; retain manual `anx context`. Optional `afterShellExecution` only hints a scan.                                   |
-| Plain Git   | Discover effective hook path through Git; no JSON stdin; repo comes from Git                                                                                                     | `post-commit` schedules capture, no stdout, never rejects a commit for an ANX failure. Never overwrite an existing hook or change `core.hooksPath`; offer an explicit chaining snippet if occupied.                         |
+## Git notes and promises
 
-Sources checked 2026-10-17: [Claude Code](https://code.claude.com/docs/en/hooks),
-[Codex](https://developers.openai.com/codex/hooks),
-[Cursor](https://cursor.com/docs/hooks). Pin tested harness versions and fixtures
-in PR1; availability is not capability. Unsupported versions retain the generic
-and manual paths. Never read transcripts, prompts, tool output, email or
-compaction summaries, even when their paths/content appear in hook payloads.
+Enable previews repo/workspace identity and initial HEAD; no initial history
+upload. Explicit `git sync --since` backfills. Store bindings outside Git:
 
-Resolve card in order:
-
-1. Explicit new `--card-id`, then payload `card_ref`.
-2. Explicit local session binding (`anx integrations bind --card-id <ref>`),
-   keyed by workspace/principal/provider/session hash. A known participation can
-   validate that candidate through existing session/task APIs; no reverse
-   session→cards API exists today. Do not enumerate all cards looking for it.
-3. Explicit per-worktree default, then longest directory card rule, stored in
-   integration configuration outside Git. Workspace rules still select only a
-   workspace. Do not infer cards from titles, branches or agent-wide presence.
-4. None/ambiguous → no injection, with configuration guidance in status.
-
-Use existing workspace/identity resolution; payloads never choose credentials
-or base URLs. Resolve a canonical card with a scoped read. Invalid/inaccessible
-explicit targets do not fall through. Existing participation leases are 120 s;
-reading context must not implicitly renew sessions, participation or presence.
-
-- Reuse `anx context`'s work/observation/refresh reads, with ten observations;
-  render ref/title, phase, current promise, selected evidence and next action.
-  Cap at 6 KiB UTF-8 (roughly 1.5k tokens, not a token guarantee).
-- Enforce 1.5 s including stdin, identity, locks and HTTP. The current 2 s
-  agentctl probe must accept the remaining budget. Fail open: exit 0, empty
-  harness output, one sanitized stderr diagnostic; unconfigured is silent.
-  No surviving background shell. Generic failures return an empty result.
-- Owner-only atomic cache, keyed by workspace/principal/card/scope. Stale fallback
-  is off by default; opt-in allows five minutes with `STALE as_of=…`. Never use
-  it after 401/403/404, identity changes or expired local credentials. Offline
-  revocation cannot be verified; disclose this when enabling fallback.
-- Extend `integrations enable <recipe> --harness … --dry-run`; preserve backups,
-  exact owned-command removal and concurrent-edit protections. Cut the duplicate
-  `anx hooks install` installer and automatic edits to every detected harness.
-
-## 2. Git capture: notes first
-
-`anx git enable [<repo>] --workspace <alias>` previews and opts in one repo,
-recording a random repo UUID and initial HEAD under Git's private metadata.
-Separate per-worktree card defaults. Clones share UUID only by explicit choice.
-No initial history upload: `anx git sync [<repo>] --since <sha>` is explicit
-backfill. Freeze workspace/writer before scanning; never fetch remote refs.
+- Elected host runs `anx git enable --writer --workspace <alias>` and exports a
+  binding with `anx git binding export`: `{repo_uuid,workspace_id,writer_host_id,writer_actor_id}`.
+- Other hosts import with `anx git enable --binding <file>`. Intake/drain mismatch
+  reports `not_capture_writer` with elected host/actor in hook stderr,
+  `anx git status` and bridge doctor; no enqueue/send, hook still exits 0.
+- Enable requires election/import; distribute the non-secret binding to clones.
+  Unprovisioned clones cannot discover peers: this is operator election, not a
+  global server lease. Handoff disables/reconciles the old writer before replacement;
+  no automatic failover.
 
 ```text
 Anx-Card: card:hook-work
 Anx-Note: Added bounded context injection
+Anx-Next: 2026-10-20 Validate bridge liveness
 ```
 
-| Concern   | Rule                                                                                                                                                                                                                                                                                                                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Parse     | Use exact Git argv and trailer-block semantics (`git interpret-trailers --parse`), never regex over prose/diffs or shell evaluation. ANX keys are case-insensitive; trim values. Inspect the original block to reject folded/multiline ANX values. Reject duplicate ANX keys, multiple cards, NUL/control characters or invalid UTF-8. Unknown trailers ignored; no inline comments. |
-| Bounds    | One explicit `card:` per commit; missing card skips. Commit message ≤64 KiB, ref ≤256 bytes, note ≤4 KiB; absent note uses subject. Malformed/reserved trailers quarantine SHA/reason before advancing, rather than publishing a partial note.                                                                                                                                       |
-| Authority | V1 publishes notes only. Reserve `Anx-Step`, `Anx-Status`, `Anx-Next` with `unsupported_trailer` diagnostics. Commits prove authored changes, not merge/deployment/acceptance. Never automatically complete cards.                                                                                                                                                                   |
-| Evidence  | Explicit credential-free HTTP(S) commit URL template with full object ID. Otherwise record SHA as plain text and omit `evidence_refs`: `commit:<sha>` is not a supported evidence ref. Do not assume a Git remote is a web permalink or upload credential-bearing URLs. Core never fetches them.                                                                                     |
-| Trigger   | Git post-commit, manual sync, optional tool-after scan hint and periodic bridge reconciliation of registered local refs. No command parsing or recursive filesystem watcher.                                                                                                                                                                                                         |
-| Cursor    | Snapshot configured ref tips; at most 100 new commits / five seconds per tick. Persist bounded-walk continuation and durable outcomes before advancing. Enable seeds the seen boundary; rewrites rescan from saved boundaries within the same budget. Overflow requires visible explicit backfill. Shallow/missing objects defer; never skip a gap or walk unlimited history.        |
+Parse only Git's trailer block; keys case-insensitive, one card, optional note
+(default subject), optional Next. Next is a date/time token followed by required
+promise text. Reuse `anx note --next` validation and warnings. Put
+`payload.next:{at,what}` in the **same** replay-safe message event as the note;
+normalize/freeze time once, never recalculate on retry. Missing Next leaves it
+unset. Reserve Anx-Step/Anx-Status with an explicit unsupported-trailer failure.
+A malformed trailer quarantines the whole capture rather than partially posting.
 
-Build the existing ordinary `message_posted` request, not a subprocess running
-`anx note`:
-`{actor_id,request_key,event:{type,actor_id,thread_ref,refs,summary,payload,provenance}}`.
-Use the card-message builder's resolved card/thread/board refs, `kind:card_message`,
-text/subject fields, optional `evidence_refs` and SHA in text. No diffs, author
-email or paths. Do not issue `anx note`'s convenience presence PATCH.
+Serialize commits oldest-first per repo/card; persist order and confirmed promise
+checkpoint. A retry cannot overtake an uncertain predecessor. Historical backfill
+or rewrite rescans below that checkpoint retain notes but omit Next and structured
+evidence **before** freezing (permalink stays text), so they cannot reset a newer
+promise. Diagnose this; divergent history requires explicit reconciliation.
+Latest accepted commit supersedes only this writer's promise. Keep the existing
+per-author fold and evidence-reset rules; no cross-author last-write-wins or completion.
 
-Key: `anx-git-v1-` + SHA256(repo UUID NUL full object ID NUL canonical card ID).
-Event replay is **actor-scoped**: overlapping triggers deduplicate with the same
-writer and frozen body, not across hosts/principals. Elect one capture writer
-per repo. Rebase/cherry-pick/amend makes new objects and potentially new notes;
-reverts append information. No patch-id guarantee. Keep confirmed-SHA receipts;
-after state loss require explicit backfill, not speculative resending.
+Use the existing card-message event with optional `payload.next`; note+promise
+commit atomically, with no presence PATCH. Evidence is a configured credential-free
+permalink or plain SHA text, never `commit:<sha>`, diffs or paths.
+Key = `anx-git-v1-` + SHA256(repo UUID NUL object ID NUL canonical card ID).
+Core replay is actor-scoped; cross-host deduplication is not promised. Rewrites
+make new objects; reverts append information. Persist frozen bodies/identity before
+sending; never prune unsent durable work. Keep visible backpressure and failed
+requests; stop uncertain retries before server receipt expiry (appendix).
 
-Generalize typed spool payload/dispatch while reading old queues unchanged.
-For new durable capture/outbox entries, disable age/capacity deletion: refuse
-intake visibly, leave commits/files intact, claim queued only after fsync.
-Freeze body/key/URL/actor/host before sending; serialize drainers. Four sends/tick,
-1 s per request, exponential jittered backoff 1–60 s. Network/timeout/429/5xx
-retain the request; 401/403/404 pause for repair; 400/422/409 are inspectable
-failures. Never recompute a conflicting body under the same key.
-Follow `core/internal/replaypolicy/policy.json`: uncertain automatic retries stop
-at 25 days, before 30-day receipt GC, pending explicit reconciliation. A local
-ledger cannot promise server exactly-once forever.
+## Bridge: strongly recommended, never required
 
-## 3. Bridge services, heartbeat and setup
+Setup help, `host enroll` output, `orient` and the participant skill prominently
+recommend **`anx bridge install`**, with resolved agent/workspace, dry-run preview
+and heartbeat-enabled option. Explain degradation: unattended resume callbacks
+wait; Git sync/drain are manual and file delivery unavailable without enabled jobs.
+Await/batch/manual reads still work. No silent install or blocking dependency.
+Orient keeps its actor-lock check and recommends installation when absent.
 
-Keep answers per agent. Add opt-in host-jobs mode of `bridge run`
-(`--jobs git,spool`, later `files`, explicit `--as` writer), with its own
-workspace/host singleton lock and service unit. This mode runs jobs only;
-existing answer units remain unchanged. Job failure must not stop another job
-or answer delivery. Extend no-config `bridge status|doctor` for Go services;
-preserve Python `--config` behavior. Log rotation is new required work;
-automatic restart by `anx update` is deferred.
+Add an independent host-jobs mode/unit of `bridge run` (`--jobs git,spool`, later
+files, explicit writer), locked per workspace/host. Existing per-agent answer
+units stay valid. Jobs/heartbeat must not starve during long executors. Extend
+no-config Go status/doctor; preserve Python --config behavior; add log rotation.
 
-### API and data model
+### Presence contract
 
-Extend signed `POST /hosts/{host_id}/bridge/check-in`. Do not introduce another
-host-auth scheme or reuse core's unrelated heartbeat-publisher environment.
+Extend signed `POST /hosts/{host_id}/bridge/check-in` with optional
+`service:{kind,actor_id,version,jobs}`, kind answer or host-jobs. Keep legacy
+`{bridge_instance_id,checked_in_at,expires_at}`, proof headers and wake behavior.
+New mode uses server receipt time plus five-minute expiry, never updates legacy
+`hosts.bridge_*`/agent `bridge_online`, and never treats token grants as presence.
+Verify active signing host/key and its non-excluded actor transactionally.
 
-| Contract               | Proposal                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Legacy request         | `{bridge_instance_id,checked_in_at,expires_at}` and roster validation unchanged. Existing `X-ANX-Host-Key-Id`, `X-ANX-Host-Signed-At`, `X-ANX-Host-Signature` sign `anx-host-bridge-check-in\|host_id\|signed_at\|base64url(SHA256(raw_body))`. Keep skew/replay/revoked-key checks; no accompanying bearer.                                                                                                                                                             |
-| New optional `service` | `{kind:"answer"\|"host-jobs",actor_id:string,version:string,jobs:string[]}`. Actor must be active, non-excluded, belonging to signing host. Version ≤64 ASCII characters, instance ≤128. Unique jobs ≤4 from `answers,git,spool,files`, compatible with kind. Reject arbitrary metadata. CLI helper signs the complete body.                                                                                                                                             |
-| New-mode time          | Retain legacy required wire times; validate positive duration ≤300 s. Store server receipt time as `last_seen_at`, with fixed 300 s expiry. Client clock cannot extend presence. Legacy wake semantics unchanged.                                                                                                                                                                                                                                                        |
-| Response               | Existing `{bridge:{host_id,bridge_instance_id,checked_in_at,expires_at}}`. New mode adds `service:{kind,actor_id,version,jobs,last_seen_at}` inside `bridge`; returned times reflect server values. Legacy response unchanged.                                                                                                                                                                                                                                           |
-| Migration              | Next migration adds `host_bridge_services(host_id,kind,actor_id,instance_id,version,jobs_json,signed_at,last_seen_at,expires_at)`, PK `(host_id,kind,actor_id)`, host FK. Fixed-size metadata; upsert, no per-beat history. Verify active key/host/actor and write in one transaction; reject signed times older than the stored slot. Instances replace the same slot, not append rows. Classify all fields in the storage privacy inventory; no startup scan/backfill. |
-| Separation             | New service beats never update `hosts.bridge_*` or agent `bridge_online`. Those retain wake-routing meaning. No historical timestamp backfill. Token grants, sessions and agent progress are separate. Revocation overrides unexpired presence immediately.                                                                                                                                                                                                              |
+Next migration: `host_bridge_services(host_id,kind,actor_id,instance_id,version,
+jobs_json,signed_at,last_seen_at,expires_at)`, PK `(host_id,kind,actor_id)`, host FK.
+Upsert one slot; reject older signed observations. No history/backfill. Response
+retains `{bridge:{host_id,bridge_instance_id,checked_in_at,expires_at}}`, adding
+`bridge.service:{kind,actor_id,version,jobs,last_seen_at}` only for new mode.
 
-Beat immediately after readiness, then every 60 s with jitter on an independent
-timer, including during long answer executors. HTTP timeout 2 s; fresh proof on
-retry, at most cadence-rate retries. Reporting defaults off (`--heartbeat` /
-persisted unit option). Unsupported core disables reporting with a diagnostic
-without disrupting delivery. Presence means a consumer checked in, not that an
-answer was delivered or jobs succeeded; stale after five minutes.
+Authenticated read-only `POST /hosts/bridge-status` accepts `{host_ids:[]}` and
+returns `{as_of,hosts:[{host_id,revoked_at,wake,services,services_truncated}]}`;
+wake is null or `{last_seen_at,expires_at}`, services contain
+`{kind,actor_id,version,jobs,last_seen_at,expires_at}`. Read legacy wake times
+directly; no fabricated general host last-seen. Unknown/inaccessible hosts disclose
+nothing; revocation overrides presence.
 
-Add authenticated read-only `POST /hosts/bridge-status`:
+Agents/Access show **per-host badges**, including zero-agent hosts: Live,
+Stale (last seen…), Not reported, with separate wake/answer/jobs. Missing telemetry
+cannot prove absence. Age expiry without reload; coalesce visible-host reads on
+roster/focus/reconnect. Authenticated readers see only version/jobs/times;
+counts/errors/paths/cards/sessions stay local.
 
-- Input `{host_ids:[canonical_id,…]}`, unique ≤100.
-- Output `{as_of,hosts:[{host_id,revoked_at:string|null,wake:{last_seen_at,expires_at}|null,services:[{kind,actor_id,version,jobs,last_seen_at,expires_at}],services_truncated:boolean}]}`.
-- Read legacy wake times directly, no inferred general host last-seen. Return
-  ≤32 services/host via 33-position PK seeks. Truncation cannot imply missing
-  coverage. Unknown/inaccessible hosts expose no metadata. Authorize hosts first;
-  admit at most 33 service slots, then omit revoked/excluded actors without
-  refilling the window. Host `revoked_at` overrides all presence. Partial results
-  never prove absence.
+## File transport
 
-This batch avoids adding N+1 calls or more full-roster hydration to host routes.
-UI shares a deduplicated store for visible hosts. Extend Agents/Access indicators
-with wake-routing, this actor's answer delivery and host-job details. Render
-`Live`, `Stale (last seen …)`, `Not reported`; absent opt-in telemetry cannot
-prove “No bridge”. Zero-agent hosts still show wake history. Keep agent work
-state separate. Age `expires_at` client-side so a dead bridge turns stale without
-an event/reload; refetch on existing agents-change, visibility/reconnect and slow
-fallback signals, coalesced, with no per-host poll.
+`anx sync enable <dir> --card-id <ref>` previews the accepted explicit allowlist,
+workspace and writer binding. Owner-only `.anx/` is locally Git-excluded, never
+credential-bearing. Directory writers have that agent's note/promise authority,
+never arbitrary API or executor access.
 
-Privacy: opt-in shares only version/job names/times with authenticated workspace
-readers under host identity visibility. Counts/errors/card refs/repo and session
-IDs/paths remain local: even counts reveal private task activity. No public
-endpoint, anonymous development bypass, event history or external telemetry.
+| Files                                  | Contract                                                                                                                                           |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STATUS.json`                          | `{schema_version,as_of,last_server_contact,stale,pending,failed,last_error_code}`                                                                  |
+| `INDEX.md` / `cards/<canonical-id>.md` | Atomic completed generation; summary, promise, plan, recent notes; as_of/stale_after/resource version, no fictitious global seq.                   |
+| `outbox/<uuid>.json`                   | `{schema_version:1,id,card_ref,text,evidence_refs:[],next?:{at,what}}`; producer UUID + temp/rename. Next uses the same note validation.           |
+| `outbox/.done` / `.failed`             | Original bytes plus receipt/reason only after confirmation/definitive failure. Uncertain work remains pending, never rerouted or silently deleted. |
 
-`host enroll`, `anx help bridge` and the participant skill recommend exact preview
-and install commands once. Never install services from enrollment/skill execution
-or add default-yes prompts. `orient` keeps the local actor-lock delivery check,
-warns about configured degraded features, and stays quiet for healthy bridge-free
-workflows. Callbacks must be repeat-safe, independent of heartbeat state.
-
-## 4. Scoped file transport
-
-`anx sync enable <dir> --card-id <ref>` previews an explicit allowlist and frozen
-workspace/writer binding outside Git. Default `.anx/` is owner-only and locally
-ignored through Git exclude; refuse an already tracked destination. ≤100 cards,
-refresh ≤10/tick with continuation; no default “all open projects”.
-
-| File                                  | V1                                                                                                                                                                                                      |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STATUS.json`                         | `{schema_version:1,as_of,last_server_contact,stale,pending,failed,last_error_code}`; no raw upstream error. Age remains derivable when bridge is dead.                                                  |
-| `INDEX.md`, `cards/<canonical-id>.md` | Read-only summary, phase, promise, bounded plan and ten recent notes. `as_of`, `stale_after`, resource version where available. No invented global `seq`: composed reads do not share a snapshot.       |
-| `outbox/<uuid>.json`                  | `{schema_version:1,id:<uuid>,card_ref:<allowlisted-ref>,text:<note>,evidence_refs:[]}`, ≤64 KiB. Producer assigns UUID and publishes by temp + rename; bridge never stamps a changing file. Notes only. |
-| `outbox/.done`, `.failed`             | Original bytes plus separate receipt/reason after confirmed send or definitive failure. Uncertain sends retain frozen request. Spool intake is not remote confirmation. No automatic source deletion.   |
-
-Key: `anx-file-v1-<directory_uuid>-<entry_uuid>`, actor-scoped event replay.
-Edited UUID contents conflict; repair uses a new UUID. Private directories,
-no-follow regular-file reads, bounds, lock and fsynced intake journal; reject
-symlinks/path traversal/out-of-allowlist targets. Same-UID writers can exercise
-the configured agent's note authority: the mounted directory is the security
-boundary. No arbitrary API methods, executors, actor selection or shell syntax.
-
-Publish mirrors by atomic generation swap + completion manifest, preserving the
-last complete generation. Validate access on refresh; 403/404 removes cached card
-and index entry. Identity/workspace change removes generated caches, preserves
-unconfirmed writes for explicit export/repair and never reroutes them. A dead
-bridge cannot update a `STALE` banner: readers compare times. Cut `events.jsonl`
-and mirror frontmatter edits/CAS from v1.
+Key: `anx-file-v1-<directory_uuid>-<entry_uuid>`. Edited IDs conflict. Lock/fsync
+intake, reject symlinks/path escape, preserve failed bytes. Refresh validates access;
+403/404 removes cached card/index data. Identity changes remove generated caches
+but preserve unconfirmed writes for explicit export/repair. Readers compare times:
+a dead bridge cannot rewrite stale banners.
 
 ## Implementation plan
 
-Three PRs, each independently useful and opt-in. **After #429 merges**, rebase
-and recheck command/help metadata before implementation.
+Three opt-in PRs, all after #429; contracts first for API changes.
 
-| PR                                          | Files/packages                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Tests and acceptance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Hooks + Git notes                        | `cli/internal/integrations/` protocol/adapters/spool/trailers/cursors; `cli/internal/app/{integrations,host_resolution,loop_tier,resource_messages,command_usage_preflight,output_contract}.go`, dispatch/help/registry and CLI-local contract metadata; directory matcher only if needed; `cli/integration/`, `cli/skills/`, CLI docs                                                                                                                                | Harness input/output goldens, settings preservation, ambiguity/principal isolation, deadlines including blocked stdin/locks, cache denial; malformed/folded trailers, shallow/merge/rebase/revert/worktree histories, backpressure. Disposable Git + real CLI/core: overlapping triggers → one note for same actor; crash before/after server commit, restart, 409/revocation/retry cutoff. Harness smoke must show model-visible start/compact context where supported, not merely emitted JSON.                               |
-| 2. Visible bridge services + Git/drain jobs | `contracts/anx-{openapi,schema}.yaml` first and generated clients/mirrors; `core/internal/{auth,server,storage,resourceaccess}/`, next migration and privacy/route/performance inventories; `cli/internal/app/{ask_bridge,host_bridge_commands,bridge_commands,bridge_unit_install,bridge_lifecycle,ask_delivery,loop_tier,setup_help}.go` plus scheduler; web-ui client/shared status store, agent/access components/pages; ask-delivery/runbooks/participant bundle | Proof tamper/replay/revocation, server-clock time, legacy compatibility, actors/instances, populated migration, bounded status reads/privacy. Fake-clock scheduler, unit lifecycle/doctor/log rotation; long executor cannot starve heartbeat/jobs. Real signed beat → status integration. **Affected Playwright `agents.spec.js` / `access.spec.js`: not reported → live → expiry without reload/event → stale → recovery → revoked; zero-agent host; answer-only never implies wake routing; old-core and opt-out fallback.** |
-| 3. Outbox + scoped mirror                   | Reuse `cli/internal/integrations/` delivery; new `cli/internal/sync/` intake/mirror generation; app sync commands/host-jobs wiring; CLI integration fixtures, skills/bundle metadata and file-transport/security docs                                                                                                                                                                                                                                                 | Atomic producer/intake crashes, concurrent drain, symlink/replacement/path escape, partial JSON, edited IDs, disk full, identity switch, replay cutoff; crash after commit before receipt; mirror consistency/bounds/staleness/revocation. E2E sandbox writer with only mounted outbox → bridge → one core note → mirror; producer has no network/token. Preserve failed/uncertain bytes.                                                                                                                                       |
+| PR                                | Files/packages                                                                                                                                                                                                                                                | Acceptance                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Hooks + Git notes/promises     | CLI integrations; app integration/identity/note/message/dispatch/preflight/output/help/registry; local-command metadata; CLI integration fixtures, docs and participant bundle.                                                                               | Harness goldens and model-visible start/compact smoke; settings preservation, card isolation/timeouts. Real Git/CLI/core: writer mismatch/handoff, trailers/time normalization, ordered promises with two authors, uncertain retry, backfill/rewrite, crash/restart and backpressure.                                                              |
+| 2. Bridge jobs + visible liveness | Canonical OpenAPI/schema and generated consumers; core auth/server/storage/resourceaccess + migration/inventories; app bridge/ask-delivery/host-enroll/orient/setup/unit lifecycle; UI status store, client, Agents/Access components/pages; skills/runbooks. | Proof/revocation/server-clock/back-compat/migration/scale tests; long executor cannot starve jobs. Playwright agents/access: not reported → live → expiry without reload → stale → recovery → revoked; zero-agent host, answer-only versus wake routing. Check prominent recommendations in all four CLI/skill surfaces and bridge-free operation. |
+| 3. Files                          | Reuse integrations delivery; new CLI sync intake/mirror package; app commands/job wiring, integration fixtures, skill/catalog/bundle and security docs.                                                                                                       | Filesystem races/symlinks/disk-full/identity/replay-cutoff tests; atomic mirrors/privacy. Sandbox E2E: mounted outbox → bridge → one note/promise → mirror, with no producer network/token.                                                                                                                                                        |
 
-Routes: PR1 reuses `POST /events` and existing scoped context/session reads;
-PR2 changes `POST /hosts/{host_id}/bridge/check-in` and adds read-only
-`POST /hosts/bridge-status`; PR3 reuses card/plan/message reads and `POST /events`.
-List every exact changed route in implementation PRs.
+PR2 extends check-in/adds read-only bridge-status; PR1/3 reuse events/scoped
+reads. List changed routes; add privacy classifications, indexed page budgets and
+[performance/migration gates](../../core/docs/performance.md). Do not expand
+SCA-663 host baselines or add overview counts.
 
-Cost: heartbeat uses indexed host/key/actor validation + PK upsert, never full
-`GetHost`/roster hydration. Status work is O(requested hosts ×33), bounded indexed
-seeks, no history/graph rebuild/per-agent queries. Context/mirror grow with
-admitted cards, bounded plans and ten notes/observations. Reuse scoped handles,
-classify new storage fields and transport-only exemptions, add populated budgets
-and query-plan assertions; run affected scale and migration/startup gates in
-[performance.md](../../core/docs/performance.md). Existing host-enrichment
-baselines linked to SCA-663 cannot excuse new unbounded work or be widened.
-Cut overview fleet counts rather than add a workspace scan.
+New features default off; setup recommendations default prominent. Probe status
+support before new heartbeat fields; old core falls back. Rollback retains unsent
+work/schema, removes owned hooks/units only. Update participant/catalog/bundle;
+run focused tests, module/test-fast/contract checks and affected Playwright, then
+terminal exact-head ci-ok (no polling). No implementation now.
 
-Rollout: new recipes, capture, reporting, host jobs and files default off.
-Explicit enable/install persists each choice and prints disable instructions.
-Ship additive core before clients/UI; probe the new status route before sending
-new check-in fields, treat 404 as unsupported. All old answer/routing behavior
-works with new flags off. Rollback stops new jobs/reporting, removes owned hooks
-and units only, retains unsent queues/files and additive schema. Update participant
-skill version/catalog/bundle tests with each shipped behavior and its manual path.
+Cuts: step/status/card completion, patch-ID deduplication, command-text inference,
+recursive watchers, runtime unification, duplicate installer/setup wizard, remote
+counters/errors, fleet counts, update auto-restart, event-log mirrors/editable
+frontmatter, FSKit/FUSE/MCP. **Coordinator questions resolved; none remain.**
 
-Validation: focused unit/integration tests, module checks, `make test-fast`;
-contract generation/checks where needed, only affected Playwright specs locally;
-full CI/`ci-ok` before merge at exact head, no CI watching/polling. This doc-only
-turn runs the selected static/fast gates.
+## Appendix: adapters, bounds and failures
 
-## Recommendations and owner questions
+| Adapter     | Input/settings                                                                                                                                                                 | Context output                                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code | Existing settings scopes; `session_id,cwd,hook_event_name,source`. `SessionStart` startup/resume/clear; source compact maps to compacted.                                      | `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`                                               |
+| Codex       | User/trusted-project `.codex/hooks.json`; same selected fields and SessionStart mapping. Preserve inline TOML; require harness trust review.                                   | Same wrapper as Claude; no injection through PreCompact/PostCompact.                                                            |
+| Cursor      | User/project `.cursor/hooks.json`, `{version:1,hooks:{…}}`; select session_id (fallback conversation_id), workspace_roots, hook_event_name. Ambiguous roots require selection. | `sessionStart` returns `{"additional_context":"…"}` asynchronously. No promised post-compaction injection.                      |
+| Git         | Effective post-commit hook path; repo from Git, no JSON stdin.                                                                                                                 | No stdout; schedule capture without rejecting commits. Preserve existing hooks; offer chaining, never replace `core.hooksPath`. |
 
-- Adopt explicit card → session binding → worktree/directory default → none;
-  60 s / 5 min service presence; notes-only capture; per-agent answers plus one
-  optional host-jobs process. No mandatory bridge or default-yes install.
-- Cut automatic step/card completion/promises, patch-id deduplication, shell
-  commit inference, recursive watchers, runtime unification, duplicate installer/
-  setup wizard, remote counters/errors, overview counts, update auto-restarts,
-  event-log mirrors, mirror edits, FSKit/FUSE and MCP resources.
-- **Owner before PR1:** is same-writer deduplication sufficient? Recommend yes.
-  Workspace-wide cross-host deduplication needs a durable canonical receipt keyed
-  by repo + commit + card, atomic with the note, plus privacy/retention contracts;
-  hashing the existing actor-bound key cannot provide it.
-- **Owner before PR3:** approve the explicit directory/card trust boundary and
-  notes-only v1. Recommend deferring promises/status until source authority,
-  merge evidence, multi-write atomicity and conflict UX are designed. Local
-  default-branch reachability alone is insufficient authority.
+Tool-after hooks only hint a bounded scan. Never consume tool output, transcripts,
+prompts or compaction summaries. Pin supported versions/fixtures against the
+[Claude](https://code.claude.com/docs/en/hooks),
+[Codex](https://developers.openai.com/codex/hooks) and
+[Cursor](https://cursor.com/docs/hooks) contracts checked 2026-10-17.
+Unsupported versions retain manual `anx context` / generic hooks.
 
-Success checks are local/opt-in: model-visible start/compact brief, recovery
-context tokens, commit→confirmed-note lag, offline drain recovery and rendered
-service expiry. No new analytics pipeline or mandatory adoption target.
+Host proof uses `X-ANX-Host-Key-Id`, `X-ANX-Host-Signed-At`,
+`X-ANX-Host-Signature` over
+`anx-host-bridge-check-in|host_id|signed_at|base64url(SHA256(raw_body))`.
+Keep existing skew/replay/revoked-key checks; legacy responses remain unchanged.
+
+Event body: `{actor_id,request_key,event:{type,actor_id,thread_ref,refs,summary,payload,provenance}}`.
+Reuse the card-message builder's subject/card/thread/board fields, optional
+`payload.next:{at,what}` and evidence; no convenience presence PATCH.
+
+| Area        | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook        | Input 64 KiB; context 6 KiB UTF-8 (~1.5k tokens); ten observations; 1.5 s total including stdin/identity/locks/HTTP. Existing 2 s agentctl probe must honor remaining budget. Fail-open exit 0; empty harness output, sanitized stderr; generic empty result.                                                                                                                                                                                                                                                                                                                       |
+| Cache       | Private atomic workspace/principal/card/scope key. Stale fallback off; opt-in ≤5 min, labeled STALE. Never after 401/403/404, expired credential or identity change; disclose offline revocation limitation. Participation leases remain 120 s, not renewed by reads.                                                                                                                                                                                                                                                                                                               |
+| Trailers    | Git interpret-trailers semantics plus raw-block rejection of folded/multiline ANX values; case-insensitive keys, trim; reject duplicates/control/NUL/invalid UTF-8; no inline comments. One card ≤256 bytes, message ≤64 KiB, note ≤4 KiB. Unknown keys ignored; reserved Step/Status quarantine.                                                                                                                                                                                                                                                                                   |
+| Next        | First token UTC YYYY-MM-DD (end of day) or zoned RFC3339; remainder required text. Accept note duration grammar too, resolved once from commit committer time, not sync time. Reuse note's 160-rune text truncation, positive duration ≤3650d and two-day-horizon / moved-without-evidence warnings. Freeze normalized RFC3339 at; note+promise atomic, never a separate patch. Missing Next is not a clear. Preserve core's per-author fold and ordinary evidence-reset rules.                                                                                                     |
+| Git walk    | Snapshot selected local refs; ≤100 commits / five seconds per tick; durable continuation/outcomes before cursor. Ordered per-card lane includes ordinary notes (evidence can affect promises). Missing/shallow objects pause; overflow explicit backfill; no fetch. Check writer on intake/drain; callbacks/scanners use the same binding.                                                                                                                                                                                                                                          |
+| Spool       | Existing 3 s hook, 100 pending+dead, 1,000 receipts, 30-day pruning is not sufficient for durable intake. Version new payloads, read old queues unchanged; no unsent eviction, reject capacity before sending and retain source. Frozen identity/key/body; four sends/tick, 1 s HTTP, jittered 1–60 s retry. Network/timeout/429/5xx retain; 401/403/404 pause; 400/422/409 inspectable failure. FIFO promise lane does not rotate failed predecessors behind newer commits. Stop uncertain auto-retry at 25 days before 30-day receipt GC; reconcile explicitly after loss/expiry. |
+| Heartbeat   | 60 s jittered independent cadence, 2 s HTTP, fresh proof per retry at most cadence-rate. Required wire duration positive ≤300 s; server fixes new expiry to 300 s. Version ≤64 ASCII, instance ≤128; unique compatible jobs ≤4: answers/git/spool/files. Existing host proof signs exact body; no bearer, arbitrary metadata, public/dev bypass or external telemetry.                                                                                                                                                                                                              |
+| Status cost | ≤100 unique hosts; authorize first, PK-seek ≤33 service candidates/host, emit ≤32 with truncation; omit revoked/excluded actors without refill. Partial results never prove absence. Indexed heartbeat validation/upsert; no full GetHost/roster, history scan, N+1 calls or ownership-graph rebuild.                                                                                                                                                                                                                                                                               |
+| Files       | ≤100 allowlisted cards, ten refreshes/tick, ten notes/card, bounded plans; entry ≤64 KiB, evidence ≤8 with note validation. Next optional, normalized/frozen once at durable intake; preserve file order per directory/card before newer promises. No tracked destination, credential export, symlink/path traversal, arbitrary actor/base URL or shell. Atomic generation+manifest; raw errors/counters stay local.                                                                                                                                                                |
+
+Success checks: model-visible context, recovery tokens, commit→confirmed
+note/promise lag, offline recovery and per-machine expiry rendering. No analytics
+pipeline or mandatory bridge adoption target.
