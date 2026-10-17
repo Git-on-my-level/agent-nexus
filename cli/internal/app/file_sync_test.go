@@ -48,7 +48,7 @@ func TestFileSyncDispatchRegistrationFrozenNotesAndOfflineDisable(t *testing.T) 
 	if !agent.Jobs["files"] || agent.Jobs["answers"] || agent.Jobs["wake"] || len(agent.FileDirs) != 1 {
 		t.Fatal(agent)
 	}
-	entry := filetransport.Entry{Version: 1, ID: filetransport.UUID(), Card: "card:work", Text: "File writer note", Evidence: []string{"https://example.test/evidence"}, Next: &filetransport.Next{At: "2d", What: strings.Repeat("r", 170)}}
+	entry := filetransport.Entry{Version: 1, ID: filetransport.UUID(), Card: "card:work", Text: "File writer note", Evidence: []string{" https://example.test/evidence "}, Next: &filetransport.Next{At: "2d", What: "  " + strings.Repeat("r", 170)}}
 	raw := integrations.JSON(entry)
 	path := filepath.Join(project, ".anx/outbox", entry.ID+".json")
 	if e = os.WriteFile(path, raw, 0600); e != nil {
@@ -67,6 +67,9 @@ func TestFileSyncDispatchRegistrationFrozenNotesAndOfflineDisable(t *testing.T) 
 	var body map[string]any
 	_ = json.Unmarshal([]byte(bodies[0]), &body)
 	payload := asMap(asMap(body["event"])["payload"])
+	if anyString(asSlice(payload["evidence_refs"])[0]) != "https://example.test/evidence" || !strings.HasPrefix(anyString(asMap(payload["next"])["what"]), "r") {
+		t.Fatal("file note differs from note normalization", payload)
+	}
 	if payload["text"] != entry.Text || len(asSlice(payload["evidence_refs"])) != 1 || len(anyString(asMap(payload["next"])["what"])) != 160 {
 		t.Fatal(body)
 	}

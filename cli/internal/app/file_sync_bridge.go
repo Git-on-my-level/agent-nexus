@@ -92,13 +92,15 @@ func (a *App) fileCallbacks(w hostbridge.Workspace, agent hostbridge.Agent) file
 			}
 			warnings := []string{}
 			payload := asMap(asMap(body["event"])["payload"])
+			evidence := []string{}
 			for _, ref := range in.Evidence {
 				if e = validateEvidenceRef(ref); e != nil {
 					return integrations.Delivery{}, nil, errnorm.Usage("invalid_evidence", e.Error())
 				}
+				evidence = append(evidence, strings.TrimSpace(ref))
 			}
 			if len(in.Evidence) > 0 {
-				payload["evidence_refs"] = in.Evidence
+				payload["evidence_refs"] = evidence
 			}
 			if in.Next != nil {
 				at, ok := parsePromiseWhen(in.Next.At, received)
@@ -113,7 +115,7 @@ func (a *App) fileCallbacks(w hostbridge.Workspace, agent hostbridge.Agent) file
 						warnings = append(warnings, "note_moved_without_evidence")
 					}
 				}
-				payload["next"] = map[string]any{"at": at.Format(time.RFC3339Nano), "what": truncateRunes(in.Next.What, maxPromiseWhatRunes)}
+				payload["next"] = map[string]any{"at": at.Format(time.RFC3339Nano), "what": truncateRunes(strings.TrimSpace(in.Next.What), maxPromiseWhatRunes)}
 			}
 			key := "anx-file-v1-" + b.ID + "-" + in.ID
 			body["request_key"] = key
