@@ -1,8 +1,8 @@
 # Agent hooks, Git capture and a first-class bridge
 
 Status: coordinator decisions accepted; single-host bridge supersedes earlier runtime split (2026-10-17).
-**Documentation only: implementation waits for [PR #429](https://github.com/Git-on-my-level/agent-nexus/pull/429)
-to merge, then rebases on main.** Main proposal: about five minutes; appendix:
+**PR 1 implementation follows merged [PR #429](https://github.com/Git-on-my-level/agent-nexus/pull/429).
+PRs 2 and 3 remain follow-up work; this PR does not change the live bridge.** Main proposal: about five minutes; appendix:
 implementation details.
 
 ## Decisions
@@ -54,7 +54,7 @@ only workspaces. No reverse session→cards API exists: validate known candidate
 with scoped reads. No card enumeration, inaccessible-target fallback or implicit
 participation/presence writes.
 
-Use existing context reads and an end-to-end deadline; fail open with a sanitized
+Compose existing scoped work/observations/plan GETs concurrently and use an end-to-end deadline; fail open with a sanitized
 diagnostic. Stale cache fallback remains explicit opt-in. Extend
 `integrations enable --harness … --dry-run`, preserving backups and owned-hook
 removal. Do not add a second hook installer.
@@ -65,14 +65,16 @@ Enable previews repo/workspace identity and initial HEAD; no initial history
 upload. Explicit `git sync --since` backfills. Store bindings outside Git:
 
 - Elected host runs `anx git enable --writer --workspace <alias>` and exports a
-  binding with `anx git binding export`: `{repo_uuid,workspace_id,writer_host_id,writer_actor_id}`.
+  binding with `anx git binding export`: `{repo_uuid,base_url,writer_host_id,writer_actor_id,writer_agent}`.
 - Other hosts import with `anx git enable --binding <file>`. Intake/drain mismatch
   reports `not_capture_writer` with elected host/actor in hook stderr,
   `anx git status` and bridge doctor; no enqueue/send, hook still exits 0.
 - Enable requires election/import; distribute the non-secret binding to clones.
   Unprovisioned clones cannot discover peers: this is operator election, not a
   global server lease. Handoff disables/reconciles the old writer before replacement;
-  no automatic failover.
+  no automatic failover. Linked worktrees share a common-repo writer, FIFO and
+  replay namespace with separate worktree scan cursors; register each explicitly.
+  Separate clones import that same binding, even on the writer host.
 
 ```text
 Anx-Card: card:hook-work
@@ -173,11 +175,12 @@ a dead bridge cannot rewrite stale banners.
 
 ## Implementation plan
 
-Three opt-in PRs, all after #429; contracts first for API changes.
+Three opt-in PRs after #429; contracts first for API changes. PR 1 usage and
+operational limits are in [the CLI guide](../../cli/docs/agent-hooks.md).
 
 | PR                             | Files/packages                                                                                                                                                                                                                                                                                                                                                                                   | Acceptance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Hooks + Git notes/promises  | CLI integrations; app integration/identity/note/message/dispatch/preflight/output/help/registry; local-command metadata; CLI integration fixtures, docs and participant bundle.                                                                                                                                                                                                                  | Harness goldens and model-visible start/compact smoke; settings preservation, card isolation/timeouts. Real Git/CLI/core: writer mismatch/handoff, trailers/time normalization, ordered promises with two authors, uncertain retry, backfill/rewrite, crash/restart and backpressure.                                                                                                                                                                                                                                                                |
+| 1. Hooks + Git notes/promises  | CLI integrations; app integration/identity/note/message/dispatch/preflight/output/help/registry; local-command metadata/MCP exclusions; CLI integration fixtures, docs and participant bundle.                                                                                                                                                                                                   | Harness goldens and model-visible start/compact smoke; settings preservation, card isolation/timeouts. Real Git/CLI/core: writer mismatch/handoff, trailers/time normalization, ordered promises with two authors, uncertain retry, backfill/rewrite, crash/restart and backpressure.                                                                                                                                                                                                                                                                |
 | 2. One host service + liveness | Canonical contracts/generated consumers; core auth/server/storage/resourceaccess/commandcenter + migration/inventories; new `cli/internal/bridge/` supervisor/registry/migrator, rewrite bridge commands/units/ask delivery/enrollment/orient; port wake dispatch/run ingestion, remove Python/lifecycle code and update build/version/docs/tests; UI status store/client/Agents/Access; skills. | Multi-agent × multi-workspace isolation/fairness and callback recovery; signed heartbeat, per-agent wake truth, scale/privacy. Migration fixtures for launchd/systemd, custom wrappers/labels, duplicate config roots, in-flight/acknowledged resumes, crash rollback and exactly one supervisor. Real CLI/core E2E after migration: answer each of three workspaces exactly once where outcome is known. Playwright: host live/stale/recovery/revoked, zero-agent and answer-only/unserved agents; prominent setup guidance, bridge-free operation. |
 | 3. Files                       | Reuse integrations delivery; new CLI sync intake/mirror package; host-supervisor job wiring, integration fixtures, skill/catalog/bundle and security docs.                                                                                                                                                                                                                                       | Filesystem races/symlinks/disk-full/identity/replay-cutoff tests; atomic mirrors/privacy. Sandbox E2E: mounted outbox → bridge → one note/promise → mirror, with no producer network/token.                                                                                                                                                                                                                                                                                                                                                          |
 
@@ -194,12 +197,17 @@ preflight every workspace before stopping old services. Rollback preserves unit/
 never start both supervisors or automatically repeat uncertain callbacks. Update
 participant/catalog/bundle, setup/release docs and module guides. Run focused tests,
 module/test-fast/contract checks and affected Playwright, then terminal exact-head
-ci-ok (no polling). No implementation until #429 merges.
+ci-ok (no polling). PR 1 is implemented here; PRs 2/3 follow separately.
 
 Cuts retained: completion/status trailers, patch-ID deduplication, command-text
 inference, recursive watchers, duplicate installer, remote counters/errors, fleet
 counts, update auto-restart, event-log mirrors/editable frontmatter, FSKit/FUSE/MCP.
 Runtime consolidation is approved and belongs in PR2; no owner questions remain.
+
+PR 1 validation boundary: deterministic native payload/merge tests and disposable
+Git/CLI/core E2E are automated. Installed-harness model-visible start/compact smoke
+remains a separate release acceptance check; see the CLI guide. No live profile,
+bridge or production workspace is used by these tests.
 
 ## Appendix: adapters, bounds and failures
 
@@ -321,7 +329,7 @@ bridge. Do not delete capabilities along with the package:
 
 If implementation reveals an additional dependency that cannot be folded, report
 it and leave that component intact pending resolution; do not substitute a second
-bridge service silently. This turn only records the removal plan.
+bridge service silently. PR 1 only records this removal plan; PR 2 implements it.
 
 Event body: `{actor_id,request_key,event:{type,actor_id,thread_ref,refs,summary,payload,provenance}}`.
 Reuse the card-message builder's subject/card/thread/board fields, optional
@@ -330,11 +338,11 @@ Reuse the card-message builder's subject/card/thread/board fields, optional
 | Area        | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Hook        | Input 64 KiB; context 6 KiB UTF-8 (~1.5k tokens); ten observations; 1.5 s total including stdin/identity/locks/HTTP. Existing 2 s agentctl probe must honor remaining budget. Fail-open exit 0; empty harness output, sanitized stderr; generic empty result.                                                                                                                                                                                                                                                                                                                       |
-| Cache       | Private atomic workspace/principal/card/scope key. Stale fallback off; opt-in ≤5 min, labeled STALE. Never after 401/403/404, expired credential or identity change; disclose offline revocation limitation. Participation leases remain 120 s, not renewed by reads.                                                                                                                                                                                                                                                                                                               |
+| Cache       | Private atomic workspace/host/principal/card key; identical scoped reads share denial invalidation. Stale fallback off; opt-in ≤5 min, labeled STALE. Never after 401/403/404, expired credential or identity change; disclose offline revocation limitation. Participation leases remain 120 s, not renewed by reads.                                                                                                                                                                                                                                                              |
 | Trailers    | Git interpret-trailers semantics plus raw-block rejection of folded/multiline ANX values; case-insensitive keys, trim; reject duplicates/control/NUL/invalid UTF-8; no inline comments. One card ≤256 bytes, message ≤64 KiB, note ≤4 KiB. Unknown keys ignored; reserved Step/Status quarantine.                                                                                                                                                                                                                                                                                   |
 | Next        | First token UTC YYYY-MM-DD (end of day) or zoned RFC3339; remainder required text. Accept note duration grammar too, resolved once from commit committer time, not sync time. Reuse note's 160-rune text truncation, positive duration ≤3650d and two-day-horizon / moved-without-evidence warnings. Freeze normalized RFC3339 at; note+promise atomic, never a separate patch. Missing Next is not a clear. Preserve core's per-author fold and ordinary evidence-reset rules.                                                                                                     |
-| Git walk    | Snapshot selected local refs; ≤100 commits / five seconds per tick; durable continuation/outcomes before cursor. Ordered per-card lane includes ordinary notes (evidence can affect promises). Missing/shallow objects pause; overflow explicit backfill; no fetch. Check writer on intake/drain; callbacks/scanners use the same binding.                                                                                                                                                                                                                                          |
-| Spool       | Existing 3 s hook, 100 pending+dead, 1,000 receipts, 30-day pruning is not sufficient for durable intake. Version new payloads, read old queues unchanged; no unsent eviction, reject capacity before sending and retain source. Frozen identity/key/body; four sends/tick, 1 s HTTP, jittered 1–60 s retry. Network/timeout/429/5xx retain; 401/403/404 pause; 400/422/409 inspectable failure. FIFO promise lane does not rotate failed predecessors behind newer commits. Stop uncertain auto-retry at 25 days before 30-day receipt GC; reconcile explicitly after loss/expiry. |
+| Git walk    | Freeze local HEAD (or explicit --to); ≤100 positions / five seconds per manual tick; durable continuation/outcomes before cursor. A shared repo FIFO (stricter than per-card) includes ordinary notes (evidence can affect promises). Missing/shallow objects pause; overflow explicit backfill; no fetch. Check writer on intake/drain; callbacks/scanners use the same binding.                                                                                                                                                                                                   |
+| Spool       | Existing 3 s hook, 100 pending+dead, 1,000 receipts, 30-day pruning is not sufficient for durable intake. Version new payloads, read old queues unchanged; no unsent eviction, reject capacity before sending and retain source. Frozen identity/key/body; four sends/tick, 1 s HTTP, jittered 2–33 s retry. Network/timeout/429/5xx retain; 401/403/404 pause; 400/422/409 inspectable failure. FIFO promise lane does not rotate failed predecessors behind newer commits. Stop uncertain auto-retry at 25 days before 30-day receipt GC; reconcile explicitly after loss/expiry. |
 | Heartbeat   | One timer; each workspace receives its own signed projection every 60 s with jitter, 2 s HTTP, fixed server expiry 300 s. Workspace-local monotonic sequence; fresh proof per retry. Version ≤64 ASCII, instance ≤128; ≤256 registered actors × five unique compatible jobs, body ≤256 KiB; reject oversized configuration before enabling, never truncate a heartbeat snapshot. No arbitrary metadata, public/dev bypass or external telemetry.                                                                                                                                    |
 | Status cost | ≤100 hosts; authorize first, admit ≤33 actor groups by `(host_id,actor_id,kind)` index (five rows/group), emit ≤32 with truncation; omit revoked/excluded without refill. Partial results never prove absence. Presence PK seek + bounded job snapshot replace/joins; O(admitted agents/jobs), no workspace/roster/history scan or graph rebuild. Batch scope/revocation checks; add native read/write budgets and query-plan tests.                                                                                                                                                |
 | Files       | ≤100 allowlisted cards, ten refreshes/tick, ten notes/card, bounded plans; entry ≤64 KiB, evidence ≤8 with note validation. Next optional, normalized/frozen once at durable intake; preserve file order per directory/card before newer promises. No tracked destination, credential export, symlink/path traversal, arbitrary actor/base URL or shell. Atomic generation+manifest; raw errors/counters stay local.                                                                                                                                                                |
