@@ -406,7 +406,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `integrations`
 
-- Commands: `21`
+- Commands: `24`
 - Command IDs:
   - `bridge.add`
   - `bridge.doctor`
@@ -429,6 +429,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `integrations.map`
   - `integrations.run`
   - `integrations.status`
+  - `sync.disable`
+  - `sync.enable`
+  - `sync.status`
 
 ## `maintenance`
 

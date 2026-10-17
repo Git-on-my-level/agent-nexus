@@ -4,8 +4,8 @@
     {
       "role": "participant",
       "name": "anx-participant",
-      "version": "anx.participant.v27",
-      "content_sha256": "sha256:dc61fa110ca321c06b1ed475ffa4ca1218adb82063df580dbc974a9586900495"
+      "version": "anx.participant.v28",
+      "content_sha256": "sha256:ebd33628f1259c5dd52e449e67be8a44926c73e4c5e052adfaac8575c097720c"
     },
     {
       "role": "pm",

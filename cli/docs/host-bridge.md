@@ -143,3 +143,20 @@ loaded/enabled states and journal retries on both OS
 managers using temporary homes and fake commands. The real CLI/core test runs
 one foreground service against three disposable workspaces without installing
 an OS unit. Tests never operate an existing service or initialize the task repo.
+
+## Scoped file transport
+
+Off by default. `anx sync enable <directory> --card-id card:<handle> --dry-run`
+previews an explicit directory allowlist and writer binding; enable registers the
+independent `files` job without installing a unit or enabling answers/wake.
+`sync disable` clears generated caches and stops that directory while retaining
+all original/frozen work. The host supervisor rotates up to 16 directories per
+agent, with a five-second short-job budget and ten card refreshes per directory
+tick. Heartbeats contain only files readiness, never paths, queue counts or notes.
+`bridge doctor` checks retained claims, binding safety, capacity, FIFO head,
+cutoff/reconciliation and mirror freshness. See [File transport](file-transport.md)
+for the producer/mount boundary and recovery rules.
+
+Every resume root traversed by the host consumer has its own exclusive consumer
+lock. A rollback executor on any preserved root fences the host dispatcher; it
+cannot overlap a consumer merely because that root is second in the registry.

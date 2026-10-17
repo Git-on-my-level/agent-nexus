@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ func (a *App) consumeHostWakes(ctx context.Context, cfg config.Resolved, agent h
 	}
 	// Both the host service and rollback executors use this namespace fence.
 	// A second consumer must never execute the same retained command concurrently.
-	unlock, err := lockAskBridgeReady(filepath.Join(agent.RegistryDirs[0], "consumer.lock"))
+	unlock, err := lockResumeRoots(agent.RegistryDirs)
 	if err != nil {
 		return err
 	}
@@ -328,4 +329,43 @@ func runRegisteredAnswerFor(ctx context.Context, entry askResumeRegistration, ra
 	response := asMap(out["response"])
 	cmd.Env = append(env, "ANX_ASK_ID="+entry.AskID, "ANX_CARD_REF="+anyString(out["subject_ref"]), "ANX_OUTCOME="+anyString(response["outcome"]), "ANX_RESPONSE_EVENT_ID="+anyString(response["response_event_id"]))
 	return cmd.Run()
+}
+
+// Fence every root traversed by one dispatcher, in stable order. Legacy
+// executors may still own a second preserved root during recovery.
+func lockResumeRoots(dirs []string) (func(), error) {
+	paths := append([]string(nil), dirs...)
+	sort.Strings(paths)
+	var infos []os.FileInfo
+	var unlocks []func()
+	release := func() {
+		for i := len(unlocks) - 1; i >= 0; i-- {
+			unlocks[i]()
+		}
+	}
+	for _, dir := range paths {
+		info, e := os.Lstat(dir)
+		if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			release()
+			return nil, fmt.Errorf("unsafe resume root: %s", dir)
+		}
+		duplicate := false
+		for _, old := range infos {
+			if os.SameFile(old, info) {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		unlock, e := lockAskBridgeReady(filepath.Join(dir, "consumer.lock"))
+		if e != nil {
+			release()
+			return nil, e
+		}
+		unlocks = append(unlocks, unlock)
+		infos = append(infos, info)
+	}
+	return release, nil
 }

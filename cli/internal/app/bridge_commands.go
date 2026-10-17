@@ -15,6 +15,7 @@ import (
 	hostbridge "agent-nexus-cli/internal/bridge"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/filetransport"
 	"agent-nexus-cli/internal/integrations"
 )
 
@@ -58,7 +59,7 @@ anx bridge doctor
 
 Install opts into signed presence reporting; add explicitly enables independent jobs.
 Without the answer job, unattended resumes wait; Git and spool drain remain manual.
-Await/batch and direct commands work without the bridge. Files are a later release.
+Await/batch and direct commands work without the bridge. Files require explicit anx sync enable with a card allowlist.
 Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
 Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
 The legacy form serves one answer namespace without host heartbeat or other jobs.
@@ -334,6 +335,10 @@ func (a *App) inspectHostBridge(ctx context.Context, doctor bool) (*commandResul
 						err = checkRuntimeReceipts(dir)
 					}
 					checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "resume_namespace", "ok": err == nil, "repair": "reconcile retained command/runtime receipts against their external outcome"})
+				}
+				for _, dir := range agent.FileDirs {
+					s, err := filetransport.Inspect(dir, a.clockNow())
+					checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "file_transport", "ok": err == nil, "status": s, "repair": "inspect sync status and protected originals; reconcile uncertain work before changing identity or UUID"})
 				}
 				if agent.Jobs["git"] {
 					_, err = a.bridgeGitTick(ctx, cfg, true)

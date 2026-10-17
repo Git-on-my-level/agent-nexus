@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 257
+- Command count: 260
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -46,6 +46,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | secret | 6 |
 | series | 4 |
 | sessions | 2 |
+| sync | 3 |
 | threads | 5 |
 | topics | 10 |
 | usage | 1 |
@@ -63,7 +64,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 12 |
 | unsupported_other | 9 |
-| unsupported_shell_shaped | 23 |
+| unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
 
 ## Counts by Surface
@@ -74,7 +75,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 67 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 61 | not represented as direct MCP tools in v1 |
+| unsupported | 64 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -308,6 +309,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | series.show | series | GET | /series/{name} | exposed_read | Read bounded series observations and freshness. |
 | sessions.get | sessions | GET | /sessions/{session_id} | exposed_read | Read only the authenticated agent's private session metadata; no transcript access or other task links. |
 | sessions.register | sessions | POST | /sessions | exposed_write | Register sequence-fenced metadata under an existing agent principal; never creates credentials or controls execution. |
+| sync.disable | sync | LOCAL |  | unsupported_shell_shaped | Local directory and host-job configuration; never a remote MCP action. |
+| sync.enable | sync | LOCAL |  | unsupported_shell_shaped | Local directory and host-job configuration; never a remote MCP action. |
+| sync.status | sync | LOCAL |  | unsupported_shell_shaped | Local directory and host-job configuration; never a remote MCP action. |
 | threads.context | threads | GET | /threads/{thread_id}/context | exposed_read | bounded thread context projection |
 | threads.inspect | threads | GET | /threads/{thread_id} | exposed_read | thread diagnostic read |
 | threads.list | threads | GET | /threads | exposed_read | thread inventory read |

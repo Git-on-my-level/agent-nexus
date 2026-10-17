@@ -23,6 +23,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `config show` (manual): Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted).
 - `doctor` (manual): Report workspace resolution and local/network preconditions.
 - `bridge` (manual): One optional host service for answers, wake routing, Git and spool jobs.
+- `sync` (group): Opt-in file notes and read-only card mirror
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `git` (local-helper): Opt-in agent context and Git progress integration.
 - `hook` (local-helper): Opt-in agent context and Git progress integration.
@@ -272,6 +273,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `bridge add` (local-helper): Register an enrolled agent/workspace and enable its selected jobs.
 - `bridge install` (local-helper): Install one host unit and safely migrate legacy consumers.
 - `bridge doctor` (local-helper): Inspect host singleton, namespace safety, jobs and writer bindings.
+- `sync enable` (local-helper): Enable a directory-scoped file job with an explicit card allowlist.
+- `sync disable` (local-helper): Disable file delivery and clear generated caches, retaining original work.
+- `sync status` (local-helper): Inspect file binding, pending work, failures and mirror freshness.
 - `host token` (local-helper): Print a short-lived derived-agent bearer from the enrolled host.
 - `host bridge check-in` (local-helper): Publish an enrolled host bridge check-in.
 - `host bridge wake claim` (local-helper): Claim a durable wake for this host.
@@ -506,6 +510,7 @@ Daily loop
 
 Runs and output
 
+- Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
 - Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
@@ -573,7 +578,7 @@ anx bridge doctor
 
 Install opts into signed presence reporting; add explicitly enables independent jobs.
 Without the answer job, unattended resumes wait; Git and spool drain remain manual.
-Await/batch and direct commands work without the bridge. Files are a later release.
+Await/batch and direct commands work without the bridge. Files require explicit anx sync enable with a card allowlist.
 Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
 Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
 The legacy form serves one answer namespace without host heartbeat or other jobs.
@@ -866,10 +871,29 @@ anx bridge doctor
 
 Install opts into signed presence reporting; add explicitly enables independent jobs.
 Without the answer job, unattended resumes wait; Git and spool drain remain manual.
-Await/batch and direct commands work without the bridge. Files are a later release.
+Await/batch and direct commands work without the bridge. Files require explicit anx sync enable with a card allowlist.
 Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
 Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
 The legacy form serves one answer namespace without host heartbeat or other jobs.
+```
+
+## `sync`
+
+Opt-in file notes and read-only card mirror
+
+```text
+Local Help: sync
+
+Optional scoped file transport, off until explicitly enabled.
+anx sync enable <directory> --card-id <ref> [--card-id <ref> ...] [--dry-run]
+anx sync disable <directory>
+anx sync status <directory>
+
+Enable pins the current workspace/host/agent and explicit card allowlist, and
+registers a files job with the optional host bridge; it never installs a service.
+Mount ONLY .anx/outbox writable into the producer sandbox. No token/network needed.
+Producer UUIDs, notes and optional next promises only. Mirror is read-only.
+See cli/docs/file-transport.md for intake receipts, stale_after and reconciliation.
 ```
 
 ## `import`
@@ -9770,6 +9794,63 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge doctor ... ; anx --json bridge doctor ... ; anx bridge doctor ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `sync enable`
+
+Enable a directory-scoped file job with an explicit card allowlist.
+
+```text
+Local Help: sync enable
+
+Optional scoped file transport, off until explicitly enabled.
+anx sync enable <directory> --card-id <ref> [--card-id <ref> ...] [--dry-run]
+anx sync disable <directory>
+anx sync status <directory>
+
+Enable pins the current workspace/host/agent and explicit card allowlist, and
+registers a files job with the optional host bridge; it never installs a service.
+Mount ONLY .anx/outbox writable into the producer sandbox. No token/network needed.
+Producer UUIDs, notes and optional next promises only. Mirror is read-only.
+See cli/docs/file-transport.md for intake receipts, stale_after and reconciliation.
+```
+
+## `sync disable`
+
+Disable file delivery and clear generated caches, retaining original work.
+
+```text
+Local Help: sync disable
+
+Optional scoped file transport, off until explicitly enabled.
+anx sync enable <directory> --card-id <ref> [--card-id <ref> ...] [--dry-run]
+anx sync disable <directory>
+anx sync status <directory>
+
+Enable pins the current workspace/host/agent and explicit card allowlist, and
+registers a files job with the optional host bridge; it never installs a service.
+Mount ONLY .anx/outbox writable into the producer sandbox. No token/network needed.
+Producer UUIDs, notes and optional next promises only. Mirror is read-only.
+See cli/docs/file-transport.md for intake receipts, stale_after and reconciliation.
+```
+
+## `sync status`
+
+Inspect file binding, pending work, failures and mirror freshness.
+
+```text
+Local Help: sync status
+
+Optional scoped file transport, off until explicitly enabled.
+anx sync enable <directory> --card-id <ref> [--card-id <ref> ...] [--dry-run]
+anx sync disable <directory>
+anx sync status <directory>
+
+Enable pins the current workspace/host/agent and explicit card allowlist, and
+registers a files job with the optional host bridge; it never installs a service.
+Mount ONLY .anx/outbox writable into the producer sandbox. No token/network needed.
+Producer UUIDs, notes and optional next promises only. Mirror is read-only.
+See cli/docs/file-transport.md for intake receipts, stale_after and reconciliation.
 ```
 
 ## `host token`

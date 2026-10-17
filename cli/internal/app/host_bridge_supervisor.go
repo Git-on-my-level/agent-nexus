@@ -138,7 +138,7 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 				agents := []map[string]any{}
 				for _, agent := range w.Agents {
 					jobs := []map[string]any{}
-					for _, kind := range []string{"answers", "wake", "git", "spool"} {
+					for _, kind := range []string{"answers", "wake", "git", "files", "spool"} {
 						enabled := agent.Jobs[kind]
 						jobs = append(jobs, map[string]any{"kind": kind, "enabled": enabled, "ready": enabled && snap.Ready[hostbridge.AgentKey(w, agent)+"\x00"+kind]})
 					}
@@ -171,6 +171,9 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 		}
 		reports.Wait()
 	}
+	var fileMu sync.Mutex
+	fileCursor := map[string]int{}
+	fileReady := map[string]bool{}
 	var logMu sync.Mutex
 	run := func(ctx context.Context, w hostbridge.Workspace, agent hostbridge.Agent, job string) (runErr error) {
 		defer func() {
@@ -193,6 +196,31 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 			return inheritedGetenv(key)
 		}
 		child.writes = writeTracker{}
+		if job == "files" {
+			select {
+			case shortJobs <- struct{}{}:
+				defer func() { <-shortJobs }()
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			tick, done := context.WithTimeout(ctx, 5*time.Second)
+			defer done()
+			fileMu.Lock()
+			key := hostbridge.AgentKey(w, agent)
+			i := fileCursor[key] % len(agent.FileDirs)
+			fileCursor[key] = i + 1
+			fileMu.Unlock()
+			e := child.bridgeFilesTick(tick, w, agent, agent.FileDirs[i])
+			fileMu.Lock()
+			fileReady[key+"\x00"+agent.FileDirs[i]] = e == nil
+			ready := true
+			for _, dir := range agent.FileDirs {
+				ready = ready && fileReady[key+"\x00"+dir]
+			}
+			fileMu.Unlock()
+			health.set(w, agent, job, ready)
+			return e
+		}
 		cfg, e := child.validateBridgeAgent(ctx, w, agent)
 		if e != nil {
 			health.set(w, agent, job, false)

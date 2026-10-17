@@ -125,3 +125,9 @@ Restored per-agent `bridge run` argv remain runnable as answers-only rollback
 executors. They share the host service's namespace consumer lock and publish no
 host heartbeat. New units clear `ANX_AS`; preserve this rollback path while the
 installer restores original legacy units on failure.
+
+File jobs are independently opt-in through `sync enable` with canonical cards and
+pinned enrollment. Producers receive only the mounted outbox, never credentials,
+intake or frozen state. Preserve producer UUIDs, original bytes and replay keys;
+clear generated mirrors on access denial. Test sandbox delivery against a fresh
+core with sandbox-exec/bubblewrap; never install the real host service for tests.

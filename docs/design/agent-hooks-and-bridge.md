@@ -1,8 +1,8 @@
 # Agent hooks, Git capture and a first-class bridge
 
 Status: coordinator decisions accepted; single-host bridge supersedes earlier runtime split (2026-10-17).
-**PR 1 is merged in #431. PR 2 consolidates the host service in this branch;
-PR 3 (files) remains follow-up work. No live service is used for acceptance.** Main proposal: about five minutes; appendix:
+**PRs 1/2 merged in #431/#432. PR 3 implements the scoped file job in this branch.
+No live service is used for acceptance.** Main proposal: about five minutes; appendix:
 implementation details.
 
 ## Decisions
@@ -117,10 +117,12 @@ enabling its answer job; optional wake/runtime, Git, files and spool jobs are
 configured independently. Add every intended agent/workspace; adding one never
 creates another unit. `run` is the same host supervisor in the foreground and
 shares its singleton lock. Start/stop/status/doctor operate this service only.
-No per-agent flags on run and no Python runtime install mode remain.
+Bare run has no per-agent jobs; explicit legacy per-agent flags remain solely as
+an answers-only rollback executor. The Python runtime is removed.
 
 The local registry pins workspace ID/base URL, enrollment/config directory,
-agent actor ID, enabled jobs, resume-registry roots and execution policy. It
+agent actor ID, enabled jobs, resume-registry roots, private file-binding roots
+and execution policy. It
 references existing credentials; never copies keys/tokens. All configured
 workspaces share one scheduler with isolated per-workspace/agent queues, bounded
 workers and an independent heartbeat timer. Long executors or one offline
@@ -164,10 +166,17 @@ never arbitrary API or executor access.
 
 | Files                                  | Contract                                                                                                                                           |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STATUS.json`                          | `{schema_version,as_of,last_server_contact,stale,pending,failed,last_error_code}`                                                                  |
-| `INDEX.md` / `cards/<canonical-id>.md` | Atomic completed generation; summary, promise, plan, recent notes; as_of/stale_after/resource version, no fictitious global seq.                   |
+| `STATUS.json`                          | `{schema_version,generation,as_of,last_server_contact,stale_after,stale,enabled,pending,failed,last_error_code}`                                   |
+| `INDEX.md` / `cards/<canonical-id>.md` | Atomic current-generation pointer; summary, promise, bounded plan, ten recent notes; as_of/stale_after/resource version, no fictitious global seq. |
 | `outbox/<uuid>.json`                   | `{schema_version:1,id,card_ref,text,evidence_refs:[],next?:{at,what}}`; producer UUID + temp/rename. Next uses the same note validation.           |
 | `outbox/.done` / `.failed`             | Original bytes plus receipt/reason only after confirmation/definitive failure. Uncertain work remains pending, never rerouted or silently deleted. |
+
+The private journal (outside the mounted outbox) pins a directory UUID, workspace,
+core URL, host, actor, canonical card allowlist and FIFO intake sequence. Claim by
+rename into protected `.anx/intake` before reading; recover claims before new files.
+The sandbox mounts only outbox writable, optionally the completed mirror read-only.
+`sync enable` registers a files-only job if the agent is new; disable clears caches
+and retains originals. `sync status` and bridge doctor inspect without sending.
 
 Key: `anx-file-v1-<directory_uuid>-<entry_uuid>`. Edited IDs conflict. Lock/fsync
 intake, reject symlinks/path escape, preserve failed bytes. Refresh validates access;
@@ -199,7 +208,8 @@ preflight every workspace before stopping old services. Rollback preserves unit/
 never start both supervisors or automatically repeat uncertain callbacks. Update
 participant/catalog/bundle, setup/release docs and module guides. Run focused tests,
 module/test-fast/contract checks and affected Playwright, then terminal exact-head
-ci-ok (no polling). PRs 1/2 are implemented; PR 3 follows separately. Host operation and migration
+ci-ok (no polling). PRs 1/2 are merged; PR 3 implements the file protocol in
+[the file transport guide](../../cli/docs/file-transport.md). Host operation and migration
 are documented in [the host bridge guide](../../cli/docs/host-bridge.md).
 
 Cuts retained: completion/status trailers, patch-ID deduplication, command-text

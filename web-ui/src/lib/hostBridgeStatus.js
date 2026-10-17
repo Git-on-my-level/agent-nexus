@@ -47,6 +47,7 @@ export const BRIDGE_JOB_LABELS = {
   wake: "Wake on mention",
   git: "Git capture",
   spool: "Delivery retries",
+  files: "File sync",
 };
 
 /**

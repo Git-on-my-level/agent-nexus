@@ -46,6 +46,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if len(args) >= 2 && args[0] == "host" && args[1] == "bridge-status" {
 		return "host bridge-status", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"from-file": {kind: preflightFlagString}})
 	}
+	if args[0] == "sync" {
+		o, e := parseSyncOptions(args[1:])
+		return strings.TrimSpace("sync " + o.verb), e
+	}
 	if args[0] == "git" {
 		o, e := parseGitOptions(args[1:])
 		return strings.TrimSpace("git " + o.verb), e

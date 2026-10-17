@@ -206,6 +206,51 @@ x-anx-local-commands:
     x-anx-examples:
       - title: Map a directory to an accessible default card.
         command: anx integrations map ./project --card-id card:work
+  - x-anx-command-id: sync.enable
+    x-anx-cli-path: sync enable
+    summary: Opt into directory-scoped file notes and a read-only card mirror.
+    x-anx-why: Opt into directory-scoped file notes and a read-only card mirror.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local file binding and health.
+    x-anx-error-codes: [invalid_flags, invalid_args, identity_changed, file_transport_capacity]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Explicit workspace/host/actor and at most 100 cards. Registers a files-only host job; never installs a service. Producer UUIDs and notes plus optional next only; no credentials in the mounted outbox.
+    x-anx-examples:
+      - title: Opt into directory-scoped file notes and a read-only card mirror.
+        command: anx sync enable ./project --card-id card:work --dry-run
+  - x-anx-command-id: sync.disable
+    x-anx-cli-path: sync disable
+    summary: Disable a directory file transport while preserving original work.
+    x-anx-why: Disable a directory file transport while preserving original work.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local file binding and health.
+    x-anx-error-codes: [invalid_flags, invalid_args, identity_changed, file_transport_capacity]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Offline local operation. Clears generated caches, disables the directory job and retains unconfirmed originals and frozen requests.
+    x-anx-examples:
+      - title: Disable a directory file transport while preserving original work.
+        command: anx sync disable ./project
+  - x-anx-command-id: sync.status
+    x-anx-cli-path: sync status
+    summary: Inspect a directory file binding, retained queue and mirror freshness.
+    x-anx-why: Inspect a directory file binding, retained queue and mirror freshness.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local file binding and health.
+    x-anx-error-codes: [invalid_flags, invalid_args, identity_changed, file_transport_capacity]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Offline bounded local inspection; shows pending head, first attempt, retry time, capacity and stale_after. Never drains or sends.
+    x-anx-examples:
+      - title: Inspect a directory file binding, retained queue and mirror freshness.
+        command: anx sync status ./project
   - x-anx-command-id: git.enable
     x-anx-cli-path: git enable
     summary: Opt into Git notes and promises with an explicitly elected writer.

@@ -2,7 +2,7 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
-  "group_count": 40,
+  "group_count": 41,
   "groups": [
     {
       "name": "topics",
@@ -466,6 +466,15 @@
       ]
     },
     {
+      "name": "sync",
+      "command_count": 3,
+      "command_ids": [
+        "sync.disable",
+        "sync.enable",
+        "sync.status"
+      ]
+    },
+    {
       "name": "usage",
       "command_count": 1,
       "command_ids": [
@@ -499,7 +508,7 @@
       ]
     }
   ],
-  "command_count": 257,
+  "command_count": 260,
   "commands": [
     {
       "command_id": "actors.create",
@@ -13605,6 +13614,123 @@
       ],
       "go_method": "SessionsRegister",
       "ts_method": "sessionsRegister"
+    },
+    {
+      "command_id": "sync.disable",
+      "cli_path": "sync disable",
+      "group": "sync",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Disable a directory file transport while preserving original work.",
+      "why": "Disable a directory file transport while preserving original work.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local file binding and health.",
+      "error_codes": [
+        "invalid_flags",
+        "invalid_args",
+        "identity_changed",
+        "file_transport_capacity"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Offline local operation. Clears generated caches, disables the directory job and retains unconfirmed originals and frozen requests.",
+      "examples": [
+        {
+          "title": "Disable a directory file transport while preserving original work.",
+          "command": "anx sync disable ./project"
+        }
+      ],
+      "adjacent_commands": [
+        "sync.enable",
+        "sync.status"
+      ],
+      "go_method": "",
+      "ts_method": ""
+    },
+    {
+      "command_id": "sync.enable",
+      "cli_path": "sync enable",
+      "group": "sync",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Opt into directory-scoped file notes and a read-only card mirror.",
+      "why": "Opt into directory-scoped file notes and a read-only card mirror.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local file binding and health.",
+      "error_codes": [
+        "invalid_flags",
+        "invalid_args",
+        "identity_changed",
+        "file_transport_capacity"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Explicit workspace/host/actor and at most 100 cards. Registers a files-only host job; never installs a service. Producer UUIDs and notes plus optional next only; no credentials in the mounted outbox.",
+      "examples": [
+        {
+          "title": "Opt into directory-scoped file notes and a read-only card mirror.",
+          "command": "anx sync enable ./project --card-id card:work --dry-run"
+        }
+      ],
+      "adjacent_commands": [
+        "sync.disable",
+        "sync.status"
+      ],
+      "go_method": "",
+      "ts_method": ""
+    },
+    {
+      "command_id": "sync.status",
+      "cli_path": "sync status",
+      "group": "sync",
+      "method": "LOCAL",
+      "path": "",
+      "operation_id": "",
+      "summary": "Inspect a directory file binding, retained queue and mirror freshness.",
+      "why": "Inspect a directory file binding, retained queue and mirror freshness.",
+      "input_mode": "flags",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Envelope v2 with local file binding and health.",
+      "error_codes": [
+        "invalid_flags",
+        "invalid_args",
+        "identity_changed",
+        "file_transport_capacity"
+      ],
+      "concepts": [
+        "integrations"
+      ],
+      "stability": "beta",
+      "surface": "utility",
+      "agent_notes": "Offline bounded local inspection; shows pending head, first attempt, retry time, capacity and stale_after. Never drains or sends.",
+      "examples": [
+        {
+          "title": "Inspect a directory file binding, retained queue and mirror freshness.",
+          "command": "anx sync status ./project"
+        }
+      ],
+      "adjacent_commands": [
+        "sync.disable",
+        "sync.enable"
+      ],
+      "go_method": "",
+      "ts_method": ""
     },
     {
       "command_id": "threads.context",

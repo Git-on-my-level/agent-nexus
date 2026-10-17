@@ -2900,6 +2900,57 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"sessions.get"},
 	},
 	{
+		CommandID: "sync.disable",
+		CLIPath:   "sync disable",
+		Group:     "sync",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"sync.enable", "sync.status"},
+		Examples: []Example{
+			{
+				Title:   "Disable a directory file transport while preserving original work.",
+				Command: "anx sync disable ./project",
+			},
+		},
+	},
+	{
+		CommandID: "sync.enable",
+		CLIPath:   "sync enable",
+		Group:     "sync",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"sync.disable", "sync.status"},
+		Examples: []Example{
+			{
+				Title:   "Opt into directory-scoped file notes and a read-only card mirror.",
+				Command: "anx sync enable ./project --card-id card:work --dry-run",
+			},
+		},
+	},
+	{
+		CommandID: "sync.status",
+		CLIPath:   "sync status",
+		Group:     "sync",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"sync.disable", "sync.enable"},
+		Examples: []Example{
+			{
+				Title:   "Inspect a directory file binding, retained queue and mirror freshness.",
+				Command: "anx sync status ./project",
+			},
+		},
+	},
+	{
 		CommandID:  "threads.context",
 		CLIPath:    "threads context",
 		Group:      "threads",

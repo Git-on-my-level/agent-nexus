@@ -194,8 +194,9 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
-	if (cmdPeek == "integrations" || cmdPeek == "git") && overrides.Workspace != nil {
+	if (cmdPeek == "integrations" || cmdPeek == "git" || cmdPeek == "sync") && overrides.Workspace != nil {
 		resolved.Sources["integration_workspace"] = *overrides.Workspace
+		resolved.Sources["sync_workspace"] = *overrides.Workspace
 	}
 	hasRunner := false
 	for _, arg := range remaining {
@@ -244,7 +245,7 @@ func (a *App) Run(args []string) int {
 		runErr = a.withWorkspaceHint(context.Background(), resolved, normalizedArgs, runErr)
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
-	if !isGoTestBinary() && cmdPeek != "integrations" && cmdPeek != "git" {
+	if !isGoTestBinary() && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
 		if !strings.HasPrefix(identity.Command, "update") {
 			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
 		}
@@ -334,7 +335,7 @@ func needsAgentIdentity(args []string) bool {
 	switch args[0] {
 	case "api":
 		return len(args) > 1 && args[1] != "call" && !isHelpToken(args[1])
-	case "help", "version", "doctor", "config", "update", "install", "skills", "integrations", "git", "hook", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
+	case "help", "version", "doctor", "config", "update", "install", "skills", "integrations", "git", "sync", "hook", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
 		return false
 	}
 	return true
