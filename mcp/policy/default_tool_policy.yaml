@@ -81,6 +81,30 @@ hosted_default_commands:
   - "work.observations.list"
   - "work.refresh.get"
 commands:
+  "hook":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "integrations.bind":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "integrations.map":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "git.enable":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "git.sync":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "git.status":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "git.disable":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
+  "git.binding.export":
+    classification: unsupported_shell_shaped
+    reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."
   "integrations.list":
     classification: unsupported_shell_shaped
     reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."

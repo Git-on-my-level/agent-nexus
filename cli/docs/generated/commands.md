@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `240`
+- Commands: `248`
 
 ## `actors.create`
 
@@ -1531,6 +1531,81 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ event }`.
 
+## `git.binding.export`
+
+- CLI path: `git binding export`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Export the non-secret elected writer binding for another clone.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: Envelope v2 result can be imported directly; no key or token is exported.
+- Examples:
+  - Export the non-secret elected writer binding for another clone.: `anx git binding export`
+
+## `git.disable`
+
+- CLI path: `git disable`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Disable Git capture and remove only the exact owned post-commit hook.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: Preserves all queued, failed and confirmed records for inspection.
+- Examples:
+  - Disable Git capture and remove only the exact owned post-commit hook.: `anx git disable`
+
+## `git.enable`
+
+- CLI path: `git enable`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Opt into Git notes and promises with an explicitly elected writer.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: No initial upload; imports on other hosts cannot capture. Optional hook never overwrites existing hooks.
+- Examples:
+  - Opt into Git notes and promises with an explicitly elected writer.: `anx git enable --writer --dry-run`
+
+## `git.status`
+
+- CLI path: `git status`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Inspect local Git capture binding, cursor and pending work.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: Offline local state; no remote reads or writes.
+- Examples:
+  - Inspect local Git capture binding, cursor and pending work.: `anx git status`
+
+## `git.sync`
+
+- CLI path: `git sync`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Capture bounded local commit trailers and drain frozen note requests.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; backfill omits promises and structured evidence only below each canonical card checkpoint; unsent prepare failures are inspectable, bounded and explicitly skippable.
+- Examples:
+  - Capture bounded local commit trailers and drain frozen note requests.: `anx git sync`
+
 ## `home.read`
 
 - CLI path: ``
@@ -1554,6 +1629,21 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `events`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`
 - Output: Returns a bounded event page grouped by topic/board: `{ groups, unread_count, group_count, generated_at, next_cursor, has_more }`. Counts cover this page; follow next_cursor to accumulate unread history.
+
+## `hook`
+
+- CLI path: `hook`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `raw-stream`
+- Why: Run an explicitly enabled bounded harness hook.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Native hook protocol; generic schema_version 1, context, card_ref, as_of, stale.
+- Agent notes: Off by default; fail-open exit 0, native harness stdout or generic HookBrief v1 rather than an envelope. No implicit presence writes.
+- Examples:
+  - Run an explicitly enabled bounded harness hook.: `anx hook session.start`
 
 ## `hosts.bridge.check_in`
 
@@ -1809,6 +1899,21 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
 - Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
 
+## `integrations.bind`
+
+- CLI path: `integrations bind`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Bind a local harness session to an accessible card.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: Explicit local binding scoped by workspace, principal and hashed session identity.
+- Examples:
+  - Bind a local harness session to an accessible card.: `anx integrations bind --session-id session --card-id card:work`
+
 ## `integrations.disable`
 
 - CLI path: `integrations disable`
@@ -1853,6 +1958,21 @@ Generated from `contracts/anx-openapi.yaml`.
 - Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
 - Examples:
   - Discover integrations: `anx integrations list`
+
+## `integrations.map`
+
+- CLI path: `integrations map`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Map a directory to an accessible default card.
+- Concepts: `integrations`
+- Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
+- Output: Envelope v2 with local configuration or capture progress.
+- Agent notes: Explicit local directory rule; does not change workspace selection or participation.
+- Examples:
+  - Map a directory to an accessible default card.: `anx integrations map ./project --card-id card:work`
 
 ## `integrations.run`
 

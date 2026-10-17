@@ -18,7 +18,7 @@ func workspaceIndependentCommand(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "help", "version", "update", "install", "skills", "integrations", "concepts", "primitives":
+	case "help", "version", "update", "install", "skills", "integrations", "git", "hook", "concepts", "primitives":
 		return true
 	case "config":
 		return len(args) > 1 && args[1] != "show"

@@ -29,6 +29,8 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "git", Description: "Opt-in Git notes and promises"},
+	{Path: "hook", Description: "Bounded opt-in harness hook entrypoint"},
 	{Path: "integrations", Description: "Discover and opt into optional harness hooks"},
 	{Path: "series", Description: "Push and query declared live series with source provenance"},
 	{Path: "adapters", Description: "Declare and administer scoped host-local live data sources"},
@@ -1172,6 +1174,12 @@ func qualifyDiagnosticExamples(text string) string {
 }
 
 func helpTopicTextRaw(topic string) (string, bool) {
+	if topic == "git" || strings.HasPrefix(topic, "git ") {
+		return "Local Help: " + topic + "\n\n" + gitCaptureHelp, true
+	}
+	if topic == "hook" || strings.HasPrefix(topic, "hook ") || topic == "integrations bind" || topic == "integrations map" {
+		return "Local Help: " + topic + "\n\n" + agentHooksHelp, true
+	}
 	topic = strings.TrimSpace(topic)
 	if strings.HasPrefix(topic, "debug ") {
 		topic = strings.TrimPrefix(topic, "debug ")
@@ -1231,7 +1239,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	}
 	if topic == "integrations" || strings.HasPrefix(topic, "integrations ") {
 		if topic == "integrations" {
-			return integrationsUsageText() + "\n", true
+			return integrationsUsageText() + "\n" + agentHooksHelp, true
 		}
 		for _, sub := range integrationsSpec.valid {
 			if topic == "integrations "+sub {

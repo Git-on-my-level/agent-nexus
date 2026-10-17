@@ -175,3 +175,5 @@ Create text confirms the ref, handle and URL. `--verbose` retains full details.
 `anx note card:ship-fix "Progress" --next 1d "Acceptance checks"` confirms the saved
 note ref and resolved promise date/text. Suggestions render as one shell command;
 JSON preserves their argument arrays.
+
+Optional context hooks and Git notes/promises are off by default. See [agent hooks](docs/agent-hooks.md) for harness installation, explicit capture-writer binding, atomic `Anx-Next` promises and offline recovery.

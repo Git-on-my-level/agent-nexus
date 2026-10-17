@@ -12,6 +12,16 @@ import (
 // commandSideEffectClass is the CLI's command policy. New command families must
 // be added here before they are published in help or meta commands.
 func commandSideEffectClass(command string) string {
+
+	if command == "git sync" || command == "hook" {
+		return "remote_coordination_write"
+	}
+	if command == "git enable" || command == "git disable" || command == "integrations bind" || command == "integrations map" {
+		return "local_operational_write"
+	}
+	if command == "git status" || command == "git binding export" {
+		return "read_only"
+	}
 	if isLoopWork(command) {
 		return "remote_coordination_write"
 	}
@@ -201,6 +211,11 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		return []output.NextAction{}
 	}
 	var actions []output.NextAction
+	if strings.HasPrefix(command, "git ") && asBool(root["enabled"]) && anyString(root["root"]) != "" {
+		if hostInt(root["pending"]) > 0 || anyString(root["snapshot"]) != "" {
+			actions = append(actions, action("Continue Git capture", "anx", "git", "sync", anyString(root["root"])))
+		}
+	}
 	if strings.HasPrefix(command, "update") {
 		if command != "update status" {
 			actions = append(actions, action("Inspect update status", "anx", "update", "status"))

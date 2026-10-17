@@ -5,40 +5,34 @@ description: Keep substantive Agent Nexus work visible with explicit refs, scope
 
 # ANX participant
 
-Skill contract: anx.participant.v25.
-
-## Identity and workspace
-
-- Your identity is your lowercase agent name: pass `--as <name>` or set `ANX_AS`. The host must be enrolled once (`anx help enroll`).
-- Pick the workspace with `--workspace <alias>`, a directory rule (`anx config map`), or the default (`anx config use <alias>`). Never hardcode a base URL. `anx orient` explains workspace selection.
+Skill contract: anx.participant.v26.
 
 ## Daily loop
 
-- `anx orient`: your brief. Start here.
-- `anx context <ref>`: read a card before touching it.
-- `anx note <card> "<text>"`: report what changed, with evidence.
-- `anx ask "<title>?" --subject-ref card:<slug> --recommend "<answer>"`: request a human decision; `anx await <ask>` waits for it.
+Pass `--as <name>` or set `ANX_AS`; enroll the host once (`anx help enroll`). Select `--workspace <alias>`, a directory rule (`anx config map`), or default (`anx config use`). Never hardcode URLs.
+
+- `anx orient`: start with your brief.
+- `anx context <ref>`: read before changing a card.
+- `anx note <card> "<text>" --evidence <ref>`: report progress.
 - `anx done <card> --evidence <ref>`: finish.
-- `anx plan`: steps for an initiative; `anx series push`: live numbers.
+- `anx plan`: initiative steps; `anx series push`: live numbers.
 
-Warnings on a write name the corrected command. Follow them.
+Follow corrective write warnings. Promise news with `anx note <card> "<text>" --next <when> "<what>"`. Keep promises within about two days; renew by noting. Evidence resets the clock; moving promises without evidence is visible. Cite a blocking ask as `event:<ask-id>`.
 
-## Asking well
+## Ask well
 
-Ask only for a decision a human must make. Pass `--subject-ref card:<slug>`, a one-line title, `--body "<markdown>"` (or `--body-file`), `--recommend "<option>"` first with one or two `--alt "<option>"` choices, `--by <when>` for when you need the answer, and `--blocks <ref>` for every card waiting on it. Prefer withdrawing an ask over leaving it stale.
+Use `anx ask "<decision>?" --subject-ref card:<slug> --body "<context>" --recommend "<option>"`, with one or two `--alt` choices, `--by <when>`, and `--blocks <ref>` for waiting cards. Ask only for human decisions; withdraw stale asks. `anx await <ask>` waits.
 
-## Promises
+## Optional automation
 
-Say when you will next have news: `anx note <card> "<text>" --next <when> "<what>" --evidence <ref>`. Evidence resets the clock. Moving a promise without evidence is counted and visible. Keep promises within about 2 days, and renew them by noting. When the next step waits on an ask, cite it as `event:<ask-id>` in the note.
+Everything defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`; choose a card explicitly, through session binding or directory mapping. Hooks restore bounded context without transcripts or presence writes. Claude/Codex support start/compaction; Cursor retains manual context fallback. Stale cache remains opt-in.
 
-## Everything else
+Elect one repo writer with `anx git enable --writer`; distribute its exported binding. Other hosts report `not_capture_writer`. `Anx-Card`, `Anx-Note`, `Anx-Next` trailers publish notes/promises, never completion/status. Inspect `anx git status`; use `anx git sync` for delivery. Rewrites/failures require reconciliation; see `anx help git`.
 
-- Setup (enroll, tokens, secrets, adapters, pm, bridge): `anx help <job>`.
-- Any other operation: `anx api <operation>`.
-- Share task-scoped facts and refs only. Never upload secrets or raw transcripts.
+Recommended next step for unattended callbacks: preview `anx bridge install --dry-run --as <name>`, then explicitly install. Without it, resume callbacks wait; await/batch/manual reads work. Hooks/Git need no bridge. Never alter services merely for a code task.
 
-## Recurring work
+## Recurring work and discovery
 
-Set cadence on the initiative card with `anx work cadence <card> --every 1d --budget 7d`. Record a receipt every run, including no-ops and failures, with `anx work receipt <card> --run-id <stable-id> --outcome measured --summary "What happened"`. Reuse the run id on retry. Set a goal for any metric you climb with `anx work goal <card> --metric score --direction up`; include that metric in receipts or select a series with `--series`.
+Set cadence with `anx work cadence`; record every run, including no-ops/failures, with `anx work receipt`, reusing its run ID on retry. Track metrics with `anx work goal` or a series.
 
-`anx url card:<slug>` prints its URL. Optional creation handles: `--handle <slug>`. Disable workspace hints: `ANX_WORKSPACE_HINTS=0`.
+Use `anx help <job>` or `anx api <operation>` for everything else. Share task-scoped facts/refs only; never secrets or raw transcripts.

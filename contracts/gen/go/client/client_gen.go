@@ -1540,6 +1540,91 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash"},
 	},
 	{
+		CommandID: "git.binding.export",
+		CLIPath:   "git binding export",
+		Group:     "git",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"git.disable", "git.enable", "git.status", "git.sync"},
+		Examples: []Example{
+			{
+				Title:   "Export the non-secret elected writer binding for another clone.",
+				Command: "anx git binding export",
+			},
+		},
+	},
+	{
+		CommandID: "git.disable",
+		CLIPath:   "git disable",
+		Group:     "git",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"git.binding.export", "git.enable", "git.status", "git.sync"},
+		Examples: []Example{
+			{
+				Title:   "Disable Git capture and remove only the exact owned post-commit hook.",
+				Command: "anx git disable",
+			},
+		},
+	},
+	{
+		CommandID: "git.enable",
+		CLIPath:   "git enable",
+		Group:     "git",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"git.binding.export", "git.disable", "git.status", "git.sync"},
+		Examples: []Example{
+			{
+				Title:   "Opt into Git notes and promises with an explicitly elected writer.",
+				Command: "anx git enable --writer --dry-run",
+			},
+		},
+	},
+	{
+		CommandID: "git.status",
+		CLIPath:   "git status",
+		Group:     "git",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"git.binding.export", "git.disable", "git.enable", "git.sync"},
+		Examples: []Example{
+			{
+				Title:   "Inspect local Git capture binding, cursor and pending work.",
+				Command: "anx git status",
+			},
+		},
+	},
+	{
+		CommandID: "git.sync",
+		CLIPath:   "git sync",
+		Group:     "git",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"git.binding.export", "git.disable", "git.enable", "git.status"},
+		Examples: []Example{
+			{
+				Title:   "Capture bounded local commit trailers and drain frozen note requests.",
+				Command: "anx git sync",
+			},
+		},
+	},
+	{
 		CommandID: "home.read",
 		CLIPath:   "",
 		Method:    "POST",
@@ -1556,6 +1641,22 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"home", "events"},
+	},
+	{
+		CommandID: "hook",
+		CLIPath:   "hook",
+		Group:     "hook",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "raw-stream",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Examples: []Example{
+			{
+				Title:   "Run an explicitly enabled bounded harness hook.",
+				Command: "anx hook session.start",
+			},
+		},
 	},
 	{
 		CommandID:  "hosts.bridge.check_in",
@@ -1787,6 +1888,23 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream"},
 	},
 	{
+		CommandID: "integrations.bind",
+		CLIPath:   "integrations bind",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.map", "integrations.run", "integrations.status"},
+		Examples: []Example{
+			{
+				Title:   "Bind a local harness session to an accessible card.",
+				Command: "anx integrations bind --session-id session --card-id card:work",
+			},
+		},
+	},
+	{
 		CommandID: "integrations.disable",
 		CLIPath:   "integrations disable",
 		Group:     "integrations",
@@ -1795,7 +1913,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "flags",
 		Stability: "beta",
 		Concepts:  []string{"integrations"},
-		Adjacent:  []string{"integrations.enable", "integrations.list", "integrations.run", "integrations.status"},
+		Adjacent:  []string{"integrations.bind", "integrations.enable", "integrations.list", "integrations.map", "integrations.run", "integrations.status"},
 		Examples: []Example{
 			{
 				Title:   "Remove the managed hook",
@@ -1812,7 +1930,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "flags",
 		Stability: "beta",
 		Concepts:  []string{"integrations"},
-		Adjacent:  []string{"integrations.disable", "integrations.list", "integrations.run", "integrations.status"},
+		Adjacent:  []string{"integrations.bind", "integrations.disable", "integrations.list", "integrations.map", "integrations.run", "integrations.status"},
 		Examples: []Example{
 			{
 				Title:   "Opt into suggested task mirroring",
@@ -1829,11 +1947,28 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "flags",
 		Stability: "beta",
 		Concepts:  []string{"integrations"},
-		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.run", "integrations.status"},
+		Adjacent:  []string{"integrations.bind", "integrations.disable", "integrations.enable", "integrations.map", "integrations.run", "integrations.status"},
 		Examples: []Example{
 			{
 				Title:   "Discover integrations",
 				Command: "anx integrations list",
+			},
+		},
+	},
+	{
+		CommandID: "integrations.map",
+		CLIPath:   "integrations map",
+		Group:     "integrations",
+		Method:    "LOCAL",
+		Path:      "",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"integrations"},
+		Adjacent:  []string{"integrations.bind", "integrations.disable", "integrations.enable", "integrations.list", "integrations.run", "integrations.status"},
+		Examples: []Example{
+			{
+				Title:   "Map a directory to an accessible default card.",
+				Command: "anx integrations map ./project --card-id card:work",
 			},
 		},
 	},
@@ -1846,7 +1981,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"integrations"},
-		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.status"},
+		Adjacent:  []string{"integrations.bind", "integrations.disable", "integrations.enable", "integrations.list", "integrations.map", "integrations.status"},
 		Examples: []Example{
 			{
 				Title:   "Harness supplies the PostToolUse payload on stdin",
@@ -1863,7 +1998,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "flags",
 		Stability: "beta",
 		Concepts:  []string{"integrations"},
-		Adjacent:  []string{"integrations.disable", "integrations.enable", "integrations.list", "integrations.run"},
+		Adjacent:  []string{"integrations.bind", "integrations.disable", "integrations.enable", "integrations.list", "integrations.map", "integrations.run"},
 		Examples: []Example{
 			{
 				Title:   "Inspect the installed hook and local spool",

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `37`
+- Groups: `39`
 
 ## `topics`
 
@@ -223,6 +223,22 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.trash` (`events trash`)
   - `events.unarchive` (`events unarchive`)
 
+## `git`
+
+- Commands: `5`
+- Command IDs:
+  - `git.binding.export` (`git binding export`)
+  - `git.disable` (`git disable`)
+  - `git.enable` (`git enable`)
+  - `git.status` (`git status`)
+  - `git.sync` (`git sync`)
+
+## `hook`
+
+- Commands: `1`
+- Command IDs:
+  - `hook` (`hook`)
+
 ## `host`
 
 - Commands: `15`
@@ -255,11 +271,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `integrations`
 
-- Commands: `5`
+- Commands: `7`
 - Command IDs:
+  - `integrations.bind` (`integrations bind`)
   - `integrations.disable` (`integrations disable`)
   - `integrations.enable` (`integrations enable`)
   - `integrations.list` (`integrations list`)
+  - `integrations.map` (`integrations map`)
   - `integrations.run` (`integrations run`)
   - `integrations.status` (`integrations status`)
 

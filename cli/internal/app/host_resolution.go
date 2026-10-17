@@ -225,8 +225,17 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 		return cfg, err
 	}
 	defer lock.Close()
-	if err := filelock.Lock(lock); err != nil {
-		return cfg, err
+	for {
+		if err := filelock.TryLock(lock); err == nil {
+			break
+		} else if !filelock.Contended(err) {
+			return cfg, err
+		}
+		select {
+		case <-ctx.Done():
+			return cfg, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 	defer filelock.Unlock(lock)
 	cachePath := filepath.Join(dir, "token-"+name+".json")
