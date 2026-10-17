@@ -35,33 +35,51 @@ type CaptureCursor struct {
 	Collected bool     `json:"collected"`
 	Backfill  bool     `json:"backfill"`
 }
-type CaptureState struct {
-	Cursors map[string]CaptureCursor `json:"worktrees"`
+type CaptureCheckpoint struct {
+	SHA      string `json:"sha"`
+	Sequence int64  `json:"sequence"`
+}
 
-	Version           int              `json:"schema_version"`
-	Binding           CaptureBinding   `json:"binding"`
-	Root              string           `json:"root"`
-	GitDir            string           `json:"git_dir"`
-	Enabled           bool             `json:"enabled"`
-	Anchor            string           `json:"anchor"`
-	Snapshot          string           `json:"snapshot,omitempty"`
-	Walk              []string         `json:"walk"`
-	Collected         bool             `json:"collected"`
-	Backfill          bool             `json:"backfill"`
-	Pending           []string         `json:"pending"`
-	Sequence          int64            `json:"sequence"`
-	PromiseCheckpoint map[string]int64 `json:"promise_checkpoint"`
-	CommitURL         string           `json:"commit_url,omitempty"`
-	HookPath          string           `json:"hook_path,omitempty"`
-	HookBody          string           `json:"hook_body,omitempty"`
-	ConfirmedSequence int64            `json:"confirmed_sequence"`
-	Confirmed         int              `json:"confirmed"`
-	Quarantined       int              `json:"quarantined"`
+// Accept numeric checkpoints written by earlier revisions of this unreleased
+// feature. Their order survives, but backfill cannot infer a missing commit SHA.
+func (c *CaptureCheckpoint) UnmarshalJSON(raw []byte) error {
+	type checkpoint CaptureCheckpoint
+	if bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) {
+		return json.Unmarshal(raw, (*checkpoint)(c))
+	}
+	return json.Unmarshal(raw, &c.Sequence)
+}
+
+type CaptureState struct {
+	LegacyCheckpoint bool                     `json:"-"`
+	Cursors          map[string]CaptureCursor `json:"worktrees"`
+
+	Version           int                          `json:"schema_version"`
+	Binding           CaptureBinding               `json:"binding"`
+	Root              string                       `json:"root"`
+	GitDir            string                       `json:"git_dir"`
+	Enabled           bool                         `json:"enabled"`
+	Anchor            string                       `json:"anchor"`
+	Snapshot          string                       `json:"snapshot,omitempty"`
+	Walk              []string                     `json:"walk"`
+	Collected         bool                         `json:"collected"`
+	Backfill          bool                         `json:"backfill"`
+	Pending           []string                     `json:"pending"`
+	Sequence          int64                        `json:"sequence"`
+	PromiseCheckpoint map[string]CaptureCheckpoint `json:"promise_checkpoint"`
+	CommitURL         string                       `json:"commit_url,omitempty"`
+	HookPath          string                       `json:"hook_path,omitempty"`
+	HookBody          string                       `json:"hook_body,omitempty"`
+	ConfirmedSequence int64                        `json:"confirmed_sequence"`
+	Confirmed         int                          `json:"confirmed"`
+	Quarantined       int                          `json:"quarantined"`
 }
 type CommitCapture struct {
 	Source       []byte    `json:"source_message,omitempty"` // private original bytes; never transmitted
 	SHA          string    `json:"sha"`
 	Card         string    `json:"card_ref"`
+	CardID       string    `json:"card_id,omitempty"`
+	Backfill     bool      `json:"backfill,omitempty"`
 	Note         string    `json:"note"`
 	Next         string    `json:"next,omitempty"`
 	What         string    `json:"what,omitempty"`
@@ -213,7 +231,12 @@ func LoadCapture(path string) (CaptureState, error) {
 		s.Cursors = map[string]CaptureCursor{}
 	}
 	if s.PromiseCheckpoint == nil {
-		s.PromiseCheckpoint = map[string]int64{}
+		s.PromiseCheckpoint = map[string]CaptureCheckpoint{}
+	}
+	for _, checkpoint := range s.PromiseCheckpoint {
+		if checkpoint.Sequence > 0 && checkpoint.SHA == "" {
+			s.LegacyCheckpoint = true
+		}
 	}
 	return s, e
 }

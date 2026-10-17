@@ -32,6 +32,9 @@ type hookFixture struct {
 	bodies          []string
 	failFirst       bool
 	status          atomic.Int32
+	prepareStatus   atomic.Int32
+	prepareCalls    atomic.Int32
+	malformedCard   atomic.Bool
 	readGate        chan struct{}
 	readStarted     chan struct{}
 	calls           atomic.Int32
@@ -81,6 +84,26 @@ func newHookFixture(t *testing.T) *hookFixture {
 		case strings.HasPrefix(r.URL.Path, "/cards/") && strings.HasSuffix(r.URL.Path, "/plan"):
 			fmt.Fprint(w, `{"plan_health":{"promise":{"at":"2026-10-20T00:00:00Z","what":"Verify behavior"}},"plan":{"steps":[]}}`)
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
+			if strings.HasSuffix(r.URL.Path, "card:blocked") {
+				f.prepareCalls.Add(1)
+				if status := f.prepareStatus.Load(); status != 0 {
+					if status < 0 {
+						<-r.Context().Done()
+						return
+					}
+					w.WriteHeader(int(status))
+					fmt.Fprint(w, `{"error":{"code":"unavailable","message":"blocked fixture"}}`)
+					return
+				}
+				if f.malformedCard.Load() {
+					fmt.Fprint(w, `{"card":{"id":"blocked-id"}}`)
+					return
+				}
+			}
+			if strings.HasSuffix(r.URL.Path, "card:other") {
+				fmt.Fprint(w, `{"card":{"id":"other-id","thread_id":"other-thread"}}`)
+				return
+			}
 			fmt.Fprint(w, `{"card":{"id":"card-id","ref":"card:work","title":"Fixture","thread_id":"thread-id","column_key":"in_progress"}}`)
 		case r.URL.Path == "/events" && r.Method == "GET":
 			fmt.Fprint(w, `{"events":[]}`)
@@ -325,7 +348,7 @@ func TestGitCaptureLinkedWorktreesShareWriterAndReplay(t *testing.T) {
 	}
 }
 
-func TestGitCaptureBackfillAndExpiredReplayRetainBytes(t *testing.T) {
+func TestGitCaptureBackfillWithoutCheckpointAndExpiredReplayRetainBytes(t *testing.T) {
 	f := newHookFixture(t)
 	fixtureGit(t, f.root, "init", "-q")
 	fixtureGit(t, f.root, "commit", "--allow-empty", "-m", "seed")
@@ -340,8 +363,8 @@ func TestGitCaptureBackfillAndExpiredReplayRetainBytes(t *testing.T) {
 	var body map[string]any
 	_ = json.Unmarshal([]byte(f.bodies[0]), &body)
 	p := asMap(asMap(body["event"])["payload"])
-	if p["next"] != nil || p["evidence_refs"] != nil {
-		t.Fatal("historical promise/evidence escaped", p)
+	if p["next"] == nil || p["evidence_refs"] == nil {
+		t.Fatal("backfill without a checkpoint lost its claims", p)
 	}
 	f.mu.Unlock()
 	fixtureGit(t, f.root, "commit", "--allow-empty", "-m", "New\n\nAnx-Card: card:work")
@@ -470,7 +493,7 @@ func TestGitCaptureRepairsReceiptSavedBeforeQueueState(t *testing.T) {
 	}
 	f.run(t, "git", "sync")
 	s, e = integrations.LoadCapture(path)
-	if e != nil || len(s.Pending) != 0 || s.Confirmed != 1 || s.PromiseCheckpoint[c.Card] != c.Sequence {
+	if e != nil || len(s.Pending) != 0 || s.Confirmed != 1 || s.PromiseCheckpoint[c.CardID].Sequence != c.Sequence {
 		t.Fatal(s, e)
 	}
 	f.mu.Lock()

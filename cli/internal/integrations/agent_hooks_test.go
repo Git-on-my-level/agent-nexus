@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -221,10 +222,25 @@ func TestGitFrozenWalkPagesAndMergeOrder(t *testing.T) {
 
 func TestGitHookEnvironmentCannotSelectAnotherRepository(t *testing.T) {
 	foreign, target := t.TempDir(), t.TempDir()
-	for _, root := range []string{foreign, target} {
-		testGit(t, root, "init", "-q")
-		testGit(t, root, "commit", "--allow-empty", "-m", "seed")
+	testGit(t, foreign, "init", "-q")
+	testGit(t, foreign, "commit", "--allow-empty", "-m", "seed")
+	configPath := filepath.Join(foreign, ".git", "config")
+	configBefore, e := os.ReadFile(configPath)
+	if e != nil {
+		t.Fatal(e)
 	}
+	if bare := testGit(t, foreign, "config", "--local", "--get", "core.bare"); bare != "false" {
+		t.Fatal(bare)
+	}
+	t.Cleanup(func() {
+		after, e := os.ReadFile(configPath)
+		if e != nil || !bytes.Equal(configBefore, after) {
+			t.Errorf("sentinel config changed: %v", e)
+		}
+		if bare := testGit(t, foreign, "config", "--local", "--get", "core.bare"); bare != "false" {
+			t.Errorf("sentinel core.bare=%s", bare)
+		}
+	})
 	before := testGit(t, foreign, "rev-parse", "HEAD")
 	t.Setenv("GIT_DIR", filepath.Join(foreign, ".git"))
 	t.Setenv("GIT_COMMON_DIR", filepath.Join(foreign, ".git"))
@@ -233,6 +249,7 @@ func TestGitHookEnvironmentCannotSelectAnotherRepository(t *testing.T) {
 	t.Setenv("GIT_CONFIG_COUNT", "1")
 	t.Setenv("GIT_CONFIG_KEY_0", "core.bare")
 	t.Setenv("GIT_CONFIG_VALUE_0", "true")
+	testGit(t, target, "init", "-q")
 	testGit(t, target, "commit", "--allow-empty", "-m", "Target\n\nAnx-Card: card:target")
 	root, gd, e := Repo(context.Background(), target)
 	want, _ := filepath.EvalSymlinks(target)
@@ -249,5 +266,25 @@ func TestGitHookEnvironmentCannotSelectAnotherRepository(t *testing.T) {
 	}
 	if got := testGit(t, foreign, "rev-parse", "HEAD"); got != before {
 		t.Fatal("foreign repo was modified", before, got)
+	}
+}
+
+func TestCaptureLoadsLegacyCheckpointWithoutLosingPendingWork(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	sha := strings.Repeat("a", 40)
+	state := map[string]any{"schema_version": 1, "binding": map[string]any{"repo_uuid": "repo"}, "pending": []string{sha}, "promise_checkpoint": map[string]any{"card:old": 3}}
+	if e := PrivateWrite(path, JSON(state)); e != nil {
+		t.Fatal(e)
+	}
+	s, e := LoadCapture(path)
+	if e != nil || !s.LegacyCheckpoint || s.PromiseCheckpoint["card:old"].Sequence != 3 || len(s.Pending) != 1 || s.Pending[0] != sha {
+		t.Fatal(s, e)
+	}
+	if e = PrivateWrite(path, CaptureJSON(s)); e != nil {
+		t.Fatal(e)
+	}
+	s, e = LoadCapture(path)
+	if e != nil || !s.LegacyCheckpoint || len(s.Pending) != 1 {
+		t.Fatal(s, e)
 	}
 }

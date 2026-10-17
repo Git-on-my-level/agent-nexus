@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -50,9 +51,9 @@ func parseGitOptions(args []string) (gitOptions, error) {
 		fs.BoolVar(&o.dry, "dry-run", false, "Preview without writing")
 	case "sync":
 		fs.BoolVar(&o.restart, "restart-scan", false, "Restart an incomplete scan from an explicit --since boundary, retaining commit records")
-		fs.StringVar(&o.since, "since", "", "Explicit historical boundary (omits promises/evidence)")
+		fs.StringVar(&o.since, "since", "", "Explicit backfill boundary (suppresses claims only below each card checkpoint)")
 		fs.StringVar(&o.to, "to", "", "Frozen end revision (default HEAD)")
-		fs.StringVar(&o.skip, "skip", "", "Explicitly skip an inspected failed SHA, retaining its bytes")
+		fs.StringVar(&o.skip, "skip", "", "Skip an inspected failed or unsent deferred SHA, retaining its bytes")
 	case "disable", "status", "binding export":
 	default:
 		return o, errnorm.Usage("unknown_subcommand", "use git enable|sync|status|disable|binding export")
@@ -144,7 +145,7 @@ func (a *App) runGitCapture(ctx context.Context, args []string, cfg config.Resol
 			if err != nil {
 				return nil, name, err
 			}
-			data["head"] = map[string]any{"sha": c.SHA, "state": c.State, "reason": c.Reason, "attempts": c.Attempts, "retry_at": c.RetryAt}
+			data["head"] = map[string]any{"sha": c.SHA, "state": c.State, "reason": c.Reason, "attempts": c.Attempts, "first_attempt": c.FirstAttempt, "retry_at": c.RetryAt}
 		}
 		local := cfg
 		local.BaseURL = s.Binding.Workspace
@@ -259,7 +260,7 @@ func (a *App) runGitCapture(ctx context.Context, args []string, cfg config.Resol
 		}
 		binding.RepoID = existing.Binding.RepoID
 	}
-	s := integrations.CaptureState{Version: 1, Cursors: map[string]integrations.CaptureCursor{}, Binding: binding, Root: root, GitDir: gd, Enabled: true, Anchor: head, Pending: []string{}, Walk: []string{}, PromiseCheckpoint: map[string]int64{}, CommitURL: o.commitURL}
+	s := integrations.CaptureState{Version: 1, Cursors: map[string]integrations.CaptureCursor{}, Binding: binding, Root: root, GitDir: gd, Enabled: true, Anchor: head, Pending: []string{}, Walk: []string{}, PromiseCheckpoint: map[string]integrations.CaptureCheckpoint{}, CommitURL: o.commitURL}
 	if registerWorktree && binding != existing.Binding {
 		return nil, name, fmt.Errorf("linked worktrees must use the elected repo writer/binding")
 	}
@@ -325,7 +326,7 @@ func (a *App) installGitHook(ctx context.Context, cfg config.Resolved, s *integr
 	if e != nil {
 		return e
 	}
-	body := "#!/bin/sh\n" + integrations.ShellQuote(exe) + " --config-dir " + integrations.ShellQuote(dir) + " --as " + integrations.ShellQuote(s.Binding.Agent) + " --base-url " + integrations.ShellQuote(s.Binding.Workspace) + " hook git.commit --harness git < /dev/null\nexit 0\n"
+	body := gitPostCommitScript(exe, dir, s.Binding)
 	if e = os.MkdirAll(filepath.Dir(path), 0700); e != nil {
 		return e
 	}
@@ -350,6 +351,16 @@ func (a *App) installGitHook(ctx context.Context, cfg config.Resolved, s *integr
 	s.HookBody = body
 	return nil
 }
+func gitPostCommitScript(exe, dir string, binding integrations.CaptureBinding) string {
+	return "#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR\n" + integrations.ShellQuote(exe) + " --config-dir " + integrations.ShellQuote(dir) + " --as " + integrations.ShellQuote(binding.Agent) + " --base-url " + integrations.ShellQuote(binding.Workspace) + " hook git.commit --harness git < /dev/null\nexit 0\n"
+}
+
+type captureWriterMismatch struct{ host, actor string }
+
+func (e *captureWriterMismatch) Error() string {
+	return fmt.Sprintf("not_capture_writer: elected host=%q actor=%q", truncateHook(e.host, 256), truncateHook(e.actor, 256))
+}
+
 func (a *App) captureAuth(ctx context.Context, cfg config.Resolved, b integrations.CaptureBinding) (config.Resolved, error) {
 	if alias := cfg.Sources["integration_workspace"]; alias != "" {
 		var e error
@@ -362,7 +373,7 @@ func (a *App) captureAuth(ctx context.Context, cfg config.Resolved, b integratio
 		return cfg, integrations.ErrIdentityChanged
 	}
 	if cfg.As != "" && cfg.As != b.Agent {
-		return cfg, fmt.Errorf("not_capture_writer: elected host=%s actor=%s", b.Host, b.Actor)
+		return cfg, &captureWriterMismatch{host: b.Host, actor: b.Actor}
 	}
 	cfg.BaseURL = b.Workspace
 	cfg.As = b.Agent
@@ -374,7 +385,7 @@ func (a *App) captureAuth(ctx context.Context, cfg config.Resolved, b integratio
 		return cfg, e
 	}
 	if host.ID != b.Host {
-		return cfg, fmt.Errorf("not_capture_writer: elected host=%s actor=%s", b.Host, b.Actor)
+		return cfg, &captureWriterMismatch{host: b.Host, actor: b.Actor}
 	}
 	auth, e := a.resolveHostAgent(ctx, cfg)
 	if e != nil {
@@ -425,8 +436,8 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 		if e != nil {
 			return nil, e
 		}
-		if len(s.Pending) == 0 || s.Pending[0] != skip || c.State != "failed" {
-			return nil, fmt.Errorf("only an inspected failed head entry can be skipped")
+		if len(s.Pending) == 0 || s.Pending[0] != skip || !(c.State == "failed" || c.State == "deferred" && c.Delivery == nil) {
+			return nil, fmt.Errorf("only an inspected failed or unsent deferred head entry can be skipped")
 		}
 		c.State = "skipped"
 		if e = integrations.SaveCommit(path, c); e != nil {
@@ -491,7 +502,7 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 			}
 			s.Sequence++
 			c.Sequence = s.Sequence
-			c.Historical = s.Backfill
+			c.Backfill = s.Backfill
 			if parseErr == nil && c.State == "pending" && c.Next != "" {
 				at, ok := parsePromiseWhen(c.Next, c.At)
 				if !ok {
@@ -503,11 +514,6 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 						warnings = append(warnings, noteWarning("note_beyond_horizon", "promise is beyond the two-day horizon", []string{"anx", "git", "status"}))
 					}
 				}
-			}
-			if c.Historical {
-				c.Next = ""
-				c.What = ""
-				c.Reason = "historical_note_without_promise_or_evidence"
 			}
 			if parseErr != nil {
 				c.State = "quarantined"
@@ -574,27 +580,38 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 		if !c.FirstAttempt.IsZero() && a.clockNow().Sub(c.FirstAttempt) >= 25*24*time.Hour {
 			c.State = "failed"
 			c.Reason = "replay_window_expired"
-			_ = integrations.SaveCommit(path, c)
-			return captureStatus(s), fmt.Errorf("replay_window_expired: reconcile before retry")
+			if e = integrations.SaveCommit(path, c); e != nil {
+				return nil, e
+			}
+			return captureStatus(s), fmt.Errorf("replay_window_expired: reconcile or explicitly skip the inspected head")
 		}
 		if a.clockNow().Before(c.RetryAt) {
 			break
 		}
+		// Persist the attempt before preparation too: an unsendable card must have
+		// bounded retries and an inspectable, skippable recovery path.
+		c.Attempts++
+		if c.FirstAttempt.IsZero() {
+			c.FirstAttempt = a.clockNow().UTC()
+		}
+		if e = integrations.SaveCommit(path, c); e != nil {
+			return nil, e
+		}
 		if c.Delivery == nil {
-			d, w, e := a.prepareCapture(ctx, auth, s, c)
+			d, w, e := a.prepareCapture(ctx, auth, s, &c)
 			warnings = append(warnings, w...)
 			if e != nil {
+				if saveErr := saveCaptureFailure(path, &c, a.clockNow(), e, true); saveErr != nil {
+					return nil, saveErr
+				}
 				return captureStatus(s), e
 			}
 			c.Delivery = &d
+			c.State, c.Reason = "pending", ""
 		}
 		d := c.Delivery
 		if d.BaseURL != s.Binding.Workspace || d.HostID != s.Binding.Host || d.PrincipalID != s.Binding.Actor || d.Agent != s.Binding.Agent || d.CommandID != "events.create" || d.Key != anyString(d.Body["request_key"]) || anyString(d.Body["actor_id"]) != s.Binding.Actor {
 			return captureStatus(s), integrations.ErrIdentityChanged
-		}
-		c.Attempts++
-		if c.FirstAttempt.IsZero() {
-			c.FirstAttempt = a.clockNow().UTC()
 		}
 		if e = integrations.SaveCommit(path, c); e != nil {
 			return nil, e
@@ -606,13 +623,7 @@ func (a *App) syncCapture(ctx context.Context, cfg config.Resolved, repo, since,
 			_, e = a.invokeTypedJSON(ctx, current, "git sync", "events.create", nil, nil, c.Delivery.Body)
 		}
 		if e != nil {
-			c.Reason = captureFailureReason(e)
-			if c.Reason == "rejected" || c.Reason == "conflict" {
-				c.State = "failed"
-			}
-			delay := time.Second << min(c.Attempts, 5)
-			c.RetryAt = a.clockNow().Add(delay + time.Duration(c.SHA[0]%10)*time.Millisecond*50)
-			if saveErr := integrations.SaveCommit(path, c); saveErr != nil {
+			if saveErr := saveCaptureFailure(path, &c, a.clockNow(), e, false); saveErr != nil {
 				return nil, saveErr
 			}
 			return captureStatus(s), e
@@ -645,10 +656,35 @@ func applyCaptureReceipt(s *integrations.CaptureState, c integrations.CommitCapt
 		s.Confirmed++
 		s.ConfirmedSequence = c.Sequence
 	}
-	if c.Next != "" && c.Sequence > s.PromiseCheckpoint[c.Card] {
-		s.PromiseCheckpoint[c.Card] = c.Sequence
+	card := firstNonEmpty(c.CardID, c.Card)
+	if c.Next != "" && c.Sequence > s.PromiseCheckpoint[card].Sequence {
+		s.PromiseCheckpoint[card] = integrations.CaptureCheckpoint{SHA: c.SHA, Sequence: c.Sequence}
 	}
 }
+
+// Deferred preparation has never sent a mutation, so explicit skip is safe.
+// Uncertain sends stay pending and cannot be skipped until the replay cutoff.
+func saveCaptureFailure(path string, c *integrations.CommitCapture, now time.Time, err error, preparing bool) error {
+	c.Reason = captureFailureReason(err)
+	if preparing {
+		c.State = "deferred"
+		var n *errnorm.Error
+		if errors.As(err, &n) && (n.Kind == errnorm.KindLocal || n.Kind == errnorm.KindUsage || n.Kind == errnorm.KindInternal) {
+			c.State = "failed"
+			c.Reason = n.Code
+		}
+	}
+	if c.Reason == "rejected" || c.Reason == "conflict" {
+		c.State = "failed"
+	}
+	if preparing {
+		c.Reason = "prepare_" + c.Reason
+	}
+	delay := time.Second << min(c.Attempts, 5)
+	c.RetryAt = now.Add(delay + time.Duration(c.SHA[0]%10)*time.Millisecond*50)
+	return integrations.SaveCommit(path, *c)
+}
+
 func captureFailureReason(e error) string {
 	var n *errnorm.Error
 	if errors.As(e, &n) {
@@ -666,17 +702,40 @@ func captureFailureReason(e error) string {
 	}
 	return "uncertain"
 }
-func (a *App) prepareCapture(ctx context.Context, auth config.Resolved, s integrations.CaptureState, c integrations.CommitCapture) (integrations.Delivery, []output.Warning, error) {
+func (a *App) prepareCapture(ctx context.Context, auth config.Resolved, s integrations.CaptureState, c *integrations.CommitCapture) (integrations.Delivery, []output.Warning, error) {
 	var warnings []output.Warning
-	card, e := a.fetchCardBody(ctx, auth, c.Card)
+	// Native scoped refs need no legacy list-based ID resolution on a 404.
+	result, e := a.invokeRawJSON(ctx, auth, "git prepare", "GET", "/cards/"+url.PathEscape(c.Card), nil)
 	if e != nil {
 		return integrations.Delivery{}, nil, e
 	}
+	card := asMap(commandResultBody(result)["card"])
 	target, e := cardMessageTarget(card, c.Card)
 	if e != nil {
 		return integrations.Delivery{}, nil, e
 	}
 	ref := firstNonEmpty(anyString(card["id"]), anyString(card["ref"]), c.Card)
+	c.CardID = ref
+	checkpoint := s.PromiseCheckpoint[ref]
+	if c.Backfill && checkpoint.SHA == "" && s.LegacyCheckpoint {
+		return integrations.Delivery{}, nil, errnorm.Local("checkpoint_reconciliation_required", "legacy checkpoint has no commit SHA; confirm a fresh Git promise for this card or repair its checkpoint before backfill")
+	}
+	if c.Backfill && checkpoint.SHA != "" && c.SHA != checkpoint.SHA {
+		if !integrations.ObjectID(checkpoint.SHA) {
+			return integrations.Delivery{}, nil, errnorm.Local("invalid_checkpoint", "invalid promise checkpoint")
+		}
+		_, err := integrations.Git(ctx, s.Root, 256, "merge-base", "--is-ancestor", c.SHA, checkpoint.SHA)
+		if err == nil {
+			c.Historical = true
+			c.Next, c.What = "", ""
+			c.Reason = "below_card_promise_checkpoint"
+		} else {
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+				return integrations.Delivery{}, nil, err
+			}
+		}
+	}
 	note := c.Note + "\n\nCommit: " + c.SHA
 	evidence := []string{}
 	if s.CommitURL != "" {

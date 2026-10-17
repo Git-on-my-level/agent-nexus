@@ -355,8 +355,9 @@ func (a *App) runAgentHook(overrides config.Overrides, args []string) int {
 		result.e = ctx.Err()
 	}
 	if result.e != nil {
-		if strings.HasPrefix(result.e.Error(), "not_capture_writer:") {
-			fmt.Fprintln(a.Stderr, "anx hook: not_capture_writer; inspect anx git status for the elected host/actor")
+		var mismatch *captureWriterMismatch
+		if errors.As(result.e, &mismatch) {
+			fmt.Fprintf(a.Stderr, "anx hook: %s; inspect anx git status\n", mismatch)
 		} else {
 			fmt.Fprintf(a.Stderr, "anx hook: unavailable code=%s; inspect integrations status or git status\n", hookFailureCode(result.e))
 		}

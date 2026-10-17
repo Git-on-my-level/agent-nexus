@@ -7361,7 +7361,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "utility",
-    "agent_notes": "Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; historical backfill omits promise and structured evidence.",
+    "agent_notes": "Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; backfill omits promises and structured evidence only below each canonical card checkpoint; unsent prepare failures are inspectable, bounded and explicitly skippable.",
     "examples": [
       {
         "title": "Capture bounded local commit trailers and drain frozen note requests.",

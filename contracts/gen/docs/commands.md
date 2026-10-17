@@ -1602,7 +1602,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `integrations`
 - Error codes: `invalid_flags`, `invalid_args`, `identity_changed`, `not_capture_writer`
 - Output: Envelope v2 with local configuration or capture progress.
-- Agent notes: Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; historical backfill omits promise and structured evidence.
+- Agent notes: Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; backfill omits promises and structured evidence only below each canonical card checkpoint; unsent prepare failures are inspectable, bounded and explicitly skippable.
 - Examples:
   - Capture bounded local commit trailers and drain frozen note requests.: `anx git sync`
 

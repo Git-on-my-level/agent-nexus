@@ -122,7 +122,7 @@ x-anx-local-commands:
     x-anx-concepts: [integrations]
     x-anx-stability: beta
     x-anx-surface: utility
-    x-anx-agent-notes: Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; historical backfill omits promise and structured evidence.
+    x-anx-agent-notes: Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; backfill omits promises and structured evidence only below each canonical card checkpoint; unsent prepare failures are inspectable, bounded and explicitly skippable.
     x-anx-examples:
       - title: Capture bounded local commit trailers and drain frozen note requests.
         command: anx git sync

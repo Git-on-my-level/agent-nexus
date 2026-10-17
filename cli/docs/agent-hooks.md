@@ -125,30 +125,45 @@ Manual sync works even without a Git hook. Scans freeze HEAD and collect at most
 maximum collected walk is 10,000 positions. `--restart-scan --since <commit>`
 explicitly restarts an unfinished walk when its queue is empty, retaining all
 existing commit records. Shallow/divergent histories require
-explicit reconciliation. Historical `--since` backfill omits promise/structured
-evidence so old notes cannot reset a newer promise. Rebase/cherry-pick produce new
+explicit reconciliation. During `--since` backfill, only commits proven to be strict
+ancestors of that canonical card's confirmed Git promise checkpoint omit Next and
+structured evidence (the permalink remains text). The checkpoint persists its
+commit SHA and capture sequence; aliases share the same canonical card key.
+Newer commits and cards without a checkpoint retain their promises and evidence.
+Earlier PR revisions' numeric checkpoints remain readable, preserving queued work.
+For a card whose legacy checkpoint lacks a SHA, backfill fails inspectably until
+its checkpoint is repaired or a fresh Git promise is confirmed; it does not guess. Rebase/cherry-pick produce new
 object IDs and can produce new notes; no patch-ID or cross-principal deduplication.
 
 Requests freeze workspace, host, actor, key and complete body before send. Same
 commit/card/writer retries reuse the event replay key. One FIFO lane prevents an
 uncertain note from being overtaken by a newer promise. Network/timeout/429/5xx
 back off; auth/access/not-found pauses for repair; validation/conflict fails visibly.
-After inspecting a failed head entry, `git sync --skip <full-sha>` acknowledges it
-without deleting the record. It is never an automatic error bypass. Failed and
+Preparation failures persist the first-attempt time, attempt count, reason and
+retry deadline too. Transient/access failures become `deferred`; local validation
+or definitive rejection becomes `failed`. `git status` shows the queue head and
+retry metadata. Repairing a deferred preparation allows an ordered retry.
+After inspecting a failed or unsent deferred head, `git sync --skip <full-sha>`
+acknowledges it and lets later commits proceed without deleting the record.
+An uncertain send remains unskippable until it reaches the replay cutoff. It is never an automatic error bypass. Failed and
 unconfirmed records, including original commit-message bytes, stay under the
 private CLI git configuration; capacity refuses
 new intake rather than evicting old work. Git source remains available.
-Automatic uncertain retries stop at 25 days before core's 30-day receipt expiry;
+Automatic preparation and uncertain-send retries stop at 25 days before core's 30-day receipt expiry;
 reconcile rather than assume exactly-once forever. Losing local state requires
 explicit backfill. No production or live bridge is needed for the test suite.
 
 ## Validation and harness acceptance
 
-Automated coverage uses disposable Git repositories, temporary enrolled identities
-and a fresh local core. It checks settings round trips and native start/compact
-payloads, denial/cache isolation, deadlines, frozen replay after a committed but
-unrecorded response, per-author promises, linked-worktree deduplication, backfills,
-paged merges, capacity and replay expiry. It requires no live bridge.
+Automated coverage requires no live bridge:
+
+| Layer                                             | Verified coverage                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests with real disposable Git and mock HTTP | Native payload/settings preservation, card/cache isolation, deadlines, writer mismatch diagnostics, preparation failure/backoff/skip/expiry, canonical per-card backfill checkpoints, linked worktrees, paged merges, capacity, and sentinel Git config preservation under inherited hook variables. |
+| Real CLI/Git with a fresh local core              | Automatic post-commit delivery, repeated manual sync without duplicates, normalized promises, committed-response replay, same-writer ordering and another author's promise, generic scoped context, and owned-hook removal.                                                                          |
+
+The core integration test does not claim writer-handoff, backfill, capacity or
+expiry coverage against core; those cases use the unit fixtures above.
 
 Before claiming model-visible support for an installed harness version, use an
 isolated harness profile and disposable enrolled workspace: give a card a unique

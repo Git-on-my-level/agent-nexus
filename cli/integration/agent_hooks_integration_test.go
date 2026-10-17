@@ -16,7 +16,7 @@ import (
 )
 
 // Uses only a fresh local core, temporary HOME/keys and disposable Git history.
-// The post-commit callback and explicit sync deliberately overlap.
+// Automatic post-commit delivery is followed by repeated manual sync and replay.
 func TestAgentHooksGitNotesAndPromisesAgainstCore(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")

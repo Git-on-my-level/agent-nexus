@@ -941,7 +941,7 @@ Opt-in Git progress capture. Everything is off until explicitly enabled.
 anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
 anx git enable [repo] --binding <file> [--dry-run]
 anx git binding export [repo]
-anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <sha>]
 anx git status [repo]
 anx git disable [repo]
 
@@ -951,9 +951,11 @@ No automatic election/failover. Existing post-commit hooks are never overwritten
 Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
 Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
 Step/status/completion trailers are rejected. Rewrites need explicit --since
-reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+reconciliation; only ancestors below a card promise checkpoint lose promises and
+structured evidence. Re-run sync to page
 large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
---skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+--skip acknowledges an inspected failed or unsent deferred head; it retains bytes.
+Preparation failures persist attempts/backoff and expire at the 25-day replay limit.
 ```
 
 ## `hook`
@@ -9435,7 +9437,7 @@ Opt-in Git progress capture. Everything is off until explicitly enabled.
 anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
 anx git enable [repo] --binding <file> [--dry-run]
 anx git binding export [repo]
-anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <sha>]
 anx git status [repo]
 anx git disable [repo]
 
@@ -9445,9 +9447,11 @@ No automatic election/failover. Existing post-commit hooks are never overwritten
 Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
 Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
 Step/status/completion trailers are rejected. Rewrites need explicit --since
-reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+reconciliation; only ancestors below a card promise checkpoint lose promises and
+structured evidence. Re-run sync to page
 large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
---skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+--skip acknowledges an inspected failed or unsent deferred head; it retains bytes.
+Preparation failures persist attempts/backoff and expire at the 25-day replay limit.
 ```
 
 ## `git sync`
@@ -9462,7 +9466,7 @@ Opt-in Git progress capture. Everything is off until explicitly enabled.
 anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
 anx git enable [repo] --binding <file> [--dry-run]
 anx git binding export [repo]
-anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <sha>]
 anx git status [repo]
 anx git disable [repo]
 
@@ -9472,9 +9476,11 @@ No automatic election/failover. Existing post-commit hooks are never overwritten
 Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
 Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
 Step/status/completion trailers are rejected. Rewrites need explicit --since
-reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+reconciliation; only ancestors below a card promise checkpoint lose promises and
+structured evidence. Re-run sync to page
 large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
---skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+--skip acknowledges an inspected failed or unsent deferred head; it retains bytes.
+Preparation failures persist attempts/backoff and expire at the 25-day replay limit.
 ```
 
 ## `git status`
@@ -9489,7 +9495,7 @@ Opt-in Git progress capture. Everything is off until explicitly enabled.
 anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
 anx git enable [repo] --binding <file> [--dry-run]
 anx git binding export [repo]
-anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <sha>]
 anx git status [repo]
 anx git disable [repo]
 
@@ -9499,9 +9505,11 @@ No automatic election/failover. Existing post-commit hooks are never overwritten
 Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
 Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
 Step/status/completion trailers are rejected. Rewrites need explicit --since
-reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+reconciliation; only ancestors below a card promise checkpoint lose promises and
+structured evidence. Re-run sync to page
 large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
---skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+--skip acknowledges an inspected failed or unsent deferred head; it retains bytes.
+Preparation failures persist attempts/backoff and expire at the 25-day replay limit.
 ```
 
 ## `git disable`
@@ -9516,7 +9524,7 @@ Opt-in Git progress capture. Everything is off until explicitly enabled.
 anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
 anx git enable [repo] --binding <file> [--dry-run]
 anx git binding export [repo]
-anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <sha>]
 anx git status [repo]
 anx git disable [repo]
 
@@ -9526,9 +9534,11 @@ No automatic election/failover. Existing post-commit hooks are never overwritten
 Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
 Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
 Step/status/completion trailers are rejected. Rewrites need explicit --since
-reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+reconciliation; only ancestors below a card promise checkpoint lose promises and
+structured evidence. Re-run sync to page
 large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
---skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+--skip acknowledges an inspected failed or unsent deferred head; it retains bytes.
+Preparation failures persist attempts/backoff and expire at the 25-day replay limit.
 ```
 
 ## `git binding export`
@@ -9543,7 +9553,7 @@ Opt-in Git progress capture. Everything is off until explicitly enabled.
 anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
 anx git enable [repo] --binding <file> [--dry-run]
 anx git binding export [repo]
-anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <sha>]
 anx git status [repo]
 anx git disable [repo]
 
@@ -9553,9 +9563,11 @@ No automatic election/failover. Existing post-commit hooks are never overwritten
 Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
 Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
 Step/status/completion trailers are rejected. Rewrites need explicit --since
-reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+reconciliation; only ancestors below a card promise checkpoint lose promises and
+structured evidence. Re-run sync to page
 large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
---skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+--skip acknowledges an inspected failed or unsent deferred head; it retains bytes.
+Preparation failures persist attempts/backoff and expire at the 25-day replay limit.
 ```
 
 ## `integrations bind`
