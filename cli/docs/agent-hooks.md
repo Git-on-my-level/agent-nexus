@@ -104,7 +104,8 @@ quarantine the capture. Unknown trailer names are ignored; inline comments are
 not syntax. Limits: 64 KiB message, 4 KiB note, 256-byte card ref; promise text uses
 `anx note`'s 160-rune limit and its existing warnings.
 
-Capture never fetches. An explicit `--commit-url 'https://forge.example.test/team/repo/commit/{sha}'`
+Capture never fetches. Child Git commands clear inherited repository-local hook
+environment variables so the selected repository controls discovery and objects. An explicit `--commit-url 'https://forge.example.test/team/repo/commit/{sha}'`
 adds evidence; credentials/query/fragment are refused. Without it the SHA is plain
 text, not an invented typed ref. Diffs, author emails and local paths are not posted.
 Tool-after hooks are optional scan hints (`integrations enable git.capture`);

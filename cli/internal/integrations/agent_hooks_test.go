@@ -14,7 +14,7 @@ import (
 func testGit(t *testing.T, root string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", root, "-c", "core.hooksPath=/dev/null", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test"}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_COMMITTER_DATE=2026-10-17T00:00:00Z", "GIT_AUTHOR_DATE=2026-10-17T00:00:00Z")
+	cmd.Env = append(GitEnvironment(os.Environ()), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_COMMITTER_DATE=2026-10-17T00:00:00Z", "GIT_AUTHOR_DATE=2026-10-17T00:00:00Z")
 	b, e := cmd.CombinedOutput()
 	if e != nil {
 		t.Fatalf("git %v: %v %s", args, e, b)
@@ -216,5 +216,38 @@ func TestGitFrozenWalkPagesAndMergeOrder(t *testing.T) {
 	}
 	if len(s.Walk) != 2 || s.Walk[1] != side {
 		t.Fatal(s.Walk)
+	}
+}
+
+func TestGitHookEnvironmentCannotSelectAnotherRepository(t *testing.T) {
+	foreign, target := t.TempDir(), t.TempDir()
+	for _, root := range []string{foreign, target} {
+		testGit(t, root, "init", "-q")
+		testGit(t, root, "commit", "--allow-empty", "-m", "seed")
+	}
+	before := testGit(t, foreign, "rev-parse", "HEAD")
+	t.Setenv("GIT_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_COMMON_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_WORK_TREE", foreign)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(foreign, ".git", "index"))
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.bare")
+	t.Setenv("GIT_CONFIG_VALUE_0", "true")
+	testGit(t, target, "commit", "--allow-empty", "-m", "Target\n\nAnx-Card: card:target")
+	root, gd, e := Repo(context.Background(), target)
+	want, _ := filepath.EvalSymlinks(target)
+	if e != nil || root != want || gd != filepath.Join(want, ".git") {
+		t.Fatal(root, gd, e)
+	}
+	sha, e := ResolveCommit(context.Background(), target, "HEAD")
+	if e != nil {
+		t.Fatal(e)
+	}
+	c, e := ParseCommit(context.Background(), target, sha)
+	if e != nil || c.Card != "card:target" {
+		t.Fatal(c, e)
+	}
+	if got := testGit(t, foreign, "rev-parse", "HEAD"); got != before {
+		t.Fatal("foreign repo was modified", before, got)
 	}
 }

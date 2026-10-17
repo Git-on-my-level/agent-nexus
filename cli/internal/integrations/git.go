@@ -94,6 +94,26 @@ func (b *cappedGitOutput) Write(p []byte) (int, error) {
 	}
 	return b.Buffer.Write(p)
 }
+
+// Git hook subprocesses export repository-local variables. Clear the same
+// localization inputs as `git rev-parse --local-env-vars` before using -C;
+// otherwise an absolute GIT_DIR/index can silently select the caller's repo.
+func GitEnvironment(env []string) []string {
+	out := make([]string, 0, len(env)+1)
+	for _, value := range env {
+		name, _, _ := strings.Cut(value, "=")
+		switch name {
+		case "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_INTERNAL_SUPER_PREFIX":
+			continue
+		}
+		if strings.HasPrefix(name, "GIT_CONFIG_KEY_") || strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
+			continue
+		}
+		out = append(out, value)
+	}
+	return append(out, "GIT_NO_REPLACE_OBJECTS=1")
+}
+
 func Git(ctx context.Context, root string, limit int, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-pager", "-C", root}, args...)...)
 	cmd.WaitDelay = 100 * time.Millisecond
@@ -101,7 +121,7 @@ func Git(ctx context.Context, root string, limit int, args ...string) ([]byte, e
 	cmd.Stdout = &out
 	cmd.Stderr = &cappedGitOutput{limit: 4096}
 	// No optional writes/interactive prompts; callers never fetch or request content filters.
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(GitEnvironment(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
 	if e := cmd.Run(); e != nil {
 		return nil, fmt.Errorf("git operation failed (%s): %w", args[0], e)
 	}
@@ -272,6 +292,7 @@ func ParseCommit(ctx context.Context, root, sha string) (CommitCapture, error) {
 	// --parse implies --only-input: configured trailer commands are not executed.
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "interpret-trailers", "--parse")
 	cmd.WaitDelay = 100 * time.Millisecond
+	cmd.Env = GitEnvironment(os.Environ())
 	cmd.Stdin = strings.NewReader(msg)
 	out := cappedGitOutput{limit: MaxPayloadBytes}
 	cmd.Stdout = &out

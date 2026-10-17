@@ -26,7 +26,7 @@ func TestAgentHooksGitNotesAndPromisesAgainstCore(t *testing.T) {
 	git := func(args ...string) string {
 		t.Helper()
 		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test"}, args...)...)
-		cmd.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_ACCESS_TOKEN=", "ANX_SKILLS_AUTO_SYNC=0", "ANX_UPDATE_POLICY=off", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+		cmd.Env = append(integrations.GitEnvironment(os.Environ()), "HOME="+h.homeDir, "ANX_ACCESS_TOKEN=", "ANX_SKILLS_AUTO_SYNC=0", "ANX_UPDATE_POLICY=off", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
 		out, e := cmd.CombinedOutput()
 		if e != nil {
 			t.Fatal(args, e, string(out))

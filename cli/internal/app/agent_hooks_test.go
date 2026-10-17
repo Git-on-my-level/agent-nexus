@@ -152,7 +152,7 @@ func (f *hookFixture) hook(t *testing.T, harness, payload string) integrations.H
 func fixtureGit(t *testing.T, root string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", root, "-c", "core.hooksPath=/dev/null", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test"}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_DATE=2026-10-17T00:00:00Z", "GIT_COMMITTER_DATE=2026-10-17T00:00:00Z")
+	cmd.Env = append(integrations.GitEnvironment(os.Environ()), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_DATE=2026-10-17T00:00:00Z", "GIT_COMMITTER_DATE=2026-10-17T00:00:00Z")
 	b, e := cmd.CombinedOutput()
 	if e != nil {
 		t.Fatal(args, e, string(b))
