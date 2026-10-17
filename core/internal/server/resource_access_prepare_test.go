@@ -78,7 +78,7 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 	}
 	scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID})
 	policy, _ := resourceaccess.PolicyFrom(scope)
-	hostQuery := `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?`
+	hostQuery := `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?`
 	query, args := policy.ReadOnDB(scope, db, hostQuery, []any{"prepare-host", "prepare-host"})
 	if len(query) > 32000 || strings.Contains(query, "denied-0999") {
 		t.Fatalf("denial data expanded SQL: %d bytes", len(query))

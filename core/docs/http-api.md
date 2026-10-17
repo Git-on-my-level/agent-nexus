@@ -766,7 +766,9 @@ install can require core support before replacing any local service.
 jobs:[{kind,enabled,ready}]}]}`. Up to 256 actors and five unique jobs each,
   256 KiB total. Jobs are `answers`, `wake`, `git`, `files`, `spool`; ready implies
   enabled. Unknown fields, actors outside the active host enrollment, exclusions,
-  revoked identities, replayed/older snapshots and retired instances are rejected.
+  revoked identities, non-increasing instance sequences, replayed proofs and retired
+  instances are rejected. Client timestamp ordering is not used: a clock step
+  backward within the proof skew window cannot interrupt presence.
   Server timestamps set last-seen and 300-second expiry. Omitted jobs are removed
   atomically. Zero agents is valid. This writes no progress events.
 - `POST /hosts/bridge-status`: authenticated **read-only** body `{host_ids:[]}`,

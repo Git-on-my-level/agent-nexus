@@ -277,8 +277,11 @@ func checkResumeNamespace(dir string, w hostbridge.Workspace, agent hostbridge.A
 		return fmt.Errorf("resume registry capacity exceeded")
 	}
 	for _, file := range entries {
-		if !strings.HasSuffix(file.Name(), ".json") {
+		if !isResumeRegistrationFile(file.Name()) {
 			continue
+		}
+		if strings.HasSuffix(file.Name(), ".paused") {
+			return fmt.Errorf("resume is paused for migration reconciliation")
 		}
 		entry, e := readAskRegistration(filepath.Join(dir, file.Name()))
 		if e != nil {

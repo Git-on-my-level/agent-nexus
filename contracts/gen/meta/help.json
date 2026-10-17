@@ -8314,7 +8314,7 @@
       "path": "/hosts/{host_id}/bridge/check-in",
       "operation_id": "checkInHostBridge",
       "summary": "Check in host bridge",
-      "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance sends a complete workspace-local agent/job snapshot, at most 256 KiB. Each actor must belong to this active enrollment and not be excluded. Server expiry is 300 seconds. Newer signed incarnations replace old ones; sequence must increase within an incarnation. Only enabled, ready wake jobs imply agent wake-online; answers alone do not.",
+      "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance sends a complete workspace-local agent/job snapshot, at most 256 KiB. Each actor must belong to this active enrollment and not be excluded. Server expiry is 300 seconds. Freshly authenticated, non-retired incarnations replace old ones; sequence must increase within an incarnation. Signed timestamps enforce the proof skew/replay window, not snapshot ordering, so a clock step backward does not interrupt presence. Only enabled, ready wake jobs imply agent wake-online; answers alone do not.",
       "why": "Record a host bridge heartbeat for wake routing.",
       "input_mode": "json-body",
       "streaming": {

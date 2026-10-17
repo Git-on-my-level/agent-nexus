@@ -98,3 +98,37 @@ func TestStoppedSystemdUnitPreservesHomeWorkingDirectory(t *testing.T) {
 		t.Fatal(plan)
 	}
 }
+
+func TestMigrationSkipsUnrelatedSymlinkButBlocksItsBridgeConsumer(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			home := t.TempDir()
+			unit, err := UnitFor(goos, home, filepath.Join(home, "anx"), os.Getuid())
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(filepath.Dir(unit.Path), "unrelated.plist")
+			if goos == "linux" {
+				path = filepath.Join(filepath.Dir(unit.Path), "unrelated.service")
+			}
+			if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Symlink("/fixture/do-not-read", path); err != nil {
+				t.Fatal(err)
+			}
+			units, err := ReadUnits(home, goos)
+			if err != nil || len(units) != 1 || units[0].Unresolved == "" {
+				t.Fatal(units, err)
+			}
+			if p := PlanMigration(home, filepath.Join(home, "anx"), os.Getuid(), units, nil); len(p.Blockers) != 0 || len(p.Units) != 0 {
+				t.Fatal(p)
+			}
+			units[0].PID = 100
+			proc := Process{PID: 100, UID: os.Getuid(), Argv: []string{filepath.Join(home, "anx"), "--as", "worker", "bridge", "run"}, Executable: filepath.Join(home, "anx"), CWD: home}
+			if p := PlanMigration(home, filepath.Join(home, "anx"), os.Getuid(), units, []Process{proc}); len(p.Blockers) == 0 {
+				t.Fatal("unverified unit accepted", p)
+			}
+		})
+	}
+}

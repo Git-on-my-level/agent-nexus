@@ -32,7 +32,7 @@ func serviceCall(ctx context.Context, kind, action string, unit hostbridge.UnitP
 	if kind == "launchd" {
 		domain := "gui/" + strconv.Itoa(os.Getuid())
 		switch action {
-		case "start":
+		case "start", "load":
 			argv = []string{"launchctl", "bootstrap", domain, unit.Path}
 		case "stop":
 			argv = []string{"launchctl", "bootout", domain + "/" + unit.Label}
@@ -48,6 +48,8 @@ func serviceCall(ctx context.Context, kind, action string, unit hostbridge.UnitP
 				return e
 			}
 			argv = []string{"systemctl", "--user", "enable", "--now", unit.Label}
+		case "load":
+			argv = []string{"systemctl", "--user", "start", unit.Label}
 		case "stop":
 			argv = []string{"systemctl", "--user", "stop", unit.Label}
 		case "enable":
@@ -61,6 +63,11 @@ func serviceCall(ctx context.Context, kind, action string, unit hostbridge.UnitP
 	}
 	out, stderr, e := bridgeCommandRun(ctx, argv[0], argv[1:]...)
 	if e != nil && action == "stop" && (strings.Contains(out+stderr, "Could not find service") || strings.Contains(out+stderr, "No such process") || strings.Contains(out+stderr, "not loaded")) {
+		return nil
+	}
+	// A retry may find the new unit already removed by an interrupted rollback.
+	// Stop has already quiesced it; a missing unit has no enablement to undo.
+	if e != nil && action == "disable" && kind == "systemd-user" && (strings.Contains(out+stderr, "does not exist") || strings.Contains(out+stderr, "not found")) {
 		return nil
 	}
 	if e != nil {
@@ -91,6 +98,15 @@ func loadedBridgeUnits(ctx context.Context, units []hostbridge.LegacyUnit) ([]ho
 		u := &units[i]
 		var out, stderr string
 		u.PID = 0
+		u.Loaded = false
+		u.Enabled = true
+		if u.Unresolved == "" {
+			var err error
+			u.Enabled, err = bridgeUnitEnabled(ctx, *u)
+			if err != nil {
+				return nil, err
+			}
+		}
 		var e error
 		if u.Kind == "launchd" {
 			out, stderr, e = bridgeCommandRun(ctx, "launchctl", "print", "gui/"+strconv.Itoa(os.Getuid())+"/"+u.Label)
@@ -101,12 +117,14 @@ func loadedBridgeUnits(ctx context.Context, units []hostbridge.LegacyUnit) ([]ho
 				}
 				return nil, fmt.Errorf("cannot inspect service %s: %w", u.Label, e)
 			}
+			u.Loaded = true
 			for _, line := range strings.Split(out, "\n") {
 				k, v, ok := strings.Cut(strings.TrimSpace(line), " = ")
 				if ok && k == "pid" {
 					u.PID, _ = strconv.Atoi(strings.TrimSpace(v))
 				}
 			}
+
 		} else {
 			out, stderr, e = bridgeCommandRun(ctx, "systemctl", "--user", "show", u.Label, "--property=MainPID", "--value")
 			if e != nil {
@@ -117,10 +135,35 @@ func loadedBridgeUnits(ctx context.Context, units []hostbridge.LegacyUnit) ([]ho
 				return nil, fmt.Errorf("cannot inspect service %s: %w", u.Label, e)
 			}
 			u.PID, _ = strconv.Atoi(strings.TrimSpace(out))
+			u.Loaded = u.PID > 0
+
 		}
 	}
 	return units, nil
 }
+func bridgeUnitEnabled(ctx context.Context, u hostbridge.LegacyUnit) (bool, error) {
+	if u.Kind == "launchd" {
+		out, _, e := bridgeCommandRun(ctx, "launchctl", "print-disabled", "gui/"+strconv.Itoa(os.Getuid()))
+		if e != nil {
+			return false, fmt.Errorf("cannot inspect enable state for %s: %w", u.Label, e)
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, strconv.Quote(u.Label)) && strings.Contains(line, "=> true") {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	out, stderr, e := bridgeCommandRun(ctx, "systemctl", "--user", "is-enabled", u.Label)
+	switch strings.TrimSpace(out) {
+	case "enabled", "enabled-runtime":
+		return true, nil
+	case "disabled", "static", "indirect":
+		return false, nil
+	}
+	return false, fmt.Errorf("cannot inspect enable state for %s: %v %s", u.Label, e, stderr)
+}
+
 func (a *App) migrationRegistration(ctx context.Context, v hostbridge.LegacyInvocation) (hostbridge.Workspace, hostbridge.Agent, error) {
 	cfg := config.Resolved{BaseURL: config.DefaultBaseURL, ConfigDir: v.ConfigDir, As: v.Agent, Timeout: 2 * time.Second, Sources: map[string]string{"base_url": "default"}}
 	if v.BaseURL != "" {
@@ -257,11 +300,17 @@ func mergeImportedAgent(r *hostbridge.Registry, w hostbridge.Workspace, agent ho
 }
 
 type bridgeMigrationJournal struct {
-	Phase   string                   `json:"phase"`
-	Plan    hostbridge.MigrationPlan `json:"plan"`
-	Before  hostbridge.Registry      `json:"registry_before"`
-	After   hostbridge.Registry      `json:"registry_after"`
-	NewUnit hostbridge.UnitPlan      `json:"new_unit"`
+	Phase           string                   `json:"phase"`
+	Plan            hostbridge.MigrationPlan `json:"plan"`
+	Before          hostbridge.Registry      `json:"registry_before"`
+	After           hostbridge.Registry      `json:"registry_after"`
+	NewUnit         hostbridge.UnitPlan      `json:"new_unit"`
+	RegistryBefore  []byte                   `json:"registry_bytes_before,omitempty"`
+	RegistryExisted bool                     `json:"registry_existed"`
+	UnitBefore      []byte                   `json:"unit_bytes_before,omitempty"`
+	UnitExisted     bool                     `json:"unit_existed"`
+	NewActivated    bool                     `json:"new_activated"`
+	Paused          []string                 `json:"paused_records,omitempty"`
 }
 
 func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -285,6 +334,42 @@ func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.R
 	unit, e := hostbridge.UnitFor(bridgePlatform, home, exe, os.Getuid())
 	if e != nil {
 		return nil, e
+	}
+	// Recovery and cutover share the same locks: a second installer must never
+	// roll back a journal while its owner is still activating the new service.
+	if !*dry {
+		if e = os.MkdirAll(root, 0700); e != nil {
+			return nil, e
+		}
+		unlock, err := integrations.Lock(ctx, filepath.Join(root, "install.lock"))
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
+		registryUnlock, err := integrations.Lock(ctx, filepath.Join(root, "registry.lock"))
+		if err != nil {
+			return nil, err
+		}
+		defer registryUnlock()
+	}
+	var prior bridgeMigrationJournal
+	if raw, readErr := integrations.PrivateRead(filepath.Join(root, "migration.json")); readErr == nil {
+		if e = json.Unmarshal(raw, &prior); e != nil {
+			return nil, e
+		}
+		if prior.Phase != "complete" && prior.Phase != "rolled_back" {
+			if *dry {
+				return nil, fmt.Errorf("interrupted migration needs recovery; install without --dry-run restores the saved services before retrying")
+			}
+			if prior.NewUnit.Path != unit.Path || prior.NewUnit.Label != unit.Label {
+				return nil, fmt.Errorf("migration journal does not identify this host unit")
+			}
+			if e = a.rollbackHostBridge(ctx, root, &prior); e != nil {
+				return nil, e
+			}
+		}
+	} else if !os.IsNotExist(readErr) {
+		return nil, readErr
 	}
 	// Even preview performs only read-only inventory and scoped remote preflight.
 	units, e := hostbridge.ReadUnits(home, bridgePlatform)
@@ -312,32 +397,6 @@ func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.R
 	afterRaw, _ := json.Marshal(before)
 	var after hostbridge.Registry
 	_ = json.Unmarshal(afterRaw, &after)
-	// A durable plan survives a crash between disabling a unit and publishing the registry.
-	var prior bridgeMigrationJournal
-	if raw, readErr := integrations.PrivateRead(filepath.Join(root, "migration.json")); readErr == nil {
-		if e = json.Unmarshal(raw, &prior); e != nil {
-			return nil, e
-		}
-		if prior.Phase != "complete" {
-			if prior.Phase == "activating" || prior.Phase == "active" {
-				return nil, fmt.Errorf("migration activation uncertain; inspect bridge doctor and reconcile before retry")
-			}
-			for _, v := range prior.Plan.Invocations {
-				plan.Invocations = append(plan.Invocations, v)
-			}
-			for _, u := range prior.Plan.Units {
-				found := false
-				for _, known := range plan.Units {
-					if known.Path == u.Path {
-						found = true
-					}
-				}
-				if !found {
-					plan.Units = append(plan.Units, u)
-				}
-			}
-		}
-	}
 	if len(plan.Blockers) > 0 {
 		return nil, errnorm.WithDetails(errnorm.Local("migration_blocked", "legacy bridge ownership or configuration needs repair"), map[string]any{"blockers": plan.Blockers})
 	}
@@ -425,19 +484,6 @@ func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.R
 	if *dry {
 		return &commandResult{Data: result}, nil
 	}
-	if e = os.MkdirAll(root, 0700); e != nil {
-		return nil, e
-	}
-	unlock, e := integrations.Lock(ctx, filepath.Join(root, "install.lock"))
-	if e != nil {
-		return nil, e
-	}
-	defer unlock()
-	registryUnlock, e := integrations.Lock(ctx, filepath.Join(root, "registry.lock"))
-	if e != nil {
-		return nil, e
-	}
-	defer registryUnlock()
 	current, e := hostbridge.Load(root)
 	if e != nil {
 		return nil, e
@@ -445,7 +491,10 @@ func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.R
 	if current.Revision != before.Revision {
 		return nil, fmt.Errorf("bridge registry changed during preflight; retry install")
 	}
-	existing, _ := os.ReadFile(unit.Path)
+	existing, unitReadErr := os.ReadFile(unit.Path)
+	if unitReadErr != nil && !os.IsNotExist(unitReadErr) {
+		return nil, unitReadErr
+	}
 	if len(plan.Units) == 0 && string(existing) == unit.Content && askBridgeLockState(filepath.Join(root, "service.lock")) == answerBridgeRunning {
 		if !reflect.DeepEqual(before.Workspaces, after.Workspaces) {
 			after.Revision = before.Revision + 1
@@ -460,118 +509,102 @@ func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.R
 		return nil, fmt.Errorf("host supervisor already running; stop it before a migration or unit replacement")
 	}
 	after.Revision = before.Revision + 1
-	journal := bridgeMigrationJournal{"planned", plan, before, after, unit}
-	save := func(phase string) error {
-		journal.Phase = phase
-		return integrations.PrivateWrite(filepath.Join(root, "migration.json"), integrations.JSON(journal))
+	registryBytes, readErr := integrations.PrivateRead(filepath.Join(root, "registry.json"))
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return nil, readErr
 	}
+	journal := bridgeMigrationJournal{Phase: "planned", Plan: plan, Before: before, After: after, NewUnit: unit, RegistryBefore: registryBytes, RegistryExisted: readErr == nil, UnitBefore: existing, UnitExisted: len(existing) > 0}
+	save := func(phase string) error { journal.Phase = phase; return saveBridgeMigration(root, &journal) }
 	if e = save("planned"); e != nil {
 		return nil, e
 	}
-	stopped := []hostbridge.LegacyUnit{}
-	rollback := func() {
-		for _, w := range after.Workspaces {
-			if checkBridgeResumeRoots(w, true) != nil {
-				return
-			}
+	// Catch an already executing/uncertain namespace before touching ANY unit.
+	// The old consumer can finish its current command; healthy namespaces stay up.
+	for _, w := range after.Workspaces {
+		if e = checkBridgeResumeIdle(w); e != nil {
+			_ = save("rolled_back")
+			return nil, e
 		}
-		for _, u := range stopped {
-			_ = integrations.AtomicWrite(u.Path, u.Content)
-			old := hostbridge.UnitPlan{Path: u.Path, Label: u.Label, Kind: u.Kind}
-			_ = serviceCall(ctx, u.Kind, "enable", old)
-			_ = serviceCall(ctx, u.Kind, "start", old)
+	}
+	fail := func(cause error) (*commandResult, error) {
+		if restoreErr := a.rollbackHostBridge(ctx, root, &journal); restoreErr != nil {
+			return nil, fmt.Errorf("migration failed: %w; restore: %v", cause, restoreErr)
 		}
+		return nil, fmt.Errorf("migration failed; all legacy services restored to their previous loaded state; retry install after repair: %w", cause)
 	}
 	if e = save("quiescing"); e != nil {
 		return nil, e
 	}
 	for _, u := range plan.Units {
 		if e = validateLegacyUnitSnapshot(ctx, u, plan.Processes); e != nil {
-			rollback()
-			return nil, e
+			return fail(e)
 		}
 		old := hostbridge.UnitPlan{Path: u.Path, Label: u.Label, Kind: u.Kind}
 		if e = serviceCall(ctx, u.Kind, "disable", old); e != nil {
-			rollback()
-			return nil, e
+			return fail(e)
 		}
 		if e = serviceCall(ctx, u.Kind, "stop", old); e != nil {
-			rollback()
-			return nil, e
+			return fail(e)
 		}
-		stopped = append(stopped, u)
 	}
 	for _, p := range plan.Processes {
 		if e = bridgeRetire(ctx, p); e != nil {
-			rollback()
-			return nil, e
+			return fail(e)
 		}
 	}
-	// Re-read only after old writers have stopped. In-flight pending attempts are
-	// marked uncertain, not re-executed. Source bytes/roots/cursors stay in place.
 	for _, w := range after.Workspaces {
 		if e = checkBridgeResumeRoots(w, true); e != nil {
-			_ = save("quiesced")
-			return nil, e
+			return fail(e)
 		}
 	}
 	if e = mergeResumeCoverage(&after, roots); e != nil {
-		rollback()
-		return nil, e
+		return fail(e)
 	}
+	journal.After = after
 	remaining, e := bridgeProcesses(ctx)
 	if e != nil {
-		return nil, e
+		return fail(e)
 	}
 	for _, p := range remaining {
 		if hostbridge.IsConsumer(p.Argv) {
-			_ = save("quiesced")
-			return nil, fmt.Errorf("consumer PID %d remains before activation; reconcile migration", p.PID)
+			return fail(fmt.Errorf("consumer PID %d remains before activation", p.PID))
 		}
 	}
+	// Keep EVERY legacy unit file until the new unit has passed readiness and
+	// singleton/survivor verification. The journal is also sufficient after a crash.
 	for _, u := range plan.Units {
-		if raw, e := os.ReadFile(u.Path); e == nil && string(raw) != string(u.Content) {
-			rollback()
-			return nil, fmt.Errorf("legacy unit changed during migration")
-		}
-		if e = os.Remove(u.Path); e != nil && !os.IsNotExist(e) {
-			rollback()
-			return nil, e
+		raw, err := os.ReadFile(u.Path)
+		if err != nil || string(raw) != string(u.Content) {
+			return fail(fmt.Errorf("legacy unit changed during migration: %s", u.Label))
 		}
 	}
 	if e = save("quiesced"); e != nil {
-		rollback()
-		return nil, e
+		return fail(e)
 	}
 	for _, w := range after.Workspaces {
 		for _, agent := range w.Agents {
 			for _, dir := range agent.RegistryDirs {
 				if e = os.MkdirAll(dir, 0700); e != nil {
-					rollback()
-					return nil, e
+					return fail(e)
 				}
 			}
 		}
 	}
 	if e = integrations.PrivateWrite(filepath.Join(root, "registry.json"), integrations.JSON(after)); e != nil {
-		rollback()
-		return nil, e
+		return fail(e)
 	}
 	if e = os.MkdirAll(filepath.Dir(unit.Path), 0700); e != nil {
-		rollback()
-		return nil, e
+		return fail(e)
 	}
 	if st, err := os.Lstat(unit.Path); err == nil && !st.Mode().IsRegular() {
-		rollback()
-		return nil, fmt.Errorf("unsafe host unit path")
+		return fail(fmt.Errorf("unsafe host unit path"))
 	}
 	if e = integrations.PrivateWrite(unit.Path, []byte(unit.Content)); e != nil {
-		rollback()
-		return nil, e
+		return fail(e)
 	}
+	journal.NewActivated = true
 	if e = save("activating"); e != nil {
-		rollback()
-		return nil, e
+		return fail(e)
 	}
 	if e = serviceCall(ctx, unit.Kind, "enable", unit); e == nil {
 		e = serviceCall(ctx, unit.Kind, "start", unit)
@@ -580,35 +613,44 @@ func (a *App) installHostBridge(ctx context.Context, args []string, cfg config.R
 		e = bridgeWaitReady(ctx, root, after)
 	}
 	if e != nil {
-		_ = serviceCall(ctx, unit.Kind, "stop", unit)
-		return nil, fmt.Errorf("host activation incomplete; legacy state retained in migration.json; reconcile before restarting: %w", e)
-	}
-	activationFailed := func(cause error) (*commandResult, error) {
-		_ = serviceCall(ctx, unit.Kind, "stop", unit)
-		return nil, cause
+		return fail(e)
 	}
 	survivors, e := bridgeProcesses(ctx)
 	if e != nil {
-		return activationFailed(e)
+		return fail(e)
 	}
 	newCount := 0
 	for _, p := range survivors {
-		if hostbridge.IsConsumer(p.Argv) {
-			newCount++
+		if !hostbridge.IsConsumer(p.Argv) {
+			continue
 		}
-		if hostbridge.IsConsumer(p.Argv) && !(len(p.Argv) == 3 && p.Argv[1] == "bridge" && p.Argv[2] == "run") {
-			return activationFailed(fmt.Errorf("legacy supervisor PID %d survived cutover", p.PID))
+		if len(p.Argv) != 3 || p.Argv[1] != "bridge" || p.Argv[2] != "run" {
+			return fail(fmt.Errorf("legacy supervisor PID %d survived cutover", p.PID))
 		}
+		newCount++
 	}
 	if newCount != 1 {
-		return activationFailed(fmt.Errorf("expected exactly one host supervisor; found %d", newCount))
+		return fail(fmt.Errorf("expected exactly one host supervisor; found %d", newCount))
+	}
+	if e = save("healthy"); e != nil {
+		return fail(e)
+	}
+	for _, u := range plan.Units {
+		raw, err := os.ReadFile(u.Path)
+		if err != nil || string(raw) != string(u.Content) {
+			return fail(fmt.Errorf("legacy unit changed before cleanup: %s", u.Label))
+		}
+		if e = os.Remove(u.Path); e != nil {
+			return fail(e)
+		}
 	}
 	if e = save("complete"); e != nil {
-		return activationFailed(e)
+		return fail(e)
 	}
 	result["started"] = true
 	return &commandResult{Data: result}, nil
 }
+
 func (a *App) preflightBridgeWorkspace(ctx context.Context, w hostbridge.Workspace) error {
 	cfg := config.Resolved{BaseURL: w.BaseURL, ConfigDir: w.ConfigDir, Timeout: 2 * time.Second, Sources: map[string]string{"base_url": "bridge"}}
 	h, e := a.resolvedHost(cfg)
@@ -658,7 +700,7 @@ func checkBridgeResumeRoots(w hostbridge.Workspace, quiesced bool) error {
 				return e
 			}
 			for _, f := range files {
-				if !strings.HasSuffix(f.Name(), ".json") {
+				if !isResumeRegistrationFile(f.Name()) {
 					continue
 				}
 				path := filepath.Join(dir, f.Name())
@@ -762,7 +804,7 @@ func mergeResumeCoverage(r *hostbridge.Registry, roots map[string]bool) error {
 				return fmt.Errorf("resume namespace capacity exceeded")
 			}
 			for _, f := range files {
-				if !strings.HasSuffix(f.Name(), ".json") {
+				if !isResumeRegistrationFile(f.Name()) {
 					continue
 				}
 				entry, e := readAskRegistration(filepath.Join(path, f.Name()))

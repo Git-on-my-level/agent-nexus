@@ -25,6 +25,10 @@ type Process struct {
 	CWD        string   `json:"cwd"`
 }
 type LegacyUnit struct {
+	Loaded      bool              `json:"loaded"`
+	Enabled     bool              `json:"enabled"`
+	Mode        uint32            `json:"mode"`
+	Unresolved  string            `json:"unresolved,omitempty"`
 	CWD         string            `json:"cwd,omitempty"`
 	Path        string            `json:"path"`
 	Label       string            `json:"label"`
@@ -181,6 +185,12 @@ func PlanMigration(home, exe string, uid int, units []LegacyUnit, processes []Pr
 			}
 		}
 		direct := IsConsumer(u.Argv)
+		if u.Unresolved != "" {
+			if len(candidates) > 0 {
+				plan.Blockers = append(plan.Blockers, "unresolved bridge unit: "+u.Label)
+			}
+			continue
+		}
 		if len(candidates) == 0 && !direct {
 			continue
 		}
@@ -506,7 +516,8 @@ func ReadUnits(home, goos string) ([]LegacyUnit, error) {
 			return nil, e
 		}
 		if !info.Mode().IsRegular() || !unitOwned(info) || info.Size() > 1<<20 {
-			return nil, fmt.Errorf("unresolved unit ownership/type: %s", f.Name())
+			out = append(out, LegacyUnit{Path: path, Label: strings.TrimSuffix(f.Name(), ".plist"), Kind: kind, Unresolved: "unit ownership/type cannot be verified"})
+			continue
 		}
 		raw, e := os.ReadFile(path)
 		if e != nil {
@@ -516,6 +527,7 @@ func ReadUnits(home, goos string) ([]LegacyUnit, error) {
 		if e != nil {
 			return nil, fmt.Errorf("inspect %s: %w", f.Name(), e)
 		}
+		u.Mode = uint32(info.Mode().Perm())
 		out = append(out, u)
 	}
 	return out, nil

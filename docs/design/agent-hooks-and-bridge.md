@@ -255,8 +255,9 @@ config_dir,agents:[{name,actor_id,jobs,registry_dirs,execution_policy}]}]}`.
   Derive a workspace-scoped instance ID from the local daemon incarnation; never
   export a machine-global correlation identifier or another workspace's config.
 - Server times govern presence. Atomically accept a newer sequence for the same
-  instance, or a newly signed replacement instance; reject older signed snapshots
-  and stale-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
+  instance, or a fresh non-retired replacement instance. Signed times enforce
+  proof skew/replay only; NTP steps backward do not control snapshot ordering.
+  Reject retired-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
 sequence,config_revision,version,signed_at,last_seen_at,expires_at)` and
   `host_bridge_jobs(host_id,actor_id,kind,enabled,ready)`, PK `(host_id,actor_id,kind)`
   with presence FK. Replace that host's bounded job snapshot transactionally.
@@ -306,24 +307,28 @@ expires_at},agents:[{actor_id,jobs:[{kind,enabled,ready}]}],agents_truncated}]}`
    remain visible/paused for reconciliation, never blindly replayed. Persist the
    final cutover snapshot after old writers stop; resume pending wakes with their
    original claims or an explicit host-authorized claim transfer.
-5. Stage one disabled unit, atomically publish merged registry, activate it, and
-   verify readiness for every imported namespace with the host singleton held.
-   Confirm exactly one bridge unit/supervisor and no surviving legacy consumers;
-   runtime/resume child commands are allowed, extra bridge daemons are not. Print
-   replaced labels/PIDs, imported workspace/agent/registry counts and unresolved
-   items, never raw callback commands. Re-running install is idempotent.
-6. Journal each phase. Before activation failure restores the saved plan where
-   safe; after callbacks may have run, rollback first stops the new consumer and
-   reconciles durable outcomes, not simultaneous old/new execution. Retain source
-   state and backups. Do not return success on partial coverage or unsafe leftovers.
+5. Keep every legacy unit file until the new unit is healthy. Publish the merged
+   registry, activate one host unit and verify every job/signed report plus the
+   singleton and absence of legacy consumers. Only then remove old unit files.
+6. Any failure restores all legacy files and prior loaded/enabled states after
+   stopping/disabling the new generation. Journal retries recover interrupted
+   phases, including activation. Reject an already busy resume before quiescing
+   any service. If execution races cutover, retain it as `.json.paused` in place
+   (older consumers only read `*.json`), with its path in the journal. Preserve
+   command/claim identity; restore healthy namespaces immediately. The owner must
+   reconcile the unknown effect before restoring that record and retrying.
 
-Owner acceptance fixture (generic discovery, no hardcoded label):
-`io.agent-nexus.hermes-answer.anx` owns three
-`anx --as hermes --workspace {personal,anx,omi} bridge run --command-timeout 30m`
-processes. Import all three as answers-enabled registrations under one unit,
-preserve all three resume namespaces and 30m policy, then retire the wrapper and
-its children. Test actual argv arrays for each alias, not shell brace expansion;
-repeat equivalent launchd/systemd and custom-config-root cases.
+Acceptance fixtures use generic discovery, with no hardcoded labels:
+
+- Three independent launchd labels `io.agent-nexus.hermes-answer.{personal,anx,omi}`
+  (and three equivalent systemd user units), each running
+  `anx --as hermes --workspace <alias> bridge run --command-timeout 30m`.
+- One custom wrapper owning the same three workspace processes.
+
+Import all three as answers-enabled registrations under one unit, preserving all
+resume namespaces and the 30m policy. Test success, bootstrap/readiness/quiesce
+failure, an executing namespace and journal recovery on both platforms. Include
+actual argv arrays per alias and custom config roots.
 
 Repository audit found no active dependency that requires retaining the Python
 bridge. Do not delete capabilities along with the package:

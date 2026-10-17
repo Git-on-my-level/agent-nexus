@@ -468,8 +468,11 @@ type moveTopicFixture struct {
 
 func newMoveCorePair(t *testing.T) *moveCorePair {
 	t.Helper()
-	source := newLiveCoreHarness(t)
-	destination := newLiveCoreHarness(t)
+	// Independent workspaces must have independent identities. Once the harness
+	// exposed /meta/handshake, both formerly defaulted to ws_main and copying the
+	// destination credentials silently overwrote the source enrollment.
+	source := newLiveCoreHarnessEnv(t, []string{"ANX_WORKSPACE_ID=move-source-" + runToken()})
+	destination := newLiveCoreHarnessEnv(t, []string{"ANX_WORKSPACE_ID=move-destination-" + runToken()})
 	sourceCoreURL, destinationCoreURL := source.baseURL, destination.baseURL
 	sourceFault, sourceProxy := newMoveIntegrationFaultProxy(t, sourceCoreURL)
 	destinationFault, destinationProxy := newMoveIntegrationFaultProxy(t, destinationCoreURL)
@@ -756,6 +759,9 @@ func copyMoveDestinationCredentials(t *testing.T, source, destination *liveCoreH
 		}
 		from := filepath.Join(destinationRoot, entry.Name())
 		to := filepath.Join(sourceRoot, entry.Name())
+		if _, err := os.Stat(to); !os.IsNotExist(err) {
+			t.Fatalf("destination workspace identity collides with source credentials: %s (%v)", entry.Name(), err)
+		}
 		if err := os.MkdirAll(to, 0o700); err != nil {
 			t.Fatal(err)
 		}

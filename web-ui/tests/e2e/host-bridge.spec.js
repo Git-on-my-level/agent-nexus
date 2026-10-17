@@ -116,3 +116,57 @@ test("machine bridge liveness ages, recovers and stays distinct from wake covera
     await context.close();
   }
 });
+
+// eslint-disable-next-line no-empty-pattern
+test("an old core shows checking then unavailable without inventing bridge absence", async ({}, testInfo) => {
+  const context = await browser.newContext({
+    baseURL: testInfo.project.use.baseURL,
+  });
+  const page = await context.newPage();
+  let release;
+  const responseGate = new Promise((resolve) => {
+    release = resolve;
+  });
+  try {
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const host = {
+      id: "old-core",
+      slug: "old-core",
+      display_name: "Older core machine",
+      os_user: "operator",
+      hostname: "old-core",
+      created_at: new Date().toISOString(),
+      revoked_at: null,
+      agents: [],
+      excluded_names: [],
+      discovered_adapters: [],
+    };
+    await installWorkspaceApi(page, { hosts: [host], agents: [] });
+    await page.route("**/hosts/bridge-status", async (route) => {
+      await responseGate;
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { code: "not_found", message: "Not found" },
+        }),
+      });
+    });
+    await page.goto(`${BASE}/agents`);
+    const badge = page.locator('[data-host-bridge="old-core"]');
+    await expect(badge).toHaveAttribute("data-bridge-state", "loading");
+    await expect(badge).toContainText("Checking bridge…");
+    await expect(badge).not.toContainText("Bridge unavailable");
+    release();
+    await expect(badge).toHaveAttribute("data-bridge-state", "unknown");
+    await expect(badge).toContainText("Bridge unavailable");
+    await expect(badge).not.toContainText("No bridge");
+    await page.goto(`${BASE}/access`);
+    await expect(badge).toHaveAttribute("data-bridge-state", "unknown");
+    expect(errors).toEqual([]);
+  } finally {
+    release();
+    await context.close();
+  }
+});

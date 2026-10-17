@@ -64,13 +64,13 @@ func TestHostBridgeSnapshotOrderingAndPerAgentWake(t *testing.T) {
 		t.Fatal("same sequence accepted")
 	}
 	input.Sequence = 2
-	if e = put(now.Add(-time.Second), input); e == nil {
-		t.Fatal("older signed snapshot accepted")
+	if e = put(now.Add(-4*time.Minute), input); e != nil {
+		t.Fatal("sequence advance rejected after clock step", e)
 	}
 	input.InstanceID = "two"
 	input.Sequence = 1
 	input.Agents = []BridgeAgent{}
-	if e = put(now.Add(time.Second), input); e != nil {
+	if e = put(now.Add(-3*time.Minute), input); e != nil {
 		t.Fatal(e)
 	}
 	input.InstanceID = "one"

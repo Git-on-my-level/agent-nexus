@@ -7,13 +7,22 @@ import { liveAgentChanges } from "$lib/liveWorkspaceEvents.js";
 export const hostBridgeStatus = writable({
   workspace: "",
   hosts: {},
+  checked: [],
   error: false,
 });
 let controller;
-export function bridgeBadge(host, observation, now = Date.now()) {
+export function bridgeBadge(
+  host,
+  observation,
+  now = Date.now(),
+  loading = false,
+) {
   if (host?.revoked_at || observation?.revoked_at)
     return { state: "revoked", label: "Revoked" };
-  if (!observation) return { state: "unknown", label: "Bridge unavailable" };
+  if (!observation)
+    return loading
+      ? { state: "loading", label: "Checking bridge…" }
+      : { state: "unknown", label: "Bridge unavailable" };
   if (!observation.bridge) return { state: "none", label: "No bridge" };
   const live = Date.parse(observation.bridge.expires_at) > now;
   return { state: live ? "live" : "stale", label: live ? "Live" : "Stale" };
@@ -32,7 +41,7 @@ export function observeHostBridge(workspace, id) {
     const ids = new Map();
     const state = { workspace, ids, run, stop };
     controller = state;
-    hostBridgeStatus.set({ workspace, hosts: {}, error: false });
+    hostBridgeStatus.set({ workspace, hosts: {}, checked: [], error: false });
     async function run() {
       if (stopped || document.hidden || !ids.size) return;
       if (inflight) {
@@ -49,10 +58,16 @@ export function observeHostBridge(workspace, id) {
             hosts: Object.fromEntries(
               (result?.hosts ?? []).map((h) => [h.host_id, h]),
             ),
+            checked: admitted,
             error: false,
           });
       } catch {
-        if (!stopped) hostBridgeStatus.update((v) => ({ ...v, error: true }));
+        if (!stopped)
+          hostBridgeStatus.update((v) => ({
+            ...v,
+            checked: admitted,
+            error: true,
+          }));
       } finally {
         inflight = false;
         if (again && !stopped) {

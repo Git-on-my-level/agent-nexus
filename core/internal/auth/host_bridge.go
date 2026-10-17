@@ -58,7 +58,7 @@ func bridgeASCII(s string, limit int) bool {
 // Revalidate enrollment/actors inside the write transaction to close revocation races.
 func (s *Store) CheckInHostBridge(ctx context.Context, id, signed string, in BridgeCheckIn) (BridgePresence, error) {
 	var out BridgePresence
-	at, err := time.Parse(time.RFC3339Nano, signed)
+	_, err := time.Parse(time.RFC3339Nano, signed)
 	if err != nil || !bridgeASCII(in.InstanceID, 128) || !bridgeASCII(in.Version, 64) || in.Sequence < 1 || in.ConfigRevision < 0 || in.Agents == nil || len(in.Agents) > 256 {
 		return out, ErrInvalidRequest
 	}
@@ -119,18 +119,16 @@ func (s *Store) CheckInHostBridge(ctx context.Context, id, signed string, in Bri
 	if valid != len(actorIDs) {
 		return out, ErrAgentExcluded
 	}
-	var oldInstance, oldSigned string
+	var oldInstance string
 	var seq int64
-	err = tx.QueryRowContext(ctx, `SELECT instance_id,sequence,signed_at FROM host_bridge_presence WHERE host_id=?`, id).Scan(&oldInstance, &seq, &oldSigned)
+	err = tx.QueryRowContext(ctx, `SELECT instance_id,sequence FROM host_bridge_presence WHERE host_id=?`, id).Scan(&oldInstance, &seq)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
-	if err == nil {
-		prev, _ := time.Parse(time.RFC3339Nano, oldSigned)
-		if !at.After(prev) || oldInstance == in.InstanceID && in.Sequence <= seq {
-			return out, ErrInvalidRequest
-		}
+	if err == nil && oldInstance == in.InstanceID && in.Sequence <= seq {
+		return out, ErrInvalidRequest
 	}
+
 	if oldInstance != "" && oldInstance != in.InstanceID {
 		var retired int
 		err = tx.QueryRowContext(ctx, `SELECT 1 FROM host_bridge_retired_instances WHERE host_id=? AND instance_id=?`, id, in.InstanceID).Scan(&retired)

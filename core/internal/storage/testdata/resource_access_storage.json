@@ -1367,7 +1367,7 @@
     "../auth/external_grants.go:type:WorkspaceManagedAgentGrantClaims": "d4fae43a5a0f6d203bee309595309f7b11d2c4ec409eed20fd85921d7b8318e2",
     "../auth/external_grants.go:type:workspaceHumanGrantJWK": "35b35d89576f005118e0efa23fbdada44b021a7f39063c682176a62a1e2442a1",
     "../auth/external_grants.go:type:workspaceHumanGrantJWKSResponse": "e2967a959b49c9aec0314a76a49f7bb37f11d15ba85edc7f593bf55f125963bc",
-    "../auth/host_bridge.go:*Store:CheckInHostBridge": "497020b755e89c1ae3878dcaac66d3697a2fd140616ee77e61911dc0db5eb4fa",
+    "../auth/host_bridge.go:*Store:CheckInHostBridge": "1d55983ad889282d8dfced059e056bc9d0edac0bd61a99d47aec3238ce2ea113",
     "../auth/host_bridge.go:*Store:HostBridgeStatus": "882a260317388ebec4c5fe0cca5ec8dde1328174903e62f302e1f2440d70bb2e",
     "../auth/host_bridge.go:*Store:ListHostSummaries": "9cf43875d99950c3a1ce9dd46276a3b2b0a6213e50d3f581133309d9a4958787",
     "../auth/host_bridge.go:type:BridgeAgent": "1814b207aef9366a89df6b86a0e94968bf0f9fac637da0a1473faf5da57a2c93",

@@ -236,3 +236,20 @@ func TestHostBridgeRoutesOrdinaryWakeAgainstCore(t *testing.T) {
 		t.Fatal(string(raw), e)
 	}
 }
+
+// Authentication and optional host service setup are distinct: a human bearer
+// can author/read work without an enrolled host or any bridge files/process.
+func TestOrdinaryCommandsWithoutHostEnrollmentOrBridge(t *testing.T) {
+	h := newPasskeyLiveCoreHarness(t)
+	bootstrap := h.postCore(t, "/auth/passkey/dev/register", "", map[string]any{"display_name": "Unenrolled operator", "bootstrap_token": h.bootstrapToken})
+	h.humanTokens["operator"] = mustStringPath(t, bootstrap, "tokens.access_token")
+	created := h.runCLIExpectOK(t, "operator", map[string]any{"title": "Unenrolled direct command", "source": map[string]any{"authority": "nexus"}}, "work", "create", "--from-file", "-")
+	ref := mustStringPath(t, created.Payload, "result.work.ref")
+	h.runCLIExpectOK(t, "operator", nil, "work", "get", ref)
+	h.runCLIExpectOK(t, "operator", nil, "work", "list")
+	for _, path := range []string{filepath.Join(h.homeDir, ".config", "anx", "hosts"), hostbridge.Root(h.homeDir)} {
+		if _, e := os.Stat(path); !os.IsNotExist(e) {
+			t.Fatalf("ordinary command required/created host or bridge state: %s (%v)", path, e)
+		}
+	}
+}

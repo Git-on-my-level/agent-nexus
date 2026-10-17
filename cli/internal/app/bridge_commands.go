@@ -302,6 +302,13 @@ func (a *App) inspectHostBridge(ctx context.Context, doctor bool) (*commandResul
 				return nil, e
 			}
 			checks = append(checks, map[string]any{"check": "migration_complete", "ok": journal.Phase == "complete", "phase": journal.Phase})
+			paused := []string{}
+			for _, path := range journal.Paused {
+				if _, err := os.Lstat(path); err == nil || !os.IsNotExist(err) {
+					paused = append(paused, path)
+				}
+			}
+			checks = append(checks, map[string]any{"check": "migration_paused_resumes", "ok": len(paused) == 0, "paths": paused, "repair": "verify the external outcome, reconcile the retained state and restore its original .json path; never reset attempts"})
 		}
 		raw, readErr := integrations.PrivateRead(filepath.Join(root, "status.json"))
 		var state localBridgeState

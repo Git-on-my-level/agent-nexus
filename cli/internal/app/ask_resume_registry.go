@@ -58,7 +58,15 @@ func askRegistryPath(dir, id string) string {
 	sum := sha256.Sum256([]byte(id))
 	return filepath.Join(dir, hex.EncodeToString(sum[:])+".json")
 }
+func isResumeRegistrationFile(name string) bool {
+	return strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".json.paused")
+}
 func writeAskRegistration(path string, entry askResumeRegistration) error {
+	if _, e := os.Lstat(path + ".paused"); e == nil {
+		return fmt.Errorf("resume outcome is paused for migration reconciliation")
+	} else if !os.IsNotExist(e) {
+		return e
+	}
 	if st, err := os.Lstat(path); err == nil && (!st.Mode().IsRegular() || st.Mode()&os.ModeSymlink != 0) {
 		return fmt.Errorf("unsafe registry entry")
 	}

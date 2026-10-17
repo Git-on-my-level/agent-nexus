@@ -57,7 +57,8 @@ Install/run explicitly opts into one host presence lifecycle. Every 60 seconds,
 one timer sends a separately signed workspace-only snapshot per enrolled
 workspace, under independent two-second deadlines. Fresh proofs cover the exact
 request bytes. Instance IDs are workspace-scoped; monotonic sequences order one
-instance. Sequences advance on every send attempt so an unobserved response cannot wedge
+instance; valid proof timestamps enforce skew/replay only, so NTP steps backward
+do not reject an increasing sequence or a fresh non-retired incarnation. Sequences advance on every send attempt so an unobserved response cannot wedge
 reporting. Core retains retired instance IDs and rejects late updates from them. Core sets last-seen
 and a 300-second expiry, replacing bounded normalized job rows atomically.
 
@@ -94,19 +95,32 @@ auth caches. Real install follows the same preflight before stopping anything:
    job's readiness, and require exactly one supervisor with no legacy consumers.
    Print replaced labels/PIDs and imported counts. Reinstall is idempotent.
 
-Before activation, failed migration can restore saved old units when callback
-outcomes are known. After activation may have run callbacks, it stops the new
-consumer and retains the journal for reconciliation; it never automatically
-starts both generations. A crash during activation is an inspectable blocker.
-Retain journal/source files; inspect `bridge doctor`, reconcile retained callback
-records with their external outcome, and complete cutover only with one consumer.
+Legacy unit files stay in place until the new service is verified healthy.
+Any failed quiesce, bootstrap, start or readiness check stops/disables the new
+service and restores **all** legacy files and their prior loaded/enabled states.
+The journal becomes `rolled_back`; another install retries normally. An interrupted
+journal is recovered automatically before a new attempt, including `activating`.
+
+An already executing/uncertain resume blocks cutover before any service stops.
+If execution races quiescence or new-service startup, its retained record becomes
+`<original>.json.paused` in the same namespace, listed in `migration.json`. Older
+consumers only read `*.json`, so restoring them cannot replay that unknown command.
+Other namespaces resume normally. `bridge doctor` reports the paused namespace;
+new registration cannot overwrite that record. Preserve it until an owner verifies
+the external outcome, sets the retained state to `delivered` or `failed`, and
+renames it back to its original `.json` path. Reset that namespace's cursor for
+acknowledgement replay before retrying install; never reset attempts or command
+identity to force another execution.
+
 Runtime receipts are private under each retained namespace's `runtime-receipts/`.
 An earlier runtime claim without a durable local outcome becomes an inspectable
 `uncertain` receipt and pauses that lane; it is never silently adopted or rerun.
 Doctor also inventories extra/unowned consumers, singleton ownership, migration
 phase, enrollment, namespace safety, runtime uncertainty, and Git writer bindings.
 
-The fixture suite covers the three-workspace custom-wrapper example on both OS
+The fixture suite covers three independent workspace units and a custom wrapper,
+including bootstrap/readiness/quiesce failures, interrupted outcomes, saved
+loaded/enabled states and journal retries on both OS
 managers using temporary homes and fake commands. The real CLI/core test runs
 one foreground service against three disposable workspaces without installing
 an OS unit. Tests never operate an existing service or initialize the task repo.

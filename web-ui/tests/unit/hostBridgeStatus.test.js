@@ -61,3 +61,52 @@ describe("host bridge liveness", () => {
     expect(get(hostBridgeStatus).hosts.a).toBeUndefined();
   });
 });
+
+describe("host bridge initial and failed reads", () => {
+  it("shows loading until a first attempt finishes and retains good data on later errors", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("document", {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    let reject;
+    coreClient.getHostBridgeStatus.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    releases.push(observeHostBridge("old-core", "host"));
+    await vi.advanceTimersByTimeAsync(100);
+    let state = get(hostBridgeStatus);
+    expect(state.checked).toEqual([]);
+    expect(
+      bridgeBadge(
+        { id: "host" },
+        state.hosts.host,
+        Date.now(),
+        !state.checked.includes("host"),
+      ).state,
+    ).toBe("loading");
+    reject(new Error("404"));
+    await Promise.resolve();
+    state = get(hostBridgeStatus);
+    expect(state.checked).toEqual(["host"]);
+    expect(bridgeBadge({ id: "host" }, state.hosts.host).label).toBe(
+      "Bridge unavailable",
+    );
+    const snapshot = {
+      host_id: "host",
+      bridge: { expires_at: new Date(Date.now() + 120000).toISOString() },
+    };
+    coreClient.getHostBridgeStatus.mockResolvedValueOnce({ hosts: [snapshot] });
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(get(hostBridgeStatus).hosts.host).toEqual(snapshot);
+    coreClient.getHostBridgeStatus.mockRejectedValueOnce(new Error("offline"));
+    await vi.advanceTimersByTimeAsync(60000);
+    state = get(hostBridgeStatus);
+    expect(state.error).toBe(true);
+    expect(state.hosts.host).toEqual(snapshot);
+  });
+});

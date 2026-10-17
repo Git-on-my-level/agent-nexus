@@ -20,7 +20,15 @@
       ? $hostBridgeStatus.hosts[host.id]
       : null,
   );
-  let badge = $derived(bridgeBadge(host, observation, now));
+  let badge = $derived(
+    bridgeBadge(
+      host,
+      observation,
+      now,
+      $hostBridgeStatus.workspace !== workspace ||
+        !$hostBridgeStatus.checked.includes(host.id),
+    ),
+  );
   $effect(() => (visible ? observeHostBridge(workspace, host.id) : undefined));
   onMount(() => {
     let observer;

@@ -111,6 +111,9 @@ func TestHostBridgeInstallMigratesThreeWorkspaceWrapperAndPreservesResumeBytes(t
 			bridgeCommandRun = func(_ context.Context, name string, args ...string) (string, string, error) {
 				actions = append(actions, name+" "+strings.Join(args, " "))
 				joined := strings.Join(args, " ")
+				if name == "systemctl" && len(args) > 1 && args[1] == "is-enabled" {
+					return "enabled", "", nil
+				}
 				if strings.Contains(joined, "print") {
 					return "pid = 700\n", "", nil
 				}
@@ -151,7 +154,7 @@ func TestHostBridgeInstallMigratesThreeWorkspaceWrapperAndPreservesResumeBytes(t
 				t.Fatal(preview.Data)
 			}
 			for _, cmd := range actions {
-				if strings.Contains(cmd, "bootout") || strings.Contains(cmd, "disable") {
+				if strings.Contains(cmd, "bootout") || strings.Contains(cmd, " disable ") {
 					t.Fatal("preview mutated a service", actions)
 				}
 			}
@@ -235,7 +238,7 @@ func TestHostBridgeInstallRequiresCoreCapabilityBeforeServiceChanges(t *testing.
 		t.Fatal(e, calls)
 	}
 }
-func TestHostBridgeInstallActivationFailureRetainsJournalAndDoesNotRestartOldConsumer(t *testing.T) {
+func TestHostBridgeInstallActivationFailureRestoresPreviouslyUnloadedSource(t *testing.T) {
 	f := newHookFixture(t)
 	f.run(t, "bridge", "add", "--as", "worker")
 	exe, e := os.Executable()
@@ -259,7 +262,10 @@ func TestHostBridgeInstallActivationFailureRetainsJournalAndDoesNotRestartOldCon
 	bridgeCommandRun = func(_ context.Context, _ string, args ...string) (string, string, error) {
 		line := strings.Join(args, " ")
 		actions = append(actions, line)
-		if strings.HasPrefix(line, "print") {
+		if strings.HasPrefix(line, "print-disabled") {
+			return "{}", "", nil
+		}
+		if strings.HasPrefix(line, "print ") {
 			return "", "Could not find service", fmt.Errorf("missing")
 		}
 		if strings.HasPrefix(line, "bootstrap") && strings.Contains(line, hostbridge.Label) {
@@ -278,7 +284,7 @@ func TestHostBridgeInstallActivationFailureRetainsJournalAndDoesNotRestartOldCon
 	}
 	raw, e := integrations.PrivateRead(filepath.Join(hostbridge.Root(f.home), "migration.json"))
 	var journal bridgeMigrationJournal
-	if e != nil || json.Unmarshal(raw, &journal) != nil || journal.Phase != "activating" || len(journal.Plan.Units) != 1 || string(journal.Plan.Units[0].Content) != content {
+	if e != nil || json.Unmarshal(raw, &journal) != nil || journal.Phase != "rolled_back" || len(journal.Plan.Units) != 1 || string(journal.Plan.Units[0].Content) != content {
 		t.Fatal(journal, e)
 	}
 }
@@ -325,7 +331,7 @@ func TestHostBridgeDoctorInventoryIsReadOnlyAndRemovalRetainsCommands(t *testing
 	oldRun, oldProcesses := bridgeCommandRun, bridgeProcesses
 	t.Cleanup(func() { bridgeCommandRun, bridgeProcesses = oldRun, oldProcesses })
 	bridgeCommandRun = func(_ context.Context, name string, argv ...string) (string, string, error) {
-		if len(argv) == 0 || argv[0] != "print" && !(len(argv) > 1 && argv[0] == "--user" && argv[1] == "show") {
+		if len(argv) == 0 || argv[0] != "print" && argv[0] != "print-disabled" && !(len(argv) > 1 && argv[0] == "--user" && argv[1] == "show") {
 			t.Fatalf("doctor mutated service: %s %v", name, argv)
 		}
 		return "", "Could not find service", fmt.Errorf("missing")
