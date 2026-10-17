@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
@@ -108,6 +109,7 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 		_, _ = serve.Process.Wait()
 	}()
 
+	waitForPMServeConnection(t, h, serveLog)
 	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
 	status := mustStringPath(t, asked.Payload, "result.turn.status")
 	if status != "delivered" {
@@ -160,6 +162,13 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 		"HOME="+h.homeDir,
 		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
 	)
+	serveLog := filepath.Join(t.TempDir(), "pm-serve.log")
+	logFile, err := os.Create(serveLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logFile.Close()
+	serve.Stdout, serve.Stderr = logFile, logFile
 	if err := serve.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -168,6 +177,7 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 		_, _ = serve.Process.Wait()
 	}()
 
+	waitForPMServeConnection(t, h, serveLog)
 	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
 	status := mustStringPath(t, asked.Payload, "result.turn.status")
 	if status != "failed" {
@@ -177,6 +187,21 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	if !strings.Contains(failure, "did not produce a reply") || !strings.Contains(failure, "status 1") {
 		t.Fatalf("failure %q", failure)
 	}
+}
+
+// Process creation is not readiness: pm serve must complete its first authenticated
+// connect before a new PM question can pass the server's onboarding gate.
+func waitForPMServeConnection(t *testing.T, h *liveCoreHarness, logPath string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		presence := h.runCLIExpectOK(t, "pm", nil, "pm", "presence")
+		if mustStringPath(t, presence.Payload, "result.state") == "connected" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("PM runner did not connect before asking: %s", readFileOrEmpty(logPath))
 }
 
 func readFileOrEmpty(path string) string {
