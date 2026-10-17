@@ -117,7 +117,7 @@ enabling its answer job; optional wake/runtime, Git, files and spool jobs are
 configured independently. Add every intended agent/workspace; adding one never
 creates another unit. `run` is the same host supervisor in the foreground and
 shares its singleton lock. Start/stop/status/doctor operate this service only.
-Bare run has no per-agent jobs; explicit legacy per-agent flags remain solely as
+Bare run serves the host registry; explicit legacy per-agent flags remain solely as
 an answers-only rollback executor. The Python runtime is removed.
 
 The local registry pins workspace ID/base URL, enrollment/config directory,
