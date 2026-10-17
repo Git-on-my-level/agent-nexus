@@ -471,6 +471,16 @@ const adapterCommandTable = [
   ["listRuns", "runs.list", (filters) => ({ options: q(filters) })],
   ["getRun", "runs.get", (runId) => p(pathParams({ run_id: runId }))],
   ["listHosts", "hosts.list"],
+  [
+    "listHostSummaries",
+    "hosts.list",
+    () => ({ options: q({ summary: true, limit: 100 }) }),
+  ],
+  [
+    "getHostBridgeStatus",
+    "hosts.bridge_status",
+    (ids) => ({ options: b({ host_ids: ids }) }),
+  ],
   ["getHost", "hosts.get", (hostId) => p(pathParams({ host_id: hostId }))],
   [
     "patchHost",

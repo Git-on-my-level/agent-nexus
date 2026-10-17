@@ -20,11 +20,31 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "help", nil
 	}
 
-	if len(args) >= 2 && args[0] == "bridge" && args[1] == "run" {
-		return "bridge run", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"max-attempts": {kind: preflightFlagString}, "command-timeout": {kind: preflightFlagString}})
+	if len(args) >= 2 && args[0] == "bridge" {
+		flags := map[string]preflightFlagSpec{}
+		switch args[1] {
+		case "install":
+			flags["dry-run"] = preflightFlagSpec{kind: preflightFlagBool}
+		case "remove":
+			flags["as"] = preflightFlagSpec{kind: preflightFlagString}
+		case "add":
+			for _, key := range []string{"as", "runtime", "max-attempts", "command-timeout"} {
+				flags[key] = preflightFlagSpec{kind: preflightFlagString}
+			}
+			for _, key := range []string{"answers", "wake", "git", "spool"} {
+				flags[key] = preflightFlagSpec{kind: preflightFlagBool}
+			}
+		case "run":
+			flags["command-timeout"] = preflightFlagSpec{kind: preflightFlagString}
+			flags["max-attempts"] = preflightFlagSpec{kind: preflightFlagString}
+		case "start", "stop", "status", "doctor":
+		default:
+			return "bridge", preflightSubcommand(args[1:], bridgeSubcommandSpec)
+		}
+		return "bridge " + args[1], preflightFlagUsage(args[2:], flags)
 	}
-	if len(args) >= 2 && args[0] == "bridge" && args[1] == "install" && !bridgeInstallTargetsRuntime(args[2:]) {
-		return "bridge install", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"as": {kind: preflightFlagString}, "dry-run": {kind: preflightFlagBool}})
+	if len(args) >= 2 && args[0] == "host" && args[1] == "bridge-status" {
+		return "host bridge-status", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"from-file": {kind: preflightFlagString}})
 	}
 	if args[0] == "git" {
 		o, e := parseGitOptions(args[1:])

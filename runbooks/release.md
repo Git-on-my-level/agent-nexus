@@ -88,11 +88,11 @@ VERSION="$(./scripts/read-version.sh)"
 ./scripts/build-cli-release-artifacts.sh "$VERSION"
 ```
 
-Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, keeps `web-ui/package.json` aligned automatically, and updates the bridge package version. Use `./scripts/version-managed-files.sh` if you need the canonical release-prep file list. Either update it locally:
+Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, keeps `web-ui/package.json` aligned automatically. Use `./scripts/version-managed-files.sh` if you need the canonical release-prep file list. Either update it locally:
 
 ```bash
 ./scripts/set-version.sh v0.0.4
-git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go adapters/agent-bridge/pyproject.toml web-ui/src/lib/generated/version.js web-ui/package.json
+git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go web-ui/src/lib/generated/version.js web-ui/package.json
 git commit -m "Prepare CLI release v0.0.4"
 git push
 ```
@@ -125,9 +125,19 @@ Raise `MinCompatibleCLI` only when a release breaks CLI/core wire compatibility,
 
 A client below the floor receives HTTP 426 `cli_outdated`. A managed CLI whose update policy is `auto` installs the recommended release with the verified updater and retries the original command once. Policy `notify` or `off`, and every unmanaged install, prints `anx update --version <recommended>` and does not replace the binary.
 
-### Python `anx-agent-bridge` package version sync
+### Host bridge wire transition
 
-[`scripts/sync-version.sh`](../scripts/sync-version.sh) bumps `project.version` in [`adapters/agent-bridge/pyproject.toml`](../adapters/agent-bridge/pyproject.toml) alongside the CLI/core/UI metadata so packaged bridge semver stays aligned with the repo tag. Run it (via `./scripts/set-version.sh` release prep or directly) before you tag. Publishing wheels to PyPI is optional and not wired in OSS CI yet; when you publish, ship the artifact for the tagged version after the Git tag exists so `pip install anx-agent-bridge` does not drift from `anx bridge install`'s pinned source install.
+Migration **107** replaces host-wide bridge expiry with workspace-local host
+presence and per-agent job coverage. Release matching core/CLI/UI together;
+`host_bridge_v1` in `/meta/handshake` is required before install stops any legacy
+consumer. `anx bridge install --dry-run` previews the cutover. There is no Python
+package or per-agent service in this release. The new service remains opt-in;
+Git/spool/wake jobs require explicit registration. File transport is deferred.
+
+Do not use a live host as a migration test. Use temporary HOME and fake service
+managers. Preserve `bridge/migration.json`, the registry and resume roots for
+rollback/reconciliation; do not start two consumers or replay unknown callbacks.
+See [the migration guide](../cli/docs/host-bridge.md).
 
 ### Painpoint status
 

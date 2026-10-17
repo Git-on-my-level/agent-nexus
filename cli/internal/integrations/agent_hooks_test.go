@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -286,5 +287,64 @@ func TestCaptureLoadsLegacyCheckpointWithoutLosingPendingWork(t *testing.T) {
 	s, e = LoadCapture(path)
 	if e != nil || !s.LegacyCheckpoint || len(s.Pending) != 1 {
 		t.Fatal(s, e)
+	}
+}
+
+func TestDrainSelectedLeavesOtherWorkspaceRequestsUntouched(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "queue.json")
+	now := time.Now()
+	other := Pending{Event: Event{Key: "other", Timestamp: now}, Delivery: &Delivery{Key: "other", BaseURL: "http://other.test", Agent: "other", Body: map[string]any{"title": "retain me"}}}
+	own := Pending{Event: Event{Key: "own", Timestamp: now}, Delivery: &Delivery{Key: "own", BaseURL: "http://own.test", Agent: "worker", Body: map[string]any{"title": "send me"}}}
+	q := Queue{Pending: []Pending{other, own}, Ledger: []Receipt{}}
+	if e := AtomicWrite(path, JSON(q)); e != nil {
+		t.Fatal(e)
+	}
+	sent := []string{}
+	e := DrainSelected(ctx, path, func(Event) (Delivery, error) { t.Fatal("frozen request was prepared again"); return Delivery{}, nil }, func(_ context.Context, d Delivery) error { sent = append(sent, d.Key); return nil }, func(p Pending) bool { return p.Delivery.BaseURL == "http://own.test" })
+	if e != nil {
+		t.Fatal(e)
+	}
+	q, e = LoadQueue(path)
+	if e != nil || len(sent) != 1 || sent[0] != "own" || len(q.Pending) != 1 || q.Pending[0].Delivery.Key != "other" || q.Pending[0].Delivery.Body["title"] != "retain me" {
+		t.Fatal(q, e, sent)
+	}
+}
+
+func TestDrainSelectedPreservesExpiredForeignWorkAndDefersExpiredOwnedWork(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.spool.json")
+	old := time.Now().Add(-31 * 24 * time.Hour)
+	q := Queue{Pending: []Pending{{Event: Event{Key: "foreign", Timestamp: old}, Reason: "foreign-reason"}, {Event: Event{Key: "owned", Timestamp: old}, Reason: "pending"}}, Ledger: []Receipt{}}
+	if e := AtomicWrite(path, JSON(q)); e != nil {
+		t.Fatal(e)
+	}
+	called := false
+	e := DrainSelected(context.Background(), path, func(Event) (Delivery, error) { called = true; return Delivery{}, nil }, func(context.Context, Delivery) error { called = true; return nil }, func(p Pending) bool { return p.Event.Key == "owned" })
+	if e == nil || called {
+		t.Fatal("expired background work replayed", called, e)
+	}
+	got, e := LoadQueue(path)
+	if e != nil || len(got.Pending) != 2 || got.Pending[0].Reason != "foreign-reason" || got.Pending[1].Reason != "replay_window_expired" || got.Dropped != 0 {
+		t.Fatal(got, e)
+	}
+}
+
+func TestDrainSelectedStopsBeforeReceiptEviction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.spool.json")
+	q := Queue{Pending: []Pending{}, Ledger: make([]Receipt, MaxLedger-1)}
+	for i := range q.Ledger {
+		q.Ledger[i] = Receipt{Key: fmt.Sprint(i), At: time.Now()}
+	}
+	for _, key := range []string{"one", "two", "three"} {
+		q.Pending = append(q.Pending, Pending{Event: Event{Key: key, Timestamp: time.Now()}, Delivery: &Delivery{Key: key}})
+	}
+	if e := AtomicWrite(path, JSON(q)); e != nil {
+		t.Fatal(e)
+	}
+	calls := 0
+	_ = DrainSelected(context.Background(), path, func(Event) (Delivery, error) { t.Fatal("already frozen"); return Delivery{}, nil }, func(context.Context, Delivery) error { calls++; return nil }, func(Pending) bool { return true })
+	got, e := LoadQueue(path)
+	if e != nil || calls != 1 || len(got.Ledger) != MaxLedger || got.Ledger[0].Key != "0" || len(got.Pending) != 2 {
+		t.Fatal(calls, got, e)
 	}
 }

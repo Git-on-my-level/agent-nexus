@@ -144,7 +144,7 @@ func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
 func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	t.Parallel()
 	output := runHelpCommand(t, "debug", "meta", "doc", "agent-bridge")
-	for _, part := range []string{"one bridge per enrolled host", "anx host token", "anx bridge doctor --config ./bridge.toml", "agentctl run"} {
+	for _, part := range []string{"one optional bridge service per host", "anx bridge add", "anx bridge doctor", "await/batch"} {
 		if !strings.Contains(strings.ToLower(output), strings.ToLower(part)) {
 			t.Fatalf("missing %q in %s", part, output)
 		}

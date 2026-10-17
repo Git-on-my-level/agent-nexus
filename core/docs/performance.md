@@ -1014,3 +1014,42 @@ go test -C core ./internal/storage -run '^Test(BlockerWriteTenThousandAskReferen
 go test -C core ./internal/series -run '^Test(SeriesCapacityTenThousand.*Budget|ExpiredLabelReactivationHonorsCapacity|RevokedSeriesCapacityScaleAndPlan)$' -v
 go test -C core ./internal/primitives -run '^Test(WorkCursorReaderFiltersRestartAndNoEviction|WorkListPaginationAdvancesPastAccessFilteredPages)$'
 ```
+
+## Host bridge presence (migration 107)
+
+`POST /hosts/bridge-status` is an authenticated read, bounded to 100 explicit
+host IDs before scoped host filtering. Two batch queries seek the host/presence
+primary keys and `(host_id,actor_id,kind)` job primary key. Each host admits 33
+actor groups of at most five jobs; at most 32 groups are emitted, without refill
+after denial, with `agents_truncated` for partial detail. Scoped host/agent
+relations apply before returning data. Cost grows with admitted hosts/jobs,
+never the workspace roster, history, or wake log. Expiry is evaluated by callers;
+the UI batches visible hosts and ages badges locally.
+
+`GET /hosts?summary=true&limit=100` admits up to 100 recent machine identities
+through `idx_hosts_created_id(created_at DESC,id)` and scoped host visibility.
+It does no roster, progress, or wake enrichment. `GET /hosts` without summary
+keeps its existing inventory contract. No per-machine HTTP fanout is added.
+
+Signed `POST /hosts/{host_id}/bridge/check-in` replaces a full operational
+snapshot under one transaction. At most 256 actors/five jobs each enter a
+batched indexed enrollment check and job insert; the presence and retired
+instance lookups use their primary keys. No card/event writes or progress
+projection work occur. Workspace-scoped daemon sequences advance even after
+an unobserved response. Migration 107 preserves enrollments and key material,
+drops obsolete shared wake-presence columns, and starts with no liveness data.
+
+`TestHostBridgeStatusBudgetAndPlans` use native SQL
+instrumentation with 10,000 unrelated hosts. The scoped nonempty-denial case
+measured two queries, 166 admitted rows, 20,545 VM steps and no full scans;
+the 100-row summary measured 808 VM steps and 99 bounded ordered index steps.
+With foreign keys enabled, the full 256-actor/1,280-job write snapshot used six
+statements, 60,270 VM steps initially and 84,609 on replacement, with no full scans.
+`TestHostBridgeFullSnapshotWriteBudget` enforces 120,000 VM steps.
+Budgets live in `auth/testdata/host_bridge_budget.json`; no existing budget or
+exact query-plan exception was widened.
+
+```sh
+go test -C core ./internal/auth -run 'TestHostBridge.*Budget' -count=1 -v
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```

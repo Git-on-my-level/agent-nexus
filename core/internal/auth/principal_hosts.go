@@ -18,7 +18,7 @@ func (s *Store) enrichPrincipalHosts(ctx context.Context, principals []AuthPrinc
 		positions[p.AgentID] = i
 	}
 	raw, _ := json.Marshal(ids)
-	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.agent_id,ha.host_id,h.id,h.slug,h.revoked_at,h.bridge_expires_at,
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.agent_id,ha.host_id,h.id,h.slug,h.revoked_at,`+wakePresenceSQL("h.id", "(SELECT actor_id FROM agents WHERE id=ha.agent_id)")+`,
  COALESCE((SELECT json_group_array(name) FROM host_exclusions WHERE host_id=ha.host_id),'[]')
  FROM json_each(?) selected JOIN host_agents ha ON ha.agent_id=selected.value
  LEFT JOIN hosts h ON h.id=ha.host_id`, string(raw))

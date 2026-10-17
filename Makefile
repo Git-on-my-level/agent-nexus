@@ -3,7 +3,6 @@ SHELL := /usr/bin/env bash
 CORE_DIR := core
 CLI_DIR := cli
 WEB_UI_DIR := web-ui
-BRIDGE_DIR := adapters/agent-bridge
 HTTP_RECORD_DIR := tools/anx-http-record
 PYTHON ?= python3
 PRE_COMMIT_BIN := $(CURDIR)/.venv/bin/pre-commit
@@ -27,7 +26,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-test release-check release-patch platform-constraints core-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -168,14 +167,8 @@ http-record-compile: ## Compile a JSONL recording to replay JSON (set ARGS='...'
 http-record-replay: ## Replay a compiled seed JSON against a core (set ARGS='...')
 	./scripts/anx-http-replay $(ARGS)
 
-bridge-setup: ## Set up the bridge-local Python 3.11 virtualenv and deps
-	$(MAKE) -C $(BRIDGE_DIR) setup
-
-bridge-doctor: ## Verify the bridge-local Python/runtime setup
-	$(MAKE) -C $(BRIDGE_DIR) doctor
-
-bridge-test: ## Run bridge unit tests
-	$(MAKE) -C $(BRIDGE_DIR) test
+bridge-test: ## Run host bridge and migration fixture tests
+	cd $(CLI_DIR) && go test ./internal/bridge ./internal/app -run 'Test.*Bridge' -timeout 5m
 
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke
@@ -226,9 +219,6 @@ kill: ## Stop stale dev listeners (CORE_PORT + WEB_UI_PORT) and local MinIO cont
 
 core-%: ## Pass-through target to core Makefile
 	$(MAKE) -C $(CORE_DIR) $*
-
-bridge-%: ## Pass-through target to adapter bridge Makefile
-	$(MAKE) -C $(BRIDGE_DIR) $*
 
 web-ui-%: ## Pass-through target to web-ui Makefile
 	$(MAKE) -C $(WEB_UI_DIR) $*

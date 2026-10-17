@@ -3634,6 +3634,356 @@ export const commandRegistry = [
         "ts_method": "boardsWorkspace"
     },
     {
+        "command_id": "bridge.add",
+        "cli_path": "bridge add",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Pins enrolled workspace/host/actor identity, keeps existing resume roots, and explicitly enables independent jobs.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Pins enrolled workspace/host/actor identity, keeps existing resume roots, and explicitly enables independent jobs.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge add"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.doctor",
+            "bridge.install",
+            "bridge.remove",
+            "bridge.run",
+            "bridge.start",
+            "bridge.status",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.doctor",
+        "cli_path": "bridge doctor",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Checks host readiness, retained namespaces, migration state and elected Git writers.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Checks host readiness, retained namespaces, migration state and elected Git writers.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge doctor"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.install",
+            "bridge.remove",
+            "bridge.run",
+            "bridge.start",
+            "bridge.status",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.install",
+        "cli_path": "bridge install",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Single host unit with ownership-verified migration; preview first. Never silently drops registrations.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Single host unit with ownership-verified migration; preview first. Never silently drops registrations.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge install"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.doctor",
+            "bridge.remove",
+            "bridge.run",
+            "bridge.start",
+            "bridge.status",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.remove",
+        "cli_path": "bridge remove",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Removes a local agent registration without deleting retained commands or receipts; works after revocation.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Stops that registration on the next supervisor tick. Interrupted outcomes remain inspectable; no records are deleted.",
+        "examples": [
+            {
+                "title": "Retire an agent from the host bridge.",
+                "command": "anx bridge remove --as worker --workspace example"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.doctor",
+            "bridge.install",
+            "bridge.run",
+            "bridge.start",
+            "bridge.status",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.run",
+        "cli_path": "bridge run",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Single host supervisor; no per-agent flags. All jobs and signed presence are explicit opt-in.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Single host supervisor; no per-agent flags. All jobs and signed presence are explicit opt-in.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge run"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.doctor",
+            "bridge.install",
+            "bridge.remove",
+            "bridge.start",
+            "bridge.status",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.start",
+        "cli_path": "bridge start",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Starts only the canonical host service.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Starts only the canonical host service.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge start"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.doctor",
+            "bridge.install",
+            "bridge.remove",
+            "bridge.run",
+            "bridge.status",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.status",
+        "cli_path": "bridge status",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Local host service and registration status.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Local host service and registration status.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge status"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.doctor",
+            "bridge.install",
+            "bridge.remove",
+            "bridge.run",
+            "bridge.start",
+            "bridge.stop"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "bridge.stop",
+        "cli_path": "bridge stop",
+        "group": "bridge",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "why": "Stops only the canonical host service; interrupted callback outcomes require reconciliation.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "CLI envelope v2.",
+        "error_codes": [
+            "invalid_args",
+            "invalid_flags",
+            "identity_changed",
+            "migration_blocked"
+        ],
+        "concepts": [
+            "hosts",
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Stops only the canonical host service; interrupted callback outcomes require reconciliation.",
+        "examples": [
+            {
+                "title": "Operate the opt-in host bridge.",
+                "command": "anx bridge stop"
+            }
+        ],
+        "adjacent_commands": [
+            "bridge.add",
+            "bridge.doctor",
+            "bridge.install",
+            "bridge.remove",
+            "bridge.run",
+            "bridge.start",
+            "bridge.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
         "command_id": "brief.get",
         "cli_path": "orient",
         "group": "orient",
@@ -7462,7 +7812,7 @@ export const commandRegistry = [
         "path": "/hosts/{host_id}/bridge/check-in",
         "operation_id": "checkInHostBridge",
         "summary": "Check in host bridge",
-        "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance checks in for all enabled derived agents on the host; no per-agent bridge identity or key is accepted.",
+        "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance sends a complete workspace-local agent/job snapshot, at most 256 KiB. Each actor must belong to this active enrollment and not be excluded. Server expiry is 300 seconds. A different non-retired incarnation may replace the current one only with a signed timestamp strictly newer than its accepted timestamp high-water mark. Within one incarnation, sequence must increase; a backward clock step is accepted without lowering that mark. Proof skew/replay checks still apply. After a restart during a backward clock step, replacement waits until signed time exceeds the stored mark. Only enabled, ready wake jobs imply agent wake-online; answers alone do not.",
         "why": "Record a host bridge heartbeat for wake routing.",
         "input_mode": "json-body",
         "streaming": {
@@ -7486,16 +7836,24 @@ export const commandRegistry = [
         "body_schema": {
             "required": [
                 {
-                    "name": "bridge_instance_id",
+                    "name": "agents",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "config_revision",
+                    "type": "integer"
+                },
+                {
+                    "name": "instance_id",
                     "type": "string"
                 },
                 {
-                    "name": "checked_in_at",
-                    "type": "datetime"
+                    "name": "sequence",
+                    "type": "integer"
                 },
                 {
-                    "name": "expires_at",
-                    "type": "datetime"
+                    "name": "version",
+                    "type": "string"
                 }
             ]
         },
@@ -7503,6 +7861,7 @@ export const commandRegistry = [
             "host_id"
         ],
         "adjacent_commands": [
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -7520,6 +7879,60 @@ export const commandRegistry = [
         ],
         "go_method": "HostsBridgeCheckIn",
         "ts_method": "hostsBridgeCheckIn"
+    },
+    {
+        "command_id": "hosts.bridge_status",
+        "cli_path": "host bridge-status",
+        "group": "host",
+        "method": "POST",
+        "path": "/hosts/bridge-status",
+        "operation_id": "getHostBridgeStatus",
+        "summary": "Read bridge liveness for visible hosts",
+        "description": "Authenticated read-only batch, at most 100 explicit host IDs. Unknown or inaccessible hosts are omitted. Per host admit 33 actor groups through the job primary key, return 32 without refilling after visibility filtering. Fresh host presence never implies wake coverage for unserved agents. No local commands, paths or failures are exposed.",
+        "why": "Inspect per-machine bridge liveness and workspace-local job coverage.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ as_of, hosts }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request"
+        ],
+        "concepts": [
+            "hosts",
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Read-only POST. Partial job coverage never proves absence.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "host_ids",
+                    "type": "list\u003cstring\u003e"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.complete",
+            "hosts.enroll.headless",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsBridgeStatus",
+        "ts_method": "hostsBridgeStatus"
     },
     {
         "command_id": "hosts.enroll.approve",
@@ -7557,6 +7970,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -7624,6 +8038,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
             "hosts.enroll.start",
@@ -7676,6 +8091,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -7764,6 +8180,7 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.poll",
             "hosts.enroll.start",
@@ -7810,6 +8227,7 @@ export const commandRegistry = [
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -7860,6 +8278,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.start",
@@ -7941,6 +8360,7 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -7990,6 +8410,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -8035,6 +8456,7 @@ export const commandRegistry = [
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -8100,6 +8522,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -8151,6 +8574,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -8216,6 +8640,7 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -8262,6 +8687,7 @@ export const commandRegistry = [
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -8312,6 +8738,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
+            "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
@@ -14920,6 +15347,9 @@ export class AnxClient {
     }
     hostsBridgeCheckIn(pathParams, options = {}) {
         return this.invoke("hosts.bridge.check_in", pathParams, options);
+    }
+    hostsBridgeStatus(options = {}) {
+        return this.invoke("hosts.bridge_status", {}, options);
     }
     hostsEnrollApprove(pathParams, options = {}) {
         return this.invoke("hosts.enroll.approve", pathParams, options);

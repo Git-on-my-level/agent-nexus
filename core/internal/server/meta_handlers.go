@@ -31,6 +31,7 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 	}
 	payload := map[string]any{
 		"core_version":            strings.TrimSpace(opts.coreVersion),
+		"capabilities":            []string{"host_bridge_v1"},
 		"api_version":             strings.TrimSpace(opts.apiVersion),
 		"schema_version":          strings.TrimSpace(schemaVersion),
 		"command_registry_digest": strings.TrimSpace(commandRegistryDigest),

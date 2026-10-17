@@ -55,7 +55,7 @@ func TestHostInventoryBatchesSelectedHostsAndBoundsAgents(t *testing.T) {
 	defer ws.Close()
 	for i := 0; i < 3; i++ {
 		id := fmt.Sprintf("host-%d", i)
-		if _, err := ws.DB().ExecContext(ctx, `INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,bridge_expires_at) VALUES(?,?,'Host','user','machine','[]','now','2999-01-01T00:00:00Z')`, id, id); err != nil {
+		if _, err := ws.DB().ExecContext(ctx, `INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES(?,?,'Host','user','machine','[]','now')`, id, id); err != nil {
 			t.Fatal(err)
 		}
 		for j := 0; j < 4; j++ {
@@ -75,7 +75,7 @@ func TestHostInventoryBatchesSelectedHostsAndBoundsAgents(t *testing.T) {
 		t.Fatalf("inventory: %+v total=%d active=%d err=%v", entries, total, active, err)
 	}
 	for _, entry := range entries {
-		if entry.AgentCount != 4 || len(entry.Host.Agents) != 3 || !entry.Host.Agents[0].BridgeOnline || *entry.Host.Agents[0].HostID != entry.Host.ID {
+		if entry.AgentCount != 4 || len(entry.Host.Agents) != 3 || entry.Host.Agents[0].BridgeOnline || *entry.Host.Agents[0].HostID != entry.Host.ID {
 			t.Fatalf("inventory changed: %+v", entry)
 		}
 	}

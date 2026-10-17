@@ -1,6 +1,8 @@
 package app
 
 import (
+	hostbridge "agent-nexus-cli/internal/bridge"
+	"agent-nexus-cli/internal/integrations"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,9 +11,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/workspaceconfig"
@@ -36,11 +38,23 @@ func deliveryTestCfg(serverURL string) config.Resolved {
 
 func holdAnswerBridgeLock(t *testing.T, a *App, serverURL string) {
 	t.Helper()
-	unlock, err := lockAskBridge(filepath.Join(mustAskRegistryDir(t, a, serverURL), "bridge.lock"))
-	if err != nil {
-		t.Fatalf("hold bridge lock: %v", err)
+	root, e := a.hostBridgeRoot()
+	if e != nil {
+		t.Fatal(e)
+	}
+	w := hostbridge.Workspace{ID: "fixture", BaseURL: serverURL, HostID: "host", ConfigDir: filepath.Dir(filepath.Dir(mustAskRegistryDir(t, a, serverURL)))}
+	agent := hostbridge.Agent{Name: "worker", ActorID: "actor-1", Jobs: map[string]bool{"answers": true}, RegistryDirs: []string{mustAskRegistryDir(t, a, serverURL)}, Policy: hostbridge.Policy{MaxAttempts: 5, Timeout: time.Minute}}
+	if e = hostbridge.Update(context.Background(), root, func(r *hostbridge.Registry) error { return hostbridge.Register(r, w, agent) }); e != nil {
+		t.Fatal(e)
+	}
+	unlock, e := lockAskBridge(filepath.Join(root, "service.lock"))
+	if e != nil {
+		t.Fatal(e)
 	}
 	t.Cleanup(unlock)
+	if e = integrations.PrivateWrite(filepath.Join(root, "status.json"), integrations.JSON(localBridgeState{At: time.Now(), Ready: map[string]bool{hostbridge.AgentKey(w, agent) + "\x00answers": true}})); e != nil {
+		t.Fatal(e)
+	}
 }
 
 func mustAskRegistryDir(t *testing.T, a *App, serverURL string) string {
@@ -204,6 +218,7 @@ func TestResolveAskDeliveryMatrix(t *testing.T) {
 		}
 		cfg := deliveryTestCfg(server.URL)
 		cfg.ConfigDir = filepath.Join(blocked, "config")
+		a.UserHomeDir = func() (string, error) { return blocked, nil }
 		if got := a.answerBridgeState(cfg); got != answerBridgeUnknown {
 			t.Fatalf("probe state %v, want unknown", got)
 		}
@@ -392,207 +407,5 @@ func TestConfigAskDeliverySetAndShow(t *testing.T) {
 	out.Reset()
 	if exit := a.Run([]string{"--json", "--as", "worker", "config", "ask-delivery", "sometimes"}); exit == 0 {
 		t.Fatal("invalid mode accepted")
-	}
-}
-
-func TestBridgeUnitInstallDryRunAndIdempotentWrite(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unit install targets launchd/systemd hosts")
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{}`)
-	}))
-	defer server.Close()
-
-	a, out := deliveryTestApp(t, server.URL, nil)
-	if exit := a.Run([]string{"--json", "--as", "worker", "bridge", "install", "--dry-run"}); exit != 0 {
-		t.Fatalf("dry-run exit=%d output=%s", exit, out.String())
-	}
-	plan := envelopeResult(t, out)
-	if plan["dry_run"] != true || anyString(plan["agent"]) != "worker" {
-		t.Fatalf("plan=%#v", plan)
-	}
-	content := anyString(plan["content"])
-	if runtime.GOOS == "darwin" {
-		if !strings.Contains(content, "<string>bridge</string>") || !strings.Contains(content, "<string>worker</string>") || !strings.Contains(content, "KeepAlive") {
-			t.Fatalf("plist missing bridge invocation: %s", content)
-		}
-	} else if !strings.Contains(content, "bridge run --as worker") || !strings.Contains(content, "WantedBy=default.target") {
-		t.Fatalf("unit missing bridge invocation: %s", content)
-	}
-	home, _ := a.UserHomeDir()
-	if !strings.HasPrefix(anyString(plan["unit_path"]), home) {
-		t.Fatalf("unit path not anchored to HOME: %s (home %s)", plan["unit_path"], home)
-	}
-}
-
-func TestBridgeUnitInstallWritesOnceThenReportsCurrent(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unit install targets launchd/systemd hosts")
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{}`)
-	}))
-	defer server.Close()
-
-	a, _ := deliveryTestApp(t, server.URL, map[string]string{"ANX_BASE_URL": server.URL})
-	var wrote []string
-	var commands [][]string
-	originalMkdir, originalWrite, originalRead, originalRun := bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun
-	originalLstat, originalChmod, originalRename, originalStat := bridgeLstat, bridgeChmod, bridgeRename, bridgeStat
-	t.Cleanup(func() {
-		bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun = originalMkdir, originalWrite, originalRead, originalRun
-		bridgeLstat, bridgeChmod, bridgeRename, bridgeStat = originalLstat, originalChmod, originalRename, originalStat
-	})
-	bridgeMkdirAll = func(path string, perm os.FileMode) error { return nil }
-	bridgeReadFile = func(path string) ([]byte, error) { return nil, os.ErrNotExist }
-	bridgeLstat = func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist }
-	bridgeStat = func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist }
-	bridgeChmod = func(path string, perm os.FileMode) error { return nil }
-	bridgeWriteFile = func(path string, data []byte, perm os.FileMode) error {
-		wrote = append(wrote, string(data))
-		return nil
-	}
-	bridgeRename = func(from, to string) error {
-		content := wrote[len(wrote)-1]
-		bridgeReadFile = func(string) ([]byte, error) { return []byte(content), nil }
-		return nil
-	}
-	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
-		commands = append(commands, append([]string{name}, args...))
-		return "", "", nil
-	}
-	cfg := deliveryTestCfg(server.URL)
-	first, err := a.runBridgeUnitInstall(context.Background(), []string{"--as", "worker"}, cfg)
-	if err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	if len(wrote) != 1 || first.Data.(map[string]any)["started"] != true {
-		t.Fatalf("first install wrote=%d data=%#v", len(wrote), first.Data)
-	}
-	assertBridgeUnitActivateCommands(t, commands, false)
-	commands = nil
-	second, err := a.runBridgeUnitInstall(context.Background(), []string{"--as", "worker"}, cfg)
-	if err != nil {
-		t.Fatalf("reinstall: %v", err)
-	}
-	data := second.Data.(map[string]any)
-	if len(wrote) != 1 || data["already_current"] != true {
-		t.Fatalf("second install must be idempotent: wrote=%d data=%#v", len(wrote), data)
-	}
-	assertBridgeUnitActivateCommands(t, commands, true)
-}
-
-func TestBridgeUnitInstallReloadsWhenUnitChanges(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unit install targets launchd/systemd hosts")
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{}`)
-	}))
-	defer server.Close()
-
-	a, _ := deliveryTestApp(t, server.URL, map[string]string{"ANX_BASE_URL": server.URL})
-	var wrote []string
-	var commands [][]string
-	originalMkdir, originalWrite, originalRead, originalRun := bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun
-	originalLstat, originalChmod, originalRename, originalStat := bridgeLstat, bridgeChmod, bridgeRename, bridgeStat
-	t.Cleanup(func() {
-		bridgeMkdirAll, bridgeWriteFile, bridgeReadFile, bridgeCommandRun = originalMkdir, originalWrite, originalRead, originalRun
-		bridgeLstat, bridgeChmod, bridgeRename, bridgeStat = originalLstat, originalChmod, originalRename, originalStat
-	})
-	bridgeMkdirAll = func(path string, perm os.FileMode) error { return nil }
-	bridgeReadFile = func(path string) ([]byte, error) { return []byte("stale unit"), nil }
-	bridgeLstat = func(path string) (os.FileInfo, error) { return nil, os.ErrNotExist }
-	bridgeStat = func(path string) (os.FileInfo, error) { return fakeFileInfo{mode: 0o644}, nil }
-	bridgeChmod = func(path string, perm os.FileMode) error { return nil }
-	bridgeRename = func(from, to string) error { return nil }
-	bridgeWriteFile = func(path string, data []byte, perm os.FileMode) error {
-		wrote = append(wrote, string(data))
-		bridgeReadFile = func(string) ([]byte, error) { return data, nil }
-		return nil
-	}
-	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
-		commands = append(commands, append([]string{name}, args...))
-		if len(args) > 0 && args[0] == "bootout" {
-			return "", "Boot-out failed: 3: No such process", fmt.Errorf("exit status 1")
-		}
-		return "", "", nil
-	}
-	result, err := a.runBridgeUnitInstall(context.Background(), []string{"--as", "worker"}, deliveryTestCfg(server.URL))
-	if err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	data := result.Data.(map[string]any)
-	if len(wrote) != 1 || data["already_current"] != false || data["started"] != true {
-		t.Fatalf("changed unit must be rewritten and started: wrote=%d data=%#v", len(wrote), data)
-	}
-	assertBridgeUnitActivateCommands(t, commands, false)
-}
-
-func assertBridgeUnitActivateCommands(t *testing.T, commands [][]string, alreadyCurrent bool) {
-	t.Helper()
-	joined := make([]string, len(commands))
-	for i, command := range commands {
-		joined[i] = strings.Join(command, " ")
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		if len(commands) < 2 || !strings.Contains(joined[0], "bootout") || !strings.Contains(joined[1], "bootstrap") {
-			t.Fatalf("expected bootout then bootstrap, got %q", joined)
-		}
-	case "linux":
-		if len(commands) < 2 || !strings.Contains(joined[0], "daemon-reload") || !strings.Contains(joined[1], "enable") || !strings.Contains(joined[1], "--now") {
-			t.Fatalf("expected daemon-reload then enable --now, got %q", joined)
-		}
-		hasRestart := false
-		for _, command := range joined {
-			if strings.Contains(command, "restart") {
-				hasRestart = true
-			}
-		}
-		if alreadyCurrent && hasRestart {
-			t.Fatalf("unchanged reinstall should not restart: %q", joined)
-		}
-		if !alreadyCurrent && !hasRestart {
-			t.Fatalf("changed or first install should restart the unit: %q", joined)
-		}
-	default:
-		if len(commands) == 0 {
-			t.Fatalf("expected activation commands, got none")
-		}
-	}
-}
-
-func TestBridgeUnitPlanContentPerPlatform(t *testing.T) {
-	plan, err := answerBridgeUnitPlan("/srv/anx-it", "worker.host", "/usr/local/bin/anx", "/srv/anx-it/.config/anx/logs/bridge.log", map[string]string{"ANX_BASE_URL": "https://core.example.test"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS == "darwin" {
-		if !strings.Contains(plan.Content, "<string>worker.host</string>") || !strings.Contains(plan.Content, "RunAtLoad") {
-			t.Fatalf("plist missing agent: %s", plan.Content)
-		}
-	} else if !strings.Contains(plan.Content, "bridge run --as worker.host") {
-		t.Fatalf("unit missing agent: %s", plan.Content)
-	}
-	if runtime.GOOS == "linux" && !strings.Contains(plan.Content, "ANX_BASE_URL=https://core.example.test") {
-		t.Fatalf("unit missing env: %s", plan.Content)
-	}
-	if runtime.GOOS == "darwin" && (!strings.Contains(plan.Content, "<key>ANX_BASE_URL</key>") || !strings.Contains(plan.Content, "EnvironmentVariables")) {
-		t.Fatalf("plist missing env: %s", plan.Content)
-	}
-	if plan.Path == "" || plan.Label == "" || len(plan.StartArgs) == 0 {
-		t.Fatalf("incomplete plan: %#v", plan)
-	}
-	plan, err = answerBridgeUnitPlan("/srv/anx-it", "wo%rker", "/opt/anx", "/var/log/anx/x.log", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS == "linux" && strings.Contains(plan.Content, "%r") && !strings.Contains(plan.Content, "wo%%rker") {
-		t.Fatalf("unescaped %% in systemd unit: %s", plan.Content)
 	}
 }

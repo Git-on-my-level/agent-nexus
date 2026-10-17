@@ -435,6 +435,11 @@
   },
   {
     "method": "GET",
+    "path": "/brief",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
     "path": "/cards",
     "policy": "collection"
   },
@@ -507,6 +512,49 @@
     "method": "POST",
     "path": "/cards/{card_id}/trash",
     "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/curation/candidates",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/curation/metrics",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/proposals",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/run",
+    "policy": "maintenance"
+  },
+  {
+    "method": "POST",
+    "path": "/curation/ungroup",
+    "policy": "reference-write"
+  },
+  {
+    "method": "GET",
+    "path": "/deliveries",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "POST",
+    "path": "/deliveries/claim",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "POST",
+    "path": "/deliveries/{delivery_id}/receipt",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
   },
   {
     "method": "POST",
@@ -670,6 +718,11 @@
     "policy": "collection"
   },
   {
+    "method": "POST",
+    "path": "/hosts/bridge-status",
+    "policy": "collection"
+  },
+  {
     "method": "DELETE",
     "path": "/hosts/{host_id}",
     "policy": "maintenance"
@@ -747,6 +800,18 @@
     "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
   },
   {
+    "method": "GET",
+    "path": "/notification-settings",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
+    "method": "PUT",
+    "path": "/notification-settings",
+    "policy": "independent",
+    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+  },
+  {
     "method": "POST",
     "path": "/ops/blob-usage/rebuild",
     "policy": "collection"
@@ -759,11 +824,6 @@
   {
     "method": "GET",
     "path": "/ops/usage-summary",
-    "policy": "collection"
-  },
-  {
-    "method": "GET",
-    "path": "/brief",
     "policy": "collection"
   },
   {
@@ -808,10 +868,10 @@
     "reason": "Channel-to-actor binding contains no canonical resource refs; PM tests enforce actor and channel authorization."
   },
   {
-    "method": "GET",
-    "path": "/pm/presence",
+    "method": "POST",
+    "path": "/pm/connect",
     "policy": "independent",
-    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
+    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
   },
   {
     "method": "GET",
@@ -865,6 +925,12 @@
   },
   {
     "method": "POST",
+    "path": "/pm/disconnect",
+    "policy": "independent",
+    "reason": "Selected authenticated PM alone can reset onboarding and terminate unfinished PM turns. Returns connection state only; unrelated principals cannot reset or observe turn data."
+  },
+  {
+    "method": "POST",
     "path": "/pm/ingress/discord",
     "policy": "independent",
     "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
@@ -874,6 +940,12 @@
     "path": "/pm/ingress/telegram",
     "policy": "independent",
     "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/presence",
+    "policy": "independent",
+    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
   },
   {
     "method": "POST",
@@ -1204,72 +1276,5 @@
     "method": "GET",
     "path": "/workspace/dashboard/reports",
     "policy": "collection"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/connect",
-    "policy": "independent",
-    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/disconnect",
-    "policy": "independent",
-    "reason": "Selected authenticated PM alone can reset onboarding and terminate unfinished PM turns. Returns connection state only; unrelated principals cannot reset or observe turn data."
-  },
-  {
-    "method": "GET",
-    "path": "/deliveries",
-    "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
-  },
-  {
-    "method": "POST",
-    "path": "/deliveries/claim",
-    "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
-  },
-  {
-    "method": "POST",
-    "path": "/deliveries/{delivery_id}/receipt",
-    "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
-  },
-  {
-    "method": "GET",
-    "path": "/notification-settings",
-    "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
-  },
-  {
-    "method": "PUT",
-    "path": "/notification-settings",
-    "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
-  },
-  {
-    "method": "GET",
-    "path": "/curation/candidates",
-    "policy": "collection"
-  },
-  {
-    "method": "GET",
-    "path": "/curation/metrics",
-    "policy": "collection"
-  },
-  {
-    "method": "POST",
-    "path": "/curation/proposals",
-    "policy": "reference-write"
-  },
-  {
-    "method": "POST",
-    "path": "/curation/run",
-    "policy": "maintenance"
-  },
-  {
-    "method": "POST",
-    "path": "/curation/ungroup",
-    "policy": "reference-write"
   }
 ]

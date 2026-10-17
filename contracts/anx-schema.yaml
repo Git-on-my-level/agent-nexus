@@ -8,6 +8,10 @@
 version: "0.6.0"
 
 enums:
+  host_bridge_job:
+    enum_policy: strict
+    values: [answers, wake, git, files, spool]
+
   priority:
     enum_policy: strict
     values: [p0, p1, p2, p3]

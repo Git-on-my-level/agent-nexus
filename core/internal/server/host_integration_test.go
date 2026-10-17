@@ -165,7 +165,7 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "DELETE", url+"/hosts/"+id, access, nil)
 	hostStatus(t, status, 403, p)
-	status, p = hostHTTP(t, "POST", url+"/hosts/"+id+"/bridge/check-in", access, map[string]any{"bridge_instance_id": "bad", "checked_in_at": time.Now().UTC().Format(time.RFC3339), "expires_at": time.Now().Add(time.Minute).UTC().Format(time.RFC3339)})
+	status, p = hostHTTP(t, "POST", url+"/hosts/"+id+"/bridge/check-in", access, map[string]any{"instance_id": "bad", "sequence": 1, "config_revision": 1, "version": "test", "agents": []any{}})
 	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollment-tokens", admin, nil)
 	hostStatus(t, status, 200, p)
@@ -194,8 +194,33 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	hostStatus(t, status, 200, p)
 	status, p = hostHTTP(t, "GET", url+"/hosts/"+id, access, nil)
 	hostStatus(t, status, 200, p)
-	status, p = hostSignedHTTP(t, "POST", url+"/hosts/"+id+"/bridge/check-in", id, keyID, "bridge-check-in", priv, map[string]any{"bridge_instance_id": "bridge-1", "checked_in_at": time.Now().UTC().Format(time.RFC3339), "expires_at": time.Now().Add(time.Minute).UTC().Format(time.RFC3339)})
+	status, p = hostSignedHTTP(t, "POST", url+"/hosts/"+id+"/bridge/check-in", id, keyID, "bridge-check-in", priv, map[string]any{"instance_id": "bridge-1", "sequence": 1, "config_revision": 1, "version": "test", "agents": []any{map[string]any{"actor_id": agent["actor_id"], "jobs": []any{map[string]any{"kind": "wake", "enabled": true, "ready": true}}}}})
 	hostStatus(t, status, 200, p)
+	// Proof freshness is independent of snapshot ordering. A small backwards
+	// clock step must not make a healthy bridge stale, but exact proofs and
+	// retired incarnations still cannot reclaim presence.
+	checkIn := map[string]any{"instance_id": "bridge-1", "sequence": 2, "config_revision": 1, "version": "test", "agents": []any{map[string]any{"actor_id": agent["actor_id"], "jobs": []any{map[string]any{"kind": "wake", "enabled": true, "ready": true}}}}}
+	checkInURL := url + "/hosts/" + id + "/bridge/check-in"
+	steppedAt := time.Now().Add(-4 * time.Minute).UTC().Format(time.RFC3339Nano)
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, steppedAt)
+	hostStatus(t, status, 200, p)
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, steppedAt)
+	hostStatus(t, status, 401, p)
+	checkIn["instance_id"], checkIn["sequence"] = "bridge-2", 1
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 200, p)
+	checkIn["instance_id"] = "delayed-unseen"
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().Add(-2*time.Minute).UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 400, p)
+	checkIn["instance_id"], checkIn["sequence"] = "bridge-2", 2
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 200, p)
+	checkIn["instance_id"], checkIn["sequence"] = "bridge-1", 3
+	status, p = hostSignedHTTP(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn)
+	hostStatus(t, status, 400, p)
+	checkIn["instance_id"] = "bridge-3"
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().Add(-6*time.Minute).UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 401, p)
 	principals, _, err := env.authStore.ListPrincipals(context.Background(), auth.AuthPrincipalListFilter{})
 	if err != nil {
 		t.Fatal(err)
@@ -530,7 +555,7 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 	}
 	checkRoster(false)
 	status, p = hostSignedHTTP(t, "POST", url+"/hosts/"+hostID+"/bridge/check-in", hostID, keyID, "bridge-check-in", priv,
-		map[string]any{"bridge_instance_id": "bridge-1", "checked_in_at": time.Now().UTC().Format(time.RFC3339), "expires_at": time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339)})
+		map[string]any{"instance_id": "bridge-1", "sequence": 1, "config_revision": 1, "version": "test", "agents": []any{map[string]any{"actor_id": agent["actor_id"], "jobs": []any{map[string]any{"kind": "wake", "enabled": true, "ready": true}}}}})
 	hostStatus(t, status, 200, p)
 	checkRoster(true)
 	change = awaitSSEEvent(t, changes, 2*time.Second)

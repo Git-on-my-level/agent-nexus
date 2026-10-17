@@ -47,7 +47,7 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "host identity", Kind: "manual", Summary: "Host enrollment and derived-agent identity resolution."},
 	{Path: "env", Kind: "manual", Summary: "Supported ANX_* environment variables and precedence."},
 	{Path: "config", Kind: "manual", Summary: "CLI config surface: effective settings and their sources."},
-	{Path: "agent-bridge", Kind: "manual", Summary: "Install and operate one `anx-agent-bridge` runtime per enrolled host."},
+	{Path: "agent-bridge", Kind: "manual", Summary: "Install and operate one optional host bridge service across all registered workspaces and agents."},
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@name.host` wake routing and host bridge presence work."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
 	{Path: "provenance", Kind: "manual", Summary: "Deterministic provenance walk reference and examples."},

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `39`
+- Groups: `40`
 
 ## `topics`
 
@@ -144,6 +144,19 @@ Generated from `contracts/anx-openapi.yaml`.
   - `boards.unarchive` (`boards unarchive`)
   - `boards.workspace` (`boards workspace`)
 
+## `bridge`
+
+- Commands: `8`
+- Command IDs:
+  - `bridge.add` (`bridge add`)
+  - `bridge.doctor` (`bridge doctor`)
+  - `bridge.install` (`bridge install`)
+  - `bridge.remove` (`bridge remove`)
+  - `bridge.run` (`bridge run`)
+  - `bridge.start` (`bridge start`)
+  - `bridge.status` (`bridge status`)
+  - `bridge.stop` (`bridge stop`)
+
 ## `cards`
 
 - Commands: `13`
@@ -241,9 +254,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `host`
 
-- Commands: `15`
+- Commands: `16`
 - Command IDs:
   - `hosts.bridge.check_in` (`host bridge check-in`)
+  - `hosts.bridge_status` (`host bridge-status`)
   - `hosts.enroll.approve` (`host enrollments approve`)
   - `hosts.enroll.complete` (`host enroll complete`)
   - `hosts.enroll.deny` (`host enrollments deny`)

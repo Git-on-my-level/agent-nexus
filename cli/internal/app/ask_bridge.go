@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,69 +14,66 @@ import (
 	"strings"
 	"time"
 
+	hostbridge "agent-nexus-cli/internal/bridge"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/integrations"
 	"agent-nexus-cli/internal/streaming"
 )
 
-func (a *App) runAskBridge(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	fs := newSilentFlagSet("bridge run")
-	maxAttempts := fs.Int("max-attempts", 5, "Maximum command attempts (1..20)")
-	timeout := fs.Duration("command-timeout", 30*time.Minute, "Maximum resume command duration")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	if len(fs.Args()) != 0 || *maxAttempts < 1 || *maxAttempts > 20 || *timeout <= 0 {
-		return nil, errnorm.Usage("invalid_args", "bridge run accepts --max-attempts 1..20 and a positive --command-timeout")
-	}
-	cfg, err := a.resolveHostAgent(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	dir, err := a.askRegistryDir(cfg)
-	if err != nil {
-		return nil, err
-	}
-	unlock, err := lockAskBridgeReady(filepath.Join(dir, "bridge.lock"))
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	backoff := time.Second
-	for ctx.Err() == nil {
-		err = a.consumeAskWakes(ctx, cfg, dir, *maxAttempts, *timeout)
-		if ctx.Err() != nil {
-			break
-		}
-		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
-			fmt.Fprintf(os.Stderr, "anx bridge run: %v\n", err)
-		}
-		timer := time.NewTimer(backoff)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-		case <-timer.C:
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			backoff = time.Second
-		}
-		if backoff < 30*time.Second {
-			backoff *= 2
-		}
-	}
-	return &commandResult{Data: map[string]any{"stopped": true}}, nil
-}
 func (a *App) consumeAskWakes(ctx context.Context, cfg config.Resolved, dir string, maxAttempts int, timeout time.Duration) error {
-	files, err := os.ReadDir(dir)
+	return a.consumeRegisteredWakes(ctx, cfg, []string{dir}, maxAttempts, timeout, true, nil, nil)
+}
+func (a *App) consumeHostWakes(ctx context.Context, cfg config.Resolved, agent hostbridge.Agent, executors chan struct{}) error {
+	if len(agent.RegistryDirs) == 0 {
+		return fmt.Errorf("missing registered namespace")
+	}
+	// Both the host service and rollback executors use this namespace fence.
+	// A second consumer must never execute the same retained command concurrently.
+	unlock, err := lockAskBridgeReady(filepath.Join(agent.RegistryDirs[0], "consumer.lock"))
 	if err != nil {
 		return err
 	}
-	for _, file := range files {
-		if !strings.HasSuffix(file.Name(), ".json") {
-			continue
+	defer unlock()
+	runtime := agent.Runtime
+	if !agent.Jobs["wake"] {
+		runtime = nil
+	}
+	return a.consumeRegisteredWakes(ctx, cfg, agent.RegistryDirs, agent.Policy.MaxAttempts, agent.Policy.Timeout, agent.Jobs["answers"], runtime, executors)
+}
+func resumePaths(dirs []string) ([]string, error) {
+	paths := []string{}
+	for _, dir := range dirs {
+		files, e := os.ReadDir(dir)
+		if e != nil {
+			return nil, e
 		}
-		path := filepath.Join(dir, file.Name())
+		if len(files) > 10000 {
+			return nil, fmt.Errorf("resume registry capacity exceeded")
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f.Name(), ".json") {
+				paths = append(paths, filepath.Join(dir, f.Name()))
+			}
+		}
+	}
+	return paths, nil
+}
+func (a *App) consumeRegisteredWakes(ctx context.Context, cfg config.Resolved, dirs []string, maxAttempts int, timeout time.Duration, answers bool, runtime *hostbridge.Runtime, executors chan struct{}) error {
+	if len(dirs) == 0 {
+		return fmt.Errorf("missing registered namespace")
+	}
+	dir := dirs[0]
+
+	files, err := resumePaths(dirs)
+	if err != nil {
+		return err
+	}
+	for _, path := range files {
+		if !answers {
+			break
+		}
 		entry, e := readAskRegistration(path)
 		if e != nil {
 			return e
@@ -151,26 +147,30 @@ func (a *App) consumeAskWakes(ctx context.Context, cfg config.Resolved, dir stri
 		}
 		instance := "answer-" + host.ID + "-" + filepath.Base(dir)
 		if !strings.HasPrefix(anyString(receipt["wakeup_id"]), "ask-delivery-") {
+			if runtime != nil {
+				if err = a.deliverRuntimeWake(ctx, cfg, dir, *runtime, receipt, executors, timeout); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if !answers {
 			continue
 		}
 		status := anyString(receipt["delivery_status"])
-		if status != "requested" && !(status == "claimed" && anyString(receipt["bridge_instance_id"]) == instance) {
+		if status != "requested" && status != "claimed" {
 			continue
 		}
 		refs := map[string]bool{}
 		for _, ref := range asSlice(receipt["related_refs"]) {
 			refs[anyString(ref)] = true
 		}
-		files, err := os.ReadDir(dir)
+		files, err := resumePaths(dirs)
 		if err != nil {
 			return err
 		}
 		entries := map[string]askResumeRegistration{}
-		for _, file := range files {
-			if !strings.HasSuffix(file.Name(), ".json") {
-				continue
-			}
-			path := filepath.Join(dir, file.Name())
+		for _, path := range files {
 			entry, e := readAskRegistration(path)
 			if e != nil {
 				return e
@@ -183,6 +183,21 @@ func (a *App) consumeAskWakes(ctx context.Context, cfg config.Resolved, dir stri
 			continue
 		}
 		wake := anyString(receipt["wakeup_id"])
+		originalInstance := ""
+		for _, entry := range entries {
+			if entry.Wakeup == wake && entry.Instance != "" {
+				if originalInstance != "" && originalInstance != entry.Instance {
+					return fmt.Errorf("conflicting retained wake claims")
+				}
+				originalInstance = entry.Instance
+			}
+		}
+		if originalInstance != "" {
+			instance = originalInstance
+		}
+		if status == "claimed" && anyString(receipt["bridge_instance_id"]) != instance {
+			continue
+		}
 		body := map[string]any{"wakeup_id": wake, "bridge_instance_id": instance}
 		if _, err = a.hostBridgeCall(ctx, cfg, host.ID, "wakeup-claim", "/agent-wakeups/claim", body); err != nil {
 			return err
@@ -211,13 +226,34 @@ func (a *App) consumeAskWakes(ctx context.Context, cfg config.Resolved, dir stri
 			entry.Wakeup = wake
 			for entry.State != "delivered" && entry.State != "failed" && entry.Attempts < maxAttempts {
 				entry.Attempts++
-				entry.State = "pending"
+				entry.State = "executing"
+				entry.Instance = instance
 				if e = writeAskRegistration(path, entry); e != nil {
 					return e
 				}
+				if executors != nil {
+					select {
+					case executors <- struct{}{}:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
 				runCtx, cancel := context.WithTimeout(ctx, timeout)
-				e = runRegisteredAnswer(runCtx, entry, raw, out)
+				callbackCfg := cfg
+				callbackCfg.ConfigDir = filepath.Dir(filepath.Dir(filepath.Dir(path)))
+				e = runRegisteredAnswerFor(runCtx, entry, raw, out, callbackCfg)
+				timedOut := runCtx.Err() != nil
 				cancel()
+				if executors != nil {
+					<-executors
+				}
+				if timedOut {
+					entry.State = "uncertain"
+					if saveErr := writeAskRegistration(path, entry); saveErr != nil {
+						return saveErr
+					}
+					return fmt.Errorf("resume execution interrupted; reconcile retained outcome")
+				}
 				if e == nil {
 					entry.State = "delivered"
 					break
@@ -270,6 +306,9 @@ func (a *App) consumeAskWakes(ctx context.Context, cfg config.Resolved, dir stri
 	return ctx.Err()
 }
 func runRegisteredAnswer(ctx context.Context, entry askResumeRegistration, raw []byte, out map[string]any) error {
+	return runRegisteredAnswerFor(ctx, entry, raw, out, config.Resolved{})
+}
+func runRegisteredAnswerFor(ctx context.Context, entry askResumeRegistration, raw []byte, out map[string]any, cfg config.Resolved) error {
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", entry.Command)
 	configureAnswerCommand(cmd)
 	cmd.Dir = entry.Dir
@@ -277,10 +316,14 @@ func runRegisteredAnswer(ctx context.Context, entry askResumeRegistration, raw [
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	env := []string{}
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "ANX_ASK_ID=") && !strings.HasPrefix(e, "ANX_CARD_REF=") && !strings.HasPrefix(e, "ANX_OUTCOME=") && !strings.HasPrefix(e, "ANX_RESPONSE_EVENT_ID=") {
-			env = append(env, e)
+	for _, v := range integrations.GitEnvironment(os.Environ()) {
+		key, _, _ := strings.Cut(v, "=")
+		if !strings.HasPrefix(key, "ANX_") && !strings.HasPrefix(key, "AGENTCTL_") {
+			env = append(env, v)
 		}
+	}
+	if cfg.BaseURL != "" {
+		env = append(env, "ANX_BASE_URL="+cfg.BaseURL, "ANX_AS="+cfg.As, "ANX_CONFIG_DIR="+cfg.ConfigDir)
 	}
 	response := asMap(out["response"])
 	cmd.Env = append(env, "ANX_ASK_ID="+entry.AskID, "ANX_CARD_REF="+anyString(out["subject_ref"]), "ANX_OUTCOME="+anyString(response["outcome"]), "ANX_RESPONSE_EVENT_ID="+anyString(response["response_event_id"]))

@@ -21,7 +21,7 @@ func TestPrincipalForActorUsesBoundedIdentityAndSelectedHost(t *testing.T) {
 		`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<4095) INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) SELECT 'unrelated-'||i,'user-'||i,'actor-'||i,'2026-01-01','2026-01-01','{}' FROM n`,
 		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('target-z','codex.mini','target','2025-01-01','2025-01-01','{"principal_kind":"human"}')`,
 		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json,revoked_at) VALUES('target-revoked','revoked','revoked-target','2027-01-01','2027-01-01','{}','now')`,
-		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,bridge_expires_at) VALUES('selected-host','mini','Host','user','machine','[]','now','2999-01-01T00:00:00Z')`,
+		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('selected-host','mini','Host','user','machine','[]','now')`,
 		`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('selected-host','codex','target-z','derived')`,
 		`INSERT INTO host_exclusions(host_id,name) VALUES('selected-host','codex')`,
 	} {
@@ -33,7 +33,7 @@ func TestPrincipalForActorUsesBoundedIdentityAndSelectedHost(t *testing.T) {
 	defer db.Close()
 	s := NewStore(db)
 	p, err := s.PrincipalForActor(ctx, "target")
-	if err != nil || p.AgentID != "target-z" || p.PrincipalKind != "human" || p.HostID != "selected-host" || !p.HostBridgeOnline || !p.HostExcluded {
+	if err != nil || p.AgentID != "target-z" || p.PrincipalKind != "human" || p.HostID != "selected-host" || p.HostBridgeOnline || !p.HostExcluded {
 		t.Fatalf("identity/host changed: %+v %v", p, err)
 	}
 	if counter.Count() != 3 || counter.ReturnedRows() != 3 {

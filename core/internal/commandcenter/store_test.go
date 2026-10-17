@@ -249,7 +249,7 @@ func TestHostIdentitySourceAndBridgePresence(t *testing.T) {
 	at := now.Format(time.RFC3339Nano)
 	expires := now.Add(2 * time.Minute).Format(time.RFC3339Nano)
 	for _, query := range []string{
-		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,bridge_checked_in_at,bridge_expires_at) VALUES('host-1','workstation-a','Mac','operator','workstation','["codex"]','` + at + `','` + at + `','` + expires + `')`,
+		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host-1','workstation-a','Mac','operator','workstation','["codex"]','` + at + `')`,
 		`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('actor-1','Misleading','["agent"]','` + at + `','{}')`,
 		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('agent-1','reviewer.workstation-a','actor-1','` + at + `','` + at + `','{"principal_kind":"agent","identity_kind":"derived","host_id":"wrong-host","name":"wrong"}')`,
 		`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host-1','reviewer','agent-1','adopted')`,
@@ -257,6 +257,12 @@ func TestHostIdentitySourceAndBridgePresence(t *testing.T) {
 		if _, e := s.DB.ExecContext(ctx, query); e != nil {
 			t.Fatal(e)
 		}
+	}
+	if _, e := s.DB.ExecContext(ctx, `INSERT INTO host_bridge_presence VALUES('host-1','test',1,1,'test',?,?,?)`, at, at, expires); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := s.DB.ExecContext(ctx, `INSERT INTO host_bridge_jobs VALUES('host-1','actor-1','wake',1,1)`); e != nil {
+		t.Fatal(e)
 	}
 	identity, e := s.Identity(ctx, "agent-1")
 	if e != nil || identity.HostID != "host-1" || identity.HostSlug != "workstation-a" || identity.Name != "reviewer" || identity.Kind != "adopted" || identity.DisplayName != "reviewer on workstation-a" || identity.Adapter != "generic" {

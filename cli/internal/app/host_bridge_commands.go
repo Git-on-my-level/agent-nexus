@@ -18,7 +18,7 @@ import (
 func init() {
 	localHelperTopics = append(localHelperTopics,
 		localHelperTopic{Path: "host token", Summary: "Print a short-lived derived-agent bearer from the enrolled host.", JSONShape: "`token`, `expires_at`, `agent: {id, handle}", Composition: "Host assertion grant; text mode prints only the token.", Examples: []string{"anx --json host token"}},
-		localHelperTopic{Path: "host bridge check-in", Summary: "Publish an enrolled host bridge check-in.", JSONShape: "Core bridge check-in result", Composition: "Signs the exact request body with the owner-only host key.", Examples: []string{"anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds 180"}},
+		localHelperTopic{Path: "host bridge check-in", Summary: "Publish an enrolled host bridge check-in.", JSONShape: "Core bridge check-in result", Composition: "Signs the exact request body with the owner-only host key.", Examples: []string{"anx host bridge check-in --host-id <id> --from-file ./heartbeat.json"}},
 		localHelperTopic{Path: "host bridge wake claim", Summary: "Claim a durable wake for this host.", JSONShape: "Core wake mutation result", Composition: "Uses a host-signed proof; complete or fail after handling.", Examples: []string{"anx host bridge wake claim --host-id <id> --wakeup-id <id> --instance-id <id>"}},
 		localHelperTopic{Path: "host bridge wake complete", Summary: "Complete a claimed wake for this host.", JSONShape: "Core wake mutation result", Composition: "Uses a host-signed proof.", Examples: []string{"anx host bridge wake complete --host-id <id> --wakeup-id <id> --instance-id <id>"}},
 		localHelperTopic{Path: "host bridge wake fail", Summary: "Record a failed claimed wake for this host.", JSONShape: "Core wake mutation result", Composition: "Uses a host-signed proof and an error summary.", Examples: []string{"anx host bridge wake fail --host-id <id> --wakeup-id <id> --instance-id <id> --error <text>"}},
@@ -74,21 +74,27 @@ func (a *App) runHostBridge(ctx context.Context, args []string, cfg config.Resol
 	}
 	if args[0] == "check-in" {
 		fs := newSilentFlagSet("host bridge check-in")
-		var hostID, instanceID trackedString
-		var ttl int
-		fs.Var(&hostID, "host-id", "Enrolled host ID")
-		fs.Var(&instanceID, "instance-id", "Bridge instance ID")
-		fs.IntVar(&ttl, "ttl-seconds", 0, "Check-in lifetime")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "host bridge check-in", errnorm.Usage("invalid_flags", err.Error())
+		hostID := fs.String("host-id", "", "Enrolled host ID")
+		file := fs.String("from-file", "", "Workspace-only heartbeat JSON snapshot")
+		if e := fs.Parse(args[1:]); e != nil {
+			return nil, "host bridge check-in", errnorm.Usage("invalid_flags", e.Error())
 		}
-		if len(fs.Args()) != 0 || hostID.value == "" || instanceID.value == "" || ttl < 1 || ttl > 3600 {
-			return nil, "host bridge check-in", errnorm.Usage("invalid_args", "--host-id, --instance-id and --ttl-seconds (1..3600) are required")
+		if len(fs.Args()) != 0 || *hostID == "" || *file == "" {
+			return nil, "host bridge check-in", errnorm.Usage("invalid_args", "--host-id and --from-file are required; prefer the host service's timer")
 		}
-		now := time.Now().UTC()
-		body := map[string]any{"bridge_instance_id": instanceID.value, "checked_in_at": now.Format(time.RFC3339Nano), "expires_at": now.Add(time.Duration(ttl) * time.Second).Format(time.RFC3339Nano)}
-		r, err := a.hostBridgeCall(ctx, cfg, hostID.value, "bridge-check-in", "/hosts/"+url.PathEscape(hostID.value)+"/bridge/check-in", body)
-		return r, "host bridge check-in", err
+		raw, e := a.ReadFile(*file)
+		if e != nil {
+			return nil, "host bridge check-in", e
+		}
+		if len(raw) > 256<<10 {
+			return nil, "host bridge check-in", errnorm.Usage("invalid_request", "heartbeat exceeds 256 KiB")
+		}
+		var body map[string]any
+		if e = json.Unmarshal(raw, &body); e != nil {
+			return nil, "host bridge check-in", e
+		}
+		r, e := a.hostBridgeCall(ctx, cfg, *hostID, "bridge-check-in", "/hosts/"+url.PathEscape(*hostID)+"/bridge/check-in", body)
+		return r, "host bridge check-in", e
 	}
 	if args[0] == "wake" && len(args) >= 2 {
 		action := args[1]

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +106,9 @@ func hostRouteAccess(r *http.Request) routeAccessRequirement {
 				return write
 			}
 		}
+	}
+	if path == "/hosts/bridge-status" && method == http.MethodPost {
+		return authenticated
 	}
 	if path == "/hosts" && method == http.MethodGet {
 		return authenticated
@@ -386,8 +390,48 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		writeError(w, 503, "auth_unavailable", "auth store unavailable")
 		return
 	}
+	if r.URL.Path == "/hosts/bridge-status" && r.Method == http.MethodPost {
+		if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+			return
+		}
+		var in struct {
+			HostIDs []string `json:"host_ids"`
+		}
+		if !decodeJSONBody(w, r, &in) {
+			return
+		}
+		if in.HostIDs == nil {
+			hostError(w, auth.ErrInvalidRequest)
+			return
+		}
+		out, err := opts.authStore.HostBridgeStatus(r.Context(), in.HostIDs)
+		if err != nil {
+			hostError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"as_of": time.Now().UTC().Format(time.RFC3339Nano), "hosts": out})
+		return
+	}
 	if r.URL.Path == "/hosts" && r.Method == http.MethodGet {
 		if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+			return
+		}
+		if r.URL.Query().Get("summary") == "true" {
+			limit := 100
+			if raw := r.URL.Query().Get("limit"); raw != "" {
+				var e error
+				limit, e = strconv.Atoi(raw)
+				if e != nil {
+					hostError(w, auth.ErrInvalidRequest)
+					return
+				}
+			}
+			hosts, e := opts.authStore.ListHostSummaries(r.Context(), limit)
+			if e != nil {
+				hostError(w, e)
+				return
+			}
+			writeJSON(w, 200, map[string]any{"hosts": hosts})
 			return
 		}
 		byID, err := hostRoster(r.Context(), opts)
@@ -421,15 +465,21 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if !hostProof(w, r, opts, id, "bridge-check-in", raw) {
 			return
 		}
-		var in struct {
-			BridgeInstanceID string `json:"bridge_instance_id"`
-			CheckedInAt      string `json:"checked_in_at"`
-			ExpiresAt        string `json:"expires_at"`
-		}
-		if !decodeJSONBody(w, r, &in) {
+		if len(raw) > 256<<10 {
+			hostError(w, auth.ErrInvalidRequest)
 			return
 		}
-		b, err := opts.authStore.CheckInHostBridge(r.Context(), id, in.BridgeInstanceID, in.CheckedInAt, in.ExpiresAt)
+		var in auth.BridgeCheckIn
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&in) != nil {
+			hostError(w, auth.ErrInvalidRequest)
+			return
+		}
+		if !ensureJSONBodyEOF(w, dec) {
+			return
+		}
+		b, err := opts.authStore.CheckInHostBridge(r.Context(), id, r.Header.Get("X-ANX-Host-Signed-At"), in)
 		if err != nil {
 			hostError(w, err)
 			return

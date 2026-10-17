@@ -14,7 +14,7 @@ Agent Nexus is split into a small set of modules with different jobs:
 - `core/`: canonical state and evidence service. Owns durable organizational truth and evidence-safe mutations.
 - `cli/`: agent-first command-line runtime. Optimized for non-interactive, script-safe, text/JSON-friendly workflows.
 - `web-ui/`: human-operator control surface. Optimized for glanceable visibility, triage, and explicit human intervention.
-- `adapters/`: first-party generic adapters (agent-bridge).
+- `adapters/`: independent optional generic provider adapters.
 - `runbooks/`: operational and release guidance.
 
 ## Progressive Discovery
@@ -27,7 +27,7 @@ Agent Nexus is split into a small set of modules with different jobs:
 - [core/AGENTS.md](core/AGENTS.md)
 - [cli/AGENTS.md](cli/AGENTS.md)
 - [web-ui/AGENTS.md](web-ui/AGENTS.md)
-- `adapters/agent-bridge/AGENTS.md`
+- Host service: `cli/internal/bridge/`, following `cli/AGENTS.md`.
 
 4. If a subdirectory has its own `AGENTS.md`, treat it as a narrower local guide that supplements, rather than replaces, the parent module guide.
 5. Plan validation from component scope outward to repo-level gates.
@@ -71,7 +71,7 @@ existing gaps are rollout work, not permission to add further bypasses.
 - Core behavior change: follow [core/AGENTS.md](core/AGENTS.md).
 - CLI behavior or output change: follow [cli/AGENTS.md](cli/AGENTS.md).
 - UI integration or operator workflow change: follow [web-ui/AGENTS.md](web-ui/AGENTS.md).
-- Adapter runtime/install/setup change: follow `adapters/agent-bridge/AGENTS.md`.
+- Host bridge runtime/install/setup change: follow `cli/AGENTS.md` and `cli/docs/host-bridge.md`.
 
 ## Validation Ladder
 
@@ -154,7 +154,7 @@ Go tests that start the full HTTP/storage stack or real sandbox/process integrat
 - [core/docs/runbook.md](core/docs/runbook.md)
 - [cli/docs/runbook.md](cli/docs/runbook.md)
 - [web-ui/docs/runbook.md](web-ui/docs/runbook.md)
-- `adapters/agent-bridge/README.md`
+- [Host bridge](cli/docs/host-bridge.md)
 
 ## Common Pitfalls
 

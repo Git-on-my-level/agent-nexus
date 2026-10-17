@@ -2,7 +2,7 @@ package router
 
 import "strings"
 
-// WakePacketVersion matches adapters/agent-bridge/anx_agent_bridge/models.py WAKE_PACKET_VERSION.
+// WakePacketVersion identifies the packet consumed by registered host bridge wake jobs.
 const WakePacketVersion = "agent-wake/v1"
 
 type WakePacket struct {

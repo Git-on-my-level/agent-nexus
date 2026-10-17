@@ -101,6 +101,16 @@
         "topic_updated"
       ]
     },
+    "host_bridge_job": {
+      "enum_policy": "strict",
+      "values": [
+        "answers",
+        "files",
+        "git",
+        "spool",
+        "wake"
+      ]
+    },
     "human_attention_response_outcome": {
       "enum_policy": "strict",
       "values": [

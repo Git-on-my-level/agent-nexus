@@ -188,7 +188,10 @@ next_actions}, warnings}`. `warnings` and `next_actions` are always present.
   raw ids, live updates via the existing event stream instead of Reload buttons, docs list
   redundancy, Settings vs Diagnostics grouping, ⌘K palette with actions.
 
-## Bridge (adapters/agent-bridge)
+> Historical runtime references below predate the unified Go host bridge.
+> Current architecture: [agent-hooks-and-bridge.md](agent-hooks-and-bridge.md).
+
+## Host bridge
 
 - One bridge per enrolled host, authenticating with the host identity (no per-agent agent
   homes, no `import-auth`, no copied refresh tokens). It checks in presence for the host
@@ -197,7 +200,7 @@ next_actions}, warnings}`. `warnings` and `next_actions` are always present.
 - When `agentctl` is installed, the bridge launches woken runtimes through `agentctl run`
   with the label `anx.card.<card-slug>` (when the wake has a subject) and a subscription that
   runs `anx runs ingest`, so wake-launched work shows up as runs automatically. The
-  launched process resolves its ANX identity from the agentctl run context.
+  launched process receives explicit workspace/config/agent identity.
 - Delete the per-agent agent-home bridge model and its docs rather than keeping both.
 
 ## agentctl changes
@@ -313,7 +316,7 @@ routes remain.
   records only bounded failure codes in an owner-only local log and exits
   nonzero for retries. The CLI no longer loads `ANX_PROFILE_PATH`; old profiles
   are read only during host adoption. (`cli/internal/app/runs_commands.go`,
-  `cli/internal/config/config.go`, `adapters/agent-bridge/anx_agent_bridge/bridge.py`.)
+  `cli/internal/config/config.go`, `cli/internal/app/host_bridge_wake.go`.)
 - 2026-09-27 (S5 follow-up): The hosted smoke temporarily enables synthetic
   human passkey bootstrap on a marked local workspace to enroll a host, then
   restarts core in hosted mode for authorization and workspace assertions.
@@ -333,22 +336,16 @@ routes remain.
   reader name to permit including an excluded current name; the signed host
   key performs the mutation. (`cli/internal/app/host_resolution.go`,
   `cli/internal/app/host_commands.go`.)
-- 2026-09-27 (S7): A host bridge checks its configured runtime names against
-  all active, non-excluded derived agents returned by `GET /hosts/{id}` before
-  each signed check-in. Core's existing check-in marks every such child online,
-  so the bridge refuses to advertise readiness when even one lacks a runtime.
-  The agentctl subscription is created for a preallocated execution ID before
-  launching the runtime, so short runs cannot finish before subscription
-  creation. CLI managed process state is keyed by core URL and host ID, so two
-  config paths for the same enrollment cannot start separate daemons.
-  (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
-  `adapters/agent-bridge/README.md`, `cli/internal/app/bridge_lifecycle.go`.)
-- 2026-09-27 (S7 review): The bridge keeps unresolved wake outcome reports in
-  memory and retries them on later polls. Reporting failures do not change a
-  successful runtime launch into a failed wake or relaunch it while the bridge
-  remains running. Check-in TTL grows with the refresh interval within core's
-  five-minute limit. (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
-  `adapters/agent-bridge/anx_agent_bridge/anx_client.py`.)
+- 2026-10-17 (host bridge consolidation): one Go supervisor serves registered
+  agents across configured workspaces. A signed host snapshot advertises only
+  per-agent jobs; answers never imply wake routing. Optional agentctl callbacks
+  carry explicit config/base URL/agent arguments. The owner-only registry and
+  singleton are canonical across config roots. (`cli/internal/bridge/`,
+  `cli/internal/app/host_bridge_install.go`, `cli/docs/host-bridge.md`.)
+- Runtime wake receipts survive restart. Confirmed launches retry acknowledgement;
+  interrupted commands pause for reconciliation. Server presence expires after
+  300 seconds independently of client clock ordering.
+  (`cli/internal/app/host_bridge_wake.go`, `core/internal/auth/host_bridge.go`.)
 
 - 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
   each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and

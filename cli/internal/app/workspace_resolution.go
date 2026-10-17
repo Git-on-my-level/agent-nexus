@@ -39,7 +39,7 @@ func workspaceIndependentCommand(args []string) bool {
 	case "import":
 		return isConfigLenientImportCommand(args[1:])
 	case "bridge":
-		return len(args) > 1 && args[1] != "doctor"
+		return len(args) > 1 && args[1] != "add" && args[1] != "remove"
 	}
 	return isWorkCommandGroup(strings.Join(args, " "))
 }

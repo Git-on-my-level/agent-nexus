@@ -1,10 +1,15 @@
 package app
 
 import (
+	hostbridge "agent-nexus-cli/internal/bridge"
+	"agent-nexus-cli/internal/integrations"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
@@ -58,21 +63,47 @@ const (
 	answerBridgeUnknown
 )
 
-// answerBridgeState reports whether an `anx bridge run` holds the answer
-// registry lock for this workspace and actor. The lock lives for the bridge
-// process lifetime, so a held exclusive lock is the truthful per-host-and-agent
-// signal; server-side bridge liveness describes the wake-routing bridge instead.
-// The probe never takes that exclusive lock: doing so races a starting bridge
-// and makes a second ask treat the probe as a live deliverer.
+// Per-agent readiness is reported by the canonical host supervisor. A held
+// singleton alone never enables resume delivery for an unregistered agent.
 func (a *App) answerBridgeState(cfg config.Resolved) answerBridgeProbe {
 	if runtime.GOOS == "windows" {
-		return answerBridgeUnknown // The answer bridge itself requires macOS or Linux.
-	}
-	dir, err := a.askRegistryDir(cfg)
-	if err != nil {
 		return answerBridgeUnknown
 	}
-	return askBridgeLockState(filepath.Join(dir, "bridge.lock"))
+	root, e := a.hostBridgeRoot()
+	if e != nil {
+		return answerBridgeUnknown
+	}
+	if _, statErr := os.Stat(root); os.IsNotExist(statErr) {
+		return answerBridgeAbsent
+	} else if statErr != nil {
+		return answerBridgeUnknown
+	}
+	if askBridgeLockState(filepath.Join(root, "service.lock")) != answerBridgeRunning {
+		return answerBridgeAbsent
+	}
+	r, e := hostbridge.Load(root)
+	if e != nil {
+		return answerBridgeUnknown
+	}
+	raw, e := integrations.PrivateRead(filepath.Join(root, "status.json"))
+	if e != nil {
+		return answerBridgeUnknown
+	}
+	var status localBridgeState
+	if json.Unmarshal(raw, &status) != nil || time.Since(status.At) > 10*time.Second || time.Until(status.At) > time.Second {
+		return answerBridgeUnknown
+	}
+	for _, w := range r.Workspaces {
+		if w.BaseURL != strings.TrimRight(cfg.BaseURL, "/") {
+			continue
+		}
+		for _, agent := range w.Agents {
+			if agent.ActorID == cfg.ActorID && agent.Jobs["answers"] && status.Ready[hostbridge.AgentKey(w, agent)+"\x00answers"] {
+				return answerBridgeRunning
+			}
+		}
+	}
+	return answerBridgeAbsent
 }
 
 // resolveAskDelivery picks the answer-delivery mode for one ask. Filing must
@@ -223,6 +254,9 @@ func (a *App) orientDeliveryHealth(cfg config.Resolved, openAsks []any) (map[str
 	}
 	probe := a.answerBridgeState(cfg)
 	health := map[string]any{"open_resume_asks": openResumeAsks, "bridge_running": probe == answerBridgeRunning}
+	health["recommended_next"] = "anx bridge install"
+	health["registration_next"] = "anx bridge add --as " + cfg.As
+	health["without_bridge"] = "Unattended resumes wait; Git and spool drain are manual without their jobs. Await/batch remain available."
 	if probe == answerBridgeUnknown {
 		// An unverifiable probe is not evidence of absence; stay quiet rather
 		// than alarm on a permissions hiccup.

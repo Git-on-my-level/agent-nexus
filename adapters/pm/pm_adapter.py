@@ -1,4 +1,4 @@
-"""Bound an existing anx-agent-bridge JSON adapter for contextual PM turns.
+"""Bound an existing JSON subprocess provider adapter for contextual PM turns.
 
 Provider/model selection stays in the operator's existing delegate adapter
 settings. This wrapper is a process/time/output boundary, NOT a sandbox. Run it

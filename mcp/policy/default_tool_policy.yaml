@@ -81,6 +81,33 @@ hosted_default_commands:
   - "work.observations.list"
   - "work.refresh.get"
 commands:
+  "bridge.remove":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.add":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.doctor":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.install":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.run":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.start":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.status":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "bridge.stop":
+    classification: unsupported_shell_shaped
+    reason: "host service and execution registration stay on the local CLI"
+  "hosts.bridge_status":
+    classification: exposed_read
+    reason: "bounded workspace-local host liveness and job coverage read"
   "hook":
     classification: unsupported_shell_shaped
     reason: "Local opt-in harness/Git configuration or callback; never a remote MCP action."

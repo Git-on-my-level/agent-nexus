@@ -46,6 +46,118 @@ x-anx-extension-vocabulary:
   x-anx-agent-notes: Idempotency, retries, and protocol caveats.
 # CLI-only commands participate in discovery, never the HTTP route inventory.
 x-anx-local-commands:
+  - x-anx-command-id: bridge.remove
+    x-anx-cli-path: bridge remove
+    x-anx-why: Removes a local agent registration without deleting retained commands or receipts; works after revocation.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Stops that registration on the next supervisor tick. Interrupted outcomes remain inspectable; no records are deleted.
+    x-anx-examples:
+      - title: Retire an agent from the host bridge.
+        command: anx bridge remove --as worker --workspace example
+  - x-anx-command-id: bridge.add
+    x-anx-cli-path: bridge add
+    x-anx-why: Pins enrolled workspace/host/actor identity, keeps existing resume roots, and explicitly enables independent jobs.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Pins enrolled workspace/host/actor identity, keeps existing resume roots, and explicitly enables independent jobs.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge add
+  - x-anx-command-id: bridge.install
+    x-anx-cli-path: bridge install
+    x-anx-why: Single host unit with ownership-verified migration; preview first. Never silently drops registrations.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Single host unit with ownership-verified migration; preview first. Never silently drops registrations.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge install
+  - x-anx-command-id: bridge.run
+    x-anx-cli-path: bridge run
+    x-anx-why: Single host supervisor; no per-agent flags. All jobs and signed presence are explicit opt-in.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Single host supervisor; no per-agent flags. All jobs and signed presence are explicit opt-in.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge run
+  - x-anx-command-id: bridge.start
+    x-anx-cli-path: bridge start
+    x-anx-why: Starts only the canonical host service.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Starts only the canonical host service.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge start
+  - x-anx-command-id: bridge.stop
+    x-anx-cli-path: bridge stop
+    x-anx-why: Stops only the canonical host service; interrupted callback outcomes require reconciliation.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Stops only the canonical host service; interrupted callback outcomes require reconciliation.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge stop
+  - x-anx-command-id: bridge.status
+    x-anx-cli-path: bridge status
+    x-anx-why: Local host service and registration status.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Local host service and registration status.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge status
+  - x-anx-command-id: bridge.doctor
+    x-anx-cli-path: bridge doctor
+    x-anx-why: Checks host readiness, retained namespaces, migration state and elected Git writers.
+    x-anx-input-mode: none
+    x-anx-streaming: {mode: none}
+    x-anx-output-envelope: CLI envelope v2.
+    x-anx-error-codes: [invalid_args, invalid_flags, identity_changed, migration_blocked]
+    x-anx-concepts: [hosts, integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Checks host readiness, retained namespaces, migration state and elected Git writers.
+    x-anx-examples:
+      - title: Operate the opt-in host bridge.
+        command: anx bridge doctor
   - x-anx-command-id: hook
     x-anx-cli-path: hook
     summary: Run an explicitly enabled bounded harness hook.
@@ -7388,6 +7500,9 @@ paths:
       x-anx-concepts: [hosts, agents]
       x-anx-stability: beta
       x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters:
+        - {name: summary, in: query, schema: {type: boolean}, description: Bounded machine-only page without agent/roster enrichment.}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 100}, description: Maximum hosts in a summary page.}
       responses:
         '200': {description: Hosts, content: {application/json: {schema: {$ref: '#/components/schemas/HostsResponse'}}}}
         '401': {$ref: '#/components/responses/ErrorResponse'}
@@ -7465,11 +7580,34 @@ paths:
         '403': {$ref: '#/components/responses/ErrorResponse'}
         '404': {$ref: '#/components/responses/ErrorResponse'}
 
+  /hosts/bridge-status:
+    post:
+      operationId: getHostBridgeStatus
+      summary: Read bridge liveness for visible hosts
+      description: Authenticated read-only batch, at most 100 explicit host IDs. Unknown or inaccessible hosts are omitted. Per host admit 33 actor groups through the job primary key, return 32 without refilling after visibility filtering. Fresh host presence never implies wake coverage for unserved agents. No local commands, paths or failures are exposed.
+      tags: [hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.bridge_status
+      x-anx-cli-path: host bridge-status
+      x-anx-why: Inspect per-machine bridge liveness and workspace-local job coverage.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ as_of, hosts }`.
+      x-anx-error-codes: [auth_required, invalid_request]
+      x-anx-concepts: [hosts, agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Read-only POST. Partial job coverage never proves absence.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HostBridgeStatusRequest'}}}}
+      responses:
+        '200': {description: Host liveness and bounded job coverage, content: {application/json: {schema: {$ref: '#/components/schemas/HostBridgeStatusResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+
   /hosts/{host_id}/bridge/check-in:
     post:
       operationId: checkInHostBridge
       summary: Check in host bridge
-      description: Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|<host_id>|<signed_at>|<base64url(SHA256(raw request body))>` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance checks in for all enabled derived agents on the host; no per-agent bridge identity or key is accepted.
+      description: Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|<host_id>|<signed_at>|<base64url(SHA256(raw request body))>` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance sends a complete workspace-local agent/job snapshot, at most 256 KiB. Each actor must belong to this active enrollment and not be excluded. Server expiry is 300 seconds. A different non-retired incarnation may replace the current one only with a signed timestamp strictly newer than its accepted timestamp high-water mark. Within one incarnation, sequence must increase; a backward clock step is accepted without lowering that mark. Proof skew/replay checks still apply. After a restart during a backward clock step, replacement waits until signed time exceeds the stored mark. Only enabled, ready wake jobs imply agent wake-online; answers alone do not.
       tags: [hosts]
       x-anx-surface: utility
       x-anx-command-id: hosts.bridge.check_in
@@ -9453,28 +9591,72 @@ components:
         display_name: {type: string, minLength: 1, maxLength: 120}
         excluded_names: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
       minProperties: 1
+    HostBridgeJob:
+      type: object
+      additionalProperties: false
+      required: [kind, enabled, ready]
+      properties:
+        kind: {type: string, enum: [answers, wake, git, files, spool]}
+        enabled: {type: boolean}
+        ready: {type: boolean}
+    HostBridgeAgent:
+      type: object
+      additionalProperties: false
+      required: [actor_id, jobs]
+      properties:
+        actor_id: {type: string, minLength: 1, maxLength: 256}
+        jobs: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/HostBridgeJob'}}
     HostBridgeCheckInRequest:
       type: object
       additionalProperties: false
+      description: Workspace-only complete snapshot; omissions clear coverage. Signed timestamp orders incarnations; sequence orders one incarnation. No paths, commands, counters or errors. Server expiry is 300 seconds.
+      required: [instance_id, sequence, config_revision, version, agents]
       properties:
-        bridge_instance_id: {type: string, minLength: 1}
-        checked_in_at: {type: string, format: date-time}
-        expires_at: {type: string, format: date-time, description: Must be after checked_in_at and no more than five minutes in the future.}
-      required: [bridge_instance_id, checked_in_at, expires_at]
+        instance_id: {type: string, minLength: 1, maxLength: 128}
+        sequence: {type: integer, minimum: 1}
+        config_revision: {type: integer, minimum: 0}
+        version: {type: string, minLength: 1, maxLength: 64}
+        agents: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/HostBridgeAgent'}}
+    HostBridgePresence:
+      type: object
+      required: [host_id, instance_id, sequence, version, last_seen_at, expires_at]
+      properties:
+        host_id: {type: string}
+        instance_id: {type: string}
+        sequence: {type: integer}
+        version: {type: string}
+        last_seen_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
     HostBridgeResponse:
       type: object
-      additionalProperties: false
-      properties:
-        bridge:
-          type: object
-          additionalProperties: false
-          properties:
-            host_id: {type: string}
-            bridge_instance_id: {type: string}
-            checked_in_at: {type: string, format: date-time}
-            expires_at: {type: string, format: date-time}
-          required: [host_id, bridge_instance_id, checked_in_at, expires_at]
       required: [bridge]
+      properties:
+        bridge: {$ref: '#/components/schemas/HostBridgePresence'}
+    HostBridgeStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [host_ids]
+      properties:
+        host_ids: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}
+    HostBridgeStatusResponse:
+      type: object
+      required: [as_of, hosts]
+      properties:
+        as_of: {type: string, format: date-time}
+        hosts:
+          type: array
+          items:
+            type: object
+            required: [host_id, revoked_at, bridge, agents, agents_truncated]
+            properties:
+              host_id: {type: string}
+              revoked_at: {type: string, nullable: true, format: date-time}
+              bridge:
+                oneOf:
+                  - {$ref: '#/components/schemas/HostBridgePresence'}
+                  - {type: 'null'}
+              agents: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/HostBridgeAgent'}}
+              agents_truncated: {type: boolean}
     AuthTokenRequest:
       type: object
       description: Existing grant payloads keep their documented fields; host_assertion requires the host fields below.
@@ -11352,7 +11534,13 @@ components:
         core_version, api_version, schema_version, command_registry_digest,
         min_cli_version, recommended_cli_version, cli_download_url,
         core_instance_id, workspace_id, dev_actor_mode, human_auth_mode, and
-        optional workspace_service_identity_id.
+        optional workspace_service_identity_id. capabilities includes host_bridge_v1
+        when signed host snapshots and per-agent bridge jobs are supported.
+      properties:
+        capabilities:
+          type: array
+          items: {type: string}
+          description: Optional supported protocol capabilities; absent means unsupported.
 
     TypedRef:
       type: string

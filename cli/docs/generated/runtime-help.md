@@ -11,7 +11,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `host identity` (manual): Host enrollment and derived-agent identity resolution.
 - `env` (manual): Supported ANX_* environment variables and precedence.
 - `config` (manual): CLI config surface: effective settings and their sources.
-- `agent-bridge` (manual): Install and operate one `anx-agent-bridge` runtime per enrolled host.
+- `agent-bridge` (manual): Install and operate one optional host bridge service across all registered workspaces and agents.
 - `wake-routing` (manual): How `@name.host` wake routing and host bridge presence work.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
@@ -22,7 +22,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `config unmap` (manual): Remove a directory rule.
 - `config show` (manual): Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted).
 - `doctor` (manual): Report workspace resolution and local/network preconditions.
-- `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
+- `bridge` (manual): One optional host service for answers, wake routing, Git and spool jobs.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `git` (local-helper): Opt-in agent context and Git progress integration.
 - `hook` (local-helper): Opt-in agent context and Git progress integration.
@@ -51,6 +51,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `runs list` (command): List launcher runs
 - `runs get` (command): Get one run
 - `host list` (command): List workspace hosts
+- `host bridge-status` (command): Read bridge liveness for visible hosts
 - `auth invites list` (command): List invite tokens
 - `auth invites create` (command): Create invite token
 - `auth invites revoke` (command): Revoke invite
@@ -266,12 +267,11 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `git binding export` (local-helper): Opt-in agent context and Git progress integration.
 - `integrations bind` (local-helper): Opt-in harness integration: bind.
 - `integrations map` (local-helper): Opt-in harness integration: map.
-- `bridge run` (local-helper): Run registered answer commands for the selected agent on this host.
-- `bridge install` (local-helper): Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
-- `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
-- `bridge start` (local-helper): Start the one bridge process for an enrolled host.
-- `bridge stop` (local-helper): Stop a managed host bridge.
-- `bridge status` (local-helper): Inspect one host bridge process.
+- `bridge run` (local-helper): Run the host supervisor, or one legacy answers-only namespace for rollback.
+- `bridge remove` (local-helper): Remove a local registration, preserving commands and receipts.
+- `bridge add` (local-helper): Register an enrolled agent/workspace and enable its selected jobs.
+- `bridge install` (local-helper): Install one host unit and safely migrate legacy consumers.
+- `bridge doctor` (local-helper): Inspect host singleton, namespace safety, jobs and writer bindings.
 - `host token` (local-helper): Print a short-lived derived-agent bearer from the enrolled host.
 - `host bridge check-in` (local-helper): Publish an enrolled host bridge check-in.
 - `host bridge wake claim` (local-helper): Claim a durable wake for this host.
@@ -558,31 +558,25 @@ Config: anx config workspaces lists aliases and the cwd rule; anx config use <al
 
 ## `agent-bridge`
 
-Install and operate one `anx-agent-bridge` runtime per enrolled host.
+Install and operate one optional host bridge service across all registered workspaces and agents.
 
 ```text
-Agent bridge
+One optional bridge service per host, across all enrolled workspaces.
 
-Enroll this machine once with anx host enroll. Run one bridge per enrolled host.
-The bridge obtains short-lived tokens through anx host token --as <name> and
-calls host-signed CLI helpers for check-in and wake mutations. It stores no
-agent keys, copied refresh tokens, or per-agent homes.
+Recommended: anx bridge install, then anx bridge add --as <agent> --workspace <alias>
+anx bridge add --as <agent> [--answers=true] [--git] [--spool] [--runtime <json-file>]
+anx bridge remove --as <agent> [--workspace <alias>]
+anx bridge install [--dry-run]
+anx bridge run
+anx bridge start|stop|status
+anx bridge doctor
 
-Create one bridge.toml with [host] base_url, id, slug, config_dir and one [agents.<name>]
-command array for each active, non-excluded derived agent. Then run:
-
-  anx bridge install
-  anx bridge start --config ./bridge.toml
-  anx bridge status --config ./bridge.toml
-  anx bridge doctor --config ./bridge.toml
-  anx bridge stop --config ./bridge.toml
-
-When agentctl is available, each wake uses agentctl run and a command
-subscription to anx runs ingest. The subscription passes --config-dir and
---base-url because agentctl's command environment has no HOME or ANX variables.
-A card subject adds anx.card.<slug>.
-Without agentctl, the runtime receives ANX_AS=<name>. The runtime should
-post its own response with anx; a run's end does not finish a card.
+Install opts into signed presence reporting; add explicitly enables independent jobs.
+Without the answer job, unattended resumes wait; Git and spool drain remain manual.
+Await/batch and direct commands work without the bridge. Files are a later release.
+Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
+The legacy form serves one answer namespace without host heartbeat or other jobs.
 ```
 
 ## `wake-routing`
@@ -845,29 +839,37 @@ Global flags:
 
 ## `bridge`
 
-One bridge per enrolled host for derived-agent wake routing.
+One optional host service for answers, wake routing, Git and spool jobs.
 
 ```text
 Deliver answers to this host (agent bridge)
 
-  anx bridge install [--as <name>]           install the per-host answer bridge service
+  anx bridge install                        recommended: install the single host service
+  anx bridge add --as <name>                 register this agent in the selected workspace
   anx bridge start|stop                      start or stop the bridge service
   anx bridge status                          show bridge state
   anx bridge doctor                          diagnose delivery for this host
-  anx bridge run                             consume answer wakes in the foreground
+  anx bridge run                             run all registered host jobs in the foreground
 
-Bridge: one process per enrolled host
+Without registered answer delivery, unattended resumes wait. Git and spool drain
+remain manual without their jobs. Await/batch and direct commands need no bridge.
 
-anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]
-anx bridge install [--as <agent>] [--dry-run] keep an anx bridge run alive (launchd/systemd)
-anx host enroll
-anx bridge install --ref <git-ref> (legacy: managed Python wake-routing runtime)
-anx bridge start --config ./bridge.toml
-anx bridge status --config ./bridge.toml
-anx bridge doctor --config ./bridge.toml
-anx bridge stop --config ./bridge.toml
+One optional bridge service per host, across all enrolled workspaces.
 
-Config: [host] base_url, id, slug; one [agents.<name>] command argv per enabled derived agent.
+Recommended: anx bridge install, then anx bridge add --as <agent> --workspace <alias>
+anx bridge add --as <agent> [--answers=true] [--git] [--spool] [--runtime <json-file>]
+anx bridge remove --as <agent> [--workspace <alias>]
+anx bridge install [--dry-run]
+anx bridge run
+anx bridge start|stop|status
+anx bridge doctor
+
+Install opts into signed presence reporting; add explicitly enables independent jobs.
+Without the answer job, unattended resumes wait; Git and spool drain remain manual.
+Await/batch and direct commands work without the bridge. Files are a later release.
+Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
+The legacy form serves one answer namespace without host heartbeat or other jobs.
 ```
 
 ## `import`
@@ -1684,12 +1686,42 @@ Generated Help: host list
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `hosts`, `agents`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host list ... ; anx --json host list ... ; anx host list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host bridge-status`
+
+Read bridge liveness for visible hosts
+
+```text
+Generated Help: host bridge-status
+
+- Command ID: `hosts.bridge_status`
+- CLI path: `host bridge-status`
+- HTTP: `POST /hosts/bridge-status`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Inspect per-machine bridge liveness and workspace-local job coverage.
+- Output: Returns `{ as_of, hosts }`.
+- Error codes: `auth_required`, `invalid_request`
+- Concepts: `hosts`, `agents`
+- Agent notes: Read-only POST. Partial job coverage never proves absence.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+
+Inputs:
+  Required:
+  - body `host_ids` (list<string>)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host bridge-status ... ; anx --json host bridge-status ... ; anx host bridge-status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -9111,7 +9143,7 @@ Generated Help: host enrollments list
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Local Help: host enrollments list
 
@@ -9147,7 +9179,7 @@ Generated Help: host enrollments approve
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`, `host_slug_taken`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -9187,7 +9219,7 @@ Generated Help: host enrollments deny
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -9227,7 +9259,7 @@ Generated Help: host tokens create
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -9274,7 +9306,7 @@ Generated Help: host tokens list
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens revoke`
 
 Local Help: host tokens list
 
@@ -9310,7 +9342,7 @@ Generated Help: host tokens revoke
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`
 
 Inputs:
   Required:
@@ -9350,7 +9382,7 @@ Generated Help: host revoke
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `host_self_revoke`, `not_found`
 - Concepts: `hosts`, `auth`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -9632,28 +9664,85 @@ must use generic/manual anx context. Tool-after is a scan hint, never commit pro
 
 ## `bridge run`
 
-Run registered answer commands for the selected agent on this host.
+Run the host supervisor, or one legacy answers-only namespace for rollback.
 
 ```text
-anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.
+Local Help: bridge run
+
+- Kind: `local helper`
+- Side effect class: `external_side_effect`
+- Summary: Run the host supervisor, or one legacy answers-only namespace for rollback.
+- Composition: Bare bridge run serves the host registry. Explicit --as or ANX_AS selects a single-namespace answers-only rollback executor, preserving its policy and receipts without publishing host presence. New service units clear ANX_AS. See cli/docs/host-bridge.md.
+- JSON body: `stopped`
+- Examples:
+  - `anx bridge run`
+
+Flags:
+  --command-timeout            Legacy rollback consumer command timeout (default 30m); requires --as.
+  --max-attempts               Legacy rollback consumer attempts (1..20, default 5); requires --as.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx bridge run ... ; anx --json bridge run ... ; anx bridge run ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge remove`
+
+Remove a local registration, preserving commands and receipts.
+
+```text
+Local Help: bridge remove
+
+- Kind: `local helper`
+- Side effect class: `local_operational_write`
+- Summary: Remove a local registration, preserving commands and receipts.
+- JSON body: `removed`, `agent`, `retained_records`
+- Examples:
+  - `anx bridge remove --as worker`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx bridge remove ... ; anx --json bridge remove ... ; anx bridge remove ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge add`
+
+Register an enrolled agent/workspace and enable its selected jobs.
+
+```text
+Local Help: bridge add
+
+- Kind: `local helper`
+- Side effect class: `local_operational_write`
+- Summary: Register an enrolled agent/workspace and enable its selected jobs.
+- JSON body: `workspace_id`, `host_id`, `actor_id`, `registered`
+- Examples:
+  - `anx bridge add --as codex`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx bridge add ... ; anx --json bridge add ... ; anx bridge add ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge install`
 
-Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
+Install one host unit and safely migrate legacy consumers.
 
 ```text
 Local Help: bridge install
 
 - Kind: `local helper`
 - Side effect class: `local_operational_write`
-- Summary: Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
-- Composition: Idempotent; --dry-run prints the unit without writing. Legacy runtime: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`.
-- JSON body: `agent`, `unit_path`, `label`, `content`, `start_args`, `wrote`, `started`
+- Summary: Install one host unit and safely migrate legacy consumers.
+- JSON body: `unit_path`, `label`, `replaced`, `imported`, `dry_run`
 - Examples:
-  - `anx bridge install --as <agent>`
-  - `anx bridge install --dry-run --as <agent>`
-  - `anx bridge install --ref <git-ref>`
+  - `anx bridge install --dry-run`
 
 
 Global flags:
@@ -9664,101 +9753,22 @@ Global flags:
 
 ## `bridge doctor`
 
-Check one enrolled-host bridge and its configured runtimes.
+Inspect host singleton, namespace safety, jobs and writer bindings.
 
 ```text
 Local Help: bridge doctor
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Check one enrolled-host bridge and its configured runtimes.
-- Composition: Invoke the bridge's host roster validation.
-- JSON body: `host`, `agents`, `agentctl`
+- Summary: Inspect host singleton, namespace safety, jobs and writer bindings.
+- JSON body: `running`, `registrations`, `checks`
 - Examples:
-  - `anx bridge doctor --config ./bridge.toml`
-
-Flags:
-  --config <path>              One host bridge config.
+  - `anx bridge doctor`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge doctor ... ; anx --json bridge doctor ... ; anx bridge doctor ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge start`
-
-Start the one bridge process for an enrolled host.
-
-```text
-Local Help: bridge start
-
-- Kind: `local helper`
-- Side effect class: `external_side_effect`
-- Summary: Start the one bridge process for an enrolled host.
-- Composition: Start a managed host bridge daemon.
-- JSON body: `config_path`, `pid`, `log_path`
-- Examples:
-  - `anx bridge start --config ./bridge.toml`
-
-Flags:
-  --config <path>              Host bridge config.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge start ... ; anx --json bridge start ... ; anx bridge start ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge stop`
-
-Stop a managed host bridge.
-
-```text
-Local Help: bridge stop
-
-- Kind: `local helper`
-- Side effect class: `local_operational_write`
-- Summary: Stop a managed host bridge.
-- Composition: Stop the host bridge process.
-- JSON body: `config_path`, `pid`, `stopped_at`
-- Examples:
-  - `anx bridge stop --config ./bridge.toml`
-
-Flags:
-  --config <path>              Host bridge config.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge stop ... ; anx --json bridge stop ... ; anx bridge stop ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge status`
-
-Inspect one host bridge process.
-
-```text
-Local Help: bridge status
-
-- Kind: `local helper`
-- Side effect class: `read_only`
-- Summary: Inspect one host bridge process.
-- Composition: Read managed host bridge process state.
-- JSON body: `config_path`, `running`, `pid`, `log_path`
-- Examples:
-  - `anx bridge status --config ./bridge.toml`
-
-Flags:
-  --config <path>              Host bridge config.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge status ... ; anx --json bridge status ... ; anx bridge status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -9797,7 +9807,7 @@ Local Help: host bridge check-in
 - Composition: Signs the exact request body with the owner-only host key.
 - JSON body: Core bridge check-in result
 - Examples:
-  - `anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds 180`
+  - `anx host bridge check-in --host-id <id> --from-file ./heartbeat.json`
 
 
 Global flags:

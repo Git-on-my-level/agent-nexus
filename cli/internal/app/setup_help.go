@@ -13,7 +13,12 @@ var setupJobs = map[string]string{
   anx host enrollments list|approve|deny     (auth-admin) review pending enrollments
   anx host exclude|include <harness>         control which harnesses derive agents here
   anx auth whoami                            confirm host, derived agent and resolution source
+  anx bridge install                        recommended next: one service for this host
+  anx bridge add --as <name>                 register each intended agent/workspace
   anx doctor                                 check workspace resolution and preconditions
+
+Without answer delivery, unattended resumes wait; Git/drain remain manual.
+Await/batch and direct commands work without a bridge.
 `,
 	"tokens": `Issue and revoke headless tokens
 
@@ -51,11 +56,15 @@ var setupJobs = map[string]string{
 `,
 	"bridge": `Deliver answers to this host (agent bridge)
 
-  anx bridge install [--as <name>]           install the per-host answer bridge service
+  anx bridge install                        recommended: install the single host service
+  anx bridge add --as <name>                 register this agent in the selected workspace
   anx bridge start|stop                      start or stop the bridge service
   anx bridge status                          show bridge state
   anx bridge doctor                          diagnose delivery for this host
-  anx bridge run                             consume answer wakes in the foreground
+  anx bridge run                             run all registered host jobs in the foreground
+
+Without registered answer delivery, unattended resumes wait. Git and spool drain
+remain manual without their jobs. Await/batch and direct commands need no bridge.
 `,
 }
 

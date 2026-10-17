@@ -250,3 +250,11 @@ the fixture and the scoped store/SSE regressions when adding a resource relation
 Reference-read batches authorize each candidate through scoped loaders and may
 echo requested identities without metadata. Their JSON decoding retains text,
 size and syntax validation; reference writes retain whole-body ownership checks.
+
+## Host bridge presence
+
+Migration 107 replaces host-wide expiry columns with operational presence and
+per-agent job rows. Signed snapshots are workspace-local and server-expiring;
+only a fresh, enabled, ready `wake` job implies agent wake-online. Presence is
+not progress or authorization. Bridge status reads admit explicit bounded host
+IDs before profile filtering; no workspace roster/history enrichment.

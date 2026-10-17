@@ -161,7 +161,8 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	legacyBridge := cmdPeek == "bridge" && subPeek == "run" && (overrides.As != nil || strings.TrimSpace(a.Getenv("ANX_AS")) != "" || len(remaining) > 2)
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && !legacyBridge && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "report" && subPeek != "publish" && subPeek != "render") ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
@@ -206,7 +207,7 @@ func (a *App) Run(args []string) int {
 	if wizard {
 		resolved.Sources["pm_install_mode"] = "interactive"
 	}
-	if (!wizard || overrides.Workspace != nil) && (!workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
+	if (!wizard || overrides.Workspace != nil) && (!workspaceIndependentCommand(remaining) || legacyBridge || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
 		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
 		if err != nil {
 			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
@@ -285,6 +286,9 @@ func (a *App) Run(args []string) int {
 		warnings = append(result.Warnings, warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
+	if result != nil {
+		actions = append(result.NextActions, actions...)
+	}
 	a.writeAskAutoCreatedWarning(warnings)
 	if root, ok := value.(map[string]any); ok {
 		if ref := ensureCreatedRef(identity.Command, root); ref != "" && !resolved.JSON {
@@ -358,11 +362,12 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 }
 
 type commandResult struct {
-	Workspace  any
-	Data       any
-	Text       string
-	RawWritten bool
-	Warnings   []output.Warning
+	Workspace   any
+	Data        any
+	Text        string
+	RawWritten  bool
+	Warnings    []output.Warning
+	NextActions []output.NextAction
 }
 
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {

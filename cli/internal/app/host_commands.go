@@ -203,6 +203,31 @@ func (a *App) runHost(ctx context.Context, args []string, cfg config.Resolved) (
 	case "token":
 		r, e := a.hostToken(ctx, args[1:], cfg)
 		return r, "host token", e
+	case "bridge-status":
+		fs := newSilentFlagSet("host bridge-status")
+		file := fs.String("from-file", "", "JSON containing at most 100 explicit host_ids")
+		if e := fs.Parse(args[1:]); e != nil {
+			return nil, "host bridge-status", errnorm.Usage("invalid_flags", e.Error())
+		}
+		if len(fs.Args()) != 0 || *file == "" {
+			return nil, "host bridge-status", errnorm.Usage("invalid_args", "--from-file is required")
+		}
+		var raw []byte
+		var e error
+		if *file == "-" {
+			raw, e = a.readStdinBytes(64 << 10)
+		} else {
+			raw, e = a.ReadFile(*file)
+		}
+		if e != nil {
+			return nil, "host bridge-status", e
+		}
+		var body map[string]any
+		if e = json.Unmarshal(raw, &body); e != nil {
+			return nil, "host bridge-status", e
+		}
+		result, e := a.invokeTypedJSON(ctx, cfg, "host bridge-status", "hosts.bridge_status", nil, nil, body)
+		return result, "host bridge-status", e
 	case "bridge":
 		return a.runHostBridge(ctx, args[1:], cfg)
 	case "status", "list":
@@ -394,7 +419,7 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 	}); err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "workspace_alias_persist_failed", "host enrolled; workspace alias could not be saved (inspect anx config workspaces)", err)
 	}
-	data := map[string]any{"host": hostData, "adopted": names, "excluded": excludes.values, "workspace_alias": alias, "base_url": cfg.BaseURL, "workspace_defaulted": workspaceDefaulted}
+	data := map[string]any{"host": hostData, "adopted": names, "excluded": excludes.values, "workspace_alias": alias, "base_url": cfg.BaseURL, "workspace_defaulted": workspaceDefaulted, "recommended_next": "anx bridge install", "without_bridge": "Unattended resumes wait; Git and spool drain are manual without their jobs. Await/batch/direct commands remain available."}
 	if cfg.ConfigDir != "" {
 		data["config_dir"] = cfg.ConfigDir
 	}

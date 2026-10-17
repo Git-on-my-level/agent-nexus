@@ -1452,5 +1452,32 @@
     "reason": "Window fold over the (type, ts) index, capped at 2000 asks and 5000 notes; counts only.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "POST",
+    "path": "/hosts/bridge-status",
+    "body": {
+      "host_ids": ["{host_id}"]
+    },
+    "latency_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "max_vm_steps": 50000,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Explicit host IDs, scoped host/agent relations, at most 33 admitted agent groups per host; native maximum-cohort budget also covered by auth/host_bridge_budget_test.go."
+  },
+  {
+    "method": "GET",
+    "path": "/hosts",
+    "case": "summary",
+    "query": "summary=true&limit=100",
+    "latency_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "max_vm_steps": 50000,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Bounded machine identity selection through idx_hosts_created_id without roster enrichment; separate native budget uses 100 rows."
   }
 ]

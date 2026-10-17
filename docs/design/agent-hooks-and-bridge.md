@@ -1,8 +1,8 @@
 # Agent hooks, Git capture and a first-class bridge
 
 Status: coordinator decisions accepted; single-host bridge supersedes earlier runtime split (2026-10-17).
-**PR 1 implementation follows merged [PR #429](https://github.com/Git-on-my-level/agent-nexus/pull/429).
-PRs 2 and 3 remain follow-up work; this PR does not change the live bridge.** Main proposal: about five minutes; appendix:
+**PR 1 is merged in #431. PR 2 consolidates the host service in this branch;
+PR 3 (files) remains follow-up work. No live service is used for acceptance.** Main proposal: about five minutes; appendix:
 implementation details.
 
 ## Decisions
@@ -136,7 +136,7 @@ An agent is wake-online only when its own wake job is enabled/ready under fresh
 host presence. Answers alone cannot imply wake routing, including for unregistered
 agents. This rule also replaces the host-wide auth/roster online inference.
 
-Agents/Access show per-host Live / Stale (last seen…) / Not reported badges,
+Agents/Access show per-host Live / Stale (last seen…) / No bridge badges,
 including zero-agent hosts, with agent/job detail. Age expiry without reload;
 coalesce visible-host reads. Only workspace-local identity/version/jobs/times
 leave the host; queue counts, paths, errors and resume commands stay local.
@@ -199,7 +199,8 @@ preflight every workspace before stopping old services. Rollback preserves unit/
 never start both supervisors or automatically repeat uncertain callbacks. Update
 participant/catalog/bundle, setup/release docs and module guides. Run focused tests,
 module/test-fast/contract checks and affected Playwright, then terminal exact-head
-ci-ok (no polling). PR 1 is implemented here; PRs 2/3 follow separately.
+ci-ok (no polling). PRs 1/2 are implemented; PR 3 follows separately. Host operation and migration
+are documented in [the host bridge guide](../../cli/docs/host-bridge.md).
 
 Cuts retained: completion/status trailers, patch-ID deduplication, command-text
 inference, recursive watchers, duplicate installer, remote counters/errors, fleet
@@ -233,7 +234,9 @@ Unsupported versions retain manual `anx context` / generic hooks.
   root: `{schema_version:1,revision,workspaces:[{workspace_id,base_url,host_id,
 config_dir,agents:[{name,actor_id,jobs,registry_dirs,execution_policy}]}]}`.
   Exact runtime argv/cwd and resume policy stay local. Pin resolved identities,
-  not mutable default aliases. Different config roots register into this same
+  not mutable default aliases. `bridge remove --as <name> --workspace <alias>` retires a local binding without
+  deleting retained commands or receipts, including after revocation.
+  Different config roots register into this same
   installation; alternate invocation flags cannot create another service/lock.
 - One launchd label `io.agent-nexus.bridge` or systemd user unit
   `anx-bridge.service`, owned by the enrolled OS user. Canonical per-host install
@@ -252,13 +255,19 @@ config_dir,agents:[{name,actor_id,jobs,registry_dirs,execution_policy}]}]}`.
   Derive a workspace-scoped instance ID from the local daemon incarnation; never
   export a machine-global correlation identifier or another workspace's config.
 - Server times govern presence. Atomically accept a newer sequence for the same
-  instance, or a newly signed replacement instance; reject older signed snapshots
-  and stale-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
+  instance through clock corrections without lowering its signed-time high-water
+  mark. A non-retired replacement must have a strictly newer signed time; delayed
+  unseen instances cannot retire the live process. After a backward clock step,
+  a restart waits for this fence; the same process can keep checking in. Reject
+  retired-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
 sequence,config_revision,version,signed_at,last_seen_at,expires_at)` and
   `host_bridge_jobs(host_id,actor_id,kind,enabled,ready)`, PK `(host_id,actor_id,kind)`
   with presence FK. Replace that host's bounded job snapshot transactionally.
+  Keep retired instance IDs in `host_bridge_retired_instances(host_id,instance_id)`
+  (PK) so stale daemons cannot reclaim presence. Advance client sequence on every
+  attempt, including a lost response; replacement snapshots need not start at 1.
   Return `{bridge:{host_id,instance_id,sequence,last_seen_at,expires_at}}`.
-- Next migration creates these tables, removes obsolete `hosts.bridge_*`
+- Migration 107 creates these tables, removes obsolete `hosts.bridge_*`
   columns/readers/writers and classifies privacy fields; no historical live-state
   backfill. Auth principal enrichment, commandcenter, host and agent responses use
   indexed per-actor wake-job joins instead of shared host expiry. Fresh parent
@@ -300,24 +309,31 @@ expires_at},agents:[{actor_id,jobs:[{kind,enabled,ready}]}],agents_truncated}]}`
    remain visible/paused for reconciliation, never blindly replayed. Persist the
    final cutover snapshot after old writers stop; resume pending wakes with their
    original claims or an explicit host-authorized claim transfer.
-5. Stage one disabled unit, atomically publish merged registry, activate it, and
-   verify readiness for every imported namespace with the host singleton held.
-   Confirm exactly one bridge unit/supervisor and no surviving legacy consumers;
-   runtime/resume child commands are allowed, extra bridge daemons are not. Print
-   replaced labels/PIDs, imported workspace/agent/registry counts and unresolved
-   items, never raw callback commands. Re-running install is idempotent.
-6. Journal each phase. Before activation failure restores the saved plan where
-   safe; after callbacks may have run, rollback first stops the new consumer and
-   reconciles durable outcomes, not simultaneous old/new execution. Retain source
-   state and backups. Do not return success on partial coverage or unsafe leftovers.
+5. Keep every legacy unit file until the new unit is healthy. Publish the merged
+   registry, activate one host unit and verify every job/signed report plus the
+   singleton and absence of legacy consumers. Only then remove old unit files.
+6. Any failure restores all legacy files and prior loaded/enabled states after
+   stopping/disabling the new generation. Journal retries recover interrupted
+   phases, including activation. Reject an already busy resume before quiescing
+   any service. If execution races cutover, retain it as `.json.paused` in place
+   (older consumers only read `*.json`), with its path in the journal. Preserve
+   command/claim identity; restore healthy namespaces immediately. The owner must
+   reconcile the unknown effect before restoring that record and retrying. Restored
+   legacy argv remain runnable as single-namespace answers-only consumers backed
+   by the new executor and shared namespace lock. No new per-agent units are
+   installed, and this rollback path publishes no host presence.
 
-Owner acceptance fixture (generic discovery, no hardcoded label):
-`io.agent-nexus.hermes-answer.anx` owns three
-`anx --as hermes --workspace {personal,anx,omi} bridge run --command-timeout 30m`
-processes. Import all three as answers-enabled registrations under one unit,
-preserve all three resume namespaces and 30m policy, then retire the wrapper and
-its children. Test actual argv arrays for each alias, not shell brace expansion;
-repeat equivalent launchd/systemd and custom-config-root cases.
+Acceptance fixtures use generic discovery, with no hardcoded labels:
+
+- Three independent launchd labels `io.agent-nexus.hermes-answer.{personal,anx,omi}`
+  (and three equivalent systemd user units), each running
+  `anx --as hermes --workspace <alias> bridge run --command-timeout 30m`.
+- One custom wrapper owning the same three workspace processes.
+
+Import all three as answers-enabled registrations under one unit, preserving all
+resume namespaces and the 30m policy. Test success, bootstrap/readiness/quiesce
+failure, an executing namespace and journal recovery on both platforms. Include
+actual argv arrays per alias and custom config roots.
 
 Repository audit found no active dependency that requires retaining the Python
 bridge. Do not delete capabilities along with the package:
@@ -345,7 +361,7 @@ Reuse the card-message builder's subject/card/thread/board fields, optional
 | Next        | First token UTC YYYY-MM-DD (end of day) or zoned RFC3339; remainder required text. Accept note duration grammar too, resolved once from commit committer time, not sync time. Reuse note's 160-rune text truncation, positive duration ≤3650d and two-day-horizon / moved-without-evidence warnings. Freeze normalized RFC3339 at; note+promise atomic, never a separate patch. Missing Next is not a clear. Preserve core's per-author fold and ordinary evidence-reset rules.                                                                                                                                                                                                                                                    |
 | Git walk    | Freeze local HEAD (or explicit --to); ≤100 positions / five seconds per manual tick; durable continuation/outcomes before cursor. A shared repo FIFO (stricter than per-card) includes ordinary notes (evidence can affect promises). Missing/shallow objects pause; overflow explicit backfill; no fetch. Check writer on intake/drain; callbacks/scanners use the same binding.                                                                                                                                                                                                                                                                                                                                                  |
 | Spool       | Existing 3 s hook, 100 pending+dead, 1,000 receipts, 30-day pruning is not sufficient for durable intake. Version new payloads, read old queues unchanged; no unsent eviction, reject capacity before sending and retain source. Frozen identity/key/body; four sends/tick, 1 s HTTP, jittered 2–33 s retry. Network/timeout/429/5xx retain; 401/403/404 pause; 400/422/409 inspectable failure. Persist first-attempt/retry metadata before preparation too; unsent prepare failures become inspectable failed/deferred heads and allow explicit --skip. FIFO never automatically bypasses a failed/uncertain predecessor. Stop uncertain auto-retry at 25 days before 30-day receipt GC; reconcile explicitly after loss/expiry. |
-| Heartbeat   | One timer; each workspace receives its own signed projection every 60 s with jitter, 2 s HTTP, fixed server expiry 300 s. Workspace-local monotonic sequence; fresh proof per retry. Version ≤64 ASCII, instance ≤128; ≤256 registered actors × five unique compatible jobs, body ≤256 KiB; reject oversized configuration before enabling, never truncate a heartbeat snapshot. No arbitrary metadata, public/dev bypass or external telemetry.                                                                                                                                                                                                                                                                                   |
+| Heartbeat   | One timer; each workspace receives its own signed projection every 60 s, 2 s HTTP, fixed server expiry 300 s. Workspace-local monotonic sequence; fresh proof per retry. Version ≤64 ASCII, instance ≤128; ≤256 registered actors × five unique compatible jobs, body ≤256 KiB; reject oversized configuration before enabling, never truncate a heartbeat snapshot. No arbitrary metadata, public/dev bypass or external telemetry.                                                                                                                                                                                                                                                                                               |
 | Status cost | ≤100 hosts; authorize first, admit ≤33 actor groups by `(host_id,actor_id,kind)` index (five rows/group), emit ≤32 with truncation; omit revoked/excluded without refill. Partial results never prove absence. Presence PK seek + bounded job snapshot replace/joins; O(admitted agents/jobs), no workspace/roster/history scan or graph rebuild. Batch scope/revocation checks; add native read/write budgets and query-plan tests.                                                                                                                                                                                                                                                                                               |
 | Files       | ≤100 allowlisted cards, ten refreshes/tick, ten notes/card, bounded plans; entry ≤64 KiB, evidence ≤8 with note validation. Next optional, normalized/frozen once at durable intake; preserve file order per directory/card before newer promises. No tracked destination, credential export, symlink/path traversal, arbitrary actor/base URL or shell. Atomic generation+manifest; raw errors/counters stay local.                                                                                                                                                                                                                                                                                                               |
 
