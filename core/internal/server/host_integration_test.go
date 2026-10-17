@@ -207,7 +207,13 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, steppedAt)
 	hostStatus(t, status, 401, p)
 	checkIn["instance_id"], checkIn["sequence"] = "bridge-2", 1
-	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().Add(-3*time.Minute).UTC().Format(time.RFC3339Nano))
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 200, p)
+	checkIn["instance_id"] = "delayed-unseen"
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().Add(-2*time.Minute).UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 400, p)
+	checkIn["instance_id"], checkIn["sequence"] = "bridge-2", 2
+	status, p = hostSignedHTTPAt(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	hostStatus(t, status, 200, p)
 	checkIn["instance_id"], checkIn["sequence"] = "bridge-1", 3
 	status, p = hostSignedHTTP(t, "POST", checkInURL, id, keyID, "bridge-check-in", priv, checkIn)

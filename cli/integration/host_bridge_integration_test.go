@@ -15,6 +15,7 @@ import (
 
 	hostbridge "agent-nexus-cli/internal/bridge"
 	"agent-nexus-cli/internal/integrations"
+	"agent-nexus-cli/internal/workspaceconfig"
 )
 
 // Service-manager replacement is exercised separately with fake launchctl and
@@ -251,5 +252,84 @@ func TestOrdinaryCommandsWithoutHostEnrollmentOrBridge(t *testing.T) {
 		if _, e := os.Stat(path); !os.IsNotExist(e) {
 			t.Fatalf("ordinary command required/created host or bridge state: %s (%v)", path, e)
 		}
+	}
+}
+
+// The exact rollback argv must remain executable after an in-place upgrade.
+// Three foreground processes stand in for restored units; no service manager is
+// invoked. They share HOME but retain separate workspace credentials/namespaces.
+func TestLegacyRollbackConsumersDeliverThreeWorkspaceAnswers(t *testing.T) {
+	harnesses := []*liveCoreHarness{}
+	roots, receipts := []string{}, []string{}
+	for range 3 {
+		h := newPasskeyLiveCoreHarness(t)
+		h.enrollHost(t, "hermes")
+		h.registerHumanPasskey(t, "operator", "Operator", h.createHumanInviteToken(t))
+		harnesses = append(harnesses, h)
+		roots = append(roots, filepath.Join(h.homeDir, ".config", "anx"))
+	}
+	home := harnesses[0].homeDir
+	for i, alias := range []string{"personal", "anx", "omi"} {
+		h := harnesses[i]
+		h.homeDir = home
+		if e := workspaceconfig.Update(roots[i], func(c *workspaceconfig.Catalog) error { c.File.Aliases[alias] = h.baseURL; return nil }); e != nil {
+			t.Fatal(e)
+		}
+		work := h.runCLIExpectOK(t, "hermes", map[string]any{"title": "Rollback answer " + alias, "source": map[string]any{"authority": "nexus"}}, "--config-dir", roots[i], "work", "create", "--from-file", "-")
+		ref := mustStringPath(t, work.Payload, "result.work.ref")
+		calls := filepath.Join(t.TempDir(), "calls")
+		receipts = append(receipts, calls)
+		command := "printf '%s|%s|%s\\n' \"$ANX_BASE_URL\" \"$ANX_AS\" \"$ANX_CONFIG_DIR\" >> " + integrations.ShellQuote(calls) + "; cat >/dev/null"
+		ask := h.runCLIExpectOK(t, "hermes", nil, "--config-dir", roots[i], "ask", "Continue after rollback?", "--subject-ref", ref, "--recommend", "Continue", "--on-answer", command)
+		askID := mustStringPath(t, ask.Payload, "result.ask_id")
+		ctx, cancel := context.WithCancel(context.Background())
+		// This is the restored ProgramArguments/ExecStart shape, with its
+		// original ANX_CONFIG_DIR environment, not a modern bridge add command.
+		cmd := exec.CommandContext(ctx, h.cliBin, "--as", "hermes", "--workspace", alias, "bridge", "run", "--command-timeout", "30m")
+		cmd.Env = append(integrations.GitEnvironment(os.Environ()), "HOME="+home, "ANX_CONFIG_DIR="+roots[i], "ANX_AS=", "ANX_BASE_URL=", "ANX_ACCESS_TOKEN=", "ANX_UPDATE_POLICY=off", "ANX_SKILLS_AUTO_SYNC=0", "AGENTCTL_EXECUTION_ID=", "AGENTCTL_ADAPTER=")
+		logPath := filepath.Join(t.TempDir(), "legacy.log")
+		log, e := os.Create(logPath)
+		if e != nil {
+			t.Fatal(e)
+		}
+		t.Cleanup(func() { log.Close() })
+		cmd.Stdout, cmd.Stderr = log, log
+		if e = cmd.Start(); e != nil {
+			cancel()
+			t.Fatal(e)
+		}
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		t.Cleanup(func() {
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Error("legacy rollback executor did not stop")
+			}
+		})
+		h.runCLIExpectOK(t, "operator", map[string]any{"inbox_item_id": findAskInboxID(t, h, askID), "response_text": "Continue", "outcome": "answered"}, "debug", "inbox", "respond", "--from-file", "-")
+		deadline := time.Now().Add(30 * time.Second)
+		want := h.baseURL + "|hermes|" + roots[i] + "\n"
+		for {
+			raw, e := os.ReadFile(calls)
+			if e == nil && string(raw) == want {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("restored argv did not deliver correct namespace: %q want %q log=%s", raw, want, readFileOrEmpty(logPath))
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	time.Sleep(3500 * time.Millisecond)
+	for _, path := range receipts {
+		raw, e := os.ReadFile(path)
+		if e != nil || strings.Count(string(raw), "\n") != 1 {
+			t.Fatal("rollback repeated a confirmed callback", string(raw), e)
+		}
+	}
+	if _, e := os.Stat(filepath.Join(hostbridge.Root(home), "registry.json")); !os.IsNotExist(e) {
+		t.Fatal("legacy executor modified host registry", e)
 	}
 }

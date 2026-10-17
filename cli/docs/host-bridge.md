@@ -57,9 +57,13 @@ Install/run explicitly opts into one host presence lifecycle. Every 60 seconds,
 one timer sends a separately signed workspace-only snapshot per enrolled
 workspace, under independent two-second deadlines. Fresh proofs cover the exact
 request bytes. Instance IDs are workspace-scoped; monotonic sequences order one
-instance; valid proof timestamps enforce skew/replay only, so NTP steps backward
-do not reject an increasing sequence or a fresh non-retired incarnation. Sequences advance on every send attempt so an unobserved response cannot wedge
-reporting. Core retains retired instance IDs and rejects late updates from them. Core sets last-seen
+instance, even through a backward clock step. Preserve the maximum accepted
+signed timestamp: a different non-retired instance must prove a strictly newer
+time before replacing it. Delayed old packets cannot retire a live successor.
+A restart during a clock correction waits until signed time exceeds that mark.
+Sequences advance on every send attempt so an unobserved response cannot wedge
+reporting. Core retains retired instance IDs and rejects late updates from them.
+Core sets last-seen
 and a 300-second expiry, replacing bounded normalized job rows atomically.
 
 Only active, nonexcluded agents with an enabled, ready **wake** job under fresh
@@ -111,6 +115,21 @@ the external outcome, sets the retained state to `delivered` or `failed`, and
 renames it back to its original `.json` path. Reset that namespace's cursor for
 acknowledgement replay before retrying install; never reset attempts or command
 identity to force another execution.
+
+The current CLI still accepts restored legacy argv, for example:
+
+```sh
+anx --as worker --workspace <alias> bridge run --command-timeout 30m --max-attempts 5
+```
+
+An explicit `--as` or `ANX_AS` selects this **rollback-only answer consumer**.
+It resolves exactly that workspace, preserves the timeout/attempt policy and
+resume files/cursor, reconnects on transient errors, and uses the new answer
+executor with a per-namespace lock shared by the host service. Unknown outcomes
+still pause that namespace. It does not install units, alter the host registry,
+publish heartbeats, or enable wake/Git/spool jobs. Retry `anx bridge install` to
+consolidate again. New host units clear `ANX_AS`; for a foreground host supervisor
+with an inherited agent identity use `ANX_AS= anx bridge run`.
 
 Runtime receipts are private under each retained namespace's `runtime-receipts/`.
 An earlier runtime claim without a durable local outcome becomes an inspectable

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,12 +35,15 @@ type directBridgeFixture struct {
 	ready, lateBusy                            bool
 	nextPID                                    int
 	exe                                        string
+	rejectAssertions                           atomic.Bool
+	proofs                                     chan string
 	t                                          *testing.T
 }
 
 func newDirectBridgeFixture(t *testing.T, goos string) *directBridgeFixture {
 	t.Helper()
 	f := &directBridgeFixture{t: t, home: t.TempDir(), goos: goos, units: map[string]hostbridge.LegacyUnit{}, loaded: map[string]bool{}, enabled: map[string]bool{}, priorLoaded: map[string]bool{}, priorEnabled: map[string]bool{}, pids: map[string]int{}, originals: map[string][]byte{}, entries: map[string]string{}, nextPID: 700}
+	f.proofs = make(chan string, 3)
 	f.configDir = filepath.Join(f.home, ".config", "anx")
 	f.a, _ = workspaceTestApp(t, f.home, f.home, map[string]string{"ANX_CONFIG_DIR": f.configDir})
 	f.exe, _ = os.Executable()
@@ -50,6 +54,12 @@ func newDirectBridgeFixture(t *testing.T, goos string) *directBridgeFixture {
 		case "meta/handshake":
 			fmt.Fprintf(w, `{"workspace_id":%q,"capabilities":["host_bridge_v1"]}`, alias)
 		case "auth/token":
+			if f.rejectAssertions.Load() {
+				f.proofs <- alias
+				w.WriteHeader(401)
+				fmt.Fprint(w, `{"error":{"code":"invalid_host_assertion","message":"fixture runtime proof"}}`)
+				return
+			}
 			fmt.Fprintf(w, `{"agent":{"id":%q,"actor_id":%q,"handle":"hermes.fixture"},"tokens":{"access_token":"fixture","expires_in":3600}}`, alias, "actor-"+alias)
 		default:
 			t.Errorf("unexpected request %s", r.URL.Path)
@@ -309,6 +319,36 @@ func (f *directBridgeFixture) assertRestored() {
 			f.t.Fatalf("state %s loaded=%v enabled=%v; want %v %v", label, f.loaded[label], f.enabled[label], f.priorLoaded[label], f.priorEnabled[label])
 		}
 	}
+	f.rejectAssertions.Store(true)
+	for _, original := range f.units {
+		raw, err := os.ReadFile(original.Path)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		u, err := hostbridge.ParseUnit(original.Path, original.Kind, raw)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		child := *f.a
+		// Force the fixture assertion to be fetched instead of using the token
+		// cached by migration preflight; its denial bounds this dispatcher probe.
+		child.now = func() time.Time { return time.Now().Add(2 * time.Hour) }
+		var stdout, stderr bytes.Buffer
+		child.Stdout, child.Stderr = &stdout, &stderr
+		code := child.Run(u.Argv[1:])
+		if code == 0 || code == 2 {
+			f.t.Fatalf("restored argv rejected/misrouted: %v code=%d %s %s", u.Argv, code, &stdout, &stderr)
+		}
+		select {
+		case alias := <-f.proofs:
+			if !strings.Contains(original.Label, "."+alias) {
+				f.t.Fatal("restored argv resolved wrong workspace", alias, original.Label)
+			}
+		default:
+			f.t.Fatalf("real dispatcher never reached legacy runtime: %v %s %s", u.Argv, &stdout, &stderr)
+		}
+	}
+	f.rejectAssertions.Store(false)
 	if f.loaded[hostbridge.Label] || f.loaded[hostbridge.Unit] {
 		f.t.Fatal("new generation survived rollback")
 	}

@@ -34,7 +34,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 			for _, key := range []string{"answers", "wake", "git", "spool"} {
 				flags[key] = preflightFlagSpec{kind: preflightFlagBool}
 			}
-		case "run", "start", "stop", "status", "doctor":
+		case "run":
+			flags["command-timeout"] = preflightFlagSpec{kind: preflightFlagString}
+			flags["max-attempts"] = preflightFlagSpec{kind: preflightFlagString}
+		case "start", "stop", "status", "doctor":
 		default:
 			return "bridge", preflightSubcommand(args[1:], bridgeSubcommandSpec)
 		}

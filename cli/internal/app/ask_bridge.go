@@ -26,6 +26,16 @@ func (a *App) consumeAskWakes(ctx context.Context, cfg config.Resolved, dir stri
 	return a.consumeRegisteredWakes(ctx, cfg, []string{dir}, maxAttempts, timeout, true, nil, nil)
 }
 func (a *App) consumeHostWakes(ctx context.Context, cfg config.Resolved, agent hostbridge.Agent, executors chan struct{}) error {
+	if len(agent.RegistryDirs) == 0 {
+		return fmt.Errorf("missing registered namespace")
+	}
+	// Both the host service and rollback executors use this namespace fence.
+	// A second consumer must never execute the same retained command concurrently.
+	unlock, err := lockAskBridgeReady(filepath.Join(agent.RegistryDirs[0], "consumer.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	runtime := agent.Runtime
 	if !agent.Jobs["wake"] {
 		runtime = nil

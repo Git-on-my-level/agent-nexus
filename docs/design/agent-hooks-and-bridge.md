@@ -255,9 +255,11 @@ config_dir,agents:[{name,actor_id,jobs,registry_dirs,execution_policy}]}]}`.
   Derive a workspace-scoped instance ID from the local daemon incarnation; never
   export a machine-global correlation identifier or another workspace's config.
 - Server times govern presence. Atomically accept a newer sequence for the same
-  instance, or a fresh non-retired replacement instance. Signed times enforce
-  proof skew/replay only; NTP steps backward do not control snapshot ordering.
-  Reject retired-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
+  instance through clock corrections without lowering its signed-time high-water
+  mark. A non-retired replacement must have a strictly newer signed time; delayed
+  unseen instances cannot retire the live process. After a backward clock step,
+  a restart waits for this fence; the same process can keep checking in. Reject
+  retired-instance updates. Store `host_bridge_presence(host_id PK,instance_id,
 sequence,config_revision,version,signed_at,last_seen_at,expires_at)` and
   `host_bridge_jobs(host_id,actor_id,kind,enabled,ready)`, PK `(host_id,actor_id,kind)`
   with presence FK. Replace that host's bounded job snapshot transactionally.
@@ -316,7 +318,10 @@ expires_at},agents:[{actor_id,jobs:[{kind,enabled,ready}]}],agents_truncated}]}`
    any service. If execution races cutover, retain it as `.json.paused` in place
    (older consumers only read `*.json`), with its path in the journal. Preserve
    command/claim identity; restore healthy namespaces immediately. The owner must
-   reconcile the unknown effect before restoring that record and retrying.
+   reconcile the unknown effect before restoring that record and retrying. Restored
+   legacy argv remain runnable as single-namespace answers-only consumers backed
+   by the new executor and shared namespace lock. No new per-agent units are
+   installed, and this rollback path publishes no host presence.
 
 Acceptance fixtures use generic discovery, with no hardcoded labels:
 

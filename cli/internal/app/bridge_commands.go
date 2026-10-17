@@ -59,13 +59,15 @@ anx bridge doctor
 Install opts into signed presence reporting; add explicitly enables independent jobs.
 Without the answer job, unattended resumes wait; Git and spool drain remain manual.
 Await/batch and direct commands work without the bridge. Files are a later release.
-All commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
+The legacy form serves one answer namespace without host heartbeat or other jobs.
 `
 }
 func init() {
 	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{Path: "bridge", Kind: "manual", Summary: "One optional host service for answers, wake routing, Git and spool jobs."})
 	for _, topic := range []localHelperTopic{
-		{Path: "bridge run", Summary: "Run the single host supervisor; no per-agent units.", JSONShape: "`stopped`", Examples: []string{"anx bridge run"}},
+		{Path: "bridge run", Summary: "Run the host supervisor, or one legacy answers-only namespace for rollback.", JSONShape: "`stopped`", Composition: "Bare bridge run serves the host registry. Explicit --as or ANX_AS selects a single-namespace answers-only rollback executor, preserving its policy and receipts without publishing host presence. New service units clear ANX_AS. See cli/docs/host-bridge.md.", Flags: []localHelperFlag{{Name: "--command-timeout", Description: "Legacy rollback consumer command timeout (default 30m); requires --as."}, {Name: "--max-attempts", Description: "Legacy rollback consumer attempts (1..20, default 5); requires --as."}}, Examples: []string{"anx bridge run"}},
 		{Path: "bridge remove", Summary: "Remove a local registration, preserving commands and receipts.", JSONShape: "`removed`, `agent`, `retained_records`", Examples: []string{"anx bridge remove --as worker"}},
 		{Path: "bridge add", Summary: "Register an enrolled agent/workspace and enable its selected jobs.", JSONShape: "`workspace_id`, `host_id`, `actor_id`, `registered`", Examples: []string{"anx bridge add --as codex"}},
 		{Path: "bridge install", Summary: "Install one host unit and safely migrate legacy consumers.", JSONShape: "`unit_path`, `label`, `replaced`, `imported`, `dry_run`", Examples: []string{"anx bridge install --dry-run"}},
@@ -88,8 +90,9 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 		r, e := a.removeHostBridgeAgent(ctx, args[1:], cfg)
 		return r, name, e
 	case "run":
-		if len(args) != 1 {
-			return nil, name, errnorm.Usage("invalid_flags", "bridge run has no per-agent flags; use bridge add")
+		if legacyAnswerBridgeInvocation(args, cfg) {
+			r, e := a.runLegacyAnswerBridge(ctx, args[1:], cfg)
+			return r, name, e
 		}
 		r, e := a.runHostSupervisor(ctx)
 		return r, name, e

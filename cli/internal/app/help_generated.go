@@ -1225,9 +1225,6 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "orient" {
 		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json keeps the brief.v1 object verbatim in result; the separate top-level workspace field reports alias, base_url, selection source and other_aliases.\n", true
 	}
-	if topic == "bridge run" {
-		return "anx bridge run: run one host supervisor for every registered agent/workspace. Configure jobs and execution policy with anx bridge add. See docs/ask-delivery.md.\n", true
-	}
 	if topic == "await" {
 		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
 	}

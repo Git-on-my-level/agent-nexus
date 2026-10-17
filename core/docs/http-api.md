@@ -767,8 +767,11 @@ jobs:[{kind,enabled,ready}]}]}`. Up to 256 actors and five unique jobs each,
   256 KiB total. Jobs are `answers`, `wake`, `git`, `files`, `spool`; ready implies
   enabled. Unknown fields, actors outside the active host enrollment, exclusions,
   revoked identities, non-increasing instance sequences, replayed proofs and retired
-  instances are rejected. Client timestamp ordering is not used: a clock step
-  backward within the proof skew window cannot interrupt presence.
+  instances are rejected. Sequence orders the same instance through backward
+  clock steps while retaining its signed-time high-water mark. A different
+  instance must have a strictly newer signed time, preventing delayed unknown
+  predecessors from retiring a live successor. A restart during a backward clock
+  step waits for that mark; proof skew/replay checks remain unchanged.
   Server timestamps set last-seen and 300-second expiry. Omitted jobs are removed
   atomically. Zero agents is valid. This writes no progress events.
 - `POST /hosts/bridge-status`: authenticated **read-only** body `{host_ids:[]}`,

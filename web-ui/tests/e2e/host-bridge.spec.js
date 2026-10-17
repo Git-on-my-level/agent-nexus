@@ -96,6 +96,20 @@ test("machine bridge liveness ages, recovers and stays distinct from wake covera
     await expect(page.locator("[data-bridge-fleet-summary]")).toHaveText(
       "2 of 4 machines live on the bridge",
     );
+    const zero = snapshots.zero;
+    delete snapshots.zero;
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("visibilitychange")),
+    );
+    await expect(badge("zero")).toHaveAttribute("data-bridge-state", "unknown");
+    await expect(page.locator("[data-bridge-fleet-summary]")).toHaveText(
+      "1 of 3 machines live on the bridge",
+    );
+    snapshots.zero = zero;
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("visibilitychange")),
+    );
+    await expect(badge("zero")).toHaveAttribute("data-bridge-state", "live");
     await expect(badge("live")).toContainText("Live on bridge");
     await expect(badge("none")).toContainText("anx bridge install");
     await expect(badge("live")).not.toContainText("anx bridge install");
@@ -168,6 +182,7 @@ test("an old core shows checking then unavailable without inventing bridge absen
     await expect(badge).toHaveAttribute("data-bridge-state", "unknown");
     await expect(badge).toContainText("Bridge unavailable");
     await expect(badge).not.toContainText("No bridge");
+    await expect(page.locator("[data-bridge-fleet-summary]")).toHaveCount(0);
     await page.goto(`${BASE}/access`);
     await expect(badge).toHaveAttribute("data-bridge-state", "unknown");
     expect(errors).toEqual([]);

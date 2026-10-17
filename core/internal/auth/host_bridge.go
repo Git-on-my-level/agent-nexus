@@ -58,7 +58,7 @@ func bridgeASCII(s string, limit int) bool {
 // Revalidate enrollment/actors inside the write transaction to close revocation races.
 func (s *Store) CheckInHostBridge(ctx context.Context, id, signed string, in BridgeCheckIn) (BridgePresence, error) {
 	var out BridgePresence
-	_, err := time.Parse(time.RFC3339Nano, signed)
+	at, err := time.Parse(time.RFC3339Nano, signed)
 	if err != nil || !bridgeASCII(in.InstanceID, 128) || !bridgeASCII(in.Version, 64) || in.Sequence < 1 || in.ConfigRevision < 0 || in.Agents == nil || len(in.Agents) > 256 {
 		return out, ErrInvalidRequest
 	}
@@ -119,9 +119,9 @@ func (s *Store) CheckInHostBridge(ctx context.Context, id, signed string, in Bri
 	if valid != len(actorIDs) {
 		return out, ErrAgentExcluded
 	}
-	var oldInstance string
+	var oldInstance, oldSigned string
 	var seq int64
-	err = tx.QueryRowContext(ctx, `SELECT instance_id,sequence FROM host_bridge_presence WHERE host_id=?`, id).Scan(&oldInstance, &seq)
+	err = tx.QueryRowContext(ctx, `SELECT instance_id,sequence,signed_at FROM host_bridge_presence WHERE host_id=?`, id).Scan(&oldInstance, &seq, &oldSigned)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
@@ -129,6 +129,21 @@ func (s *Store) CheckInHostBridge(ctx context.Context, id, signed string, in Bri
 		return out, ErrInvalidRequest
 	}
 
+	if oldInstance != "" {
+		previous, parseErr := time.Parse(time.RFC3339Nano, oldSigned)
+		if parseErr != nil {
+			return out, ErrInvalidRequest
+		}
+		if oldInstance != in.InstanceID && !at.After(previous) {
+			return out, ErrInvalidRequest
+		}
+		// Sequence orders one process through NTP corrections. Preserve its proof
+		// high-water mark so a delayed unseen incarnation cannot replace it after
+		// a backwards step, even if this snapshot's signed_at is older.
+		if oldInstance == in.InstanceID && at.Before(previous) {
+			signed = oldSigned
+		}
+	}
 	if oldInstance != "" && oldInstance != in.InstanceID {
 		var retired int
 		err = tx.QueryRowContext(ctx, `SELECT 1 FROM host_bridge_retired_instances WHERE host_id=? AND instance_id=?`, id, in.InstanceID).Scan(&retired)

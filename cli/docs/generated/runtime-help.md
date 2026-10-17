@@ -267,7 +267,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `git binding export` (local-helper): Opt-in agent context and Git progress integration.
 - `integrations bind` (local-helper): Opt-in harness integration: bind.
 - `integrations map` (local-helper): Opt-in harness integration: map.
-- `bridge run` (local-helper): Run the single host supervisor; no per-agent units.
+- `bridge run` (local-helper): Run the host supervisor, or one legacy answers-only namespace for rollback.
 - `bridge remove` (local-helper): Remove a local registration, preserving commands and receipts.
 - `bridge add` (local-helper): Register an enrolled agent/workspace and enable its selected jobs.
 - `bridge install` (local-helper): Install one host unit and safely migrate legacy consumers.
@@ -574,7 +574,9 @@ anx bridge doctor
 Install opts into signed presence reporting; add explicitly enables independent jobs.
 Without the answer job, unattended resumes wait; Git and spool drain remain manual.
 Await/batch and direct commands work without the bridge. Files are a later release.
-All commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
+The legacy form serves one answer namespace without host heartbeat or other jobs.
 ```
 
 ## `wake-routing`
@@ -865,7 +867,9 @@ anx bridge doctor
 Install opts into signed presence reporting; add explicitly enables independent jobs.
 Without the answer job, unattended resumes wait; Git and spool drain remain manual.
 Await/batch and direct commands work without the bridge. Files are a later release.
-All commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Host commands share the canonical ~/.config/anx/bridge registry, service and lock.
+Rollback only: anx --as <agent> --workspace <alias> bridge run [--command-timeout 30m] [--max-attempts 5]
+The legacy form serves one answer namespace without host heartbeat or other jobs.
 ```
 
 ## `import`
@@ -9660,10 +9664,28 @@ must use generic/manual anx context. Tool-after is a scan hint, never commit pro
 
 ## `bridge run`
 
-Run the single host supervisor; no per-agent units.
+Run the host supervisor, or one legacy answers-only namespace for rollback.
 
 ```text
-anx bridge run: run one host supervisor for every registered agent/workspace. Configure jobs and execution policy with anx bridge add. See docs/ask-delivery.md.
+Local Help: bridge run
+
+- Kind: `local helper`
+- Side effect class: `external_side_effect`
+- Summary: Run the host supervisor, or one legacy answers-only namespace for rollback.
+- Composition: Bare bridge run serves the host registry. Explicit --as or ANX_AS selects a single-namespace answers-only rollback executor, preserving its policy and receipts without publishing host presence. New service units clear ANX_AS. See cli/docs/host-bridge.md.
+- JSON body: `stopped`
+- Examples:
+  - `anx bridge run`
+
+Flags:
+  --command-timeout            Legacy rollback consumer command timeout (default 30m); requires --as.
+  --max-attempts               Legacy rollback consumer attempts (1..20, default 5); requires --as.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx bridge run ... ; anx --json bridge run ... ; anx bridge run ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge remove`

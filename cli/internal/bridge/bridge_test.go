@@ -53,6 +53,9 @@ func TestUnitParsersAndSingleHostPlans(t *testing.T) {
 			if e != nil || len(parsed.Argv) != 3 || parsed.Argv[1] != "bridge" || parsed.Argv[2] != "run" {
 				t.Fatal(parsed, e)
 			}
+			if value, ok := parsed.Environment["ANX_AS"]; !ok || value != "" {
+				t.Fatal("host service can inherit a legacy identity", parsed.Environment)
+			}
 			if strings.Contains(plan.Content, "--as") || strings.Contains(plan.Content, "--workspace") {
 				t.Fatal(plan.Content)
 			}

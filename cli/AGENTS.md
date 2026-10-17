@@ -120,3 +120,8 @@ registered workspace/agent jobs. `bridge add` pins identities and credential roo
 run never creates per-agent units. Preserve legacy resume namespaces in place.
 Test install and migration only with temporary HOME and fake service managers.
 Never infer wake coverage from an answer consumer or a live host alone.
+
+Restored per-agent `bridge run` argv remain runnable as answers-only rollback
+executors. They share the host service's namespace consumer lock and publish no
+host heartbeat. New units clear `ANX_AS`; preserve this rollback path while the
+installer restores original legacy units on failure.

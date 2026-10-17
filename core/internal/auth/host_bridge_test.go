@@ -70,7 +70,7 @@ func TestHostBridgeSnapshotOrderingAndPerAgentWake(t *testing.T) {
 	input.InstanceID = "two"
 	input.Sequence = 1
 	input.Agents = []BridgeAgent{}
-	if e = put(now.Add(-3*time.Minute), input); e != nil {
+	if e = put(now.Add(time.Second), input); e != nil {
 		t.Fatal(e)
 	}
 	input.InstanceID = "one"
@@ -149,5 +149,46 @@ func TestHostBridgeAcceptsSequenceGapsAfterLostResponses(t *testing.T) {
 	in.Sequence = 100
 	if _, e := s.CheckInHostBridge(ctx, id, now.Add(3*time.Second).Format(time.RFC3339Nano), in); e == nil {
 		t.Fatal("retired daemon reclaimed liveness")
+	}
+}
+
+func TestHostBridgeDelayedUnknownInstanceCannotRetireLiveInstance(t *testing.T) {
+	s, id, _ := bridgeFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	put := func(instance string, seq int64, at time.Time) error {
+		_, e := s.CheckInHostBridge(ctx, id, at.Format(time.RFC3339Nano), BridgeCheckIn{InstanceID: instance, Sequence: seq, Version: "test", Agents: []BridgeAgent{}})
+		return e
+	}
+	// A's first packet is in flight. B has already replaced its process and
+	// arrives first; A has never been recorded in the retired-instance table.
+	if e := put("B", 1, now); e != nil {
+		t.Fatal(e)
+	}
+	if e := put("A", 1, now.Add(-time.Second)); e == nil {
+		t.Fatal("late A retired live B")
+	}
+	if e := put("A", 2, now); e == nil {
+		t.Fatal("equal timestamp replaced B")
+	}
+	if e := put("B", 2, now.Add(-4*time.Minute)); e != nil {
+		t.Fatal("same instance clock correction rejected", e)
+	}
+	// A must also remain rejected after B's clock correction: keep the high-water.
+	if e := put("A", 3, now.Add(-time.Second)); e == nil {
+		t.Fatal("clock correction lowered replacement fence")
+	}
+	if e := put("B", 3, now.Add(-3*time.Minute)); e != nil {
+		t.Fatal("B was retired by a rejected packet", e)
+	}
+	rows, e := s.HostBridgeStatus(ctx, []string{id})
+	if e != nil || len(rows) != 1 || rows[0].Bridge.InstanceID != "B" || rows[0].Bridge.Sequence != 3 {
+		t.Fatal(rows, e)
+	}
+	if e := put("C", 1, now.Add(time.Second)); e != nil {
+		t.Fatal("newer replacement rejected", e)
+	}
+	if e := put("B", 4, now.Add(2*time.Second)); e == nil {
+		t.Fatal("retired instance reclaimed presence")
 	}
 }

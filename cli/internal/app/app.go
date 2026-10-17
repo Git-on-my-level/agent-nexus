@@ -161,7 +161,8 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	legacyBridge := cmdPeek == "bridge" && subPeek == "run" && (overrides.As != nil || strings.TrimSpace(a.Getenv("ANX_AS")) != "" || len(remaining) > 2)
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && !legacyBridge && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "report" && subPeek != "publish" && subPeek != "render") ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
@@ -206,7 +207,7 @@ func (a *App) Run(args []string) int {
 	if wizard {
 		resolved.Sources["pm_install_mode"] = "interactive"
 	}
-	if (!wizard || overrides.Workspace != nil) && (!workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
+	if (!wizard || overrides.Workspace != nil) && (!workspaceIndependentCommand(remaining) || legacyBridge || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
 		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
 		if err != nil {
 			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
