@@ -93,6 +93,12 @@ test("machine bridge liveness ages, recovers and stays distinct from wake covera
     await expect(badge("stale")).toHaveAttribute("data-bridge-state", "stale");
     await expect(badge("none")).toContainText("No bridge");
     await expect(badge("zero")).toHaveAttribute("data-bridge-state", "live");
+    await expect(page.locator("[data-bridge-fleet-summary]")).toHaveText(
+      "2 of 4 machines live on the bridge",
+    );
+    await expect(badge("live")).toContainText("Live on bridge");
+    await expect(badge("none")).toContainText("anx bridge install");
+    await expect(badge("live")).not.toContainText("anx bridge install");
     await expect(
       page.locator('[data-agent-bridge="offline"]').first(),
     ).toBeVisible();

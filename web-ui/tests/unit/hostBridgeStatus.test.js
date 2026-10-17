@@ -11,6 +11,7 @@ import {
   bridgeBadge,
   hostBridgeStatus,
   observeHostBridge,
+  summarizeBridgeFleet,
 } from "$lib/hostBridgeStatus.js";
 let releases = [];
 afterEach(() => {
@@ -35,6 +36,26 @@ describe("host bridge liveness", () => {
     expect(bridgeBadge({ ...h, revoked_at: "now" }, seen).state).toBe(
       "revoked",
     );
+  });
+  it("counts only checked, unrevoked machines as live or not", () => {
+    const at = Date.parse("2026-10-17T00:00:00Z");
+    const live = { bridge: { expires_at: "2026-10-17T00:05:00Z" } };
+    const stale = { bridge: { expires_at: "2026-10-16T23:00:00Z" } };
+    const hosts = [
+      { id: "a" },
+      { id: "b" },
+      { id: "c" },
+      { id: "gone", revoked_at: "2026-10-01T00:00:00Z" },
+      { id: "unchecked" },
+    ];
+    const status = { a: live, b: stale, c: { bridge: null }, gone: live };
+    expect(
+      summarizeBridgeFleet(hosts, status, ["a", "b", "c", "gone"], at),
+    ).toEqual({ total: 3, live: 1 });
+    expect(summarizeBridgeFleet(hosts, status, [], at)).toEqual({
+      total: 0,
+      live: 0,
+    });
   });
   it("coalesces visible host reads and discards late workspace responses", async () => {
     vi.useFakeTimers();

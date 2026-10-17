@@ -25,7 +25,52 @@ export function bridgeBadge(
       : { state: "unknown", label: "Bridge unavailable" };
   if (!observation.bridge) return { state: "none", label: "No bridge" };
   const live = Date.parse(observation.bridge.expires_at) > now;
-  return { state: live ? "live" : "stale", label: live ? "Live" : "Stale" };
+  return live
+    ? { state: "live", label: "Live on bridge" }
+    : { state: "stale", label: "Bridge stale" };
+}
+
+/** What each bridge state means for the reader, for tooltips and hints. */
+export const BRIDGE_STATE_HELP = {
+  live: "This machine's bridge is checking in: answers reach its agents automatically, and its enabled jobs run.",
+  stale:
+    "This machine's bridge has stopped checking in. Answers and captured commits wait until it is back.",
+  none: "No bridge on this machine. ANX still works here, but answers are not delivered automatically and commits are not captured.",
+  revoked: "This machine's access was revoked.",
+  loading: "Checking this machine's bridge.",
+  unknown: "Bridge status could not be read from this workspace.",
+};
+
+/** Human labels for bridge jobs. Unknown kinds fall back to their raw name. */
+export const BRIDGE_JOB_LABELS = {
+  answers: "Answers",
+  wake: "Wake on mention",
+  git: "Git capture",
+  spool: "Delivery retries",
+};
+
+/**
+ * Count machines live on the bridge among those already checked. Revoked
+ * machines and machines whose status has not been read yet are left out, so
+ * the summary never reports a machine as down before it has been asked.
+ */
+export function summarizeBridgeFleet(
+  hosts,
+  statusHosts,
+  checked = [],
+  now = Date.now(),
+) {
+  const seen = new Set(checked);
+  let total = 0,
+    live = 0;
+  for (const host of hosts ?? []) {
+    if (host?.revoked_at || !seen.has(host.id)) continue;
+    const state = bridgeBadge(host, statusHosts?.[host.id], now).state;
+    if (state === "revoked") continue;
+    total += 1;
+    if (state === "live") live += 1;
+  }
+  return { total, live };
 }
 export function observeHostBridge(workspace, id) {
   if (!workspace || !id) return () => {};

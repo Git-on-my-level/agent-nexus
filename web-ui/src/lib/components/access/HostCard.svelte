@@ -142,10 +142,15 @@
     </div>
     {#if !revoked}
       <div class="shrink-0 pt-0.5 text-micro">
-        <HostBridgeBadge {host} detail />
+        <HostBridgeBadge {host} variant="pill" />
       </div>
     {/if}
   </header>
+  {#if !revoked}
+    <div class="px-4 pb-2 empty:hidden">
+      <HostBridgeBadge {host} variant="details" />
+    </div>
+  {/if}
 
   <div class="border-t border-line-subtle">
     {#if agents.length}
