@@ -7122,6 +7122,211 @@ export const commandRegistry = [
         "ts_method": "eventsUnarchive"
     },
     {
+        "command_id": "git.binding.export",
+        "cli_path": "git binding export",
+        "group": "git",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Export the non-secret elected writer binding for another clone.",
+        "why": "Export the non-secret elected writer binding for another clone.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Envelope v2 result can be imported directly; no key or token is exported.",
+        "examples": [
+            {
+                "title": "Export the non-secret elected writer binding for another clone.",
+                "command": "anx git binding export"
+            }
+        ],
+        "adjacent_commands": [
+            "git.disable",
+            "git.enable",
+            "git.status",
+            "git.sync"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "git.disable",
+        "cli_path": "git disable",
+        "group": "git",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Disable Git capture and remove only the exact owned post-commit hook.",
+        "why": "Disable Git capture and remove only the exact owned post-commit hook.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Preserves all queued, failed and confirmed records for inspection.",
+        "examples": [
+            {
+                "title": "Disable Git capture and remove only the exact owned post-commit hook.",
+                "command": "anx git disable"
+            }
+        ],
+        "adjacent_commands": [
+            "git.binding.export",
+            "git.enable",
+            "git.status",
+            "git.sync"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "git.enable",
+        "cli_path": "git enable",
+        "group": "git",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Opt into Git notes and promises with an explicitly elected writer.",
+        "why": "Opt into Git notes and promises with an explicitly elected writer.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "No initial upload; imports on other hosts cannot capture. Optional hook never overwrites existing hooks.",
+        "examples": [
+            {
+                "title": "Opt into Git notes and promises with an explicitly elected writer.",
+                "command": "anx git enable --writer --dry-run"
+            }
+        ],
+        "adjacent_commands": [
+            "git.binding.export",
+            "git.disable",
+            "git.status",
+            "git.sync"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "git.status",
+        "cli_path": "git status",
+        "group": "git",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Inspect local Git capture binding, cursor and pending work.",
+        "why": "Inspect local Git capture binding, cursor and pending work.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Offline local state; no remote reads or writes.",
+        "examples": [
+            {
+                "title": "Inspect local Git capture binding, cursor and pending work.",
+                "command": "anx git status"
+            }
+        ],
+        "adjacent_commands": [
+            "git.binding.export",
+            "git.disable",
+            "git.enable",
+            "git.sync"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "git.sync",
+        "cli_path": "git sync",
+        "group": "git",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Capture bounded local commit trailers and drain frozen note requests.",
+        "why": "Capture bounded local commit trailers and drain frozen note requests.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; historical backfill omits promise and structured evidence.",
+        "examples": [
+            {
+                "title": "Capture bounded local commit trailers and drain frozen note requests.",
+                "command": "anx git sync"
+            }
+        ],
+        "adjacent_commands": [
+            "git.binding.export",
+            "git.disable",
+            "git.enable",
+            "git.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
         "command_id": "home.read",
         "cli_path": "",
         "method": "POST",
@@ -7213,6 +7418,41 @@ export const commandRegistry = [
         "surface": "canonical",
         "go_method": "HomeUnread",
         "ts_method": "homeUnread"
+    },
+    {
+        "command_id": "hook",
+        "cli_path": "hook",
+        "group": "hook",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Run an explicitly enabled bounded harness hook.",
+        "why": "Run an explicitly enabled bounded harness hook.",
+        "input_mode": "raw-stream",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Native hook protocol; generic schema_version 1, context, card_ref, as_of, stale.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Off by default; fail-open exit 0, native harness stdout or generic HookBrief v1 rather than an envelope. No implicit presence writes.",
+        "examples": [
+            {
+                "title": "Run an explicitly enabled bounded harness hook.",
+                "command": "anx hook session.start"
+            }
+        ],
+        "go_method": "",
+        "ts_method": ""
     },
     {
         "command_id": "hosts.bridge.check_in",
@@ -8326,6 +8566,49 @@ export const commandRegistry = [
         "ts_method": "inboxSummary"
     },
     {
+        "command_id": "integrations.bind",
+        "cli_path": "integrations bind",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Bind a local harness session to an accessible card.",
+        "why": "Bind a local harness session to an accessible card.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Explicit local binding scoped by workspace, principal and hashed session identity.",
+        "examples": [
+            {
+                "title": "Bind a local harness session to an accessible card.",
+                "command": "anx integrations bind --session-id session --card-id card:work"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.disable",
+            "integrations.enable",
+            "integrations.list",
+            "integrations.map",
+            "integrations.run",
+            "integrations.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
         "command_id": "integrations.disable",
         "cli_path": "integrations disable",
         "group": "integrations",
@@ -8357,8 +8640,10 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "integrations.bind",
             "integrations.enable",
             "integrations.list",
+            "integrations.map",
             "integrations.run",
             "integrations.status"
         ],
@@ -8397,8 +8682,10 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "integrations.bind",
             "integrations.disable",
             "integrations.list",
+            "integrations.map",
             "integrations.run",
             "integrations.status"
         ],
@@ -8437,8 +8724,53 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "integrations.bind",
             "integrations.disable",
             "integrations.enable",
+            "integrations.map",
+            "integrations.run",
+            "integrations.status"
+        ],
+        "go_method": "",
+        "ts_method": ""
+    },
+    {
+        "command_id": "integrations.map",
+        "cli_path": "integrations map",
+        "group": "integrations",
+        "method": "LOCAL",
+        "path": "",
+        "operation_id": "",
+        "summary": "Map a directory to an accessible default card.",
+        "why": "Map a directory to an accessible default card.",
+        "input_mode": "flags",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Envelope v2 with local configuration or capture progress.",
+        "error_codes": [
+            "invalid_flags",
+            "invalid_args",
+            "identity_changed",
+            "not_capture_writer"
+        ],
+        "concepts": [
+            "integrations"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Explicit local directory rule; does not change workspace selection or participation.",
+        "examples": [
+            {
+                "title": "Map a directory to an accessible default card.",
+                "command": "anx integrations map ./project --card-id card:work"
+            }
+        ],
+        "adjacent_commands": [
+            "integrations.bind",
+            "integrations.disable",
+            "integrations.enable",
+            "integrations.list",
             "integrations.run",
             "integrations.status"
         ],
@@ -8477,9 +8809,11 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "integrations.bind",
             "integrations.disable",
             "integrations.enable",
             "integrations.list",
+            "integrations.map",
             "integrations.status"
         ],
         "go_method": "",
@@ -8517,9 +8851,11 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "integrations.bind",
             "integrations.disable",
             "integrations.enable",
             "integrations.list",
+            "integrations.map",
             "integrations.run"
         ],
         "go_method": "",

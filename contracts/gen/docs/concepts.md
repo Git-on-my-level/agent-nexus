@@ -396,11 +396,19 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `integrations`
 
-- Commands: `5`
+- Commands: `13`
 - Command IDs:
+  - `git.binding.export`
+  - `git.disable`
+  - `git.enable`
+  - `git.status`
+  - `git.sync`
+  - `hook`
+  - `integrations.bind`
   - `integrations.disable`
   - `integrations.enable`
   - `integrations.list`
+  - `integrations.map`
   - `integrations.run`
   - `integrations.status`
 

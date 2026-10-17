@@ -72,3 +72,5 @@ func TryLock(file *os.File) error {
 	}
 	return nil
 }
+
+func Contended(err error) bool { return errors.Is(err, syscall.Errno(33)) } // ERROR_LOCK_VIOLATION

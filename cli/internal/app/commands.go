@@ -162,6 +162,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "import":
 		result, name, err := a.runImportCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "git":
+		result, name, err := a.runGitCapture(ctx, args[1:], cfg)
+		return name, result, err
 	case "integrations":
 		result, name, err := a.runIntegrations(ctx, args[1:], cfg)
 		return name, result, err

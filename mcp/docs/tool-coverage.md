@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 240
+- Command count: 248
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -25,10 +25,12 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | derived | 1 |
 | docs | 19 |
 | events | 8 |
+| git | 5 |
 | home | 2 |
+| hook | 1 |
 | host | 15 |
 | inbox | 5 |
-| integrations | 5 |
+| integrations | 7 |
 | meta | 9 |
 | notifications | 2 |
 | ops | 3 |
@@ -60,7 +62,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 12 |
 | unsupported_other | 9 |
-| unsupported_shell_shaped | 7 |
+| unsupported_shell_shaped | 15 |
 | unsupported_streaming | 6 |
 
 ## Counts by Surface
@@ -71,7 +73,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 67 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 45 | not represented as direct MCP tools in v1 |
+| unsupported | 53 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -197,8 +199,14 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | events.stream | events | GET | /stream/events | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | events.trash | events | POST | /events/{event_id}/trash | exposed_write | ordinary reversible event lifecycle write |
 | events.unarchive | events | POST | /events/{event_id}/unarchive | exposed_write | ordinary reversible event lifecycle write |
+| git.binding.export | git | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
+| git.disable | git | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
+| git.enable | git | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
+| git.status | git | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
+| git.sync | git | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | home.read | home | POST | /home/read | exposed_write | ordinary home read-marker write |
 | home.unread | home | GET | /home/unread | exposed_read | home unread projection |
+| hook | hook | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | hosts.bridge.check_in | host | POST | /hosts/{host_id}/bridge/check-in | unsupported_other | bridge check-in is host-signed infrastructure traffic |
 | hosts.enroll.approve | host | POST | /auth/hosts/enrollments/{enrollment_id}/approve | gated_admin | approving a host grants machine-level credentials |
 | hosts.enroll.complete | host | POST | /auth/hosts/enrollments/{enrollment_id}/complete | unsupported_bootstrap_auth | host enrollment is a local machine ceremony |
@@ -219,9 +227,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | inbox.summary | inbox | GET | /inbox/summary | exposed_read | workspace-local count and bounded human asks visible to the caller |
+| integrations.bind | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | integrations.disable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | integrations.enable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | integrations.list | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
+| integrations.map | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | integrations.run | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | integrations.status | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | meta.commands.get | meta | GET | /meta/commands/{command_id} | exposed_read | command metadata read |

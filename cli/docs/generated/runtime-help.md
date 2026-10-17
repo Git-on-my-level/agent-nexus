@@ -24,6 +24,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `doctor` (manual): Report workspace resolution and local/network preconditions.
 - `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
+- `git` (local-helper): Opt-in agent context and Git progress integration.
+- `hook` (local-helper): Opt-in agent context and Git progress integration.
 - `integrations` (group): Discover and opt into optional harness hooks
 - `series` (group): Push and query declared live series with source provenance
 - `adapters` (group): Declare and administer scoped host-local live data sources
@@ -257,6 +259,13 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `host revoke` (local-helper): Revoke a host by ID or slug. Agents cannot revoke their own host.
 - `meta skill` (local-helper): Render the bundled participant or PM skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
+- `git enable` (local-helper): Opt-in agent context and Git progress integration.
+- `git sync` (local-helper): Opt-in agent context and Git progress integration.
+- `git status` (local-helper): Opt-in agent context and Git progress integration.
+- `git disable` (local-helper): Opt-in agent context and Git progress integration.
+- `git binding export` (local-helper): Opt-in agent context and Git progress integration.
+- `integrations bind` (local-helper): Opt-in harness integration: bind.
+- `integrations map` (local-helper): Opt-in harness integration: map.
 - `bridge run` (local-helper): Run registered answer commands for the selected agent on this host.
 - `bridge install` (local-helper): Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.
 - `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
@@ -920,6 +929,63 @@ Output conventions
 - `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
 ```
 
+## `git`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: git
+
+Opt-in Git progress capture. Everything is off until explicitly enabled.
+
+anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
+anx git enable [repo] --binding <file> [--dry-run]
+anx git binding export [repo]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git status [repo]
+anx git disable [repo]
+
+Use --workspace and --as to select the capture writer when enabling. Export its
+binding and import it on other clones; those hosts report not_capture_writer.
+No automatic election/failover. Existing post-commit hooks are never overwritten.
+Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
+Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
+Step/status/completion trailers are rejected. Rewrites need explicit --since
+reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
+--skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+```
+
+## `hook`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: hook
+
+Optional context and capture hooks, off by default.
+
+anx integrations enable context.inject --harness generic|claude-code|codex|cursor [--scope project|user|local] [--card-id card:<ref>] [--allow-stale] [--dry-run]
+anx integrations enable git.capture --harness <harness> [--scope <scope>] [--dry-run]
+anx integrations status context.inject|git.capture [--harness <harness>] [--scope <scope>]
+anx integrations disable context.inject|git.capture [--harness <harness>] [--scope <scope>] [--dry-run]
+anx integrations bind --session-id <id> --card-id card:<ref> [--harness <harness>] [--dry-run]
+anx integrations map <directory> --card-id card:<ref> [--dry-run]
+anx hook session.start|context.compacted|tool.after [--harness <harness>] [--card-id <ref>] < payload.json
+anx hook git.commit --harness git
+
+Specify --as when enabling; --workspace selects an explicit workspace. A project
+installation applies within that directory; user installs apply everywhere in
+the pinned workspace. Card order: explicit argument/payload, session binding,
+installation default, longest directory rule, none. No implicit presence writes.
+Generic payload: {schema_version:1,cwd:<absolute>,session_id?:<id>,card_ref?:<ref>}.
+Hooks fail open within 1.5s. Stale cache is off unless enabled, at most five minutes,
+and cannot verify offline revocation. Claude/Codex SessionStart(compact) injects
+context; Cursor sessionStart is asynchronous and has no post-compaction promise.
+Codex trust review is required; inspect hooks in the harness. Unsupported versions
+must use generic/manual anx context. Tool-after is a scan hint, never commit proof.
+```
+
 ## `integrations`
 
 Discover and opt into optional harness hooks
@@ -945,6 +1011,27 @@ Use status/disable with the same scope and project directory used for enable.
 
 Harness scopes:
   claude-code: user|project|local (default: user)
+Optional context and capture hooks, off by default.
+
+anx integrations enable context.inject --harness generic|claude-code|codex|cursor [--scope project|user|local] [--card-id card:<ref>] [--allow-stale] [--dry-run]
+anx integrations enable git.capture --harness <harness> [--scope <scope>] [--dry-run]
+anx integrations status context.inject|git.capture [--harness <harness>] [--scope <scope>]
+anx integrations disable context.inject|git.capture [--harness <harness>] [--scope <scope>] [--dry-run]
+anx integrations bind --session-id <id> --card-id card:<ref> [--harness <harness>] [--dry-run]
+anx integrations map <directory> --card-id card:<ref> [--dry-run]
+anx hook session.start|context.compacted|tool.after [--harness <harness>] [--card-id <ref>] < payload.json
+anx hook git.commit --harness git
+
+Specify --as when enabling; --workspace selects an explicit workspace. A project
+installation applies within that directory; user installs apply everywhere in
+the pinned workspace. Card order: explicit argument/payload, session binding,
+installation default, longest directory rule, none. No implicit presence writes.
+Generic payload: {schema_version:1,cwd:<absolute>,session_id?:<id>,card_ref?:<ref>}.
+Hooks fail open within 1.5s. Stale cache is off unless enabled, at most five minutes,
+and cannot verify offline revocation. Claude/Codex SessionStart(compact) injects
+context; Cursor sessionStart is asynchronous and has no post-compaction promise.
+Codex trust review is required; inspect hooks in the harness. Unsupported versions
+must use generic/manual anx context. Tool-after is a scan hint, never commit proof.
 ```
 
 ## `series`
@@ -9334,6 +9421,201 @@ Options:
 Examples:
   anx install skill --path ./SKILL.md
   anx install skill ./anx-participant/SKILL.md
+```
+
+## `git enable`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: git enable
+
+Opt-in Git progress capture. Everything is off until explicitly enabled.
+
+anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
+anx git enable [repo] --binding <file> [--dry-run]
+anx git binding export [repo]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git status [repo]
+anx git disable [repo]
+
+Use --workspace and --as to select the capture writer when enabling. Export its
+binding and import it on other clones; those hosts report not_capture_writer.
+No automatic election/failover. Existing post-commit hooks are never overwritten.
+Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
+Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
+Step/status/completion trailers are rejected. Rewrites need explicit --since
+reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
+--skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+```
+
+## `git sync`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: git sync
+
+Opt-in Git progress capture. Everything is off until explicitly enabled.
+
+anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
+anx git enable [repo] --binding <file> [--dry-run]
+anx git binding export [repo]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git status [repo]
+anx git disable [repo]
+
+Use --workspace and --as to select the capture writer when enabling. Export its
+binding and import it on other clones; those hosts report not_capture_writer.
+No automatic election/failover. Existing post-commit hooks are never overwritten.
+Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
+Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
+Step/status/completion trailers are rejected. Rewrites need explicit --since
+reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
+--skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+```
+
+## `git status`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: git status
+
+Opt-in Git progress capture. Everything is off until explicitly enabled.
+
+anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
+anx git enable [repo] --binding <file> [--dry-run]
+anx git binding export [repo]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git status [repo]
+anx git disable [repo]
+
+Use --workspace and --as to select the capture writer when enabling. Export its
+binding and import it on other clones; those hosts report not_capture_writer.
+No automatic election/failover. Existing post-commit hooks are never overwritten.
+Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
+Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
+Step/status/completion trailers are rejected. Rewrites need explicit --since
+reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
+--skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+```
+
+## `git disable`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: git disable
+
+Opt-in Git progress capture. Everything is off until explicitly enabled.
+
+anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
+anx git enable [repo] --binding <file> [--dry-run]
+anx git binding export [repo]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git status [repo]
+anx git disable [repo]
+
+Use --workspace and --as to select the capture writer when enabling. Export its
+binding and import it on other clones; those hosts report not_capture_writer.
+No automatic election/failover. Existing post-commit hooks are never overwritten.
+Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
+Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
+Step/status/completion trailers are rejected. Rewrites need explicit --since
+reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
+--skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+```
+
+## `git binding export`
+
+Opt-in agent context and Git progress integration.
+
+```text
+Local Help: git binding export
+
+Opt-in Git progress capture. Everything is off until explicitly enabled.
+
+anx git enable [repo] --writer [--install-hook] [--commit-url <https-url-with-{sha}>] [--dry-run]
+anx git enable [repo] --binding <file> [--dry-run]
+anx git binding export [repo]
+anx git sync [repo] [--since <commit>] [--to <commit>] [--restart-scan] [--skip <failed-sha>]
+anx git status [repo]
+anx git disable [repo]
+
+Use --workspace and --as to select the capture writer when enabling. Export its
+binding and import it on other clones; those hosts report not_capture_writer.
+No automatic election/failover. Existing post-commit hooks are never overwritten.
+Anx-Card: card:<handle>, optional Anx-Note, optional Anx-Next: <date> <promise>.
+Anx-Next also accepts a zoned timestamp or note duration anchored to commit time.
+Step/status/completion trailers are rejected. Rewrites need explicit --since
+reconciliation; backfill omits promises/structured evidence. Re-run sync to page
+large frozen scans/drain offline requests. Failed/uncertain bytes are retained.
+--skip explicitly acknowledges an inspected failed head entry; it never deletes it.
+```
+
+## `integrations bind`
+
+Opt-in harness integration: bind.
+
+```text
+Local Help: integrations bind
+
+Optional context and capture hooks, off by default.
+
+anx integrations enable context.inject --harness generic|claude-code|codex|cursor [--scope project|user|local] [--card-id card:<ref>] [--allow-stale] [--dry-run]
+anx integrations enable git.capture --harness <harness> [--scope <scope>] [--dry-run]
+anx integrations status context.inject|git.capture [--harness <harness>] [--scope <scope>]
+anx integrations disable context.inject|git.capture [--harness <harness>] [--scope <scope>] [--dry-run]
+anx integrations bind --session-id <id> --card-id card:<ref> [--harness <harness>] [--dry-run]
+anx integrations map <directory> --card-id card:<ref> [--dry-run]
+anx hook session.start|context.compacted|tool.after [--harness <harness>] [--card-id <ref>] < payload.json
+anx hook git.commit --harness git
+
+Specify --as when enabling; --workspace selects an explicit workspace. A project
+installation applies within that directory; user installs apply everywhere in
+the pinned workspace. Card order: explicit argument/payload, session binding,
+installation default, longest directory rule, none. No implicit presence writes.
+Generic payload: {schema_version:1,cwd:<absolute>,session_id?:<id>,card_ref?:<ref>}.
+Hooks fail open within 1.5s. Stale cache is off unless enabled, at most five minutes,
+and cannot verify offline revocation. Claude/Codex SessionStart(compact) injects
+context; Cursor sessionStart is asynchronous and has no post-compaction promise.
+Codex trust review is required; inspect hooks in the harness. Unsupported versions
+must use generic/manual anx context. Tool-after is a scan hint, never commit proof.
+```
+
+## `integrations map`
+
+Opt-in harness integration: map.
+
+```text
+Local Help: integrations map
+
+Optional context and capture hooks, off by default.
+
+anx integrations enable context.inject --harness generic|claude-code|codex|cursor [--scope project|user|local] [--card-id card:<ref>] [--allow-stale] [--dry-run]
+anx integrations enable git.capture --harness <harness> [--scope <scope>] [--dry-run]
+anx integrations status context.inject|git.capture [--harness <harness>] [--scope <scope>]
+anx integrations disable context.inject|git.capture [--harness <harness>] [--scope <scope>] [--dry-run]
+anx integrations bind --session-id <id> --card-id card:<ref> [--harness <harness>] [--dry-run]
+anx integrations map <directory> --card-id card:<ref> [--dry-run]
+anx hook session.start|context.compacted|tool.after [--harness <harness>] [--card-id <ref>] < payload.json
+anx hook git.commit --harness git
+
+Specify --as when enabling; --workspace selects an explicit workspace. A project
+installation applies within that directory; user installs apply everywhere in
+the pinned workspace. Card order: explicit argument/payload, session binding,
+installation default, longest directory rule, none. No implicit presence writes.
+Generic payload: {schema_version:1,cwd:<absolute>,session_id?:<id>,card_ref?:<ref>}.
+Hooks fail open within 1.5s. Stale cache is off unless enabled, at most five minutes,
+and cannot verify offline revocation. Claude/Codex SessionStart(compact) injects
+context; Cursor sessionStart is asynchronous and has no post-compaction promise.
+Codex trust review is required; inspect hooks in the harness. Unsupported versions
+must use generic/manual anx context. Tool-after is a scan hint, never commit proof.
 ```
 
 ## `bridge run`

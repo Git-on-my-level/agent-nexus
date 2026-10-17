@@ -3,6 +3,7 @@
 package filelock
 
 import (
+	"errors"
 	"os"
 	"syscall"
 )
@@ -25,4 +26,9 @@ func Unlock(file *os.File) error {
 // remain at a stable inode: never unlink one to recover a dead owner.
 func TryLock(file *os.File) error {
 	return syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+}
+
+// Contended distinguishes an occupied lock from unsupported or invalid I/O.
+func Contended(err error) bool {
+	return errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN)
 }

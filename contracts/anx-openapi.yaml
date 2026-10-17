@@ -46,6 +46,134 @@ x-anx-extension-vocabulary:
   x-anx-agent-notes: Idempotency, retries, and protocol caveats.
 # CLI-only commands participate in discovery, never the HTTP route inventory.
 x-anx-local-commands:
+  - x-anx-command-id: hook
+    x-anx-cli-path: hook
+    summary: Run an explicitly enabled bounded harness hook.
+    x-anx-why: Run an explicitly enabled bounded harness hook.
+    x-anx-input-mode: raw-stream
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Native hook protocol; generic schema_version 1, context, card_ref, as_of, stale.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Off by default; fail-open exit 0, native harness stdout or generic HookBrief v1 rather than an envelope. No implicit presence writes.
+    x-anx-examples:
+      - title: Run an explicitly enabled bounded harness hook.
+        command: anx hook session.start
+  - x-anx-command-id: integrations.bind
+    x-anx-cli-path: integrations bind
+    summary: Bind a local harness session to an accessible card.
+    x-anx-why: Bind a local harness session to an accessible card.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Explicit local binding scoped by workspace, principal and hashed session identity.
+    x-anx-examples:
+      - title: Bind a local harness session to an accessible card.
+        command: anx integrations bind --session-id session --card-id card:work
+  - x-anx-command-id: integrations.map
+    x-anx-cli-path: integrations map
+    summary: Map a directory to an accessible default card.
+    x-anx-why: Map a directory to an accessible default card.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Explicit local directory rule; does not change workspace selection or participation.
+    x-anx-examples:
+      - title: Map a directory to an accessible default card.
+        command: anx integrations map ./project --card-id card:work
+  - x-anx-command-id: git.enable
+    x-anx-cli-path: git enable
+    summary: Opt into Git notes and promises with an explicitly elected writer.
+    x-anx-why: Opt into Git notes and promises with an explicitly elected writer.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: No initial upload; imports on other hosts cannot capture. Optional hook never overwrites existing hooks.
+    x-anx-examples:
+      - title: Opt into Git notes and promises with an explicitly elected writer.
+        command: anx git enable --writer --dry-run
+  - x-anx-command-id: git.sync
+    x-anx-cli-path: git sync
+    summary: Capture bounded local commit trailers and drain frozen note requests.
+    x-anx-why: Capture bounded local commit trailers and drain frozen note requests.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Actor-bound event replay; notes and optional next promise atomic. FIFO retained requests, no unsent eviction; historical backfill omits promise and structured evidence.
+    x-anx-examples:
+      - title: Capture bounded local commit trailers and drain frozen note requests.
+        command: anx git sync
+  - x-anx-command-id: git.status
+    x-anx-cli-path: git status
+    summary: Inspect local Git capture binding, cursor and pending work.
+    x-anx-why: Inspect local Git capture binding, cursor and pending work.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Offline local state; no remote reads or writes.
+    x-anx-examples:
+      - title: Inspect local Git capture binding, cursor and pending work.
+        command: anx git status
+  - x-anx-command-id: git.disable
+    x-anx-cli-path: git disable
+    summary: Disable Git capture and remove only the exact owned post-commit hook.
+    x-anx-why: Disable Git capture and remove only the exact owned post-commit hook.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Preserves all queued, failed and confirmed records for inspection.
+    x-anx-examples:
+      - title: Disable Git capture and remove only the exact owned post-commit hook.
+        command: anx git disable
+  - x-anx-command-id: git.binding.export
+    x-anx-cli-path: git binding export
+    summary: Export the non-secret elected writer binding for another clone.
+    x-anx-why: Export the non-secret elected writer binding for another clone.
+    x-anx-input-mode: flags
+    x-anx-streaming: { mode: none }
+    x-anx-output-envelope: Envelope v2 with local configuration or capture progress.
+    x-anx-error-codes:
+      [invalid_flags, invalid_args, identity_changed, not_capture_writer]
+    x-anx-concepts: [integrations]
+    x-anx-stability: beta
+    x-anx-surface: utility
+    x-anx-agent-notes: Envelope v2 result can be imported directly; no key or token is exported.
+    x-anx-examples:
+      - title: Export the non-secret elected writer binding for another clone.
+        command: anx git binding export
   - x-anx-command-id: integrations.list
     x-anx-cli-path: integrations list
     summary: List optional harness integrations and local state.

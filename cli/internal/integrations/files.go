@@ -236,6 +236,9 @@ func Lock(ctx context.Context, path string) (func(), error) {
 	for {
 		if err = filelock.TryLock(f); err == nil {
 			return func() { _ = filelock.Unlock(f); _ = f.Close() }, nil
+		} else if !filelock.Contended(err) {
+			_ = f.Close()
+			return nil, err
 		}
 		select {
 		case <-ctx.Done():
@@ -244,4 +247,24 @@ func Lock(ctx context.Context, path string) (func(), error) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
+}
+
+// Private cache/queue files never inherit a permissive planted file mode.
+func PrivateWrite(path string, raw []byte) error {
+	if st, e := os.Lstat(path); e == nil && (!st.Mode().IsRegular() || st.Mode().Perm() != 0600) {
+		return fmt.Errorf("private file must be regular mode 0600")
+	} else if e != nil && !errors.Is(e, os.ErrNotExist) {
+		return e
+	}
+	return AtomicWrite(path, raw)
+}
+func PrivateRead(path string) ([]byte, error) {
+	st, e := os.Lstat(path)
+	if e != nil {
+		return nil, e
+	}
+	if !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
+		return nil, fmt.Errorf("private file must be regular mode 0600")
+	}
+	return Read(path)
 }

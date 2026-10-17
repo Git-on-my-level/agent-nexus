@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `240`
+- Command operations: `248`
 - Baseline-allowed required-field gaps: `120`
 - Missing recommended examples: `212`
 

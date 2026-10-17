@@ -16,7 +16,7 @@ import (
 	"agent-nexus-cli/internal/integrations"
 )
 
-var integrationsSpec = subcommandSpec{command: "integrations", valid: []string{"list", "status", "enable", "disable", "run"}, examples: []string{"anx integrations list", "anx integrations enable claude-code-suggested-tasks --board follow-ups"}}
+var integrationsSpec = subcommandSpec{command: "integrations", valid: []string{"list", "status", "enable", "disable", "run", "bind", "map"}, examples: []string{"anx integrations list", "anx integrations enable claude-code-suggested-tasks --board follow-ups"}}
 
 type integrationOptions struct {
 	verb, name, scope, installation, board, column string
@@ -218,6 +218,9 @@ func (a *App) integrationStatus(cfg config.Resolved, r integrations.Recipe, scop
 	return result, nil
 }
 func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if newHookIntegration(args) {
+		return a.runHookIntegration(ctx, args, cfg)
+	}
 	o, err := parseIntegrationOptions(args)
 	name := "integrations " + o.verb
 	if err != nil {
@@ -237,6 +240,25 @@ func (a *App) runIntegrations(ctx context.Context, args []string, cfg config.Res
 				return nil, name, err
 			}
 			items = append(items, s)
+		}
+		dir, err := a.configDir(cfg)
+		if err != nil {
+			return nil, name, err
+		}
+		hooks, err := integrations.LoadHooks(dir)
+		if err != nil {
+			return nil, name, err
+		}
+		for _, recipe := range []string{"context.inject", "git.capture"} {
+			enabled := false
+			installed := []integrations.HookInstallation{}
+			for _, i := range hooks.Installations {
+				if i.Recipe == recipe {
+					installed = append(installed, i)
+					enabled = enabled || i.Enabled
+				}
+			}
+			items = append(items, map[string]any{"name": recipe, "enabled": enabled, "installations": installed, "harnesses": []string{"generic", "claude-code", "codex", "cursor"}, "status_command": "anx integrations status " + recipe})
 		}
 		return &commandResult{Data: map[string]any{"integrations": items}}, name, nil
 	}

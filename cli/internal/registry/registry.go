@@ -332,6 +332,16 @@ func sideEffectClass(cmd Command) string {
 		}
 		return "local_operational_write"
 	}
+
+	if cmd.CLIPath == "git sync" || cmd.CLIPath == "hook" {
+		return "remote_coordination_write"
+	}
+	if cmd.CLIPath == "git enable" || cmd.CLIPath == "git disable" || cmd.CLIPath == "integrations bind" || cmd.CLIPath == "integrations map" {
+		return "local_operational_write"
+	}
+	if cmd.CLIPath == "git status" || cmd.CLIPath == "git binding export" {
+		return "read_only"
+	}
 	if strings.HasPrefix(cmd.CLIPath, "integrations ") {
 		switch cmd.CLIPath {
 		case "integrations enable", "integrations disable":
