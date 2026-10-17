@@ -29,8 +29,9 @@ func annotateMissingRef(err error, path string) {
 		return
 	}
 	path, _, _ = strings.Cut(path, "?")
-	for _, part := range strings.Split(path, "/") {
-		part, _ = url.PathUnescape(part)
+	parts := strings.Split(path, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		part, _ := url.PathUnescape(parts[i])
 		if _, ok := workspaceRefPath(part); ok {
 			errnorm.AnnotateDetail(err, "requested_ref", part)
 			return

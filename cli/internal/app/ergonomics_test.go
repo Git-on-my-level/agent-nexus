@@ -331,3 +331,11 @@ func TestWorkspaceHintsIgnoreHTMLAndUnrelatedJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestMissingRefSelectsInnermostTypedResource(t *testing.T) {
+	e := errnorm.New(errnorm.KindRemote, "not_found", "board or card not found")
+	annotateMissingRef(e, "/boards/board:tasks/cards/card:ship")
+	if got := anyString(asMap(e.Details)["requested_ref"]); got != "card:ship" {
+		t.Fatalf("missing ref=%s", got)
+	}
+}
