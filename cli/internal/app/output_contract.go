@@ -472,6 +472,11 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 	if err == nil {
 		return []output.NextAction{}
 	}
+	if details, ok := err.Details.(map[string]any); ok {
+		if argv := stringList(details["workspace_next_argv"]); len(argv) > 0 {
+			return []output.NextAction{action("Retry in matching workspace", argv...)}
+		}
+	}
 	if strings.HasPrefix(command, "plan ") && (err.Code == "not_found" || err.Code == "invalid_request" || err.Code == "conflict") {
 		if details, ok := err.Details.(map[string]any); ok {
 			if card := strings.TrimSpace(anyString(details["card_ref"])); card != "" {

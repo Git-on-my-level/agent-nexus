@@ -78,9 +78,36 @@ func TestAgentErgonomicsAgainstCore(t *testing.T) {
 		}
 		return res
 	}
-	created := ok(true, map[string]any{"title": "Agent ergonomics scenario", "phase": "ready"}, "work", "create", "--from-file", "-")
+	created := ok(true, map[string]any{"title": "Agent ergonomics scenario", "phase": "ready"}, "work", "create", "--from-file", "-", "--handle", "ergonomics-task")
 	ref := mustStringPath(t, created.Payload, "result.work.ref")
-	ok(false, nil, "orient")
+	if ref != "card:ergonomics-task" {
+		t.Fatalf("chosen handle ignored: %s", created.Stdout)
+	}
+	orient := ok(false, nil, "orient")
+	if !strings.Contains(orient.Stdout, "source=flag:--base-url") {
+		t.Fatalf("workspace selection missing: %s", orient.Stdout)
+	}
+	urlResult := ok(false, nil, "url", ref)
+	legacyURL := ok(false, nil, "url", "card", ref)
+	if urlResult.Stdout != legacyURL.Stdout || strings.Count(urlResult.Stdout, "\n") != 1 || !strings.HasPrefix(urlResult.Stdout, h.baseURL+"/") {
+		t.Fatalf("url output: %s", urlResult.Stdout)
+	}
+	noted := ok(false, nil, "note", ref, "Progress saved", "--next", "1d", "Acceptance checks")
+	if !strings.Contains(noted.Stdout, "saved note_ref=event:") || !strings.Contains(noted.Stdout, "next_at=") || !strings.Contains(noted.Stdout, `next_what="Acceptance checks"`) || strings.Contains(noted.Stdout, "Review the error") {
+		t.Fatalf("note confirmation: %s", noted.Stdout)
+	}
+	noNext := ok(false, nil, "note", ref, "More progress")
+	if strings.Contains(noNext.Stdout, "suggest.3=") || !strings.Contains(noNext.Stdout, "anx note "+ref+" --next") {
+		t.Fatalf("note suggestion: %s", noNext.Stdout)
+	}
+	card := ok(false, nil, "cards", "create", "--board", mustStringPath(t, created.Payload, "result.work.board_ref"), "--title", "Ergonomics extra card", "--body", "Details", "--handle", "ergonomics-extra")
+	if !strings.Contains(card.Stdout, "created ref=card:ergonomics-extra handle=ergonomics-extra url=") || strings.Contains(card.Stdout, "result.board.card_refs") {
+		t.Fatalf("create confirmation: %s", card.Stdout)
+	}
+	conflict := run(true, map[string]any{"title": "Duplicate"}, "work", "create", "--from-file", "-", "--handle", "ergonomics-task")
+	if conflict.ExitCode != 4 || !strings.Contains(conflict.Stdout, "handle is already reserved") {
+		t.Fatalf("handle conflict: %s", conflict.Stdout)
+	}
 	ok(false, nil, "work", "start", ref)
 	session := ok(true, map[string]any{"provider": "generic", "native_session_id": "ergonomics-scenario", "activity": "active", "sequence": 1, "capabilities": map[string]any{"resume": "unknown", "history": "unsupported", "logs": "unknown"}}, "sessions", "register", "--from-file", "-")
 	ok(false, map[string]any{"session_id": mustStringPath(t, session.Payload, "result.session.session_id"), "activity": "active", "sequence": 1}, "work", "participants", "register", ref, "--from-file", "-")

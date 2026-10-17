@@ -224,6 +224,7 @@ const (
 type preflightFlagSpec struct {
 	kind            preflightFlagKind
 	requireNonEmpty bool
+	validate        func(string) error
 }
 
 func preflightKnownCommandShape(args []string) error {
@@ -314,7 +315,11 @@ func preflightKnownCommandShape(args []string) error {
 	case "read":
 		return nil
 	case "url":
-		return nil
+		if len(args) == 1 || isHelpToken(args[1]) {
+			return nil
+		}
+		_, err := parseURLArgs(args[1:])
+		return err
 	case "actors":
 		return preflightSubcommand(args[1:], actorsSubcommandSpec)
 	case "threads":
@@ -497,6 +502,7 @@ func matchPreflightFlagSpec(args []string) (string, []string, bool) {
 
 func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error {
 	seen := map[string]bool{}
+	validationValues := map[string]string{}
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
 		if arg == "" {
@@ -534,9 +540,18 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 					return errnorm.Usage("invalid_request", fmt.Sprintf("--%s must not be empty", name))
 				}
 				i++
+				value = args[i]
 			} else if flagSpec.requireNonEmpty && strings.TrimSpace(value) == "" {
 				return errnorm.Usage("invalid_request", fmt.Sprintf("--%s must not be empty", name))
 			}
+			if flagSpec.validate != nil {
+				validationValues[name] = value
+			}
+		}
+	}
+	for name, value := range validationValues {
+		if err := spec[name].validate(value); err != nil {
+			return err
 		}
 	}
 	return validateLifecycleFilterFlags(seen["include-archived"], seen["archived-only"], seen["include-trashed"], seen["trashed-only"])
@@ -932,6 +947,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"propose":     boolFlag,
 		},
 		"cards create": {
+			"handle":              {kind: preflightFlagString, validate: validateCardHandle},
 			"board":               valueFlag,
 			"board-id":            valueFlag,
 			"title":               valueFlag,

@@ -200,7 +200,7 @@ func displayResourceKind(kind string) string {
 	}
 }
 
-func (a *App) runReadCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+func (a *App) runReadCommand(ctx context.Context, args []string, cfg config.Resolved) (out *commandResult, runErr error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return &commandResult{Text: readCommandHelpText(), Data: map[string]any{"help_text": readCommandHelpText()}}, nil
 	}
@@ -208,6 +208,7 @@ func (a *App) runReadCommand(ctx context.Context, args []string, cfg config.Reso
 		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx read`; pass one ANX URL or typed ref")
 	}
 	raw := strings.TrimSpace(args[0])
+	defer func() { annotateMissingRef(runErr, "/"+url.PathEscape(raw)) }()
 	loc, ok, err := parseResourceLocator(raw)
 	if err != nil {
 		return nil, err
@@ -247,21 +248,10 @@ func (a *App) runURLCommand(ctx context.Context, args []string, cfg config.Resol
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return &commandResult{Text: urlCommandHelpText(), Data: map[string]any{"help_text": urlCommandHelpText()}}, nil
 	}
-	if len(args) != 2 {
-		return nil, errnorm.Usage("invalid_args", "`anx url` expects `<type> <id-or-url-or-ref>`")
-	}
-	kind := canonicalResourceKind(args[0])
-	if kind == "" {
-		return nil, errnorm.Usage("invalid_request", "resource type is required")
-	}
-	id, err := normalizeResourceIDInput(args[1], kind, kind+" id")
+	loc, err := parseURLArgs(args)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateID(id, kind+" id"); err != nil {
-		return nil, err
-	}
-	loc := resourceLocator{Kind: kind, ID: id}
 	loc, err = a.resolveLocatorForURL(ctx, cfg, loc)
 	if err != nil {
 		return nil, err
@@ -278,6 +268,36 @@ func (a *App) runURLCommand(ctx context.Context, args []string, cfg config.Resol
 			"id":   loc.ID,
 		},
 	}, nil
+}
+
+func parseURLArgs(args []string) (resourceLocator, error) {
+	if len(args) == 1 {
+		loc, ok, err := typedRefLocator(args[0])
+		if err != nil {
+			return loc, err
+		}
+		if ok {
+			if loc.Kind == "card" {
+				loc.ID = args[0]
+			}
+			return loc, nil
+		}
+	}
+	if len(args) != 2 {
+		return resourceLocator{}, errnorm.Usage("invalid_args", "`anx url` expects `<typed-ref>` or `<type> <id-or-url-or-ref>`")
+	}
+	kind := canonicalResourceKind(args[0])
+	id, err := normalizeResourceIDInput(args[1], kind, kind+" id")
+	if err != nil {
+		return resourceLocator{}, err
+	}
+	if err := validateID(id, kind+" id"); err != nil {
+		return resourceLocator{}, err
+	}
+	if kind != "card" {
+		id = refID(id)
+	}
+	return resourceLocator{Kind: kind, ID: id}, nil
 }
 
 func (a *App) resolveLocatorForURL(ctx context.Context, cfg config.Resolved, loc resourceLocator) (resourceLocator, error) {
@@ -369,8 +389,11 @@ func locatorFromCommandBody(commandID string, body map[string]any) (resourceLoca
 		artifact := extractNestedMap(body, "artifact")
 		id := publicLocatorID(artifact, "artifact")
 		return resourceLocator{Kind: "artifact", ID: id}, id != ""
-	case "cards.create":
+	case "cards.create", "work.create":
 		card := extractNestedMap(body, "card")
+		if commandID == "work.create" {
+			card = extractNestedMap(body, "work")
+		}
 		id := publicLocatorID(card, "card")
 		boardID := firstNonEmpty(refID(anyString(card["board_ref"])), strings.TrimSpace(anyString(card["board_handle"])))
 		if boardID == "" {
@@ -514,8 +537,11 @@ func urlCommandHelpText() string {
 	return strings.TrimSpace(`Local Help: url
 
 - Kind: local helper
-- Summary: Print a shareable ANX URL for a resource.
+- Summary: Print only the shareable URL to stdout; --json includes resource details.
 - Examples:
+  - anx url card:<card-handle>
+  - anx url topic:<topic-handle>
+  - anx url thread:<thread-handle>
   - anx url card <card-ref-or-handle>
   - anx url board <board-ref-or-handle>
   - anx url document <doc-ref-or-handle>`)

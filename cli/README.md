@@ -143,3 +143,35 @@ the harness provenance stamp. Adapters own allowed/default scopes, project scope
 semantics, settings location, merge and inspection. Neither requires a new CLI command. The first
 adapter installs POSIX-shell commands; Windows hook-shell support is not yet
 qualified.
+
+### Workspace and resource ergonomics
+
+`anx orient` reports the resolved workspace alias, base URL, selection source
+(`--workspace`, `--base-url`, `ANX_BASE_URL`, directory rule, default or the sole
+enrollment), and other configured aliases. JSON adds these under `result.workspace`.
+
+When a typed resource ref is missing, the CLI can suggest another configured,
+already authenticated workspace. This is best effort: at most four distinct other
+workspace URLs, a 350 ms timeout per lookup and a 1.5 s overall budget. Only that
+workspace's unexpired cached agent token is used; redirects and token grants are
+excluded. Expired or unavailable credentials and network errors leave the original
+not-found error unchanged. Set `ANX_WORKSPACE_HINTS=0` to disable these reads.
+JSON errors expose `error.details.workspace_hint` and an exact retry command in
+`error.next_actions`. No command is automatically retried in another workspace.
+
+`anx url card:ship-fix` prints only the URL, suitable for shell substitution.
+Board, topic, document, artifact and thread refs also work. The legacy
+`anx url card ship-fix` form remains supported; `--json` retains URL, kind and id.
+
+Choose a stable card name with
+`anx cards create --board board:tasks --handle ship-fix --title "Ship fix" --body "Acceptance criteria"`. For JSON-backed work
+creation, use `anx work create --from-file work.json --handle ship-fix`; the flag
+overrides the JSON handle. Slugs use lowercase ASCII letters and digits separated
+by single hyphens, up to 64 characters; reserved names and UUIDs are rejected.
+A reserved handle fails with conflict instead of being silently renamed. Omitted
+handles derive from the title with a 40-character cap; existing handles stay intact.
+Create text confirms the ref, handle and URL. `--verbose` retains full details.
+
+`anx note card:ship-fix "Progress" --next 1d "Acceptance checks"` confirms the saved
+note ref and resolved promise date/text. Suggestions render as one shell command;
+JSON preserves their argument arrays.

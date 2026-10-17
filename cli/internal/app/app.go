@@ -237,6 +237,7 @@ func (a *App) Run(args []string) int {
 		} else if nextErr != nil {
 			runErr = nextErr
 		}
+		runErr = a.withWorkspaceHint(context.Background(), resolved, normalizedArgs, runErr)
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 	if !isGoTestBinary() && cmdPeek != "integrations" {
@@ -257,6 +258,12 @@ func (a *App) Run(args []string) int {
 	}
 	if value == nil && result != nil && result.Text != "" {
 		value = map[string]any{"text": result.Text}
+	}
+	if identity.Command == "url" && !resolved.JSON {
+		if resourceURL := anyString(asMap(value)["url"]); resourceURL != "" {
+			a.writeOutput(a.Stdout, resourceURL+"\n")
+			return 0
+		}
 	}
 	if identity.Command == "work receipt" && !resolved.JSON {
 		if id := anyString(asMap(asMap(value)["event"])["id"]); id != "" {

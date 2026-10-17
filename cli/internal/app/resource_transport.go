@@ -197,6 +197,7 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 	responseBody := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
 		err := errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Headers, responseBody)
+		annotateMissingRef(err, path)
 		a.writes.record(method, err)
 		return nil, err
 	}
@@ -254,6 +255,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 	})
 	if resp != nil && resp.StatusCode >= http.StatusBadRequest {
 		recovered, err := a.recoverCardMove(ctx, cfg, commandID, pathParams, body, errnorm.FromHTTPFailureWithHeaders(resp.StatusCode, resp.Header, responseBody))
+		annotateMissingRef(err, resolveCommandPath(commandID, pathParams, nil))
 		a.writes.record(resolveCommandMethod(commandID), err)
 		return recovered, err
 	}
@@ -350,6 +352,7 @@ func (a *App) invokeTypedJSONWithIDResolution(
 	}
 	resolvedID, resolveErr := a.resolveUniqueResourcePrefix(ctx, cfg, lookupSpec, rawID, pathParams)
 	if resolveErr != nil {
+		annotateMissingRef(resolveErr, "/"+url.PathEscape(rawID))
 		return nil, resolveErr
 	}
 	if strings.TrimSpace(resolvedID) == "" || resolvedID == rawID {

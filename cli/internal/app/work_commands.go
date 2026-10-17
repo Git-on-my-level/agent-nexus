@@ -81,6 +81,7 @@ var workCommands = map[string]workCommandSpec{
 type parsedWorkCommand struct {
 	spec               workCommandSpec
 	name, id, fromFile string
+	handle             string
 	leaseToken         string
 	runnerID           string
 	query              url.Values
@@ -122,7 +123,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
-	var id, fromFile, leaseToken, runnerID trackedString
+	var id, fromFile, leaseToken, runnerID, handle trackedString
 	var limit trackedInt
 
 	values := map[string]*trackedString{}
@@ -131,6 +132,9 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	if spec.body || spec.optionalBody {
 		fs.Var(&fromFile, "from-file", "JSON request from path or - for stdin")
+	}
+	if out.name == "work create" {
+		fs.Var(&handle, "handle", "Client-chosen lowercase card slug (1-64 characters)")
 	}
 	if workCommandUsesLeaseToken(out.name) {
 		fs.Var(&leaseToken, "lease-token", "Active PM lease token")
@@ -202,6 +206,12 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 			}
 			out.query.Set(strings.ReplaceAll(k, "-", "_"), v.value)
 		}
+	}
+	if handle.set {
+		if err := validateCardHandle(handle.value); err != nil {
+			return out, err
+		}
+		out.handle = handle.value
 	}
 	out.fromFile = strings.TrimSpace(fromFile.value)
 	out.leaseToken = strings.TrimSpace(leaseToken.value)
@@ -294,6 +304,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		if !json.Valid(raw) {
 			return nil, parsed.name, errnorm.Usage("invalid_json", "--from-file must contain one JSON object")
 		}
+		if parsed.handle != "" {
+			object["handle"] = parsed.handle
+		}
 		body = object
 	} else if parsed.spec.method == "POST" {
 		body = map[string]any{}
@@ -349,6 +362,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 			errnorm.AnnotateDetail(err, "action_id", parsed.id)
 		}
 		return result, parsed.name, err
+	}
+	if parsed.name == "work create" {
+		result = addResourceURLToResult(cfg, "work.create", result)
 	}
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
@@ -432,6 +448,9 @@ func workHelpText(topic string) (string, bool) {
 	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.\n\n")
 	if exact {
 		fmt.Fprintf(&b, "%s\n\nUsage: anx %s", spec.summary, topic)
+		if topic == "work create" {
+			b.WriteString(" [--handle <slug>]")
+		}
 		if spec.idFlag != "" {
 			fmt.Fprintf(&b, " <ref> (or --%s <ref>)", spec.idFlag)
 		}

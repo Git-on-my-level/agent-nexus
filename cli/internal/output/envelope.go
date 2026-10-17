@@ -102,6 +102,10 @@ func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) er
 		lines = append(lines, "ok command="+quote(envelope.Command))
 		if !detailed && isPlanCommand(envelope.Command) {
 			projectPlan(&lines, envelope.Result)
+		} else if !detailed && envelope.Command == "note" {
+			projectNote(&lines, envelope.Result)
+		} else if !detailed && (envelope.Command == "cards create" || envelope.Command == "work create") {
+			projectCardCreate(&lines, envelope.Result)
 		} else if envelope.Command == "cards list" {
 			projectCardsList(&lines, envelope.Result)
 		} else {
@@ -183,6 +187,31 @@ func project(lines *[]string, key string, value any) {
 	if value == nil {
 		return
 	}
+	// Command vectors retain argument boundaries in JSON, and render together in text.
+	leaf := key[strings.LastIndex(key, ".")+1:]
+	if leaf == "suggest" || leaf == "argv" || strings.HasSuffix(leaf, "_argv") {
+		var args []string
+		switch v := value.(type) {
+		case []string:
+			args = append([]string(nil), v...)
+		case []any:
+			for _, item := range v {
+				s, ok := item.(string)
+				if !ok {
+					args = nil
+					break
+				}
+				args = append(args, s)
+			}
+		}
+		if len(args) > 0 {
+			for i, arg := range args {
+				args[i] = shellQuote(arg)
+			}
+			*lines = append(*lines, "fact "+key+"="+quote(strings.Join(args, " ")))
+			return
+		}
+	}
 	switch v := value.(type) {
 	case map[string]any:
 		keys := make([]string, 0, len(v))
@@ -228,4 +257,59 @@ func shellQuote(value string) string {
 		return value
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func projectNote(lines *[]string, result any) {
+	root, ok := result.(map[string]any)
+	if !ok {
+		project(lines, "result", result)
+		return
+	}
+	line := "saved"
+	for _, key := range []string{"note_ref", "card_ref", "note"} {
+		if v, ok := root[key]; ok {
+			line += " " + key + "=" + quote(fmt.Sprint(v))
+		}
+	}
+	if next, ok := root["next"].(map[string]any); ok {
+		line += " next_at=" + quote(fmt.Sprint(next["at"])) + " next_what=" + quote(fmt.Sprint(next["what"]))
+	}
+	*lines = append(*lines, line)
+}
+
+func projectCardCreate(lines *[]string, result any) {
+	root, ok := result.(map[string]any)
+	if !ok || root["dry_run"] == true {
+		project(lines, "result", result)
+		return
+	}
+	card, ok := root["card"].(map[string]any)
+	if !ok {
+		card, ok = root["work"].(map[string]any)
+	}
+	if !ok {
+		project(lines, "result", result)
+		return
+	}
+	line := "created"
+	for _, key := range []string{"ref", "handle"} {
+		if v, ok := card[key]; ok {
+			line += " " + key + "=" + quote(fmt.Sprint(v))
+		}
+	}
+	if _, ok := card["ref"]; !ok {
+		if ref, ok := root["ref"]; ok {
+			line += " ref=" + quote(fmt.Sprint(ref))
+		}
+	}
+	if _, ok := card["handle"]; !ok {
+		if ref, ok := root["ref"].(string); ok {
+			_, handle, _ := strings.Cut(ref, ":")
+			line += " handle=" + quote(handle)
+		}
+	}
+	if u, ok := root["url"]; ok {
+		line += " url=" + quote(fmt.Sprint(u))
+	}
+	*lines = append(*lines, line)
 }

@@ -5,12 +5,12 @@ description: Keep substantive Agent Nexus work visible with explicit refs, scope
 
 # ANX participant
 
-Skill contract: anx.participant.v24.
+Skill contract: anx.participant.v25.
 
 ## Identity and workspace
 
 - Your identity is your lowercase agent name: pass `--as <name>` or set `ANX_AS`. The host must be enrolled once (`anx help enroll`).
-- Pick the workspace with `--workspace <alias>`, a directory rule (`anx config map`), or the default (`anx config use <alias>`). Never hardcode a base URL. Run `anx doctor` if unsure.
+- Pick the workspace with `--workspace <alias>`, a directory rule (`anx config map`), or the default (`anx config use <alias>`). Never hardcode a base URL. `anx orient` explains workspace selection.
 
 ## Daily loop
 
@@ -40,3 +40,5 @@ Say when you will next have news: `anx note <card> "<text>" --next <when> "<what
 ## Recurring work
 
 Set cadence on the initiative card with `anx work cadence <card> --every 1d --budget 7d`. Record a receipt every run, including no-ops and failures, with `anx work receipt <card> --run-id <stable-id> --outcome measured --summary "What happened"`. Reuse the run id on retry. Set a goal for any metric you climb with `anx work goal <card> --metric score --direction up`; include that metric in receipts or select a series with `--series`.
+
+`anx url card:<slug>` prints its URL. Optional creation handles: `--handle <slug>`. Disable workspace hints: `ANX_WORKSPACE_HINTS=0`.
