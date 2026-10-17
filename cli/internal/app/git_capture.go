@@ -193,10 +193,10 @@ func (a *App) runGitCapture(ctx context.Context, args []string, cfg config.Resol
 		if existing.SelectWorktree(root) {
 			return nil, name, errnorm.Usage("capture_exists", "capture already configured; disable/reconcile before replacing the binding")
 		}
-		if len(existing.Cursors) >= 100 {
-			return nil, name, fmt.Errorf("worktree capacity reached")
-		}
 		registerWorktree = true
+	}
+	if registerWorktree && len(existing.Cursors) >= 100 {
+		return nil, name, fmt.Errorf("worktree capacity reached")
 	}
 	if loadErr != nil && !errors.Is(loadErr, os.ErrNotExist) {
 		return nil, name, loadErr

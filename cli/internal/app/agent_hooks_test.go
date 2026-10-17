@@ -479,3 +479,35 @@ func TestGitCaptureRepairsReceiptSavedBeforeQueueState(t *testing.T) {
 		t.Fatal("confirmed receipt was resent")
 	}
 }
+
+func TestGitCaptureDisabledRepoCannotExceedWorktreeCapacity(t *testing.T) {
+	f := newHookFixture(t)
+	fixtureGit(t, f.root, "init", "-q")
+	fixtureGit(t, f.root, "commit", "--allow-empty", "-m", "seed")
+	f.run(t, "git", "enable", "--writer")
+	f.run(t, "git", "disable")
+	_, gd, _ := integrations.Repo(context.Background(), f.root)
+	path := integrations.CapturePath(f.dir, gd)
+	s, e := integrations.LoadCapture(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for n := len(s.Cursors); n < 100; n++ {
+		s.Cursors[fmt.Sprintf("/registered/%d", n)] = integrations.CaptureCursor{Anchor: s.Anchor}
+	}
+	if e = integrations.PrivateWrite(path, integrations.CaptureJSON(s)); e != nil {
+		t.Fatal(e)
+	}
+	before, _ := integrations.PrivateRead(path)
+	linked := filepath.Join(t.TempDir(), "linked")
+	fixtureGit(t, f.root, "worktree", "add", "-b", "capacity", linked)
+	f.out.Reset()
+	code := f.a.Run([]string{"--json", "git", "enable", linked, "--writer"})
+	after, _ := integrations.PrivateRead(path)
+	if code == 0 || !strings.Contains(f.out.String(), "worktree capacity reached") || !bytes.Equal(before, after) {
+		t.Fatal("capacity failure changed retained state", code, f.out.String())
+	}
+	if _, e = integrations.LoadCapture(path); e != nil {
+		t.Fatal("retained state unreadable", e)
+	}
+}
