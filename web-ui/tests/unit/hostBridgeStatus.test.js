@@ -52,6 +52,11 @@ describe("host bridge liveness", () => {
     expect(
       summarizeBridgeFleet(hosts, status, ["a", "b", "c", "gone"], at),
     ).toEqual({ total: 3, live: 1 });
+    // An old core or a failed read checks ids without observing them.
+    expect(summarizeBridgeFleet(hosts, {}, ["a", "b", "c"], at)).toEqual({
+      total: 0,
+      live: 0,
+    });
     expect(summarizeBridgeFleet(hosts, status, [], at)).toEqual({
       total: 0,
       live: 0,

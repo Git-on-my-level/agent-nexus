@@ -66,7 +66,10 @@ export function summarizeBridgeFleet(
   for (const host of hosts ?? []) {
     if (host?.revoked_at || !seen.has(host.id)) continue;
     const state = bridgeBadge(host, statusHosts?.[host.id], now).state;
-    if (state === "revoked") continue;
+    // A failed or partial read leaves no observation: "unavailable" is not
+    // "down", so it stays out of both sides of the count.
+    if (state === "revoked" || state === "unknown" || state === "loading")
+      continue;
     total += 1;
     if (state === "live") live += 1;
   }
