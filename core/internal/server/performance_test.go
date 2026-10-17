@@ -109,7 +109,7 @@ func performanceBudgets(t *testing.T) []routeBudget {
 }
 
 func performanceReadPOST(method, path string) bool {
-	return method == http.MethodPost && (path == "/refs/resolve" || path == "/reports/preview" || path == "/pm/turns/{turn_id}/context" || path == "/secrets/{secret_id}/reveal" || path == "/secrets/reveal-batch")
+	return method == http.MethodPost && (path == "/hosts/bridge-status" || path == "/refs/resolve" || path == "/reports/preview" || path == "/pm/turns/{turn_id}/context" || path == "/secrets/{secret_id}/reveal" || path == "/secrets/reveal-batch")
 }
 
 func TestPerformanceRouteInventory(t *testing.T) {

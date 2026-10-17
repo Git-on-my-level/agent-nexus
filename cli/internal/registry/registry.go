@@ -357,6 +357,9 @@ func sideEffectClass(cmd Command) string {
 		}
 		return "read_only"
 	}
+	if cmd.CommandID == "hosts.bridge_status" {
+		return "read_only"
+	}
 	if strings.EqualFold(cmd.Method, "GET") {
 		return "read_only"
 	}

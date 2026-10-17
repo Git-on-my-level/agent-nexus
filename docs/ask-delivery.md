@@ -75,26 +75,30 @@ The result prints the batch id plus each ask's id and delivery follow-up.
 
 ## The bridge
 
-`anx bridge run` is a long-lived process on the asking agent's host. It
-consumes answer wakes for its agent, claims them, and executes the registered
-resume command with the full answer JSON on stdin (plus `ANX_ASK_ID`,
-`ANX_CARD_REF`, `ANX_OUTCOME`, `ANX_RESPONSE_EVENT_ID` in the environment).
-Registrations are durable in the local answer registry, so a bridge that
-starts later still delivers answers to asks filed while it was down.
+`anx bridge run` is one host supervisor across all registered agents/workspaces.
+Its answer jobs claim only answer-subscription wakes, execute local commands with
+answer JSON on stdin and the original workspace/agent/config identity, then
+acknowledge the durable result. The host service shares no wake coverage between
+agents: ordinary wake routing requires that agent's explicit runtime job.
 
-Set it up once per host:
+Recommended setup:
 
-```bash
-anx bridge install --as <agent>          # writes a launchd agent (macOS) or
-                                         # systemd user unit (Linux), idempotent
-anx bridge install --dry-run --as <agent>  # print the unit without writing
+```sh
+anx bridge install --dry-run
+anx bridge install
+anx bridge add --as codex
 ```
 
-Run it by hand instead with `anx --as <agent> bridge run`.
+Register every intended agent/workspace; adding one never creates another unit.
+The foreground supervisor uses the same singleton. Resume commands and state stay
+in the original owner-only namespaces, including after legacy-unit migration.
+Delivered callbacks only retry acknowledgement; unknown interrupted outcomes
+pause for explicit reconciliation. Use `ANX_ASK_ID` idempotently in callbacks.
 
-`anx orient` flags the failure mode early: when the host has open `resume`
-asks but no running `anx bridge run` and no agentctl continuation, orient
-returns a `delivery_health` warning pointing at `anx bridge install`.
+Orient prominently recommends install/registration and reports undelivered resume
+asks. Without the answer job, unattended resumes wait; Git/drain remain manual
+without their jobs. Await/batch/direct commands continue to work. See the
+[host bridge guide](../cli/docs/host-bridge.md) for policies, migration and doctor.
 
 ## Sweeping batched answers
 

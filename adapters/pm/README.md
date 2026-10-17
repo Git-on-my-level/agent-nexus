@@ -8,31 +8,13 @@ and no fallback chat generator.
 
 ## Provider configuration
 
-Use the installed `anx-agent-bridge` subprocess adapter with `pm_adapter.py` as
-its entrypoint. Keep provider/model settings in the existing delegate adapter
-configuration. For example, adapt an existing Hermes ACP bridge configuration:
-
-```toml
-[adapter]
-kind = "subprocess"
-command = ["python3", "adapters/pm/pm_adapter.py"]
-timeout_seconds = 130
-pm_timeout_seconds = 120
-pm_max_output_bytes = 16000
-
-[adapter.delegate]
-command = ["python3", "-m", "anx_agent_bridge.adapters.hermes_acp"]
-
-[adapter.delegate.adapter]
-interactive = false
-# Reuse your existing approved Hermes profile/runtime selection here.
-# Configure any required environment explicitly via adapter.delegate.env.
-```
-
-Resolve executable/script paths against the deployment checkout. This example
-contains no credentials and does not change an existing gateway or profile.
-Use the provider you already operate, including an existing custom subprocess
-adapter, rather than selecting a different model through this package.
+The host bridge registers existing provider runtimes with `anx bridge add --runtime`.
+`pm_adapter.py` remains an independent subprocess protocol wrapper for provider
+integrations that already speak the PM adapter request/response protocol. It has
+no dependency on the removed Python bridge package. Configure its delegate as an
+exact argv for the provider adapter you operate; preserve the PM read-only limits
+and explicit environment described below. The host service itself owns wake
+claims and optional agentctl run-ingest callbacks; no second PM daemon is needed.
 
 The wrapper forwards the existing `anx-bridge-adapter-request/v1` protocol,
 `session_key`, and `existing_native_session_id`. It rejects missing/expired PM

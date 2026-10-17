@@ -23,8 +23,8 @@ var apiSubcommandSpec = subcommandSpec{
 
 var bridgeSubcommandSpec = subcommandSpec{
 	command:  "bridge",
-	valid:    []string{"install", "start", "stop", "status", "doctor", "run"},
-	examples: []string{"anx bridge install", "anx bridge start --config ./bridge.toml", "anx bridge status --config ./bridge.toml", "anx bridge doctor --config ./bridge.toml"},
+	valid:    []string{"install", "add", "remove", "start", "stop", "status", "doctor", "run"},
+	examples: []string{"anx bridge install", "anx bridge start", "anx bridge status", "anx bridge doctor"},
 }
 
 var notificationsSubcommandSpec = subcommandSpec{

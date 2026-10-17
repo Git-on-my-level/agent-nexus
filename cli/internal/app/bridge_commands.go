@@ -4,438 +4,348 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
+	"time"
 
-	"agent-nexus-cli/internal/buildinfo"
+	hostbridge "agent-nexus-cli/internal/bridge"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/integrations"
 )
 
-const bridgeRepoURL = "https://github.com/Git-on-my-level/agent-nexus.git"
+var bridgeCommandRun = defaultBridgeCommandRun
 
-var (
-	bridgeLookPath    = exec.LookPath
-	bridgeMkdirAll    = os.MkdirAll
-	bridgeWriteFile   = os.WriteFile
-	bridgeStat        = os.Stat
-	bridgeCommandRun  = defaultBridgeCommandRun
-	bridgeUserHomeDir = os.UserHomeDir
-)
-
-type bridgePythonRuntime struct {
-	Command string
-	Version string
+func defaultBridgeCommandRun(ctx context.Context, name string, args ...string) (string, string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = integrations.GitEnvironment(os.Environ())
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	e := cmd.Run()
+	return out.String(), stderr.String(), e
 }
+func shellSingleQuote(v string) string     { return integrations.ShellQuote(v) }
+func (a *App) bridgeHome() (string, error) { return a.UserHomeDir() }
+func (a *App) hostBridgeRoot() (string, error) {
+	home, e := a.bridgeHome()
+	if e != nil {
+		return "", e
+	}
+	st, e := os.Stat(home)
+	if e != nil {
+		return "", e
+	}
+	if !st.IsDir() {
+		return "", fmt.Errorf("host home is not a directory")
+	}
+	return hostbridge.Root(home), nil
+}
+func bridgeUsageText() string {
+	return `One optional bridge service per host, across all enrolled workspaces.
 
+Recommended: anx bridge install, then anx bridge add --as <agent> --workspace <alias>
+anx bridge add --as <agent> [--answers=true] [--git] [--spool] [--runtime <json-file>]
+anx bridge remove --as <agent> [--workspace <alias>]
+anx bridge install [--dry-run]
+anx bridge run
+anx bridge start|stop|status
+anx bridge doctor
+
+Install opts into signed presence reporting; add explicitly enables independent jobs.
+Without the answer job, unattended resumes wait; Git and spool drain remain manual.
+Await/batch and direct commands work without the bridge. Files are a later release.
+All commands share the canonical ~/.config/anx/bridge registry, service and lock.
+`
+}
 func init() {
-	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{Path: "bridge", Kind: "manual", Summary: "One bridge per enrolled host for derived-agent wake routing."})
-	localHelperTopics = append(localHelperTopics,
-		localHelperTopic{Path: "bridge run", Summary: "Run registered answer commands for the selected agent on this host.", JSONShape: "`stopped`", Composition: "Long-lived signed wake consumer; command registry stays local.", Examples: []string{"anx bridge run"}},
-		localHelperTopic{Path: "bridge install", Summary: "Keep an anx bridge run answer bridge alive on this host (launchd on macOS, systemd user unit on Linux); --python and friends install the legacy managed Python wake-routing runtime instead.", JSONShape: "`agent`, `unit_path`, `label`, `content`, `start_args`, `wrote`, `started`", Composition: "Idempotent; --dry-run prints the unit without writing. Legacy runtime: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`.", Examples: []string{"anx bridge install --as <agent>", "anx bridge install --dry-run --as <agent>", "anx bridge install --ref <git-ref>"}},
-		localHelperTopic{Path: "bridge doctor", Summary: "Check one enrolled-host bridge and its configured runtimes.", JSONShape: "`host`, `agents`, `agentctl`", Composition: "Invoke the bridge's host roster validation.", Examples: []string{"anx bridge doctor --config ./bridge.toml"}, Flags: []localHelperFlag{{Name: "--config <path>", Description: "One host bridge config."}}},
-	)
+	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{Path: "bridge", Kind: "manual", Summary: "One optional host service for answers, wake routing, Git and spool jobs."})
+	for _, topic := range []localHelperTopic{
+		{Path: "bridge run", Summary: "Run the single host supervisor; no per-agent units.", JSONShape: "`stopped`", Examples: []string{"anx bridge run"}},
+		{Path: "bridge remove", Summary: "Remove a local registration, preserving commands and receipts.", JSONShape: "`removed`, `agent`, `retained_records`", Examples: []string{"anx bridge remove --as worker"}},
+		{Path: "bridge add", Summary: "Register an enrolled agent/workspace and enable its selected jobs.", JSONShape: "`workspace_id`, `host_id`, `actor_id`, `registered`", Examples: []string{"anx bridge add --as codex"}},
+		{Path: "bridge install", Summary: "Install one host unit and safely migrate legacy consumers.", JSONShape: "`unit_path`, `label`, `replaced`, `imported`, `dry_run`", Examples: []string{"anx bridge install --dry-run"}},
+		{Path: "bridge doctor", Summary: "Inspect host singleton, namespace safety, jobs and writer bindings.", JSONShape: "`running`, `registrations`, `checks`", Examples: []string{"anx bridge doctor"}},
+	} {
+		localHelperTopics = append(localHelperTopics, topic)
+	}
 }
-
 func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return &commandResult{Text: bridgeUsageText()}, "bridge", nil
 	}
-	sub := bridgeSubcommandSpec.normalize(args[0])
+	sub := args[0]
+	name := "bridge " + sub
 	switch sub {
+	case "add":
+		r, e := a.addHostBridgeAgent(ctx, args[1:], cfg)
+		return r, name, e
+	case "remove":
+		r, e := a.removeHostBridgeAgent(ctx, args[1:], cfg)
+		return r, name, e
 	case "run":
-		result, err := a.runAskBridge(ctx, args[1:], cfg)
-		return result, "bridge run", err
+		if len(args) != 1 {
+			return nil, name, errnorm.Usage("invalid_flags", "bridge run has no per-agent flags; use bridge add")
+		}
+		r, e := a.runHostSupervisor(ctx)
+		return r, name, e
 	case "install":
-		if bridgeInstallTargetsRuntime(args[1:]) {
-			result, err := a.runBridgeInstall(ctx, args[1:])
-			return result, "bridge install", err
+		r, e := a.installHostBridge(ctx, args[1:], cfg)
+		return r, name, e
+	case "start", "stop":
+		if len(args) != 1 {
+			return nil, name, errnorm.Usage("invalid_flags", "host service takes no workspace or agent flags")
 		}
-		result, err := a.runBridgeUnitInstall(ctx, args[1:], cfg)
-		return result, "bridge install", err
-	case "doctor":
-		result, err := a.runBridgeDoctor(ctx, args[1:])
-		return result, "bridge doctor", err
-	case "start":
-		result, err := a.runBridgeStart(ctx, args[1:])
-		return result, "bridge start", err
-	case "stop":
-		result, err := a.runBridgeStop(args[1:])
-		return result, "bridge stop", err
-	case "status":
-		result, err := a.runBridgeStatus(ctx, args[1:])
-		return result, "bridge status", err
+		r, e := a.controlHostBridge(ctx, sub)
+		return r, name, e
+	case "status", "doctor":
+		if len(args) != 1 {
+			return nil, name, errnorm.Usage("invalid_flags", "use bridge status|doctor without flags")
+		}
+		r, e := a.inspectHostBridge(ctx, sub == "doctor")
+		return r, name, e
 	default:
-		return nil, "bridge", bridgeSubcommandSpec.unknownError(args[0])
+		return nil, name, bridgeSubcommandSpec.unknownError(sub)
 	}
 }
-
-// bridgeInstallTargetsRuntime reports whether the flags select the legacy
-// managed Python wake-routing runtime rather than the default answer-bridge unit.
-func bridgeInstallTargetsRuntime(args []string) bool {
-	for _, arg := range args {
-		name := strings.SplitN(strings.TrimLeft(arg, "-"), "=", 2)[0]
-		switch name {
-		case "python", "install-dir", "bin-dir", "ref", "with-dev":
-			return true
+func (a *App) bridgeRegistration(ctx context.Context, cfg config.Resolved) (hostbridge.Workspace, hostbridge.Agent, error) {
+	var w hostbridge.Workspace
+	var agent hostbridge.Agent
+	cfg, e := a.resolveHostAgent(ctx, cfg)
+	if e != nil {
+		return w, agent, e
+	}
+	h, e := a.resolvedHost(cfg)
+	if e != nil {
+		return w, agent, e
+	}
+	dir, e := a.configDir(cfg)
+	if e != nil {
+		return w, agent, e
+	}
+	dir, e = filepath.EvalSymlinks(dir)
+	if e != nil {
+		return w, agent, e
+	}
+	workspaceID, e := a.bridgeWorkspaceID(ctx, cfg, h.WorkspaceID)
+	if e != nil {
+		return w, agent, e
+	}
+	if cfg.ActorID == "" || workspaceID == "" {
+		return w, agent, errnorm.Local("identity_unresolved", "enrolled workspace and actor required")
+	}
+	w = hostbridge.Workspace{ID: workspaceID, BaseURL: strings.TrimRight(cfg.BaseURL, "/"), HostID: h.ID, ConfigDir: dir}
+	registry := filepath.Join(dir, "answer-resumes", hostbridge.Namespace(w.BaseURL, cfg.ActorID))
+	agent = hostbridge.Agent{Name: cfg.As, ActorID: cfg.ActorID, Jobs: map[string]bool{"answers": true}, RegistryDirs: []string{registry}, Policy: hostbridge.Policy{MaxAttempts: 5, Timeout: 30 * time.Minute}}
+	return w, agent, nil
+}
+func (a *App) addHostBridgeAgent(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("bridge add")
+	as := fs.String("as", cfg.As, "Enrolled agent name")
+	answers := fs.Bool("answers", true, "Enable registered answer delivery")
+	git := fs.Bool("git", false, "Enable explicitly configured Git capture")
+	spool := fs.Bool("spool", false, "Enable configured integration spool drain")
+	wake := fs.Bool("wake", false, "Enable exact runtime wake routing (requires runtime configuration)")
+	runtime := fs.String("runtime", "", "Owner-only JSON with exact argv/cwd and optional agentctl wiring")
+	attempts := fs.Int("max-attempts", 5, "Resume attempts (1..20)")
+	timeout := fs.Duration("command-timeout", 30*time.Minute, "Resume timeout")
+	if e := fs.Parse(args); e != nil {
+		return nil, errnorm.Usage("invalid_flags", e.Error())
+	}
+	if len(fs.Args()) != 0 || !agentNamePattern.MatchString(*as) || *attempts < 1 || *attempts > 20 || *timeout <= 0 {
+		return nil, errnorm.Usage("invalid_args", "bridge add requires --as <agent> and valid execution policy")
+	}
+	cfg.As = *as
+	w, agent, e := a.bridgeRegistration(ctx, cfg)
+	if e != nil {
+		return nil, e
+	}
+	agent.Jobs = map[string]bool{"answers": *answers, "git": *git, "spool": *spool}
+	agent.Policy = hostbridge.Policy{MaxAttempts: *attempts, Timeout: *timeout}
+	if *runtime != "" {
+		raw, e := integrations.PrivateRead(*runtime)
+		if e != nil {
+			return nil, e
+		}
+		if len(raw) > 64<<10 {
+			return nil, fmt.Errorf("runtime config too large")
+		}
+		var r hostbridge.Runtime
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if e = dec.Decode(&r); e != nil {
+			return nil, e
+		}
+		agent.Runtime = &r
+		agent.Jobs["wake"] = true
+	}
+	for _, namespace := range agent.RegistryDirs {
+		if e = os.MkdirAll(namespace, 0700); e != nil {
+			return nil, e
 		}
 	}
-	return false
-}
-
-func bridgeUsageText() string {
-	return "Bridge: one process per enrolled host\n\n" +
-		"anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]\n" +
-		"anx bridge install [--as <agent>] [--dry-run] keep an anx bridge run alive (launchd/systemd)\n" +
-		"anx host enroll\n" +
-		"anx bridge install --ref <git-ref> (legacy: managed Python wake-routing runtime)\n" +
-		"anx bridge start --config ./bridge.toml\n" +
-		"anx bridge status --config ./bridge.toml\n" +
-		"anx bridge doctor --config ./bridge.toml\n" +
-		"anx bridge stop --config ./bridge.toml\n\n" +
-		"Config: [host] base_url, id, slug; one [agents.<name>] command argv per enabled derived agent.\n"
-}
-
-func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResult, error) {
-	if runtime.GOOS == "windows" {
-		return nil, errnorm.Usage("unsupported_platform", "`anx bridge install` currently supports macOS and Linux only")
-	}
-	fs := newSilentFlagSet("bridge install")
-	var pythonFlag trackedString
-	var installDirFlag trackedString
-	var binDirFlag trackedString
-	var refFlag trackedString
-	var withDev trackedBool
-	fs.Var(&pythonFlag, "python", "Preferred Python executable")
-	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the anx-agent-bridge wrapper should be written")
-	fs.Var(&refFlag, "ref", "Git ref to install from")
-	fs.Var(&withDev, "with-dev", "Also install bridge development/test dependencies")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge install`")
-	}
-
-	home, err := a.bridgeHome()
-	if err != nil {
-		return nil, err
-	}
-	installDir := strings.TrimSpace(installDirFlag.value)
-	if installDir == "" {
-		installDir = bridgeDefaultInstallDir(home)
-	}
-	binDir := strings.TrimSpace(binDirFlag.value)
-	if binDir == "" {
-		binDir = bridgeDefaultBinDir(home)
-	}
-	ref := strings.TrimSpace(refFlag.value)
-	if ref == "" {
-		ref = defaultBridgeInstallRef()
-	}
-	result, err := a.performManagedBridgeInstall(ctx, managedBridgeInstallOpts{
-		Home:            home,
-		PreferredPython: strings.TrimSpace(pythonFlag.value),
-		InstallDir:      installDir,
-		BinDir:          binDir,
-		Ref:             ref,
-		WithDev:         withDev.set && withDev.value,
+	wakeSpecified := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "wake" {
+			wakeSpecified = true
+		}
 	})
-	if err != nil {
-		return nil, err
+	if wakeSpecified {
+		agent.Jobs["wake"] = *wake
 	}
-	data := map[string]any{
-		"install_dir":    result.InstallDir,
-		"bin_dir":        result.BinDir,
-		"wrapper_path":   result.WrapperPath,
-		"python":         result.PythonRuntime.Command,
-		"python_version": result.PythonRuntime.Version,
-		"bridge_binary":  result.BridgeBinary,
-		"package_ref":    result.PackageRef,
-		"version":        result.VersionLine,
+	root, e := a.hostBridgeRoot()
+	if e != nil {
+		return nil, e
 	}
-	lines := []string{
-		"Bridge install complete.",
-		"Bridge binary: " + result.BridgeBinary,
-		"Wrapper path: " + result.WrapperPath,
-		"Python: " + result.PythonRuntime.Command + " (" + result.PythonRuntime.Version + ")",
-		"Installed ref: " + result.PackageRef,
-		"Next: enroll the host, write one host bridge config, then run anx bridge start --config ./bridge.toml",
+	e = hostbridge.Update(ctx, root, func(r *hostbridge.Registry) error {
+		for _, oldW := range r.Workspaces {
+			if oldW.BaseURL != w.BaseURL || oldW.HostID != w.HostID {
+				continue
+			}
+			for _, old := range oldW.Agents {
+				if old.ActorID != agent.ActorID {
+					continue
+				}
+				if *runtime == "" {
+					agent.Runtime = old.Runtime
+					if !wakeSpecified {
+						agent.Jobs["wake"] = old.Jobs["wake"]
+					}
+				}
+				specified := map[string]bool{}
+				fs.Visit(func(f *flag.Flag) { specified[f.Name] = true })
+				for _, kind := range []string{"git", "spool"} {
+					if !specified[kind] {
+						agent.Jobs[kind] = old.Jobs[kind]
+					}
+				}
+				if !specified["max-attempts"] {
+					agent.Policy.MaxAttempts = old.Policy.MaxAttempts
+				}
+				if !specified["command-timeout"] {
+					agent.Policy.Timeout = old.Policy.Timeout
+				}
+			}
+		}
+		return hostbridge.Register(r, w, agent)
+	})
+	if e != nil {
+		return nil, e
 	}
-	if !bridgePathContains(a.Getenv, result.BinDir) {
-		lines = append(lines, "PATH note: add "+result.BinDir+" to PATH to run `anx-agent-bridge` directly.")
-	}
-	return &commandResult{Text: strings.Join(lines, "\n"), Data: data}, nil
+	return &commandResult{Data: map[string]any{"registered": true, "workspace_id": w.ID, "host_id": w.HostID, "actor_id": agent.ActorID, "jobs": agent.Jobs, "next": "anx bridge install"}}, nil
 }
 
-func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResult, error) {
-	fs := newSilentFlagSet("bridge doctor")
-	var configFlag trackedString
-	fs.Var(&configFlag, "config", "Host bridge config")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
+// Removal uses the pinned local name, not a fresh agent grant, so a revoked
+// registration can be repaired. Retained commands and outcome receipts stay put.
+func (a *App) removeHostBridgeAgent(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("bridge remove")
+	as := fs.String("as", cfg.As, "Registered agent name")
+	if e := fs.Parse(args); e != nil {
+		return nil, errnorm.Usage("invalid_flags", e.Error())
 	}
-	if len(fs.Args()) > 0 || configFlag.value == "" {
-		return nil, errnorm.Usage("invalid_args", "--config is required")
+	if len(fs.Args()) != 0 || !agentNamePattern.MatchString(*as) {
+		return nil, errnorm.Usage("invalid_args", "bridge remove requires --as <agent>")
 	}
-	home, err := a.bridgeHome()
-	if err != nil {
-		return nil, err
+	root, e := a.hostBridgeRoot()
+	if e != nil {
+		return nil, e
 	}
-	binary, err := resolveBridgeBinary(home, "", "")
-	if err != nil {
-		return nil, err
+	removed := false
+	e = hostbridge.Update(ctx, root, func(r *hostbridge.Registry) error {
+		for i := range r.Workspaces {
+			w := &r.Workspaces[i]
+			if w.BaseURL != strings.TrimRight(cfg.BaseURL, "/") {
+				continue
+			}
+			kept := []hostbridge.Agent{}
+			for _, agent := range w.Agents {
+				if agent.Name == *as {
+					removed = true
+				} else {
+					kept = append(kept, agent)
+				}
+			}
+			w.Agents = kept
+		}
+		return nil
+	})
+	if e != nil {
+		return nil, e
 	}
-	raw, err := runBridgeExternalOutput(ctx, binary, "doctor", "--config", configFlag.value)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_doctor_failed", "host bridge doctor failed", err)
-	}
-	var data map[string]any
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_doctor_invalid", "bridge doctor returned invalid JSON", err)
-	}
-	return &commandResult{Text: raw, Data: data}, nil
+	return &commandResult{Data: map[string]any{"removed": removed, "agent": *as, "retained_records": true}}, nil
 }
-
-func (a *App) bridgeHome() (string, error) {
-	if a.UserHomeDir != nil {
-		home, err := a.UserHomeDir()
-		if err == nil {
-			return home, nil
+func bridgeCfg(w hostbridge.Workspace, a hostbridge.Agent) config.Resolved {
+	return config.Resolved{BaseURL: w.BaseURL, As: a.Name, ActorID: a.ActorID, ConfigDir: w.ConfigDir, Timeout: 2 * time.Second, Sources: map[string]string{"base_url": "bridge", "agent": "bridge"}}
+}
+func (a *App) inspectHostBridge(ctx context.Context, doctor bool) (*commandResult, error) {
+	root, e := a.hostBridgeRoot()
+	if e != nil {
+		return nil, e
+	}
+	r, e := hostbridge.Load(root)
+	if e != nil {
+		return nil, e
+	}
+	running := askBridgeLockState(filepath.Join(root, "service.lock")) == answerBridgeRunning
+	checks := []map[string]any{}
+	if doctor {
+		checks = append(checks, a.inspectBridgeInventory(ctx, root)...)
+	}
+	if doctor {
+		if raw, readErr := integrations.PrivateRead(filepath.Join(root, "migration.json")); readErr == nil {
+			var journal bridgeMigrationJournal
+			if e := json.Unmarshal(raw, &journal); e != nil {
+				return nil, e
+			}
+			checks = append(checks, map[string]any{"check": "migration_complete", "ok": journal.Phase == "complete", "phase": journal.Phase})
+		}
+		raw, readErr := integrations.PrivateRead(filepath.Join(root, "status.json"))
+		var state localBridgeState
+		if readErr == nil && json.Unmarshal(raw, &state) == nil {
+			checks = append(checks, map[string]any{"check": "fresh_local_status", "ok": time.Since(state.At) < 10*time.Second, "as_of": state.At, "ready": state.Ready, "heartbeat_reports": state.Reports})
 		}
 	}
-	home, err := bridgeUserHomeDir()
-	if err != nil {
-		return "", errnorm.Wrap(errnorm.KindLocal, "resolve_home_failed", "failed to resolve home directory", err)
-	}
-	return home, nil
-}
 
-func bridgeDefaultInstallDir(home string) string {
-	return filepath.Join(home, ".local", "share", "anx", "agent-bridge")
-}
-
-func bridgeDefaultBinDir(home string) string {
-	return filepath.Join(home, ".local", "bin")
-}
-
-func bridgeInstallPackageSpec(ref string) string {
-	return fmt.Sprintf("git+%s@%s#subdirectory=adapters/agent-bridge", bridgeRepoURL, ref)
-}
-
-func defaultBridgeInstallRef() string {
-	// Pin to the same tag as this CLI build so `anx bridge install` pulls a bridge
-	// snapshot that matches the released binary (including adapter surface area).
-	// Development: pass `--ref main` (or a feature branch) when iterating ahead of the tag.
-	return strings.TrimSpace(buildinfo.Current)
-}
-
-type managedBridgeInstallOpts struct {
-	Home            string
-	PreferredPython string
-	InstallDir      string
-	BinDir          string
-	Ref             string
-	WithDev         bool
-}
-
-type managedBridgeInstallResult struct {
-	InstallDir    string
-	BinDir        string
-	VenvPython    string
-	BridgeBinary  string
-	WrapperPath   string
-	PackageRef    string
-	VersionLine   string
-	PythonRuntime bridgePythonRuntime
-}
-
-func (a *App) performManagedBridgeInstall(ctx context.Context, opts managedBridgeInstallOpts) (managedBridgeInstallResult, error) {
-	installDir := strings.TrimSpace(opts.InstallDir)
-	if installDir == "" {
-		installDir = bridgeDefaultInstallDir(opts.Home)
-	}
-	binDir := strings.TrimSpace(opts.BinDir)
-	if binDir == "" {
-		binDir = bridgeDefaultBinDir(opts.Home)
-	}
-	pythonRuntime, err := detectBridgePython(ctx, strings.TrimSpace(opts.PreferredPython))
-	if err != nil {
-		return managedBridgeInstallResult{}, err
-	}
-	if _, err := bridgeLookPath("git"); err != nil {
-		return managedBridgeInstallResult{}, errnorm.Local("git_required", "`anx bridge install` currently requires `git` on PATH because it installs the bridge package from the GitHub repo")
-	}
-	venvDir := filepath.Join(installDir, ".venv")
-	venvPython := filepath.Join(venvDir, "bin", "python")
-	pkgBridgeBinary := filepath.Join(venvDir, "bin", "anx-agent-bridge")
-	ref := strings.TrimSpace(opts.Ref)
-	if ref == "" {
-		ref = defaultBridgeInstallRef()
-	}
-	if err := bridgeMkdirAll(installDir, 0o755); err != nil {
-		return managedBridgeInstallResult{}, errnorm.Wrap(errnorm.KindLocal, "bridge_install_dir_failed", "failed to create bridge install directory", err)
-	}
-	if err := runBridgeExternal(ctx, pythonRuntime.Command, "-m", "venv", venvDir); err != nil {
-		return managedBridgeInstallResult{}, err
-	}
-	if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", "--upgrade", "pip"); err != nil {
-		return managedBridgeInstallResult{}, err
-	}
-	if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", bridgeInstallPackageSpec(ref)); err != nil {
-		return managedBridgeInstallResult{}, err
-	}
-	if opts.WithDev {
-		if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", "pytest>=8,<9", "cryptography>=42,<47"); err != nil {
-			return managedBridgeInstallResult{}, err
+	count := 0
+	for _, w := range r.Workspaces {
+		for _, agent := range w.Agents {
+			count++
+			cfg := bridgeCfg(w, agent)
+			if doctor {
+				_, err := a.validateBridgeAgent(ctx, w, agent)
+				checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "enrollment", "ok": err == nil, "repair": "repair enrollment or use bridge remove --as " + agent.Name + " in this workspace; retained records survive"})
+				for _, dir := range agent.RegistryDirs {
+					err = checkResumeNamespace(dir, w, agent)
+					if err == nil && agent.Jobs["wake"] {
+						err = checkRuntimeReceipts(dir)
+					}
+					checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "resume_namespace", "ok": err == nil, "repair": "reconcile retained command/runtime receipts against their external outcome"})
+				}
+				if agent.Jobs["git"] {
+					_, err = a.bridgeGitTick(ctx, cfg, true)
+					checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "capture_writer", "ok": err == nil})
+				}
+			}
 		}
 	}
-	if err := bridgeMkdirAll(binDir, 0o755); err != nil {
-		return managedBridgeInstallResult{}, errnorm.Wrap(errnorm.KindLocal, "bridge_bin_dir_failed", "failed to create bridge bin directory", err)
-	}
-	wrapperPath := filepath.Join(binDir, "anx-agent-bridge")
-	if err := bridgeWriteLauncher(wrapperPath, pkgBridgeBinary); err != nil {
-		return managedBridgeInstallResult{}, err
-	}
-	versionOut, err := probeBridgeBinaryOutput(ctx, pkgBridgeBinary)
-	if err != nil {
-		return managedBridgeInstallResult{}, err
-	}
-	return managedBridgeInstallResult{
-		InstallDir:    installDir,
-		BinDir:        binDir,
-		VenvPython:    venvPython,
-		BridgeBinary:  pkgBridgeBinary,
-		WrapperPath:   wrapperPath,
-		PackageRef:    ref,
-		VersionLine:   strings.TrimSpace(versionOut),
-		PythonRuntime: pythonRuntime,
-	}, nil
+	return &commandResult{Data: map[string]any{"running": running, "registrations": count, "revision": r.Revision, "checks": checks, "registry_path": filepath.Join(root, "registry.json")}}, nil
 }
 
-func detectBridgePython(ctx context.Context, preferred string) (bridgePythonRuntime, error) {
-	candidates := make([]string, 0, 4)
-	if preferred != "" {
-		candidates = append(candidates, preferred)
+func (a *App) bridgeWorkspaceID(ctx context.Context, cfg config.Resolved, enrolled string) (string, error) {
+	if enrolled != "" {
+		return enrolled, nil
 	}
-	candidates = append(candidates, "python3.12", "python3.11", "python3")
-	seen := map[string]struct{}{}
-	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		if _, ok := seen[candidate]; ok {
-			continue
-		}
-		seen[candidate] = struct{}{}
-		runtimeInfo, ok := probeBridgePython(ctx, candidate)
-		if ok {
-			return runtimeInfo, nil
-		}
+	reply, e := a.hostCall(ctx, cfg, "GET", "/meta/handshake", nil, nil)
+	if e != nil {
+		return "", e
 	}
-	return bridgePythonRuntime{}, errnorm.Local("python_unsupported", "Python 3.11+ is required for `anx-agent-bridge`; pass --python <exe> if needed")
-}
-
-func probeBridgePython(ctx context.Context, candidate string) (bridgePythonRuntime, bool) {
-	name := candidate
-	if !strings.Contains(candidate, string(os.PathSeparator)) {
-		if _, err := bridgeLookPath(candidate); err != nil {
-			return bridgePythonRuntime{}, false
-		}
+	id := anyString(reply["workspace_id"])
+	if id == "" {
+		return "", fmt.Errorf("workspace identity is unavailable")
 	}
-	out, err := runBridgeExternalOutput(ctx, name, "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')")
-	if err != nil {
-		return bridgePythonRuntime{}, false
-	}
-	version := strings.TrimSpace(out)
-	parts := strings.Split(version, ".")
-	if len(parts) < 2 {
-		return bridgePythonRuntime{}, false
-	}
-	major, majorErr := strconv.Atoi(parts[0])
-	minor, minorErr := strconv.Atoi(parts[1])
-	if majorErr != nil || minorErr != nil || major < 3 || (major == 3 && minor < 11) {
-		return bridgePythonRuntime{}, false
-	}
-	return bridgePythonRuntime{Command: name, Version: version}, true
-}
-
-func runBridgeExternal(ctx context.Context, name string, args ...string) error {
-	_, err := runBridgeExternalOutput(ctx, name, args...)
-	return err
-}
-
-func runBridgeExternalOutput(ctx context.Context, name string, args ...string) (string, error) {
-	stdout, stderr, err := bridgeCommandRun(ctx, name, args...)
-	if err != nil {
-		message := strings.TrimSpace(stderr)
-		if message == "" {
-			message = strings.TrimSpace(stdout)
-		}
-		if message == "" {
-			message = err.Error()
-		}
-		return stdout, errnorm.Wrap(errnorm.KindLocal, "bridge_command_failed", fmt.Sprintf("failed running %s", strings.Join(append([]string{name}, args...), " ")), fmt.Errorf("%s", message))
-	}
-	return stdout, nil
-}
-
-func probeBridgeBinaryOutput(ctx context.Context, bridgeBinary string) (string, error) {
-	versionOut, err := runBridgeExternalOutput(ctx, bridgeBinary, "--version")
-	if err == nil {
-		return versionOut, nil
-	}
-	helpOut, helpErr := runBridgeExternalOutput(ctx, bridgeBinary, "--help")
-	if helpErr != nil {
-		return "", err
-	}
-	firstLine := strings.TrimSpace(strings.SplitN(helpOut, "\n", 2)[0])
-	if firstLine == "" {
-		firstLine = "anx-agent-bridge --help"
-	}
-	return firstLine, nil
-}
-
-func defaultBridgeCommandRun(ctx context.Context, name string, args ...string) (string, string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		return stdout.String(), stderr.String(), err
-	}
-	return stdout.String(), stderr.String(), nil
-}
-
-func bridgeWriteLauncher(path string, bridgeBinary string) error {
-	content := "#!/bin/sh\nexec " + shellSingleQuote(bridgeBinary) + ` "$@"` + "\n"
-	if err := bridgeWriteFile(path, []byte(content), 0o755); err != nil {
-		return errnorm.Wrap(errnorm.KindLocal, "bridge_wrapper_write_failed", "failed to write anx-agent-bridge launcher", err)
-	}
-	return nil
-}
-
-func shellSingleQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
-}
-
-func bridgePathContains(getenv func(string) string, dir string) bool {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	for _, item := range filepath.SplitList(getenv("PATH")) {
-		if item == dir {
-			return true
-		}
-	}
-	return false
+	return id, nil
 }

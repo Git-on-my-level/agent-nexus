@@ -48,8 +48,9 @@ mv %q %q
 		t.Fatal(err)
 	}
 
-	// Start the answer bridge for worker; it must outlive the asking CLI.
-	bridgeCmd := exec.Command(h.cliBin, "--json", "--base-url", h.baseURL, "--as", "worker", "bridge", "run")
+	h.runCLIExpectOK(t, "worker", nil, "bridge", "add", "--as", "worker")
+	// Start the single host bridge; it must outlive the asking CLI.
+	bridgeCmd := exec.Command(h.cliBin, "--json", "bridge", "run")
 	bridgeCmd.Env = append(os.Environ(),
 		"HOME="+h.homeDir,
 		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),

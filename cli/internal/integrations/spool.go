@@ -148,6 +148,15 @@ func Enqueue(ctx context.Context, path string, e Event, reason ...string) error 
 // Drain serializes senders while queue writers only hold a short local lock.
 // Delivery is saved before sending and never recomputed after an uncertain write.
 func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, error), send func(context.Context, Delivery) error, priority ...string) error {
+	return drainSelected(ctx, path, prepare, send, nil, priority...)
+}
+
+// DrainSelected isolates a host job's admitted workspace/agent entries without
+// rotating or rewriting entries belonging to another registered job.
+func DrainSelected(ctx context.Context, path string, prepare func(Event) (Delivery, error), send func(context.Context, Delivery) error, admit func(Pending) bool) error {
+	return drainSelected(ctx, path, prepare, send, admit)
+}
+func drainSelected(ctx context.Context, path string, prepare func(Event) (Delivery, error), send func(context.Context, Delivery) error, admit func(Pending) bool, priority ...string) error {
 	lockCtx, cancel := context.WithTimeout(ctx, time.Millisecond)
 	defer cancel()
 	unlock, err := Lock(lockCtx, path+".drain.lock")
@@ -155,8 +164,10 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 		return nil
 	}
 	defer unlock()
-	if err := updateQueue(ctx, path, func(q *Queue) error { q.prune(time.Now()); return nil }); err != nil {
-		return err
+	if admit == nil {
+		if err := updateQueue(ctx, path, func(q *Queue) error { q.prune(time.Now()); return nil }); err != nil {
+			return err
+		}
 	}
 	q, err := LoadQueue(path)
 	if err != nil {
@@ -171,10 +182,34 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 		}
 	}
 	count := 0
+	ledgerCount := len(q.Ledger)
 	var last error
 	for _, candidate := range q.Pending {
+		if admit != nil && !admit(candidate) {
+			continue
+		}
 		if count >= MaxDrain || ctx.Err() != nil {
 			break
+		}
+		// Background draining cannot prune another namespace or evict its receipts.
+		// Old unsent work stays inspectable beyond the conservative replay cutoff.
+		if admit != nil && (ledgerCount >= MaxLedger || time.Since(candidate.Event.Timestamp) > 25*24*time.Hour) {
+			reason := "replay_window_expired"
+			if ledgerCount >= MaxLedger {
+				reason = "receipt_capacity"
+			}
+			if err := updateQueue(ctx, path, func(current *Queue) error {
+				for i := range current.Pending {
+					if current.Pending[i].Event.Key == candidate.Event.Key {
+						current.Pending[i].Reason = reason
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			last = DeferredDelivery{Reason: reason}
+			continue
 		}
 		count++
 		p := candidate
@@ -228,6 +263,9 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 			continue
 		}
 		sendErr := send(ctx, *p.Delivery)
+		if sendErr == nil {
+			ledgerCount++
+		}
 		err = updateQueue(ctx, path, func(current *Queue) error {
 			for i := range current.Pending {
 				if current.Pending[i].Event.Key != p.Event.Key {
@@ -255,7 +293,9 @@ func Drain(ctx context.Context, path string, prepare func(Event) (Delivery, erro
 				} else {
 					current.Pending = append(current.Pending[:i], current.Pending[i+1:]...)
 					current.Ledger = append(current.Ledger, Receipt{Key: p.Event.Key, TaskID: p.Event.TaskID, At: time.Now().UTC()})
-					current.prune(time.Now())
+					if admit == nil {
+						current.prune(time.Now())
+					}
 				}
 				break
 			}

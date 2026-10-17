@@ -1131,6 +1131,7 @@ var migrations = []migration{
 	}},
 	{Version: 105, AfterApply: installBriefAgentOwnershipIndexes},
 	{Version: 106, AfterApply: upgradeAgentSummaryAndBriefAskIndexes},
+	{Version: 107, AfterApply: installHostBridge},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

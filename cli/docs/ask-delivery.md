@@ -55,23 +55,24 @@ The existing `anx await --answers` batch and card-state await remain available.
 
 ## Host bridge
 
-Enroll the host and use the same Agent Nexus identity to ask and run the bridge.
-If the CLI cannot resolve the caller identity, set `ANX_AS` to the identity you
-intend to use before either command:
+Use [one host service](host-bridge.md) for every registered agent/workspace:
 
 ```sh
-: "${ANX_AS:?Set this to your intended Agent Nexus identity}"
-anx ask 'Proceed?' --recommend Proceed --on-answer '/usr/local/bin/resume-work'
-anx bridge run --max-attempts 5 --command-timeout 30m
+anx bridge install --dry-run
+anx bridge install
+anx bridge add --as codex
+anx bridge run
 ```
 
-Each ask has a 0600 JSON registration under the CLI config directory's
-`answer-resumes/` namespace (0700). It records the originating working directory
-and command. The server receives only subscription kind and label. It cannot
-supply or change commands. Protect the config directory and host key as local
-execution credentials. One process holds the namespace lock. Run a separate unit
-per selected agent/workspace. This native answer runner coexists with the older
-`bridge start` runtime; it consumes only its dedicated subscription wakes.
+Install and foreground run share one singleton. Answers, exact runtime wakes,
+Git and integration spool drain are independent jobs; only answers are enabled
+by agent registration. The answer dispatcher consumes dedicated subscription
+wakes; ordinary runtime wakes cannot claim them.
+
+Each ask retains its 0600 JSON command/cwd/subscription/attempt record under the
+original config root's `answer-resumes/` namespace. Migration does not move or
+clear directories/cursors. The server cannot supply or change resume commands.
+Protect those roots like local execution credentials.
 
 The runner receives response JSON on stdin and `ANX_ASK_ID`, `ANX_CARD_REF`,
 `ANX_OUTCOME`, `ANX_RESPONSE_EVENT_ID` in its environment. Keep these values as data.
@@ -80,8 +81,9 @@ claim/complete/fail calls. Wakes are per subscription so different hosts answeri
 asks for the same actor cannot complete each other's deliveries. Commands have
 bounded exponential retry; timeouts kill the shell's process group on macOS/Linux.
 A successful command is saved before remote acknowledgement, so acknowledgement
-retries do not repeat it. A crash after external effects but before local save can
-repeat execution: make callbacks idempotent using `ANX_ASK_ID`.
+retries do not repeat it. A crash after external effects but before local save leaves an inspectable
+uncertain attempt. Reconcile its outcome before restarting that namespace; make
+callbacks idempotent using `ANX_ASK_ID`.
 
 `ANX_RESUME_CMD` supplies a generic hook. Under agentctl the verified environment
 variable is `AGENTCTL_EXECUTION_ID`: the CLI registers `agentctl continue <id>
@@ -98,12 +100,10 @@ Harness adapters belong on the host. Examples of commands for local wrappers:
 - Hermes: wrap `hermes -z` with the supported prompt input for your installed
   runner. The generic hook does not assume a resumable conversation exists.
 
-The sample systemd unit is `examples/anx-answer-bridge.service`. Create its
-`~/.config/anx/answer-bridge.env` environment file with the selected workspace
-URL and intended identity. On macOS, use an ordinary launchd agent with the same
-argv and environment, RunAtLoad, KeepAlive, and durable StandardOutPath/StandardErrorPath. Stop the service before
-editing/removing local registrations. Deleting a registration prevents execution;
-its server delivery remains visibly pending until acknowledged or failed.
+Use the generated host unit on both platforms; per-agent sample units and Python
+runtime paths are removed. See `anx bridge doctor` and the migration journal before
+repairing retained registrations. Without answer delivery, resumes wait;
+await/batch/direct reads work without a bridge.
 
 ## Signed webhooks
 

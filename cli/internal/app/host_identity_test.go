@@ -171,7 +171,7 @@ func TestHostEnrollmentAdoptsOrExcludesLocalProfile(t *testing.T) {
 				t.Fatalf("enrollment changed selection: %#v", prefs.File)
 			}
 			actions := deriveNextActions("host enroll", nil, enrolled.Data)
-			if len(actions) != 3 || strings.Join(actions[0].Argv, " ") != "anx config use personal" || strings.Join(actions[2].Argv, " ") != "anx skills sync" {
+			if len(actions) != 4 || strings.Join(actions[0].Argv, " ") != "anx bridge install" || strings.Join(actions[1].Argv, " ") != "anx config use personal" || strings.Join(actions[3].Argv, " ") != "anx skills sync" {
 				t.Fatalf("enrollment repairs=%#v", actions)
 			}
 			proofs := asSlice(posted["adoptions"])

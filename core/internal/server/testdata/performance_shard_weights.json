@@ -40,6 +40,10 @@
     "milliseconds": 4270
   },
   {
+    "key": "GET /asks/{ask_id}",
+    "milliseconds": 1000
+  },
+  {
     "key": "GET /auth/access-requests",
     "milliseconds": 229
   },
@@ -100,6 +104,10 @@
     "milliseconds": 6700
   },
   {
+    "key": "GET /brief",
+    "milliseconds": 20000
+  },
+  {
     "key": "GET /cards",
     "milliseconds": 26163
   },
@@ -122,6 +130,18 @@
   {
     "key": "GET /cards/{card_id}/timeline",
     "milliseconds": 5269
+  },
+  {
+    "key": "GET /curation/candidates",
+    "milliseconds": 20000
+  },
+  {
+    "key": "GET /curation/metrics",
+    "milliseconds": 20000
+  },
+  {
+    "key": "GET /deliveries",
+    "milliseconds": 4000
   },
   {
     "key": "GET /docs",
@@ -172,6 +192,10 @@
     "milliseconds": 6987
   },
   {
+    "key": "GET /hosts [summary]",
+    "milliseconds": 3500
+  },
+  {
     "key": "GET /hosts/{host_id}",
     "milliseconds": 6110
   },
@@ -212,16 +236,16 @@
     "milliseconds": 65
   },
   {
+    "key": "GET /notification-settings",
+    "milliseconds": 4000
+  },
+  {
     "key": "GET /ops/health",
     "milliseconds": 6
   },
   {
     "key": "GET /ops/usage-summary",
     "milliseconds": 4911
-  },
-  {
-    "key": "GET /brief",
-    "milliseconds": 20000
   },
   {
     "key": "GET /overview",
@@ -248,10 +272,6 @@
     "milliseconds": 3998
   },
   {
-    "key": "GET /pm/presence",
-    "milliseconds": 100
-  },
-  {
     "key": "GET /pm/context",
     "milliseconds": 4667
   },
@@ -270,6 +290,10 @@
   {
     "key": "GET /pm/decisions/{decision_id}",
     "milliseconds": 4305
+  },
+  {
+    "key": "GET /pm/presence",
+    "milliseconds": 100
   },
   {
     "key": "GET /pm/turns/{turn_id}",
@@ -320,12 +344,20 @@
     "milliseconds": 66026
   },
   {
+    "key": "GET /stream/agent-wakeups",
+    "milliseconds": 1000
+  },
+  {
     "key": "GET /stream/agents",
     "milliseconds": 7
   },
   {
     "key": "GET /stream/agents [agents-resumed-header]",
     "milliseconds": 7
+  },
+  {
+    "key": "GET /stream/asks/{ask_id}",
+    "milliseconds": 1000
   },
   {
     "key": "GET /stream/events",
@@ -432,6 +464,10 @@
     "milliseconds": 3962
   },
   {
+    "key": "POST /hosts/bridge-status",
+    "milliseconds": 3500
+  },
+  {
     "key": "POST /pm/turns/{turn_id}/context",
     "milliseconds": 13699
   },
@@ -450,33 +486,5 @@
   {
     "key": "POST /secrets/{secret_id}/reveal",
     "milliseconds": 25359
-  },
-  {
-    "key": "GET /asks/{ask_id}",
-    "milliseconds": 1000
-  },
-  {
-    "key": "GET /stream/asks/{ask_id}",
-    "milliseconds": 1000
-  },
-  {
-    "key": "GET /stream/agent-wakeups",
-    "milliseconds": 1000
-  },
-  {
-    "key": "GET /deliveries",
-    "milliseconds": 4000
-  },
-  {
-    "key": "GET /notification-settings",
-    "milliseconds": 4000
-  },
-  {
-    "key": "GET /curation/candidates",
-    "milliseconds": 20000
-  },
-  {
-    "key": "GET /curation/metrics",
-    "milliseconds": 20000
   }
 ]

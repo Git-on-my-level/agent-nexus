@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `248`
+- Commands: `257`
 
 ## `actors.create`
 
@@ -874,6 +874,126 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
 
+## `bridge.add`
+
+- CLI path: `bridge add`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Pins enrolled workspace/host/actor identity, keeps existing resume roots, and explicitly enables independent jobs.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Pins enrolled workspace/host/actor identity, keeps existing resume roots, and explicitly enables independent jobs.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge add`
+
+## `bridge.doctor`
+
+- CLI path: `bridge doctor`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Checks host readiness, retained namespaces, migration state and elected Git writers.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Checks host readiness, retained namespaces, migration state and elected Git writers.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge doctor`
+
+## `bridge.install`
+
+- CLI path: `bridge install`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Single host unit with ownership-verified migration; preview first. Never silently drops registrations.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Single host unit with ownership-verified migration; preview first. Never silently drops registrations.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge install`
+
+## `bridge.remove`
+
+- CLI path: `bridge remove`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Removes a local agent registration without deleting retained commands or receipts; works after revocation.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`
+- Output: CLI envelope v2.
+- Agent notes: Stops that registration on the next supervisor tick. Interrupted outcomes remain inspectable; no records are deleted.
+- Examples:
+  - Retire an agent from the host bridge.: `anx bridge remove --as worker --workspace example`
+
+## `bridge.run`
+
+- CLI path: `bridge run`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Single host supervisor; no per-agent flags. All jobs and signed presence are explicit opt-in.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Single host supervisor; no per-agent flags. All jobs and signed presence are explicit opt-in.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge run`
+
+## `bridge.start`
+
+- CLI path: `bridge start`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Starts only the canonical host service.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Starts only the canonical host service.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge start`
+
+## `bridge.status`
+
+- CLI path: `bridge status`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Local host service and registration status.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Local host service and registration status.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge status`
+
+## `bridge.stop`
+
+- CLI path: `bridge stop`
+- Execution: local CLI handler (no HTTP route)
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Stops only the canonical host service; interrupted callback outcomes require reconciliation.
+- Concepts: `hosts`, `integrations`
+- Error codes: `invalid_args`, `invalid_flags`, `identity_changed`, `migration_blocked`
+- Output: CLI envelope v2.
+- Agent notes: Stops only the canonical host service; interrupted callback outcomes require reconciliation.
+- Examples:
+  - Operate the opt-in host bridge.: `anx bridge stop`
+
 ## `brief.get`
 
 - CLI path: `orient`
@@ -1657,6 +1777,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`
 - Output: Returns `{ bridge }`.
 - Agent notes: Host proof is required; no agent bearer or per-agent bridge proof is accepted.
+
+## `hosts.bridge_status`
+
+- CLI path: `host bridge-status`
+- HTTP: `POST /hosts/bridge-status`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Inspect per-machine bridge liveness and workspace-local job coverage.
+- Concepts: `hosts`, `agents`
+- Error codes: `auth_required`, `invalid_request`
+- Output: Returns `{ as_of, hosts }`.
+- Agent notes: Read-only POST. Partial job coverage never proves absence.
 
 ## `hosts.enroll.approve`
 

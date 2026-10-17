@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 241,
+  "route_count": 242,
   "routes": [
     {
       "method": "GET",
@@ -680,6 +680,11 @@
     {
       "method": "GET",
       "path": "/hosts",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/hosts/bridge-status",
       "access_class": "authenticated_principal_surface"
     },
     {

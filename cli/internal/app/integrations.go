@@ -477,7 +477,10 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 	if reason != "pending" {
 		return fmt.Errorf("%s", reason)
 	}
-	return integrations.Drain(ctx, path, func(e integrations.Event) (integrations.Delivery, error) {
+	return a.drainIntegrationQueue(ctx, cfg, dir, r, c, path, nil, event.Key)
+}
+func (a *App) drainIntegrationQueue(ctx context.Context, cfg config.Resolved, dir string, r integrations.Recipe, c integrations.Config, path string, admit func(integrations.Pending) bool, priority ...string) error {
+	prepare := func(e integrations.Event) (integrations.Delivery, error) {
 		routed := cfg
 		local := *a
 		local.Getwd = func() (string, error) { return e.CWD, nil }
@@ -494,7 +497,8 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 			return integrations.Delivery{}, fmt.Errorf("no_board")
 		}
 		return integrations.Delivery{BaseURL: routed.BaseURL, Agent: c.Agent, CommandID: r.CommandID, Body: r.BuildBody(e, target)}, nil
-	}, func(sendCtx context.Context, d integrations.Delivery) error {
+	}
+	send := func(sendCtx context.Context, d integrations.Delivery) error {
 		routed := cfg
 		routed.BaseURL = d.BaseURL
 		routed.As = d.Agent
@@ -546,7 +550,11 @@ func (a *App) processIntegrationHook(ctx context.Context, overrides config.Overr
 			}
 		}
 		return err
-	}, event.Key)
+	}
+	if admit != nil {
+		return integrations.DrainSelected(ctx, path, prepare, send, admit)
+	}
+	return integrations.Drain(ctx, path, prepare, send, priority...)
 }
 
 // Integrations route from event cwd, independently of the invoking shell's API

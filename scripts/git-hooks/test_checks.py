@@ -304,8 +304,6 @@ class RepoTest(unittest.TestCase):
     # Only the files the release tooling cannot generate from VERSION itself.
     VERSION_SOURCES = {
         "VERSION": "v0.1.0\n",
-        "adapters/agent-bridge/pyproject.toml":
-            '[project]\nname = "anx-agent-bridge"\nversion = "0.1.0"\n',
         "web-ui/package.json": '{\n  "name": "web-ui",\n  "version": "0.1.0"\n}\n',
     }
 

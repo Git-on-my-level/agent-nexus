@@ -73,23 +73,23 @@ anx update --check
 anx update
 ```
 
-For host wake routing, enroll once and run one bridge for the host:
+The bridge is the recommended next step after enrollment. Install one service
+for this host, then register each intended agent in each workspace:
 
 ```bash
 anx host enroll
-anx skills sync --dry-run
-anx skills sync
+anx bridge install --dry-run
 anx bridge install
-# write one bridge.toml with [host] and [agents.<name>] runtime entries
-anx bridge start --config ./bridge.toml
-anx bridge status --config ./bridge.toml
-anx bridge doctor --config ./bridge.toml
-anx bridge stop --config ./bridge.toml
+anx bridge add --as codex
+anx bridge status
+anx bridge doctor
 ```
 
-The bridge uses `anx host token --as <name>` for each derived agent and does not
-copy host keys or refresh tokens. See `adapters/agent-bridge/README.md` for the
-host config and runtime argv format.
+Without its answer job, unattended resumes wait; Git and spool drain remain
+manual without their jobs. Await/batch/direct commands work without a bridge.
+The Go service references existing enrolled credentials and keeps callback
+commands local. See [the host bridge guide](cli/docs/host-bridge.md) for jobs,
+optional exact runtime argv, signed presence and safe legacy-unit migration.
 
 See `runbooks/release.md` for version-pinning and custom install directory options.
 
@@ -106,11 +106,8 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make hosted-ops-smoke`: run one hosted provisioning/backup/restore smoke flow
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
-- `make bridge-setup`: create the adapter-local Python 3.11 virtualenv and install bridge deps
-- `make bridge-doctor`: verify the adapter-local bridge environment
-- `make bridge-test`: run bridge unit tests
+- `make bridge-test`: run host supervisor and migration fixture tests
 - `make core-<target>`: pass through to `core/Makefile`
-- `make bridge-<target>`: pass through to `adapters/agent-bridge/Makefile`
 - `make web-ui-<target>`: pass through to `web-ui/Makefile`
 
 Release/operations docs:
@@ -182,16 +179,14 @@ See `tools/anx-http-record/README.md` for details.
 
 ## Adapter Integrations
 
-The vendored bridge package at `adapters/agent-bridge/` runs one bridge per
-enrolled host and launches configured runtimes for its derived agents.
+The optional host bridge is part of the Go CLI (`cli/internal/bridge`). It
+serves registered agents and workspaces through one OS-user service. The
+workspace-owned router remains embedded in `anx-core`.
 
-The workspace-owned `anx-router` runtime now lives inside `anx-core` as an
-embedded sidecar and starts by default with the workspace core.
-
-- CLI-only bridge bootstrap: `anx bridge install`, `anx bridge start`, `anx bridge doctor`
-- Repo-local contributor workflow: `make bridge-setup`, `make bridge-doctor`, `make bridge-test`
+- Host setup and migration: [host bridge guide](cli/docs/host-bridge.md)
+- Isolated fixtures: `make bridge-test`
 - Workspace-router runtime notes: `core/README.md`
-- Package-specific bridge runtime notes: `adapters/agent-bridge/README.md`
+- Independent PM provider protocol wrapper: `adapters/pm/README.md`
 
 Live dashboard data and declared push adapters: [guide](docs/live-series.md).
 

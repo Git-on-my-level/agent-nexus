@@ -22,6 +22,7 @@
   import { otherDialogOpen } from "$lib/inboxShortcuts.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import AgentRosterRow from "$lib/components/agents/AgentRosterRow.svelte";
+  import HostBridgeList from "$lib/components/agents/HostBridgeList.svelte";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -197,6 +198,7 @@
       {/if}
     {/snippet}
   </WorkspacePageHeader>
+  <HostBridgeList />
 
   {#if roster?.status === "error" && agents.length > 0}
     <p class="text-micro text-warn-text" role="status">

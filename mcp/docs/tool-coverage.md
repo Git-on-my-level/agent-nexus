@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 248
+- Command count: 257
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -19,6 +19,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | asks | 4 |
 | auth | 22 |
 | boards | 13 |
+| bridge | 8 |
 | cards | 13 |
 | curation | 5 |
 | deliveries | 3 |
@@ -28,7 +29,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | git | 5 |
 | home | 2 |
 | hook | 1 |
-| host | 15 |
+| host | 16 |
 | inbox | 5 |
 | integrations | 7 |
 | meta | 9 |
@@ -55,25 +56,25 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 85 |
+| exposed_read | 86 |
 | exposed_write | 68 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 12 |
 | unsupported_other | 9 |
-| unsupported_shell_shaped | 15 |
+| unsupported_shell_shaped | 23 |
 | unsupported_streaming | 6 |
 
 ## Counts by Surface
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 153 | exposed_read + exposed_write + adapted |
+| standalone default | 154 | exposed_read + exposed_write + adapted |
 | hosted default | 67 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 53 | not represented as direct MCP tools in v1 |
+| unsupported | 61 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -149,6 +150,14 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | boards.trash | boards | POST | /boards/{board_id}/trash | exposed_write | ordinary reversible board lifecycle write |
 | boards.unarchive | boards | POST | /boards/{board_id}/unarchive | exposed_write | ordinary reversible board lifecycle write |
 | boards.workspace | boards | GET | /boards/{board_id}/workspace | exposed_read | bounded board workspace projection |
+| bridge.add | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.doctor | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.install | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.remove | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.run | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.start | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.status | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
+| bridge.stop | bridge | LOCAL |  | unsupported_shell_shaped | host service and execution registration stay on the local CLI |
 | brief.get | orient | GET | /brief | exposed_read | brief.v1: the caller's decisions, initiatives against promises, own asks and answers. |
 | cards.archive | cards | POST | /cards/{card_id}/archive | exposed_write | ordinary reversible card lifecycle write |
 | cards.create | cards | POST | /cards | exposed_write | ordinary card creation |
@@ -207,6 +216,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | home.read | home | POST | /home/read | exposed_write | ordinary home read-marker write |
 | home.unread | home | GET | /home/unread | exposed_read | home unread projection |
 | hook | hook | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
+| hosts.bridge_status | host | POST | /hosts/bridge-status | exposed_read | bounded workspace-local host liveness and job coverage read |
 | hosts.bridge.check_in | host | POST | /hosts/{host_id}/bridge/check-in | unsupported_other | bridge check-in is host-signed infrastructure traffic |
 | hosts.enroll.approve | host | POST | /auth/hosts/enrollments/{enrollment_id}/approve | gated_admin | approving a host grants machine-level credentials |
 | hosts.enroll.complete | host | POST | /auth/hosts/enrollments/{enrollment_id}/complete | unsupported_bootstrap_auth | host enrollment is a local machine ceremony |

@@ -414,17 +414,28 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 		agent, detail = ag, det
 		_, warnings = a.orientDeliveryHealth(cfg, asSlice(detail["open_asks"]))
 	}
+	bridgeActions := []output.NextAction{}
+	bridgeRecommended := a.answerBridgeState(cfg) != answerBridgeRunning
+	if bridgeRecommended {
+		bridgeActions = append(bridgeActions, action("Recommended: install host bridge", "anx", "bridge", "install"))
+		if agentNamePattern.MatchString(cfg.As) {
+			bridgeActions = append(bridgeActions, action("Register this agent", "anx", "bridge", "add", "--as", cfg.As))
+		}
+	}
 	workspace := a.orientWorkspace(cfg)
 	if !cfg.JSON {
 		markOrientAgentInitiatives(brief, agent, detail)
 		text := fmt.Sprintf("workspace: %s source=%s other_aliases=%s\n", anyString(workspace["alias"]), anyString(workspace["source"]), strings.Join(stringList(workspace["other_aliases"]), ",")) + renderOrientText(brief, a.orientIdentityLine(cfg))
+		if bridgeRecommended {
+			text += "recommended next: anx bridge install; then register each intended agent/workspace with anx bridge add. Without answer delivery, unattended resumes wait; Git/drain remain manual. Await/batch work without a bridge.\n"
+		}
 		for _, w := range warnings {
 			text += "warn: " + w.Message + "\n"
 		}
 		a.writeOutput(a.Stdout, text)
 		return &commandResult{RawWritten: true}, nil
 	}
-	return &commandResult{Data: brief, Workspace: workspace, Warnings: warnings}, nil
+	return &commandResult{Data: brief, Workspace: workspace, Warnings: warnings, NextActions: bridgeActions}, nil
 }
 
 func parseOrientArgs(args []string) error {

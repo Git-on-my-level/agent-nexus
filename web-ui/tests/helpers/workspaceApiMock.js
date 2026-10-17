@@ -299,6 +299,17 @@ export async function installWorkspaceApi(page, overrides = {}) {
     if (path === "/inbox") return reply({ items: [], total: 0 });
     if (path === "/agents") return reply({ agents: api.agents ?? [] });
     if (path === "/hosts") return reply({ hosts: api.hosts ?? [] });
+    if (path === "/hosts/bridge-status" && method === "POST")
+      return reply({
+        as_of: new Date().toISOString(),
+        hosts: (api.hosts ?? []).map((h) => ({
+          host_id: h.id,
+          revoked_at: h.revoked_at ?? null,
+          bridge: null,
+          agents: [],
+          agents_truncated: false,
+        })),
+      });
     if (path === "/boards") return reply({ boards: [] });
     if (path === "/topics") return reply({ topics: [] });
     if (path.startsWith("/stream/")) return holdOpenStream(page, route);

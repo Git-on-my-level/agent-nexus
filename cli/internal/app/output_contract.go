@@ -114,6 +114,9 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "await" {
 		return "remote_coordination_write"
 	}
+	if command == "host bridge-status" {
+		return "read_only"
+	}
 	if parts[0] == "orient" || parts[0] == "context" {
 		return "read_only"
 	}
@@ -156,7 +159,7 @@ func commandSideEffectClass(command string) string {
 	}
 	if parts[0] == "bridge" && len(parts) > 1 {
 		switch parts[1] {
-		case "install", "stop":
+		case "install", "add", "remove", "stop":
 			return "local_operational_write"
 		case "start", "run":
 			return "external_side_effect"
@@ -238,6 +241,7 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		if dir := anyString(root["config_dir"]); dir != "" {
 			prefix = append(prefix, "--config-dir", dir)
 		}
+		actions = append(actions, action("Recommended: install host bridge", append(append([]string{}, prefix...), "bridge", "install")...))
 		if alias := anyString(root["workspace_alias"]); alias != "" {
 			if !asBool(root["workspace_defaulted"]) {
 				actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))

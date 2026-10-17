@@ -24,20 +24,21 @@ import (
 )
 
 type hookFixture struct {
-	a               *App
-	out             *bytes.Buffer
-	home, dir, root string
-	server          *httptest.Server
-	mu              sync.Mutex
-	bodies          []string
-	failFirst       bool
-	status          atomic.Int32
-	prepareStatus   atomic.Int32
-	prepareCalls    atomic.Int32
-	malformedCard   atomic.Bool
-	readGate        chan struct{}
-	readStarted     chan struct{}
-	calls           atomic.Int32
+	a                    *App
+	out                  *bytes.Buffer
+	home, dir, root      string
+	server               *httptest.Server
+	mu                   sync.Mutex
+	bodies               []string
+	failFirst            bool
+	status               atomic.Int32
+	handshakeUnsupported atomic.Bool
+	prepareStatus        atomic.Int32
+	prepareCalls         atomic.Int32
+	malformedCard        atomic.Bool
+	readGate             chan struct{}
+	readStarted          chan struct{}
+	calls                atomic.Int32
 }
 
 func newHookFixture(t *testing.T) *hookFixture {
@@ -67,7 +68,11 @@ func newHookFixture(t *testing.T) *hookFixture {
 			agent := anyString(grant["agent_name"])
 			fmt.Fprintf(w, `{"agent":{"id":%q,"actor_id":%q,"handle":%q},"tokens":{"access_token":"fixture-token","expires_in":3600}}`, agent, "actor-"+agent, agent+".fixture")
 		case r.URL.Path == "/meta/handshake":
-			fmt.Fprint(w, `{"workspace_id":"ws","min_cli_version":"0.0.0"}`)
+			if f.handshakeUnsupported.Load() {
+				fmt.Fprint(w, `{"workspace_id":"ws","min_cli_version":"0.0.0"}`)
+			} else {
+				fmt.Fprint(w, `{"workspace_id":"ws","min_cli_version":"0.0.0","capabilities":["host_bridge_v1"]}`)
+			}
 		case strings.HasPrefix(r.URL.Path, "/work/"):
 			if status := int(f.status.Load()); status != 0 {
 				w.WriteHeader(status)

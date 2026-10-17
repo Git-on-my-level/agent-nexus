@@ -738,8 +738,8 @@ func revokeChildSessions(ctx context.Context, tx Transaction, id, now string) er
 func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 	var h Host
 	var adapters string
-	var revoked, bridgeExpiry sql.NullString
-	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?`, id, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry, &h.KeyID)
+	var revoked sql.NullString
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?`, id, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &h.KeyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, ErrHostNotFound
 	}
@@ -770,15 +770,15 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 		h.ExcludedNames = append(h.ExcludedNames, n)
 	}
 	rows.Close()
-	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name`, h.ID)
+	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,`+wakePresenceSQL("ha.host_id", "a.actor_id")+` FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name`, h.ID)
 	if err != nil {
 		return h, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var a HostAgent
-		var rev sql.NullString
-		if err := rows.Scan(&a.Name, &a.IdentityKind, &a.ID, &a.ActorID, &a.Handle, &rev); err != nil {
+		var rev, expiry sql.NullString
+		if err := rows.Scan(&a.Name, &a.IdentityKind, &a.ID, &a.ActorID, &a.Handle, &rev, &expiry); err != nil {
 			return h, err
 		}
 		a.Ref = "actor:" + a.ActorID
@@ -786,7 +786,12 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 		a.HostSlug = &h.Slug
 		a.DisplayName = a.Name + " on " + h.Slug
 		a.State = "stale"
-		a.BridgeOnline = bridgeExpiry.Valid && !expired(bridgeExpiry.String) && h.RevokedAt == nil
+		a.BridgeOnline = expiry.Valid && !expired(expiry.String) && h.RevokedAt == nil && !rev.Valid
+		for _, name := range h.ExcludedNames {
+			if name == a.Name {
+				a.BridgeOnline = false
+			}
+		}
 		if rev.Valid {
 			a.RevokedAt = &rev.String
 		}
@@ -837,20 +842,20 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END),0) FROM hosts`).Scan(&total, &active); err != nil {
 		return nil, 0, 0, err
 	}
-	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,revoked_at,bridge_expires_at FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,revoked_at FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 	entries := []HostInventoryEntry{}
 	ids := []string{}
 	positions := map[string]int{}
-	expiries := map[string]string{}
+
 	for rows.Next() {
 		var entry HostInventoryEntry
 		h := &entry.Host
 		var adapters string
-		var revoked, expiry sql.NullString
-		if err = rows.Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &expiry); err != nil {
+		var revoked sql.NullString
+		if err = rows.Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked); err != nil {
 			rows.Close()
 			return nil, 0, 0, err
 		}
@@ -867,7 +872,7 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 		}
 		h.ExcludedNames, h.Agents = []string{}, []HostAgent{}
 		positions[h.ID] = len(entries)
-		expiries[h.ID] = expiry.String
+
 		ids = append(ids, h.ID)
 		entries = append(entries, entry)
 	}
@@ -900,18 +905,18 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 	}
 	// Rank only selected hosts, then hydrate at most agentLimit per host. These
 	// are the same scoped relations used by the former per-host point reads.
-	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT host_id,name,identity_kind,id,actor_id,username,revoked_at FROM (
+	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.host_id,ha.name,ha.identity_kind,ha.id,ha.actor_id,ha.username,ha.revoked_at,`+wakePresenceSQL("ha.host_id", "ha.actor_id")+` AS bridge_expiry FROM (
  SELECT ha.host_id,ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,
  row_number() OVER (PARTITION BY ha.host_id ORDER BY ha.name) AS position
- FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id IN (SELECT value FROM json_each(?))) WHERE position<=? ORDER BY host_id,name`, string(raw), agentLimit)
+ FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id IN (SELECT value FROM json_each(?))) ha WHERE ha.position<=? ORDER BY ha.host_id,ha.name`, string(raw), agentLimit)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 	for rows.Next() {
 		var id string
 		var agent HostAgent
-		var revoked sql.NullString
-		if err = rows.Scan(&id, &agent.Name, &agent.IdentityKind, &agent.ID, &agent.ActorID, &agent.Handle, &revoked); err != nil {
+		var revoked, expiry sql.NullString
+		if err = rows.Scan(&id, &agent.Name, &agent.IdentityKind, &agent.ID, &agent.ActorID, &agent.Handle, &revoked, &expiry); err != nil {
 			rows.Close()
 			return nil, 0, 0, err
 		}
@@ -920,7 +925,12 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 		agent.HostID, agent.HostSlug = &h.ID, &h.Slug
 		agent.DisplayName = agent.Name + " on " + h.Slug
 		agent.State = "stale"
-		agent.BridgeOnline = expiries[id] != "" && !expired(expiries[id]) && h.RevokedAt == nil
+		agent.BridgeOnline = expiry.Valid && !expired(expiry.String) && h.RevokedAt == nil && !revoked.Valid
+		for _, name := range h.ExcludedNames {
+			if name == agent.Name {
+				agent.BridgeOnline = false
+			}
+		}
 		if revoked.Valid {
 			agent.RevokedAt = &revoked.String
 		}
@@ -1214,25 +1224,6 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 	hostIDCopy, slugCopy := id, slug
 	a := HostAgent{ID: agentID, Ref: "actor:" + actorID, ActorID: actorID, HostID: &hostIDCopy, HostSlug: &slugCopy, Name: name, Handle: name + "." + slug, DisplayName: name + " on " + slug, IdentityKind: kind, State: "stale"}
 	return a, TokenBundle{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(ttl.Seconds())}, nil
-}
-func (s *Store) CheckInHostBridge(ctx context.Context, id, instance, checked, expires string) (map[string]string, error) {
-	h, err := s.GetHost(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if h.RevokedAt != nil {
-		return nil, ErrHostRevoked
-	}
-	c, e1 := time.Parse(time.RFC3339, checked)
-	e, e2 := time.Parse(time.RFC3339, expires)
-	if instance == "" || e1 != nil || e2 != nil || !e.After(c) || e.After(time.Now().UTC().Add(5*time.Minute)) {
-		return nil, ErrInvalidRequest
-	}
-	_, err = s.db.ExecContext(ctx, `UPDATE hosts SET bridge_instance_id=?,bridge_checked_in_at=?,bridge_expires_at=? WHERE id=?`, instance, checked, expires, h.ID)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{"host_id": h.ID, "bridge_instance_id": instance, "checked_in_at": checked, "expires_at": expires}, nil
 }
 func (s *Store) IsDerivedAgent(ctx context.Context, id string) (bool, error) {
 	var count int

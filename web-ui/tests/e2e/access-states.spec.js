@@ -385,6 +385,17 @@ async function installAccessApi(page, overrides = {}) {
   await page.route(/(?<!\/auth)\/hosts\/[^/?]+$/, (route) => {
     const method = route.request().method();
     const id = decodeURIComponent(route.request().url().split("/hosts/")[1]);
+    if (id === "bridge-status")
+      return respond(route, "bridgeStatus", () => ({
+        as_of: new Date().toISOString(),
+        hosts: api.hosts.map((h) => ({
+          host_id: h.id,
+          revoked_at: h.revoked_at,
+          bridge: null,
+          agents: [],
+          agents_truncated: false,
+        })),
+      }));
     if (method === "PATCH") {
       return respond(route, "patchHost", () => {
         const body = route.request().postDataJSON();

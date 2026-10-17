@@ -31,12 +31,14 @@ func (s SQLIdentities) listAgents(ctx context.Context, limit int) ([]Identity, e
 		COALESCE(x.display_name,a.username),COALESCE(a.revoked_at,''),
 		COALESCE(ha.name,''),COALESCE(ha.identity_kind,''),
 		COALESCE(h.id,''),COALESCE(h.slug,''),
-		COALESCE(h.bridge_checked_in_at,''),COALESCE(h.bridge_expires_at,''),
+		COALESCE(bp.last_seen_at,''),CASE WHEN bj.enabled=1 AND bj.ready=1 THEN COALESCE(bp.expires_at,'') ELSE '' END,
 		COALESCE(h.revoked_at,''),CASE WHEN hx.name IS NULL THEN 0 ELSE 1 END
 		FROM agents a
 		LEFT JOIN actors x ON x.id=a.actor_id
 		LEFT JOIN host_agents ha ON ha.agent_id=a.id
 		LEFT JOIN hosts h ON h.id=ha.host_id
+        LEFT JOIN host_bridge_presence bp ON bp.host_id=h.id
+        LEFT JOIN host_bridge_jobs bj ON bj.host_id=h.id AND bj.actor_id=a.actor_id AND bj.kind='wake'
 		LEFT JOIN host_exclusions hx ON hx.host_id=ha.host_id AND hx.name=ha.name
 		WHERE COALESCE(json_extract(a.metadata_json,'$.principal_kind'),'agent')='agent'
 		ORDER BY a.username`+suffix, args...)

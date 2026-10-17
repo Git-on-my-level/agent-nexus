@@ -15,7 +15,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `21`
+- Commands: `22`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -29,6 +29,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `agents.me.presence`
   - `agents.stream`
   - `hosts.bridge.check_in`
+  - `hosts.bridge_status`
   - `hosts.get`
   - `hosts.list`
   - `hosts.patch`
@@ -336,9 +337,18 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `hosts`
 
-- Commands: `15`
+- Commands: `24`
 - Command IDs:
+  - `bridge.add`
+  - `bridge.doctor`
+  - `bridge.install`
+  - `bridge.remove`
+  - `bridge.run`
+  - `bridge.start`
+  - `bridge.status`
+  - `bridge.stop`
   - `hosts.bridge.check_in`
+  - `hosts.bridge_status`
   - `hosts.enroll.approve`
   - `hosts.enroll.complete`
   - `hosts.enroll.deny`
@@ -396,8 +406,16 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `integrations`
 
-- Commands: `13`
+- Commands: `21`
 - Command IDs:
+  - `bridge.add`
+  - `bridge.doctor`
+  - `bridge.install`
+  - `bridge.remove`
+  - `bridge.run`
+  - `bridge.start`
+  - `bridge.status`
+  - `bridge.stop`
   - `git.binding.export`
   - `git.disable`
   - `git.enable`

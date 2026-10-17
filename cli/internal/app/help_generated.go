@@ -1080,7 +1080,7 @@ Core Commands:
   doctor        Validate local and network preconditions
   update        Replace the installed CLI binary with the recommended or requested release
   concepts      Explain the core ANX primitives and when to use them
-  bridge        Install, manage, and inspect the Python wake-routing bridge runtime
+  bridge        Register agents and operate one optional host bridge service
   auth          Inspect enrolled host and derived-agent identity
   config        Inspect effective CLI config (base URL and derived agent)
   import        Bootstrap a precision-first workspace import and run local import helpers
@@ -1226,7 +1226,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json keeps the brief.v1 object verbatim in result; the separate top-level workspace field reports alias, base_url, selection source and other_aliases.\n", true
 	}
 	if topic == "bridge run" {
-		return "anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.\n", true
+		return "anx bridge run: run one host supervisor for every registered agent/workspace. Configure jobs and execution policy with anx bridge add. See docs/ask-delivery.md.\n", true
 	}
 	if topic == "await" {
 		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
@@ -2091,7 +2091,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},
 		{command: "deliveries", valid: []string{"list", "claim", "receipt"}},
 		{command: "runs", valid: []string{"list", "get", "ingest"}},
-		{command: "host", valid: []string{"list", "revoke"}},
+		{command: "host", valid: []string{"list", "revoke", "bridge-status"}},
 		authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec,
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,

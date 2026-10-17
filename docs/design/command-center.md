@@ -188,7 +188,10 @@ next_actions}, warnings}`. `warnings` and `next_actions` are always present.
   raw ids, live updates via the existing event stream instead of Reload buttons, docs list
   redundancy, Settings vs Diagnostics grouping, ⌘K palette with actions.
 
-## Bridge (adapters/agent-bridge)
+> Historical runtime references below predate the unified Go host bridge.
+> Current architecture: [agent-hooks-and-bridge.md](agent-hooks-and-bridge.md).
+
+## Bridge (historical Python runtime)
 
 - One bridge per enrolled host, authenticating with the host identity (no per-agent agent
   homes, no `import-auth`, no copied refresh tokens). It checks in presence for the host

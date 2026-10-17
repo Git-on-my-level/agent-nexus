@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit refs, scope
 
 # ANX participant
 
-Skill contract: anx.participant.v26.
+Skill contract: anx.participant.v27.
 
 ## Daily loop
 
@@ -29,7 +29,7 @@ Everything defaults off. Preview `anx integrations enable context.inject --harne
 
 Elect one repo writer with `anx git enable --writer`; distribute its exported binding. Other hosts report `not_capture_writer`. `Anx-Card`, `Anx-Note`, `Anx-Next` trailers publish notes/promises, never completion/status. Inspect `anx git status`; use `anx git sync` for delivery. Rewrites/failures require reconciliation; see `anx help git`.
 
-Recommended next step for unattended callbacks: preview `anx bridge install --dry-run --as <name>`, then explicitly install. Without it, resume callbacks wait; await/batch/manual reads work. Hooks/Git need no bridge. Never alter services merely for a code task.
+Recommended next step: preview `anx bridge install --dry-run`, explicitly install the one host service, then register each agent/workspace with `anx bridge add --as <name> --workspace <alias>`. Answers are enabled by registration; Git capture, spool drain and exact runtime wake commands are independent opt-ins. Without their jobs, unattended resumes wait and Git/drain are manual. Await/batch/direct reads need no bridge. Never alter services merely for a code task.
 
 ## Recurring work and discovery
 

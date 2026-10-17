@@ -4,7 +4,7 @@
     agentPath,
     agentStateShortLabel,
   } from "$lib/agentPresence.js";
-  import AgentBridgeIndicator from "$lib/components/agents/AgentBridgeIndicator.svelte";
+  import HostBridgeBadge from "$lib/components/agents/HostBridgeBadge.svelte";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
   import Button from "$lib/components/Button.svelte";
   import CopyableId from "$lib/components/CopyableId.svelte";
@@ -29,9 +29,6 @@
 
   let revoked = $derived(Boolean(host?.revoked_at));
   let activeAgents = $derived(agents.filter((agent) => !agent.revoked_at));
-  let bridgeOnline = $derived(
-    activeAgents.some((agent) => agent.bridge_online),
-  );
   let excluded = $derived(host?.excluded_names ?? []);
   let unusedAdapters = $derived(
     (host?.discovered_adapters ?? []).filter(
@@ -145,7 +142,7 @@
     </div>
     {#if !revoked}
       <div class="shrink-0 pt-0.5 text-micro">
-        <AgentBridgeIndicator online={bridgeOnline} showLabel />
+        <HostBridgeBadge {host} detail />
       </div>
     {/if}
   </header>

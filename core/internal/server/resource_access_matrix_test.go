@@ -226,6 +226,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					// Point routes use their actual private path selector, without
 					// unrelated private IDs injected into the request body.
 					payload := map[string]any{}
+					if p.Path == "/hosts/bridge-status" {
+						payload["host_ids"] = []string{rosterAgent.Host.ID}
+					}
 					if p.Path == "/asks/{ask_id}/subscriptions" {
 						payload = map[string]any{"kind": "await", "label": "privacy"}
 					}

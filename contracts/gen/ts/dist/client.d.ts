@@ -178,6 +178,7 @@ export declare class AnxClient {
     homeRead(options?: RequestOptions): Promise<InvokeResult>;
     homeUnread(options?: RequestOptions): Promise<InvokeResult>;
     hostsBridgeCheckIn(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    hostsBridgeStatus(options?: RequestOptions): Promise<InvokeResult>;
     hostsEnrollApprove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsEnrollComplete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsEnrollDeny(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

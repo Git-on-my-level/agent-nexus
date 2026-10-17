@@ -1,0 +1,8 @@
+{
+  "status_vm_steps": 30000,
+  "status_full_scan_steps": 0,
+  "summary_vm_steps": 5000,
+  "summary_full_scan_steps": 99,
+  "scoped_status_vm_steps": 30000,
+  "snapshot_write_vm_steps": 120000
+}

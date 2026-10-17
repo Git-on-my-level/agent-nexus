@@ -285,6 +285,9 @@ func (a *App) Run(args []string) int {
 		warnings = append(result.Warnings, warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
+	if result != nil {
+		actions = append(result.NextActions, actions...)
+	}
 	a.writeAskAutoCreatedWarning(warnings)
 	if root, ok := value.(map[string]any); ok {
 		if ref := ensureCreatedRef(identity.Command, root); ref != "" && !resolved.JSON {
@@ -358,11 +361,12 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 }
 
 type commandResult struct {
-	Workspace  any
-	Data       any
-	Text       string
-	RawWritten bool
-	Warnings   []output.Warning
+	Workspace   any
+	Data        any
+	Text        string
+	RawWritten  bool
+	Warnings    []output.Warning
+	NextActions []output.NextAction
 }
 
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {

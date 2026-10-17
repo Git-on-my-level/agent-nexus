@@ -497,6 +497,7 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 		"--listen-addr", fmt.Sprintf("127.0.0.1:%d", port),
 		"--workspace-root", workspace,
 		"--schema-path", filepath.Join(root, "contracts", "anx-schema.yaml"),
+		"--meta-commands-path", filepath.Join(root, "contracts", "gen", "meta", "commands.json"),
 	)
 	// Background projection maintenance contends with API SQLite transactions; on
 	// slow CI busy_timeout(20s) can expire and surface as 500s on mutating requests.
