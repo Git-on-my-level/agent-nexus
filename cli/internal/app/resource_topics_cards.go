@@ -471,7 +471,7 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 
 func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
 	fs := newSilentFlagSet(commandName)
-	var boardFlag, titleFlag, bodyFlag, contentFileFlag, fromFileFlag trackedString
+	var boardFlag, titleFlag, bodyFlag, contentFileFlag, fromFileFlag, handleFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
 	var columnFlag, topicFlag, documentRefFlag, riskFlag, dueAtFlag trackedString
 	var beforeCardIDFlag, afterCardIDFlag trackedString
@@ -480,6 +480,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	fs.Var(&boardFlag, "board", "Parent board ref, handle, or id for the new card")
 	fs.Var(&boardFlag, "board-id", "Parent board ref, handle, or id for the new card")
 	fs.Var(&titleFlag, "title", "Card title")
+	fs.Var(&handleFlag, "handle", "Client-chosen lowercase slug (1-64 characters); conflicts fail without renaming")
 	fs.Var(&bodyFlag, "body", "Inline card summary/body text")
 	fs.Var(&contentFileFlag, "body-file", "Load card summary/body text from a local file or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
@@ -503,7 +504,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	if len(fs.Args()) > 0 {
 		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
-	fieldFlagsSet := strings.TrimSpace(boardFlag.value) != "" ||
+	fieldFlagsSet := handleFlag.set || strings.TrimSpace(boardFlag.value) != "" ||
 		strings.TrimSpace(titleFlag.value) != "" ||
 		strings.TrimSpace(bodyFlag.value) != "" ||
 		strings.TrimSpace(contentFileFlag.value) != "" ||
@@ -572,6 +573,12 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 		"related_refs":    normalizedStringsOrEmpty(relatedRefFlags.values),
 		"risk":            firstNonEmpty(strings.TrimSpace(riskFlag.value), "low"),
 		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	}
+	if handleFlag.set {
+		if err := validateCardHandle(handleFlag.value); err != nil {
+			return nil, false, err
+		}
+		card["handle"] = handleFlag.value
 	}
 	if topicRef := normalizeTopicFlagRef(topicFlag.value); topicRef != "" {
 		card["topic_ref"] = topicRef

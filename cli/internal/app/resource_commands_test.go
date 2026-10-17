@@ -299,7 +299,7 @@ func TestCreateCommandsAppendShareableURL(t *testing.T) {
 		t.Fatalf("write content file: %v", err)
 	}
 	cardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "cards", "create", "--board", "board_123", "--title", "Card URL", "--body-file", contentFile})
-	if !strings.Contains(cardOut, "fact result.url="+strconv.Quote(server.URL+"/o/example-team/w/personal/boards/board_123?card=card_123")) {
+	if !strings.Contains(cardOut, "url="+strconv.Quote(server.URL+"/o/example-team/w/personal/boards/board_123?card=card_123")) {
 		t.Fatalf("expected card create URL, got:\n%s", cardOut)
 	}
 
@@ -329,7 +329,7 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 	hostedBase := server.URL + "/ws/example-team/personal"
 	out := strings.TrimSpace(runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "url", "card", "card:card_123"}))
 	expected := server.URL + "/o/example-team/w/personal/boards/anx-features?card=cli-json-body-input"
-	if !strings.Contains(out, "fact result.url="+strconv.Quote(expected)) {
+	if out != expected {
 		t.Fatalf("expected %q, got %q", expected, out)
 	}
 }

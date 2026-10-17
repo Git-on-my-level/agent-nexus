@@ -393,7 +393,7 @@ func (a *App) runContext(ctx context.Context, args []string, cfg config.Resolved
 }
 
 // runOrient reads the caller's brief.v1 (GET /brief). JSON mode prints the
-// object verbatim; text mode prints a compact rendering.
+// object verbatim in result, with local workspace metadata beside it in the envelope.
 func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	if err := parseOrientArgs(args); err != nil {
 		return nil, err
@@ -414,16 +414,17 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 		agent, detail = ag, det
 		_, warnings = a.orientDeliveryHealth(cfg, asSlice(detail["open_asks"]))
 	}
+	workspace := a.orientWorkspace(cfg)
 	if !cfg.JSON {
 		markOrientAgentInitiatives(brief, agent, detail)
-		text := renderOrientText(brief, a.orientIdentityLine(cfg))
+		text := fmt.Sprintf("workspace: %s source=%s other_aliases=%s\n", anyString(workspace["alias"]), anyString(workspace["source"]), strings.Join(stringList(workspace["other_aliases"]), ",")) + renderOrientText(brief, a.orientIdentityLine(cfg))
 		for _, w := range warnings {
 			text += "warn: " + w.Message + "\n"
 		}
 		a.writeOutput(a.Stdout, text)
 		return &commandResult{RawWritten: true}, nil
 	}
-	return &commandResult{Data: brief, Warnings: warnings}, nil
+	return &commandResult{Data: brief, Workspace: workspace, Warnings: warnings}, nil
 }
 
 func parseOrientArgs(args []string) error {

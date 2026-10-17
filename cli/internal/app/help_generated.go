@@ -494,11 +494,12 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--body-file` so the CLI can fill the stable Card envelope.",
 		Examples: []string{
 			"anx cards create --board board:<board-handle> --topic topic:<topic-handle> --title \"Implement login\" --body-file card.md",
-			"anx cards create --board board:<board-handle> --title \"Implement login\" --body \"Inline summary\"",
+			"anx cards create --board board:<board-handle> --handle implement-login --title \"Implement login\" --body \"Inline summary\"",
 			"anx cards create --board board:<board-handle> --title \"Implement login\" --body-file card.md --assignee-ref actor:<actor-handle>",
 			"cat card-create.json | anx cards create",
 		},
 		Flags: []localHelperFlag{
+			{Name: "--handle <slug>", Description: "Client-chosen lowercase card slug (1-64 characters); conflicts fail without renaming."},
 			{Name: "--board <board-ref-or-handle>", Description: "Board typed ref or handle for the new work card."},
 			{Name: "--title <text>", Description: "Card title."},
 			{Name: "--body <text>", Description: "Inline card summary/body text."},
@@ -1179,7 +1180,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.\n", true
 	}
 	if topic == "work" {
-		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|->; anx work list. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
+		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|-> [--handle <slug>]; anx work list. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
 	}
 	if topic == "note" {
 		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]...: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  Warnings (never errors): note_no_next, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n", true
@@ -1214,7 +1215,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return draftUsageText(), true
 	}
 	if topic == "orient" {
-		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json prints the brief.v1 object verbatim.\n", true
+		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json keeps the brief.v1 object verbatim in result; the separate top-level workspace field reports alias, base_url, selection source and other_aliases.\n", true
 	}
 	if topic == "bridge run" {
 		return "anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.\n", true

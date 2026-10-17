@@ -5336,7 +5336,7 @@ paths:
       x-anx-why: One brief for the human surfaces and the agent orient loop.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns the bare brief.v1 object."
+      x-anx-output-envelope: "HTTP returns bare brief.v1. CLI orient --json preserves it verbatim in result and adds a separate top-level workspace field (alias, base_url, source, other_aliases)."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [home, inbox, cards]
       x-anx-stability: stable
@@ -11025,6 +11025,7 @@ components:
       type: object
       additionalProperties: true
       properties:
+        handle: {$ref: '#/components/schemas/CardHandle'}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         request_key:
@@ -12080,15 +12081,24 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
 
+    CardHandle:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+      description: Canonical lowercase slug; reserved resource names and UUIDs are rejected. Conflicts return HTTP 409. Omit to derive a word-bounded handle of at most 40 characters from the title; existing handles are unchanged.
+
     CardCreateInput:
       type: object
       properties:
         handle:
-          $ref: '#/components/schemas/ResourceHandle'
+          $ref: '#/components/schemas/CardHandle'
         id:
           type: string
-          deprecated: true
-          description: Deprecated compatibility alias for `handle`; not an internal UUID field on create.
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
+        card_id:
+          type: string
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
@@ -12443,14 +12453,12 @@ components:
         card: { $ref: '#/components/schemas/CardCreateInput' }
         card_id:
           type: string
-          deprecated: true
-          description: Deprecated compatibility alias for `handle`.
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         handle:
-          $ref: '#/components/schemas/ResourceHandle'
+          $ref: '#/components/schemas/CardHandle'
         id:
           type: string
-          deprecated: true
-          description: Deprecated compatibility alias for `handle`.
+          description: Optional caller-selected storage id, including UUIDs; independent of the public handle. Existing storage-id validation applies. If both id and card_id are supplied, card_id takes precedence.
         title: { type: string }
         summary: { type: string }
         column_key:

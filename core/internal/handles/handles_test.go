@@ -1,6 +1,9 @@
 package handles
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNormalize(t *testing.T) {
 	t.Parallel()
@@ -33,5 +36,21 @@ func TestFallbackIsSpeakableAndDeterministicForSeed(t *testing.T) {
 	}
 	if Normalize("你好") != "" && Candidate("你好", "thread-1") == "" {
 		t.Fatal("expected non-ASCII-only input to receive fallback candidate")
+	}
+}
+
+func TestShortCandidateRevalidatesTruncatedNames(t *testing.T) {
+	for name := range reserved {
+		title := name + " " + strings.Repeat("x", 40)
+		got := ShortCandidate(title, "stable-seed", 40)
+		if !ValidSlug(got) || len(got) > 40 || got != ShortCandidate(title, "stable-seed", 40) {
+			t.Fatalf("%s: %q", title, got)
+		}
+	}
+	for _, title := range []string{strings.Repeat("z", 80), "ordinary words " + strings.Repeat("word ", 20), "550e8400-e29b-41d4-a716-446655440000 " + strings.Repeat("x", 40)} {
+		got := ShortCandidate(title, "stable-seed", 40)
+		if !ValidSlug(got) || len(got) > 40 {
+			t.Fatalf("%q: %q", title, got)
+		}
 	}
 }

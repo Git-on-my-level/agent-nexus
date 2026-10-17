@@ -99,6 +99,7 @@ func (a *App) resolveWorkspace(cfg config.Resolved, alias *string) (config.Resol
 		}
 		cfg.BaseURL = base
 		cfg.Sources["base_url"] = "flag:--workspace"
+		cfg.Sources["workspace_alias"] = *alias
 		return cfg, nil
 	}
 	cwd, err := a.workspaceCWD()
@@ -126,5 +127,15 @@ func (a *App) resolveWorkspace(cfg config.Resolved, alias *string) (config.Resol
 		cfg.BaseURL = base
 	}
 	cfg.Sources["base_url"] = source
+	selected := ""
+	if source == "config:default" {
+		selected = catalog.File.Default
+	}
+	if rule, ok := strings.CutPrefix(source, "config:directory-rule:"); ok {
+		selected = catalog.File.Rules[rule]
+	}
+	if _, ok := catalog.File.Aliases[selected]; ok {
+		cfg.Sources["workspace_alias"] = selected
+	}
 	return cfg, nil
 }

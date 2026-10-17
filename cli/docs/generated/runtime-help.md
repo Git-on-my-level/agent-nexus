@@ -1024,7 +1024,7 @@ Tip: `anx help <command path>` for full command-level generated details.
 Query commitments, evidence, freshness and refresh state
 
 ```text
-Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|->; anx work list. Progress and completion are loop verbs: anx note <card> "<text>" [--next <when> "<what>"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.
+Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|-> [--handle <slug>]; anx work list. Progress and completion are loop verbs: anx note <card> "<text>" [--next <when> "<what>"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.
 ```
 
 ## `pm`
@@ -4992,6 +4992,7 @@ Inputs:
   - body `due_at` (string)
   - body `executions` (list<object>)
   - body `goal` (any)
+  - body `handle` (string)
   - body `id` (string)
   - body `labels` (list<string>)
   - body `next_action` (string)
@@ -5027,7 +5028,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
 Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
-Usage: anx work create --from-file <path|->
+Usage: anx work create [--handle <slug>] --from-file <path|->
 
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
@@ -7518,6 +7519,7 @@ Inputs:
   - body `card.after_card_id` (string)
   - body `card.assignee_refs` (list<any>)
   - body `card.before_card_id` (string)
+  - body `card.card_id` (string)
   - body `card.column_key` (string)
   - body `card.definition_of_done` (list<string>)
   - body `card.document_ref` (string)
@@ -7546,11 +7548,12 @@ Local Help: cards create
 - JSON body: Either flags plus `--body`/`--body-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
 - Examples:
   - `anx cards create --board board:<board-handle> --topic topic:<topic-handle> --title "Implement login" --body-file card.md`
-  - `anx cards create --board board:<board-handle> --title "Implement login" --body "Inline summary"`
+  - `anx cards create --board board:<board-handle> --handle implement-login --title "Implement login" --body "Inline summary"`
   - `anx cards create --board board:<board-handle> --title "Implement login" --body-file card.md --assignee-ref actor:<actor-handle>`
   - `cat card-create.json | anx cards create`
 
 Flags:
+  --handle <slug>              Client-chosen lowercase card slug (1-64 characters); conflicts fail without renaming.
   --board <board-ref-or-handle> Board typed ref or handle for the new work card.
   --title <text>               Card title.
   --body <text>                Inline card summary/body text.

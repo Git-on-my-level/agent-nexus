@@ -237,6 +237,7 @@ func (a *App) Run(args []string) int {
 		} else if nextErr != nil {
 			runErr = nextErr
 		}
+		runErr = a.withWorkspaceHint(context.Background(), resolved, normalizedArgs, runErr)
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 	if !isGoTestBinary() && cmdPeek != "integrations" {
@@ -257,6 +258,12 @@ func (a *App) Run(args []string) int {
 	}
 	if value == nil && result != nil && result.Text != "" {
 		value = map[string]any{"text": result.Text}
+	}
+	if identity.Command == "url" && !resolved.JSON {
+		if resourceURL := anyString(asMap(value)["url"]); resourceURL != "" {
+			a.writeOutput(a.Stdout, resourceURL+"\n")
+			return 0
+		}
 	}
 	if identity.Command == "work receipt" && !resolved.JSON {
 		if id := anyString(asMap(asMap(value)["event"])["id"]); id != "" {
@@ -281,7 +288,7 @@ func (a *App) Run(args []string) int {
 			a.writeOutput(a.Stdout, ref+"\n")
 		}
 	}
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return 0
@@ -348,6 +355,7 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 }
 
 type commandResult struct {
+	Workspace  any
 	Data       any
 	Text       string
 	RawWritten bool
@@ -704,4 +712,11 @@ func isConfigLenientImportCommand(args []string) bool {
 	}
 	flags, err := parseImportApplyFlags(args[1:])
 	return err == nil && !flags.execute.value
+}
+
+func commandWorkspace(result *commandResult) any {
+	if result == nil {
+		return nil
+	}
+	return result.Workspace
 }

@@ -63,6 +63,8 @@ func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
 		// remaining typed rejections fall through unchanged.
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, 404, "not_found", "work not found")
+	case errors.Is(err, primitives.ErrCardHandleConflict):
+		writeError(w, 409, "conflict", "card handle is already reserved; choose another handle")
 	case errors.Is(err, primitives.ErrConflict):
 		writeError(w, 409, "conflict", "work changed or idempotency key conflicts; reload before retry")
 	case errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidCursor):

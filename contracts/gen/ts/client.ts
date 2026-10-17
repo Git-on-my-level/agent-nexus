@@ -3698,7 +3698,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns the bare brief.v1 object.",
+    "output_envelope": "HTTP returns bare brief.v1. CLI orient --json preserves it verbatim in result and adds a separate top-level workspace field (alias, base_url, source, other_aliases).",
     "error_codes": [
       "auth_required",
       "invalid_token"
@@ -3858,6 +3858,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "card.before_card_id",
+          "type": "string"
+        },
+        {
+          "name": "card.card_id",
           "type": "string"
         },
         {
@@ -13333,6 +13337,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "goal",
           "type": "any"
+        },
+        {
+          "name": "handle",
+          "type": "string"
         },
         {
           "name": "id",

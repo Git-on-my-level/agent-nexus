@@ -736,7 +736,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			}
 			existingCard, loadCardErr := loadExistingBoardCardForCreateReplay(r.Context(), opts, boardID, req.CardID, req.ParentThread, req.ThreadID)
 			existingBoard, loadBoardErr := opts.primitiveStore.GetBoard(r.Context(), boardID)
-			if loadCardErr == nil && loadBoardErr == nil && boardCardReplayPreconditionMatches(existingBoard, req.IfBoardUpdatedAt) && boardCardMatchesCreateReplay(
+			if loadCardErr == nil && loadBoardErr == nil && (req.Handle == "" || anyString(existingCard["handle"]) == req.Handle) && boardCardReplayPreconditionMatches(existingBoard, req.IfBoardUpdatedAt) && boardCardMatchesCreateReplay(
 				existingCard,
 				explicitReplayCardID,
 				req.Title,
@@ -769,6 +769,8 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board, thread, or document not found")
+		case errors.Is(err, primitives.ErrCardHandleConflict):
+			writeError(w, http.StatusConflict, "conflict", "card handle is already reserved; choose another handle")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board membership already exists or board has changed; refresh and retry")
 		default:
@@ -916,6 +918,8 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board, thread, or document not found")
+		case errors.Is(err, primitives.ErrCardHandleConflict):
+			writeError(w, http.StatusConflict, "conflict", "card handle is already reserved; choose another handle")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board membership already exists or board has changed; refresh and retry")
 		default:
