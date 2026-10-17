@@ -87,13 +87,21 @@ func TestAgentErgonomicsAgainstCore(t *testing.T) {
 	if !strings.Contains(orient.Stdout, "source=flag:--base-url") {
 		t.Fatalf("workspace selection missing: %s", orient.Stdout)
 	}
+	jsonOrient := ok(true, nil, "orient")
+	if _, exists := jsonOrient.Payload["result"].(map[string]any)["workspace"]; exists {
+		t.Fatalf("brief polluted with workspace metadata: %s", jsonOrient.Stdout)
+	}
+	if mustStringPath(t, jsonOrient.Payload, "workspace.base_url") != h.baseURL {
+		t.Fatalf("workspace envelope missing: %s", jsonOrient.Stdout)
+	}
 	urlResult := ok(false, nil, "url", ref)
 	legacyURL := ok(false, nil, "url", "card", ref)
-	if urlResult.Stdout != legacyURL.Stdout || strings.Count(urlResult.Stdout, "\n") != 1 || !strings.HasPrefix(urlResult.Stdout, h.baseURL+"/") {
+	expectedURL := h.baseURL + "/boards/" + strings.TrimPrefix(mustStringPath(t, created.Payload, "result.work.board_ref"), "board:") + "?card=ergonomics-task\n"
+	if urlResult.Stdout != legacyURL.Stdout || urlResult.Stdout != expectedURL {
 		t.Fatalf("url output: %s", urlResult.Stdout)
 	}
-	noted := ok(false, nil, "note", ref, "Progress saved", "--next", "1d", "Acceptance checks")
-	if !strings.Contains(noted.Stdout, "saved note_ref=event:") || !strings.Contains(noted.Stdout, "next_at=") || !strings.Contains(noted.Stdout, `next_what="Acceptance checks"`) || strings.Contains(noted.Stdout, "Review the error") {
+	noted := ok(false, nil, "note", ref, "Progress saved", "--next", "1d", "Acceptance checks", "--evidence", "https://example.test/verification")
+	if !strings.Contains(noted.Stdout, "https://example.test/verification") || !strings.Contains(noted.Stdout, "saved note_ref=event:") || !strings.Contains(noted.Stdout, "next_at=") || !strings.Contains(noted.Stdout, `next_what="Acceptance checks"`) || strings.Contains(noted.Stdout, "Review the error") {
 		t.Fatalf("note confirmation: %s", noted.Stdout)
 	}
 	noNext := ok(false, nil, "note", ref, "More progress")

@@ -884,7 +884,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: One brief for the human surfaces and the agent orient loop.
 - Concepts: `home`, `inbox`, `cards`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns the bare brief.v1 object.
+- Output: HTTP returns bare brief.v1. CLI orient --json preserves it verbatim in result and adds a separate top-level workspace field (alias, base_url, source, other_aliases).
 - Agent notes: Principal-scoped passive read. Bounded per request — materialized facts, indexed lookups and at most 50 rows per section; durations are computed at read time. Counts and refs are filtered by the caller's access.
 
 ## `cards.archive`

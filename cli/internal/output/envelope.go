@@ -44,6 +44,7 @@ type Envelope struct {
 	SchemaVersion int           `json:"schema_version"`
 	Command       string        `json:"command,omitempty"`
 	Result        any           `json:"result,omitempty"`
+	Workspace     any           `json:"workspace,omitempty"`
 	Warnings      []Warning     `json:"warnings"`
 	NextActions   []NextAction  `json:"next_actions"`
 	Error         *ErrorPayload `json:"error,omitempty"`
@@ -275,6 +276,7 @@ func projectNote(lines *[]string, result any) {
 		line += " next_at=" + quote(fmt.Sprint(next["at"])) + " next_what=" + quote(fmt.Sprint(next["what"]))
 	}
 	*lines = append(*lines, line)
+	project(lines, "result.evidence_refs", root["evidence_refs"])
 }
 
 func projectCardCreate(lines *[]string, result any) {

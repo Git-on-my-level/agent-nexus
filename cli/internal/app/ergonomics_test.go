@@ -37,9 +37,16 @@ func TestURLTypedRefsAndLegacyForms(t *testing.T) {
 		home := t.TempDir()
 		prefix := []string{"--base-url", server.URL, "url"}
 		text := runCLIForTest(t, home, nil, nil, append(prefix, args...))
-		if !strings.HasPrefix(text, server.URL+"/") || strings.Count(text, "\n") != 1 || strings.Contains(text, "ok command") {
-			t.Fatalf("%v: %q", args, text)
+		suffix := map[string]string{"card": "/boards/tasks?card=ship", "board": "/boards/tasks", "topic": "/topics/launch", "document": "/docs/guide", "artifact": "/artifacts/report", "thread": "/threads/discussion"}
+		kind := args[0]
+		if prefix, _, ok := strings.Cut(kind, ":"); ok {
+			kind = prefix
 		}
+		expected := server.URL + suffix[kind] + "\n"
+		if text != expected {
+			t.Fatalf("%v: got %q want %q", args, text, expected)
+		}
+
 		jsonArgs := append([]string{"--json"}, append(prefix, args...)...)
 		var doc map[string]any
 		if err := json.Unmarshal([]byte(runCLIForTest(t, home, nil, nil, jsonArgs)), &doc); err != nil {
@@ -333,9 +340,11 @@ func TestWorkspaceHintsIgnoreHTMLAndUnrelatedJSON(t *testing.T) {
 }
 
 func TestMissingRefSelectsInnermostTypedResource(t *testing.T) {
-	e := errnorm.New(errnorm.KindRemote, "not_found", "board or card not found")
-	annotateMissingRef(e, "/boards/board:tasks/cards/card:ship")
-	if got := anyString(asMap(e.Details)["requested_ref"]); got != "card:ship" {
-		t.Fatalf("missing ref=%s", got)
+	for _, path := range []string{"/boards/board:tasks/cards/card:ship", "/work/card:ship", "/cards/card:ship/plan"} {
+		e := errnorm.New(errnorm.KindRemote, "not_found", "resource not found")
+		annotateMissingRef(e, path)
+		if got := anyString(asMap(e.Details)["requested_ref"]); got != "card:ship" {
+			t.Fatalf("path=%s missing ref=%s", path, got)
+		}
 	}
 }

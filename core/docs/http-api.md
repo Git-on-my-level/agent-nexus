@@ -746,3 +746,11 @@ and UUIDs. Invalid handles return 400; handles reserved by existing cards, alias
 or tombstones return 409. Auto-derived card handles are capped at 40 characters,
 cut at a word boundary where possible, with collision suffixes inside that bound.
 Existing handles are unchanged.
+
+On `POST /cards` and board-scoped single/batch card creation, deprecated
+`id` and `card_id` spellings select the public
+handle with the same slug validation and 409 reservation semantics as `handle`.
+They never choose a storage ID. If several spellings (including flat and nested
+forms) are present, they must agree or the server returns 400. Internal IDs
+remain server-generated on those routes; no existing rows are migrated.
+`POST /work` retains its separately documented caller-selected internal `id`.

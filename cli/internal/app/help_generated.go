@@ -1215,7 +1215,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return draftUsageText(), true
 	}
 	if topic == "orient" {
-		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json prints the brief.v1 object verbatim.\n", true
+		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json keeps the brief.v1 object verbatim in result; the separate top-level workspace field reports alias, base_url, selection source and other_aliases.\n", true
 	}
 	if topic == "bridge run" {
 		return "anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.\n", true

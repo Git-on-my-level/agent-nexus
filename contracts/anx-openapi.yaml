@@ -5336,7 +5336,7 @@ paths:
       x-anx-why: One brief for the human surfaces and the agent orient loop.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns the bare brief.v1 object."
+      x-anx-output-envelope: "HTTP returns bare brief.v1. CLI orient --json preserves it verbatim in result and adds a separate top-level workspace field (alias, base_url, source, other_aliases)."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [home, inbox, cards]
       x-anx-stability: stable
@@ -12094,9 +12094,13 @@ components:
         handle:
           $ref: '#/components/schemas/CardHandle'
         id:
-          type: string
+          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
           deprecated: true
-          description: Deprecated compatibility alias for `handle`; not an internal UUID field on create.
+          description: Deprecated compatibility alias for `handle`; same slug validation and conflict behavior, never an internal storage id. Multiple handle spellings must agree.
+        card_id:
+          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
+          deprecated: true
+          description: Deprecated compatibility alias for handle; same slug validation and conflict behavior, never a storage id. Multiple handle spellings must agree.
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
@@ -12450,15 +12454,15 @@ components:
       properties:
         card: { $ref: '#/components/schemas/CardCreateInput' }
         card_id:
-          type: string
+          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
           deprecated: true
-          description: Deprecated compatibility alias for `handle`.
+          description: Deprecated compatibility alias for `handle`; same slug validation and conflict behavior, never a storage id. Multiple handle spellings must agree.
         handle:
           $ref: '#/components/schemas/CardHandle'
         id:
-          type: string
+          allOf: [{ $ref: '#/components/schemas/CardHandle' }]
           deprecated: true
-          description: Deprecated compatibility alias for `handle`.
+          description: Deprecated compatibility alias for `handle`; same slug validation and conflict behavior, never a storage id. Multiple handle spellings must agree.
         title: { type: string }
         summary: { type: string }
         column_key:

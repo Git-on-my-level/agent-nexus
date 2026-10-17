@@ -292,7 +292,7 @@ func uniqueHandleLimitTx(ctx context.Context, q queryRower, typ, desired, fallba
 		seen[candidate] = struct{}{}
 		// Sequential names stay byte-for-byte with the previous allocator.
 		// Hash candidates must round-trip through Normalize so refs resolve.
-		if attempt >= handleSequentialAttempts && handles.Normalize(candidate) != candidate {
+		if !handles.ValidSlug(candidate) {
 			continue
 		}
 		free, err := handleCandidateAvailable(ctx, q, table, typ, candidate)

@@ -288,7 +288,7 @@ func (a *App) Run(args []string) int {
 			a.writeOutput(a.Stdout, ref+"\n")
 		}
 	}
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return 0
@@ -355,6 +355,7 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 }
 
 type commandResult struct {
+	Workspace  any
 	Data       any
 	Text       string
 	RawWritten bool
@@ -711,4 +712,11 @@ func isConfigLenientImportCommand(args []string) bool {
 	}
 	flags, err := parseImportApplyFlags(args[1:])
 	return err == nil && !flags.execute.value
+}
+
+func commandWorkspace(result *commandResult) any {
+	if result == nil {
+		return nil
+	}
+	return result.Workspace
 }

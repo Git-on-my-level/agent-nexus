@@ -29,13 +29,30 @@ func annotateMissingRef(err error, path string) {
 		return
 	}
 	path, _, _ = strings.Cut(path, "?")
-	parts := strings.Split(path, "/")
-	for i := len(parts) - 1; i >= 0; i-- {
-		part, _ := url.PathUnescape(parts[i])
-		if _, ok := workspaceRefPath(part); ok {
-			errnorm.AnnotateDetail(err, "requested_ref", part)
-			return
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	// Standalone selectors are used when preserving a ref through read/prefix recovery.
+	if len(parts) == 1 {
+		ref, _ := url.PathUnescape(parts[0])
+		if _, ok := workspaceRefPath(ref); ok {
+			errnorm.AnnotateDetail(err, "requested_ref", ref)
 		}
+		return
+	}
+	collections := map[string]string{"work": "card", "cards": "card", "boards": "board", "topics": "topic", "docs": "document", "artifacts": "artifact", "threads": "thread", "events": "event", "comments": "event", "revisions": "", "participants": "", "observations": "", "steps": ""}
+	for i := len(parts) - 2; i >= 0; i-- {
+		kind, collection := collections[parts[i]]
+		if !collection {
+			continue
+		}
+		ref, _ := url.PathUnescape(parts[i+1])
+		actual, _, _, parseErr := parseTypedRef(ref)
+		if parseErr == nil && canonicalResourceKind(actual) == kind {
+			if _, ok := workspaceRefPath(ref); ok {
+				errnorm.AnnotateDetail(err, "requested_ref", ref)
+			}
+		}
+		// An untyped leaf must not fall back to a typed ancestor resource.
+		return
 	}
 }
 
@@ -139,7 +156,7 @@ func (a *App) withWorkspaceHint(ctx context.Context, cfg config.Resolved, argv [
 		resp.Body.Close()
 		kind, _, _, _ := parseTypedRef(ref)
 		resource := asMap(record[canonicalResourceKind(kind)])
-		if resp.StatusCode != http.StatusOK || decodeErr != nil || firstNonEmpty(anyString(resource["ref"]), anyString(resource["id"])) == "" {
+		if resp.StatusCode != http.StatusOK || decodeErr != nil || !workspaceResourceMatches(ref, resource) {
 			continue
 		}
 		normalized.Message = fmt.Sprintf("%s not found in workspace %q; it exists in workspace %q — rerun with --workspace %s", ref, current, ws.Alias, ws.Alias)
@@ -185,4 +202,46 @@ func (a *App) orientWorkspace(cfg config.Resolved) map[string]any {
 	}
 	sort.Strings(others)
 	return map[string]any{"alias": alias, "base_url": cfg.BaseURL, "source": cfg.Sources["base_url"], "other_aliases": others}
+}
+
+// Require evidence that this is the requested resource, not just a successful endpoint.
+func workspaceResourceMatches(requested string, resource map[string]any) bool {
+	kind, value, _, err := parseTypedRef(requested)
+	if err != nil {
+		return false
+	}
+	if ref, ok := resource["ref"].(string); ok {
+		actualKind, actualValue, _, refErr := parseTypedRef(ref)
+		if refErr != nil || canonicalResourceKind(actualKind) != canonicalResourceKind(kind) {
+			return false
+		}
+		if actualValue == value {
+			return true
+		}
+	}
+	for _, key := range []string{"handle", "id"} {
+		if actual, ok := resource[key].(string); ok && actual == value {
+			return true
+		}
+	}
+	return false
+}
+
+// Argument vectors are lossless. stringList is for normalized identifiers, not replay.
+func exactArgv(raw any) []string {
+	switch values := raw.(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []any:
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			s, ok := value.(string)
+			if !ok {
+				return nil
+			}
+			result = append(result, s)
+		}
+		return result
+	}
+	return nil
 }

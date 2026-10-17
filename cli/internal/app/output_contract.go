@@ -473,7 +473,7 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		return []output.NextAction{}
 	}
 	if details, ok := err.Details.(map[string]any); ok {
-		if argv := stringList(details["workspace_next_argv"]); len(argv) > 0 {
+		if argv := exactArgv(details["workspace_next_argv"]); len(argv) > 0 {
 			return []output.NextAction{action("Retry in matching workspace", argv...)}
 		}
 	}

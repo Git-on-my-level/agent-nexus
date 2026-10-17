@@ -148,7 +148,7 @@ qualified.
 
 `anx orient` reports the resolved workspace alias, base URL, selection source
 (`--workspace`, `--base-url`, `ANX_BASE_URL`, directory rule, default or the sole
-enrollment), and other configured aliases. JSON adds these under `result.workspace`.
+enrollment), and other configured aliases. JSON adds these in the top-level `workspace` field, separate from `result`, which retains the verbatim `brief.v1` object.
 
 When a typed resource ref is missing, the CLI can suggest another configured,
 already authenticated workspace. This is best effort: at most four distinct other

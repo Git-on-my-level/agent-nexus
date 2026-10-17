@@ -3647,7 +3647,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns the bare brief.v1 object.",
+        "output_envelope": "HTTP returns bare brief.v1. CLI orient --json preserves it verbatim in result and adds a separate top-level workspace field (alias, base_url, source, other_aliases).",
         "error_codes": [
             "auth_required",
             "invalid_token"
@@ -3810,6 +3810,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "card.card_id",
+                    "type": "any"
+                },
+                {
                     "name": "card.column_key",
                     "type": "string",
                     "enum_values": [
@@ -3839,7 +3843,7 @@ export const commandRegistry = [
                 },
                 {
                     "name": "card.id",
-                    "type": "string"
+                    "type": "any"
                 },
                 {
                     "name": "card.provenance.by_field",

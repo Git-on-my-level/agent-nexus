@@ -153,11 +153,11 @@ func TestOrientJSONPrintsBriefVerbatim(t *testing.T) {
 	}
 	var want any
 	_ = json.Unmarshal(raw, &want)
-	got := dailyJSON(t, out)["result"]
-	if workspace := asMap(asMap(got)["workspace"]); workspace["base_url"] != server.URL || workspace["source"] == "" {
+	doc := dailyJSON(t, out)
+	got := doc["result"]
+	if workspace := asMap(doc["workspace"]); workspace["base_url"] != server.URL || workspace["source"] == "" {
 		t.Fatalf("workspace=%#v", workspace)
 	}
-	delete(asMap(got), "workspace")
 	gotJSON, _ := json.Marshal(got)
 	wantJSON, _ := json.Marshal(want)
 	if string(gotJSON) != string(wantJSON) {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -41,6 +42,22 @@ func TestCardCreateChosenHandleConflictAndAutoLength(t *testing.T) {
 		created, err := store.CreateBoardCard(ctx, "actor-1", boardID, primitives.AddBoardCardInput{Title: strings.Repeat("long title words ", 10), ColumnKey: "ready"})
 		if err != nil || len(created.Card["handle"].(string)) > 40 {
 			t.Fatalf("%#v %v", created, err)
+		}
+	}
+	for _, name := range []string{"cards", "new", "threads", "api", "attachments", "documents", "events", "search", "settings", "topics", "trash", "uuid"} {
+		for i := 0; i < 2; i++ {
+			created, err := store.CreateBoardCard(ctx, "actor-1", boardID, primitives.AddBoardCardInput{Title: name + " " + strings.Repeat("x", 40), ColumnKey: "ready"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			handle := created.Card["handle"].(string)
+			if !handles.ValidSlug(handle) || len(handle) > 40 {
+				t.Fatalf("derived %s: %q", name, handle)
+			}
+			resolved, err := store.ResolveResourceRef(ctx, primitives.ResourceRefInput{Ref: created.Card["ref"].(string)})
+			if err != nil || resolved.ID != created.Card["id"] {
+				t.Fatalf("unresolvable derived ref: %#v %v", created.Card, err)
+			}
 		}
 	}
 	existing, err := store.GetBoardCard(ctx, "", first.Card["id"].(string))

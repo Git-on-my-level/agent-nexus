@@ -97,15 +97,28 @@ func ValidSlug(raw string) bool {
 
 // ShortCandidate caps newly derived names without changing normalization of existing refs.
 func ShortCandidate(raw, seed string, limit int) string {
-	value := Candidate(raw, seed)
-	if len(value) <= limit {
-		return value
+	if limit < 1 {
+		return ""
 	}
-	cut := value[:limit]
-	if value[limit] != '-' {
-		if i := strings.LastIndex(cut, "-"); i > 0 {
-			cut = cut[:i]
+	if limit > MaxLength {
+		limit = MaxLength
+	}
+	shorten := func(value string) string {
+		if len(value) <= limit {
+			return value
 		}
+		cut := value[:limit]
+		if value[limit] != '-' {
+			if i := strings.LastIndex(cut, "-"); i > 0 {
+				cut = cut[:i]
+			}
+		}
+		return strings.TrimRight(cut, "-")
 	}
-	return strings.TrimRight(cut, "-")
+	candidate := shorten(Candidate(raw, seed))
+	if ValidSlug(candidate) {
+		return candidate
+	}
+	// A word boundary can collapse a valid title to a reserved name (e.g. cards).
+	return shorten(Fallback(seed))
 }

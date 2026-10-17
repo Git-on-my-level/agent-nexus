@@ -179,6 +179,10 @@ identity_concepts:
       Client-chosen card handles use lowercase ASCII letters and digits separated
       by single hyphens, 1-64 characters; reserved resource names and UUIDs are
       rejected. Existing handles and aliases remain reserved (409 conflict).
+      CardCreateInput and board batch id/card_id are deprecated aliases of handle,
+      never storage IDs. Multiple handle spellings must agree; storage IDs are
+      server-owned on these routes. WorkCreateRequest.id retains its separate
+      documented caller-selected internal ID semantics.
       Omitted handles derive from the title, at most 40 characters on a word
       boundary where possible; no existing handles are rewritten.
   InternalResourceUUID:
@@ -1443,6 +1447,13 @@ brief:
     object backs Decide, Watch and `anx orient --json`. Facts are materialized on write events;
     durations (age, overdue_for, past_promise_for) are computed at read time. One workspace
     only; aggregation across workspaces happens in a hosted shell, never in core.
+  cli_output:
+    command: anx orient --json
+    result: The result field is the verbatim GET /brief brief.v1 object, without CLI-local keys.
+    workspace:
+      location: Top-level CLI envelope field, separate from result; omitted by other commands.
+      fields: [alias, base_url, source, other_aliases]
+      description: Locally resolved workspace identity, selection source and other configured aliases. Adds no core read.
   sections: [decisions, initiatives, your_asks, answered_for_you]
   section_limit: 50
   decision_kinds: [ask, review, access, host, pm_proposal]
