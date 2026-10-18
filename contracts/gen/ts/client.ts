@@ -178,8 +178,24 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
+          "name": "addressing",
+          "type": "string",
+          "enum_values": [
+            "principal",
+            "settings"
+          ]
+        },
+        {
           "name": "delivers",
           "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "kinds",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "label",
+          "type": "string"
         },
         {
           "name": "series",
@@ -5378,7 +5394,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/deliveries/{delivery_id}/receipt",
     "operation_id": "deliveries_receipt",
     "summary": "Record a delivery outcome for a claimed delivery",
-    "why": "Record delivered or failed for a delivery claimed by this adapter.",
+    "why": "Record delivered, failed or skipped for a delivery claimed by this adapter.",
     "input_mode": "flags",
     "http_input_mode": "json-body",
     "cli_input": {
@@ -5392,7 +5408,7 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "outcome",
           "required": true,
-          "description": "delivered or failed."
+          "description": "delivered"
         },
         {
           "name": "error",
@@ -5439,7 +5455,8 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string",
           "enum_values": [
             "delivered",
-            "failed"
+            "failed",
+            "skipped"
           ]
         }
       ],

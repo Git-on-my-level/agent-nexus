@@ -241,7 +241,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Caller-owned channel rows only, bounded by the per-human channel cap, plus a 64-row declared-channel read. Includes authentication.",
+    "reason": "Caller-owned channel rows only, bounded by the per-human channel cap, plus a bounded read of active channel declarations (host adapters and grant declarations, at most 256 rows). Includes authentication.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },

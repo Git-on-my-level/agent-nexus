@@ -239,7 +239,7 @@ func TestClaimLimitLeaseAndReclaim(t *testing.T) {
 		}
 	}
 	if oldTok != "" {
-		if _, err := e.store.RecordReceipt(ctx, re[0].DeliveryID, oldTok, "email", true, "", false, "w1"); !errors.Is(err, delivery.ErrConflict) {
+		if _, err := e.store.RecordReceipt(ctx, re[0].DeliveryID, oldTok, "email", delivery.ReceiptDelivered, "", false, "w1"); !errors.Is(err, delivery.ErrConflict) {
 			t.Fatalf("stale token want ErrConflict got %v", err)
 		}
 	}
@@ -261,19 +261,19 @@ func TestRecordReceipt(t *testing.T) {
 
 	// Delivered.
 	d := claimOne("deliver")
-	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "telegram", true, "", false, "w"); !errors.Is(err, delivery.ErrNotFound) {
+	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "telegram", delivery.ReceiptDelivered, "", false, "w"); !errors.Is(err, delivery.ErrNotFound) {
 		t.Fatalf("wrong channel want ErrNotFound got %v", err)
 	}
-	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "bogus", "email", true, "", false, "w"); !errors.Is(err, delivery.ErrConflict) {
+	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "bogus", "email", delivery.ReceiptDelivered, "", false, "w"); !errors.Is(err, delivery.ErrConflict) {
 		t.Fatalf("wrong token want ErrConflict got %v", err)
 	}
-	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "", "email", true, "", false, "w"); !errors.Is(err, delivery.ErrInvalid) {
+	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "", "email", delivery.ReceiptDelivered, "", false, "w"); !errors.Is(err, delivery.ErrInvalid) {
 		t.Fatal("empty token invalid")
 	}
-	if _, err := e.store.RecordReceipt(ctx, "nope", "tok", "email", true, "", false, "w"); !errors.Is(err, delivery.ErrNotFound) {
+	if _, err := e.store.RecordReceipt(ctx, "nope", "tok", "email", delivery.ReceiptDelivered, "", false, "w"); !errors.Is(err, delivery.ErrNotFound) {
 		t.Fatal("missing delivery not found")
 	}
-	got, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", true, "", false, "w")
+	got, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", delivery.ReceiptDelivered, "", false, "w")
 	if err != nil || got.Status != delivery.StatusDelivered || got.DeliveredAt == "" || got.ClaimToken != "" {
 		t.Fatalf("delivered: %+v %v", got, err)
 	}
@@ -281,14 +281,14 @@ func TestRecordReceipt(t *testing.T) {
 		t.Fatal("missing delivered receipt")
 	}
 	// Retrying the receipt that closed this attempt returns the row.
-	again, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, "ignored", false, "w")
+	again, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", delivery.ReceiptFailed, "ignored", false, "w")
 	if err != nil || again.Status != delivery.StatusDelivered || again.ClaimToken != "" || again.DeliveryID != d.DeliveryID {
 		t.Fatalf("replayed receipt: %+v %v", again, err)
 	}
 	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=?`, d.DeliveryID); n != 1 {
 		t.Fatalf("replay appended a receipt: %d", n)
 	}
-	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "bogus", "email", true, "", false, "w"); !errors.Is(err, delivery.ErrConflict) {
+	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, "bogus", "email", delivery.ReceiptDelivered, "", false, "w"); !errors.Is(err, delivery.ErrConflict) {
 		t.Fatalf("wrong token after delivery want ErrConflict got %v", err)
 	}
 
@@ -296,7 +296,7 @@ func TestRecordReceipt(t *testing.T) {
 	d = claimOne("retry")
 	for attempt := 1; attempt <= delivery.DefaultMaxAttempts; attempt++ {
 		long := strings.Repeat("e", 900)
-		got, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, long, true, "w")
+		got, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", delivery.ReceiptFailed, long, true, "w")
 		if err != nil {
 			t.Fatalf("attempt %d: %v", attempt, err)
 		}
@@ -328,11 +328,11 @@ func TestRecordReceipt(t *testing.T) {
 
 	// Non-retryable failure fails immediately.
 	d = claimOne("fatal")
-	got, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, "bad address", false, "w")
+	got, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", delivery.ReceiptFailed, "bad address", false, "w")
 	if err != nil || got.Status != delivery.StatusFailed {
 		t.Fatalf("fatal: %+v %v", got, err)
 	}
-	if again, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", false, "bad address", false, "w"); err != nil || again.Status != delivery.StatusFailed || again.FailedAt == "" {
+	if again, err = e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "email", delivery.ReceiptFailed, "bad address", false, "w"); err != nil || again.Status != delivery.StatusFailed || again.FailedAt == "" {
 		t.Fatalf("replayed failure: %+v %v", again, err)
 	}
 	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=?`, d.DeliveryID); n != 1 {

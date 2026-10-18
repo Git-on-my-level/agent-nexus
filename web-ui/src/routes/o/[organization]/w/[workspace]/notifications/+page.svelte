@@ -21,7 +21,10 @@
     draftDirty,
     draftFromSettings,
     enqueueNotificationSettings,
+    isPrincipalRow,
     reconcileDraft,
+    rowEnabled,
+    setRowEnabled,
     validateDraft,
   } from "$lib/notificationSettings.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
@@ -232,49 +235,76 @@
           }}
         >
           {#each draft.rows as row (row.channel)}
-            <fieldset class="rounded-md border border-line bg-panel p-4">
-              <legend class="px-1 text-meta font-medium text-fg"
-                >{channelLabel(row.channel)}</legend
-              >
-              <label
-                class="mb-1 block text-micro font-medium text-fg-muted"
-                for="notify-{row.channel}-address"
-                >{addressLabel(row.channel)}</label
-              >
-              <input
-                id="notify-{row.channel}-address"
-                type={row.channel === "email" ? "email" : "text"}
-                autocomplete="off"
-                disabled={Boolean(pending) || preparing}
-                bind:value={row.address}
-                class="w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
-              />
-              {#if problems[row.channel]}
-                <p class="mt-1 text-micro text-danger-text" role="alert">
-                  {problems[row.channel]}
-                </p>
-              {:else}
-                <p class="mt-1 text-micro text-fg-subtle">
-                  Leave blank to stop notifications on this channel.
-                </p>
-              {/if}
-              <label class="mt-3 flex items-center gap-2 text-meta text-fg">
+            {#if isPrincipalRow(row)}
+              <fieldset class="rounded-md border border-line bg-panel p-4">
+                <legend class="px-1 text-meta font-medium text-fg"
+                  >{channelLabel(row.channel, row.label)}</legend
+                >
+                <label class="flex items-start gap-2 text-meta text-fg">
+                  <input
+                    type="checkbox"
+                    class="mt-0.5"
+                    data-testid="notify-{row.channel}-enabled"
+                    disabled={Boolean(pending) || preparing}
+                    checked={rowEnabled(row)}
+                    onchange={(event) =>
+                      setRowEnabled(row, event.currentTarget.checked)}
+                  />
+                  <span>
+                    Send notifications from this workspace
+                    <span class="mt-0.5 block text-micro text-fg-muted">
+                      On by default. There is no address to enter here: this
+                      channel already knows how to reach you. Turn it off to
+                      stop notifications from this workspace on this channel.
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
+            {:else}
+              <fieldset class="rounded-md border border-line bg-panel p-4">
+                <legend class="px-1 text-meta font-medium text-fg"
+                  >{channelLabel(row.channel, row.label)}</legend
+                >
+                <label
+                  class="mb-1 block text-micro font-medium text-fg-muted"
+                  for="notify-{row.channel}-address"
+                  >{addressLabel(row.channel)}</label
+                >
                 <input
-                  type="checkbox"
+                  id="notify-{row.channel}-address"
+                  type={row.channel === "email" ? "email" : "text"}
+                  autocomplete="off"
                   disabled={Boolean(pending) || preparing}
-                  bind:checked={row.push_enabled}
+                  bind:value={row.address}
+                  class="w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
                 />
-                Immediate alerts when a decision is overdue
-              </label>
-              <label class="mt-2 flex items-center gap-2 text-meta text-fg">
-                <input
-                  type="checkbox"
-                  disabled={Boolean(pending) || preparing}
-                  bind:checked={row.digest_enabled}
-                />
-                Daily digest
-              </label>
-            </fieldset>
+                {#if problems[row.channel]}
+                  <p class="mt-1 text-micro text-danger-text" role="alert">
+                    {problems[row.channel]}
+                  </p>
+                {:else}
+                  <p class="mt-1 text-micro text-fg-subtle">
+                    Leave blank to stop notifications on this channel.
+                  </p>
+                {/if}
+                <label class="mt-3 flex items-center gap-2 text-meta text-fg">
+                  <input
+                    type="checkbox"
+                    disabled={Boolean(pending) || preparing}
+                    bind:checked={row.push_enabled}
+                  />
+                  Immediate alerts when a decision is overdue
+                </label>
+                <label class="mt-2 flex items-center gap-2 text-meta text-fg">
+                  <input
+                    type="checkbox"
+                    disabled={Boolean(pending) || preparing}
+                    bind:checked={row.digest_enabled}
+                  />
+                  Daily digest
+                </label>
+              </fieldset>
+            {/if}
           {/each}
           <div class="flex justify-end gap-2">
             <Button

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -142,21 +143,54 @@ func (e *Escalator) normalize(ctx context.Context) error {
 
 type recipient struct{ principal, channel string }
 
-func (e *Escalator) recipients(ctx context.Context, column string) ([]recipient, error) {
+// recipients lists who receives kind on which channel, at most recipientCap:
+// saved addresses on settings-addressed channels, then every human for whom
+// a principal-addressed channel is on. A channel that does not accept kind
+// gets nothing.
+func (e *Escalator) recipients(ctx context.Context, kind string) ([]recipient, error) {
+	column := "push_enabled"
+	if kind == KindDigest {
+		column = "digest_enabled"
+	}
+	opts, err := e.Store.ChannelOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := e.Store.DB.QueryContext(ctx, `SELECT principal_id, channel FROM notification_channel_settings WHERE `+column+`=1 AND address<>'' ORDER BY channel, principal_id LIMIT ?`, recipientCap)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := []recipient{}
 	for rows.Next() {
 		var r recipient
 		if err := rows.Scan(&r.principal, &r.channel); err != nil {
+			rows.Close()
 			return nil, err
+		}
+		if o, ok := opts[r.channel]; ok && (o.Addressing == AddressingPrincipal || !o.Accepts(kind)) {
+			continue
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, channel := range sortedChannels(opts) {
+		o := opts[channel]
+		if o.Addressing != AddressingPrincipal || !o.Accepts(kind) {
+			continue
+		}
+		ids, err := principalRecipients(ctx, e.Store.DB, channel, "s."+column+"=1", recipientCap-len(out))
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			out = append(out, recipient{principal: id, channel: channel})
+		}
+	}
+	return out, nil
 }
 
 type dueAsk struct {
@@ -202,7 +236,7 @@ func (e *Escalator) escalate(ctx context.Context, now time.Time) error {
 		mode := EscalationMode(a.askTS, a.decideBy, a.blocks)
 		if mode == EscalationPush {
 			if pushRecipients == nil {
-				if pushRecipients, err = e.recipients(ctx, "push_enabled"); err != nil {
+				if pushRecipients, err = e.recipients(ctx, KindPush); err != nil {
 					return err
 				}
 			}
@@ -253,7 +287,7 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 		return nil
 	}
 	day := now.Format("2006-01-02")
-	recipients, err := e.recipients(ctx, "digest_enabled")
+	recipients, err := e.recipients(ctx, KindDigest)
 	if err != nil || len(recipients) == 0 {
 		return err
 	}
@@ -394,7 +428,11 @@ func (e *Escalator) logf(format string, args ...any) {
 // counts and times only, never titles or refs. The top-level totals are the
 // workspace ledger, for the control plane. Each principal's due, overdue and
 // earliest_decide_by count only asks that principal can read, and are never
-// a copy of the workspace totals.
+// a copy of the workspace totals. Principals are those who receive
+// notifications on some channel; a human signed in through an external
+// identity grant carries that grant's issuer and subject so the publisher's
+// receiver can tell whose counts these are. pending_deliveries counts queued
+// deliveries per declared channel so an adapter knows when to claim.
 func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]any, error) {
 	var open, overdue int
 	var earliest sql.NullString
@@ -412,19 +450,18 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 	if earliest.Valid && earliest.String != "" {
 		earliestValue = earliest.String
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT principal_id FROM notification_channel_settings WHERE address<>'' AND (push_enabled=1 OR digest_enabled=1) ORDER BY principal_id LIMIT ?`, recipientCap)
+	ids, err := s.notifiedPrincipals(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	pending, err := s.pendingByChannel(ctx)
+	if err != nil {
+		return nil, err
+	}
 	principals := []map[string]any{}
 	var ledger []deadlineFact
 	ledgerLoaded := false
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
+	for _, id := range ids {
 		due, principalOverdue := 0, 0
 		var principalEarliest any
 		if s.CanRead != nil {
@@ -438,18 +475,105 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 				return s.CanRead(ctx, id, askID)
 			})
 		}
-		principals = append(principals, map[string]any{"principal_id": id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		entry := map[string]any{"principal_id": id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest}
+		if _, identity, err := activeHuman(ctx, s.DB, id); err != nil {
+			return nil, err
+		} else if identity != nil {
+			entry["external_issuer"] = identity.ExternalIssuer
+			entry["external_subject"] = identity.ExternalSubject
+		}
+		principals = append(principals, entry)
 	}
 	return map[string]any{
 		"earliest_decide_by": earliestValue,
 		"open_decisions":     open,
 		"overdue_decisions":  overdue,
 		"principals":         principals,
+		"pending_deliveries": pending,
 		"generated_at":       stamp(now),
 	}, nil
+}
+
+// notifiedPrincipals is everyone with at least one channel on: a saved
+// address with a toggle on, or a principal-addressed channel they have not
+// turned off. Sorted, at most recipientCap.
+func (s Store) notifiedPrincipals(ctx context.Context) ([]string, error) {
+	opts, err := s.ChannelOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	rows, err := s.DB.QueryContext(ctx, `SELECT principal_id, channel, push_enabled, digest_enabled FROM notification_channel_settings WHERE address<>'' AND (push_enabled=1 OR digest_enabled=1) ORDER BY principal_id LIMIT ?`, recipientCap)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id, channel string
+		var push, digest int
+		if err := rows.Scan(&id, &channel, &push, &digest); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if o, ok := opts[channel]; ok && (o.Addressing == AddressingPrincipal || !((push == 1 && o.Accepts(KindPush)) || (digest == 1 && o.Accepts(KindDigest)))) {
+			continue
+		}
+		seen[id] = true
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, channel := range sortedChannels(opts) {
+		o := opts[channel]
+		if o.Addressing != AddressingPrincipal {
+			continue
+		}
+		var conds []string
+		for _, k := range o.Kinds {
+			if k == KindPush {
+				conds = append(conds, "s.push_enabled=1")
+			} else {
+				conds = append(conds, "s.digest_enabled=1")
+			}
+		}
+		ids, err := principalRecipients(ctx, s.DB, channel, "("+strings.Join(conds, " OR ")+")", recipientCap)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			seen[id] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	if len(out) > recipientCap {
+		out = out[:recipientCap]
+	}
+	return out, nil
+}
+
+// pendingByChannel counts pending or claimed deliveries on each declared
+// channel: one seek on idx_deliveries_claim per channel, each count capped.
+func (s Store) pendingByChannel(ctx context.Context) (map[string]int, error) {
+	channels, err := s.DeclaredChannels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]int{}
+	for _, channel := range channels {
+		var n int
+		if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM deliveries WHERE channel=? AND status IN ('pending','claimed') LIMIT 1000)`, channel).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			out[channel] = n
+		}
+	}
+	return out, nil
 }
 
 type deadlineFact struct {

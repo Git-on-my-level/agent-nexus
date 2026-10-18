@@ -56,6 +56,12 @@ type Declaration struct {
 	// Delivers lists notification channels this adapter delivers (for example
 	// "email" or "telegram"). Its owning agent may claim those deliveries.
 	Delivers []string `json:"delivers,omitempty"`
+	// Addressing, Kinds and Label say how the delivered channels accept
+	// deliveries (see delivery.ChannelOptions). Empty means settings
+	// addressing and both kinds.
+	Addressing string   `json:"addressing,omitempty"`
+	Kinds      []string `json:"kinds,omitempty"`
+	Label      string   `json:"label,omitempty"`
 }
 type Adapter struct {
 	Declaration
@@ -106,6 +112,13 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 	interval, err := Duration(d.ExpectedInterval)
 	if err != nil || interval < time.Second || interval%time.Second != 0 || interval > 30*24*time.Hour || !Name.MatchString(d.Name) || len(d.Description) > 2000 || strings.TrimSpace(d.Description) == "" || (len(d.Series) < 1 && len(d.Delivers) == 0) || len(d.Series) > 100 || len(d.Delivers) > 8 {
 		return Adapter{}, ErrInvalid
+	}
+	options, err := delivery.NormalizeChannelOptions(d.Addressing, d.Kinds, d.Label)
+	if err != nil {
+		return Adapter{}, ErrInvalid
+	}
+	if len(d.Delivers) > 0 {
+		d.Addressing, d.Kinds, d.Label = options.Addressing, options.Kinds, options.Label
 	}
 	channels := map[string]bool{}
 	for _, channel := range d.Delivers {
@@ -173,7 +186,11 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 			return out, err
 		}
 	}
-	if err = delivery.SetAdapterChannelsTx(ctx, tx, d.Name, d.Delivers); err != nil {
+	// Agreement with other declarations is canonical, never reader-filtered.
+	if err = delivery.SetAdapterChannelsTx(resourceaccess.WithoutPolicy(ctx), tx, d.Name, d.Delivers, options); err != nil {
+		if errors.Is(err, delivery.ErrDeclarationConflict) {
+			return out, fmt.Errorf("%w: %v", ErrConflict, err)
+		}
 		return out, err
 	}
 	if err = s.Auth.AuditSeriesTx(ctx, tx, actor, "series_write_granted", d.Name); err != nil {
@@ -252,7 +269,7 @@ func (s Store) Adapters(ctx context.Context) ([]Adapter, error) {
 		if err != nil {
 			return nil, err
 		}
-		if out[i].Delivers, err = adapterChannels(ctx, s.DB, out[i].Name); err != nil {
+		if out[i].Delivers, out[i].Addressing, out[i].Kinds, out[i].Label, err = adapterChannels(ctx, s.DB, out[i].Name); err != nil {
 			return nil, err
 		}
 		out[i].Series = []Definition{}
@@ -445,19 +462,23 @@ type seriesTransaction interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-func adapterChannels(ctx context.Context, db *sql.DB, adapter string) ([]string, error) {
-	rows, err := resourceaccess.NewDB(db).QueryContext(ctx, `SELECT channel FROM adapter_channels WHERE adapter=? ORDER BY channel LIMIT 8`, adapter)
+func adapterChannels(ctx context.Context, db *sql.DB, adapter string) ([]string, string, []string, string, error) {
+	rows, err := resourceaccess.NewDB(db).QueryContext(ctx, `SELECT channel, addressing, kinds, label FROM adapter_channels WHERE adapter=? ORDER BY channel LIMIT 8`, adapter)
 	if err != nil {
-		return nil, err
+		return nil, "", nil, "", err
 	}
 	defer rows.Close()
 	var out []string
+	var addressing, kinds, label string
 	for rows.Next() {
 		var c string
-		if err := rows.Scan(&c); err != nil {
-			return nil, err
+		if err := rows.Scan(&c, &addressing, &kinds, &label); err != nil {
+			return nil, "", nil, "", err
 		}
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if len(out) == 0 {
+		return out, "", nil, "", rows.Err()
+	}
+	return out, addressing, strings.Split(kinds, ","), label, rows.Err()
 }

@@ -639,13 +639,13 @@ paths:
       tags: [deliveries]
       x-anx-command-id: deliveries.receipt
       x-anx-cli-path: deliveries receipt
-      x-anx-why: Record delivered or failed for a delivery claimed by this adapter.
+      x-anx-why: Record delivered, failed or skipped for a delivery claimed by this adapter.
       x-anx-input-mode: json-body
       x-anx-cli-input:
         mode: flags
         flags:
         - {name: claim-token, required: true, description: Claim token returned by deliveries claim.}
-        - {name: outcome, required: true, description: delivered or failed.}
+        - {name: outcome, required: true, description: delivered, failed or skipped.}
         - {name: error, description: Failure detail; never include secrets.}
         - {name: retryable, description: Mark a failed delivery as retryable (true or false).}
       x-anx-examples:
@@ -672,7 +672,7 @@ paths:
               required: [claim_token, outcome]
               properties:
                 claim_token: {type: string, minLength: 1}
-                outcome: {type: string, enum: [delivered, failed]}
+                outcome: {type: string, enum: [delivered, failed, skipped], description: skipped closes the delivery as canceled without a failure, for example when the recipient muted this kind outside the workspace.}
                 error: {type: string, maxLength: 2000}
                 retryable: {type: boolean}
       responses:
@@ -14829,6 +14829,15 @@ components:
           uniqueItems: true
           description: Notification channels this adapter delivers. "bridge" is reserved.
           items: {type: string, pattern: "^[a-z][a-z0-9_-]{0,31}$", not: {const: bridge}}
+        addressing: {$ref: '#/components/schemas/NotificationChannelAddressing'}
+        kinds:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          description: Delivery kinds the delivered channels accept. Defaults to push and digest.
+          items: {type: string, enum: [push, digest]}
+        label: {type: string, maxLength: 80, description: Short channel name shown to people in notification settings.}
     Delivery:
       type: object
       additionalProperties: false
@@ -14848,6 +14857,14 @@ components:
         lease_expires_at: {type: string, format: date-time}
         last_error: {type: string}
         address: {type: string, description: Returned only by deliveries claim.}
+        recipient:
+          type: object
+          additionalProperties: false
+          description: Returned only by deliveries claim on a principal-addressed channel, and only for a human signed in through an external identity grant. The adapter maps this identity to its own address.
+          required: [external_issuer, external_subject]
+          properties:
+            external_issuer: {type: string}
+            external_subject: {type: string}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         delivered_at: {type: string, format: date-time}
@@ -14862,13 +14879,27 @@ components:
         attempt: {type: integer}
         error: {type: string}
         created_at: {type: string, format: date-time}
+    NotificationChannelAddressing:
+      type: string
+      enum: [settings, principal]
+      description: settings channels deliver to the address a person enters and are off until they do. principal channels need no address, are on by default for every person, and the adapter resolves the recipient itself; a saved row with both toggles off turns the channel off.
+    NotificationChannelOptions:
+      type: object
+      additionalProperties: false
+      required: [addressing, kinds]
+      properties:
+        addressing: {$ref: '#/components/schemas/NotificationChannelAddressing'}
+        kinds:
+          type: array
+          items: {type: string, enum: [push, digest]}
+        label: {type: string}
     NotificationChannelSetting:
       type: object
       additionalProperties: false
       required: [channel, address, push_enabled, digest_enabled]
       properties:
         channel: {type: string, pattern: "^[a-z][a-z0-9_-]{0,31}$"}
-        address: {type: string}
+        address: {type: string, description: Empty on principal-addressed channels.}
         push_enabled: {type: boolean}
         digest_enabled: {type: boolean}
         updated_at: {type: string, format: date-time}
@@ -14891,6 +14922,10 @@ components:
         available_channels:
           type: array
           items: {type: string}
+        channel_options:
+          type: object
+          description: Options per available channel.
+          additionalProperties: {$ref: '#/components/schemas/NotificationChannelOptions'}
     SeriesPointInput:
       type: object
       additionalProperties: false

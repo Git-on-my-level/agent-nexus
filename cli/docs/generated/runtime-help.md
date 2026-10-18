@@ -185,7 +185,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `adapters delete` (local-helper): Delete a source and its series history; invalidate its tokens.
 - `deliveries list` (local-helper): List your own deliveries with receipts.
 - `deliveries claim` (local-helper): Claim due deliveries for a channel your adapter delivers.
-- `deliveries receipt` (local-helper): Record delivered or failed for a claimed delivery.
+- `deliveries receipt` (local-helper): Record delivered, failed or skipped for a claimed delivery.
 - `notifications settings get` (local-helper): Read your notification channels and the channels adapters deliver.
 - `notifications settings set` (local-helper): Replace your notification channels, addresses and push or digest opt-ins.
 - `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
@@ -6110,8 +6110,12 @@ Inputs:
   - body `expected_interval` (string)
   - body `name` (string)
   Optional:
+  - body `addressing` (string)
   - body `delivers` (list<string>)
+  - body `kinds` (list<string>)
+  - body `label` (string)
   - body `series` (list<any>)
+  Enum values: addressing: principal, settings
 
 CLI input:
   Flags:
@@ -6349,7 +6353,7 @@ Global flags:
 
 ## `deliveries receipt`
 
-Record delivered or failed for a claimed delivery.
+Record delivered, failed or skipped for a claimed delivery.
 
 ```text
 Generated Help: deliveries receipt
@@ -6360,7 +6364,7 @@ Generated Help: deliveries receipt
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `flags`
-- Why: Record delivered or failed for a delivery claimed by this adapter.
+- Why: Record delivered, failed or skipped for a delivery claimed by this adapter.
 - Output: Returns JSON with the named delivery objects.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
 - Concepts: `inbox`
@@ -6377,12 +6381,12 @@ Inputs:
   Optional:
   - body `error` (string)
   - body `retryable` (boolean)
-  Enum values: outcome: delivered, failed
+  Enum values: outcome: delivered, failed, skipped
 
 CLI input:
   Flags:
   - `--claim-token` required: Claim token returned by deliveries claim.
-  - `--outcome` required: delivered or failed.
+  - `--outcome` required: delivered
   - `--error`: Failure detail; never include secrets.
   - `--retryable`: Mark a failed delivery as retryable (true or false).
 
@@ -6390,7 +6394,7 @@ Local Help: deliveries receipt
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Record delivered or failed for a claimed delivery.
+- Summary: Record delivered, failed or skipped for a claimed delivery.
 - Quick start: anx deliveries receipt <delivery_id> --claim-token <token> --outcome delivered
 - Examples:
   - `anx deliveries receipt <delivery_id> --claim-token <token> --outcome failed --error timeout --retryable true`
@@ -6398,7 +6402,7 @@ Local Help: deliveries receipt
 Flags:
   <delivery_id>                Accepted by deliveries receipt.
   --claim-token <token>        Accepted by deliveries receipt.
-  --outcome <delivered|failed> Accepted by deliveries receipt.
+  --outcome <delivered|failed|skipped> Accepted by deliveries receipt.
   --error <text>               Accepted by deliveries receipt.
   --retryable <bool>           Accepted by deliveries receipt.
 
