@@ -107,8 +107,8 @@ func briefPlanTargetEntries(row string) string {
  'status',COALESCE(NULLIF(json_extract(` + obs + `,'$.facts.native_status'),''),json_extract(` + obs + `,'$.facts.phase'),''),
  'phase',COALESCE(json_extract(` + obs + `,'$.facts.phase'),''),
  'identifier',COALESCE(json_extract(` + obs + `,'$.facts.identifier'),json_extract(` + row + `.metadata_json,'$.source.identifier'),''),
- 'identifier_aliases',json(COALESCE(json_extract(` + obs + `,'$.facts.identifier_aliases'),json_extract(` + row + `.metadata_json,'$.source.identifier_aliases'),'[]')),
- 'aliases',json(COALESCE(json_extract(` + obs + `,'$.facts.aliases'),json_extract(` + row + `.metadata_json,'$.source.aliases'),'[]')))) WHERE ` + row + `.authority<>'nexus'`
+ 'identifier_aliases',json(CASE WHEN json_type(` + obs + `,'$.facts.identifier_aliases')='array' THEN json_extract(` + obs + `,'$.facts.identifier_aliases') WHEN json_type(` + row + `.metadata_json,'$.source.identifier_aliases')='array' THEN json_extract(` + row + `.metadata_json,'$.source.identifier_aliases') ELSE '[]' END),
+ 'aliases',json(CASE WHEN json_type(` + obs + `,'$.facts.aliases')='array' THEN json_extract(` + obs + `,'$.facts.aliases') WHEN json_type(` + row + `.metadata_json,'$.source.aliases')='array' THEN json_extract(` + row + `.metadata_json,'$.source.aliases') ELSE '[]' END))) WHERE ` + row + `.authority<>'nexus'`
 }
 
 func briefPlanTargetSignature(row string) string {
