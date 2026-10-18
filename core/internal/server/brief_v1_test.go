@@ -205,8 +205,13 @@ func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	yoursByRef := map[string]bool{}
+	owners := map[string]any{}
 	for _, raw := range brief["initiatives"].([]map[string]any) {
 		yoursByRef[anyString(raw["ref"])] = raw["yours"] == true
+		owners[anyString(raw["ref"])] = raw["owner"]
+	}
+	if owners[anyString(assigned["ref"])] != "actor:agent-1" || owners[anyString(unrelated["ref"])] != "actor:agent-2" || owners[anyString(promised["ref"])] != nil {
+		t.Fatalf("owner must be nullable first assignee, not promise author: %#v", owners)
 	}
 	if !yoursByRef[anyString(assigned["ref"])] {
 		t.Fatalf("assigned card should have yours=true: %#v", brief["initiatives"])

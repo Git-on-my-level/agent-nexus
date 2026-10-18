@@ -33,7 +33,7 @@ func TestExternalPublicationInventoryPreservesReferencesAndUnknownFields(t *test
 		kind string
 		body any
 	}{
-		{"work_metadata", map[string]any{"metadata_json": map[string]any{"source": entry, "source_refs": []any{entry}, "plan": map[string]any{"steps": []any{map[string]any{"ref": "published-alias"}}}}, "refresh_json": map[string]any{"ref": "refresh-key"}}},
+		{"work_metadata", map[string]any{"metadata_json": map[string]any{"source": entry, "source_refs": []any{entry}, "_anx_source_evidence_refs": []any{entry}, "plan": map[string]any{"steps": []any{map[string]any{"ref": "published-alias"}}}}, "refresh_json": map[string]any{"ref": "refresh-key"}}},
 		{"work_observation", map[string]any{"body_json": map[string]any{"facts": entry, "evidence": []any{entry}, "ref": "observation-key"}}},
 		{"work_evidence_record", map[string]any{"evidence_json": entry}},
 	} {

@@ -14196,8 +14196,8 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
-                    "name": "plan",
-                    "type": "any"
+                    "name": "plan.steps",
+                    "type": "list\u003cany\u003e"
                 },
                 {
                     "name": "priority",

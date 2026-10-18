@@ -97,7 +97,7 @@ type PromiseState struct {
 // evidence time. Rules:
 //   - Resets are a note with resolved evidence, a plan-step state change and a
 //     changed source observation. last_evidence_at is the newest reset.
-//   - A note promise counts for the author's latest note carrying next. It is
+//   - A note promise counts for the author's latest note, if it carries next. It is
 //     met when evidence, a step status change, a linked step moving, or a
 //     changed observation lands after the note. A plan edit does not meet it.
 //   - Step, due_at and wake promises are milestones. A past one is met when a
@@ -144,6 +144,8 @@ func FoldPromise(in PromiseInput) PromiseFold {
 	previous := map[string]time.Time{}
 	for _, n := range notes {
 		if n.NextAt.IsZero() {
+			delete(latest, n.Author)
+			delete(previous, n.Author)
 			continue
 		}
 		prev, ok := previous[n.Author]

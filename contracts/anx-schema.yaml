@@ -1427,9 +1427,11 @@ promises:
     never an object, table or status enum. Durations are computed at read time.
   sources: [note, plan_step, due_at, wake_condition]
   rules:
-    - "Which promise counts: a live note promise is the stated next. That is each principal's latest message_posted payload.next that evidence, a step status change, a linked step moving, or a changed observation has not met; the earliest such note wins. Plan-step due dates, the effective due_at, and the first date inside wake_condition are milestones and supply the counted promise only when no live note promise remains, in which case the earliest unmet at wins."
+    - "Which promise counts: a live note promise is the stated next. That is each principal's latest message_posted note, when it carries payload.next, that evidence, a step status change, a linked step moving, or a changed observation has not met; the earliest such note wins. Plan-step due dates, the effective due_at, and the first date inside wake_condition are milestones and supply the counted promise only when no live note promise remains, in which case the earliest unmet at wins."
     - "Met: a promise is met when a reset event lands before its `at`. A met promise no longer counts. A plan edit meets a milestone promise inside the horizon and does not meet a note promise."
-    - "Reset: a note carrying a resolvable evidence ref, a plan-step status change, a linked step resource moving, or a changed source observation meets a note promise and updates last_evidence_at. A plan edit updates last_evidence_at and meets a milestone promise when it lands in (at-2d, at]."
+    - "Reset: a note carrying a resolvable evidence ref, a plan-step status change, a linked step resource moving, newly linked or materially changed structured source_refs, or a changed source observation meets a note promise and updates last_evidence_at. A plan edit updates last_evidence_at and meets a milestone promise when it lands in (at-2d, at]."
+    - "Clear: a principal's newer note without next replaces their promise with none; it does not revive an older next. CLI warns note_clears_promise with the previous next and a carry-forward command. Setting next on a card without assignees warns note_promise_unowned."
+    - "Source evidence is compared on write; newly linked or materially changed structured entries and promoted changed observations advance a server-authored watermark. Poll timestamps, order and unlinking alone do not advance it. Reads consume the watermark, never rescan history."
     - "Move: a note that changes the author's latest next.at without a resolving evidence ref records a move. promise_moves counts moves since the last reset."
     - "Grammar: `at` reuses the review_by grammar; `what` is free text up to 160 characters."
     - "Horizon: a promise beyond 2 days warns at write time and shows its distance; it is never a state."
@@ -1461,6 +1463,7 @@ brief:
   sections: [decisions, initiatives, your_asks, answered_for_you]
   section_limit: 50
   decision_kinds: [ask, review, access, host, pm_proposal]
+  initiative_owner: Nullable first canonical assignee ref, matching work list; no new health state.
   initiative_states: [past_promise, moving, no_promise, done]
   placements: [backlog, ready, in_progress, review, done]
   decision_order: "decide_by ascending (absent last), then blocks_count descending, then priority (critical/p0, high/p1, medium/p2, low/p3, absent), then created_at ascending, then ref."

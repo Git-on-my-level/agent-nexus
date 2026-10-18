@@ -43,6 +43,9 @@ type hookFixture struct {
 	filePlan             atomic.Bool
 	fileCardStatus       atomic.Int32
 	fileSendStatus       atomic.Int32
+	briefStatus          atomic.Int32
+	briefDelay           atomic.Bool
+	cardDelay            atomic.Int64
 }
 
 func newHookFixture(t *testing.T) *hookFixture {
@@ -64,6 +67,17 @@ func newHookFixture(t *testing.T) *hookFixture {
 				}
 			}
 		}
+		if r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/cards/") && !strings.HasSuffix(r.URL.Path, "/plan") {
+			if delay := f.cardDelay.Load(); delay > 0 {
+				timer := time.NewTimer(time.Duration(delay))
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+				case <-r.Context().Done():
+					return
+				}
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/auth/token":
@@ -78,6 +92,20 @@ func newHookFixture(t *testing.T) *hookFixture {
 				return
 			}
 			fmt.Fprint(w, `{"agent":{"id":"worker","actor_id":"actor-worker"}}`)
+		case r.URL.Path == "/brief":
+			if f.briefDelay.Load() {
+				<-r.Context().Done()
+				return
+			}
+			if status := f.briefStatus.Load(); status != 0 {
+				w.WriteHeader(int(status))
+				fmt.Fprint(w, `{"error":{"code":"forbidden","message":"denied"}}`)
+				return
+			}
+			if r.Header.Get("Authorization") != "Bearer fixture-token" {
+				t.Error("brief used wrong credentials")
+			}
+			fmt.Fprint(w, `{"schema":"brief.v1","principal":{"id":"actor-worker","kind":"agent","display":"Worker"},"answered_for_you":[{"ref":"inbox:ask-answer","title":"Answered decision","answer":"Ship"}],"your_asks":[{"ref":"inbox:ask-waiting","title":"Waiting decision"}],"initiatives":[{"ref":"card:own","title":"Owned work","state":"past_promise","yours":true,"promise":{"at":"2026-01-01T00:00:00Z","what":"Verify checkpoint"}},{"ref":"card:other","title":"Other initiative","state":"no_promise"}]}`)
 		case r.URL.Path == "/meta/handshake":
 			if f.handshakeUnsupported.Load() {
 				fmt.Fprint(w, `{"workspace_id":"ws","min_cli_version":"0.0.0"}`)
@@ -562,5 +590,57 @@ func TestGitCaptureDisabledRepoCannotExceedWorktreeCapacity(t *testing.T) {
 	}
 	if _, e = integrations.LoadCapture(path); e != nil {
 		t.Fatal("retained state unreadable", e)
+	}
+}
+
+func TestAgentHookNoCardFallsBackToOwnBrief(t *testing.T) {
+	for _, harness := range []string{"generic", "claude-code"} {
+		t.Run(harness, func(t *testing.T) {
+			f := newHookFixture(t)
+			f.run(t, "integrations", "enable", "context.inject", "--harness", harness)
+			payload := fmt.Sprintf(`{"schema_version":1,"cwd":%q,"session_id":"no-card"}`, f.root)
+			if harness == "claude-code" {
+				payload = fmt.Sprintf(`{"cwd":%q,"session_id":"no-card","source":"resume","hook_event_name":"SessionStart"}`, f.root)
+			}
+			brief := f.hook(t, harness, payload)
+			for _, want := range []string{"answered for you:", "Answered decision", "waiting on human:", "Waiting decision", "your initiatives:", "Verify checkpoint", "next: anx note card:own", "Reload the anx-participant skill"} {
+				if !strings.Contains(brief.Context, want) {
+					t.Fatalf("missing %q: %#v stderr=%v", want, brief, f.a.Stderr)
+				}
+			}
+			if strings.Contains(brief.Context, "Other initiative") || len(brief.Context) > 6<<10 || brief.Card != nil {
+				t.Fatalf("bad fallback: %#v", brief)
+			}
+			// No stale brief cache on authorization failure.
+			f.briefStatus.Store(403)
+			f.a.Stdin = strings.NewReader(payload)
+			f.out.Reset()
+			if exit := f.a.Run([]string{"hook", "session.start", "--harness", harness}); exit != 0 {
+				t.Fatal(exit)
+			}
+			if strings.Contains(f.out.String(), "Answered decision") || harness == "generic" && !strings.Contains(f.out.String(), `"context": ""`) {
+				t.Fatalf("denied brief leaked: %s", f.out.String())
+			}
+		})
+	}
+}
+
+func TestAgentHookNoCardBriefDeadline(t *testing.T) {
+	f := newHookFixture(t)
+	f.run(t, "integrations", "enable", "context.inject", "--harness", "generic")
+	f.briefDelay.Store(true)
+	payload := fmt.Sprintf(`{"schema_version":1,"cwd":%q}`, f.root)
+	start := time.Now()
+	brief := f.hook(t, "generic", payload)
+	if brief.Context != "" || time.Since(start) > 1800*time.Millisecond {
+		t.Fatalf("deadline/fail-open violated: %#v", brief)
+	}
+}
+
+func TestHookOrientBudgetPreservesNextAndSkillReminder(t *testing.T) {
+	brief := map[string]any{"principal": map[string]any{"id": "worker", "kind": "agent"}, "answered_for_you": []any{map[string]any{"title": strings.Repeat("é", 10000), "answer": "Answer"}}, "initiatives": []any{map[string]any{"ref": "card:own", "state": "no_promise", "yours": true}}}
+	text := renderHookOrient(brief)
+	if len(text) > 6<<10 || !strings.Contains(text, hookSkillReminder) || !strings.HasSuffix(text, "next: anx note card:own --next <date> \"<what>\"") {
+		t.Fatal(len(text), text)
 	}
 }

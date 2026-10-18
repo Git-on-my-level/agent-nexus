@@ -230,7 +230,8 @@
         },
         "effects_7d": 1,
         "goal": null
-      }
+      },
+      "owner": null
     },
     {
       "ref": "card:fleet-onboarding",
@@ -257,7 +258,8 @@
       },
       "series": [],
       "metric_flat": null,
-      "loop": null
+      "loop": null,
+      "owner": null
     },
     {
       "ref": "card:observability",
@@ -284,7 +286,8 @@
       },
       "series": [],
       "metric_flat": null,
-      "loop": null
+      "loop": null,
+      "owner": null
     },
     {
       "ref": "card:labels",
@@ -305,7 +308,8 @@
       },
       "series": [],
       "metric_flat": null,
-      "loop": null
+      "loop": null,
+      "owner": null
     },
     {
       "ref": "card:ble-reliability",
@@ -328,7 +332,8 @@
       },
       "series": [],
       "metric_flat": null,
-      "loop": null
+      "loop": null,
+      "owner": null
     },
     {
       "ref": "card:docs-refresh",
@@ -351,7 +356,8 @@
       },
       "series": [],
       "metric_flat": null,
-      "loop": null
+      "loop": null,
+      "owner": null
     }
   ],
   "your_asks": [],

@@ -160,6 +160,9 @@ func (a *App) withWorkspaceHint(ctx context.Context, cfg config.Resolved, argv [
 			continue
 		}
 		normalized.Message = fmt.Sprintf("%s not found in workspace %q; it exists in workspace %q — rerun with --workspace %s", ref, current, ws.Alias, ws.Alias)
+		if details["ask_subject"] == "card" {
+			normalized.Message = fmt.Sprintf("asks attach to a card in the same workspace; %s is not available in workspace %q; rerun with --workspace %s for workspace %q, or choose a same-workspace card", ref, current, ws.Alias, ws.Alias)
+		}
 		normalized.Hint = "Rerun the original command with --workspace " + ws.Alias + "."
 		if details == nil {
 			details = map[string]any{}

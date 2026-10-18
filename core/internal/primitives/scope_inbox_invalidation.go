@@ -272,7 +272,7 @@ func scopeInboxInvalidationCheckTable(ctx context.Context, tx *sql.Tx, table str
 	}
 	for _, col := range columns {
 		var valid bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pragma_table_xinfo(?) WHERE name=? AND hidden=0)`, table, col).Scan(&valid); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pragma_table_xinfo(?) WHERE name=? AND hidden IN (0,2,3))`, table, col).Scan(&valid); err != nil {
 			return err
 		}
 		if !valid {

@@ -126,13 +126,14 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	// Receipt aggregates additionally inherit every contributing event.
 	if needed["brief_initiatives"] {
 		visible := denied("brief_loop", "'loop-facts/'||_row.card_id")
-		columns := "card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,loop_annotated,loop_annotated_at,loop_last_run_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until"
-		addColumns("brief_initiatives", columns, denied("card", "_row.card_id"))
+		columns := "plan_provenance_id,plan_provenance_json,progress_done,progress_total,card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,loop_annotated,loop_annotated_at,loop_last_run_at,CASE WHEN " + visible + " THEN loop_facts_json END loop_facts_json,CASE WHEN " + visible + " THEN loop_valid_from END loop_valid_from,CASE WHEN " + visible + " THEN loop_valid_until END loop_valid_until"
+		addColumns("brief_initiatives", columns, denied("card", "_row.card_id")+" AND "+denied("plan", "_row.card_id")+" AND "+denied("brief_progress", "'plan-facts/'||_row.card_id"))
 	}
 	add("brief_notes", denied("card", "_row.card_id")+" AND "+denied("event", "_row.event_id"))
 	add("brief_asks", denied("event", "_row.ask_id"))
 	add("brief_ask_blocks", denied("event", "_row.ask_id"))
 	add("brief_dirty", denied("card", "_row.card_id"))
+	add("brief_plan_refs", denied("card", "_row.card_id")+" AND "+denied("plan", "_row.card_id"))
 	add("brief_loop_facts", denied("card", "_row.card_id")+" AND "+denied("brief_loop", "'loop-facts/'||_row.card_id"))
 
 	add("work_metadata", denied("card", "_row.card_id"))

@@ -52,7 +52,8 @@ binding (`integrations bind --card-id`, workspace/principal/provider/session has
 → worktree default / longest directory card rule → none. Workspace rules select
 only workspaces. No reverse session→cards API exists: validate known candidates
 with scoped reads. No card enumeration, inaccessible-target fallback or implicit
-participation/presence writes.
+participation/presence writes. When resolution yields no card, inject the installed
+principal's bounded brief instead; a denied explicit target does not fall back.
 
 Compose existing scoped work/observations/plan GETs concurrently and use an end-to-end deadline; fail open with a sanitized
 diagnostic. Stale cache fallback remains explicit opt-in. Extend

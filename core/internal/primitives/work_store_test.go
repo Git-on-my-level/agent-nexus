@@ -540,7 +540,7 @@ func TestCreateWorkMoveReplayReusesOnlyMatchingMove(t *testing.T) {
 	input := map[string]any{
 		"id": "move-card-stable-id", "title": "Moved commitment",
 		"source":         map[string]any{"authority": "nexus"},
-		"plan":           map[string]any{"steps": []any{"copy", "verify"}},
+		"plan":           map[string]any{"steps": []any{map[string]any{"id": "copy", "title": "Copy"}, map[string]any{"id": "verify", "title": "Verify"}}},
 		"workspace_move": map[string]any{"move_id": "mv_stable", "source_ref": "card:source"},
 	}
 	first, err := s.CreateWork(ctx, "actor-1", b, input)

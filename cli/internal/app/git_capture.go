@@ -121,8 +121,6 @@ func (a *App) runGitCapture(ctx context.Context, args []string, cfg config.Resol
 	}
 	path := integrations.CapturePath(dir, gd)
 	if o.verb == "sync" {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
 		data, e := a.syncCapture(ctx, cfg, root, o.since, o.to, o.skip, o.restart)
 		warnings, _ := data["warnings"].([]output.Warning)
 		delete(data, "warnings")
@@ -379,7 +377,6 @@ func (a *App) captureAuth(ctx context.Context, cfg config.Resolved, b integratio
 	cfg.As = b.Agent
 	cfg.AccessToken = ""
 	cfg.Sources = map[string]string{"base_url": "capture", "agent": "capture"}
-	cfg.Timeout = time.Second
 	host, e := a.resolvedHost(cfg)
 	if e != nil {
 		return cfg, e

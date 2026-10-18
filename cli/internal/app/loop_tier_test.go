@@ -260,7 +260,7 @@ func noteServer(t *testing.T, rec *noteRecorder) *httptest.Server {
 				fmt.Fprint(w, `{"events":[]}`)
 				return
 			}
-			fmt.Fprintf(w, `{"events":[{"id":"e0","ts":"2026-10-14T09:00:00Z","payload":{"next":{"at":%q}}}]}`, prev)
+			fmt.Fprintf(w, `{"events":[{"id":"e0","actor_id":"actor-1","ts":"2026-10-14T09:00:00Z","payload":{"next":{"at":%q}}}]}`, prev)
 		case r.URL.Path == "/events" && r.Method == http.MethodPost:
 			body, _ := io.ReadAll(r.Body)
 			var doc map[string]any
@@ -311,8 +311,8 @@ func TestNotePostsNextAndEvidencePayload(t *testing.T) {
 	if anyString(asMap(doc["result"])["note_ref"]) != "event:evt-9" {
 		t.Fatalf("result=%#v", doc["result"])
 	}
-	if len(warningCodes(doc)) != 0 {
-		t.Fatalf("unexpected warnings %#v", doc["warnings"])
+	if codes := warningCodes(doc); len(codes) != 1 || codes["note_promise_unowned"] == "" {
+		t.Fatalf("expected warning for unassigned fixture card: %#v", doc["warnings"])
 	}
 }
 

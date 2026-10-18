@@ -11427,7 +11427,7 @@ components:
           type: object
           additionalProperties: true
           description: Stable client-side move marker used to resume cross-workspace copies.
-        plan: {}
+        plan: { $ref: '#/components/schemas/InitiativePlan' }
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         related_refs:
@@ -14048,10 +14048,11 @@ components:
         at: { type: string, format: date-time }
     BriefInitiative:
       type: object
-      required: [ref, title, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot, loop]
+      required: [ref, title, owner, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot, loop]
       properties:
         ref: { type: string, description: "card:<handle-or-id>" }
         title: { type: string }
+        owner: { type: string, nullable: true, description: First canonical assignee ref, as in work list; null when unassigned. }
         state: { type: string, enum: [past_promise, moving, no_promise, done] }
         placement: { type: string, enum: [backlog, ready, in_progress, review, done] }
         promise: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefPromise' }] }
