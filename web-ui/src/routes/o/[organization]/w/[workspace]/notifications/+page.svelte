@@ -253,9 +253,8 @@
                   <span>
                     Send notifications from this workspace
                     <span class="mt-0.5 block text-micro text-fg-muted">
-                      On by default. There is no address to enter here: this
-                      channel already knows how to reach you. Turn it off to
-                      stop notifications from this workspace on this channel.
+                      On by default, with nothing to set up here. Turn it off to
+                      stop this workspace's notifications on this channel.
                     </span>
                   </span>
                 </label>
