@@ -45,6 +45,7 @@ const DECLARED = {
       addressing: "principal",
       kinds: ["push"],
       label: "Hosted notifications",
+      manage_url: "https://app.example.com/account/notifications",
     },
   },
 };
@@ -71,6 +72,12 @@ for (const viewport of AUDIT_VIEWPORTS.filter(
       });
       await expect(toggle).toBeChecked();
       await expect(fieldset.getByRole("textbox")).toHaveCount(0);
+      await expect(
+        fieldset.getByRole("link", { name: "Manage where this reaches you" }),
+      ).toHaveAttribute(
+        "href",
+        "https://app.example.com/account/notifications",
+      );
       await expectCleanLayout(page, "principal channel on");
 
       await toggle.uncheck();

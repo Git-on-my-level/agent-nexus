@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -101,6 +100,9 @@ func (e *Escalator) Run(ctx context.Context) {
 func (e *Escalator) Step(ctx context.Context, now time.Time) error {
 	if err := e.normalize(ctx); err != nil {
 		return err
+	}
+	if err := e.Store.RefreshReadability(ctx, now, e.CanRead); err != nil {
+		return fmt.Errorf("refresh readability: %w", err)
 	}
 	if err := e.escalate(ctx, now); err != nil {
 		return err
@@ -291,8 +293,6 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 	if err != nil || len(recipients) == 0 {
 		return err
 	}
-	var ledger []deadlineFact
-	loaded := false
 	readable := map[string][]dueAsk{}
 	for _, r := range recipients {
 		key := "digest:" + r.principal + ":" + r.channel + ":" + day
@@ -300,12 +300,6 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			continue
 		} else if err != ErrNotFound {
 			return err
-		}
-		if !loaded {
-			if ledger, err = loadDeadlineFacts(ctx, e.Store.DB); err != nil {
-				return err
-			}
-			loaded = true
 		}
 		overdue, ok := readable[r.principal]
 		if !ok {
@@ -326,9 +320,10 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			// Nothing overdue for this recipient today; no message.
 			continue
 		}
-		open, _, _ := readableDeadlineCounts(ledger, now, func(id string) bool {
-			return e.CanRead != nil && e.CanRead(ctx, r.principal, id)
-		})
+		open, _, _, _, err := e.Store.principalCounts(ctx, r.principal, now)
+		if err != nil {
+			return err
+		}
 		if _, _, err := e.Store.Enqueue(ctx, Request{
 			IdempotencyKey: key,
 			PrincipalID:    r.principal,
@@ -427,12 +422,17 @@ func (e *Escalator) logf(format string, args ...any) {
 // AttentionSummary is the heartbeat's due counts and earliest decide_by:
 // counts and times only, never titles or refs. The top-level totals are the
 // workspace ledger, for the control plane. Each principal's due, overdue and
-// earliest_decide_by count only asks that principal can read, and are never
-// a copy of the workspace totals. Principals are those who receive
-// notifications on some channel; a human signed in through an external
-// identity grant carries that grant's issuer and subject so the publisher's
-// receiver can tell whose counts these are. pending_deliveries counts queued
-// deliveries per declared channel so an adapter knows when to claim.
+// earliest_decide_by count only asks that principal can read, read from the
+// materialized readability (RefreshReadability), never computed here: the
+// cost is a fixed number of indexed queries per notified principal (at most
+// recipientCap), each capped at principalCountCap rows. counts_complete is
+// false while that principal's readability is still being filled in.
+//
+// Principals are those who receive notifications on some channel, with the
+// channels that reach them; a human signed in through an external identity
+// grant carries that grant's issuer and subject so the publisher's receiver
+// can tell whose counts these are. pending_deliveries counts deliveries an
+// adapter could claim now, per declared channel.
 func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]any, error) {
 	var open, overdue int
 	var earliest sql.NullString
@@ -450,7 +450,7 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 	if earliest.Valid && earliest.String != "" {
 		earliestValue = earliest.String
 	}
-	ids, err := s.notifiedPrincipals(ctx)
+	notifiedList, err := s.notifiedPrincipals(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -459,24 +459,13 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 		return nil, err
 	}
 	principals := []map[string]any{}
-	var ledger []deadlineFact
-	ledgerLoaded := false
-	for _, id := range ids {
-		due, principalOverdue := 0, 0
-		var principalEarliest any
-		if s.CanRead != nil {
-			if !ledgerLoaded {
-				if ledger, err = loadDeadlineFacts(ctx, s.DB); err != nil {
-					return nil, err
-				}
-				ledgerLoaded = true
-			}
-			due, principalOverdue, principalEarliest = readableDeadlineCounts(ledger, now, func(askID string) bool {
-				return s.CanRead(ctx, id, askID)
-			})
+	for _, p := range notifiedList {
+		due, principalOverdue, principalEarliest, complete, err := s.principalCounts(ctx, p.id, now)
+		if err != nil {
+			return nil, err
 		}
-		entry := map[string]any{"principal_id": id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest}
-		if _, identity, err := activeHuman(ctx, s.DB, id); err != nil {
+		entry := map[string]any{"principal_id": p.id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest, "channels": p.channels, "counts_complete": complete}
+		if _, identity, err := activeHuman(ctx, s.DB, p.id); err != nil {
 			return nil, err
 		} else if identity != nil {
 			entry["external_issuer"] = identity.ExternalIssuer
@@ -494,15 +483,22 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 	}, nil
 }
 
-// notifiedPrincipals is everyone with at least one channel on: a saved
-// address with a toggle on, or a principal-addressed channel they have not
-// turned off. Sorted, at most recipientCap.
-func (s Store) notifiedPrincipals(ctx context.Context) ([]string, error) {
+// notifiedPrincipals is everyone with at least one channel on, with those
+// channels: a saved address with a toggle on for a kind the channel accepts,
+// or a principal-addressed channel they have not turned off. Sorted, at most
+// recipientCap principals.
+func (s Store) notifiedPrincipals(ctx context.Context) ([]notified, error) {
 	opts, err := s.ChannelOptions(ctx)
 	if err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
+	seen := map[string]map[string]bool{}
+	add := func(id, channel string) {
+		if seen[id] == nil {
+			seen[id] = map[string]bool{}
+		}
+		seen[id][channel] = true
+	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT principal_id, channel, push_enabled, digest_enabled FROM notification_channel_settings WHERE address<>'' AND (push_enabled=1 OR digest_enabled=1) ORDER BY principal_id LIMIT ?`, recipientCap)
 	if err != nil {
 		return nil, err
@@ -517,7 +513,7 @@ func (s Store) notifiedPrincipals(ctx context.Context) ([]string, error) {
 		if o, ok := opts[channel]; ok && (o.Addressing == AddressingPrincipal || !((push == 1 && o.Accepts(KindPush)) || (digest == 1 && o.Accepts(KindDigest)))) {
 			continue
 		}
-		seen[id] = true
+		add(id, channel)
 	}
 	err = rows.Err()
 	rows.Close()
@@ -542,18 +538,10 @@ func (s Store) notifiedPrincipals(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		for _, id := range ids {
-			seen[id] = true
+			add(id, channel)
 		}
 	}
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	if len(out) > recipientCap {
-		out = out[:recipientCap]
-	}
-	return out, nil
+	return sortedNotified(seen), nil
 }
 
 // pendingByChannel counts deliveries an adapter could claim right now on each
@@ -578,69 +566,6 @@ func (s Store) pendingByChannel(ctx context.Context, now time.Time) (map[string]
 		}
 	}
 	return out, nil
-}
-
-type deadlineFact struct {
-	id        string
-	decideBy  string
-	escalated string
-}
-
-// loadDeadlineFacts reads the open-ask ledger in primary-key pages. It does
-// not stop after a fixed window of rows, so a run of unreadable asks cannot
-// hide a later readable one from a count.
-func loadDeadlineFacts(ctx context.Context, db *sql.DB) ([]deadlineFact, error) {
-	out := []deadlineFact{}
-	after := ""
-	for {
-		rows, err := db.QueryContext(ctx, `SELECT request_event_id, COALESCE(decide_by,''), COALESCE(escalated_at,'') FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?`, after, deadlinePage)
-		if err != nil {
-			return nil, err
-		}
-		n := 0
-		for rows.Next() {
-			var f deadlineFact
-			if err := rows.Scan(&f.id, &f.decideBy, &f.escalated); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			out = append(out, f)
-			after = f.id
-			n++
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		if n < deadlinePage {
-			return out, nil
-		}
-	}
-}
-
-// readableDeadlineCounts counts asks readable reports. A nil-equivalent
-// readable that always returns false yields zeros: unknown access is not
-// the workspace total.
-func readableDeadlineCounts(ledger []deadlineFact, now time.Time, readable func(askID string) bool) (open, overdue int, earliest any) {
-	dueBy := stamp(now)
-	var earliestText string
-	for _, f := range ledger {
-		if readable == nil || !readable(f.id) {
-			continue
-		}
-		open++
-		if f.decideBy != "" && f.decideBy <= dueBy {
-			overdue++
-		}
-		if f.escalated == "" && f.decideBy != "" && (earliestText == "" || f.decideBy < earliestText) {
-			earliestText = f.decideBy
-		}
-	}
-	if earliestText != "" {
-		earliest = earliestText
-	}
-	return open, overdue, earliest
 }
 
 const maxBlocksChecked = 20

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -31,6 +32,9 @@ type ChannelOptions struct {
 	Addressing string   `json:"addressing"`
 	Kinds      []string `json:"kinds"`
 	Label      string   `json:"label,omitempty"`
+	// ManageURL is where a person manages how a principal-addressed channel
+	// reaches them (set by the declaring grant; absolute https only).
+	ManageURL string `json:"manage_url,omitempty"`
 }
 
 // Accepts reports whether the channel takes deliveries of kind.
@@ -92,9 +96,9 @@ func decodeKinds(raw string) []string {
 // host-enrolled adapters, and the one channel a grant-created agent may
 // declare. Both branches are bounded by the declaration tables, which are
 // small and indexed by adapter or agent.
-const activeDeclarations = `SELECT a.agent_id AS agent_id, c.adapter AS source, c.channel AS channel, c.addressing AS addressing, c.kinds AS kinds, c.label AS label
+const activeDeclarations = `SELECT a.agent_id AS agent_id, c.adapter AS source, c.channel AS channel, c.addressing AS addressing, c.kinds AS kinds, c.label AS label, '' AS manage_url
 	FROM adapter_channels c JOIN series_adapters a ON a.name=c.adapter WHERE a.revoked_at IS NULL AND a.deleted_at IS NULL
-	UNION ALL SELECT g.agent_id, 'grant:'||g.agent_id, g.channel, g.addressing, g.kinds, g.label
+	UNION ALL SELECT g.agent_id, 'grant:'||g.agent_id, g.channel, g.addressing, g.kinds, g.label, g.manage_url
 	FROM grant_channel_declarations g JOIN agents ag ON ag.id=g.agent_id WHERE g.revoked_at IS NULL AND ag.revoked_at IS NULL`
 
 type queryer interface {
@@ -112,15 +116,15 @@ func (s Store) ChannelOptions(ctx context.Context) (map[string]ChannelOptions, e
 }
 
 func channelOptions(ctx context.Context, q queryer) (map[string]ChannelOptions, error) {
-	rows, err := q.QueryContext(ctx, `SELECT channel, addressing, kinds, label FROM (`+activeDeclarations+`) ORDER BY channel, label DESC LIMIT 256`)
+	rows, err := q.QueryContext(ctx, `SELECT channel, addressing, kinds, label, manage_url FROM (`+activeDeclarations+`) ORDER BY channel, label DESC LIMIT 256`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]ChannelOptions{}
 	for rows.Next() {
-		var channel, addressing, kinds, label string
-		if err := rows.Scan(&channel, &addressing, &kinds, &label); err != nil {
+		var channel, addressing, kinds, label, manageURL string
+		if err := rows.Scan(&channel, &addressing, &kinds, &label, &manageURL); err != nil {
 			return nil, err
 		}
 		if _, ok := out[channel]; ok {
@@ -129,7 +133,7 @@ func channelOptions(ctx context.Context, q queryer) (map[string]ChannelOptions, 
 		if len(out) >= 64 {
 			break
 		}
-		out[channel] = ChannelOptions{Addressing: addressing, Kinds: decodeKinds(kinds), Label: label}
+		out[channel] = ChannelOptions{Addressing: addressing, Kinds: decodeKinds(kinds), Label: label, ManageURL: manageURL}
 	}
 	return out, rows.Err()
 }
@@ -180,6 +184,28 @@ type GrantDeclaration struct {
 	Addressing string   `json:"addressing,omitempty"`
 	Kinds      []string `json:"kinds,omitempty"`
 	Label      string   `json:"label,omitempty"`
+	// ManageURL, optional, is where people manage how this channel reaches
+	// them. Absolute https, at most maxManageURLLength bytes.
+	ManageURL string `json:"manage_url,omitempty"`
+}
+
+const maxManageURLLength = 512
+
+// normalizeManageURL accepts an empty value or an absolute https URL with a
+// host and no credentials, bounded in length.
+func normalizeManageURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if len(raw) > maxManageURLLength || strings.ContainsAny(raw, "\x00\r\n\t ") {
+		return "", fmt.Errorf("%w: manage_url is invalid", ErrInvalid)
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Opaque != "" {
+		return "", fmt.Errorf("%w: manage_url must be an absolute https URL", ErrInvalid)
+	}
+	return u.String(), nil
 }
 
 // ValidateGrantDeclaration checks a grant's declaration without writing it.
@@ -190,6 +216,9 @@ func ValidateGrantDeclaration(d GrantDeclaration) error {
 	}
 	if !ValidChannel(channel) {
 		return fmt.Errorf("%w: delivers channel is invalid", ErrInvalid)
+	}
+	if _, err := normalizeManageURL(d.ManageURL); err != nil {
+		return err
 	}
 	_, err := NormalizeChannelOptions(d.Addressing, d.Kinds, d.Label)
 	return err
@@ -216,13 +245,17 @@ func UpsertGrantDeclarationTx(ctx context.Context, tx execQueryer, agentID, issu
 	if err != nil {
 		return err
 	}
+	manageURL, err := normalizeManageURL(d.ManageURL)
+	if err != nil {
+		return err
+	}
 	if err := checkChannelAgreement(ctx, tx, channel, "grant:"+agentID, opts); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO grant_channel_declarations(agent_id, issuer, channel, addressing, kinds, label, created_at, updated_at, revoked_at)
-		VALUES(?,?,?,?,?,?,?,?,NULL)
-		ON CONFLICT(agent_id) DO UPDATE SET issuer=excluded.issuer, channel=excluded.channel, addressing=excluded.addressing, kinds=excluded.kinds, label=excluded.label, updated_at=excluded.updated_at, revoked_at=NULL`,
-		agentID, strings.TrimSpace(issuer), channel, opts.Addressing, encodeKinds(opts.Kinds), opts.Label, now, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO grant_channel_declarations(agent_id, issuer, channel, addressing, kinds, label, manage_url, created_at, updated_at, revoked_at)
+		VALUES(?,?,?,?,?,?,?,?,?,NULL)
+		ON CONFLICT(agent_id) DO UPDATE SET issuer=excluded.issuer, channel=excluded.channel, addressing=excluded.addressing, kinds=excluded.kinds, label=excluded.label, manage_url=excluded.manage_url, updated_at=excluded.updated_at, revoked_at=NULL`,
+		agentID, strings.TrimSpace(issuer), channel, opts.Addressing, encodeKinds(opts.Kinds), opts.Label, manageURL, now, now)
 	return err
 }
 

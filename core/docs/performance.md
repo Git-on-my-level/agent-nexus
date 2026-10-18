@@ -242,6 +242,25 @@ certify dense external-evidence alias fanout or every composed inbox selector.
 Keep the focused source-reference and inbox privacy/bounds regressions; add
 populated high-fanout fixtures when changing those reads.
 
+## Heartbeat attention summary
+
+The heartbeat's per-principal due/overdue counts never evaluate access or
+materialize the ask ledger on the heartbeat path. `principal_ask_readability`
+holds one row per notified principal and open ask, refreshed by the escalation
+clock under fixed budgets (1000 access checks and about 2000 inserted rows per
+step); the heartbeat reads it with a primary-key prefix per principal, capped
+at 1000 rows each, for at most 200 principals. Run the gate with 200 humans ×
+2000 open asks:
+
+```sh
+cd core
+ANX_PERFORMANCE_TEST=1 go test ./internal/delivery -run '^TestPerformanceAttentionSummaryBudget$' -count=1 -v
+```
+
+It fails if the heartbeat evaluates any access check, exceeds 4 indexed queries
+per principal plus 20, scans either table, or if one refresh step exceeds its
+access-check or statement budget.
+
 ## Route coverage and SQL plans
 
 `internal/server/testdata/resource_access_routes.json` is the authority for route

@@ -37,7 +37,7 @@ func TestGrantDeclaredPrincipalChannel(t *testing.T) {
 	accessToken := func(out map[string]any) string {
 		return out["tokens"].(map[string]any)["access_token"].(string)
 	}
-	declaration := &delivery.GrantDeclaration{Channel: "hosted", Addressing: delivery.AddressingPrincipal, Kinds: []string{delivery.KindPush}, Label: "Hosted notifications"}
+	declaration := &delivery.GrantDeclaration{Channel: "hosted", Addressing: delivery.AddressingPrincipal, Kinds: []string{delivery.KindPush}, Label: "Hosted notifications", ManageURL: "https://app.example.com/notifications"}
 	notifierGrant := func(jti string, d *delivery.GrantDeclaration) string {
 		return fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
 			Subject: "notifier", JTI: jti, OrganizationID: "org_1", SlotID: "notifier",
@@ -66,7 +66,7 @@ func TestGrantDeclaredPrincipalChannel(t *testing.T) {
 	status, out = hostHTTP(t, "GET", base+"/notification-settings", humanToken, nil)
 	hostStatus(t, status, 200, out)
 	options := out["channel_options"].(map[string]any)["hosted"].(map[string]any)
-	if options["addressing"] != "principal" || options["label"] != "Hosted notifications" {
+	if options["addressing"] != "principal" || options["label"] != "Hosted notifications" || options["manage_url"] != "https://app.example.com/notifications" {
 		t.Fatalf("channel options %#v", out)
 	}
 	// Saving an address on a principal channel stores only the choice.

@@ -225,7 +225,9 @@ func (s Store) ChannelsForAgent(ctx context.Context, agentID string) ([]string, 
 // set is one seek on idx_deliveries_claim. The address comes from the
 // recipient's channel setting (primary-key lookup); rows whose recipient has
 // since removed the channel, or whose kind the channel no longer accepts, are
-// canceled instead of handed out. On a principal-addressed channel there is
+// canceled instead of handed out. A push whose recipient can no longer read
+// its ask (Store.CanRead, checked live per claimed row) is canceled too, and
+// a canceled row's payload is cleared. On a principal-addressed channel there is
 // no address: the recipient must still be an active human, and a human signed
 // in through an external identity grant is identified by that grant.
 func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, lease time.Duration) ([]Delivery, error) {
@@ -313,8 +315,15 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 		case !saved || strings.TrimSpace(address) == "" || !toggled:
 			cancel = "channel disabled by recipient"
 		}
+		if cancel == "" && s.CanRead != nil && d.Kind == KindPush && strings.HasPrefix(d.SourceRef, "event:") &&
+			!s.CanRead(ctx, d.PrincipalID, strings.TrimPrefix(d.SourceRef, "event:")) {
+			// Access changed since the push was queued: hand out nothing.
+			cancel = "recipient can no longer read the ask"
+		}
 		if cancel != "" {
-			if _, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='canceled', last_error=?, updated_at=? WHERE delivery_id=?`, cancel, stamp(now), id); err != nil {
+			// The payload is dropped with the delivery: nothing it held is
+			// handed out or kept once it can no longer be delivered.
+			if _, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='canceled', payload_json='{}', last_error=?, updated_at=? WHERE delivery_id=?`, cancel, stamp(now), id); err != nil {
 				return nil, err
 			}
 			continue

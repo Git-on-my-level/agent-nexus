@@ -170,6 +170,9 @@
       "latency_ms": "internal:delivery",
       "status_code": "internal:delivery"
     },
+    "ask_readability_queue": {
+      "request_event_id": "internal:delivery"
+    },
     "ask_subject_boards": {
       "actor_id": "internal:delivery",
       "board_id": "internal:delivery"
@@ -665,6 +668,7 @@
       "issuer": "internal:delivery",
       "kinds": "internal:delivery",
       "label": "internal:delivery",
+      "manage_url": "internal:delivery",
       "revoked_at": "internal:delivery",
       "updated_at": "internal:delivery"
     },
@@ -936,6 +940,18 @@
     "pm_workspace_event_positions": {
       "id": "internal:reader-cursor",
       "ts": "internal:reader-cursor"
+    },
+    "principal_ask_readability": {
+      "checked_at": "internal:delivery",
+      "checked_epoch": "internal:delivery",
+      "principal_id": "internal:delivery",
+      "readable": "internal:delivery",
+      "request_event_id": "internal:delivery"
+    },
+    "principal_readability_coverage": {
+      "complete": "internal:delivery",
+      "cursor": "internal:delivery",
+      "principal_id": "internal:delivery"
     },
     "receipt_access_epoch": {
       "singleton": "internal:reader-snapshot",
@@ -1314,7 +1330,7 @@
     "../../cmd/anx-core/blob_backend.go:blobBackendConfig:Normalize": "3c01540ff7ae0fbacbb936c3a010c8ce771f75a6904d63950b633805daa740bf",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-    "../../cmd/anx-core/main.go:main": "2998b81d903634b786b6db276badd7e91493d7529442c704b8f5c0df963a49d1",
+    "../../cmd/anx-core/main.go:main": "0886d3ea83ea4f34f80cdf4c23c489c39e4f0968c9b33f6ffa85cd588fba274d",
     "../../cmd/anx-core/main.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
     "../../cmd/anx-observe/main.go:load": "07b08a12c195d92fa958af2c0f460af0ca25a9acd678f9db3ce624675b73407f",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
@@ -1547,29 +1563,33 @@
     "../curation/metrics.go:type:S20": "f7eced45d5424f256913e788f5964aa11bfb5bd798203b27deb7231bb90fa24f",
     "../delivery/channels.go:SetAdapterChannelsTx": "174ebe32086648aa1dbacdab4e2794a00f837ae7488bcc9a37efd89f24b77efe",
     "../delivery/channels.go:Store:ChannelOptions": "61e5f6e21d4d660b3174108dcaa46150ce26ddd7cd3b235f6341d731aaf78226",
-    "../delivery/channels.go:UpsertGrantDeclarationTx": "8f012bae4dd9e0aeb23404da5ff9f1ea0e4dcb08162f2fa07909c212c681583f",
+    "../delivery/channels.go:UpsertGrantDeclarationTx": "38750ea7b8c2e3dc85a530ec06876deb95c050dd5a30dced7a6ae032044cf158",
     "../delivery/channels.go:activeHuman": "57916a8d5827274a2f68d6f9ebca5dd7debb66adeb59b8f59bf19341bb5d6c5d",
-    "../delivery/channels.go:channelOptions": "2d2b3c78c409f205c3bce06131f937bb12c322ea3d4a2e3caa4c7231ec88a6fa",
+    "../delivery/channels.go:channelOptions": "7a3bdd710142a39c5e07b4418b697549e5b0e214ad34d83a12cd95dc51a27b2d",
     "../delivery/channels.go:checkChannelAgreement": "e9e5749bbf66ec20be53c83bb9afd5b7bac8557666980c59e3ae65e27a7dbdf8",
     "../delivery/channels.go:principalRecipients": "511a9b174dd65b34bf7c3d956209db1b2b69eecd2cf21ef41438c8216f7053c4",
-    "../delivery/channels.go:type:ChannelOptions": "b60f0b541d3f9b19c5d218e82bef7661784f162b314a1702dbc15bea20983e01",
-    "../delivery/channels.go:type:GrantDeclaration": "69d10ed54d95f5a6511ac8ebe7b4751f6b67021a5f28a96bf2161ec0cf900068",
+    "../delivery/channels.go:type:ChannelOptions": "f8ea1c3812cada878f0a5b75bf836246a492c3acd6bcb295c299f2efa0b557c8",
+    "../delivery/channels.go:type:GrantDeclaration": "3011bb2d23dcf2a4c8c3185b41eb4668a2e060b5df59e31d0ac903753e4520fe",
     "../delivery/channels.go:type:Recipient": "cbfe19c3b8065d87bf2f0ede9f578fa42f249f1d6581c26bbd46a81b2db17528",
     "../delivery/escalation.go:*Escalator:Run": "07bda1dc1ef9ae462c56d6b308c971aa8f4e51db103895c3cd3e0359d1ad4471",
-    "../delivery/escalation.go:*Escalator:Step": "0388c1ec4e624348afa88c5ccaaa1e7d42ddf9c4255cbcc5184843d1cba69996",
+    "../delivery/escalation.go:*Escalator:Step": "dd9ac50f89a1b1509a0ff3ad4341e722dfa46950e0b39d486f707b98b2588b0e",
     "../delivery/escalation.go:*Escalator:askTitle": "d0dc48308e00a4a86d27ddd1d8ba3dc16b97a2ded6611115f5703b0218ace5df",
-    "../delivery/escalation.go:*Escalator:digest": "22cfe1df3ad8dbcdcbb46e8166254e24d469c2bb8af0a77631d37bae595aa959",
+    "../delivery/escalation.go:*Escalator:digest": "ecaf28e494f317ade5996f3d9a66246abdc8ae568244d23259b60397f90053d0",
     "../delivery/escalation.go:*Escalator:escalate": "c3b7972a6a1694377ae5ba394823cdcff97953414f5aad4eb86ead25d3798bd7",
     "../delivery/escalation.go:*Escalator:normalize": "9dd81836d0604d6ade0179d6396daecd18a57b6cb2f0c9e4fcbe352bee2a20fc",
     "../delivery/escalation.go:*Escalator:openBlocks": "79ac4e3ceb9057a2a252a4d9c16aca39ff3a40aeaf02f566c54f3a9dd8215db0",
     "../delivery/escalation.go:*Escalator:readableOverdue": "56fccda2988d6131ce1b89787f13d78d63704b24dcc25da83452dfbaf6cf5fb6",
     "../delivery/escalation.go:*Escalator:recipients": "5c630263dc5cc6b76a9dbc5a86b590cfcc27f5c11abc7fd9e713e4cfd8c9e6a8",
-    "../delivery/escalation.go:Store:AttentionSummary": "122dc828d71b0e190e7cd2b1ce463c17c20379a18c3397432bcec239a8416c2b",
-    "../delivery/escalation.go:Store:notifiedPrincipals": "d520d203ff17093ee4f308b49788d76f75bbbd67d459aff4f359c7c57ebc3efa",
+    "../delivery/escalation.go:Store:AttentionSummary": "bb4e39b88c6aa5b436be3bb2cd6d86f993838174c07d74a26edb67fef086b28c",
+    "../delivery/escalation.go:Store:notifiedPrincipals": "ae3aa4227083efde5a4e2b30c2c69e0b6b10787b2152c5d55c4d63f2b664ec6f",
     "../delivery/escalation.go:Store:pendingByChannel": "eab29fa04c35ebe3afa37e0cb8b922bc92700ef320d2d4699f48f3bc713eb6d0",
-    "../delivery/escalation.go:loadDeadlineFacts": "f4740c655cd0ba88e37a537cdfb1ff0698fafd0b024ada8477a4c177ee5ecd49",
+    "../delivery/readability.go:Store:RefreshReadability": "6835f8db8c3905474a060014cc8e20f21c8d3ab4dbcbdf1990b09d975472a15d",
+    "../delivery/readability.go:Store:principalCounts": "54a80c48d3a728c069f9b6367de62bf22ac44450129b0e8286fcd5b20599bbbb",
+    "../delivery/readability.go:Store:walkCoverage": "576797170c1cc6433b1eb64f880396b9ffd5fcbfe17a1d973c9e4f3fd16d104b",
+    "../delivery/readability.go:accessEpoch": "c7bc8861902d79168ed5a3187fb4ed1adf2c5bc3e1d67a708f88ce509f7f2f3a",
+    "../delivery/readability.go:queryStrings": "90afb7f56c2264ad3babe0a7075981eef3117c497ff75c7e112da3dc3e222e68",
     "../delivery/store.go:Store:ChannelsForAgent": "80b25eb67b1087fafa0b0a826bd6771c4493d33aadcce438f438b43b42f584fa",
-    "../delivery/store.go:Store:Claim": "13e1a78481f1bd4a0a32451f707e9ef66b99ee6e0a22c087d7e26eac38f4afc6",
+    "../delivery/store.go:Store:Claim": "c48e921699c79d9e2391d78e88c92520071e076abf20e58eb5c82b29706ce5ab",
     "../delivery/store.go:Store:DeclaredChannels": "c0a7be6e70d9c56c69a34d1ecb2f1e7fd0911a6c4549213a657532e9adb1d8e4",
     "../delivery/store.go:Store:Enqueue": "b45f8181b70144ec631bff5f30c1ea333dd68ce0a94825eb24f20727b4ea2990",
     "../delivery/store.go:Store:Get": "eccf30f59d44e36d12244f972316a6f1fb04683964ddde5be80450438a997295",
@@ -3195,7 +3215,7 @@
     "../storage/brief_plan_refs.go:briefPlanTargetQueue": "411b295dd2af602c47cf38ea4e2ccc5e7ccbc6879a9fd1d892f5a5d8de58732f",
     "../storage/brief_plan_refs.go:installBriefPlanRefs": "bf0d0ec69578ed1098194693658c6fdcf2e970def858a52e291c223d9db3f14b",
     "../storage/brief_plan_refs.go:installBriefPlanTargetTriggers": "08ef0d72b6941dff7a1fc004deca3505589360622edce169123ee2f2a2f7e3f9",
-    "../storage/channel_declarations.go:installChannelDeclarations": "2aad26c5178b2579800d03813e0d4b26e7af4c5fc26edac0c7ce2385f87bb97b",
+    "../storage/channel_declarations.go:installChannelDeclarations": "edc33148cf1c2360c0bd36d7d13def1f9d0b38867e3770e2c2040d384777a258",
     "../storage/comment_search.go:*Workspace:MaintainCommentSearchBatch": "a08656ccff128b8ba7cac11dd292d65aeefd7368914c526f0aa651aba76d3982",
     "../storage/comment_search.go:*Workspace:RunCommentSearchMaintenance": "a62072f132d3dcce8d23aaef990f89d9cdd1157ef2d6b19a74334f81f59530cc",
     "../storage/comment_search.go:*Workspace:maintainCommentSearchBatch": "509a5264ef183ec70d0b97cb8d553b48ada6dd5371be02e923d1cc5537d7d63d",

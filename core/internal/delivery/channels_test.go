@@ -334,3 +334,67 @@ func TestPrincipalRecipientsQueryPlan(t *testing.T) {
 		t.Fatalf("plan:\n%s", joined)
 	}
 }
+
+func TestClaimRechecksReadAccess(t *testing.T) {
+	e := principalChannelEnv(t)
+	ctx := context.Background()
+	esc, _ := newEscalator(e, nil)
+	e.addAsk(t, "ask-1", baseNow.Add(-2*time.Hour), "1h", 0, "Secret plan")
+	if err := esc.Step(ctx, baseNow); err != nil {
+		t.Fatal(err)
+	}
+	// actor_ext loses access after the push was queued.
+	e.store.CanRead = func(_ context.Context, principal, _ string) bool { return principal != "actor_ext" }
+	claimed, err := e.store.Claim(ctx, "hosted", "actor_notifier", 10, time.Minute)
+	if err != nil || len(claimed) != 1 || claimed[0].PrincipalID != "actor_pk" {
+		t.Fatalf("claim %v %v", claimed, err)
+	}
+	var status, payload string
+	if err := e.db.QueryRow(`SELECT status, payload_json FROM deliveries WHERE principal_id='actor_ext'`).Scan(&status, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if status != "canceled" || strings.Contains(payload, "Secret") {
+		t.Fatalf("a recipient who lost access gets nothing and nothing is kept: %s %s", status, payload)
+	}
+}
+
+func TestGrantManageURL(t *testing.T) {
+	e := principalChannelEnv(t)
+	ctx := context.Background()
+	for _, bad := range []string{"http://example.com/x", "javascript:alert(1)", "/relative", "https://user:pw@example.com/", "https://" + strings.Repeat("a", 600) + ".example"} {
+		d := hostedChannel
+		d.ManageURL = bad
+		if err := delivery.ValidateGrantDeclaration(d); !errors.Is(err, delivery.ErrInvalid) {
+			t.Errorf("%q should be refused: %v", bad, err)
+		}
+	}
+	d := hostedChannel
+	d.ManageURL = "https://app.example.com/account/notifications"
+	if err := e.declareGrant(t, "agent_notifier", d); err != nil {
+		t.Fatal(err)
+	}
+	opts, _ := e.store.ChannelOptions(ctx)
+	if opts["hosted"].ManageURL != "https://app.example.com/account/notifications" {
+		t.Fatalf("manage_url %+v", opts["hosted"])
+	}
+}
+
+func TestHeartbeatListsEachPrincipalsChannels(t *testing.T) {
+	e := principalChannelEnv(t)
+	ctx := context.Background()
+	e.addAgent(t, "agent_mail", "actor_mail", "agent", "public_key", nil)
+	// actor_ext turns the principal channel off but keeps another channel on.
+	e.setChannel(t, "actor_ext", "hosted", "", false, false)
+	e.setChannel(t, "actor_ext", "email", "me@example.com", true, true)
+	sum, err := e.store.AttentionSummary(ctx, baseNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, p := range sum["principals"].([]map[string]any) {
+		got[p["principal_id"].(string)] = strings.Join(p["channels"].([]string), ",")
+	}
+	if got["actor_ext"] != "email" || got["actor_pk"] != "hosted" {
+		t.Fatalf("channels per principal %v", got)
+	}
+}

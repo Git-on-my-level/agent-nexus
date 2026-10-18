@@ -14892,6 +14892,7 @@ components:
           type: array
           items: {type: string, enum: [push, digest]}
         label: {type: string}
+        manage_url: {type: string, format: uri, maxLength: 512, description: "Absolute https URL where people manage how a principal-addressed channel reaches them; set by the declaring grant."}
     NotificationChannelSetting:
       type: object
       additionalProperties: false

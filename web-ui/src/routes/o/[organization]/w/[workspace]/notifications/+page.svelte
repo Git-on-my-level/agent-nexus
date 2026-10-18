@@ -258,6 +258,14 @@
                     </span>
                   </span>
                 </label>
+                {#if row.manageUrl}
+                  <a
+                    class="mt-3 inline-block text-micro text-accent-text hover:underline"
+                    href={row.manageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer">Manage where this reaches you</a
+                  >
+                {/if}
               </fieldset>
             {:else}
               <fieldset class="rounded-md border border-line bg-panel p-4">

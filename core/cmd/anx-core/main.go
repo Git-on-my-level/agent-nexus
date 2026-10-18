@@ -569,7 +569,7 @@ func main() {
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
 		server.WithSeriesStore(&series.Store{DB: workspace.DB(), Auth: authStore}),
-		server.WithDeliveryStore(&delivery.Store{DB: workspace.DB()}),
+		server.WithDeliveryStore(&delivery.Store{DB: workspace.DB(), CanRead: server.NewEscalationReadCheck(primitiveStore)}),
 		server.WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),

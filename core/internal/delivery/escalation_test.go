@@ -268,7 +268,8 @@ func TestAttentionSummaryOmitsUnreadable(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	e.store.CanRead = func(_ context.Context, _, ask string) bool { return ask == "visible-ask" }
+	canRead := func(_ context.Context, _, ask string) bool { return ask == "visible-ask" }
+	e.refreshUntilComplete(t, canRead)
 	sum, err := e.store.AttentionSummary(ctx, baseNow)
 	if err != nil {
 		t.Fatal(err)
@@ -368,7 +369,7 @@ func TestDigestItemCap(t *testing.T) {
 func TestAttentionSummary(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	esc, _ := newEscalator(e, nil)
+	esc, _ := newEscalator(e, func(string, string) bool { return false })
 	e.setChannel(t, "alice", "email", "a@example.com", true, false)
 	e.setChannel(t, "alice", "telegram", "1", true, false)
 	e.setChannel(t, "bob", "email", "", true, true)                  // no address
@@ -396,11 +397,19 @@ func TestAttentionSummary(t *testing.T) {
 	if len(principals) != 1 || principals[0]["principal_id"] != "alice" {
 		t.Fatalf("principals %v", principals)
 	}
-	// No read check: the workspace totals stay, and the principal's copy is not those totals.
+	// Nothing readable yet: the workspace totals stay, and the principal's
+	// copy is not those totals.
+	e.refreshUntilComplete(t, func(context.Context, string, string) bool { return false })
+	sum, _ = e.store.AttentionSummary(ctx, baseNow)
+	principals = sum["principals"].([]map[string]any)
 	if principals[0]["due"] != 0 || principals[0]["overdue"] != 0 || principals[0]["earliest_decide_by"] != nil {
-		t.Fatalf("nil CanRead copied workspace counts onto the principal: %v", principals[0])
+		t.Fatalf("unreadable asks were counted for the principal: %v", principals[0])
 	}
-	e.store.CanRead = func(context.Context, string, string) bool { return true }
+	// An access change (new epoch) makes every pair due for a recheck.
+	if _, err := e.db.Exec(`UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1`); err != nil {
+		t.Fatal(err)
+	}
+	e.refreshUntilComplete(t, func(context.Context, string, string) bool { return true })
 	sum, err = e.store.AttentionSummary(ctx, baseNow)
 	if err != nil {
 		t.Fatal(err)

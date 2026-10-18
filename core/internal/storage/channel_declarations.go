@@ -44,15 +44,57 @@ func installChannelDeclarations(ctx context.Context, tx *sql.Tx) error {
 			addressing TEXT NOT NULL DEFAULT 'settings',
 			kinds TEXT NOT NULL DEFAULT 'push,digest',
 			label TEXT NOT NULL DEFAULT '',
+			manage_url TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			revoked_at TEXT
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_grant_channel_declarations_channel ON grant_channel_declarations(channel, agent_id) WHERE revoked_at IS NULL`,
+		// Materialized readability for per-principal attention counts (see
+		// internal/delivery/readability.go): one row per notified principal and
+		// open ask. The heartbeat reads it by primary-key prefix; the refresh
+		// step walks idx_principal_ask_readability_refresh oldest epoch first.
+		`CREATE TABLE IF NOT EXISTS principal_ask_readability (
+			principal_id TEXT NOT NULL,
+			request_event_id TEXT NOT NULL,
+			readable INTEGER NOT NULL DEFAULT 0,
+			checked_epoch INTEGER NOT NULL DEFAULT -1,
+			checked_at TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(principal_id, request_event_id)
+		) WITHOUT ROWID`,
+		`CREATE INDEX IF NOT EXISTS idx_principal_ask_readability_refresh ON principal_ask_readability(checked_epoch, checked_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_principal_ask_readability_ask ON principal_ask_readability(request_event_id)`,
+		`CREATE TABLE IF NOT EXISTS principal_readability_coverage (
+			principal_id TEXT PRIMARY KEY,
+			cursor TEXT NOT NULL DEFAULT '',
+			complete INTEGER NOT NULL DEFAULT 0
+		) WITHOUT ROWID`,
+		`CREATE TABLE IF NOT EXISTS ask_readability_queue (
+			request_event_id TEXT PRIMARY KEY
+		) WITHOUT ROWID`,
 	}
 	for _, statement := range statements {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("install channel declarations: %w", err)
+		}
+	}
+	if ok, err := sqliteTableExists(ctx, tx, "ask_deadlines"); err != nil {
+		return err
+	} else if ok {
+		for _, statement := range []string{
+			`CREATE TRIGGER IF NOT EXISTS ask_readability_on_open AFTER INSERT ON ask_deadlines BEGIN
+				INSERT INTO ask_readability_queue(request_event_id) VALUES(NEW.request_event_id) ON CONFLICT DO NOTHING;
+			END`,
+			`CREATE TRIGGER IF NOT EXISTS ask_readability_on_close AFTER DELETE ON ask_deadlines BEGIN
+				DELETE FROM principal_ask_readability WHERE request_event_id=OLD.request_event_id;
+				DELETE FROM ask_readability_queue WHERE request_event_id=OLD.request_event_id;
+			END`,
+			// Asks already open when this migration runs are covered by each
+			// principal's ledger walk.
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("install ask readability triggers: %w", err)
+			}
 		}
 	}
 	if ok, err := sqliteTableExists(ctx, tx, "agents"); err != nil {

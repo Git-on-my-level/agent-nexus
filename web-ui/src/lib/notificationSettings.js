@@ -22,11 +22,27 @@ export const isPrincipalRow = (row) => row?.addressing === "principal";
 export const addressLabel = (channel) =>
   ADDRESS_LABELS[channel] || `${channelLabel(channel)} address`;
 
+/** An absolute https URL, or "" (core validates it too; never trust it blindly). */
+export function safeManageUrl(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value || value.length > 512) return "";
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.host && !url.username
+      ? url.href
+      : "";
+  } catch {
+    return "";
+  }
+}
+
 const channelMeta = (settings, channel) => {
   const options = settings?.channel_options?.[channel] ?? {};
+  const principal = options.addressing === "principal";
   return {
-    addressing: options.addressing === "principal" ? "principal" : "settings",
+    addressing: principal ? "principal" : "settings",
     label: String(options.label ?? ""),
+    manageUrl: principal ? safeManageUrl(options.manage_url) : "",
   };
 };
 
@@ -86,6 +102,7 @@ export function reconcileDraft(draft, settings) {
             channel: row.channel,
             addressing: row.addressing,
             label: row.label,
+            manageUrl: row.manageUrl,
             address: isPrincipalRow(row) ? "" : String(mine.address ?? ""),
             push_enabled: Boolean(mine.push_enabled),
             digest_enabled: Boolean(mine.digest_enabled),

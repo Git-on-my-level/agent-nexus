@@ -11,6 +11,7 @@ const {
   notificationPreview,
   channelLabel,
   rowEnabled,
+  safeManageUrl,
   setRowEnabled,
 } = await import("../../src/lib/notificationSettings.js");
 
@@ -34,6 +35,7 @@ describe("notification settings helpers", () => {
         channel: "email",
         addressing: "settings",
         label: "",
+        manageUrl: "",
         address: "a@example.com",
         push_enabled: true,
         digest_enabled: false,
@@ -42,6 +44,7 @@ describe("notification settings helpers", () => {
         channel: "telegram",
         addressing: "settings",
         label: "",
+        manageUrl: "",
         address: "",
         push_enabled: true,
         digest_enabled: true,
@@ -173,5 +176,38 @@ describe("notification settings helpers", () => {
       const restored = reconcileDraft(draftFromSettings(hosted), saved);
       expect(restored.rows[1].addressing).toBe("principal");
     });
+  });
+
+  it("keeps only an absolute https manage link on principal channels", () => {
+    expect(safeManageUrl("https://app.example.com/settings")).toBe(
+      "https://app.example.com/settings",
+    );
+    for (const bad of [
+      "http://app.example.com/",
+      "javascript:alert(1)",
+      "/relative",
+      "https://user:pw@example.com/",
+      "",
+    ])
+      expect(safeManageUrl(bad)).toBe("");
+    const settings = {
+      channels: [],
+      available_channels: ["hosted", "email"],
+      channel_options: {
+        hosted: {
+          addressing: "principal",
+          kinds: ["push"],
+          manage_url: "https://app.example.com/settings",
+        },
+        email: {
+          addressing: "settings",
+          kinds: ["push"],
+          manage_url: "https://evil.example/",
+        },
+      },
+    };
+    const rows = draftFromSettings(settings).rows;
+    expect(rows[0].manageUrl).toBe("https://app.example.com/settings");
+    expect(rows[1].manageUrl).toBe("");
   });
 });
