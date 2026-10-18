@@ -393,7 +393,11 @@ func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channe
 		return Delivery{}, ErrNotFound
 	}
 	if d.Status == StatusCanceled && d.ClaimToken == claimToken {
-		// A retried skip, or a claim canceled since: nothing more to record.
+		if outcomeName != ReceiptSkipped {
+			// Canceled under this claim (skipped, or the recipient turned
+			// the channel off): a different outcome must not read as success.
+			return Delivery{}, ErrConflict
+		}
 		d.ClaimToken = ""
 		return d, nil
 	}

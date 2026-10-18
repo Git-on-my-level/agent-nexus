@@ -30,16 +30,15 @@ Optional declaration fields:
 
 - `"kinds": ["push"]` (or `["digest"]`) limits the kinds the channels accept;
   core never queues the other kind for them. The default is both.
-- `"addressing": "principal"` is for an adapter that already knows how to reach
-  each person, for example through the identity provider that signed them in.
-  People enter no address; the channel is on for every person until they turn
-  it off in notification settings. A claim carries no `address`; for a person
-  signed in through an external identity grant it carries
-  `recipient.external_issuer` and `recipient.external_subject`, which only that
-  channel's adapter sees. The default is `"settings"`.
+- Host adapters always deliver to the address each person saves. A
+  principal-addressed channel, which needs no address and is on for every
+  person until they turn it off, can only be declared by a grant from the
+  workspace's trusted identity issuer (the `delivers` grant claim). A claim on
+  such a channel carries `recipient.external_issuer` and
+  `recipient.external_subject` instead of an `address`.
 - `"label"` is the short channel name people see in notification settings.
 
-Every active declaration of one channel must agree on `addressing` and `kinds`.
+Every active declaration of one channel must agree on addressing and `kinds`.
 An adapter that decides not to send (for example the person muted alerts
 elsewhere) posts `--outcome skipped`, which closes the delivery without a
 failure.

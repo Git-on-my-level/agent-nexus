@@ -239,11 +239,11 @@ type rowQueryer interface {
 
 // activeHuman reports whether principalID is an active human principal and,
 // for humans signed in through an external identity grant, that identity.
-// One seek on idx_agents_actor.
+// One seek on idx_agents_actor (agents.actor_id is unique).
 func activeHuman(ctx context.Context, q rowQueryer, principalID string) (bool, *Recipient, error) {
 	var method, issuer, subject sql.NullString
 	err := q.QueryRowContext(ctx, `SELECT json_extract(metadata_json,'$.auth_method'), json_extract(metadata_json,'$.external_issuer'), json_extract(metadata_json,'$.external_subject')
-		FROM agents WHERE actor_id=? AND revoked_at IS NULL AND json_extract(metadata_json,'$.principal_kind')='human' ORDER BY created_at, id LIMIT 1`, principalID).Scan(&method, &issuer, &subject)
+		FROM agents WHERE actor_id=? AND revoked_at IS NULL AND json_extract(metadata_json,'$.principal_kind')='human' LIMIT 1`, principalID).Scan(&method, &issuer, &subject)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil, nil
 	}

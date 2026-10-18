@@ -229,6 +229,9 @@ func TestReceiptSkipped(t *testing.T) {
 	if again, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "hosted", delivery.ReceiptSkipped, "", false, "actor_notifier"); err != nil || again.Status != delivery.StatusCanceled || again.ClaimToken != "" {
 		t.Fatalf("retried skip %+v %v", again, err)
 	}
+	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "hosted", delivery.ReceiptDelivered, "", false, "actor_notifier"); !errors.Is(err, delivery.ErrConflict) {
+		t.Fatalf("a delivered receipt after a skip must not read as success: %v", err)
+	}
 	if _, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "hosted", "bogus", "", false, "w"); !errors.Is(err, delivery.ErrInvalid) {
 		t.Fatalf("unknown outcome %v", err)
 	}
@@ -272,6 +275,18 @@ func TestAttentionSummaryIdentityAndPending(t *testing.T) {
 	}
 	if pending := summary["pending_deliveries"].(map[string]int); pending["hosted"] != 2 {
 		t.Fatalf("pending %v", pending)
+	}
+	// A delivery waiting out its retry backoff is not claimable yet.
+	claimed, err := e.store.Claim(ctx, "hosted", "actor_notifier", 1, time.Minute)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim %v %v", claimed, err)
+	}
+	if _, err := e.store.RecordReceipt(ctx, claimed[0].DeliveryID, claimed[0].ClaimToken, "hosted", delivery.ReceiptFailed, "provider down", true, "actor_notifier"); err != nil {
+		t.Fatal(err)
+	}
+	summary, _ = e.store.AttentionSummary(ctx, baseNow)
+	if pending := summary["pending_deliveries"].(map[string]int); pending["hosted"] != 1 {
+		t.Fatalf("backoff rows are not pending: %v", pending)
 	}
 }
 

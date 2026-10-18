@@ -178,14 +178,6 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
-          "name": "addressing",
-          "type": "string",
-          "enum_values": [
-            "principal",
-            "settings"
-          ]
-        },
-        {
           "name": "delivers",
           "type": "list\u003cstring\u003e"
         },

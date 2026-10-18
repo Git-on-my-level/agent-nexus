@@ -454,7 +454,7 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	pending, err := s.pendingByChannel(ctx)
+	pending, err := s.pendingByChannel(ctx, now)
 	if err != nil {
 		return nil, err
 	}
@@ -556,9 +556,12 @@ func (s Store) notifiedPrincipals(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// pendingByChannel counts pending or claimed deliveries on each declared
-// channel: one seek on idx_deliveries_claim per channel, each count capped.
-func (s Store) pendingByChannel(ctx context.Context) (map[string]int, error) {
+// pendingByChannel counts deliveries an adapter could claim right now on each
+// declared channel: pending and due, or claimed with an expired lease. Rows
+// waiting out a retry backoff are not counted, so a receiver never wakes a
+// workspace for them early. Two seeks on idx_deliveries_claim per channel,
+// each count capped.
+func (s Store) pendingByChannel(ctx context.Context, now time.Time) (map[string]int, error) {
 	channels, err := s.DeclaredChannels(ctx)
 	if err != nil {
 		return nil, err
@@ -566,7 +569,8 @@ func (s Store) pendingByChannel(ctx context.Context) (map[string]int, error) {
 	out := map[string]int{}
 	for _, channel := range channels {
 		var n int
-		if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT 1 FROM deliveries WHERE channel=? AND status IN ('pending','claimed') LIMIT 1000)`, channel).Scan(&n); err != nil {
+		if err := s.DB.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM deliveries WHERE channel=? AND status='pending' AND next_attempt_at<=? LIMIT 1000))
+			+ (SELECT COUNT(*) FROM (SELECT 1 FROM deliveries INDEXED BY idx_deliveries_claim WHERE channel=? AND status='claimed' AND lease_expires_at<=? LIMIT 1000))`, channel, stamp(now), channel, stamp(now)).Scan(&n); err != nil {
 			return nil, err
 		}
 		if n > 0 {

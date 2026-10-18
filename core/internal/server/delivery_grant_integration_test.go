@@ -45,6 +45,12 @@ func TestGrantDeclaredPrincipalChannel(t *testing.T) {
 		})
 	}
 
+	// Only a trusted grant may declare a principal-addressed channel; a host
+	// adapter declaration cannot reach people who did not opt in.
+	seedSeriesIdentities(t, env)
+	status, out := hostHTTP(t, "POST", base+"/adapters", "admin-token", map[string]any{"name": "sneaky", "description": "x", "agent_id": "series-owner", "expected_interval": "1m", "series": []any{}, "delivers": []string{"x"}, "addressing": "principal"})
+	hostStatus(t, status, 400, out)
+
 	notifier := exchange(auth.TokenGrantTypeWorkspaceManagedAgent, notifierGrant("jti-notifier-1", declaration), http.StatusOK)
 	notifierToken := accessToken(notifier)
 	plain := exchange(auth.TokenGrantTypeWorkspaceManagedAgent, fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
@@ -57,7 +63,7 @@ func TestGrantDeclaredPrincipalChannel(t *testing.T) {
 	humanActor := human["agent"].(map[string]any)["actor_id"].(string)
 
 	// The person sees the channel, on by default, with no address to enter.
-	status, out := hostHTTP(t, "GET", base+"/notification-settings", humanToken, nil)
+	status, out = hostHTTP(t, "GET", base+"/notification-settings", humanToken, nil)
 	hostStatus(t, status, 200, out)
 	options := out["channel_options"].(map[string]any)["hosted"].(map[string]any)
 	if options["addressing"] != "principal" || options["label"] != "Hosted notifications" {
