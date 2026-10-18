@@ -6110,12 +6110,10 @@ Inputs:
   - body `expected_interval` (string)
   - body `name` (string)
   Optional:
-  - body `addressing` (string)
   - body `delivers` (list<string>)
   - body `kinds` (list<string>)
   - body `label` (string)
   - body `series` (list<any>)
-  Enum values: addressing: principal, settings
 
 CLI input:
   Flags:
