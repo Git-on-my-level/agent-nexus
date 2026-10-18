@@ -135,3 +135,51 @@ func TestMigrationSkipsUnrelatedSymlinkButBlocksItsBridgeConsumer(t *testing.T) 
 		})
 	}
 }
+
+func TestMigrationMalformedUnitsAreScopedToPossibleBridgeConsumers(t *testing.T) {
+	const zeroclaw = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\"><dict>
+<key>Label</key><string>com.zeroclaw.daemon</string>
+<key>ProgramArguments</key><array><string>/opt/bin/zeroclaw</string><string>daemon</string><string>preserve \"literal quotes\"</string></array>
+<key>Comment</key><string>preserve \"literal quotes\"</string>
+</dict></plist>`
+	u, err := ParseUnit("com.zeroclaw.daemon.plist", "launchd", []byte(zeroclaw))
+	if err != nil || len(u.Argv) != 3 || u.Argv[0] != "/opt/bin/zeroclaw" || u.Argv[2] != `preserve \"literal quotes\"` || string(u.Content) != zeroclaw {
+		t.Fatal(u, err)
+	}
+	for _, tc := range []struct {
+		name, raw string
+		blocked   bool
+	}{
+		{"com.zeroclaw.daemon.plist", zeroclaw, false},
+		{"unrelated.plist", `<plist version=bad><dict><string>/opt/bin/zeroclaw</string>`, false},
+		{"custom.plist", `<plist version=bad><dict><string>/opt/bin/anx bridge run</string>`, true},
+		{"split.plist", `<plist version=bad><array><string>/custom/tool</string><string>bridge</string><string>run</string>`, true},
+		{"wrapper.plist", `<plist version=bad><string>/opt/bin/anx-hermes</string>`, true},
+		{"label.plist", `<plist version=bad><string>io.agent-nexus.hermes-answer</string>`, true},
+		{"io.agent-nexus.bridge.plist", `<plist version=bad>`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			path := filepath.Join(home, "Library", "LaunchAgents", tc.name)
+			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(tc.raw), 0600); err != nil {
+				t.Fatal(err)
+			}
+			units, err := ReadUnits(home, "darwin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan := PlanMigration(home, filepath.Join(home, "anx"), os.Getuid(), units, nil)
+			if (len(plan.Blockers) > 0) != tc.blocked {
+				t.Fatal(plan)
+			}
+			if tc.blocked && (len(units) != 1 || units[0].Unresolved == "") {
+				t.Fatal(units)
+			}
+		})
+	}
+}

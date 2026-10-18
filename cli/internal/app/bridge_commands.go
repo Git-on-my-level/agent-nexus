@@ -330,11 +330,7 @@ func (a *App) inspectHostBridge(ctx context.Context, doctor bool) (*commandResul
 				_, err := a.validateBridgeAgent(ctx, w, agent)
 				checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "enrollment", "ok": err == nil, "repair": "repair enrollment or use bridge remove --as " + agent.Name + " in this workspace; retained records survive"})
 				for _, dir := range agent.RegistryDirs {
-					err = checkResumeNamespace(dir, w, agent)
-					if err == nil && agent.Jobs["wake"] {
-						err = checkRuntimeReceipts(dir)
-					}
-					checks = append(checks, map[string]any{"workspace_id": w.ID, "actor_id": agent.ActorID, "check": "resume_namespace", "ok": err == nil, "repair": "reconcile retained command/runtime receipts against their external outcome"})
+					checks = append(checks, inspectBridgeResumeCheck(dir, w, agent))
 				}
 				for _, dir := range agent.FileDirs {
 					s, err := filetransport.Inspect(dir, a.clockNow())

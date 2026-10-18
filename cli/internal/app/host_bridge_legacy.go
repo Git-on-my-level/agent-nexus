@@ -47,16 +47,16 @@ func (a *App) runLegacyAnswerBridge(ctx context.Context, args []string, cfg conf
 	}
 	agent.RegistryDirs = []string{dir}
 	agent.Policy.Timeout, agent.Policy.MaxAttempts = *timeout, *attempts
-	fmt.Fprintln(a.Stderr, "anx bridge: legacy answers-only rollback mode; retry anx bridge install to consolidate this host")
+	fmt.Fprintf(a.Stderr, "%s anx bridge: legacy answers-only rollback mode; retry anx bridge install to consolidate this host\n", a.clockNow().UTC().Format(time.RFC3339))
 	for ctx.Err() == nil {
 		if cfg, e = a.validateBridgeAgent(ctx, w, agent); e == nil {
 			e = checkResumeNamespace(dir, w, agent)
 		}
 		if e == nil {
-			e = a.consumeHostWakes(ctx, cfg, agent, make(chan struct{}, 1))
+			e = bridgeWakeResult(a.consumeHostWakes(ctx, cfg, agent, make(chan struct{}, 1)))
 		}
 		if e != nil && ctx.Err() == nil {
-			fmt.Fprintf(a.Stderr, "anx bridge: legacy answers paused/reconnecting code=%s\n", errnorm.Normalize(e).Code)
+			fmt.Fprintf(a.Stderr, "%s anx bridge: legacy answers paused/reconnecting code=%s\n", a.clockNow().UTC().Format(time.RFC3339), errnorm.Normalize(e).Code)
 		}
 		timer := time.NewTimer(3 * time.Second)
 		select {

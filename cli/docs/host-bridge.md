@@ -78,7 +78,14 @@ self-reported readiness grants authorization or proves a completed callback.
 
 `install --dry-run` previews labels/PIDs and registration counts without changing
 services, units or the bridge registry. Identity preflight can refresh existing
-auth caches. Real install follows the same preflight before stopping anything:
+auth caches.
+
+Unrelated malformed unit files do not block discovery. Malformed files whose
+name or bytes mention ANX, an `io.agent-nexus` label, or both `bridge` and `run`
+remain unresolved and block migration, including stopped units. Escaped attribute
+quotes in XML/plist headers are accepted without rewriting command values or the
+original unit snapshot. Real install follows the same preflight before stopping
+anything:
 
 1. Inspect owner-controlled unit files, loaded main PIDs, kernel argv, executable,
    UID, parent ancestry and process start times. Custom wrapper labels are valid;
@@ -136,6 +143,12 @@ An earlier runtime claim without a durable local outcome becomes an inspectable
 `uncertain` receipt and pauses that lane; it is never silently adopted or rerun.
 Doctor also inventories extra/unowned consumers, singleton ownership, migration
 phase, enrollment, namespace safety, runtime uncertainty, and Git writer bindings.
+Namespace checks include sanitized errors without command values or filenames.
+Executing answer/runtime records report `in_progress` while their namespace's
+consumer lock is held; ownerless execution and uncertain/paused records still
+require reconciliation. Startup and migration keep their stricter safety checks.
+Service log lines carry RFC3339 UTC timestamps. Normal SSE reconnect deadlines
+are quiet; real stream/job errors remain logged.
 
 The fixture suite covers three independent workspace units and a custom wrapper,
 including bootstrap/readiness/quiesce failures, interrupted outcomes, saved

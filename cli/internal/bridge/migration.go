@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -175,7 +176,7 @@ func PlanMigration(home, exe string, uid int, units []LegacyUnit, processes []Pr
 		return false
 	}
 	for _, u := range units {
-		if u.Label == Label || u.Label == Unit {
+		if u.Unresolved == "" && (u.Label == Label || u.Label == Unit) {
 			continue
 		}
 		candidates := []Process{}
@@ -186,7 +187,7 @@ func PlanMigration(home, exe string, uid int, units []LegacyUnit, processes []Pr
 		}
 		direct := IsConsumer(u.Argv)
 		if u.Unresolved != "" {
-			if len(candidates) > 0 {
+			if len(candidates) > 0 || possibleBridgeUnit(u.Path, u.Content) {
 				plan.Blockers = append(plan.Blockers, "unresolved bridge unit: "+u.Label)
 			}
 			continue
@@ -326,13 +327,33 @@ func plistValue(d *xml.Decoder, start xml.StartElement) (any, error) {
 		return nil, fmt.Errorf("unsupported plist value %s", start.Name.Local)
 	}
 }
+
+var plistHeaders = regexp.MustCompile(`(?s)<\?xml\b.*?\?>|<plist\b[^>]*>`)
+
+// On parse failure, conservatively retain any ANX marker in the filename or
+// bytes (including wrappers/labels), or bridge plus run separated by XML tags
+// or whitespace. These are suspicion, not ownership proof: unresolved matches
+// block cutover even when stopped. Unrelated malformed units are ignored; live
+// consumers are still independently discovered through kernel argv/ancestry.
+func possibleBridgeUnit(path string, raw []byte) bool {
+	text := strings.ToLower(filepath.Base(path) + "\n" + string(raw))
+	return strings.Contains(text, "anx") || strings.Contains(text, "io.agent-nexus") ||
+		strings.Contains(text, "bridge") && strings.Contains(text, "run")
+}
+
 func ParseUnit(path, kind string, raw []byte) (LegacyUnit, error) {
 	u := LegacyUnit{Path: path, Kind: kind, Content: raw, Environment: map[string]string{}}
 	if len(raw) > 1<<20 {
 		return u, fmt.Errorf("unit too large")
 	}
 	if kind == "launchd" {
-		d := xml.NewDecoder(strings.NewReader(string(raw)))
+		// Some launchd-accepted plists escape attribute quotes as if embedded in
+		// a string. Normalize only the XML/plist headers, never command values;
+		// Content retains the exact original bytes for rollback.
+		xmlText := plistHeaders.ReplaceAllStringFunc(string(raw), func(header string) string {
+			return strings.ReplaceAll(header, `\"`, `"`)
+		})
+		d := xml.NewDecoder(strings.NewReader(xmlText))
 		for {
 			t, e := d.Token()
 			if e != nil {
@@ -525,7 +546,10 @@ func ReadUnits(home, goos string) ([]LegacyUnit, error) {
 		}
 		u, e := ParseUnit(path, kind, raw)
 		if e != nil {
-			return nil, fmt.Errorf("inspect %s: %w", f.Name(), e)
+			if !possibleBridgeUnit(path, raw) {
+				continue
+			}
+			u = LegacyUnit{Path: path, Label: strings.TrimSuffix(f.Name(), suffix), Kind: kind, Content: raw, Unresolved: "unit cannot be parsed"}
 		}
 		u.Mode = uint32(info.Mode().Perm())
 		out = append(out, u)
