@@ -248,8 +248,10 @@ The heartbeat's per-principal due/overdue counts never evaluate access or
 materialize the ask ledger on the heartbeat path. `principal_ask_readability`
 holds one row per notified principal and open ask, refreshed by the escalation
 clock under fixed budgets (1000 access checks and about 2000 inserted rows per
-step); the heartbeat reads it with a primary-key prefix per principal, capped
-at 1000 rows each, for at most 200 principals. Run the gate with 200 humans ×
+step). Readability rows carry each ask's deadline and escalation state, so the
+heartbeat computes each principal's exact due, overdue and earliest deadline
+as uncapped index-only aggregates (two covering ranges and one seek), for at
+most 200 principals. Run the gate with 200 humans ×
 2000 open asks:
 
 ```sh
@@ -258,8 +260,10 @@ ANX_PERFORMANCE_TEST=1 go test ./internal/delivery -run '^TestPerformanceAttenti
 ```
 
 It fails if the heartbeat evaluates any access check, exceeds 4 indexed queries
-per principal plus 20, scans either table, or if one refresh step exceeds its
-access-check or statement budget.
+per principal plus 20, scans either table, reports any principal's due,
+overdue or earliest deadline differently from the fixture (each principal can
+read more than 1000 asks), or if one refresh step exceeds its access-check or
+statement budget.
 
 ## Route coverage and SQL plans
 
