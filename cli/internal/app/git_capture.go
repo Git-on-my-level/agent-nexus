@@ -379,7 +379,6 @@ func (a *App) captureAuth(ctx context.Context, cfg config.Resolved, b integratio
 	cfg.As = b.Agent
 	cfg.AccessToken = ""
 	cfg.Sources = map[string]string{"base_url": "capture", "agent": "capture"}
-	cfg.Timeout = time.Second
 	host, e := a.resolvedHost(cfg)
 	if e != nil {
 		return cfg, e

@@ -66,6 +66,10 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 // Presentation-only readers share title and visibility resolution but do not
 // hydrate movement, due dates or assignee display metadata they never render.
 func (s *Store) readRefProjection(ctx context.Context, refs []string, visible func(string, string) bool, presentationOnly bool) ([]RefPreview, error) {
+	return readRefProjection(ctx, s.db, refs, visible, presentationOnly)
+}
+
+func readRefProjection(ctx context.Context, q briefQueryer, refs []string, visible func(string, string) bool, presentationOnly bool) ([]RefPreview, error) {
 	if visible != nil {
 		if _, scoped := accessScopeFrom(ctx); !scoped {
 			return nil, invalidBoardRequest("principal read access scope is required for visibility-filtered resolution")
@@ -147,7 +151,7 @@ func (s *Store) readRefProjection(ctx context.Context, refs []string, visible fu
 			wanted[value] = true
 		}
 		for {
-			rows, err := s.db.QueryContext(ctx, query, args...)
+			rows, err := q.QueryContext(ctx, query, args...)
 			if err != nil {
 				return nil, err
 			}
@@ -238,10 +242,10 @@ func (s *Store) readRefProjection(ctx context.Context, refs []string, visible fu
 			}
 		}
 	}
-	if err := s.readSeriesRefFacts(ctx, refs, out); err != nil {
+	if err := readSeriesRefFacts(ctx, q, refs, out); err != nil {
 		return nil, err
 	}
-	if err := s.readExternalRefFacts(ctx, refs, out, visible); err != nil {
+	if err := readExternalRefFacts(ctx, q, refs, out, visible); err != nil {
 		return nil, err
 	}
 	return out, nil

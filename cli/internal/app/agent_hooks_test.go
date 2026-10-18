@@ -45,6 +45,7 @@ type hookFixture struct {
 	fileSendStatus       atomic.Int32
 	briefStatus          atomic.Int32
 	briefDelay           atomic.Bool
+	cardDelay            atomic.Int64
 }
 
 func newHookFixture(t *testing.T) *hookFixture {
@@ -61,6 +62,17 @@ func newHookFixture(t *testing.T) *hookFixture {
 				started <- struct{}{}
 				select {
 				case <-gate:
+				case <-r.Context().Done():
+					return
+				}
+			}
+		}
+		if r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/cards/") && !strings.HasSuffix(r.URL.Path, "/plan") {
+			if delay := f.cardDelay.Load(); delay > 0 {
+				timer := time.NewTimer(time.Duration(delay))
+				defer timer.Stop()
+				select {
+				case <-timer.C:
 				case <-r.Context().Done():
 					return
 				}

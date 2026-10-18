@@ -44,7 +44,7 @@ type externalEvidence struct {
 
 // readExternalRefFacts looks up only requested identities in the evidence index,
 // applying SQL access before candidate limits and decoding evidence JSON.
-func (s *Store) readExternalRefFacts(ctx context.Context, refs []string, out []RefPreview, visible func(string, string) bool) error {
+func readExternalRefFacts(ctx context.Context, q briefQueryer, refs []string, out []RefPreview, visible func(string, string) bool) error {
 	keys := map[string][]int{}
 	for i, ref := range refs {
 		kind, _, _ := strings.Cut(ref, ":")
@@ -70,7 +70,7 @@ func (s *Store) readExternalRefFacts(ctx context.Context, refs []string, out []R
 	seenCandidates := make([]map[int64]bool, len(refs))
 	var cursor int64
 	for {
-		rows, err := s.db.QueryContext(ctx, `WITH candidates AS (
+		rows, err := q.QueryContext(ctx, `WITH candidates AS (
  SELECT CAST(bounded.value AS INTEGER) AS id FROM json_each(?) requested CROSS JOIN json_each((SELECT json_group_array(id) FROM (SELECT limited.id FROM work_evidence_index limited INDEXED BY idx_work_evidence_lookup JOIN cards access_card ON access_card.id=limited.card_id WHERE limited.lookup_key=requested.value AND access_card.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM boards lifecycle_board WHERE lifecycle_board.id=access_card.board_id AND lifecycle_board.trashed_at IS NOT NULL) ORDER BY limited.id LIMIT 33))) bounded WHERE CAST(bounded.value AS INTEGER)>?
  ORDER BY 1 LIMIT 200)
  SELECT e.id,e.evidence_id,e.lookup_key,record.evidence_json,c.updated_at,

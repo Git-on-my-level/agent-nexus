@@ -58,11 +58,11 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 		if !fold.LastEvidenceAt.IsZero() {
 			lastEvidence = fold.LastEvidenceAt.UTC().Format(time.RFC3339Nano)
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO brief_initiatives(card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,NULLIF(?,''),?) ON CONFLICT(card_id) DO UPDATE SET open=excluded.open,promise_at=excluded.promise_at,promise_what=excluded.promise_what,
+		if _, err = tx.ExecContext(ctx, `INSERT INTO brief_initiatives(card_id,open,promise_at,promise_what,promise_source,promise_source_ref,promise_author,promise_moves,last_evidence_at,step_status_sig,step_change_at,computed_at,progress_done,progress_total,plan_provenance_json)
+			VALUES(?,?,?,?,?,?,?,?,?,?,NULLIF(?,''),?,?,?,?) ON CONFLICT(card_id) DO UPDATE SET open=excluded.open,promise_at=excluded.promise_at,promise_what=excluded.promise_what,
 			promise_source=excluded.promise_source,promise_source_ref=excluded.promise_source_ref,promise_author=excluded.promise_author,promise_moves=excluded.promise_moves,
-			last_evidence_at=excluded.last_evidence_at,step_status_sig=excluded.step_status_sig,step_change_at=excluded.step_change_at,computed_at=excluded.computed_at`,
-			f.id, open, promiseAt, what, source, sourceRef, author, fold.Moves, lastEvidence, sig, stepChangeAt, now); err != nil {
+			last_evidence_at=excluded.last_evidence_at,step_status_sig=excluded.step_status_sig,step_change_at=excluded.step_change_at,computed_at=excluded.computed_at,progress_done=excluded.progress_done,progress_total=excluded.progress_total,plan_provenance_json=excluded.plan_provenance_json`,
+			f.id, open, promiseAt, what, source, sourceRef, author, fold.Moves, lastEvidence, sig, stepChangeAt, now, c.progress.Done, c.progress.Total, c.planProvenance); err != nil {
 			return false, err
 		}
 	}
@@ -384,15 +384,19 @@ type briefCardInput struct {
 	open              int
 	in                plans.PromiseInput
 	sig, stepChangeAt string
+	progress          plans.Progress
+	planProvenance    string
 }
 
 // briefPromiseInputs loads the fold inputs for at most 200 cards: one
-// statement for card, plan, metadata and observation facts, plus notes.
+// statement for card, plan, metadata and observation facts, bounded notes,
+// and indexed ref-resolution batches. Progress and promise dues share the
+// effective statuses used by plan_state.
 func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notesFor func([]string) (map[string][]plans.PromiseNote, error)) ([]briefCardInput, error) {
 	encoded, _ := json.Marshal(ids)
 	rows, err := q.QueryContext(ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key,COALESCE(c.archived_at,''),COALESCE(c.trashed_at,''),`+effectiveCardDueSQL+`,
 		COALESCE(json_extract(m.metadata_json,'$.wake_condition'),''),COALESCE(p.body_json,''),COALESCE(p.updated_at,''),
-		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(json_extract(m.metadata_json,'$._anx_source_evidence_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'')
+		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(json_extract(m.metadata_json,'$._anx_source_evidence_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,''),COALESCE(bi.plan_provenance_json,'{}')
 		FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id
 		LEFT JOIN work_observations o ON o.id=m.latest_observation_id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
 		WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
@@ -400,12 +404,12 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 		return nil, err
 	}
 	type cardFacts struct {
-		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sourceEvidenceAt, sig, stepChangeAt string
+		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sourceEvidenceAt, sig, stepChangeAt, provenance string
 	}
 	facts := []cardFacts{}
 	for rows.Next() {
 		var f cardFacts
-		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sourceEvidenceAt, &f.sig, &f.stepChangeAt); err != nil {
+		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sourceEvidenceAt, &f.sig, &f.stepChangeAt, &f.provenance); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -419,6 +423,28 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 	if err != nil {
 		return nil, err
 	}
+	// Resolve through the same indexed, scoped reader as plan_state, inside
+	// this maintenance transaction. At most 200 plans x 200 steps; no history.
+	ps := map[string]plans.Plan{}
+	refs := []string{}
+	for _, f := range facts {
+		var p plans.Plan
+		if f.planRaw != "" && json.Unmarshal([]byte(f.planRaw), &p) == nil {
+			ps[f.id] = p
+			refs = append(refs, planStepRefs(p)...)
+		}
+	}
+	refs = uniqueSortedStrings(refs)
+	resolved := map[string]plans.Fact{}
+	for start := 0; start < len(refs); start += 200 {
+		batch, err := readRefProjection(ctx, q, refs[start:min(start+200, len(refs))], nil, false)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range batch {
+			resolved[r.Ref] = plans.Fact{Known: r.Resolvable, Status: r.Phase, MovementAt: r.MovementAt}
+		}
+	}
 	out := make([]briefCardInput, 0, len(facts))
 	for _, f := range facts {
 		ref := "card:" + firstNonEmptyString(f.handle, f.id)
@@ -431,27 +457,33 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 		if f.archived != "" || f.trashed != "" {
 			open = -1
 		}
-		sig := ""
-		if f.planRaw != "" {
-			var p plans.Plan
-			if json.Unmarshal([]byte(f.planRaw), &p) == nil {
-				parts := make([]string, 0, len(p.Steps))
-				for _, step := range p.Steps {
-					parts = append(parts, step.ID+"="+step.Status)
-					if step.Status != "done" {
-						if due := plans.ParseDue(step.Due); !due.IsZero() {
-							in.Steps = append(in.Steps, plans.PromiseStep{ID: step.ID, Title: step.Title, Due: due})
-						}
-					}
+		p := ps[f.id]
+		state := plans.Compute(p, resolved, time.Time{})
+		parts := make([]string, 0, len(state.Steps))
+		for i, step := range state.Steps {
+			parts = append(parts, step.ID+"="+step.Status)
+			if step.Status != "done" {
+				if due := plans.ParseDue(p.Steps[i].Due); !due.IsZero() {
+					in.Steps = append(in.Steps, plans.PromiseStep{ID: step.ID, Title: p.Steps[i].Title, Due: due})
 				}
-				sig = strings.Join(parts, ";")
 			}
 		}
-		// A plan-step state change is a reset: the plan's update time when
-		// its step statuses differ from the last fold.
+		sig := strings.Join(parts, ";")
+		// Only an effective status change advances the clock. A linked card's
+		// movement time matters even when the authored plan has not changed.
 		stepChangeAt := f.stepChangeAt
-		if sig != f.sig && f.planAt != "" && (f.sig != "" || strings.Contains(sig, "=done")) {
-			stepChangeAt = f.planAt
+		// Older projections stored an empty authored status for not_started.
+		// Normalizing that representation alone must not invent evidence.
+		previous := strings.Split(f.sig, ";")
+		for i, part := range previous {
+			if strings.HasSuffix(part, "=") {
+				previous[i] += "not_started"
+			}
+		}
+		if sig != strings.Join(previous, ";") && (f.sig != "" || strings.Contains(sig, "=done")) {
+			if at := latestCardActivity(f.planAt, state.LastMovementAt, stepChangeAt); !at.IsZero() {
+				stepChangeAt = at.UTC().Format(time.RFC3339Nano)
+			}
 		}
 		if at, e := time.Parse(time.RFC3339Nano, stepChangeAt); e == nil {
 			in.StepChanges = []time.Time{at}
@@ -459,9 +491,42 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 		if at := latestCardActivity(f.progressAt, f.sourceEvidenceAt); !at.IsZero() {
 			in.Observations = []time.Time{at}
 		}
-		out = append(out, briefCardInput{id: f.id, open: open, in: in, sig: sig, stepChangeAt: stepChangeAt})
+		provenance, err := briefPlanProvenance(f.planRaw, f.provenance, f.stepChangeAt, stepChangeAt)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, briefCardInput{id: f.id, open: open, in: in, sig: sig, stepChangeAt: stepChangeAt, progress: state.Progress, planProvenance: provenance})
 	}
 	return out, nil
+}
+
+// briefPlanProvenance retains two bounded plans: the current progress/promise
+// inputs and the plan responsible for the retained step-change clock. Swapping
+// refs without changing effective status must not declassify an old private
+// timestamp. Never nest or accumulate previous snapshots.
+func briefPlanProvenance(current, previous, oldClock, newClock string) (string, error) {
+	var snapshot struct {
+		Current json.RawMessage `json:"current"`
+		Clock   json.RawMessage `json:"clock,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(firstNonEmptyString(previous, "{}")), &snapshot); err != nil {
+		return "", err
+	}
+	oldAt, _ := time.Parse(time.RFC3339Nano, oldClock)
+	newAt, _ := time.Parse(time.RFC3339Nano, newClock)
+	current = firstNonEmptyString(current, "{}")
+	if newAt.After(oldAt) {
+		snapshot.Clock = json.RawMessage(current)
+	} else if !oldAt.IsZero() && len(snapshot.Clock) == 0 {
+		// Migration 108 initially seeds a raw plan rather than this wrapper.
+		snapshot.Clock = snapshot.Current
+		if len(snapshot.Clock) == 0 {
+			snapshot.Clock = json.RawMessage(firstNonEmptyString(previous, "{}"))
+		}
+	}
+	snapshot.Current = json.RawMessage(current)
+	encoded, err := json.Marshal(snapshot)
+	return string(encoded), err
 }
 
 // FoldPromisesFromEvents derives the same folds as the materialized path, per

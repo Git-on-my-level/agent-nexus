@@ -91,7 +91,7 @@ func (s *Store) enrichSummaryMetrics(ctx context.Context, inputs map[string]card
 
 // Series are context refs, with authored fallback step status. Presence only
 // needs a scoped definition lookup; metric observations are resolved separately.
-func (s *Store) readSeriesRefFacts(ctx context.Context, refs []string, previews []RefPreview) error {
+func readSeriesRefFacts(ctx context.Context, q briefQueryer, refs []string, previews []RefPreview) error {
 	names := []string{}
 	parsed := map[string]series.Ref{}
 	for _, ref := range refs {
@@ -108,7 +108,7 @@ func (s *Store) readSeriesRefFacts(ctx context.Context, refs []string, previews 
 		return nil
 	}
 	raw, _ := json.Marshal(uniqueSortedStrings(names))
-	rows, err := s.db.QueryContext(ctx, `SELECT name FROM series_definitions WHERE name IN (SELECT value FROM json_each(?))`, string(raw))
+	rows, err := q.QueryContext(ctx, `SELECT name FROM series_definitions WHERE name IN (SELECT value FROM json_each(?))`, string(raw))
 	if err != nil {
 		return err
 	}

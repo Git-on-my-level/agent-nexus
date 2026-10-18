@@ -72,6 +72,32 @@ go test -C core ./internal/series -run '^TestBriefSeries' -count=1
 pnpm -C web-ui exec vitest run tests/unit/briefSeries.test.js
 ```
 
+## Brief resolved plan progress
+
+Migration 108 indexes each plan's references in `brief_plan_refs`, with
+`(ref,card_id)` reverse lookups and `(card_id,ref)` replacement/deletion. Plan
+writes examine at most 200 steps. Referenced-card state, identity, lifecycle or
+source-observation/evidence-key changes queue only indexed dependents, O(log references +
+fanout); board lifecycle changes first seek its cards by board ID. No workspace
+plan scan occurs on writes or reads. Evidence-index insert/delete hooks probe
+the same reverse index for each existing bounded evidence lookup key (under the
+existing source-entry and alias caps). The migration alone backfills all plans.
+
+Maintenance folds at most 200 cards per transaction, resolving at most 200 steps
+per plan through the same scoped ref reader and `plans.Compute` as `plan_state`.
+Distinct references are resolved in batches of 200 using existing ID, handle,
+source URL and evidence lookup indexes. It stores scalar progress counts and a
+bounded provenance snapshot of the current plan and the plan that supplied the
+retained step-change clock; indexed ownership edges keep a private fold
+hidden until replacement, even when its plan is cleared between maintenance
+runs or its refs change without a state change. The snapshot never accumulates
+history: each component admits at most 200 steps. `/brief` reads these counts from its existing 50-row projection; progress
+adds no query, JSON parsing or reference resolution on read. Existing budgets
+remain unchanged. Run `TestBriefPlanRefsUpgradeAndInvalidation`,
+`TestBriefResolvesReferencedStepProgressAndPromises`,
+`TestBriefResolvedProgressRetainsPrivatePlanProvenance`, and the populated brief
+series gate above.
+
 ## Idle streaming
 
 Inbox, event and notification-receipt streams observe SQLite `data_version` on

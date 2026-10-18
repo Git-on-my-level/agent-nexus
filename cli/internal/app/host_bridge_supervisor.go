@@ -56,7 +56,22 @@ func (h *bridgeHealth) snapshot() localBridgeState {
 	return v
 }
 func (a *App) validateBridgeAgent(ctx context.Context, w hostbridge.Workspace, agent hostbridge.Agent) (config.Resolved, error) {
-	cfg, e := a.resolveHostAgent(ctx, bridgeCfg(w, agent))
+	return a.validateBridgeAgentConfig(ctx, w, agent, bridgeCfg(w, agent))
+}
+
+func bridgeJobConfig(w hostbridge.Workspace, agent hostbridge.Agent, job string, timeout time.Duration) config.Resolved {
+	cfg := bridgeCfg(w, agent)
+	if job == "git" {
+		cfg.Timeout = timeout
+		if cfg.Timeout <= 0 {
+			cfg.Timeout = config.DefaultTimeout
+		}
+	}
+	return cfg
+}
+
+func (a *App) validateBridgeAgentConfig(ctx context.Context, w hostbridge.Workspace, agent hostbridge.Agent, cfg config.Resolved) (config.Resolved, error) {
+	cfg, e := a.resolveHostAgent(ctx, cfg)
 	if e != nil {
 		return cfg, e
 	}
@@ -78,7 +93,7 @@ func (a *App) validateBridgeAgent(ctx context.Context, w hostbridge.Workspace, a
 	}
 	return cfg, nil
 }
-func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
+func (a *App) runHostSupervisor(ctx context.Context, requestCfg config.Resolved) (*commandResult, error) {
 	ctx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	root, e := a.hostBridgeRoot()
@@ -221,7 +236,7 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 			health.set(w, agent, job, ready)
 			return e
 		}
-		cfg, e := child.validateBridgeAgent(ctx, w, agent)
+		cfg, e := child.validateBridgeAgentConfig(ctx, w, agent, bridgeJobConfig(w, agent, job, requestCfg.Timeout))
 		if e != nil {
 			health.set(w, agent, job, false)
 			return e
@@ -253,7 +268,11 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-		tick, done := context.WithTimeout(ctx, 5*time.Second)
+		tickTimeout := 5 * time.Second
+		if job == "git" {
+			tickTimeout = max(30*time.Second, 3*cfg.Timeout)
+		}
+		tick, done := context.WithTimeout(ctx, tickTimeout)
 		defer done()
 		roots := map[string]bool{w.ConfigDir: true}
 		for _, dir := range agent.RegistryDirs {

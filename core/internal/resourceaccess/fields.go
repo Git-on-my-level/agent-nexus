@@ -30,6 +30,8 @@ var OwnershipSources = []OwnershipSource{
 	{"work_evidence_index", "work_evidence_alias", "id", []string{"lookup_key"}},
 	{"work_participants", "participant", "id", []string{"request_json"}},
 	{"card_plans", "plan", "card_id", []string{"body_json"}},
+	// Retain plan provenance until its derived progress/promise fold is replaced.
+	{"brief_initiatives", "brief_progress", "plan_provenance_id", []string{"plan_provenance_json"}},
 	{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json", "trigger_text", "thread_title", "failure_reason"}},
 	{"runs", "run", "id", []string{"card_ref", "labels_json", "repository", "branch", "model", "external_id"}},
 	{"derived_inbox_items", "inbox", "id", []string{"data_json", "thread_id", "source_card_id", "source_event_id"}},

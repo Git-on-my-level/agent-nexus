@@ -122,6 +122,10 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 		}
 	}
 	fixtures := map[string]string{"threads": anyStringValue(public["thread_id"]), "boards": anyStringValue(public["board_id"]), "cards": id, "work_metadata": id, "work_observations": anyStringValue(obs["observation"].(map[string]any)["id"]), "documents": anyStringValue(doc["id"]), "topics": anyStringValue(topic.Topic["id"]), "events": anyStringValue(event["id"]), "card_plans": id, "agent_wakeups": "field-wakeup", "work_participants": "field-participant", "runs": "field-run"}
+	if _, err = ws.DB().Exec(`INSERT OR IGNORE INTO brief_initiatives(card_id,computed_at) VALUES(?,'now')`, id); err != nil {
+		t.Fatal(err)
+	}
+	fixtures["brief_initiatives"] = "plan-facts/" + id
 	fixtures["work_evidence_records"] = "1000000"
 	fixtures["work_evidence_index"] = "1000001"
 	for table, parent := range map[string]string{"card_revisions": "card_id", "document_revisions": "document_id"} {

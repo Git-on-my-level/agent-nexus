@@ -183,3 +183,10 @@ Protocol references: [Claude Code](https://code.claude.com/docs/en/hooks),
 [Cursor](https://cursor.com/docs/hooks), checked 2026-10-17. Native support depends
 on a harness version implementing these contracts; unsupported versions use the
 generic adapter or manual context. Enabling hooks never changes inline Codex TOML.
+
+Git capture uses a one-second request timeout inside hooks, under the existing
+fail-open hook deadline. `anx git sync` uses the normal request timeout (10 seconds
+by default, configurable with `--timeout` or `ANX_TIMEOUT`). The bridge Git job
+uses the same normal request timeout; its tick allows at least 30 seconds or
+three request timeouts. Uncertain attempts retain their durable capture record
+for a later sync.

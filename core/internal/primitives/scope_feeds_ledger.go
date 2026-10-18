@@ -46,6 +46,7 @@ func ScopeInboxMutationLedger() []ScopeInboxMutationSource {
 		{"work_evidence_index", "source alias and reference ancestry", false},
 		{"work_participants", "assignment and reference ancestry", false},
 		{"card_plans", "source plan and reference ancestry", false},
+		{"brief_initiatives", "materialized plan provenance and visibility", false},
 		{"agent_wakeups", "notification payload and reference ancestry", false},
 		{"runs", "source run and reference ancestry", false},
 		{"ref_edges", "reference ancestry", false},

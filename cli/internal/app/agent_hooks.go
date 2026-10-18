@@ -389,6 +389,7 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 		return empty, e
 	}
 	if o.event == "git.commit" && o.harness == "git" {
+		cfg.Timeout = time.Second
 		cwd, e := a.workspaceCWD()
 		if e != nil {
 			return empty, e
@@ -460,6 +461,7 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 		return empty, fmt.Errorf("ambiguous installation; pass --installation")
 	}
 	if recipe == "git.capture" {
+		cfg.Timeout = time.Second
 		cfg.As, cfg.BaseURL = install.Agent, install.Workspace
 		cfg.Sources = map[string]string{"base_url": "hook"}
 		_, e = a.syncCapture(ctx, cfg, event.CWD, "", "", "", false)

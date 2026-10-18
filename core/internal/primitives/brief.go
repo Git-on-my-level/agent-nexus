@@ -779,6 +779,7 @@ func (b *briefBuild) answered() ([]map[string]any, bool, error) {
 type briefCardRow struct {
 	briefInitiativeRow
 	handle, title, phase, thread, owner, plan, assignee string
+	progressDone, progressTotal                         int
 	loopAnnotated                                       int
 	loopLastRunAt                                       string
 }
@@ -789,7 +790,7 @@ func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow
 		ownerExpr = `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'')`
 	}
 	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
-	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),COALESCE(c.assignee,''),bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')
+	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')
 	FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id
 	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')) AND `
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
@@ -801,7 +802,7 @@ func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow
 	out := []briefCardRow{}
 	for rows.Next() {
 		var r briefCardRow
-		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan, &r.assignee, &r.loopAnnotated, &r.loopLastRunAt); err != nil {
+		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan, &r.progressDone, &r.progressTotal, &r.assignee, &r.loopAnnotated, &r.loopLastRunAt); err != nil {
 			return nil, err
 		}
 		if b.reader.Visible != nil && !b.reader.Visible(r.thread, r.owner) {
@@ -867,7 +868,7 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 		item := map[string]any{
 			"ref": ref, "title": r.title, "owner": nil, "state": state.State, "placement": briefPlacement(r.phase),
 			"promise": nil, "past_promise_for_seconds": nil, "promise_moves": state.Moves, "last_evidence_at": nil,
-			"progress": briefProgress(r.plan), "blocked_count": counts[r.cardID].blocked, "waiting_on_you_count": counts[r.cardID].waiting,
+			"progress": briefProgress(r.progressDone, r.progressTotal), "blocked_count": counts[r.cardID].blocked, "waiting_on_you_count": counts[r.cardID].waiting,
 			"note": nil, "possibly_moot": possiblyMootJSON(moot[r.cardID]),
 		}
 		if refs := boardCardAssigneeRefs(r.assignee); len(refs) > 0 {
@@ -984,21 +985,11 @@ func briefPlacement(phase string) string {
 	return "backlog"
 }
 
-func briefProgress(raw string) any {
-	if raw == "" {
+func briefProgress(done, total int) any {
+	if total == 0 {
 		return nil
 	}
-	var p plans.Plan
-	if json.Unmarshal([]byte(raw), &p) != nil || len(p.Steps) == 0 {
-		return nil
-	}
-	done := 0
-	for _, s := range p.Steps {
-		if s.Status == "done" {
-			done++
-		}
-	}
-	return map[string]any{"done": done, "total": len(p.Steps)}
+	return map[string]any{"done": done, "total": total}
 }
 
 type briefAskCounts struct{ blocked, waiting int }

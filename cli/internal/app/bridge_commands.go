@@ -95,7 +95,7 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 			r, e := a.runLegacyAnswerBridge(ctx, args[1:], cfg)
 			return r, name, e
 		}
-		r, e := a.runHostSupervisor(ctx)
+		r, e := a.runHostSupervisor(ctx, cfg)
 		return r, name, e
 	case "install":
 		r, e := a.installHostBridge(ctx, args[1:], cfg)

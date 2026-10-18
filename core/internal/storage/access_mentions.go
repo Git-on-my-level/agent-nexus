@@ -70,10 +70,10 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 
 	type identitySource struct{ table, id, kind, resourceID, refs string }
 	var sources []identitySource
-	// Numeric evidence projection IDs are internal, never navigable identities.
+	// Evidence and brief projection IDs are internal, never navigable identities.
 	// Their tables still invalidate request snapshots below.
 	for _, s := range resourceaccess.OwnershipSources {
-		if s.Kind == "work_evidence_record" || s.Kind == "work_evidence_alias" {
+		if s.Kind == "work_evidence_record" || s.Kind == "work_evidence_alias" || s.Kind == "brief_progress" {
 			continue
 		}
 		refs := "r." + s.ID
