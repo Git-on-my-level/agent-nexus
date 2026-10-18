@@ -112,3 +112,37 @@ func validateObservationAliases(observation map[string]any) error {
 	}
 	return nil
 }
+
+// This internal watermark is written with canonical source changes. It is not
+// a client annotation and is not projected into work responses.
+const sourceEvidenceKey = "_anx_source_evidence_at"
+
+// Retain the ownership inputs behind the watermark after unlinking. The
+// publication inventory gives these identities the same treatment as source_refs.
+const sourceEvidenceRefsKey = "_anx_source_evidence_refs"
+
+// sourceEvidenceChanged compares generic structured evidence in O(input) at
+// write time. Poll timestamps, order and removals alone are not progress.
+func sourceEvidenceChanged(before, after any) bool {
+	entries := func(raw any) []map[string]any {
+		data, _ := json.Marshal(raw)
+		var out []map[string]any
+		_ = json.Unmarshal(data, &out)
+		return out
+	}
+	signature := func(entry map[string]any) string {
+		entry = workClone(entry)
+		delete(entry, "observed_at")
+		return workJSON(entry)
+	}
+	prior := map[string]bool{}
+	for _, entry := range entries(before) {
+		prior[signature(entry)] = true
+	}
+	for _, entry := range entries(after) {
+		if !prior[signature(entry)] {
+			return true
+		}
+	}
+	return false
+}

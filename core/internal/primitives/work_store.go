@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"agent-nexus-core/internal/handles"
+	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/workprojection"
 	"context"
@@ -79,6 +80,24 @@ type WorkPage struct {
 
 func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID string, m map[string]any) error {
 	source := workMap(m["source"])
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	delete(m, sourceEvidenceKey)
+	delete(m, sourceEvidenceRefsKey)
+	if sourceEvidenceChanged(nil, m["source_refs"]) {
+		m[sourceEvidenceKey] = now
+		m[sourceEvidenceRefsKey] = m["source_refs"]
+	}
+	if raw, ok := m["plan"]; ok {
+		p, err := workCreatePlan(raw)
+		if err != nil {
+			return err
+		}
+		data, _ := json.Marshal(p)
+		if _, err = tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?)`, cardID, string(data), now); err != nil {
+			return err
+		}
+		m["plan"] = p
+	}
 	if m["cadence"] != nil {
 		m["cadence_set_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}
@@ -271,6 +290,15 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	delete(m, "actor_id")
 	delete(m, "request_key")
 	delete(m, "board_ref")
+	delete(m, sourceEvidenceKey)
+	delete(m, sourceEvidenceRefsKey)
+	if raw, ok := m["plan"]; ok {
+		p, err := workCreatePlan(raw)
+		if err != nil {
+			return nil, err
+		}
+		m["plan"] = p
+	}
 	if err := validateWorkLocal(m); err != nil {
 		return nil, err
 	}
@@ -1066,6 +1094,7 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	if v != version {
 		return nil, ErrConflict
 	}
+	sourceChanged := sourceEvidenceChanged(m["source_refs"], patch["source_refs"])
 	for k, val := range patch {
 		m[k] = val
 	}
@@ -1089,7 +1118,15 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 		}
 	}()
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), now, actor, id, version)
+	// Preserve concurrent observation progress: observations do not bump the
+	// annotation version, and must not be overwritten by this earlier snapshot.
+	var evidenceAt, evidenceRefs any
+	if sourceChanged {
+		evidenceAt = time.Now().UTC().Format(time.RFC3339Nano)
+		raw, _ := json.Marshal(m["source_refs"])
+		evidenceRefs = string(raw)
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=json_set(?, '$._anx_source_evidence_at', COALESCE(?,json_extract(metadata_json,'$._anx_source_evidence_at')), '$._anx_source_evidence_refs', json(COALESCE(?,json_extract(metadata_json,'$._anx_source_evidence_refs'),'null'))),version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), evidenceAt, evidenceRefs, now, actor, id, version)
 	if err != nil {
 		return nil, err
 	}
@@ -1103,6 +1140,7 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	if err = insertWorkEvent(ctx, tx, actor, w, "card_updated", "Work annotations updated", map[string]any{"changed_fields": []string{"work_annotations"}, "patch": patch}); err != nil {
 		return nil, err
 	}
+
 	if err = tx.Commit(); err != nil {
 		return nil, &MutationOutcomeUnknown{Cause: err}
 	}
@@ -1392,10 +1430,13 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 			if err = json.Unmarshal([]byte(priorRaw), &prior); err != nil {
 				return nil, err
 			}
-			materialChange = workJSON(workMap(prior["facts"])) != workJSON(facts) || workString(prior["meaningful_progress_at"]) != workString(o["meaningful_progress_at"])
+			materialChange = workJSON(workMap(prior["facts"])) != workJSON(facts) || workString(prior["meaningful_progress_at"]) != workString(o["meaningful_progress_at"]) || sourceEvidenceChanged(prior["evidence"], o["evidence"])
 		}
 	}
 	if materialChange {
+		if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=json_set(json_remove(metadata_json,'$._anx_source_evidence_refs'),'$._anx_source_evidence_at',?) WHERE card_id=?`, time.Now().UTC().Format(time.RFC3339Nano), id); err != nil {
+			return nil, err
+		}
 		if err = insertWorkEvent(ctx, tx, actor, card, "card_updated", "Source observation changed", map[string]any{"changed_fields": []string{"source_observation"}, "observation_id": o["id"], "source_revision": o["source_revision"], "knowledge": "reported", "facts": facts}); err != nil {
 			return nil, err
 		}
@@ -1861,4 +1902,26 @@ func (s *Store) workSnapshots(ctx context.Context, refs []string, cardLifecycleO
 		}
 	}
 	return out, nil
+}
+
+// workCreatePlan validates before board creation; the same value is installed
+// inside the card transaction, rather than left as an inert annotation.
+func workCreatePlan(raw any) (plans.Plan, error) {
+	var p plans.Plan
+	data, err := json.Marshal(raw)
+	if err == nil {
+		err = json.Unmarshal(data, &p)
+	}
+	if err == nil {
+		err = plans.Validate(p)
+	}
+	if err != nil {
+		return p, workInvalid("plan: %s; use anx plan set <card> --from-file <path> for a later plan", err)
+	}
+	for i := range p.Steps {
+		if p.Steps[i].After == nil {
+			p.Steps[i].After = []string{}
+		}
+	}
+	return p, nil
 }

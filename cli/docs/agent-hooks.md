@@ -53,8 +53,13 @@ schema_version, context, nullable card_ref/as_of, stale. Native adapters emit
 only their context-injection protocol. Hooks fail open within 1.5 seconds, with
 sanitized stderr diagnostics; no feature enabled means no auth/network work.
 Maximum input is 64 KiB, output context 6 KiB. Reads compose the existing scoped work, ten-observation page and plan/promise
-GETs concurrently under one budget. Unused refresh status is not requested. Missing newer context is
-visible as an empty result, never fabricated task progress.
+GETs concurrently under one budget. Unused refresh status is not requested.
+When card resolution yields no target, one authenticated `GET /brief` supplies
+up to five answers, waiting asks and the agent's own initiatives against their
+promises, plus a next command. This fallback has no stale cache and retains the
+same deadline and 6 KiB bound. A missing or denied explicit card still fails
+open with empty context. Every context restoration reminds the session to reload
+`anx-participant`, because harness events do not report a reliable skill version.
 
 Offline cache reuse is off. `enable --allow-stale` allows a marked owner-only
 cache for at most five minutes, only while the local credential is unexpired.

@@ -143,7 +143,17 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	var warnings []output.Warning
 	if !parsed.nextSet {
 		warnings = append(warnings, noteWarning("note_no_next", "no --next; a card renews by noting its next promise", []string{"anx", "note", cardRef, "--next", "<when>", "<what>"}))
+		if prev, ok := a.previousOwnPromise(ctx, cfg, target.ThreadID); ok {
+			argv := []string{"anx", "note", cardRef, "--next", prev.at.Format(time.RFC3339)}
+			if prev.what != "" {
+				argv = append(argv, prev.what)
+			}
+			warnings = append(warnings, noteWarning("note_clears_promise", fmt.Sprintf("this note clears your promise %q due %s; carry it forward with --next", prev.what, prev.at.Format(time.RFC3339)), argv))
+		}
 	} else {
+		if len(stringList(card["assignee_refs"])) == 0 && anyString(card["assignee"]) == "" && anyString(card["owner"]) == "" {
+			warnings = append(warnings, noteWarning("note_promise_unowned", "promise set on an unowned card; nobody will be prompted to renew it", []string{"anx", "work", "start", cardRef}))
+		}
 		if parsed.nextAt.Sub(a.clockNow()) > promiseHorizon {
 			warnings = append(warnings, noteWarning("note_beyond_horizon", fmt.Sprintf("--next %s is beyond the 2-day horizon; promise a nearer checkpoint", parsed.nextWhen), []string{"anx", "note", cardRef, "--next", "2d", "<checkpoint>"}))
 		}
@@ -267,41 +277,52 @@ func noteWarning(id, message string, argv []string) output.Warning {
 	return output.Warning{Code: id, Message: message, Details: map[string]any{"suggest": argv}}
 }
 
-// previousOwnNext reads at most one bounded page of the caller's own notes on
-// the card thread and returns the resolved `next` of the newest one carrying
-// a promise.
+// ownPromise is the caller's latest note promise. A newer note without next
+// clears it; the warning read never searches back through older promises.
+type ownPromise struct {
+	at   time.Time
+	what string
+}
+
 func (a *App) previousOwnNext(ctx context.Context, cfg config.Resolved, threadID string) (time.Time, bool) {
+	p, ok := a.previousOwnPromise(ctx, cfg, threadID)
+	return p.at, ok
+}
+
+func (a *App) previousOwnPromise(ctx context.Context, cfg config.Resolved, threadID string) (ownPromise, bool) {
 	actor := strings.TrimSpace(cfg.ActorID)
 	if actor == "" || strings.TrimSpace(threadID) == "" {
-		return time.Time{}, false
+		return ownPromise{}, false
 	}
-	path := "/events?thread_id=" + url.QueryEscape(threadID) + "&type=message_posted&actor_id=" + url.QueryEscape(actor) + "&limit=50"
+	path := "/events?thread_id=" + url.QueryEscape(threadID) + "&type=message_posted&limit=50"
 	result, err := a.invokeRawJSON(ctx, cfg, "note previous", "GET", path, nil)
 	if err != nil {
-		return time.Time{}, false
+		return ownPromise{}, false
 	}
-	var newestTS time.Time
-	var newestAt time.Time
-	found := false
-	for _, raw := range asSlice(commandResultBody(result)["events"]) {
-		ev := asMap(raw)
-		next := asMap(asMap(ev["payload"])["next"])
-		if next == nil {
-			continue
-		}
-		ts, tsErr := time.Parse(time.RFC3339Nano, anyString(ev["ts"]))
-		if tsErr != nil {
-			continue
-		}
-		at, ok := parsePromiseWhen(anyString(next["at"]), ts)
-		if !ok {
-			continue
-		}
-		if !found || ts.After(newestTS) {
-			newestTS, newestAt, found = ts, at, true
+	events := asSlice(commandResultBody(result)["events"])
+	if len(events) == 0 {
+		return ownPromise{}, false
+	}
+	// Bound candidates before filtering authors, matching core's 50-note fold.
+	// An actor predicate could scan a busy thread looking for one old note.
+	var ev map[string]any
+	for _, raw := range events[:min(50, len(events))] {
+		candidate := asMap(raw)
+		if strings.TrimSpace(anyString(candidate["actor_id"])) == actor {
+			ev = candidate
+			break
 		}
 	}
-	return newestAt, found
+	if ev == nil {
+		return ownPromise{}, false
+	}
+	next := asMap(asMap(ev["payload"])["next"])
+	ts, err := time.Parse(time.RFC3339Nano, anyString(ev["ts"]))
+	if err != nil {
+		return ownPromise{}, false
+	}
+	at, ok := parsePromiseWhen(anyString(next["at"]), ts)
+	return ownPromise{at: at, what: anyString(next["what"])}, ok
 }
 
 func doneUsage() string {

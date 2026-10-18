@@ -482,8 +482,23 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 		return empty, e
 	}
 	card, e := integrations.ResolveHookCard(s, install, event, auth.BaseURL, auth.ActorID)
-	if e != nil || card == "" {
+	if e != nil {
 		return empty, e
+	}
+	if card == "" {
+		auth.HostID = "" // The installed principal is already authenticated.
+		readCtx, cancel := context.WithTimeout(ctx, 1100*time.Millisecond)
+		defer cancel()
+		r, err := local.invokeRawJSON(readCtx, auth, "hook brief", "GET", "/brief", nil)
+		if err != nil {
+			return empty, err
+		}
+		body := commandResultBody(r)
+		if anyString(body["schema"]) != "brief.v1" {
+			return empty, errnorm.Local("invalid_response", "hook brief returned no brief.v1")
+		}
+		at := a.clockNow().UTC().Format(time.RFC3339Nano)
+		return integrations.HookBrief{Version: 1, Context: renderHookOrient(body), AsOf: &at}, nil
 	}
 	key := integrations.Digest(auth.BaseURL + "\x00" + auth.HostID + "\x00" + auth.ActorID + "\x00" + card)
 	cache := filepath.Join(dir, "hooks", "cache", key+".json")
@@ -501,6 +516,9 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 				age := a.clockNow().Sub(at)
 				if err == nil && age >= 0 && age <= 5*time.Minute {
 					b.Stale = true
+					if !strings.Contains(b.Context, hookSkillReminder) {
+						b.Context = hookSkillReminder + "\n" + b.Context
+					}
 					b.Context = truncateHook("STALE as_of="+*b.AsOf+"\n"+b.Context, 6<<10)
 					return b, nil
 				}
@@ -583,7 +601,7 @@ func uncertainHookError(e error) bool {
 }
 func renderHookContext(card string, body map[string]any) string {
 	w := asMap(body["work"])
-	lines := []string{"ANX context " + card}
+	lines := []string{hookSkillReminder, "ANX context " + card}
 	for _, k := range []string{"title", "phase", "summary", "definition_of_done", "promise", "next", "plan"} {
 		if v, ok := w[k]; ok {
 			b, _ := json.Marshal(v)
@@ -615,4 +633,38 @@ func truncateHook(s string, n int) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// Sessions do not report a reliable skill contract version. Remind them on
+// every context restoration, without reading harness-private skill files.
+const hookSkillReminder = "Reload the anx-participant skill before continuing; its installed contract may have changed."
+
+func renderHookOrient(brief map[string]any) string {
+	compact := map[string]any{"principal": brief["principal"]}
+	principal := asMap(brief["principal"])
+	for _, section := range []string{"answered_for_you", "your_asks", "initiatives"} {
+		items := []any{}
+		for _, raw := range asSlice(brief[section]) {
+			item := asMap(raw)
+			if section == "initiatives" && !orientInitiativeIsYours(item, principal) {
+				continue
+			}
+			items = append(items, item)
+			if len(items) == 5 {
+				break
+			}
+		}
+		compact[section] = items
+	}
+	text := renderOrientText(compact, "")
+	// Keep every section useful even when an answer or title is large.
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	next := lines[len(lines)-1]
+	for i := range lines {
+		lines[i] = truncateHook(lines[i], 320)
+	}
+	text = strings.Join(lines[:len(lines)-1], "\n")
+	prefix := "ANX brief (up to 5 per section; anx orient for more)\n" + hookSkillReminder + "\n"
+	suffix := "\n" + truncateHook(next, 512)
+	return prefix + truncateHook(text, (6<<10)-len(prefix)-len(suffix)) + suffix
 }

@@ -322,9 +322,10 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 		if err = json.Unmarshal([]byte(observation), &o); err != nil {
 			return nil, nil, nil, err
 		}
+		input.Observed = latestCardActivity(workString(m[sourceEvidenceKey]), workString(o["meaningful_progress_at"]))
 		input.Source = workClone(workMap(m["source"]))
 		if authority := workString(input.Source["authority"]); authority != "" && authority != "nexus" {
-			input.Observed, _ = time.Parse(time.RFC3339Nano, at)
+			input.Observed = latestCardActivity(workString(m[sourceEvidenceKey]), workString(o["meaningful_progress_at"]), at)
 			input.Phase = workString(m["phase"])
 			input.Owner = workString(m["owner"])
 			if value, ok := workMap(o["facts"])["phase"]; ok {

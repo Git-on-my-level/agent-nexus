@@ -13,7 +13,7 @@ import (
 // by OwnershipSources; this distinction only affects external-key inheritance.
 // Unknown fields, including extensions of a source entry, remain references.
 var ExternalKeyPublications = map[string][]string{
-	"work_metadata":        {"metadata_json.source", "metadata_json.source_refs.*"},
+	"work_metadata":        {"metadata_json.source", "metadata_json.source_refs.*", "metadata_json._anx_source_evidence_refs.*"},
 	"work_observation":     {"body_json.facts", "body_json.evidence.*"},
 	"work_evidence_record": {"evidence_json"},
 }

@@ -109,3 +109,20 @@ func TestParseWhen(t *testing.T) {
 		}
 	}
 }
+
+func TestFoldPromiseLatestNoteClearsOnlyItsAuthor(t *testing.T) {
+	in := PromiseInput{Notes: []PromiseNote{
+		{At: day(0), Author: "one", NextAt: day(2)},
+		{At: day(0), Author: "two", NextAt: day(3)},
+		{At: day(1), Author: "one"},
+	}}
+	f := FoldPromise(in)
+	if f.Promise == nil || f.Promise.Author != "two" || !f.LastEvidenceAt.IsZero() {
+		t.Fatalf("latest per principal or evidence semantics changed: %#v", f)
+	}
+	in.Notes = append(in.Notes, PromiseNote{At: day(2), Author: "one", NextAt: day(4)})
+	f = FoldPromise(in)
+	if f.Moves != 0 {
+		t.Fatalf("cleared promise counted as moved: %#v", f)
+	}
+}

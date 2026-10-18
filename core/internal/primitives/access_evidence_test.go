@@ -114,3 +114,125 @@ func TestSourceRefsAndEvidenceProjectionsUseCentralOwnership(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateWorkPlanInheritsPrivacyAtomically(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	privateBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Private"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", anyStringValue(privateBoard["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	private, err := s.CreateWork(ctx, "owner", anyStringValue(privateBoard["id"]), map[string]any{"title": "Confidential source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := map[string]any{"title": "Inherited private plan", "plan": map[string]any{"steps": []any{map[string]any{"id": "verify", "title": "Confidential step", "ref": private["ref"]}}}}
+	created, err := s.CreateWork(WithAccessScope(ctx, AccessScope{ActorID: "owner"}), "owner", anyStringValue(publicBoard["id"]), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.RefreshBriefInitiatives(ctx, 200); err != nil {
+		t.Fatal(err)
+	}
+	for _, actor := range []string{"stranger", "unauthorized-agent"} {
+		scope := WithAccessScope(ctx, AccessScope{ActorID: actor})
+		if _, err = s.GetWork(scope, anyStringValue(created["id"])); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s read private create plan: %v", actor, err)
+		}
+		brief, err := s.Brief(scope, BriefReader{ActorID: actor, Kind: "agent"}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range brief["initiatives"].([]map[string]any) {
+			if item["ref"] == created["ref"] {
+				t.Fatalf("%s leaked private initiative: %#v", actor, item)
+			}
+		}
+		if _, err = s.CreateWork(scope, actor, anyStringValue(publicBoard["id"]), input); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s created plan with hidden source: %v", actor, err)
+		}
+	}
+	var count int
+	if err = ws.DB().QueryRow(`SELECT count(*) FROM cards WHERE title='Inherited private plan'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("rejected plans left partial cards: %d %v", count, err)
+	}
+}
+
+func TestSourceEvidenceWatermarkRetainsPrivateProvenanceAfterUnlink(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	privateBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Private contributor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", anyStringValue(privateBoard["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	private, err := s.CreateWork(ctx, "owner", anyStringValue(privateBoard["id"]), map[string]any{"title": "Private source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := []any{map[string]any{"authority": "tracker", "connection_id": "fixture", "native_id": "private", "extension": map[string]any{"ref": private["ref"]}}}
+	owner := WithAccessScope(ctx, AccessScope{ActorID: "owner"})
+	for _, onCreate := range []bool{true, false} {
+		input := map[string]any{"title": "Evidence provenance"}
+		if onCreate {
+			input["source_refs"] = evidence
+		}
+		w, err := s.CreateWork(owner, "owner", anyStringValue(publicBoard["id"]), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !onCreate {
+			w, err = s.PatchWork(owner, "owner", anyStringValue(w["id"]), w["version"].(int64), map[string]any{"source_refs": evidence})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		w, err = s.PatchWork(owner, "owner", anyStringValue(w["id"]), w["version"].(int64), map[string]any{"source_refs": []any{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.RefreshBriefInitiatives(ctx, 200); err != nil {
+			t.Fatal(err)
+		}
+		for _, actor := range []string{"stranger", "unauthorized-agent"} {
+			scope := WithAccessScope(ctx, AccessScope{ActorID: actor})
+			if _, err = s.GetWork(scope, anyStringValue(w["id"])); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("%s read private watermark onCreate=%v: %v", actor, onCreate, err)
+			}
+			brief, err := s.Brief(scope, BriefReader{ActorID: actor, Kind: "agent"}, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range brief["initiatives"].([]map[string]any) {
+				if item["ref"] == w["ref"] {
+					t.Fatalf("private evidence time leaked: %#v", item)
+				}
+			}
+		}
+	}
+}

@@ -5144,7 +5144,7 @@ Inputs:
   - body `next_actor` (string)
   - body `owner` (string)
   - body `phase` (string)
-  - body `plan` (any)
+  - body `plan.steps` (list<any>)
   - body `priority` (string)
   - body `project_ref` (string)
   - body `related_refs` (list<any>)

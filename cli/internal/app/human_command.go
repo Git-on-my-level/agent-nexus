@@ -536,6 +536,13 @@ func (a *App) resolveHumanAttentionSubject(ctx context.Context, cfg config.Resol
 		body, err = a.fetchTopicBody(ctx, cfg, subjectRef)
 	case "card":
 		body, err = a.fetchCardBody(ctx, cfg, subjectRef)
+		if isRemoteNotFound(err) {
+			normalized := errnorm.Normalize(err)
+			normalized.Message = "asks attach to a card in the same workspace; choose a same-workspace --subject-ref card:<slug>, or rerun with --workspace <alias> for the card's workspace"
+			errnorm.AnnotateDetail(normalized, "requested_ref", subjectRef)
+			errnorm.AnnotateDetail(normalized, "ask_subject", "card")
+			err = normalized
+		}
 	case "document":
 		body, err = a.fetchDocumentBody(ctx, cfg, subjectRef)
 	default:

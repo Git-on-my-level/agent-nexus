@@ -58,7 +58,7 @@ func (a *App) currentCardRef(ctx context.Context, cfg config.Resolved) (string, 
 	}
 	ref := strings.TrimSpace(anyString(agent["current_card_ref"]))
 	if ref == "" {
-		return "", errnorm.WithDetails(errnorm.Usage("no_current_task", "no current card; run anx orient, then anx work start <card-ref>"), map[string]any{"next_argv": []string{"anx", "orient"}})
+		return "", errnorm.WithDetails(errnorm.Usage("no_current_task", "no current card in this workspace; choose a same-workspace card or rerun with --workspace <alias>; run anx orient, then anx work start <card-ref>"), map[string]any{"next_argv": []string{"anx", "orient"}})
 	}
 	return ref, nil
 }

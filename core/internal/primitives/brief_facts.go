@@ -392,7 +392,7 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 	encoded, _ := json.Marshal(ids)
 	rows, err := q.QueryContext(ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key,COALESCE(c.archived_at,''),COALESCE(c.trashed_at,''),`+effectiveCardDueSQL+`,
 		COALESCE(json_extract(m.metadata_json,'$.wake_condition'),''),COALESCE(p.body_json,''),COALESCE(p.updated_at,''),
-		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'')
+		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(json_extract(m.metadata_json,'$._anx_source_evidence_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'')
 		FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id
 		LEFT JOIN work_observations o ON o.id=m.latest_observation_id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
 		WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
@@ -400,12 +400,12 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 		return nil, err
 	}
 	type cardFacts struct {
-		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sig, stepChangeAt string
+		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sourceEvidenceAt, sig, stepChangeAt string
 	}
 	facts := []cardFacts{}
 	for rows.Next() {
 		var f cardFacts
-		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sig, &f.stepChangeAt); err != nil {
+		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sourceEvidenceAt, &f.sig, &f.stepChangeAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -456,7 +456,7 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 		if at, e := time.Parse(time.RFC3339Nano, stepChangeAt); e == nil {
 			in.StepChanges = []time.Time{at}
 		}
-		if at, e := time.Parse(time.RFC3339Nano, f.progressAt); e == nil {
+		if at := latestCardActivity(f.progressAt, f.sourceEvidenceAt); !at.IsZero() {
 			in.Observations = []time.Time{at}
 		}
 		out = append(out, briefCardInput{id: f.id, open: open, in: in, sig: sig, stepChangeAt: stepChangeAt})
