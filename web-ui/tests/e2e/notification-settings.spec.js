@@ -73,7 +73,9 @@ for (const viewport of AUDIT_VIEWPORTS.filter(
       await expect(toggle).toBeChecked();
       await expect(fieldset.getByRole("textbox")).toHaveCount(0);
       await expect(
-        fieldset.getByRole("link", { name: "Manage where this reaches you" }),
+        fieldset.getByRole("link", {
+          name: "Change where notifications reach you",
+        }),
       ).toHaveAttribute(
         "href",
         "https://app.example.com/account/notifications",

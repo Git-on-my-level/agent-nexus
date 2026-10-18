@@ -253,8 +253,8 @@
                   <span>
                     Send notifications from this workspace
                     <span class="mt-0.5 block text-micro text-fg-muted">
-                      On by default, with nothing to set up here. Turn it off to
-                      stop this workspace's notifications on this channel.
+                      On by default. Turn it off and this workspace stops
+                      notifying you here; your other workspaces are unaffected.
                     </span>
                   </span>
                 </label>
@@ -263,7 +263,8 @@
                     class="mt-3 inline-block text-micro text-accent-text hover:underline"
                     href={row.manageUrl}
                     target="_blank"
-                    rel="noopener noreferrer">Manage where this reaches you</a
+                    rel="noopener noreferrer"
+                    >Change where notifications reach you</a
                   >
                 {/if}
               </fieldset>
