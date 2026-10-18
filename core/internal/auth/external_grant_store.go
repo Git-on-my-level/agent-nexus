@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/delivery"
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -247,6 +249,20 @@ func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, id
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return Agent{}, TokenBundle{}, ErrAgentRevoked
+	}
+
+	if identity.Delivers != nil {
+		// The trusted issuer declares the one channel this agent delivers.
+		// A revoked agent never reaches here, so revocation stays final.
+		if err := delivery.UpsertGrantDeclarationTx(resourceaccess.WithoutPolicy(ctx), tx, agentID, issuer, *identity.Delivers, nowText); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			if errors.Is(err, delivery.ErrInvalid) || errors.Is(err, delivery.ErrDeclarationConflict) {
+				return Agent{}, TokenBundle{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
+			}
+			return Agent{}, TokenBundle{}, fmt.Errorf("declare grant delivery channel: %w", err)
+		}
 	}
 
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)

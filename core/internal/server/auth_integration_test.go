@@ -1119,6 +1119,7 @@ type workspaceManagedGrantTokenOptions struct {
 	TTL                  time.Duration
 	OmitExp              bool
 	OmitJTI              bool
+	Delivers             *delivery.GrantDeclaration
 }
 
 func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audience string) *workspaceHumanGrantTestFixture {
@@ -1355,6 +1356,7 @@ func (f *workspaceHumanGrantTestFixture) signManagedAgentGrantAssertion(t *testi
 		ExternalSubject:      strings.TrimSpace(options.ExternalSubject),
 		Scope:                scope,
 		GrantType:            grantType,
+		Delivers:             options.Delivers,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    f.issuer,
 			Subject:   subject,

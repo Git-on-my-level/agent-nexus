@@ -1263,7 +1263,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `flags`
-- Why: Record delivered or failed for a delivery claimed by this adapter.
+- Why: Record delivered, failed or skipped for a delivery claimed by this adapter.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns JSON with the named delivery objects.

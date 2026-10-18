@@ -101,6 +101,9 @@ func (e *Escalator) Step(ctx context.Context, now time.Time) error {
 	if err := e.normalize(ctx); err != nil {
 		return err
 	}
+	if err := e.Store.RefreshReadability(ctx, now, e.CanRead); err != nil {
+		return fmt.Errorf("refresh readability: %w", err)
+	}
 	if err := e.escalate(ctx, now); err != nil {
 		return err
 	}
@@ -142,21 +145,54 @@ func (e *Escalator) normalize(ctx context.Context) error {
 
 type recipient struct{ principal, channel string }
 
-func (e *Escalator) recipients(ctx context.Context, column string) ([]recipient, error) {
+// recipients lists who receives kind on which channel, at most recipientCap:
+// saved addresses on settings-addressed channels, then every human for whom
+// a principal-addressed channel is on. A channel that does not accept kind
+// gets nothing.
+func (e *Escalator) recipients(ctx context.Context, kind string) ([]recipient, error) {
+	column := "push_enabled"
+	if kind == KindDigest {
+		column = "digest_enabled"
+	}
+	opts, err := e.Store.ChannelOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := e.Store.DB.QueryContext(ctx, `SELECT principal_id, channel FROM notification_channel_settings WHERE `+column+`=1 AND address<>'' ORDER BY channel, principal_id LIMIT ?`, recipientCap)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := []recipient{}
 	for rows.Next() {
 		var r recipient
 		if err := rows.Scan(&r.principal, &r.channel); err != nil {
+			rows.Close()
 			return nil, err
+		}
+		if o, ok := opts[r.channel]; ok && (o.Addressing == AddressingPrincipal || !o.Accepts(kind)) {
+			continue
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, channel := range sortedChannels(opts) {
+		o := opts[channel]
+		if o.Addressing != AddressingPrincipal || !o.Accepts(kind) {
+			continue
+		}
+		ids, err := principalRecipients(ctx, e.Store.DB, channel, "s."+column+"=1", recipientCap-len(out))
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			out = append(out, recipient{principal: id, channel: channel})
+		}
+	}
+	return out, nil
 }
 
 type dueAsk struct {
@@ -202,7 +238,7 @@ func (e *Escalator) escalate(ctx context.Context, now time.Time) error {
 		mode := EscalationMode(a.askTS, a.decideBy, a.blocks)
 		if mode == EscalationPush {
 			if pushRecipients == nil {
-				if pushRecipients, err = e.recipients(ctx, "push_enabled"); err != nil {
+				if pushRecipients, err = e.recipients(ctx, KindPush); err != nil {
 					return err
 				}
 			}
@@ -253,12 +289,10 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 		return nil
 	}
 	day := now.Format("2006-01-02")
-	recipients, err := e.recipients(ctx, "digest_enabled")
+	recipients, err := e.recipients(ctx, KindDigest)
 	if err != nil || len(recipients) == 0 {
 		return err
 	}
-	var ledger []deadlineFact
-	loaded := false
 	readable := map[string][]dueAsk{}
 	for _, r := range recipients {
 		key := "digest:" + r.principal + ":" + r.channel + ":" + day
@@ -266,12 +300,6 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			continue
 		} else if err != ErrNotFound {
 			return err
-		}
-		if !loaded {
-			if ledger, err = loadDeadlineFacts(ctx, e.Store.DB); err != nil {
-				return err
-			}
-			loaded = true
 		}
 		overdue, ok := readable[r.principal]
 		if !ok {
@@ -292,9 +320,10 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			// Nothing overdue for this recipient today; no message.
 			continue
 		}
-		open, _, _ := readableDeadlineCounts(ledger, now, func(id string) bool {
-			return e.CanRead != nil && e.CanRead(ctx, r.principal, id)
-		})
+		open, _, _, _, err := e.Store.principalCounts(ctx, r.principal, now)
+		if err != nil {
+			return err
+		}
 		if _, _, err := e.Store.Enqueue(ctx, Request{
 			IdempotencyKey: key,
 			PrincipalID:    r.principal,
@@ -393,8 +422,17 @@ func (e *Escalator) logf(format string, args ...any) {
 // AttentionSummary is the heartbeat's due counts and earliest decide_by:
 // counts and times only, never titles or refs. The top-level totals are the
 // workspace ledger, for the control plane. Each principal's due, overdue and
-// earliest_decide_by count only asks that principal can read, and are never
-// a copy of the workspace totals.
+// earliest_decide_by count only asks that principal can read, read from the
+// materialized readability (RefreshReadability), never computed here: the
+// cost is a fixed number of index-only aggregate queries per notified
+// principal (at most recipientCap), uncapped and exact. counts_complete is
+// false while that principal's readability is still being filled in.
+//
+// Principals are those who receive notifications on some channel, with the
+// channels that reach them; a human signed in through an external identity
+// grant carries that grant's issuer and subject so the publisher's receiver
+// can tell whose counts these are. pending_deliveries counts deliveries an
+// adapter could claim now, per declared channel.
 func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]any, error) {
 	var open, overdue int
 	var earliest sql.NullString
@@ -412,107 +450,122 @@ func (s Store) AttentionSummary(ctx context.Context, now time.Time) (map[string]
 	if earliest.Valid && earliest.String != "" {
 		earliestValue = earliest.String
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT principal_id FROM notification_channel_settings WHERE address<>'' AND (push_enabled=1 OR digest_enabled=1) ORDER BY principal_id LIMIT ?`, recipientCap)
+	notifiedList, err := s.notifiedPrincipals(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	pending, err := s.pendingByChannel(ctx, now)
+	if err != nil {
+		return nil, err
+	}
 	principals := []map[string]any{}
-	var ledger []deadlineFact
-	ledgerLoaded := false
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+	for _, p := range notifiedList {
+		due, principalOverdue, principalEarliest, complete, err := s.principalCounts(ctx, p.id, now)
+		if err != nil {
 			return nil, err
 		}
-		due, principalOverdue := 0, 0
-		var principalEarliest any
-		if s.CanRead != nil {
-			if !ledgerLoaded {
-				if ledger, err = loadDeadlineFacts(ctx, s.DB); err != nil {
-					return nil, err
-				}
-				ledgerLoaded = true
-			}
-			due, principalOverdue, principalEarliest = readableDeadlineCounts(ledger, now, func(askID string) bool {
-				return s.CanRead(ctx, id, askID)
-			})
+		entry := map[string]any{"principal_id": p.id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest, "channels": p.channels, "counts_complete": complete}
+		if _, identity, err := activeHuman(ctx, s.DB, p.id); err != nil {
+			return nil, err
+		} else if identity != nil {
+			entry["external_issuer"] = identity.ExternalIssuer
+			entry["external_subject"] = identity.ExternalSubject
 		}
-		principals = append(principals, map[string]any{"principal_id": id, "due": due, "overdue": principalOverdue, "earliest_decide_by": principalEarliest})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		principals = append(principals, entry)
 	}
 	return map[string]any{
 		"earliest_decide_by": earliestValue,
 		"open_decisions":     open,
 		"overdue_decisions":  overdue,
 		"principals":         principals,
+		"pending_deliveries": pending,
 		"generated_at":       stamp(now),
 	}, nil
 }
 
-type deadlineFact struct {
-	id        string
-	decideBy  string
-	escalated string
-}
-
-// loadDeadlineFacts reads the open-ask ledger in primary-key pages. It does
-// not stop after a fixed window of rows, so a run of unreadable asks cannot
-// hide a later readable one from a count.
-func loadDeadlineFacts(ctx context.Context, db *sql.DB) ([]deadlineFact, error) {
-	out := []deadlineFact{}
-	after := ""
-	for {
-		rows, err := db.QueryContext(ctx, `SELECT request_event_id, COALESCE(decide_by,''), COALESCE(escalated_at,'') FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?`, after, deadlinePage)
-		if err != nil {
-			return nil, err
-		}
-		n := 0
-		for rows.Next() {
-			var f deadlineFact
-			if err := rows.Scan(&f.id, &f.decideBy, &f.escalated); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			out = append(out, f)
-			after = f.id
-			n++
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		if n < deadlinePage {
-			return out, nil
-		}
+// notifiedPrincipals is everyone with at least one channel on, with those
+// channels: a saved address with a toggle on for a kind the channel accepts,
+// or a principal-addressed channel they have not turned off. Sorted, at most
+// recipientCap principals.
+func (s Store) notifiedPrincipals(ctx context.Context) ([]notified, error) {
+	opts, err := s.ChannelOptions(ctx)
+	if err != nil {
+		return nil, err
 	}
-}
-
-// readableDeadlineCounts counts asks readable reports. A nil-equivalent
-// readable that always returns false yields zeros: unknown access is not
-// the workspace total.
-func readableDeadlineCounts(ledger []deadlineFact, now time.Time, readable func(askID string) bool) (open, overdue int, earliest any) {
-	dueBy := stamp(now)
-	var earliestText string
-	for _, f := range ledger {
-		if readable == nil || !readable(f.id) {
+	seen := map[string]map[string]bool{}
+	add := func(id, channel string) {
+		if seen[id] == nil {
+			seen[id] = map[string]bool{}
+		}
+		seen[id][channel] = true
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT principal_id, channel, push_enabled, digest_enabled FROM notification_channel_settings WHERE address<>'' AND (push_enabled=1 OR digest_enabled=1) ORDER BY principal_id LIMIT ?`, recipientCap)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id, channel string
+		var push, digest int
+		if err := rows.Scan(&id, &channel, &push, &digest); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if o, ok := opts[channel]; ok && (o.Addressing == AddressingPrincipal || !((push == 1 && o.Accepts(KindPush)) || (digest == 1 && o.Accepts(KindDigest)))) {
 			continue
 		}
-		open++
-		if f.decideBy != "" && f.decideBy <= dueBy {
-			overdue++
+		add(id, channel)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, channel := range sortedChannels(opts) {
+		o := opts[channel]
+		if o.Addressing != AddressingPrincipal {
+			continue
 		}
-		if f.escalated == "" && f.decideBy != "" && (earliestText == "" || f.decideBy < earliestText) {
-			earliestText = f.decideBy
+		var conds []string
+		for _, k := range o.Kinds {
+			if k == KindPush {
+				conds = append(conds, "s.push_enabled=1")
+			} else {
+				conds = append(conds, "s.digest_enabled=1")
+			}
+		}
+		ids, err := principalRecipients(ctx, s.DB, channel, "("+strings.Join(conds, " OR ")+")", recipientCap)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			add(id, channel)
 		}
 	}
-	if earliestText != "" {
-		earliest = earliestText
+	return sortedNotified(seen), nil
+}
+
+// pendingByChannel counts deliveries an adapter could claim right now on each
+// declared channel: pending and due, or claimed with an expired lease. Rows
+// waiting out a retry backoff are not counted, so a receiver never wakes a
+// workspace for them early. Two seeks on idx_deliveries_claim per channel,
+// each count capped.
+func (s Store) pendingByChannel(ctx context.Context, now time.Time) (map[string]int, error) {
+	channels, err := s.DeclaredChannels(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return open, overdue, earliest
+	out := map[string]int{}
+	for _, channel := range channels {
+		var n int
+		if err := s.DB.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM deliveries WHERE channel=? AND status='pending' AND next_attempt_at<=? LIMIT 1000))
+			+ (SELECT COUNT(*) FROM (SELECT 1 FROM deliveries INDEXED BY idx_deliveries_claim WHERE channel=? AND status='claimed' AND lease_expires_at<=? LIMIT 1000))`, channel, stamp(now), channel, stamp(now)).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			out[channel] = n
+		}
+	}
+	return out, nil
 }
 
 const maxBlocksChecked = 20

@@ -1234,6 +1234,7 @@ delivery:
   channels: {bridge: "agent wake; mirrored from agent_wakeups", others: "declared by adapters via delivers; push and digest for humans"}
   backoff: {initial_seconds: 30, factor: 2, max_seconds: 3600, max_attempts: 6}
   receipts: [notification_delivered, notification_failed]
+  addressing: {settings: "address entered by the person; off until set", principal: "no address; on by default for every person; adapter resolves the recipient"}
   rules:
     - One durable queue holds every delivery. Wakes on the bridge channel are mirrored from agent_wakeups; push and digest deliveries go to humans on channels they enable.
     - Each delivery has an idempotency key; enqueueing a repeated key returns the existing row unchanged.
@@ -1242,6 +1243,13 @@ delivery:
     - Receipts notification_delivered and notification_failed are stored in the queue, not the event log.
     - Escalation: when an ask's decide_by passes unanswered, push immediately if the ask's window (decide_by minus asked_at) is at most 2 hours or the ask blocks 3 or more refs; otherwise include it in the daily digest. The PM is woken to answer, withdraw or re-ask.
     - Privacy: push and digest content is built only for principals who can read the ask. The heartbeat attention_summary carries counts and times only.
+    - A declaration may limit the kinds its channels accept; core never queues a kind a channel does not accept. Every active declaration of one channel must agree on addressing and kinds.
+    - Only a grant from the trusted issuer may declare a principal-addressed channel; host adapter declarations always use settings addressing, so no channel reaches people who did not opt in unless the operator's trusted issuer declared it.
+    - A principal-addressed channel needs no address and is on by default for every human principal; a saved setting with both toggles off turns it off. A claim on such a channel carries recipient.external_issuer and external_subject only for humans signed in through an external identity grant, and only to the channel's adapter.
+    - A workspace managed-agent grant from the configured trusted issuer may carry a delivers claim {channel, addressing, kinds, label, manage_url} declaring one channel adapter owned by the agent the grant creates; a delivers claim with an empty channel revokes it. Revoking that agent revokes the declaration and a later grant cannot restore it. manage_url, when set, is an absolute https URL of at most 512 bytes, exposed in notification settings channel_options.
+    - A claim re-checks that the recipient can still read the ask behind a push; a delivery that can no longer be delivered is canceled and its payload cleared.
+    - A skipped receipt closes a claimed delivery as canceled without a failure receipt.
+    - The heartbeat attention_summary lists principals who receive notifications with the channels that reach them, their due/overdue/earliest_decide_by over asks they can read, counts_complete, and external_issuer/external_subject for external-grant humans; pending_deliveries counts claimable deliveries per channel. Per-principal counts are read from materialized readability (one row per notified principal and open ask, refreshed in bounded steps by the escalation clock), never computed on the heartbeat path; they may lag an access change by a bounded number of steps.
 
 initiative_overview:
   max_initiatives: 2000

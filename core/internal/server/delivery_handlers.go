@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -102,15 +103,21 @@ func handleDeliveryRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			if !decodeDeliveryJSON(w, r, &body) {
 				return
 			}
-			declared, err := store.DeclaredChannels(ctx)
+			options, err := store.ChannelOptions(ctx)
 			if err != nil {
 				deliveryError(w, err)
 				return
 			}
-			for _, c := range body.Channels {
-				if !containsString(declared, strings.TrimSpace(c.Channel)) {
+			for i, c := range body.Channels {
+				o, ok := options[strings.TrimSpace(c.Channel)]
+				if !ok {
 					writeError(w, http.StatusBadRequest, "invalid_request", "channel is not delivered by any active adapter: "+c.Channel)
 					return
+				}
+				if o.Addressing == delivery.AddressingPrincipal {
+					// The adapter resolves the recipient; a saved row only
+					// records the person's on or off choice.
+					body.Channels[i].Address = ""
 				}
 			}
 			if _, err := store.ReplaceSettings(ctx, actor.ActorID, body.Channels); err != nil {
@@ -123,12 +130,17 @@ func handleDeliveryRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			deliveryError(w, err)
 			return
 		}
-		declared, err := store.DeclaredChannels(ctx)
+		options, err := store.ChannelOptions(ctx)
 		if err != nil {
 			deliveryError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"channels": settings, "available_channels": declared})
+		declared := make([]string, 0, len(options))
+		for channel := range options {
+			declared = append(declared, channel)
+		}
+		sort.Strings(declared)
+		writeJSON(w, http.StatusOK, map[string]any{"channels": settings, "available_channels": declared, "channel_options": options})
 		return
 	}
 	switch {
@@ -168,8 +180,8 @@ func handleDeliveryRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 		if !decodeDeliveryJSON(w, r, &body) {
 			return
 		}
-		if body.Outcome != "delivered" && body.Outcome != "failed" {
-			writeError(w, http.StatusBadRequest, "invalid_request", "outcome must be delivered or failed")
+		if body.Outcome != delivery.ReceiptDelivered && body.Outcome != delivery.ReceiptFailed && body.Outcome != delivery.ReceiptSkipped {
+			writeError(w, http.StatusBadRequest, "invalid_request", "outcome must be delivered, failed or skipped")
 			return
 		}
 		current, err := store.Get(ctx, parts[1])
@@ -182,7 +194,7 @@ func handleDeliveryRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			deliveryError(w, delivery.ErrNotFound)
 			return
 		}
-		updated, err := store.RecordReceipt(ctx, current.DeliveryID, body.ClaimToken, current.Channel, body.Outcome == "delivered", body.Error, body.Retryable, actor.ActorID)
+		updated, err := store.RecordReceipt(ctx, current.DeliveryID, body.ClaimToken, current.Channel, body.Outcome, body.Error, body.Retryable, actor.ActorID)
 		if err != nil {
 			deliveryError(w, err)
 			return

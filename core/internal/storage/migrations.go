@@ -1133,6 +1133,9 @@ var migrations = []migration{
 	{Version: 106, AfterApply: upgradeAgentSummaryAndBriefAskIndexes},
 	{Version: 107, AfterApply: installHostBridge},
 	{Version: 108, AfterApply: installBriefPlanRefs},
+	// Channel options (addressing, kinds, label) and the one channel a
+	// grant-created agent may declare.
+	{Version: 109, AfterApply: installChannelDeclarations},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

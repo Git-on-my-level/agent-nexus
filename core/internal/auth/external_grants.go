@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/delivery"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -67,6 +68,10 @@ type WorkspaceManagedAgentGrantClaims struct {
 	ExternalSubject      string `json:"external_subject,omitempty"`
 	Scope                string `json:"scope,omitempty"`
 	GrantType            string `json:"grant_type,omitempty"`
+	// Delivers, when present, declares the one notification channel the
+	// agent this grant creates may deliver. An empty channel revokes it.
+	// Grants without it leave any existing declaration unchanged.
+	Delivers *delivery.GrantDeclaration `json:"delivers,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -98,6 +103,7 @@ type WorkspaceManagedAgentGrantIdentity struct {
 	ExternalSubject      string
 	Scope                string
 	GrantType            string
+	Delivers             *delivery.GrantDeclaration
 	JTI                  string
 	ExpiresAt            string
 }
@@ -452,6 +458,11 @@ func (v *WorkspaceManagedAgentGrantVerifier) Verify(ctx context.Context, asserti
 	if strings.TrimSpace(claims.GrantType) != GrantTypeWorkspaceManagedAgent {
 		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: grant_type is invalid", ErrExternalGrantInvalid)
 	}
+	if claims.Delivers != nil {
+		if err := delivery.ValidateGrantDeclaration(*claims.Delivers); err != nil {
+			return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: delivers is invalid", ErrExternalGrantInvalid)
+		}
+	}
 
 	expiresAt := ""
 	if claims.ExpiresAt != nil {
@@ -472,6 +483,7 @@ func (v *WorkspaceManagedAgentGrantVerifier) Verify(ctx context.Context, asserti
 		ExternalSubject:      strings.TrimSpace(claims.ExternalSubject),
 		Scope:                strings.TrimSpace(claims.Scope),
 		GrantType:            strings.TrimSpace(claims.GrantType),
+		Delivers:             claims.Delivers,
 		JTI:                  strings.TrimSpace(claims.ID),
 		ExpiresAt:            expiresAt,
 	}, nil

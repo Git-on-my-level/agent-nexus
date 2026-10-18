@@ -9,16 +9,46 @@ export const NOTIFICATION_SETTINGS_OPERATION = "notifications.settings.set";
 const LABELS = { email: "Email", telegram: "Telegram" };
 const ADDRESS_LABELS = { email: "Email address", telegram: "Telegram chat ID" };
 
-export const channelLabel = (channel) =>
+export const channelLabel = (channel, label = "") =>
+  String(label || "").trim() ||
   LABELS[channel] ||
   String(channel || "")
     .replace(/[-_]+/g, " ")
     .replace(/^./, (c) => c.toUpperCase());
+
+/** A principal-addressed channel needs no address: it is on for everyone
+ * until a person turns it off, and the adapter finds them itself. */
+export const isPrincipalRow = (row) => row?.addressing === "principal";
 export const addressLabel = (channel) =>
   ADDRESS_LABELS[channel] || `${channelLabel(channel)} address`;
 
-const emptyRow = (channel) => ({
+/** An absolute https URL, or "" (core validates it too; never trust it blindly). */
+export function safeManageUrl(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value || value.length > 512) return "";
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.host && !url.username
+      ? url.href
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+const channelMeta = (settings, channel) => {
+  const options = settings?.channel_options?.[channel] ?? {};
+  const principal = options.addressing === "principal";
+  return {
+    addressing: principal ? "principal" : "settings",
+    label: String(options.label ?? ""),
+    manageUrl: principal ? safeManageUrl(options.manage_url) : "",
+  };
+};
+
+const emptyRow = (channel, meta) => ({
   channel,
+  ...meta,
   address: "",
   push_enabled: true,
   digest_enabled: true,
@@ -32,16 +62,29 @@ export function draftFromSettings(settings) {
   return {
     rows: (settings?.available_channels ?? []).map((channel) => {
       const row = saved.get(channel);
+      const meta = channelMeta(settings, channel);
       return row
         ? {
             channel,
-            address: String(row.address ?? ""),
+            ...meta,
+            address:
+              meta.addressing === "principal" ? "" : String(row.address ?? ""),
             push_enabled: Boolean(row.push_enabled),
             digest_enabled: Boolean(row.digest_enabled),
           }
-        : emptyRow(channel);
+        : emptyRow(channel, meta);
     }),
   };
+}
+
+/** Whether a principal-addressed row is on. */
+export const rowEnabled = (row) =>
+  Boolean(row?.push_enabled || row?.digest_enabled);
+
+/** Turn a principal-addressed row on or off; the one switch sets both kinds. */
+export function setRowEnabled(row, enabled) {
+  row.push_enabled = Boolean(enabled);
+  row.digest_enabled = Boolean(enabled);
 }
 
 /** Apply a restored device draft over the latest canonical channel list. Rows
@@ -57,7 +100,10 @@ export function reconcileDraft(draft, settings) {
       return mine
         ? {
             channel: row.channel,
-            address: String(mine.address ?? ""),
+            addressing: row.addressing,
+            label: row.label,
+            manageUrl: row.manageUrl,
+            address: isPrincipalRow(row) ? "" : String(mine.address ?? ""),
             push_enabled: Boolean(mine.push_enabled),
             digest_enabled: Boolean(mine.digest_enabled),
           }
@@ -74,19 +120,28 @@ const normalized = (row) => ({
 });
 
 /** Rows with an address, in the shape core accepts. A blank address removes
- * the channel because the request replaces the caller's whole list. */
+ * the channel because the request replaces the caller's whole list.
+ * Principal-addressed rows are always sent so an off choice is kept. */
 export function settingsBody(draft) {
   return {
     channels: (draft?.rows ?? [])
-      .map(normalized)
-      .filter((row) => row.address !== ""),
+      .filter(
+        (row) => isPrincipalRow(row) || String(row.address ?? "").trim() !== "",
+      )
+      .map((row) =>
+        isPrincipalRow(row)
+          ? { ...normalized(row), address: "" }
+          : normalized(row),
+      ),
   };
 }
 
 /** Returns a plain-language problem per channel, or an empty object. */
 export function validateDraft(draft) {
   const problems = {};
-  for (const row of (draft?.rows ?? []).map(normalized)) {
+  for (const row of (draft?.rows ?? [])
+    .filter((row) => !isPrincipalRow(row))
+    .map(normalized)) {
     if (row.address === "") continue;
     if (
       row.channel === "email" &&
@@ -109,13 +164,17 @@ export function draftDirty(draft, settings) {
 }
 
 export function notificationPreview(draft) {
+  const rows = new Map((draft?.rows ?? []).map((row) => [row.channel, row]));
   const { channels } = settingsBody(draft);
   if (!channels.length) return "Turn off all notification channels";
   return channels
-    .map(
-      (row) =>
-        `${channelLabel(row.channel)}: ${row.address}\n  Immediate alerts: ${row.push_enabled ? "on" : "off"}\n  Daily digest: ${row.digest_enabled ? "on" : "off"}`,
-    )
+    .map((row) => {
+      const source = rows.get(row.channel);
+      const name = channelLabel(row.channel, source?.label);
+      if (isPrincipalRow(source))
+        return `${name}: ${rowEnabled(row) ? "on" : "off"}`;
+      return `${name}: ${row.address}\n  Immediate alerts: ${row.push_enabled ? "on" : "off"}\n  Daily digest: ${row.digest_enabled ? "on" : "off"}`;
+    })
     .join("\n");
 }
 

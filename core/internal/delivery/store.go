@@ -37,6 +37,11 @@ const (
 	OutcomeDelivered = "notification_delivered"
 	OutcomeFailed    = "notification_failed"
 
+	// Receipt outcomes an adapter reports.
+	ReceiptDelivered = "delivered"
+	ReceiptFailed    = "failed"
+	ReceiptSkipped   = "skipped"
+
 	MaxClaimLimit       = 50
 	DefaultClaimLimit   = 10
 	MinLease            = 10 * time.Second
@@ -82,6 +87,7 @@ type Delivery struct {
 	LeaseExpiresAt string         `json:"lease_expires_at,omitempty"`
 	LastError      string         `json:"last_error,omitempty"`
 	Address        string         `json:"address,omitempty"`
+	Recipient      *Recipient     `json:"recipient,omitempty"`
 	CreatedAt      string         `json:"created_at"`
 	UpdatedAt      string         `json:"updated_at"`
 	DeliveredAt    string         `json:"delivered_at,omitempty"`
@@ -198,8 +204,7 @@ func (s Store) Get(ctx context.Context, id string) (Delivery, error) {
 // ChannelsForAgent returns the channels the agent's active adapter
 // declarations deliver. Bounded by the agent's own declarations.
 func (s Store) ChannelsForAgent(ctx context.Context, agentID string) ([]string, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT c.channel FROM adapter_channels c JOIN series_adapters a ON a.name=c.adapter
-		WHERE a.agent_id=? AND a.revoked_at IS NULL AND a.deleted_at IS NULL ORDER BY c.channel LIMIT 64`, strings.TrimSpace(agentID))
+	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT channel FROM (`+activeDeclarations+`) WHERE agent_id=? ORDER BY channel LIMIT 64`, strings.TrimSpace(agentID))
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +224,12 @@ func (s Store) ChannelsForAgent(ctx context.Context, agentID string) ([]string, 
 // next attempt is due, and claimed rows whose lease expired. Each candidate
 // set is one seek on idx_deliveries_claim. The address comes from the
 // recipient's channel setting (primary-key lookup); rows whose recipient has
-// since removed the channel are canceled instead of handed out.
+// since removed the channel, or whose kind the channel no longer accepts, are
+// canceled instead of handed out. A push whose recipient can no longer read
+// its ask (Store.CanRead, checked live per claimed row) is canceled too, and
+// a canceled row's payload is cleared. On a principal-addressed channel there is
+// no address: the recipient must still be an active human, and a human signed
+// in through an external identity grant is identified by that grant.
 func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, lease time.Duration) ([]Delivery, error) {
 	if !ValidChannel(channel) {
 		return nil, ErrInvalid
@@ -236,6 +246,12 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 	if lease < MinLease || lease > MaxLease {
 		return nil, ErrInvalid
 	}
+	opts, err := s.ChannelOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	options, declared := opts[channel]
+	principalAddressed := declared && options.Addressing == AddressingPrincipal
 	now := s.now()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -272,12 +288,42 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 		var address string
 		var push, digest int
 		err = tx.QueryRowContext(ctx, `SELECT address, push_enabled, digest_enabled FROM notification_channel_settings WHERE principal_id=? AND channel=?`, d.PrincipalID, channel).Scan(&address, &push, &digest)
-		enabled := err == nil && strings.TrimSpace(address) != "" && ((d.Kind == KindPush && push == 1) || (d.Kind == KindDigest && digest == 1))
+		saved := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
-		if !enabled {
-			if _, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='canceled', last_error='channel disabled by recipient', updated_at=? WHERE delivery_id=?`, stamp(now), id); err != nil {
+		toggled := (d.Kind == KindPush && push == 1) || (d.Kind == KindDigest && digest == 1)
+		var recipient *Recipient
+		cancel := ""
+		switch {
+		case declared && !options.Accepts(d.Kind):
+			cancel = "kind not accepted by channel"
+		case principalAddressed:
+			address = ""
+			if saved && !toggled {
+				cancel = "channel disabled by recipient"
+				break
+			}
+			active, identity, err := activeHuman(ctx, tx, d.PrincipalID)
+			if err != nil {
+				return nil, err
+			}
+			if !active {
+				cancel = "recipient is not an active human"
+			}
+			recipient = identity
+		case !saved || strings.TrimSpace(address) == "" || !toggled:
+			cancel = "channel disabled by recipient"
+		}
+		if cancel == "" && s.CanRead != nil && d.Kind == KindPush && strings.HasPrefix(d.SourceRef, "event:") &&
+			!s.CanRead(ctx, d.PrincipalID, strings.TrimPrefix(d.SourceRef, "event:")) {
+			// Access changed since the push was queued: hand out nothing.
+			cancel = "recipient can no longer read the ask"
+		}
+		if cancel != "" {
+			// The payload is dropped with the delivery: nothing it held is
+			// handed out or kept once it can no longer be delivered.
+			if _, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='canceled', payload_json='{}', last_error=?, updated_at=? WHERE delivery_id=?`, cancel, stamp(now), id); err != nil {
 				return nil, err
 			}
 			continue
@@ -300,6 +346,7 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 		d.ClaimToken = token
 		d.LeaseExpiresAt = stamp(expires)
 		d.Address = address
+		d.Recipient = recipient
 		d.UpdatedAt = stamp(now)
 		out = append(out, d)
 	}
@@ -323,16 +370,18 @@ func Backoff(attempts int) time.Duration {
 
 // RecordReceipt closes the current claim. A delivered outcome is final; a
 // retryable failure returns the row to pending after Backoff until
-// max_attempts is spent, then it fails. Receipts are appended to
+// max_attempts is spent, then it fails. A skipped outcome closes the row as
+// canceled without a failure: the adapter chose not to send (for example the
+// recipient muted this kind outside the workspace) and appends no receipt. Receipts are appended to
 // delivery_receipts, never to the event log. The caller must hold the claim
 // token; the claimer identity is checked by the caller against the channel.
 // A retry of the receipt that already delivered or failed this attempt
 // returns that row and does not append another receipt. The claim token
 // stays on the row so that retry can be recognized; callers do not receive it.
-func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel string, delivered bool, errText string, retryable bool, recordedBy string) (Delivery, error) {
+func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel, outcomeName string, errText string, retryable bool, recordedBy string) (Delivery, error) {
 	deliveryID = strings.TrimSpace(deliveryID)
 	claimToken = strings.TrimSpace(claimToken)
-	if deliveryID == "" || claimToken == "" {
+	if deliveryID == "" || claimToken == "" || (outcomeName != ReceiptDelivered && outcomeName != ReceiptFailed && outcomeName != ReceiptSkipped) {
 		return Delivery{}, ErrInvalid
 	}
 	if len(errText) > maxErrorLength {
@@ -352,6 +401,15 @@ func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channe
 		// Do not confirm that another channel's delivery exists.
 		return Delivery{}, ErrNotFound
 	}
+	if d.Status == StatusCanceled && d.ClaimToken == claimToken {
+		if outcomeName != ReceiptSkipped {
+			// Canceled under this claim (skipped, or the recipient turned
+			// the channel off): a different outcome must not read as success.
+			return Delivery{}, ErrConflict
+		}
+		d.ClaimToken = ""
+		return d, nil
+	}
 	if (d.Status == StatusDelivered || d.Status == StatusFailed) && d.ClaimToken == claimToken {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=? AND attempt=?`, deliveryID, d.Attempt).Scan(&n); err != nil {
@@ -365,9 +423,23 @@ func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channe
 	if d.Status != StatusClaimed || d.ClaimToken != claimToken {
 		return Delivery{}, ErrConflict
 	}
+	if outcomeName == ReceiptSkipped {
+		if errText == "" {
+			errText = "skipped by adapter"
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE deliveries SET status='canceled', lease_expires_at='', last_error=?, updated_at=? WHERE delivery_id=?`, errText, stamp(now), deliveryID); err != nil {
+			return Delivery{}, fmt.Errorf("record skipped delivery: %w", err)
+		}
+		updated, err := scanDelivery(tx.QueryRowContext(ctx, `SELECT `+deliveryColumns+` FROM deliveries WHERE delivery_id=?`, deliveryID))
+		if err != nil {
+			return Delivery{}, err
+		}
+		updated.ClaimToken = ""
+		return updated, tx.Commit()
+	}
 	outcome := OutcomeDelivered
 	switch {
-	case delivered:
+	case outcomeName == ReceiptDelivered:
 		_, err = tx.ExecContext(ctx, `UPDATE deliveries SET status='delivered', lease_expires_at='', last_error='', delivered_at=?, updated_at=? WHERE delivery_id=?`, stamp(now), stamp(now), deliveryID)
 	case retryable && d.Attempt < d.MaxAttempts:
 		outcome = OutcomeFailed
@@ -503,21 +575,6 @@ func (s Store) ReplaceSettings(ctx context.Context, principalID string, settings
 	return s.Settings(ctx, principalID)
 }
 
-// SetAdapterChannels records the channels an adapter declaration delivers.
-func SetAdapterChannelsTx(ctx context.Context, tx interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-}, adapter string, channels []string) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM adapter_channels WHERE adapter=?`, adapter); err != nil {
-		return err
-	}
-	for _, c := range channels {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO adapter_channels(adapter, channel) VALUES(?,?)`, adapter, c); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func boolInt(b bool) int {
 	if b {
 		return 1
@@ -534,8 +591,7 @@ func nonNil(m map[string]any) map[string]any {
 
 // DeclaredChannels lists channels delivered by at least one active adapter.
 func (s Store) DeclaredChannels(ctx context.Context) ([]string, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT c.channel FROM adapter_channels c JOIN series_adapters a ON a.name=c.adapter
-		WHERE a.revoked_at IS NULL AND a.deleted_at IS NULL ORDER BY c.channel LIMIT 64`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT channel FROM (`+activeDeclarations+`) ORDER BY channel LIMIT 64`)
 	if err != nil {
 		return nil, err
 	}

@@ -79,3 +79,24 @@ func (e *env) count(t *testing.T, query string, args ...any) int {
 	}
 	return n
 }
+
+// refreshUntilComplete runs the readability refresh until every notified
+// principal's counts are complete at the current access epoch.
+func (e *env) refreshUntilComplete(t *testing.T, canRead func(context.Context, string, string) bool) {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; i < 200; i++ {
+		if err := e.store.RefreshReadability(ctx, *e.now, canRead); err != nil {
+			t.Fatal(err)
+		}
+		var stale int
+		if err := e.db.QueryRow(`SELECT (SELECT COUNT(*) FROM principal_ask_readability WHERE checked_epoch < COALESCE((SELECT version FROM resource_access_epoch WHERE singleton=1),0))
+			+ (SELECT COUNT(*) FROM ask_readability_queue) + (SELECT COUNT(*) FROM principal_readability_coverage WHERE complete=0)`).Scan(&stale); err != nil {
+			t.Fatal(err)
+		}
+		if stale == 0 {
+			return
+		}
+	}
+	t.Fatal("readability never completed")
+}

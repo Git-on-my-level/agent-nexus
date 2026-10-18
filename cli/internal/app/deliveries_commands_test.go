@@ -19,6 +19,7 @@ func TestDeliveriesUsageBeforeHostResolution(t *testing.T) {
 		{"deliveries", "receipt", "--claim-token", "t", "--outcome", "delivered"},
 		{"deliveries", "receipt", "d1", "--claim-token", "t", "--outcome", "maybe"},
 		{"deliveries", "receipt", "d1", "--outcome", "delivered"},
+		{"deliveries", "receipt", "d1", "--claim-token", "t", "--outcome", "skipped", "--retryable", "true"},
 		{"deliveries", "list", "--channel", "chat"},
 		{"notifications", "settings"}, {"notifications", "settings", "set"}, {"notifications", "settings", "get", "--body-file", "x"},
 	} {
@@ -64,6 +65,8 @@ func TestDeliveriesAndSettingsRequests(t *testing.T) {
 			io.WriteString(w, `{"deliveries":[{"delivery_id":"d1","channel":"chat","kind":"push","claim_token":"tok","address":"a"}]}`)
 		case "/deliveries/d1/receipt":
 			io.WriteString(w, `{"delivery":{"delivery_id":"d1","status":"failed","attempt":1}}`)
+		case "/deliveries/d2/receipt":
+			io.WriteString(w, `{"delivery":{"delivery_id":"d2","status":"canceled","attempt":1}}`)
 		case "/notification-settings":
 			io.WriteString(w, `{"channels":[{"channel":"chat","address":"a","push_enabled":true,"digest_enabled":false}],"available_channels":["chat"]}`)
 		default:
@@ -91,6 +94,7 @@ func TestDeliveriesAndSettingsRequests(t *testing.T) {
 	res := run("deliveries", "receipt", "d1", "--claim-token", "tok", "--outcome", "failed", "--error", "boom", "--retryable", "true")
 	run("notifications", "settings", "get")
 	run("notifications", "settings", "set", "--body-file", "s.json")
+	run("deliveries", "receipt", "d2", "--claim-token", "tok2", "--outcome", "skipped", "--error", "muted")
 	if res.Text == "" {
 		t.Fatal("empty text")
 	}
@@ -102,6 +106,12 @@ func TestDeliveriesAndSettingsRequests(t *testing.T) {
 	}
 	if calls[2].path != "/deliveries/d1/receipt" || calls[2].body["claim_token"] != "tok" || calls[2].body["outcome"] != "failed" || calls[2].body["retryable"] != true || calls[2].body["error"] != "boom" {
 		t.Fatalf("receipt: %+v", calls[2])
+	}
+	if calls[5].path != "/deliveries/d2/receipt" || calls[5].body["outcome"] != "skipped" || calls[5].body["error"] != "muted" {
+		t.Fatalf("skipped receipt: %+v", calls[5])
+	}
+	if _, ok := calls[5].body["retryable"]; ok {
+		t.Fatalf("skipped receipt must not send retryable: %+v", calls[5])
 	}
 	if calls[3].method != "GET" || calls[3].path != "/notification-settings" {
 		t.Fatalf("settings get: %+v", calls[3])

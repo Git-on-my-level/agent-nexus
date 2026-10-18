@@ -10,6 +10,9 @@ const {
   validateDraft,
   notificationPreview,
   channelLabel,
+  rowEnabled,
+  safeManageUrl,
+  setRowEnabled,
 } = await import("../../src/lib/notificationSettings.js");
 
 const settings = {
@@ -30,12 +33,18 @@ describe("notification settings helpers", () => {
     expect(draftFromSettings(settings).rows).toEqual([
       {
         channel: "email",
+        addressing: "settings",
+        label: "",
+        manageUrl: "",
         address: "a@example.com",
         push_enabled: true,
         digest_enabled: false,
       },
       {
         channel: "telegram",
+        addressing: "settings",
+        label: "",
+        manageUrl: "",
         address: "",
         push_enabled: true,
         digest_enabled: true,
@@ -102,5 +111,103 @@ describe("notification settings helpers", () => {
     expect(notificationPreview(draftFromSettings(settings))).toContain(
       "Daily digest: off",
     );
+  });
+
+  describe("principal-addressed channels", () => {
+    const hosted = {
+      channels: [],
+      available_channels: ["email", "hosted"],
+      channel_options: {
+        email: { addressing: "settings", kinds: ["push", "digest"] },
+        hosted: {
+          addressing: "principal",
+          kinds: ["push"],
+          label: "Hosted notifications",
+        },
+      },
+    };
+
+    it("is on by default with no address and uses the declared label", () => {
+      const row = draftFromSettings(hosted).rows[1];
+      expect(row.addressing).toBe("principal");
+      expect(rowEnabled(row)).toBe(true);
+      expect(channelLabel(row.channel, row.label)).toBe("Hosted notifications");
+      expect(settingsBody(draftFromSettings(hosted)).channels).toEqual([
+        {
+          channel: "hosted",
+          address: "",
+          push_enabled: true,
+          digest_enabled: true,
+        },
+      ]);
+      expect(draftDirty(draftFromSettings(hosted), hosted)).toBe(false);
+    });
+
+    it("keeps an off choice and never sends an address", () => {
+      const draft = draftFromSettings(hosted);
+      draft.rows[1].address = "should-not-send";
+      setRowEnabled(draft.rows[1], false);
+      expect(validateDraft(draft)).toEqual({});
+      expect(settingsBody(draft).channels).toEqual([
+        {
+          channel: "hosted",
+          address: "",
+          push_enabled: false,
+          digest_enabled: false,
+        },
+      ]);
+      expect(draftDirty(draft, hosted)).toBe(true);
+      expect(notificationPreview(draft)).toBe("Hosted notifications: off");
+    });
+
+    it("reads a saved off row back as off", () => {
+      const saved = {
+        ...hosted,
+        channels: [
+          {
+            channel: "hosted",
+            address: "",
+            push_enabled: false,
+            digest_enabled: false,
+          },
+        ],
+      };
+      expect(rowEnabled(draftFromSettings(saved).rows[1])).toBe(false);
+      const restored = reconcileDraft(draftFromSettings(hosted), saved);
+      expect(restored.rows[1].addressing).toBe("principal");
+    });
+  });
+
+  it("keeps only an absolute https manage link on principal channels", () => {
+    expect(safeManageUrl("https://app.example.com/settings")).toBe(
+      "https://app.example.com/settings",
+    );
+    for (const bad of [
+      "http://app.example.com/",
+      "javascript:alert(1)",
+      "/relative",
+      "https://user:pw@example.com/",
+      "",
+    ])
+      expect(safeManageUrl(bad)).toBe("");
+    const settings = {
+      channels: [],
+      available_channels: ["hosted", "email"],
+      channel_options: {
+        hosted: {
+          addressing: "principal",
+          kinds: ["push"],
+          manage_url: "https://app.example.com/settings",
+        },
+        email: {
+          addressing: "settings",
+          kinds: ["push"],
+          manage_url: "https://evil.example/",
+        },
+      },
+    };
+    const rows = draftFromSettings(settings).rows;
+    expect(rows[0].manageUrl).toBe("https://app.example.com/settings");
+    expect(rows[1].manageUrl).toBe("");
   });
 });

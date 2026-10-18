@@ -132,11 +132,14 @@ func parseDeliveriesFlags(p deliveriesCommand, args []string, usage func(string)
 		if p.claimToken == "" {
 			return usage("deliveries receipt requires --claim-token")
 		}
-		if p.outcome != "delivered" && p.outcome != "failed" {
-			return usage("--outcome must be delivered or failed")
+		if p.outcome != "delivered" && p.outcome != "failed" && p.outcome != "skipped" {
+			return usage("--outcome must be delivered, failed or skipped")
 		}
 		if p.outcome == "delivered" && (p.errText != "" || p.retryableSet) {
 			return usage("--error and --retryable apply only to --outcome failed")
+		}
+		if p.outcome == "skipped" && p.retryableSet {
+			return usage("--retryable applies only to --outcome failed")
 		}
 	}
 	return p, nil
