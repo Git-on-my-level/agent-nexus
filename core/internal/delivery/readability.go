@@ -27,7 +27,6 @@ const (
 	readabilityQueueBatch  = 10
 	readabilityWalkPage    = 200
 	readabilityWalkBudget  = 2000
-	principalCountCap      = 1000
 )
 
 // notified is one principal who receives notifications, with the channels
@@ -110,8 +109,8 @@ func (s Store) RefreshReadability(ctx context.Context, now time.Time, canRead fu
 	}
 	for _, ask := range queued {
 		// One statement per ask: a row for every notified principal.
-		if _, err := s.DB.ExecContext(ctx, `INSERT INTO principal_ask_readability(principal_id, request_event_id)
-			SELECT p.value, d.request_event_id FROM json_each(?) p JOIN ask_deadlines d ON d.request_event_id=? WHERE true ON CONFLICT DO NOTHING`, string(encodedIDs), ask); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO principal_ask_readability(principal_id, request_event_id, decide_by, escalated)
+			SELECT p.value, d.request_event_id, d.decide_by, d.escalated_at IS NOT NULL FROM json_each(?) p JOIN ask_deadlines d ON d.request_event_id=? WHERE true ON CONFLICT DO NOTHING`, string(encodedIDs), ask); err != nil {
 			return err
 		}
 		if _, err := s.DB.ExecContext(ctx, `DELETE FROM ask_readability_queue WHERE request_event_id=?`, ask); err != nil {
@@ -184,8 +183,8 @@ func (s Store) walkCoverage(ctx context.Context) error {
 			break
 		}
 		// One page of the ledger by primary key, inserted in one statement.
-		if _, err := s.DB.ExecContext(ctx, `INSERT INTO principal_ask_readability(principal_id, request_event_id)
-			SELECT ?, request_event_id FROM (SELECT request_event_id FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?) WHERE true ON CONFLICT DO NOTHING`, c.principal, c.after, readabilityWalkPage); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO principal_ask_readability(principal_id, request_event_id, decide_by, escalated)
+			SELECT ?, request_event_id, decide_by, escalated_at IS NOT NULL FROM (SELECT request_event_id, decide_by, escalated_at FROM ask_deadlines WHERE request_event_id>? ORDER BY request_event_id LIMIT ?) WHERE true ON CONFLICT DO NOTHING`, c.principal, c.after, readabilityWalkPage); err != nil {
 			return err
 		}
 		var n int
@@ -208,15 +207,18 @@ func (s Store) walkCoverage(ctx context.Context) error {
 	return nil
 }
 
-// principalCounts reads one principal's materialized counts: open asks it
-// can read (capped at principalCountCap), how many are overdue, the
-// earliest unescalated deadline, and whether every open ask has been checked.
+// principalCounts reads one principal's materialized counts, uncapped: open
+// asks it can read, how many are overdue, the earliest unescalated deadline,
+// and whether every open ask has been checked. Each figure is an index-only
+// aggregate over that principal's readable rows (idx_..._due ranges for the
+// counts, one idx_..._earliest seek for the minimum), never a row fetch.
 func (s Store) principalCounts(ctx context.Context, principalID string, now time.Time) (due, overdue int, earliest any, complete bool, err error) {
 	var earliestText sql.NullString
-	err = s.DB.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(CASE WHEN d.decide_by IS NOT NULL AND d.decide_by<=? THEN 1 ELSE 0 END),0),
-			MIN(CASE WHEN d.escalated_at IS NULL THEN d.decide_by END)
-		FROM (SELECT request_event_id FROM principal_ask_readability WHERE principal_id=? AND readable=1 LIMIT ?) r
-		JOIN ask_deadlines d ON d.request_event_id=r.request_event_id`, stamp(now), principalID, principalCountCap).Scan(&due, &overdue, &earliestText)
+	err = s.DB.QueryRowContext(ctx, `SELECT
+			(SELECT COUNT(*) FROM principal_ask_readability INDEXED BY idx_principal_ask_readability_due WHERE principal_id=?1 AND readable=1),
+			(SELECT COUNT(*) FROM principal_ask_readability INDEXED BY idx_principal_ask_readability_due WHERE principal_id=?1 AND readable=1 AND decide_by<=?2),
+			(SELECT MIN(decide_by) FROM principal_ask_readability INDEXED BY idx_principal_ask_readability_earliest WHERE principal_id=?1 AND readable=1 AND escalated=0 AND decide_by IS NOT NULL)`,
+		principalID, stamp(now)).Scan(&due, &overdue, &earliestText)
 	if err != nil {
 		return 0, 0, nil, false, err
 	}

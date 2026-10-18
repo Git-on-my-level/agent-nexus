@@ -61,9 +61,17 @@ func TestPerformanceAttentionSummaryBudget(t *testing.T) {
 	defer db.Close()
 	store := delivery.Store{DB: db}
 	var checks atomic.Int64
+	// Readable unless (principal + ask) % 3 == 0: about 1333 readable asks
+	// per principal, past any row cap, and different per principal.
+	index := func(id, prefix string) int {
+		var n int
+		fmt.Sscanf(strings.TrimPrefix(id, prefix), "%d", &n)
+		return n
+	}
+	readable := func(p, a int) bool { return (p+a)%3 != 0 }
 	canRead := func(_ context.Context, principal, ask string) bool {
 		checks.Add(1)
-		return (len(principal)+len(ask))%3 != 0
+		return readable(index(principal, "actor_h"), index(ask, "ask"))
 	}
 
 	// One refresh step: bounded access checks and SQL whatever the corpus.
@@ -108,6 +116,29 @@ func TestPerformanceAttentionSummaryBudget(t *testing.T) {
 	for _, p := range principals {
 		if p["counts_complete"] != true {
 			t.Fatalf("incomplete after refresh: %v", p)
+		}
+		// Exact counts and earliest deadline from the fixture itself.
+		pi := index(p["principal_id"].(string), "actor_h")
+		wantDue, wantOverdue := 0, 0
+		var wantEarliest time.Time
+		for a := 0; a < asks; a++ {
+			if !readable(pi, a) {
+				continue
+			}
+			wantDue++
+			by := baseNow.Add(time.Duration(a%7-3) * time.Hour)
+			if !by.After(baseNow) {
+				wantOverdue++
+			}
+			if wantEarliest.IsZero() || by.Before(wantEarliest) {
+				wantEarliest = by
+			}
+		}
+		if wantDue <= 1000 {
+			t.Fatalf("fixture must exceed 1000 readable asks, has %d", wantDue)
+		}
+		if p["due"] != wantDue || p["overdue"] != wantOverdue || p["earliest_decide_by"] != rfc(wantEarliest) {
+			t.Fatalf("%v: due=%v overdue=%v earliest=%v, want %d %d %s", p["principal_id"], p["due"], p["overdue"], p["earliest_decide_by"], wantDue, wantOverdue, rfc(wantEarliest))
 		}
 	}
 	if checks.Load() != 0 {

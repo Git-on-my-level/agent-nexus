@@ -424,8 +424,8 @@ func (e *Escalator) logf(format string, args ...any) {
 // workspace ledger, for the control plane. Each principal's due, overdue and
 // earliest_decide_by count only asks that principal can read, read from the
 // materialized readability (RefreshReadability), never computed here: the
-// cost is a fixed number of indexed queries per notified principal (at most
-// recipientCap), each capped at principalCountCap rows. counts_complete is
+// cost is a fixed number of index-only aggregate queries per notified
+// principal (at most recipientCap), uncapped and exact. counts_complete is
 // false while that principal's readability is still being filled in.
 //
 // Principals are those who receive notifications on some channel, with the
