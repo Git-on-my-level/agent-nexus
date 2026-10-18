@@ -66,6 +66,12 @@ func TestHostBridgeInstallMigratesThreeWorkspaceWrapperAndPreservesResumeBytes(t
 			if e = os.WriteFile(path, []byte(content), 0600); e != nil {
 				t.Fatal(e)
 			}
+			// An unrelated malformed service must not block either preview or cutover.
+			if goos == "darwin" {
+				if e = os.WriteFile(filepath.Join(filepath.Dir(path), "unrelated.plist"), []byte(`<plist version=bad><string>/opt/bin/zeroclaw</string>`), 0600); e != nil {
+					t.Fatal(e)
+				}
+			}
 			processes := []hostbridge.Process{{PID: 700, UID: os.Getuid(), Started: "wrapper", Executable: "/bin/sh", Argv: []string{"/bin/sh", "/fixture/wrapper"}}}
 			original := map[string][]byte{}
 			for i, alias := range []string{"personal", "anx", "omi"} {
@@ -315,6 +321,15 @@ func TestHostBridgeMigrationRefusesUncoveredRetainedWork(t *testing.T) {
 func TestHostBridgeDoctorInventoryIsReadOnlyAndRemovalRetainsCommands(t *testing.T) {
 	f := newHookFixture(t)
 	f.run(t, "bridge", "add", "--as", "worker")
+	if bridgePlatform == "darwin" {
+		units := filepath.Join(f.home, "Library", "LaunchAgents")
+		if err := os.MkdirAll(units, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(units, "unrelated.plist"), []byte(`<plist version=bad><string>/opt/bin/zeroclaw</string>`), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	root := hostbridge.Root(f.home)
 	r, e := hostbridge.Load(root)
 	if e != nil {
@@ -344,7 +359,16 @@ func TestHostBridgeDoctorInventoryIsReadOnlyAndRemovalRetainsCommands(t *testing
 		t.Fatal(e)
 	}
 	raw, _ := json.Marshal(result.Data)
-	if !strings.Contains(string(raw), `"legacy_consumers":0`) || !strings.Contains(string(raw), "unowned bridge consumer PID 99") || !strings.Contains(string(raw), `"check":"resume_namespace","ok":false`) {
+	var resume map[string]any
+	for _, check := range asMap(result.Data)["checks"].([]map[string]any) {
+		if check["check"] == "resume_namespace" {
+			resume = check
+		}
+	}
+	if resume["ok"] != false {
+		t.Fatal("uncertain resume did not fail doctor", resume)
+	}
+	if !strings.Contains(string(raw), `"legacy_consumers":0`) || !strings.Contains(string(raw), "unowned bridge consumer PID 99") || !strings.Contains(string(raw), `"check":"resume_namespace"`) || !strings.Contains(string(raw), `"error":"resume outcome uncertain; reconcile retained record before enabling this namespace"`) || strings.Contains(string(raw), entry.Command) {
 		t.Fatal(string(raw))
 	}
 	cfg := bridgeCfg(r.Workspaces[0], agent)

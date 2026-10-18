@@ -180,7 +180,7 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 			if runErr != nil && ctx.Err() == nil {
 				logMu.Lock()
 				defer logMu.Unlock()
-				fmt.Fprintf(a.Stderr, "anx bridge: job=%s workspace=%q actor=%q code=%s detail=%q\n", job, w.ID, agent.ActorID, errnorm.Normalize(runErr).Code, truncateHook(runErr.Error(), 256))
+				a.logBridgeJobError(job, w, agent, runErr)
 			}
 		}()
 
@@ -240,8 +240,8 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 			health.set(w, agent, "wake", agent.Jobs["wake"])
 			// Multiple preserved roots share a single dispatcher's cursor. Duplicates
 			// are checked before admission; acknowledged outcomes never execute again.
-			e = child.consumeHostWakes(ctx, cfg, agent, executors)
-			if e != nil && !errors.Is(e, context.DeadlineExceeded) {
+			e = bridgeWakeResult(child.consumeHostWakes(ctx, cfg, agent, executors))
+			if e != nil {
 				health.set(w, agent, "answers", false)
 				health.set(w, agent, "wake", false)
 			}
@@ -286,43 +286,68 @@ func (a *App) runHostSupervisor(ctx context.Context) (*commandResult, error) {
 	wg.Wait()
 	return &commandResult{Data: map[string]any{"stopped": true}}, e
 }
+
+// Normalize only the wake consumer's result: other job/validation deadlines
+// are real errors. SSE expiry is a healthy reconnect, not an internal failure.
+func bridgeWakeResult(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return nil
+	}
+	return err
+}
+
+func (a *App) logBridgeJobError(job string, w hostbridge.Workspace, agent hostbridge.Agent, err error) {
+	fmt.Fprintf(a.Stderr, "%s anx bridge: job=%s workspace=%q actor=%q code=%s detail=%q\n", a.clockNow().UTC().Format(time.RFC3339), job, w.ID, agent.ActorID, errnorm.Normalize(err).Code, truncateHook(err.Error(), 256))
+}
+
 func checkResumeNamespace(dir string, w hostbridge.Workspace, agent hostbridge.Agent) error {
+	_, err := inspectResumeNamespace(dir, w, agent, false)
+	return err
+}
+
+// Only doctor allows executing records while a live namespace consumer holds
+// the existing fence. Startup/cutover must never adopt an earlier execution.
+func inspectResumeNamespace(dir string, w hostbridge.Workspace, agent hostbridge.Agent, live bool) (inProgress bool, err error) {
 	if filepath.Base(dir) != hostbridge.Namespace(w.BaseURL, agent.ActorID) {
-		return fmt.Errorf("resume namespace identity mismatch")
+		return false, fmt.Errorf("resume namespace identity mismatch")
 	}
 	info, e := os.Lstat(dir)
 	if e != nil {
-		return e
+		return false, e
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("unsafe resume namespace")
+		return false, fmt.Errorf("unsafe resume namespace")
 	}
 	entries, e := os.ReadDir(dir)
 	if e != nil {
-		return e
+		return false, e
 	}
 	if len(entries) > 10000 {
-		return fmt.Errorf("resume registry capacity exceeded")
+		return false, fmt.Errorf("resume registry capacity exceeded")
 	}
 	for _, file := range entries {
 		if !isResumeRegistrationFile(file.Name()) {
 			continue
 		}
 		if strings.HasSuffix(file.Name(), ".paused") {
-			return fmt.Errorf("resume is paused for migration reconciliation")
+			return false, fmt.Errorf("resume is paused for migration reconciliation")
 		}
 		entry, e := readAskRegistration(filepath.Join(dir, file.Name()))
 		if e != nil {
-			return e
+			return false, e
 		}
 		if entry.BaseURL != w.BaseURL || entry.ActorID != agent.ActorID {
-			return integrations.ErrIdentityChanged
+			return false, integrations.ErrIdentityChanged
+		}
+		if entry.State == "executing" && live {
+			inProgress = true
+			continue
 		}
 		if entry.State == "executing" || entry.State == "uncertain" {
-			return fmt.Errorf("resume outcome uncertain; reconcile retained record before enabling this namespace")
+			return false, fmt.Errorf("resume outcome uncertain; reconcile retained record before enabling this namespace")
 		}
 	}
-	return nil
+	return inProgress, nil
 }
 func (a *App) bridgeGitTick(ctx context.Context, cfg config.Resolved, doctor bool) (int, error) {
 	files, e := filepath.Glob(filepath.Join(cfg.ConfigDir, "git", "*", "state.json"))

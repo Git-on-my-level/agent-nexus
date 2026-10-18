@@ -217,16 +217,21 @@ func (b *bridgeControlOutput) Bytes() []byte { return b.buffer.Bytes() }
 // A killed/timeout child may have committed external effects. Keep this lane
 // visibly unready until the owner reconciles its outcome; other jobs keep running.
 func checkRuntimeReceipts(dir string) error {
+	_, err := inspectRuntimeReceipts(dir, false)
+	return err
+}
+
+func inspectRuntimeReceipts(dir string, live bool) (inProgress bool, err error) {
 	dir = filepath.Join(dir, "runtime-receipts")
 	files, e := os.ReadDir(dir)
 	if os.IsNotExist(e) {
-		return nil
+		return inProgress, nil
 	}
 	if e != nil {
-		return e
+		return false, e
 	}
 	if len(files) > 10000 {
-		return fmt.Errorf("runtime receipt capacity exceeded")
+		return false, fmt.Errorf("runtime receipt capacity exceeded")
 	}
 	for _, f := range files {
 		if !strings.HasSuffix(f.Name(), ".json") {
@@ -234,19 +239,25 @@ func checkRuntimeReceipts(dir string) error {
 		}
 		raw, e := integrations.PrivateRead(filepath.Join(dir, f.Name()))
 		if e != nil {
-			return e
+			return false, e
 		}
 		var r runtimeWakeReceipt
 		if e = json.Unmarshal(raw, &r); e != nil {
-			return e
+			return false, e
 		}
 		switch r.State {
 		case "delivered", "failed", "acknowledged":
-		case "executing", "uncertain":
-			return fmt.Errorf("runtime outcome uncertain; reconcile retained runtime receipt")
+		case "executing":
+			if live {
+				inProgress = true
+				continue
+			}
+			return false, fmt.Errorf("runtime outcome uncertain; reconcile retained runtime receipt")
+		case "uncertain":
+			return false, fmt.Errorf("runtime outcome uncertain; reconcile retained runtime receipt")
 		default:
-			return fmt.Errorf("unrecognized runtime receipt state")
+			return false, fmt.Errorf("unrecognized runtime receipt state")
 		}
 	}
-	return nil
+	return inProgress, nil
 }
