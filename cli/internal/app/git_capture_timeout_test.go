@@ -11,7 +11,7 @@ import (
 )
 
 func TestGitCaptureRequestTimeouts(t *testing.T) {
-	for _, mode := range []string{"sync-default", "sync-explicit", "hook", "bridge"} {
+	for _, mode := range []string{"sync-default", "sync-explicit", "sync-over-five-seconds", "hook", "bridge"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newHookFixture(t)
 			fixtureGit(t, f.root, "init", "-q")
@@ -25,6 +25,11 @@ func TestGitCaptureRequestTimeouts(t *testing.T) {
 				f.run(t, "git", "sync")
 			case "sync-explicit":
 				f.run(t, "--timeout", "4s", "git", "sync")
+			case "sync-over-five-seconds":
+				// Each card read exceeds the former whole-sync deadline, but
+				// remains within the caller's per-request timeout.
+				f.cardDelay.Store(int64(5500 * time.Millisecond))
+				f.run(t, "--timeout", "8s", "git", "sync")
 			case "hook":
 				start := time.Now()
 				// Even an explicit long timeout cannot slow the post-commit hook.

@@ -1434,7 +1434,7 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 		}
 	}
 	if materialChange {
-		if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=json_set(json_remove(metadata_json,'$._anx_source_evidence_refs'),'$._anx_source_evidence_at',?) WHERE card_id=?`, time.Now().UTC().Format(time.RFC3339Nano), id); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=json_set(metadata_json,'$._anx_source_evidence_at',?) WHERE card_id=?`, time.Now().UTC().Format(time.RFC3339Nano), id); err != nil {
 			return nil, err
 		}
 		if err = insertWorkEvent(ctx, tx, actor, card, "card_updated", "Source observation changed", map[string]any{"changed_fields": []string{"source_observation"}, "observation_id": o["id"], "source_revision": o["source_revision"], "knowledge": "reported", "facts": facts}); err != nil {

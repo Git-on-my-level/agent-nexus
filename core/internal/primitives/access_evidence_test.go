@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -198,7 +199,7 @@ func TestSourceEvidenceWatermarkRetainsPrivateProvenanceAfterUnlink(t *testing.T
 	evidence := []any{map[string]any{"authority": "tracker", "connection_id": "fixture", "native_id": "private", "extension": map[string]any{"ref": private["ref"]}}}
 	owner := WithAccessScope(ctx, AccessScope{ActorID: "owner"})
 	for _, onCreate := range []bool{true, false} {
-		input := map[string]any{"title": "Evidence provenance"}
+		input := map[string]any{"title": "Evidence provenance", "source": map[string]any{"authority": "tracker", "connection_id": "fixture", "native_id": fmt.Sprint(onCreate)}}
 		if onCreate {
 			input["source_refs"] = evidence
 		}
@@ -214,6 +215,15 @@ func TestSourceEvidenceWatermarkRetainsPrivateProvenanceAfterUnlink(t *testing.T
 		}
 		w, err = s.PatchWork(owner, "owner", anyStringValue(w["id"]), w["version"].(int64), map[string]any{"source_refs": []any{}})
 		if err != nil {
+			t.Fatal(err)
+		}
+		// A later material observation must preserve the ownership inputs of
+		// the earlier clock, even after the active evidence was unlinked.
+		if _, err = s.SubmitWorkObservation(owner, "owner", anyStringValue(w["id"]), map[string]any{
+			"idempotency_key": "material", "reader_id": "fixture", "reader_revision": "1",
+			"observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported",
+			"facts": map[string]any{"phase": "in_progress"},
+		}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = s.RefreshBriefInitiatives(ctx, 200); err != nil {

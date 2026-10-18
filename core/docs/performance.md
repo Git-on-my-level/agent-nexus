@@ -79,9 +79,15 @@ Migration 108 indexes each plan's references in `brief_plan_refs`, with
 writes examine at most 200 steps. Referenced-card state, identity, lifecycle or
 source-observation/evidence-key changes queue only indexed dependents, O(log references +
 fanout); board lifecycle changes first seek its cards by board ID. No workspace
-plan scan occurs on writes or reads. Evidence-index insert/delete hooks probe
-the same reverse index for each existing bounded evidence lookup key (under the
-existing source-entry and alias caps). The migration alone backfills all plans.
+plan scan occurs on writes or reads. Metadata triggers compare only effective
+phase, evidence identities, aliases and status, reading the old/new observations
+by primary key. Timestamp-only polls, errors, stale reads and evidence-index
+rebuilds do not queue referencers. Changed inputs enumerate old and new keys
+under the existing 2,000-entry and 50-alias caps, seeking the reverse covering
+index for each key, without workspace scans. Signature comparison sorts at most
+4,001 bounded evidence entries, O(E log E); reverse probes cost O(K log R + affected fanout), where K
+is the bounded old/new key set and R is the reverse-reference index. The
+migration alone backfills all plans.
 
 Maintenance folds at most 200 cards per transaction, resolving at most 200 steps
 per plan through the same scoped ref reader and `plans.Compute` as `plan_state`.

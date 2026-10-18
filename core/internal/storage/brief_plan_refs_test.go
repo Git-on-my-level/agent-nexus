@@ -78,4 +78,16 @@ func TestBriefPlanRefsUpgradeAndInvalidation(t *testing.T) {
 	exec(`DELETE FROM card_plans WHERE card_id='parent'`)
 	count(`SELECT count(*) FROM brief_plan_refs WHERE card_id='parent'`, 0)
 	count(`SELECT count(*) FROM brief_dirty WHERE card_id='parent'`, 1)
+	// Old evidence spellings must invalidate on unlink and card deletion, even
+	// though the evidence projection is rebuilt or cascaded away in that write.
+	exec(`INSERT INTO card_plans(card_id,body_json,updated_at) VALUES('parent','{"steps":[{"id":"step","title":"Build","ref":"old-evidence"}]}','now')`)
+	linked := `UPDATE work_metadata SET metadata_json='{"source_refs":[{"authority":"tracker","connection_id":"fixture","native_id":"old-evidence","phase":"done"}]}' WHERE card_id='child'`
+	exec(linked)
+	exec(`DELETE FROM brief_dirty`)
+	exec(`UPDATE work_metadata SET metadata_json='{"source_refs":[]}' WHERE card_id='child'`)
+	count(`SELECT count(*) FROM brief_dirty WHERE card_id='parent'`, 1)
+	exec(linked)
+	exec(`DELETE FROM brief_dirty`)
+	exec(`DELETE FROM cards WHERE id='child'`)
+	count(`SELECT count(*) FROM brief_dirty WHERE card_id='parent'`, 1)
 }

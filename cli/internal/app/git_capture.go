@@ -121,8 +121,6 @@ func (a *App) runGitCapture(ctx context.Context, args []string, cfg config.Resol
 	}
 	path := integrations.CapturePath(dir, gd)
 	if o.verb == "sync" {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
 		data, e := a.syncCapture(ctx, cfg, root, o.since, o.to, o.skip, o.restart)
 		warnings, _ := data["warnings"].([]output.Warning)
 		delete(data, "warnings")
