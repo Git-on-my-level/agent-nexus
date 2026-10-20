@@ -21,17 +21,21 @@ const (
 	defaultAuthRequestBodyLimit    int64 = 256 << 10
 	defaultContentRequestBodyLimit int64 = 8 << 20
 
-	defaultAuthRequestsPerMinute             = 600
-	defaultAuthRequestsBurst                 = 100
-	defaultEnrollmentRequestsPerMinute       = 12
-	defaultEnrollmentRequestsBurst           = 8
-	defaultWriteRequestsPerMinute            = 1200
-	defaultWriteRequestsBurst                = 200
-	requestTooLargeRetryAfterSecs            = 1
-	defaultRouteRateLimitMaxKeys             = 4096
-	defaultRouteRateLimitBucketTTL           = 15 * time.Minute
-	routeRateLimitPruneInterval              = time.Minute
-	defaultAttachmentRequestBodyLimit  int64 = 50 << 20
+	defaultAuthRequestsPerMinute       = 600
+	defaultAuthRequestsBurst           = 100
+	defaultEnrollmentRequestsPerMinute = 12
+	defaultEnrollmentRequestsBurst     = 8
+	defaultWriteRequestsPerMinute      = 1200
+	defaultWriteRequestsBurst          = 200
+	requestTooLargeRetryAfterSecs      = 1
+	// One person or managed agent gets the budget a single caller address
+	// had before verified exchanges were keyed by subject.
+	defaultWorkspaceGrantSubjectRequestsPerMinute       = 10
+	defaultWorkspaceGrantSubjectBurst                   = 10
+	defaultRouteRateLimitMaxKeys                        = 4096
+	defaultRouteRateLimitBucketTTL                      = 15 * time.Minute
+	routeRateLimitPruneInterval                         = time.Minute
+	defaultAttachmentRequestBodyLimit             int64 = 50 << 20
 )
 
 type RequestBodyLimits struct {
@@ -171,6 +175,65 @@ func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bo
 		retryAfter = time.Second
 	}
 	return false, retryAfter
+}
+
+// blocked reports whether a scope has no request left, without spending one.
+// Pair it with charge to count only the requests that fail.
+func (l *routeRateLimiter) blocked(bucket string, scope string, now time.Time) (bool, time.Duration) {
+	return l.take(bucket, scope, now, 0)
+}
+
+// charge spends one request even when none is left. The debt (at most one
+// burst) delays recovery, so concurrent failures that all passed blocked
+// still pay for each attempt.
+func (l *routeRateLimiter) charge(bucket string, scope string, now time.Time) {
+	l.take(bucket, scope, now, 1)
+}
+
+func (l *routeRateLimiter) take(bucket string, scope string, now time.Time, cost float64) (bool, time.Duration) {
+	if l == nil || strings.TrimSpace(bucket) == "" {
+		return false, 0
+	}
+	limit, burst := l.limitForBucket(bucket)
+	if limit <= 0 || burst <= 0 {
+		return false, 0
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.pruneBuckets(now)
+	stateKey := bucket
+	if scope = strings.TrimSpace(scope); scope != "" {
+		stateKey = bucket + ":" + scope
+	}
+	state, ok := l.buckets[stateKey]
+	if !ok {
+		if cost == 0 {
+			return false, 0
+		}
+		l.evictOldestBucketIfFull()
+		state = &rateLimitBucket{tokens: float64(burst), lastRefill: now}
+		l.buckets[stateKey] = state
+	}
+	state.lastSeen = now
+	if now.Before(state.lastRefill) {
+		state.lastRefill = now
+	}
+	ratePerSecond := float64(limit) / 60.0
+	if elapsed := now.Sub(state.lastRefill).Seconds(); elapsed > 0 {
+		state.tokens = math.Min(float64(burst), state.tokens+elapsed*ratePerSecond)
+		state.lastRefill = now
+	}
+	state.tokens = math.Max(-float64(burst), state.tokens-cost)
+	if state.tokens >= 1 {
+		return false, 0
+	}
+	retryAfter := time.Duration(math.Ceil((1 - state.tokens) / ratePerSecond * float64(time.Second)))
+	if retryAfter < time.Second {
+		retryAfter = time.Second
+	}
+	return true, retryAfter
 }
 
 func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {

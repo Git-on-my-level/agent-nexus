@@ -7885,7 +7885,7 @@ paths:
     post:
       operationId: issueAuthToken
       summary: Exchange host assertion or refresh auth tokens
-      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.'
+      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address for attempts that fail verification and per issuer, subject and grant type (plus organization and slot for managed agents) for grants that verify; both return 429 with Retry-After.'
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: auth.token
@@ -7894,7 +7894,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope."
-      x-anx-error-codes: [invalid_request, invalid_token, key_mismatch, host_revoked, agent_excluded, agent_handle_taken, agent_revoked]
+      x-anx-error-codes: [invalid_request, invalid_token, key_mismatch, host_revoked, agent_excluded, agent_handle_taken, agent_revoked, rate_limited, auth_unavailable]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       requestBody:
@@ -7917,6 +7917,10 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
         '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
           $ref: '#/components/responses/ErrorResponse'
 
   /auth/passkey/register/options:
@@ -9715,6 +9719,10 @@ components:
         refresh_token: {type: string}
         agent_id: {type: string}
         assertion: {type: string}
+        issue_refresh_token:
+          type: boolean
+          default: true
+          description: 'Only for workspace_human_grant and workspace_managed_agent_grant. false issues an access token alone: the response has no refresh_token and core stores no refresh session. Callers that exchange a fresh grant whenever they need access should send false. Rejected with invalid_request for other grant types.'
       required: [grant_type]
     AuthTokenResponse:
       type: object
@@ -9726,7 +9734,7 @@ components:
             access_token: {type: string}
             token_type: {type: string, enum: [Bearer]}
             expires_in: {type: integer, minimum: 1, description: Seconds until access-token expiry.}
-            refresh_token: {type: string, description: Never present for host_assertion.}
+            refresh_token: {type: string, description: Never present for host_assertion or for a grant exchange sent with issue_refresh_token=false.}
           required: [access_token, token_type, expires_in]
       required: [tokens]
     RunState:

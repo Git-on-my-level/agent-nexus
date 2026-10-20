@@ -917,17 +917,10 @@ func (s *Store) issueTokenBundleTx(ctx context.Context, tx Transaction, agentID 
 	if err != nil {
 		return TokenBundle{}, "", fmt.Errorf("generate refresh token: %w", err)
 	}
-	accessToken, err := generateOpaqueToken(32)
-	if err != nil {
-		return TokenBundle{}, "", fmt.Errorf("generate access token: %w", err)
-	}
 
 	refreshSessionID := "refresh_" + uuid.NewString()
-	accessTokenID := "access_" + uuid.NewString()
-
 	nowText := now.Format(time.RFC3339Nano)
 	refreshExpiresText := now.Add(s.refreshTokenTTL).Format(time.RFC3339Nano)
-	accessExpiresText := now.Add(s.accessTokenTTL).Format(time.RFC3339Nano)
 
 	_, err = tx.ExecContext(
 		ctx,
@@ -943,26 +936,39 @@ func (s *Store) issueTokenBundleTx(ctx context.Context, tx Transaction, agentID 
 		return TokenBundle{}, "", fmt.Errorf("insert refresh session: %w", err)
 	}
 
+	tokens, err := s.issueAccessTokenTx(ctx, tx, agentID, now)
+	if err != nil {
+		return TokenBundle{}, "", err
+	}
+	tokens.RefreshToken = refreshToken
+	return tokens, refreshSessionID, nil
+}
+
+// issueAccessTokenTx stores one access token and no refresh session. The
+// bundle it returns carries no refresh token.
+func (s *Store) issueAccessTokenTx(ctx context.Context, tx Transaction, agentID string, now time.Time) (TokenBundle, error) {
+	accessToken, err := generateOpaqueToken(32)
+	if err != nil {
+		return TokenBundle{}, fmt.Errorf("generate access token: %w", err)
+	}
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO auth_access_tokens(id, agent_id, token_hash, created_at, expires_at, revoked_at)
 		 VALUES (?, ?, ?, ?, ?, NULL)`,
-		accessTokenID,
+		"access_"+uuid.NewString(),
 		agentID,
 		hashToken(accessToken),
-		nowText,
-		accessExpiresText,
+		now.Format(time.RFC3339Nano),
+		now.Add(s.accessTokenTTL).Format(time.RFC3339Nano),
 	)
 	if err != nil {
-		return TokenBundle{}, "", fmt.Errorf("insert access token: %w", err)
+		return TokenBundle{}, fmt.Errorf("insert access token: %w", err)
 	}
-
 	return TokenBundle{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int64(s.accessTokenTTL.Seconds()),
-	}, refreshSessionID, nil
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   int64(s.accessTokenTTL.Seconds()),
+	}, nil
 }
 
 func normalizeUsername(raw string) (string, error) {

@@ -222,11 +222,14 @@ type handlerOptions struct {
 	routeRateLimits                RouteRateLimits
 	rateLimiter                    *routeRateLimiter
 	workspaceHumanGrantRateLimiter *routeRateLimiter
-	workspaceID                    string
-	readinessChecks                []namedReadinessCheck
-	opsHealthSections              map[string]OpsHealthSectionFunc
-	secretsStore                   *secrets.Store
-	workspaceAccessMode            string
+	// workspaceGrantSubjectRateLimiter budgets verified grant exchanges per
+	// issuer, subject and grant type.
+	workspaceGrantSubjectRateLimiter *routeRateLimiter
+	workspaceID                      string
+	readinessChecks                  []namedReadinessCheck
+	opsHealthSections                map[string]OpsHealthSectionFunc
+	secretsStore                     *secrets.Store
+	workspaceAccessMode              string
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -476,9 +479,19 @@ func WithRouteRateLimits(limits RouteRateLimits) HandlerOption {
 	}
 }
 
+// WithWorkspaceGrantRateLimits sets the per-address budget for grant
+// exchange attempts that fail verification.
 func WithWorkspaceGrantRateLimits(limits RouteRateLimits) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(limits.normalize())
+	}
+}
+
+// WithWorkspaceGrantSubjectRateLimits sets the budget for verified grant
+// exchanges, per issuer, subject and grant type. The Auth fields apply.
+func WithWorkspaceGrantSubjectRateLimits(limits RouteRateLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceGrantSubjectRateLimiter = newRouteRateLimiter(limits.normalize())
 	}
 }
 
@@ -686,6 +699,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(RouteRateLimits{
 			AuthRequestsPerMinute:  10,
 			AuthBurst:              10,
+			WriteRequestsPerMinute: 1,
+			WriteBurst:             1,
+		})
+	}
+	if (opts.workspaceHumanGrantVerifier != nil || opts.workspaceManagedGrantVerifier != nil) && opts.workspaceGrantSubjectRateLimiter == nil {
+		opts.workspaceGrantSubjectRateLimiter = newRouteRateLimiter(RouteRateLimits{
+			AuthRequestsPerMinute:  defaultWorkspaceGrantSubjectRequestsPerMinute,
+			AuthBurst:              defaultWorkspaceGrantSubjectBurst,
 			WriteRequestsPerMinute: 1,
 			WriteBurst:             1,
 		})

@@ -807,10 +807,16 @@ func main() {
 		deleted, err := authStore.PurgeConsumedGrantJTIs(jobCtx, workspaceHumanGrantReplayRetention)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to purge consumed workspace grant JTIs: %v\n", err)
+		} else if deleted > 0 {
+			fmt.Printf("purged %d consumed workspace grant JTIs\n", deleted)
+		}
+		purged, err := authStore.PurgeExpiredAuthRows(jobCtx, auth.AuthRowPurgeOptions{})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to purge expired auth tokens and sessions: %v\n", err)
 			return
 		}
-		if deleted > 0 {
-			fmt.Printf("purged %d consumed workspace grant JTIs\n", deleted)
+		if purged.AccessTokens > 0 || purged.RefreshSessions > 0 {
+			fmt.Printf("purged %d expired access tokens and %d expired or revoked refresh sessions (truncated=%t)\n", purged.AccessTokens, purged.RefreshSessions, purged.Truncated)
 		}
 	})
 	go func() {

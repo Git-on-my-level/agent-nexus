@@ -75,7 +75,13 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - `grant_type=host_assertion` using an enrolled host key for a derived agent
   - `grant_type=assertion` for existing standalone agent principals awaiting adoption
   - `grant_type=refresh_token` using a refresh token
+  - `grant_type=workspace_human_grant` and `grant_type=workspace_managed_agent_grant`, which exchange a signed grant from the configured trusted external issuer
 - Refresh tokens are rotated on successful refresh.
+- A grant exchange returns an access token and a refresh token by default. A caller that exchanges a fresh grant whenever it needs access (for example, a server acting on a person's behalf) should send `"issue_refresh_token": false`: the response then has no `refresh_token` and core stores no refresh session. The field is rejected for other grant types.
+- Grant exchanges have two rate limits, both answered with `429 rate_limited` and `Retry-After`:
+  - Per caller address, for attempts that fail: unverifiable or replayed grants, or verification that is temporarily unavailable. An address that has spent this budget is rejected before any signature work, even for a grant that would verify. Default 10 per minute, burst 10.
+  - Per issuer, subject and grant type, for grants that verify (a managed-agent grant is also keyed by its organization and slot). Default 10 per minute, burst 10. One caller exchanging grants for many people therefore is not limited by its shared address.
+- Core deletes access tokens and refresh sessions a day after they expire, and refresh sessions a day after they are revoked or rotated, in the daily maintenance run. It keeps each principal's newest access token, which its last-seen time is derived from.
 - Stable auth error codes include:
   - `username_taken`
   - `auth_required`

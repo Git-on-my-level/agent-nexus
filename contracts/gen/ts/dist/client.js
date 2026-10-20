@@ -2760,7 +2760,7 @@ export const commandRegistry = [
         "path": "/auth/token",
         "operation_id": "issueAuthToken",
         "summary": "Exchange host assertion or refresh auth tokens",
-        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.",
+        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address for attempts that fail verification and per issuer, subject and grant type (plus organization and slot for managed agents) for grants that verify; both return 429 with Retry-After.",
         "why": "Assertion or refresh-token exchange for bearer access.",
         "input_mode": "json-body",
         "streaming": {
@@ -2774,7 +2774,9 @@ export const commandRegistry = [
             "host_revoked",
             "agent_excluded",
             "agent_handle_taken",
-            "agent_revoked"
+            "agent_revoked",
+            "rate_limited",
+            "auth_unavailable"
         ],
         "concepts": [
             "auth"
@@ -2811,6 +2813,10 @@ export const commandRegistry = [
                 {
                     "name": "host_id",
                     "type": "string"
+                },
+                {
+                    "name": "issue_refresh_token",
+                    "type": "boolean"
                 },
                 {
                     "name": "key_id",

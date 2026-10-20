@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -52,8 +54,17 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		SignedAt        string `json:"signed_at"`
 		Signature       string `json:"signature"`
 		Assertion       string `json:"assertion"`
+		// Nil keeps the default; only grant exchanges accept it.
+		IssueRefreshToken *bool `json:"issue_refresh_token"`
 	}
 	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	switch grantType := strings.TrimSpace(req.GrantType); {
+	case req.IssueRefreshToken == nil:
+	case grantType == auth.TokenGrantTypeWorkspaceHuman, grantType == auth.TokenGrantTypeWorkspaceManagedAgent:
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_request", "issue_refresh_token applies only to workspace_human_grant and workspace_managed_agent_grant")
 		return
 	}
 
@@ -88,43 +99,18 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			writeError(w, http.StatusBadRequest, "invalid_request", "grant_type workspace_human_grant is not enabled")
 			return
 		}
-		if opts.workspaceHumanGrantRateLimiter != nil {
-			scope := "anonymous"
-			if host := requestClientHost(r); host != "" {
-				scope = "addr:" + host
-			}
-			if allowed, retryAfter := opts.workspaceHumanGrantRateLimiter.allow("auth", scope, time.Now().UTC()); !allowed {
-				writeRateLimitedError(w, auth.TokenGrantTypeWorkspaceHuman, retryAfter)
-				return
-			}
-		}
-		identity, verifyErr := opts.workspaceHumanGrantVerifier.Verify(r.Context(), req.Assertion)
-		if verifyErr != nil {
-			switch {
-			case errors.Is(verifyErr, auth.ErrExternalGrantUnavailable):
-				writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "workspace grant verification is temporarily unavailable")
-			default:
-				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace grant assertion could not be validated")
-			}
-			return
-		}
-		agent, issuedTokens, exchangeErr := opts.authStore.IssueTokenFromWorkspaceHumanGrant(r.Context(), identity)
-		if exchangeErr != nil {
-			switch {
-			case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
-				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace grant assertion has already been consumed")
-			case errors.Is(exchangeErr, auth.ErrAgentRevoked):
-				writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
-			case errors.Is(exchangeErr, auth.ErrInvalidRequest):
-				writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
-			default:
-				writeInternalError(w, r, exchangeErr, "failed to issue token")
-			}
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"agent":  agent,
-			"tokens": issuedTokens,
+		var identity auth.WorkspaceHumanGrantIdentity
+		exchangeWorkspaceGrant(w, r, opts, req.IssueRefreshToken, workspaceGrantExchange{
+			grantType: auth.TokenGrantTypeWorkspaceHuman,
+			label:     "workspace grant",
+			verify: func(ctx context.Context) (string, string, error) {
+				var err error
+				identity, err = opts.workspaceHumanGrantVerifier.Verify(ctx, req.Assertion)
+				return identity.Issuer, identity.Subject, err
+			},
+			exchange: func(ctx context.Context, options auth.GrantExchangeOptions) (auth.Agent, auth.TokenBundle, error) {
+				return opts.authStore.IssueTokenFromWorkspaceHumanGrant(ctx, identity, options)
+			},
 		})
 		return
 	case auth.TokenGrantTypeWorkspaceManagedAgent:
@@ -132,43 +118,20 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			writeError(w, http.StatusBadRequest, "invalid_request", "grant_type workspace_managed_agent_grant is not enabled")
 			return
 		}
-		if opts.workspaceHumanGrantRateLimiter != nil {
-			scope := "anonymous"
-			if host := requestClientHost(r); host != "" {
-				scope = "addr:" + host
-			}
-			if allowed, retryAfter := opts.workspaceHumanGrantRateLimiter.allow("auth", scope, time.Now().UTC()); !allowed {
-				writeRateLimitedError(w, auth.TokenGrantTypeWorkspaceManagedAgent, retryAfter)
-				return
-			}
-		}
-		identity, verifyErr := opts.workspaceManagedGrantVerifier.Verify(r.Context(), req.Assertion)
-		if verifyErr != nil {
-			switch {
-			case errors.Is(verifyErr, auth.ErrExternalGrantUnavailable):
-				writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "workspace managed-agent grant verification is temporarily unavailable")
-			default:
-				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace managed-agent grant assertion could not be validated")
-			}
-			return
-		}
-		agent, issuedTokens, exchangeErr := opts.authStore.IssueTokenFromWorkspaceManagedAgentGrant(r.Context(), identity)
-		if exchangeErr != nil {
-			switch {
-			case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
-				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace managed-agent grant assertion has already been consumed")
-			case errors.Is(exchangeErr, auth.ErrAgentRevoked):
-				writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
-			case errors.Is(exchangeErr, auth.ErrInvalidRequest):
-				writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
-			default:
-				writeInternalError(w, r, exchangeErr, "failed to issue token")
-			}
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"agent":  agent,
-			"tokens": issuedTokens,
+		var identity auth.WorkspaceManagedAgentGrantIdentity
+		exchangeWorkspaceGrant(w, r, opts, req.IssueRefreshToken, workspaceGrantExchange{
+			grantType: auth.TokenGrantTypeWorkspaceManagedAgent,
+			label:     "workspace managed-agent grant",
+			verify: func(ctx context.Context) (string, string, error) {
+				var err error
+				identity, err = opts.workspaceManagedGrantVerifier.Verify(ctx, req.Assertion)
+				// The managed principal is the slot, whatever subject the
+				// issuer puts on the grant, so budget each slot separately.
+				return identity.Issuer, strings.Join([]string{identity.Subject, identity.OrganizationID, identity.SlotID}, "\n"), err
+			},
+			exchange: func(ctx context.Context, options auth.GrantExchangeOptions) (auth.Agent, auth.TokenBundle, error) {
+				return opts.authStore.IssueTokenFromWorkspaceManagedAgentGrant(ctx, identity, options)
+			},
 		})
 		return
 	default:
@@ -195,6 +158,84 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"tokens": tokens})
+}
+
+type workspaceGrantExchange struct {
+	grantType string
+	label     string
+	// verify checks the grant signature and claims and returns its issuer
+	// and the subject the per-subject budget is keyed by.
+	verify func(context.Context) (issuer string, subject string, err error)
+	// exchange records the verified grant and issues its tokens.
+	exchange func(context.Context, auth.GrantExchangeOptions) (auth.Agent, auth.TokenBundle, error)
+}
+
+// exchangeWorkspaceGrant applies two rate limits around grant verification.
+//
+//  1. Before any signature work, a caller address that has spent its budget
+//     on failed attempts is rejected. Only attempts that fail (unverifiable,
+//     unavailable or replayed grants) are charged to the address, so one
+//     server-side caller exchanging valid grants for many people is not
+//     limited by its shared address.
+//  2. After a grant verifies, the request is charged to a budget keyed by
+//     issuer, subject and grant type (for a managed agent, also its
+//     organization and slot), so each person or managed agent has its own
+//     allowance however many callers share an address.
+func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handlerOptions, issueRefreshToken *bool, grant workspaceGrantExchange) {
+	addressScope := "anonymous"
+	if host := requestClientHost(r); host != "" {
+		addressScope = "addr:" + host
+	}
+	addressLimiter := opts.workspaceHumanGrantRateLimiter
+	if blocked, retryAfter := addressLimiter.blocked("auth", addressScope, time.Now().UTC()); blocked {
+		writeRateLimitedError(w, grant.grantType, retryAfter)
+		return
+	}
+	chargeAddress := func() { addressLimiter.charge("auth", addressScope, time.Now().UTC()) }
+
+	issuer, subject, verifyErr := grant.verify(r.Context())
+	if verifyErr != nil {
+		chargeAddress()
+		switch {
+		case errors.Is(verifyErr, auth.ErrExternalGrantUnavailable):
+			writeError(w, http.StatusServiceUnavailable, "auth_unavailable", grant.label+" verification is temporarily unavailable")
+		default:
+			writeError(w, http.StatusUnauthorized, "invalid_token", grant.label+" assertion could not be validated")
+		}
+		return
+	}
+	if allowed, retryAfter := opts.workspaceGrantSubjectRateLimiter.allow("auth", workspaceGrantSubjectScope(grant.grantType, issuer, subject), time.Now().UTC()); !allowed {
+		writeRateLimitedError(w, grant.grantType, retryAfter)
+		return
+	}
+
+	options := auth.GrantExchangeOptions{AccessOnly: issueRefreshToken != nil && !*issueRefreshToken}
+	agent, issuedTokens, exchangeErr := grant.exchange(r.Context(), options)
+	if exchangeErr != nil {
+		switch {
+		case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
+			chargeAddress()
+			writeError(w, http.StatusUnauthorized, "invalid_token", grant.label+" assertion has already been consumed")
+		case errors.Is(exchangeErr, auth.ErrAgentRevoked):
+			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
+		case errors.Is(exchangeErr, auth.ErrInvalidRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
+		default:
+			writeInternalError(w, r, exchangeErr, "failed to issue token")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agent":  agent,
+		"tokens": issuedTokens,
+	})
+}
+
+// workspaceGrantSubjectScope hashes the verified identity so the limiter
+// holds a fixed-size key per subject.
+func workspaceGrantSubjectScope(grantType string, issuer string, subject string) string {
+	sum := sha256.Sum256([]byte(grantType + "\n" + strings.TrimSpace(issuer) + "\n" + strings.TrimSpace(subject)))
+	return "subject:" + hex.EncodeToString(sum[:])
 }
 
 func handleGetCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
