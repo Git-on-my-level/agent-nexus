@@ -120,12 +120,13 @@ func TestMaintenanceDeadlineEventuallyCommitsCursor(t *testing.T) {
 							t.Fatalf("ask job state cursor=%q done=%d", cursor, finished)
 						}
 					} else {
-						var phase, offset, ownersReady, finished int
-						if e := ws.DB().QueryRowContext(ctx, `SELECT phase,ref_offset,owners_ready,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &offset, &ownersReady, &finished); e != nil {
+						var phase, ownersReady, finished int
+						var split string
+						if e := ws.DB().QueryRowContext(ctx, `SELECT phase,split_id,owners_ready,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &split, &ownersReady, &finished); e != nil {
 							t.Fatal(e)
 						}
-						if phase != 5 || cursor != "" || offset != 0 || ownersReady != 1 || finished != 1 {
-							t.Fatalf("inbox job state phase=%d cursor=%q offset=%d owners_ready=%d done=%d", phase, cursor, offset, ownersReady, finished)
+						if phase != 5 || cursor != "" || split != "" || ownersReady != 1 || finished != 1 {
+							t.Fatalf("inbox job state phase=%d cursor=%q split=%q owners_ready=%d done=%d", phase, cursor, split, ownersReady, finished)
 						}
 						var pending int
 						if e := ws.DB().QueryRowContext(ctx, `SELECT count(*) FROM derived_inbox_items WHERE lifecycle_ready=0`).Scan(&pending); e != nil || pending != 0 {
