@@ -349,6 +349,37 @@ func consumeWorkspaceGrantJTI(ctx context.Context, db *sql.DB, jti string, consu
 	return nil
 }
 
+// WorkspaceHumanGrantPrincipalKey identifies the principal a human grant
+// acts for, from the same fields its stable IDs derive from.
+func WorkspaceHumanGrantPrincipalKey(identity WorkspaceHumanGrantIdentity) string {
+	agentID, _, _ := stableExternalGrantPrincipalIDs(identity.Issuer, identity.Subject)
+	return agentID
+}
+
+// WorkspaceManagedAgentGrantPrincipalKey identifies the managed agent a grant
+// acts for. The grant's subject is not part of it: the principal is the slot.
+func WorkspaceManagedAgentGrantPrincipalKey(identity WorkspaceManagedAgentGrantIdentity) string {
+	agentID, _, _ := stableManagedGrantPrincipalIDs(identity.Issuer, identity.WorkspaceID, identity.OrganizationID, identity.SlotID)
+	return agentID
+}
+
+// GrantJTIConsumed reports whether a grant jti has already been exchanged.
+// It is a cheap pre-check; the exchange still consumes the jti atomically.
+func (s *Store) GrantJTIConsumed(ctx context.Context, jti string) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("auth store database is not initialized")
+	}
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM consumed_grant_jtis WHERE jti = ?`, strings.TrimSpace(jti)).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check consumed grant jti: %w", err)
+	}
+	return true, nil
+}
+
 func stableExternalGrantPrincipalIDs(issuer string, subject string) (string, string, string) {
 	digest := sha256.Sum256([]byte(strings.TrimSpace(issuer) + "\n" + strings.TrimSpace(subject)))
 	hexDigest := hex.EncodeToString(digest[:])

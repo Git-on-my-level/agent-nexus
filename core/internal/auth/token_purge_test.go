@@ -239,3 +239,58 @@ func TestManagedAgentGrantAccessOnlyStoresNoRefreshSession(t *testing.T) {
 		t.Fatalf("authenticate access-only token: %v", err)
 	}
 }
+
+func TestPurgeExpiredAuthRowsDoesNotStarveRefreshSessions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+	db := workspace.DB()
+	store := NewStore(db)
+
+	agent, _, err := store.IssueTokenFromWorkspaceHumanGrant(ctx, WorkspaceHumanGrantIdentity{
+		Issuer:  "https://issuer.example",
+		Subject: "person-backlog",
+		JTI:     "jti-backlog",
+	}, GrantExchangeOptions{AccessOnly: true})
+	if err != nil {
+		t.Fatalf("exchange grant: %v", err)
+	}
+	old := time.Now().UTC().Add(-3 * DefaultExpiredAuthRowRetention)
+	oldText := old.Format(time.RFC3339Nano)
+	// An access-token backlog far larger than one run's budget.
+	for i := 0; i < 40; i++ {
+		id := "access_backlog_" + time.Duration(i).String()
+		if _, err := db.ExecContext(ctx, `INSERT INTO auth_access_tokens(id, agent_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
+			id, agent.AgentID, "hash-"+id, old.Add(-time.Hour).Format(time.RFC3339Nano), oldText); err != nil {
+			t.Fatalf("insert access token: %v", err)
+		}
+	}
+	for _, row := range []struct{ id, revoked string }{{"refresh_backlog_expired", ""}, {"refresh_backlog_revoked", oldText}} {
+		var revoked any
+		expires := oldText
+		if row.revoked != "" {
+			revoked = row.revoked
+			expires = time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339Nano)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO auth_refresh_sessions(id, agent_id, token_hash, created_at, expires_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?)`,
+			row.id, agent.AgentID, "hash-"+row.id, oldText, expires, revoked); err != nil {
+			t.Fatalf("insert refresh session: %v", err)
+		}
+	}
+
+	result, err := store.PurgeExpiredAuthRows(ctx, AuthRowPurgeOptions{BatchSize: 2, MaxBatches: 3})
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if result.AccessTokens != 6 || !result.Truncated {
+		t.Fatalf("expected the access-token step to stop at its own budget, got %#v", result)
+	}
+	if result.RefreshSessions != 2 {
+		t.Fatalf("refresh sessions were starved by the access-token backlog: %#v", result)
+	}
+}

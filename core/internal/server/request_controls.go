@@ -32,6 +32,7 @@ const (
 	// had before verified exchanges were keyed by subject.
 	defaultWorkspaceGrantSubjectRequestsPerMinute       = 10
 	defaultWorkspaceGrantSubjectBurst                   = 10
+	defaultWorkspaceGrantPrincipalMaxKeys               = 65536
 	defaultRouteRateLimitMaxKeys                        = 4096
 	defaultRouteRateLimitBucketTTL                      = 15 * time.Minute
 	routeRateLimitPruneInterval                         = time.Minute
@@ -99,6 +100,10 @@ type routeRateLimiter struct {
 	maxKeys   int
 	bucketTTL time.Duration
 	lastPrune time.Time
+	// failClosedWhenFull refuses a new scope when every tracked bucket
+	// still carries state, instead of evicting one and handing that scope a
+	// fresh burst.
+	failClosedWhenFull bool
 }
 
 type rateLimitBucket struct {
@@ -116,124 +121,137 @@ func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
 	}
 }
 
+// allow spends one request from the scope's budget when one is left.
 func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bool, time.Duration) {
 	if l == nil || strings.TrimSpace(bucket) == "" {
 		return true, 0
 	}
-
 	limit, burst := l.limitForBucket(bucket)
 	if limit <= 0 || burst <= 0 {
 		return true, 0
 	}
+	ratePerSecond := float64(limit) / 60.0
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.pruneBuckets(now)
-
-	stateKey := bucket
-	scope = strings.TrimSpace(scope)
-	if scope != "" {
-		stateKey = bucket + ":" + scope
-	}
-
-	state, ok := l.buckets[stateKey]
-	if !ok {
-		l.evictOldestBucketIfFull()
-		state = &rateLimitBucket{
-			tokens:     float64(burst),
-			lastRefill: now,
-			lastSeen:   now,
-		}
-		l.buckets[stateKey] = state
+	state := l.bucketLocked(rateLimitStateKey(bucket, scope), limit, burst, now)
+	if state == nil {
+		// No bucket could be tracked without discarding another scope's
+		// state; refuse until one refills.
+		return false, rateLimitRetryAfter(0, ratePerSecond)
 	}
 	state.lastSeen = now
-
-	if now.Before(state.lastRefill) {
-		state.lastRefill = now
-	}
-
-	ratePerSecond := float64(limit) / 60.0
-	elapsed := now.Sub(state.lastRefill).Seconds()
-	if elapsed > 0 && ratePerSecond > 0 {
-		state.tokens = math.Min(float64(burst), state.tokens+elapsed*ratePerSecond)
-		state.lastRefill = now
-	}
-
 	if state.tokens >= 1 {
 		state.tokens -= 1
 		return true, 0
 	}
-
-	if ratePerSecond <= 0 {
-		return false, requestTooLargeRetryAfterSecs * time.Second
-	}
-
-	deficit := 1 - state.tokens
-	retryAfter := time.Duration(math.Ceil(deficit / ratePerSecond * float64(time.Second)))
-	if retryAfter < time.Second {
-		retryAfter = time.Second
-	}
-	return false, retryAfter
+	return false, rateLimitRetryAfter(state.tokens, ratePerSecond)
 }
 
-// blocked reports whether a scope has no request left, without spending one.
-// Pair it with charge to count only the requests that fail.
-func (l *routeRateLimiter) blocked(bucket string, scope string, now time.Time) (bool, time.Duration) {
-	return l.take(bucket, scope, now, 0)
-}
-
-// charge spends one request even when none is left. The debt (at most one
-// burst) delays recovery, so concurrent failures that all passed blocked
-// still pay for each attempt.
-func (l *routeRateLimiter) charge(bucket string, scope string, now time.Time) {
-	l.take(bucket, scope, now, 1)
-}
-
-func (l *routeRateLimiter) take(bucket string, scope string, now time.Time, cost float64) (bool, time.Duration) {
+// refund returns one request spent by allow, for work that turned out not
+// to count against the scope.
+func (l *routeRateLimiter) refund(bucket string, scope string, now time.Time) {
 	if l == nil || strings.TrimSpace(bucket) == "" {
-		return false, 0
+		return
 	}
 	limit, burst := l.limitForBucket(bucket)
 	if limit <= 0 || burst <= 0 {
-		return false, 0
+		return
 	}
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	l.pruneBuckets(now)
-	stateKey := bucket
-	if scope = strings.TrimSpace(scope); scope != "" {
-		stateKey = bucket + ":" + scope
-	}
-	state, ok := l.buckets[stateKey]
+	state, ok := l.buckets[rateLimitStateKey(bucket, scope)]
 	if !ok {
-		if cost == 0 {
-			return false, 0
-		}
-		l.evictOldestBucketIfFull()
-		state = &rateLimitBucket{tokens: float64(burst), lastRefill: now}
-		l.buckets[stateKey] = state
+		return
 	}
-	state.lastSeen = now
+	refillRateLimitBucket(state, limit, burst, now)
+	state.tokens = math.Min(float64(burst), state.tokens+1)
+}
+
+func rateLimitStateKey(bucket string, scope string) string {
+	if scope = strings.TrimSpace(scope); scope != "" {
+		return bucket + ":" + scope
+	}
+	return bucket
+}
+
+func rateLimitRetryAfter(tokens float64, ratePerSecond float64) time.Duration {
+	if ratePerSecond <= 0 {
+		return requestTooLargeRetryAfterSecs * time.Second
+	}
+	retryAfter := time.Duration(math.Ceil((1 - tokens) / ratePerSecond * float64(time.Second)))
+	if retryAfter < time.Second {
+		retryAfter = time.Second
+	}
+	return retryAfter
+}
+
+func refillRateLimitBucket(state *rateLimitBucket, limit int, burst int, now time.Time) {
 	if now.Before(state.lastRefill) {
 		state.lastRefill = now
 	}
 	ratePerSecond := float64(limit) / 60.0
-	if elapsed := now.Sub(state.lastRefill).Seconds(); elapsed > 0 {
+	if elapsed := now.Sub(state.lastRefill).Seconds(); elapsed > 0 && ratePerSecond > 0 {
 		state.tokens = math.Min(float64(burst), state.tokens+elapsed*ratePerSecond)
 		state.lastRefill = now
 	}
-	state.tokens = math.Max(-float64(burst), state.tokens-cost)
-	if state.tokens >= 1 {
-		return false, 0
+}
+
+// bucketLocked returns the refilled bucket for a key, creating it when
+// there is room. It returns nil only for a fail-closed limiter whose
+// buckets all still carry state.
+func (l *routeRateLimiter) bucketLocked(stateKey string, limit int, burst int, now time.Time) *rateLimitBucket {
+	l.pruneBuckets(now)
+	if state, ok := l.buckets[stateKey]; ok {
+		refillRateLimitBucket(state, limit, burst, now)
+		return state
 	}
-	retryAfter := time.Duration(math.Ceil((1 - state.tokens) / ratePerSecond * float64(time.Second)))
-	if retryAfter < time.Second {
-		retryAfter = time.Second
+	if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys && !l.evictBucketLocked(now) {
+		return nil
 	}
-	return true, retryAfter
+	state := &rateLimitBucket{tokens: float64(burst), lastRefill: now, lastSeen: now}
+	l.buckets[stateKey] = state
+	return state
+}
+
+// bucketIsIdleLocked reports whether a bucket has refilled to its burst, so
+// forgetting it loses nothing: a new bucket would start in the same state.
+func (l *routeRateLimiter) bucketIsIdleLocked(key string, state *rateLimitBucket, now time.Time) bool {
+	bucket, _, _ := strings.Cut(key, ":")
+	limit, burst := l.limitForBucket(bucket)
+	if limit <= 0 || burst <= 0 {
+		return true
+	}
+	refillRateLimitBucket(state, limit, burst, now)
+	return state.tokens >= float64(burst)
+}
+
+// evictBucketLocked frees one slot. It prefers the oldest idle bucket. If
+// none is idle, a fail-closed limiter keeps every bucket and reports false;
+// otherwise the oldest bucket is evicted.
+func (l *routeRateLimiter) evictBucketLocked(now time.Time) bool {
+	var idleKey, oldestKey string
+	var idleSeen, oldestSeen time.Time
+	for key, state := range l.buckets {
+		// lastSeen, not lastRefill: idle checks refill buckets as they scan.
+		lastTouched := state.lastSeen
+		if oldestKey == "" || lastTouched.Before(oldestSeen) {
+			oldestKey, oldestSeen = key, lastTouched
+		}
+		if l.bucketIsIdleLocked(key, state, now) && (idleKey == "" || lastTouched.Before(idleSeen)) {
+			idleKey, idleSeen = key, lastTouched
+		}
+	}
+	switch {
+	case idleKey != "":
+		delete(l.buckets, idleKey)
+	case l.failClosedWhenFull || oldestKey == "":
+		return false
+	default:
+		delete(l.buckets, oldestKey)
+	}
+	return true
 }
 
 func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {
@@ -258,37 +276,12 @@ func (l *routeRateLimiter) pruneBuckets(now time.Time) {
 	}
 	if l.bucketTTL > 0 {
 		for key, bucket := range l.buckets {
-			lastTouched := bucket.lastSeen
-			if lastTouched.Before(bucket.lastRefill) {
-				lastTouched = bucket.lastRefill
-			}
-			if now.Sub(lastTouched) >= l.bucketTTL {
+			if now.Sub(bucket.lastSeen) >= l.bucketTTL && l.bucketIsIdleLocked(key, bucket, now) {
 				delete(l.buckets, key)
 			}
 		}
 	}
 	l.lastPrune = now
-}
-
-func (l *routeRateLimiter) evictOldestBucketIfFull() {
-	if l == nil || l.maxKeys <= 0 || len(l.buckets) < l.maxKeys {
-		return
-	}
-	var oldestKey string
-	var oldestSeen time.Time
-	for key, bucket := range l.buckets {
-		lastTouched := bucket.lastSeen
-		if lastTouched.Before(bucket.lastRefill) {
-			lastTouched = bucket.lastRefill
-		}
-		if oldestKey == "" || lastTouched.Before(oldestSeen) {
-			oldestKey = key
-			oldestSeen = lastTouched
-		}
-	}
-	if oldestKey != "" {
-		delete(l.buckets, oldestKey)
-	}
 }
 
 func requestBodyLimitForRequest(path string, method string, bucket routeAccessRequirement, limits RequestBodyLimits) int64 {

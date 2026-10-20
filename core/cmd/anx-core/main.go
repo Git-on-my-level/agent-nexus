@@ -810,6 +810,8 @@ func main() {
 		} else if deleted > 0 {
 			fmt.Printf("purged %d consumed workspace grant JTIs\n", deleted)
 		}
+	})
+	go runEvery(maintenanceCtx, auth.AuthRowPurgeInterval, authRowPurgeTimeout, func(jobCtx context.Context) {
 		purged, err := authStore.PurgeExpiredAuthRows(jobCtx, auth.AuthRowPurgeOptions{})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to purge expired auth tokens and sessions: %v\n", err)
@@ -862,6 +864,26 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("server stopped")
+	}
+}
+
+// authRowPurgeTimeout bounds one auth row purge run; batches commit
+// individually, so a run cut short keeps what it deleted.
+const authRowPurgeTimeout = 5 * time.Minute
+
+// runEvery runs fn once per interval, each run bounded by timeout.
+func runEvery(ctx context.Context, interval time.Duration, timeout time.Duration, fn func(context.Context)) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runCtx, cancel := context.WithTimeout(ctx, timeout)
+			fn(runCtx)
+			cancel()
+		}
 	}
 }
 

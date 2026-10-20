@@ -12,8 +12,13 @@ const (
 	// covers sub-second ordering of RFC3339Nano text timestamps.
 	DefaultExpiredAuthRowRetention = 24 * time.Hour
 
+	// AuthRowPurgeInterval is how often maintenance runs the purge. Each run
+	// deletes up to BatchSize*MaxBatches rows of each kind (250,000), about
+	// 6 million a day per kind at the default interval.
+	AuthRowPurgeInterval = time.Hour
+
 	defaultAuthRowPurgeBatchSize  = 500
-	defaultAuthRowPurgeMaxBatches = 1000
+	defaultAuthRowPurgeMaxBatches = 500
 )
 
 // AuthRowPurgeResult counts the rows one purge deleted.
@@ -25,7 +30,15 @@ type AuthRowPurgeResult struct {
 	Truncated bool
 }
 
+type authRowPurgeStep struct {
+	query   string
+	count   *int64
+	batches int
+	done    bool
+}
+
 // AuthRowPurgeOptions bounds one purge. Zero values use the defaults.
+// MaxBatches applies to each kind of row separately.
 type AuthRowPurgeOptions struct {
 	Retention  time.Duration
 	BatchSize  int
@@ -91,19 +104,23 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 	cutoff := now.UTC().Add(-retention).Format(time.RFC3339Nano)
 
 	var result AuthRowPurgeResult
-	batches := 0
-	for _, step := range []struct {
-		query string
-		count *int64
-	}{
-		{purgeExpiredAccessTokensSQL, &result.AccessTokens},
-		{purgeExpiredRefreshSessionsSQL, &result.RefreshSessions},
-		{purgeRevokedRefreshSessionsSQL, &result.RefreshSessions},
-	} {
-		for {
-			if batches >= maxBatches {
+	steps := []*authRowPurgeStep{
+		{query: purgeExpiredAccessTokensSQL, count: &result.AccessTokens},
+		{query: purgeExpiredRefreshSessionsSQL, count: &result.RefreshSessions},
+		{query: purgeRevokedRefreshSessionsSQL, count: &result.RefreshSessions},
+	}
+	// Round-robin one batch per step, each step with its own batch budget,
+	// so a large backlog in one table never starves the others.
+	for active := len(steps); active > 0; {
+		active = 0
+		for _, step := range steps {
+			if step.done {
+				continue
+			}
+			if step.batches >= maxBatches {
+				step.done = true
 				result.Truncated = true
-				return result, nil
+				continue
 			}
 			if err := ctx.Err(); err != nil {
 				return result, err
@@ -112,15 +129,17 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 			if err != nil {
 				return result, fmt.Errorf("purge expired auth rows: %w", err)
 			}
-			batches++
+			step.batches++
 			rows, err := res.RowsAffected()
 			if err != nil {
 				return result, fmt.Errorf("read expired auth row purge count: %w", err)
 			}
 			*step.count += rows
 			if rows < int64(batchSize) {
-				break
+				step.done = true
+				continue
 			}
+			active++
 		}
 	}
 	return result, nil
