@@ -17,8 +17,11 @@ const (
 	// 6 million a day per kind at the default interval.
 	AuthRowPurgeInterval = time.Hour
 
-	defaultAuthRowPurgeBatchSize  = 500
-	defaultAuthRowPurgeMaxBatches = 500
+	// Small batches with a pause between them keep each write-lock hold
+	// short, so live writes wait for at most one batch.
+	defaultAuthRowPurgeBatchSize  = 100
+	defaultAuthRowPurgeMaxBatches = 2500
+	defaultAuthRowPurgePause      = 20 * time.Millisecond
 )
 
 // AuthRowPurgeResult counts the rows one purge deleted.
@@ -44,6 +47,9 @@ type AuthRowPurgeOptions struct {
 	BatchSize  int
 	MaxBatches int
 	Now        time.Time
+	// Pause is the wait between batches; zero uses the default and a
+	// negative value disables it.
+	Pause time.Duration
 }
 
 // Each statement deletes at most one batch, seeking the expiry or revocation
@@ -97,6 +103,10 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 	if maxBatches <= 0 {
 		maxBatches = defaultAuthRowPurgeMaxBatches
 	}
+	pause := options.Pause
+	if pause == 0 {
+		pause = defaultAuthRowPurgePause
+	}
 	now := options.Now
 	if now.IsZero() {
 		now = time.Now()
@@ -109,6 +119,7 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 		{query: purgeExpiredRefreshSessionsSQL, count: &result.RefreshSessions},
 		{query: purgeRevokedRefreshSessionsSQL, count: &result.RefreshSessions},
 	}
+	totalBatches := 0
 	// Round-robin one batch per step, each step with its own batch budget,
 	// so a large backlog in one table never starves the others.
 	for active := len(steps); active > 0; {
@@ -122,7 +133,7 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 				result.Truncated = true
 				continue
 			}
-			if err := ctx.Err(); err != nil {
+			if err := waitAuthRowPurgePause(ctx, pause, totalBatches > 0); err != nil {
 				return result, err
 			}
 			res, err := s.db.ExecContext(ctx, step.query, cutoff, batchSize)
@@ -130,6 +141,7 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 				return result, fmt.Errorf("purge expired auth rows: %w", err)
 			}
 			step.batches++
+			totalBatches++
 			rows, err := res.RowsAffected()
 			if err != nil {
 				return result, fmt.Errorf("read expired auth row purge count: %w", err)
@@ -143,4 +155,18 @@ func (s *Store) PurgeExpiredAuthRows(ctx context.Context, options AuthRowPurgeOp
 		}
 	}
 	return result, nil
+}
+
+func waitAuthRowPurgePause(ctx context.Context, pause time.Duration, wait bool) error {
+	if !wait || pause <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(pause)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

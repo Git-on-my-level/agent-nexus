@@ -2,9 +2,12 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,12 +121,30 @@ func TestPerformanceAuthRowIndexesAndPurge(t *testing.T) {
 	t.Logf("expired access tokens past retention: %d (oldest %s)", eligible, sample)
 
 	store := NewStore(db)
-	purgeStart := time.Now()
-	result, err := store.PurgeExpiredAuthRows(ctx, AuthRowPurgeOptions{})
-	if err != nil {
-		t.Fatalf("purge: %v", err)
+
+	// A writer issuing tokens, as live traffic does, measured alone and then
+	// while the purge drains the backlog.
+	baseline := measureAuthWrites(ctx, t, db, "baseline", 3*time.Second, nil)
+	purgeDone := make(chan struct{})
+	var result AuthRowPurgeResult
+	var purgeErr error
+	var elapsed time.Duration
+	go func() {
+		defer close(purgeDone)
+		purgeStart := time.Now()
+		result, purgeErr = store.PurgeExpiredAuthRows(ctx, AuthRowPurgeOptions{})
+		elapsed = time.Since(purgeStart)
+	}()
+	during := measureAuthWrites(ctx, t, db, "during-purge", 0, purgeDone)
+	<-purgeDone
+	if purgeErr != nil {
+		t.Fatalf("purge: %v", purgeErr)
 	}
-	elapsed := time.Since(purgeStart)
+	t.Logf("write latency baseline p50=%s p99=%s max=%s busy=%d; during purge p50=%s p99=%s max=%s busy=%d",
+		baseline.p50, baseline.p99, baseline.max, baseline.busy, during.p50, during.p99, during.max, during.busy)
+	if during.busy > 0 {
+		t.Fatalf("concurrent writes failed with SQLITE_BUSY %d times during the purge", during.busy)
+	}
 	t.Logf("one default purge run: %d access tokens, %d refresh sessions, truncated=%t, in %s (%.0f rows/s)",
 		result.AccessTokens, result.RefreshSessions, result.Truncated, elapsed.Round(time.Millisecond),
 		float64(result.AccessTokens+result.RefreshSessions)/elapsed.Seconds())
@@ -146,4 +167,54 @@ func scaleEnvInt(t *testing.T, name string, fallback int) int {
 		t.Fatalf("%s must be a positive integer", name)
 	}
 	return value
+}
+
+type authWriteLatency struct {
+	p50, p99, max time.Duration
+	busy          int
+}
+
+// measureAuthWrites inserts a live access token every 2ms for duration, or
+// until done closes, and reports the latency distribution.
+func measureAuthWrites(ctx context.Context, t *testing.T, db *sql.DB, label string, duration time.Duration, done <-chan struct{}) authWriteLatency {
+	t.Helper()
+	var samples []time.Duration
+	busy := 0
+	deadline := time.Now().Add(duration)
+	for i := 0; ; i++ {
+		if done != nil {
+			select {
+			case <-done:
+				goto report
+			default:
+			}
+		} else if time.Now().After(deadline) {
+			break
+		}
+		now := time.Now().UTC()
+		start := time.Now()
+		_, err := db.ExecContext(ctx, `INSERT INTO auth_access_tokens(id, agent_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
+			fmt.Sprintf("access_live_%s_%d", label, i), "agent-scale-0000", fmt.Sprintf("live-%s-%d", label, i),
+			now.Format(time.RFC3339Nano), now.Add(15*time.Minute).Format(time.RFC3339Nano))
+		samples = append(samples, time.Since(start))
+		if err != nil {
+			if strings.Contains(err.Error(), "busy") || strings.Contains(err.Error(), "locked") {
+				busy++
+			} else {
+				t.Fatalf("%s write: %v", label, err)
+			}
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+report:
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	if len(samples) == 0 {
+		return authWriteLatency{busy: busy}
+	}
+	return authWriteLatency{
+		p50:  samples[len(samples)/2].Round(time.Microsecond),
+		p99:  samples[len(samples)*99/100].Round(time.Microsecond),
+		max:  samples[len(samples)-1].Round(time.Microsecond),
+		busy: busy,
+	}
 }

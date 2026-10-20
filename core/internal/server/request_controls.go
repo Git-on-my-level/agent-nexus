@@ -1,6 +1,7 @@
 package server
 
 import (
+	"container/heap"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,8 +95,11 @@ func (l RouteRateLimits) normalize() RouteRateLimits {
 }
 
 type routeRateLimiter struct {
-	mu        sync.Mutex
-	buckets   map[string]*rateLimitBucket
+	mu      sync.Mutex
+	buckets map[string]*rateLimitBucket
+	// byFullAt orders buckets by when they refill to their burst, so idle
+	// buckets are found at the top without scanning.
+	byFullAt  rateLimitBucketHeap
 	limits    RouteRateLimits
 	maxKeys   int
 	bucketTTL time.Duration
@@ -107,9 +111,37 @@ type routeRateLimiter struct {
 }
 
 type rateLimitBucket struct {
+	key        string
 	tokens     float64
 	lastRefill time.Time
 	lastSeen   time.Time
+	// fullAt is when the bucket will have refilled to its burst; from then
+	// on forgetting it loses nothing.
+	fullAt time.Time
+	index  int
+}
+
+type rateLimitBucketHeap []*rateLimitBucket
+
+func (h rateLimitBucketHeap) Len() int           { return len(h) }
+func (h rateLimitBucketHeap) Less(i, j int) bool { return h[i].fullAt.Before(h[j].fullAt) }
+func (h rateLimitBucketHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+	h[i].index = i
+	h[j].index = j
+}
+func (h *rateLimitBucketHeap) Push(x any) {
+	bucket := x.(*rateLimitBucket)
+	bucket.index = len(*h)
+	*h = append(*h, bucket)
+}
+func (h *rateLimitBucketHeap) Pop() any {
+	old := *h
+	last := old[len(old)-1]
+	old[len(old)-1] = nil
+	*h = old[:len(old)-1]
+	last.index = -1
+	return last
 }
 
 func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
@@ -122,6 +154,7 @@ func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
 }
 
 // allow spends one request from the scope's budget when one is left.
+// Its cost is O(log n) in the tracked scopes, full or not.
 func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bool, time.Duration) {
 	if l == nil || strings.TrimSpace(bucket) == "" {
 		return true, 0
@@ -138,12 +171,19 @@ func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bo
 	state := l.bucketLocked(rateLimitStateKey(bucket, scope), limit, burst, now)
 	if state == nil {
 		// No bucket could be tracked without discarding another scope's
-		// state; refuse until one refills.
-		return false, rateLimitRetryAfter(0, ratePerSecond)
+		// state; refuse until the nearest one refills.
+		retryAfter := time.Second
+		if len(l.byFullAt) > 0 {
+			if wait := l.byFullAt[0].fullAt.Sub(now); wait > retryAfter {
+				retryAfter = wait
+			}
+		}
+		return false, retryAfter
 	}
 	state.lastSeen = now
 	if state.tokens >= 1 {
 		state.tokens -= 1
+		l.updateFullAtLocked(state, limit, burst)
 		return true, 0
 	}
 	return false, rateLimitRetryAfter(state.tokens, ratePerSecond)
@@ -167,6 +207,7 @@ func (l *routeRateLimiter) refund(bucket string, scope string, now time.Time) {
 	}
 	refillRateLimitBucket(state, limit, burst, now)
 	state.tokens = math.Min(float64(burst), state.tokens+1)
+	l.updateFullAtLocked(state, limit, burst)
 }
 
 func rateLimitStateKey(bucket string, scope string) string {
@@ -198,59 +239,58 @@ func refillRateLimitBucket(state *rateLimitBucket, limit int, burst int, now tim
 	}
 }
 
+// updateFullAtLocked recomputes when a just-refilled bucket reaches its
+// burst and restores heap order.
+func (l *routeRateLimiter) updateFullAtLocked(state *rateLimitBucket, limit int, burst int) {
+	missing := float64(burst) - state.tokens
+	state.fullAt = state.lastRefill
+	if missing > 0 {
+		ratePerSecond := float64(limit) / 60.0
+		state.fullAt = state.lastRefill.Add(time.Duration(math.Ceil(missing / ratePerSecond * float64(time.Second))))
+	}
+	if state.index >= 0 && state.index < len(l.byFullAt) && l.byFullAt[state.index] == state {
+		heap.Fix(&l.byFullAt, state.index)
+	}
+}
+
+func (l *routeRateLimiter) removeLocked(state *rateLimitBucket) {
+	if state.index >= 0 && state.index < len(l.byFullAt) && l.byFullAt[state.index] == state {
+		heap.Remove(&l.byFullAt, state.index)
+	}
+	delete(l.buckets, state.key)
+}
+
 // bucketLocked returns the refilled bucket for a key, creating it when
 // there is room. It returns nil only for a fail-closed limiter whose
 // buckets all still carry state.
 func (l *routeRateLimiter) bucketLocked(stateKey string, limit int, burst int, now time.Time) *rateLimitBucket {
-	l.pruneBuckets(now)
 	if state, ok := l.buckets[stateKey]; ok {
 		refillRateLimitBucket(state, limit, burst, now)
 		return state
 	}
+	l.pruneBuckets(now)
 	if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys && !l.evictBucketLocked(now) {
 		return nil
 	}
-	state := &rateLimitBucket{tokens: float64(burst), lastRefill: now, lastSeen: now}
+	state := &rateLimitBucket{key: stateKey, tokens: float64(burst), lastRefill: now, lastSeen: now, fullAt: now}
 	l.buckets[stateKey] = state
+	heap.Push(&l.byFullAt, state)
 	return state
 }
 
-// bucketIsIdleLocked reports whether a bucket has refilled to its burst, so
-// forgetting it loses nothing: a new bucket would start in the same state.
-func (l *routeRateLimiter) bucketIsIdleLocked(key string, state *rateLimitBucket, now time.Time) bool {
-	bucket, _, _ := strings.Cut(key, ":")
-	limit, burst := l.limitForBucket(bucket)
-	if limit <= 0 || burst <= 0 {
-		return true
-	}
-	refillRateLimitBucket(state, limit, burst, now)
-	return state.tokens >= float64(burst)
-}
-
-// evictBucketLocked frees one slot. It prefers the oldest idle bucket. If
-// none is idle, a fail-closed limiter keeps every bucket and reports false;
-// otherwise the oldest bucket is evicted.
+// evictBucketLocked frees one slot, in O(log n). The bucket nearest to
+// refilled goes first; if it has refilled, nothing is lost. If none has, a
+// fail-closed limiter keeps every bucket and reports false; otherwise the
+// nearest-to-refilled bucket, which carries the least state, is evicted.
 func (l *routeRateLimiter) evictBucketLocked(now time.Time) bool {
-	var idleKey, oldestKey string
-	var idleSeen, oldestSeen time.Time
-	for key, state := range l.buckets {
-		// lastSeen, not lastRefill: idle checks refill buckets as they scan.
-		lastTouched := state.lastSeen
-		if oldestKey == "" || lastTouched.Before(oldestSeen) {
-			oldestKey, oldestSeen = key, lastTouched
-		}
-		if l.bucketIsIdleLocked(key, state, now) && (idleKey == "" || lastTouched.Before(idleSeen)) {
-			idleKey, idleSeen = key, lastTouched
-		}
-	}
-	switch {
-	case idleKey != "":
-		delete(l.buckets, idleKey)
-	case l.failClosedWhenFull || oldestKey == "":
+	if len(l.byFullAt) == 0 {
 		return false
-	default:
-		delete(l.buckets, oldestKey)
 	}
+	nearest := l.byFullAt[0]
+	if nearest.fullAt.After(now) && l.failClosedWhenFull {
+		return false
+	}
+	l.removeLocked(nearest)
 	return true
 }
 
@@ -267,19 +307,19 @@ func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {
 	}
 }
 
+// pruneBuckets forgets buckets that have been refilled for at least the
+// bucket TTL, at most once per prune interval, popping them from the top of
+// the refill order.
 func (l *routeRateLimiter) pruneBuckets(now time.Time) {
-	if l == nil || len(l.buckets) == 0 {
+	if l == nil || len(l.buckets) == 0 || l.bucketTTL <= 0 {
 		return
 	}
-	if now.Sub(l.lastPrune) < routeRateLimitPruneInterval && len(l.buckets) < l.maxKeys {
+	if now.Sub(l.lastPrune) < routeRateLimitPruneInterval {
 		return
 	}
-	if l.bucketTTL > 0 {
-		for key, bucket := range l.buckets {
-			if now.Sub(bucket.lastSeen) >= l.bucketTTL && l.bucketIsIdleLocked(key, bucket, now) {
-				delete(l.buckets, key)
-			}
-		}
+	cutoff := now.Add(-l.bucketTTL)
+	for len(l.byFullAt) > 0 && !l.byFullAt[0].fullAt.After(cutoff) {
+		l.removeLocked(l.byFullAt[0])
 	}
 	l.lastPrune = now
 }

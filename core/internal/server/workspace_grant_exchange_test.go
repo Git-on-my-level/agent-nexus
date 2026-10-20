@@ -419,3 +419,91 @@ func TestRouteRateLimiterEvictsIdleScopesBeforeLimitedOnes(t *testing.T) {
 		t.Fatal("limited scope regained budget")
 	}
 }
+
+func TestWorkspaceGrantConcurrentReplaysDoNotSpendPrincipalBudget(t *testing.T) {
+	t.Parallel()
+	h := newGrantExchangeHarness(t)
+
+	const copies = 10
+	codes := make([]int, copies)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < copies; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			codes[i] = h.post(t, "203.0.113.60:40000", humanGrantBody("valid:raced:jti-raced")).Code
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	succeeded := 0
+	for _, code := range codes {
+		switch code {
+		case http.StatusOK:
+			succeeded++
+		case http.StatusUnauthorized:
+		default:
+			t.Fatalf("unexpected status in concurrent replays: %v", codes)
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("exactly one copy of a grant must succeed, got %d: %v", succeeded, codes)
+	}
+	// Only the one success spent the principal's budget: 9 remain.
+	for i := 0; i < 9; i++ {
+		if rr := h.post(t, "198.51.100.140:40000", humanGrantBody(fmt.Sprintf("valid:raced:jti-raced-%d", i))); rr.Code != http.StatusOK {
+			t.Fatalf("exchange %d after concurrent replays: got %d: %s", i, rr.Code, rr.Body.String())
+		}
+	}
+	if rr := h.post(t, "198.51.100.140:40000", humanGrantBody("valid:raced:jti-raced-over")); rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("budget should now be spent: got %d", rr.Code)
+	}
+}
+
+func fullPrincipalLimiter(tb testing.TB, now time.Time) *routeRateLimiter {
+	tb.Helper()
+	limiter := newWorkspaceGrantPrincipalRateLimiter(RouteRateLimits{AuthRequestsPerMinute: 10, AuthBurst: 10})
+	for i := 0; i < limiter.maxKeys; i++ {
+		if ok, _ := limiter.allow("auth", fmt.Sprintf("principal-%d", i), now); !ok {
+			tb.Fatalf("fill %d refused", i)
+		}
+	}
+	return limiter
+}
+
+func TestFullPrincipalLimiterPerRequestCostIsBounded(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	limiter := fullPrincipalLimiter(t, now)
+
+	const calls = 20000
+	started := time.Now()
+	for i := 0; i < calls; i++ {
+		at := now.Add(time.Duration(i) * time.Millisecond)
+		// New principals are refused (every bucket carries state) and
+		// existing ones are served, both without scanning the limiter.
+		if ok, _ := limiter.allow("auth", fmt.Sprintf("new-%d", i), at); ok && i < 5000 {
+			t.Fatalf("new principal %d admitted while every bucket carries state", i)
+		}
+		limiter.allow("auth", fmt.Sprintf("principal-%d", i%limiter.maxKeys), at)
+	}
+	// A scan per request would be calls*maxKeys (over a billion) bucket
+	// visits; a heap keeps this to milliseconds.
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("%d requests on a full limiter took %s", 2*calls, elapsed)
+	}
+	if len(limiter.buckets) > limiter.maxKeys || len(limiter.byFullAt) != len(limiter.buckets) {
+		t.Fatalf("limiter bookkeeping drifted: buckets=%d heap=%d", len(limiter.buckets), len(limiter.byFullAt))
+	}
+}
+
+func BenchmarkFullPrincipalLimiterAllow(b *testing.B) {
+	now := time.Now().UTC()
+	limiter := fullPrincipalLimiter(b, now)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		limiter.allow("auth", fmt.Sprintf("new-%d", i), now)
+	}
+}
