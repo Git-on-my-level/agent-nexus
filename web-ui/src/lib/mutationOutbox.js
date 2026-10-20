@@ -826,146 +826,17 @@ async function attempt(entry) {
   if (confirmedInTab.has(tabKey) || inFlightInTab.has(tabKey)) return;
   try {
     await requestMutationSendLock(entry.scope, async (lease) => {
-      if (
-        !active(entry) ||
-        confirmedInTab.has(tabKey) ||
-        inFlightInTab.has(tabKey)
-      )
-        return;
-      const latest = await loadLocalWorkRecord(
-        entry.scope,
-        "mutation",
-        entry.key,
-      );
-      if (latest?.deleted) {
-        if (latest.deletionReason === "confirmed") {
-          confirmedInTab.set(tabKey, latest.confirmation ?? null);
-          volatile.delete(entry.key);
-          confirm(entry, latest.confirmation ?? null);
-        } else {
-          volatile.delete(entry.key);
-        }
-        return;
-      }
-      if (!latest || latest.value.state === "superseded") {
-        volatile.delete(entry.key);
-        return;
-      }
-      const saved = latest.value;
-      if (saved.state === "attention" || saved.nextAt > Date.now()) return;
-      entry = saved;
-      if (replayExpired(entry.createdAt)) throw expiredReplayError();
-      const fingerprint = await intentFingerprint(entry.request);
-      const records = await listLocalWork(entry.scope, "mutation", {
-        includeDeleted: true,
-      });
-      let adopted = null;
-      for (const record of records) {
-        if (record.target === entry.key) continue;
-        if (record.deleted) {
-          if (
-            record.deletionReason === "confirmed" &&
-            record.submission?.confirmedAt >= entry.createdAt &&
-            record.submission?.target === entry.target &&
-            record.submission.operation === entry.operation &&
-            record.submission.fingerprint === fingerprint
-          ) {
-            adopted = record;
-            break;
-          }
-          continue;
-        }
-        const other = record.value;
-        if (
-          !visible(other) ||
-          replayExpired(other.createdAt) ||
-          other.target !== entry.target ||
-          other.operation !== entry.operation
-        )
-          continue;
-        if (
-          other.createdAt > entry.createdAt ||
-          (other.createdAt === entry.createdAt && other.key > entry.key)
-        )
-          continue;
-        if ((await intentFingerprint(other.request)) !== fingerprint) continue;
-        // Another tab owns the identical persisted submission. Adopt its
-        // active request, including its original keys and checkpoints.
-        await persist(
-          {
-            ...entry,
-            state: "superseded",
-            adoptedKey: other.key,
-          },
-          lease,
-        );
-        volatile.delete(entry.key);
-        return;
-      }
-      entry.state = "sending";
-      entry.attempts += 1;
-      await persist(entry, lease);
-      inFlightInTab.add(tabKey);
-      mutationOutbox.update((rows) =>
-        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
-      );
       try {
-        if (!active(entry)) return;
-        const result = adopted
-          ? adopted.confirmation
-          : await send(entry, lease);
-        confirmedInTab.set(tabKey, result);
-        if (entry.epoch !== localWorkEpoch(entry.scope)) return;
-        try {
-          await saveLocalWork(entry.scope, "mutation", entry.key, null, {
-            epoch: entry.epoch,
-            lease,
-            deletionReason: "confirmed",
-            confirmation: result,
-            submission: {
-              target: entry.target,
-              operation: entry.operation,
-              fingerprint,
-              confirmedAt: Date.now(),
-            },
-          });
-        } catch (confirmSaveErr) {
-          if (!confirmSaveErr?.localPersistence) throw confirmSaveErr;
-        }
-        volatile.delete(entry.key);
-        // Preserve any newer composer contents, even in another tab.
-        const current = await loadLocalWork(
-          entry.scope,
-          "draft",
-          entry.draftTarget || entry.target,
-        );
-        if (JSON.stringify(current) === JSON.stringify(entry.draft)) {
-          try {
-            await saveLocalWork(
-              entry.scope,
-              "draft",
-              entry.draftTarget || entry.target,
-              null,
-              {
-                epoch: entry.epoch,
-                lease,
-              },
-            );
-          } catch (draftErr) {
-            if (draftErr?.leaseLost) throw draftErr;
-          }
-        }
-        if (entry.operation === "events.create") {
-          lease?.assertHeld();
-          await consumeUploadedAttachments(
-            entry.scope,
-            entry.request.event.refs,
-            entry.epoch,
-          );
-        }
-        confirm(entry, result);
-      } finally {
-        inFlightInTab.delete(tabKey);
+        await attemptLocked(lease);
+      } catch (error) {
+        if (error?.leaseLost || lease?.isHeld?.() === false || !active(entry))
+          throw error;
+        // Checkpoint the failure before releasing the send lock. While the
+        // send is in flight the persisted row says "sending" with a nextAt
+        // that is already due; a tab waiting on this lock would otherwise
+        // read that row and resend at once, skipping the backoff and
+        // inflating the attempt count that sets the next delay.
+        await recordFailure(error, lease);
       }
     });
   } catch (error) {
@@ -988,6 +859,152 @@ async function attempt(entry) {
       timer = setTimeout(requestRecovery, 250);
       return;
     }
+    await recordFailure(error);
+  }
+
+  async function attemptLocked(lease) {
+    if (
+      !active(entry) ||
+      confirmedInTab.has(tabKey) ||
+      inFlightInTab.has(tabKey)
+    )
+      return;
+    const latest = await loadLocalWorkRecord(
+      entry.scope,
+      "mutation",
+      entry.key,
+    );
+    if (latest?.deleted) {
+      if (latest.deletionReason === "confirmed") {
+        confirmedInTab.set(tabKey, latest.confirmation ?? null);
+        volatile.delete(entry.key);
+        confirm(entry, latest.confirmation ?? null);
+      } else {
+        volatile.delete(entry.key);
+      }
+      return;
+    }
+    if (!latest || latest.value.state === "superseded") {
+      volatile.delete(entry.key);
+      return;
+    }
+    const saved = latest.value;
+    if (saved.state === "attention" || saved.nextAt > Date.now()) return;
+    entry = saved;
+    if (replayExpired(entry.createdAt)) throw expiredReplayError();
+    const fingerprint = await intentFingerprint(entry.request);
+    const records = await listLocalWork(entry.scope, "mutation", {
+      includeDeleted: true,
+    });
+    let adopted = null;
+    for (const record of records) {
+      if (record.target === entry.key) continue;
+      if (record.deleted) {
+        if (
+          record.deletionReason === "confirmed" &&
+          record.submission?.confirmedAt >= entry.createdAt &&
+          record.submission?.target === entry.target &&
+          record.submission.operation === entry.operation &&
+          record.submission.fingerprint === fingerprint
+        ) {
+          adopted = record;
+          break;
+        }
+        continue;
+      }
+      const other = record.value;
+      if (
+        !visible(other) ||
+        replayExpired(other.createdAt) ||
+        other.target !== entry.target ||
+        other.operation !== entry.operation
+      )
+        continue;
+      if (
+        other.createdAt > entry.createdAt ||
+        (other.createdAt === entry.createdAt && other.key > entry.key)
+      )
+        continue;
+      if ((await intentFingerprint(other.request)) !== fingerprint) continue;
+      // Another tab owns the identical persisted submission. Adopt its
+      // active request, including its original keys and checkpoints.
+      await persist(
+        {
+          ...entry,
+          state: "superseded",
+          adoptedKey: other.key,
+        },
+        lease,
+      );
+      volatile.delete(entry.key);
+      return;
+    }
+    entry.state = "sending";
+    entry.attempts += 1;
+    await persist(entry, lease);
+    inFlightInTab.add(tabKey);
+    mutationOutbox.update((rows) =>
+      rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
+    );
+    try {
+      if (!active(entry)) return;
+      const result = adopted ? adopted.confirmation : await send(entry, lease);
+      confirmedInTab.set(tabKey, result);
+      if (entry.epoch !== localWorkEpoch(entry.scope)) return;
+      try {
+        await saveLocalWork(entry.scope, "mutation", entry.key, null, {
+          epoch: entry.epoch,
+          lease,
+          deletionReason: "confirmed",
+          confirmation: result,
+          submission: {
+            target: entry.target,
+            operation: entry.operation,
+            fingerprint,
+            confirmedAt: Date.now(),
+          },
+        });
+      } catch (confirmSaveErr) {
+        if (!confirmSaveErr?.localPersistence) throw confirmSaveErr;
+      }
+      volatile.delete(entry.key);
+      // Preserve any newer composer contents, even in another tab.
+      const current = await loadLocalWork(
+        entry.scope,
+        "draft",
+        entry.draftTarget || entry.target,
+      );
+      if (JSON.stringify(current) === JSON.stringify(entry.draft)) {
+        try {
+          await saveLocalWork(
+            entry.scope,
+            "draft",
+            entry.draftTarget || entry.target,
+            null,
+            {
+              epoch: entry.epoch,
+              lease,
+            },
+          );
+        } catch (draftErr) {
+          if (draftErr?.leaseLost) throw draftErr;
+        }
+      }
+      if (entry.operation === "events.create") {
+        lease?.assertHeld();
+        await consumeUploadedAttachments(
+          entry.scope,
+          entry.request.event.refs,
+          entry.epoch,
+        );
+      }
+      confirm(entry, result);
+    } finally {
+      inFlightInTab.delete(tabKey);
+    }
+  }
+
+  async function recordFailure(error, lease = null) {
     const latest = await loadLocalWorkRecord(
       entry.scope,
       "mutation",
@@ -1036,9 +1053,10 @@ async function attempt(entry) {
       );
     volatile.set(entry.key, entry);
     try {
-      await persist(entry);
+      await persist(entry, lease);
       volatile.delete(entry.key);
     } catch (saveError) {
+      if (saveError?.leaseLost) throw saveError;
       entry.state = "attention";
       entry.failure = mutationFailure(
         Object.assign(saveError, { localPersistence: true }),

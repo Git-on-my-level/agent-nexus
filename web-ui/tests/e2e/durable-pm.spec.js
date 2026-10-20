@@ -197,6 +197,53 @@ for (const failure of ["creation", "message"])
       });
     });
 
+test("a tab waiting on the send lock honours the failed attempt's backoff", async ({
+  page,
+  context,
+}) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let failedAt = 0;
+  const sends = [];
+  const handle = async ({ path, method, body, reply }) => {
+    if (method !== "POST" || !path.endsWith("/messages")) return;
+    sends.push({ at: Date.now(), body });
+    if (sends.length === 1) {
+      await gate;
+      failedAt = Date.now();
+      await reply({ error: { message: "Private upstream failure" } }, 524);
+    } else
+      await reply(
+        {
+          id: "turn-sample",
+          text: body.text,
+          status: "sending",
+          created_at: new Date().toISOString(),
+        },
+        202,
+      );
+    return true;
+  };
+  await setup(page, { handle });
+  await open(page);
+  await send(page);
+  await expect.poll(() => sends.length).toBe(1);
+  const other = await context.newPage();
+  await setup(other, { handle });
+  await open(other);
+  // The second tab lists the in-flight row as due and queues on the send
+  // lock the first tab holds until the uncertain response arrives.
+  await expect(other.locator("[data-unsent-indicator]")).toBeVisible();
+  release();
+  await expect.poll(() => sends.length, { timeout: 10000 }).toBe(2);
+  // The 2s backoff from the first failure must hold across tabs, rather
+  // than the waiting tab resending as soon as the lock is released.
+  expect(sends[1].at - failedAt).toBeGreaterThanOrEqual(1500);
+  expect(sends[1].body).toEqual(sends[0].body);
+});
+
 test("definitive message failure keeps text and edits in its already-created conversation", async ({
   page,
 }, testInfo) => {
