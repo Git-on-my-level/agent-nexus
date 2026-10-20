@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -273,5 +274,91 @@ func TestInboxLifecycleRefIndexingIsLinear(t *testing.T) {
 		if big > 30*small+200*time.Millisecond {
 			t.Fatalf("%s indexing is superlinear: 2k %s, 20k %s", field, small, big)
 		}
+	}
+}
+
+// A rewrite that keeps data_json's byte length (here: many more, shorter
+// refs) must not be indexed inline with the stale planned ref count.
+func TestInboxLifecycleSameLengthRewriteIsNotIndexedInline(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	w, err := InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	db := w.DB()
+	document := func(refs []string, size int) string {
+		t.Helper()
+		encode := func(pad int) string {
+			data, err := json.Marshal(map[string]any{"related_refs": refs, "pad": strings.Repeat("x", pad)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return string(data)
+		}
+		base := encode(0)
+		if size == 0 {
+			return base
+		}
+		if len(base) > size {
+			t.Fatalf("cannot pad %d bytes to %d", len(base), size)
+		}
+		return encode(size - len(base)) // each pad byte adds one byte
+	}
+	short := make([]string, 3000)
+	for i := range short {
+		short[i] = fmt.Sprintf("card:s%04d", i)
+	}
+	rewritten := document(short, 0)
+	long := make([]string, 20)
+	for i := range long {
+		long[i] = "card:" + strings.Repeat(fmt.Sprintf("%c", 'a'+i), 900)
+	}
+	original := document(long, len(rewritten))
+	if len(original) != len(rewritten) || len(original) > inboxLifecycleInlineBytes {
+		t.Fatalf("fixture sizes %d and %d", len(original), len(rewritten))
+	}
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES('item','thread-x','agent_wake','now','now',?)`, []any{original}},
+		{`DELETE FROM inbox_lifecycle_refs`, nil},
+		{`UPDATE derived_inbox_items SET lifecycle_ready=0`, nil},
+		{`UPDATE inbox_lifecycle_job SET phase=5,cursor='',split_id='',split_offset=0,split_hidden=0,owners_ready=1,done=0`, nil},
+	} {
+		if _, err = db.ExecContext(ctx, q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	planned, err := w.classifyInboxLifecycleItems(ctx, "", 200)
+	if err != nil || len(planned) != 1 || planned[0].refs != 20 {
+		t.Fatalf("plan: %+v %v", planned, err)
+	}
+	// Same byte length and projection version; only the ref count changes.
+	if _, err = db.ExecContext(ctx, `UPDATE derived_inbox_items SET data_json=? WHERE id='item'`, rewritten); err != nil {
+		t.Fatal(err)
+	}
+	// The update trigger reindexed it fully; clear its refs to observe
+	// whether the stale plan indexes it again inside the write.
+	if _, err = db.ExecContext(ctx, `DELETE FROM inbox_lifecycle_refs`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	cursor, _, err := maintainInboxLifecycleItems(ctx, tx, "", planned, 200, inboxLifecycleRefBudget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM inbox_lifecycle_refs`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 || cursor != "item" {
+		t.Fatalf("stale candidate re-indexed inline: refs=%d cursor=%q", n, cursor)
 	}
 }

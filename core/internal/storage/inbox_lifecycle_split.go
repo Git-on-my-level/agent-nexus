@@ -24,17 +24,26 @@ const inboxLifecycleInlineBytes = 64 << 10
 
 // inboxLifecycleCandidate is an item sized by a read before the write chunk.
 type inboxLifecycleCandidate struct {
-	id    string
-	bytes int64
-	refs  int
-	ready bool
+	id      string
+	bytes   int64
+	refs    int
+	ready   bool
+	version string // generated_at and source_hash, set by projection writes
 }
+
+// inboxLifecycleRowCheck reads what the write chunk re-checks for a planned
+// candidate. Readiness and the version are read only for inline-sized rows,
+// so an oversized row's later columns (past its large document) stay unread.
+const inboxLifecycleRowCheck = `SELECT octet_length(data_json),
+ CASE WHEN octet_length(data_json)<=? THEN lifecycle_ready END,
+ CASE WHEN octet_length(data_json)<=? THEN COALESCE(generated_at,'')||char(31)||COALESCE(source_hash,'') END
+ FROM derived_inbox_items WHERE id=?`
 
 // classifyInboxLifecycleItems sizes the next candidates in one read
 // statement that holds no write lock. octet_length comes from the record
 // header; json_array_length parses the document, outside the lock.
 func (w *Workspace) classifyInboxLifecycleItems(ctx context.Context, cursor string, limit int) ([]inboxLifecycleCandidate, error) {
-	rows, err := w.db.QueryContext(context.WithoutCancel(ctx), `SELECT id,octet_length(data_json),`+inboxLifecycleItemRefs+`,lifecycle_ready FROM derived_inbox_items WHERE id>? ORDER BY id LIMIT ?`, cursor, limit)
+	rows, err := w.db.QueryContext(context.WithoutCancel(ctx), `SELECT id,octet_length(data_json),`+inboxLifecycleItemRefs+`,lifecycle_ready,COALESCE(generated_at,'')||char(31)||COALESCE(source_hash,'') FROM derived_inbox_items WHERE id>? ORDER BY id LIMIT ?`, cursor, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +52,7 @@ func (w *Workspace) classifyInboxLifecycleItems(ctx context.Context, cursor stri
 	for rows.Next() {
 		var c inboxLifecycleCandidate
 		var bytes sql.NullInt64
-		if err = rows.Scan(&c.id, &bytes, &c.refs, &c.ready); err != nil {
+		if err = rows.Scan(&c.id, &bytes, &c.refs, &c.ready, &c.version); err != nil {
 			return nil, err
 		}
 		c.bytes = bytes.Int64
@@ -54,9 +63,11 @@ func (w *Workspace) classifyInboxLifecycleItems(ctx context.Context, cursor stri
 
 // maintainInboxLifecycleItems indexes the planned candidates that fit the
 // budget in the caller's write transaction, with the trigger's SQL. Each is
-// re-checked first by its data_json byte length (O(1), from the record
-// header); a changed or missing item ends the chunk so it is re-planned. It
-// returns the new cursor (the last complete item) and whether the phase
+// re-checked first: a missing item is skipped; a changed byte length or row
+// version ends the chunk so it is re-planned; an item that is already
+// lifecycle-ready is skipped, because any write of it since planning (even
+// one that keeps its byte length) fully reindexed it and marked it ready.
+// It returns the new cursor (the last complete item) and whether the phase
 // finished.
 //
 // A first candidate too large for inline expansion becomes the job's split
@@ -66,7 +77,9 @@ func maintainInboxLifecycleItems(ctx context.Context, tx *sql.Tx, cursor string,
 	remaining := budget
 	for i, c := range candidates {
 		var bytes sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT octet_length(data_json) FROM derived_inbox_items WHERE id=?`, c.id).Scan(&bytes)
+		var ready sql.NullBool
+		var version sql.NullString
+		err := tx.QueryRowContext(ctx, inboxLifecycleRowCheck, inboxLifecycleInlineBytes, inboxLifecycleInlineBytes, c.id).Scan(&bytes, &ready, &version)
 		if errors.Is(err, sql.ErrNoRows) {
 			cursor = c.id // deleted since planning: nothing to index
 			continue
@@ -75,10 +88,18 @@ func maintainInboxLifecycleItems(ctx context.Context, tx *sql.Tx, cursor string,
 			return cursor, false, err
 		}
 		if bytes.Int64 != c.bytes {
-			return cursor, false, nil // rewritten since planning; its trigger indexed it
+			return cursor, false, nil // rewritten since planning; re-plan it
 		}
 		left := max(c.refs, 1)
-		if left > budget || c.bytes > inboxLifecycleInlineBytes {
+		inline := left <= budget && c.bytes <= inboxLifecycleInlineBytes
+		if inline && ready.Bool {
+			cursor = c.id // fully indexed by its own trigger
+			continue
+		}
+		if inline && version.String != c.version {
+			return cursor, false, nil // rewritten since planning; re-plan it
+		}
+		if !inline {
 			if i > 0 {
 				return cursor, false, nil // the next chunk starts with it
 			}
