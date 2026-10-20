@@ -2987,35 +2987,10 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 	if err != nil {
 		return err
 	}
-	blobHashesToDelete := make([]string, 0)
-	for _, contentHash := range uniqueSortedStrings(contentHashes) {
-		if contentHash == "" {
-			continue
-		}
-		var cnt int
-		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
-			return fmt.Errorf("count card blob references: %w", err)
-		}
-		if cnt == 0 {
-			if err := s.removeBlobLedgerEntryTx(ctx, tx, contentHash); err != nil {
-				return err
-			}
-			blobHashesToDelete = append(blobHashesToDelete, contentHash)
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit purge card transaction: %w", err)
 	}
-	for _, contentHash := range blobHashesToDelete {
-		if contentHash == "" || s.blob == nil {
-			continue
-		}
-		if err := s.blob.Delete(ctx, contentHash); err != nil && !errors.Is(err, blob.ErrBlobNotFound) {
-			return fmt.Errorf("delete card blob object: %w", err)
-		}
-	}
-	return nil
+	return s.collectUnreferencedBlobs(ctx, contentHashes)
 }
 
 // TrashBoardCard records an operational soft-delete and clears archive columns (distinct soft-delete lanes).

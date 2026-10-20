@@ -195,6 +195,9 @@ type Store struct {
 	askLifecycleMu       sync.Mutex
 	askCloseCursor       string
 	askCloseBackoff      map[string]askBackoffState
+	// blobCollectHook is a test seam that runs after a purge commits and before
+	// it collects unreferenced blobs.
+	blobCollectHook func(hashes []string)
 }
 
 type eventExec interface {
@@ -1412,32 +1415,11 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 		return fmt.Errorf("delete artifact: %w", err)
 	}
 
-	contentHash = strings.TrimSpace(contentHash)
-	var shouldDeleteBlob bool
-	if contentHash != "" {
-		var cnt int
-		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
-			return fmt.Errorf("count artifact blob references: %w", err)
-		}
-		if cnt == 0 {
-			if err := s.removeBlobLedgerEntryTx(ctx, tx, contentHash); err != nil {
-				return err
-			}
-			shouldDeleteBlob = true
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit purge transaction: %w", err)
 	}
 
-	if shouldDeleteBlob && s.blob != nil {
-		if err := s.blob.Delete(ctx, contentHash); err != nil && !errors.Is(err, blob.ErrBlobNotFound) {
-			return fmt.Errorf("delete blob object: %w", err)
-		}
-	}
-
-	return nil
+	return s.collectUnreferencedBlobs(ctx, []string{contentHash})
 }
 
 // applyThreadPatch updates a threads-table row with kind "thread".
