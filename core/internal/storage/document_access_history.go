@@ -195,7 +195,7 @@ func moveDocumentAccessHistoryUntil(ctx context.Context, tx *sql.Tx, limit int, 
 	if cards {
 		shared += ` OR EXISTS(SELECT 1 FROM card_revisions WHERE artifact_id=?1)`
 	}
-	budget, visited := limit, 0
+	budget, visited, progressed := limit, 0, false
 	for budget > 0 && visited < 4*limit {
 		var revision, document, artifact string
 		err := tx.QueryRowContext(ctx, `SELECT revision_id,document_id,artifact_id FROM document_revisions WHERE revision_id>? ORDER BY revision_id LIMIT 1`, cursor).Scan(&revision, &document, &artifact)
@@ -217,7 +217,13 @@ func moveDocumentAccessHistoryUntil(ctx context.Context, tx *sql.Tx, limit int, 
 		}
 		complete := true
 	sources:
-		for _, source := range sources {
+		for i, source := range sources {
+			if i > 0 && progressed && stop() {
+				// Out of budget between this revision's sources: leave the
+				// cursor on it; the next chunk finishes the remaining source.
+				complete = false
+				break
+			}
 			for {
 				request := min(budget, documentHistoryEdgeBatch)
 				moved, err := moveDocumentAccessEdges(ctx, tx, source[0], source[1], document, request)
@@ -225,6 +231,7 @@ func moveDocumentAccessHistoryUntil(ctx context.Context, tx *sql.Tx, limit int, 
 					return false, err
 				}
 				budget -= moved
+				progressed = progressed || moved > 0
 				if moved < request {
 					break // this source has no own edges left
 				}

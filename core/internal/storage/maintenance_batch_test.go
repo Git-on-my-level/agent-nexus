@@ -16,7 +16,8 @@ import (
 var maintenanceDelayID atomic.Uint64
 
 // Delaying projection writes inside SQLite makes an oversized chunk exceed its
-// real deadline without relying on payload parsing speed on the test machine.
+// lease without relying on payload parsing speed on the test machine. The
+// chunk is not interrupted: it commits, and later chunks use a smaller cap.
 func TestMaintenanceDeadlineEventuallyCommitsCursor(t *testing.T) {
 	for _, kind := range []string{"asks", "inbox"} {
 		t.Run(kind, func(t *testing.T) {
@@ -104,7 +105,9 @@ func TestMaintenanceDeadlineEventuallyCommitsCursor(t *testing.T) {
 					if e := ws.DB().QueryRowContext(ctx, `SELECT count(*) FROM `+target).Scan(&count); e != nil {
 						t.Fatal(e)
 					}
-					if failures == 0 || !progress || count != 8 {
+					// An overrun (8 rows x 20ms > the 100ms lease) commits
+					// instead of being cancelled mid-transaction.
+					if failures != 0 || count != 8 {
 						t.Fatalf("failures=%d progress=%v rows=%d", failures, progress, count)
 					}
 					return

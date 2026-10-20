@@ -40,14 +40,9 @@ func TestCompactMigrationDiagnosticsAreSafeAndClassified(t *testing.T) {
 }
 
 func TestCompactMigrationDeadlineJoinKeepsSQLiteCode(t *testing.T) {
-	var batch adaptiveMaintenanceBatch
-	_, err := batch.run(context.Background(), 3, func(ctx context.Context, _ int) (bool, error) {
-		<-ctx.Done()
-		return false, compactDriverCode(9)
-	})
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected joined deadline: %v", err)
-	}
+	// Maintenance chunks are no longer cancelled, but a caller deadline joined
+	// with a driver error must still keep the SQLite code.
+	err := errors.Join(context.DeadlineExceeded, compactDriverCode(9))
 	diagnostic := compactMigrationError("compact_backfill", err).(*CompactAccessMigrationError)
 	if diagnostic.Reason != "deadline_exceeded" || diagnostic.SQLiteCode != 9 || strings.Contains(diagnostic.Error(), "driver-secret") {
 		t.Fatalf("lost driver code: %+v error=%q", diagnostic, diagnostic.Error())

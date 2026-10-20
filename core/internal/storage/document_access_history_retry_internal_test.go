@@ -138,6 +138,50 @@ func TestDocumentAccessHistoryRetryBacksOffAndReportsStuckRevision(t *testing.T)
 	}
 }
 
+// A budget that runs out after the revision row's edges must not start the
+// artifact's pair; the cursor stays on the revision for the next chunk.
+func TestDocumentAccessHistoryStopsBetweenRevisionSources(t *testing.T) {
+	t.Parallel()
+	w := legacyDocumentHistoryWorkspace(t, 1, 4)
+	count := func(kind, id string) int {
+		t.Helper()
+		var n int
+		if err := w.DB().QueryRow(`SELECT count(*) FROM resource_access_edges WHERE source_kind=? AND source_id=?`, kind, id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if count("document_revision", "rev-1") == 0 || count("artifact", "art-1") == 0 {
+		t.Fatal("fixture lacks revision or artifact edges")
+	}
+	run := func(stop func() bool) bool {
+		t.Helper()
+		tx, err := w.DB().BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		done, err := moveDocumentAccessHistoryUntil(context.Background(), tx, 1000, stop)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		return done
+	}
+	run(func() bool { return true })
+	var cursor string
+	if err := w.DB().QueryRow(`SELECT cursor FROM resource_access_document_history_job`).Scan(&cursor); err != nil {
+		t.Fatal(err)
+	}
+	if count("document_revision", "rev-1") != 0 || count("artifact", "art-1") == 0 || cursor != "" {
+		t.Fatalf("over-budget chunk: revision=%d artifact=%d cursor=%q", count("document_revision", "rev-1"), count("artifact", "art-1"), cursor)
+	}
+	if !run(func() bool { return false }) || count("artifact", "art-1") != 0 {
+		t.Fatal("next chunk did not finish the revision")
+	}
+}
+
 // Chunks used to run under a 100ms context deadline. On a slow or large
 // database every chunk could overrun it, so none committed, and an overrun
 // that cancelled a statement mid-transaction could leave the write lock held.
