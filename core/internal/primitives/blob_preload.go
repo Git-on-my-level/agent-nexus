@@ -7,6 +7,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 // Creators store blob content in two steps so that slow remote uploads stay
@@ -26,7 +27,14 @@ import (
 //
 // If the create then fails, discardUnlessCommitted removes the objects the
 // preload created, through the same locked recount, so a failed request does
-// not leave untracked blobs behind.
+// not leave untracked blobs behind. A create nested in an outer
+// WriteTransaction (idempotent replay) keeps that decision until the outer
+// transaction finishes, because its rows are durable only then.
+//
+// A replay-wrapped create opens its outer transaction before the create runs,
+// so a preload there would hold the lock. PreloadDocumentContentForReplay lets the
+// caller preload known content before the outer transaction instead; the
+// nested create then skips those hashes.
 
 const blobTransferConcurrency = 8
 
@@ -74,9 +82,13 @@ func (s *Store) preloadBlobContent(ctx context.Context, contents ...blobContent)
 func (s *Store) preloadBlobs(ctx context.Context, hashes []string, preload func(int) (bool, error)) (*blobPreload, error) {
 	p := &blobPreload{store: s, ctx: ctx}
 	created := make([]bool, len(hashes))
+	already, _ := ctx.Value(replayPreloadKey{}).(map[string]struct{})
 	g := new(errgroup.Group)
 	g.SetLimit(blobTransferConcurrency)
 	for i := range hashes {
+		if _, ok := already[hashes[i]]; ok {
+			continue
+		}
 		g.Go(func() error {
 			ok, err := preload(i)
 			created[i] = ok
@@ -99,11 +111,23 @@ func (s *Store) preloadBlobs(ctx context.Context, hashes []string, preload func(
 	return p, nil
 }
 
-// markCommitted records that the write transaction committed its references.
+// markCommitted records that the create's write transaction committed its
+// references. Inside an outer WriteTransaction that was only a savepoint, so
+// the preloaded objects are discarded if the outer transaction rolls back.
 func (p *blobPreload) markCommitted() {
-	if p != nil {
-		p.committed = true
+	if p == nil {
+		return
 	}
+	p.committed = true
+	if len(p.created) == 0 {
+		return
+	}
+	created, store := p.created, p.store
+	resourceaccess.AfterWriteTransaction(p.ctx, func(ctx context.Context, committed bool) {
+		if !committed {
+			store.discardBlobs(ctx, created)
+		}
+	})
 }
 
 // discardUnlessCommitted is deferred by creators. When the create did not
@@ -114,10 +138,53 @@ func (p *blobPreload) discardUnlessCommitted() {
 	if p == nil || p.committed || len(p.created) == 0 {
 		return
 	}
-	if err := p.store.collectUnreferencedBlobs(context.WithoutCancel(p.ctx), p.created); err != nil {
+	p.store.discardBlobs(p.ctx, p.created)
+	p.created = nil
+}
+
+func (s *Store) discardBlobs(ctx context.Context, hashes []string) {
+	if err := s.collectUnreferencedBlobs(context.WithoutCancel(ctx), hashes); err != nil {
 		log.Printf("discard preloaded blobs after failed create: %v", err)
 	}
-	p.created = nil
+}
+
+type replayPreloadKey struct{}
+
+// PreloadDocumentContentForReplay preloads the revision content a
+// replay-wrapped document create or revise will store, before the replay opens
+// its outer write transaction. Run the replay with the returned context, then
+// call finish: it collects the preloaded object if no committed row references
+// it, so a failed replay (or content the mutation did not store) leaves nothing
+// behind. Content that cannot be encoded, or a failed preload, is left to the
+// mutation itself.
+func (s *Store) PreloadDocumentContentForReplay(ctx context.Context, content any, contentType string) (context.Context, func()) {
+	noop := func() {}
+	if s == nil || s.blob == nil {
+		return ctx, noop
+	}
+	if _, ok := s.blob.(blob.ContentPreloader); !ok {
+		return ctx, noop
+	}
+	contentType, err := normalizeDocumentContentType(contentType)
+	if err != nil {
+		return ctx, noop
+	}
+	data, err := encodeContent(content, contentType)
+	if err != nil {
+		return ctx, noop
+	}
+	hash := sha256Hex(data)
+	p, err := s.preloadBlobContent(ctx, blobContent{hash: hash, data: data})
+	if err != nil {
+		return ctx, noop
+	}
+	already, _ := ctx.Value(replayPreloadKey{}).(map[string]struct{})
+	next := make(map[string]struct{}, len(already)+1)
+	for h := range already {
+		next[h] = struct{}{}
+	}
+	next[hash] = struct{}{}
+	return context.WithValue(ctx, replayPreloadKey{}, next), p.discardUnlessCommitted
 }
 
 // promoteStagedBlobs promotes a batch's staged writes inside its write

@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -63,23 +64,78 @@ type Tx struct {
 }
 type writeTransactionKey struct{}
 type writeTransaction struct {
-	db *sql.DB
-	tx *sql.Tx
+	db    *sql.DB
+	tx    *sql.Tx
+	hooks *completionHooks
+}
+
+// completionHooks run once the outermost WriteTransaction has finished.
+type completionHooks struct {
+	mu  sync.Mutex
+	fns []func(ctx context.Context, committed bool)
 }
 
 // WriteTransaction binds nested scoped reads/writes to one transaction. Nested
 // BeginTx calls use savepoints, preserving local rollback and outer atomicity.
+// A WriteTransaction opened inside another one joins it.
 func (d *DB) WriteTransaction(ctx context.Context, run func(context.Context, *Tx) error) error {
+	if bound, ok := ctx.Value(writeTransactionKey{}).(writeTransaction); ok && bound.db == d.raw {
+		tx, err := d.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err := run(ctx, tx); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	ctx = context.WithValue(ctx, writeTransactionKey{}, writeTransaction{d.raw, tx.raw})
-	if err := run(ctx, tx); err != nil {
+	hooks := &completionHooks{}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+		hooks.run(ctx, committed)
+	}()
+	bound := context.WithValue(ctx, writeTransactionKey{}, writeTransaction{d.raw, tx.raw, hooks})
+	if err := run(bound, tx); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+// AfterWriteTransaction defers fn until the outermost WriteTransaction bound to
+// ctx finishes, with a context outside that transaction and whether it
+// committed. Work inside a nested transaction is durable only then. It reports
+// false, without calling fn, when ctx is not inside a WriteTransaction.
+func AfterWriteTransaction(ctx context.Context, fn func(ctx context.Context, committed bool)) bool {
+	bound, ok := ctx.Value(writeTransactionKey{}).(writeTransaction)
+	if !ok || bound.hooks == nil {
+		return false
+	}
+	bound.hooks.mu.Lock()
+	bound.hooks.fns = append(bound.hooks.fns, fn)
+	bound.hooks.mu.Unlock()
+	return true
+}
+
+func (h *completionHooks) run(ctx context.Context, committed bool) {
+	h.mu.Lock()
+	fns := h.fns
+	h.fns = nil
+	h.mu.Unlock()
+	for _, fn := range fns {
+		fn(ctx, committed)
+	}
 }
 
 // SetWriteHook is construction-only. Hooks maintain derived state in the source

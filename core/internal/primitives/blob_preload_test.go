@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ type remoteBlobBackend struct {
 	mu            sync.Mutex
 	preloadCalls  int
 	failPreloadOn int
+	onPreload     func()
 }
 
 type remoteStage struct {
@@ -59,6 +61,9 @@ func (b *remoteBlobBackend) WriteStream(ctx context.Context, src io.Reader, maxB
 }
 
 func (b *remoteBlobBackend) store(ctx context.Context, hash string, data []byte) (bool, error) {
+	if b.onPreload != nil {
+		b.onPreload()
+	}
 	if exists, err := b.Backend.Exists(ctx, hash); err != nil || exists {
 		return false, err
 	}
@@ -371,4 +376,106 @@ func TestFailedCardBatchDiscardsPreloadedBlobs(t *testing.T) {
 		}
 		assertBlobsAbsent(t, ctx, s, hashes...)
 	})
+}
+
+// A document create nested in an idempotent replay only commits a savepoint.
+// When the replay's outer transaction then rolls back, the blob its preload
+// created must be collected, not left untracked.
+func TestReplayRollbackDiscardsNestedPreload(t *testing.T) {
+	t.Parallel()
+	for name, run := range map[string]func(map[string]any) (map[string]any, error){
+		"handler error": func(map[string]any) (map[string]any, error) { return nil, errors.New("injected handler failure") },
+		"receipt failure": func(document map[string]any) (map[string]any, error) {
+			return map[string]any{"document": document, "unencodable": make(chan int)}, nil
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, s := newBlobGCTestStore(t)
+			newRemoteBlobBackend(s)
+			content := "replayed document bytes"
+			hash := sha256Hex([]byte(content))
+			_, err := s.ExecuteWithReplay(ctx, "docs.create", "writer", "key-1", "hash-1", 201, func(ctx context.Context) (map[string]any, error) {
+				document, _, err := s.CreateDocument(ctx, "writer", map[string]any{"title": "replayed"}, content, "text", nil)
+				if err != nil {
+					return nil, err
+				}
+				return run(document)
+			})
+			if err == nil {
+				t.Fatal("replay succeeded although its outer transaction should roll back")
+			}
+			if n := countRows(t, ctx, s, `SELECT COUNT(*) FROM documents`); n != 0 {
+				t.Fatalf("outer rollback kept %d documents", n)
+			}
+			assertBlobsAbsent(t, ctx, s, hash)
+		})
+	}
+}
+
+// With the content preloaded before the replay opens its outer transaction,
+// the nested create stores nothing remotely while it holds the write lock.
+func TestReplayDocumentContentPreloadsOutsideOuterTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, s := newBlobGCTestStore(t)
+	backend := newRemoteBlobBackend(s)
+	var inside atomic.Bool
+	var preloadsInside, preloadsOutside atomic.Int32
+	backend.onPreload = func() {
+		if inside.Load() {
+			preloadsInside.Add(1)
+		} else {
+			preloadsOutside.Add(1)
+		}
+	}
+	content := "preloaded replay bytes"
+	replayCtx, finish := s.PreloadDocumentContentForReplay(ctx, content, "text")
+	var documentID string
+	_, err := s.ExecuteWithReplay(replayCtx, "docs.create", "writer", "key-2", "hash-2", 201, func(ctx context.Context) (map[string]any, error) {
+		inside.Store(true)
+		defer inside.Store(false)
+		document, _, err := s.CreateDocument(ctx, "writer", map[string]any{"title": "preloaded"}, content, "text", nil)
+		documentID = anyStringValue(document["id"])
+		return map[string]any{"document": document}, err
+	})
+	finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := preloadsInside.Load(); got != 0 {
+		t.Fatalf("nested create preloaded %d object(s) under the outer write lock", got)
+	}
+	if got := preloadsOutside.Load(); got != 1 {
+		t.Fatalf("preloads before the replay = %d, want 1", got)
+	}
+	hash := sha256Hex([]byte(content))
+	if _, err := s.blob.Read(ctx, hash); err != nil {
+		t.Fatalf("replayed document content missing: %v", err)
+	}
+	if _, found, err := s.lookupBlobLedgerEntry(ctx, hash); err != nil || !found {
+		t.Fatalf("ledger entry: found=%v err=%v", found, err)
+	}
+	if _, _, err := s.GetDocument(ctx, documentID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A replay that fails after the content was preloaded before it leaves no blob.
+func TestFailedReplayDiscardsContentPreloadedBeforeIt(t *testing.T) {
+	t.Parallel()
+	ctx, s := newBlobGCTestStore(t)
+	newRemoteBlobBackend(s)
+	content := "abandoned replay bytes"
+	replayCtx, finish := s.PreloadDocumentContentForReplay(ctx, content, "text")
+	_, err := s.ExecuteWithReplay(replayCtx, "docs.create", "writer", "key-3", "hash-3", 201, func(ctx context.Context) (map[string]any, error) {
+		if _, _, err := s.CreateDocument(ctx, "writer", map[string]any{"title": "abandoned"}, content, "text", nil); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("injected handler failure")
+	})
+	finish()
+	if err == nil {
+		t.Fatal("replay succeeded")
+	}
+	assertBlobsAbsent(t, ctx, s, sha256Hex([]byte(content)))
 }

@@ -179,13 +179,15 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 	}
 
-	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
+	replayCtx, finishPreload := preloadReplayDocumentContent(r.Context(), opts.primitiveStore, req.RequestKey, req.Content, req.ContentType)
+	status, response, err := executeAtomicMutation(replayCtx, opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
 		document, revision, err := opts.primitiveStore.CreateDocument(ctx, actorID, req.Document, req.Content, req.ContentType, refs)
 		if err != nil {
 			return nil, err
 		}
 		return hygiene.attach(map[string]any{"document": document, "revision": revision}), nil
 	})
+	finishPreload()
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "resource not found")
@@ -514,7 +516,8 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "docs.revise", actorID, req.RequestKey, struct {
+	replayCtx, finishPreload := preloadReplayDocumentContent(r.Context(), opts.primitiveStore, req.RequestKey, req.Content, req.ContentType)
+	status, response, err := executeAtomicMutation(replayCtx, opts.primitiveStore, "docs.revise", actorID, req.RequestKey, struct {
 		ID   string
 		Body any
 	}{documentID, req}, successStatus, func(ctx context.Context) (map[string]any, error) {
@@ -524,6 +527,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		return hygiene.attach(map[string]any{"document": document, "revision": revision}), nil
 	})
+	finishPreload()
 	if err != nil {
 		switch {
 		case writePrimitiveQuotaViolationError(w, err):

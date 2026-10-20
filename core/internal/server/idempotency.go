@@ -104,6 +104,20 @@ func executeAtomicMutation(ctx context.Context, store PrimitiveStore, scope, act
 	return replay.Status, replay.Response, err
 }
 
+// preloadReplayDocumentContent preloads document content before a
+// replay-wrapped create or revise opens its outer write transaction, so a
+// remote blob upload does not run under the workspace write lock. Without a
+// replay key the mutation preloads for itself.
+func preloadReplayDocumentContent(ctx context.Context, store PrimitiveStore, key string, content any, contentType string) (context.Context, func()) {
+	preloader, ok := store.(interface {
+		PreloadDocumentContentForReplay(context.Context, any, string) (context.Context, func())
+	})
+	if strings.TrimSpace(key) == "" || !ok {
+		return ctx, func() {}
+	}
+	return preloader.PreloadDocumentContentForReplay(ctx, content, contentType)
+}
+
 func writeIdempotencyError(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
