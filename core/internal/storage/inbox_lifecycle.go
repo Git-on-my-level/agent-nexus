@@ -43,7 +43,7 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TABLE IF NOT EXISTS inbox_hidden_subject_refs(owner_kind TEXT NOT NULL,owner_id TEXT NOT NULL,ref TEXT NOT NULL,PRIMARY KEY(owner_kind,owner_id,ref)) WITHOUT ROWID`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_hidden_subject_ref ON inbox_hidden_subject_refs(ref)`,
 		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_dirty(inbox_id TEXT PRIMARY KEY) WITHOUT ROWID`,
-		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_job(singleton INTEGER PRIMARY KEY CHECK(singleton=1),phase INTEGER NOT NULL DEFAULT 0,cursor TEXT NOT NULL DEFAULT '',owners_ready INTEGER NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_job(singleton INTEGER PRIMARY KEY CHECK(singleton=1),phase INTEGER NOT NULL DEFAULT 0,cursor TEXT NOT NULL DEFAULT '',owners_ready INTEGER NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0,ref_offset INTEGER NOT NULL DEFAULT 0)`,
 		`INSERT OR IGNORE INTO inbox_lifecycle_job(singleton,phase,owners_ready,done) SELECT 1,CASE WHEN populated THEN 0 ELSE 5 END,NOT populated,NOT populated FROM (SELECT (EXISTS(SELECT 1 FROM boards LIMIT 1) OR EXISTS(SELECT 1 FROM documents LIMIT 1) OR EXISTS(SELECT 1 FROM threads LIMIT 1) OR EXISTS(SELECT 1 FROM topics LIMIT 1) OR EXISTS(SELECT 1 FROM cards LIMIT 1) OR EXISTS(SELECT 1 FROM derived_inbox_items LIMIT 1)) AS populated)`,
 		`DROP TRIGGER IF EXISTS access_epoch_derived_inbox_items_update`,
 		`CREATE TRIGGER access_epoch_derived_inbox_items_update AFTER UPDATE OF id,thread_id,category,trigger_at,due_at,has_due_at,source_event_id,source_card_id,generated_at,data_json,source_hash ON derived_inbox_items BEGIN UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1; END`,
@@ -54,6 +54,10 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 		if _, err = tx.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("inbox lifecycle projection: %w", err)
 		}
+	}
+	// Job tables created before ref_offset existed (rebuilt by later installs).
+	if err = installInboxLifecycleRefOffset(ctx, tx); err != nil {
+		return err
 	}
 	for _, event := range []string{"INSERT", "UPDATE OF id,data_json,thread_id,category"} {
 		name := "inbox_lifecycle_insert"
@@ -135,6 +139,21 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+// installInboxLifecycleRefOffset lets the item phase split one item's refs
+// across chunks. Metadata only: an O(1) column add on the one-row job table.
+func installInboxLifecycleRefOffset(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "inbox_lifecycle_job")
+	if err != nil || !exists {
+		return err
+	}
+	column, err := sqliteTableHasColumn(ctx, tx, "inbox_lifecycle_job", "ref_offset")
+	if err != nil || column {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `ALTER TABLE inbox_lifecycle_job ADD COLUMN ref_offset INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
 func replaceInboxLifecycleTrigger(ctx context.Context, tx *sql.Tx, name, event, table, body string) error {
 	if _, err := tx.ExecContext(ctx, "DROP TRIGGER IF EXISTS "+name); err != nil {
 		return err
@@ -146,9 +165,15 @@ func replaceInboxLifecycleTrigger(ctx context.Context, tx *sql.Tx, name, event, 
 // Match the payload shaper: explicit related_refs supersede legacy refs; when
 // absent or empty, legacy refs and the indexed backing thread are used.
 func inboxLifecycleRefsSQL(where string) string {
+	return inboxLifecycleRefSliceSQL(where, "")
+}
+
+// inboxLifecycleRefSliceSQL appends keyWhere (empty, or " AND <predicate on
+// the array index j.key>") so one item's refs can span several chunks.
+func inboxLifecycleRefSliceSQL(where, keyWhere string) string {
 	explicit := `json_type(i.data_json,'$.related_refs')='array' AND json_array_length(i.data_json,'$.related_refs')>0 AND NOT EXISTS (SELECT 1 FROM json_each(i.data_json,'$.related_refs') WHERE type<>'text')`
 	legacy := `json_type(i.data_json,'$.refs')='array' AND NOT EXISTS (SELECT 1 FROM json_each(i.data_json,'$.refs') WHERE type<>'text')`
-	refs := `SELECT i.id AS inbox_id,CASE WHEN (` + explicit + `) THEN j.value ELSE anx_unicode_trim(j.value) END AS ref FROM derived_inbox_items i,json_each(CASE WHEN (` + explicit + `) THEN json_extract(i.data_json,'$.related_refs') ELSE CASE WHEN (` + legacy + `) THEN json_extract(i.data_json,'$.refs') ELSE '[]' END END) j WHERE j.type='text' AND (` + where + `)
+	refs := `SELECT i.id AS inbox_id,CASE WHEN (` + explicit + `) THEN j.value ELSE anx_unicode_trim(j.value) END AS ref FROM derived_inbox_items i,json_each(CASE WHEN (` + explicit + `) THEN json_extract(i.data_json,'$.related_refs') ELSE CASE WHEN (` + legacy + `) THEN json_extract(i.data_json,'$.refs') ELSE '[]' END END) j WHERE j.type='text' AND (` + where + `)` + keyWhere + `
  UNION ALL SELECT i.id,'thread:'||anx_unicode_trim(i.thread_id) FROM derived_inbox_items i WHERE NOT COALESCE((` + explicit + `),0) AND (` + where + `)`
 	return `SELECT inbox_id,ref FROM (` + refs + `) WHERE ref<>''`
 }
@@ -189,9 +214,9 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 		return false, err
 	}
 	defer cleanup()
-	var phase, done int
+	var phase, done, offset int
 	var cursor string
-	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done,ref_offset FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done, &offset); err != nil {
 		return false, err
 	}
 	if done != 0 {
@@ -199,6 +224,17 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 	}
 	sources := []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"derived_inbox_items", "inbox"}}
 	source := sources[phase]
+	if source.kind == "inbox" {
+		var finished bool
+		if cursor, offset, finished, err = maintainInboxLifecycleItems(ctx, tx, cursor, offset, limit, inboxLifecycleRefBudget); err != nil {
+			return false, err
+		}
+		if finished {
+			phase++
+			cursor, offset = "", 0
+		}
+		return finishInboxLifecycleChunk(ctx, tx, phase, cursor, offset, len(sources))
+	}
 	rows, err := tx.QueryContext(ctx, "SELECT id FROM "+source.table+" WHERE id>? ORDER BY id LIMIT ?", cursor, limit)
 	if err != nil {
 		return false, err
@@ -220,15 +256,7 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 	}
 	if len(ids) > 0 {
 		marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-		if source.kind == "inbox" {
-			if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefsSQL("i.id IN ("+marks+")"), append(append([]any{}, ids...), ids...)...); err != nil {
-				return false, err
-			}
-			_, err = tx.ExecContext(ctx, `UPDATE derived_inbox_items SET lifecycle_hidden=`+inboxLifecycleHiddenSQL()+`,lifecycle_ready=1 WHERE id IN (`+marks+`)`, ids...)
-		} else {
-			_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE owner_kind='`+source.kind+`' AND owner_id IN (`+marks+`)`, ids...)
-		}
-		if err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE owner_kind='`+source.kind+`' AND owner_id IN (`+marks+`)`, ids...); err != nil {
 			return false, err
 		}
 	}
@@ -236,22 +264,103 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 		phase++
 		cursor = ""
 	}
-	done = 0
-	if phase == len(sources) {
+	return finishInboxLifecycleChunk(ctx, tx, phase, cursor, 0, len(sources))
+}
+
+func finishInboxLifecycleChunk(ctx context.Context, tx *sql.Tx, phase int, cursor string, offset, sources int) (bool, error) {
+	done := 0
+	if phase == sources {
 		done = 1
-		phase = len(sources) - 1
+		phase = sources - 1
 	}
 	ownersReady := 0
-	if phase >= len(sources)-1 {
+	if phase >= sources-1 {
 		ownersReady = 1
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET phase=?,cursor=?,owners_ready=?,done=? WHERE singleton=1`, phase, cursor, ownersReady, done); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET phase=?,cursor=?,ref_offset=?,owners_ready=?,done=? WHERE singleton=1`, phase, cursor, offset, ownersReady, done); err != nil {
 		return false, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return done != 0, nil
+}
+
+// inboxLifecycleRefBudget bounds the array elements one chunk expands. The
+// 200-item cap alone does not bound work: one item may carry a huge ref array.
+const inboxLifecycleRefBudget = 2000
+
+// inboxLifecycleItemRefs is an upper bound on the elements the refs SQL
+// expands for an item (whichever of related_refs or legacy refs it uses).
+const inboxLifecycleItemRefs = `max(COALESCE(json_array_length(data_json,'$.related_refs'),0),COALESCE(json_array_length(data_json,'$.refs'),0))`
+
+// maintainInboxLifecycleItems indexes item refs within a ref budget and
+// returns the new cursor and ref offset, and whether the item phase finished.
+//
+// With offset 0 the cursor is the last complete item. With offset > 0 it is an
+// item whose refs exceed the budget, split across chunks; elements before
+// offset are already indexed. A split item
+// stays lifecycle_ready=0 until its final slice, so readers keep using the
+// canonical lifecycle read for it; the owner triggers can only mark it ready
+// as hidden, which a superset of its refs would also be. The final slice
+// recomputes it from all of its refs. Lifecycle never grants authorization.
+func maintainInboxLifecycleItems(ctx context.Context, tx *sql.Tx, cursor string, offset, limit, budget int) (string, int, bool, error) {
+	// A split item is re-read by >=; if it was deleted the scan moves on.
+	op := ">"
+	if offset > 0 {
+		op = ">="
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id,`+inboxLifecycleItemRefs+` FROM derived_inbox_items WHERE id`+op+`? ORDER BY id LIMIT ?`, cursor, limit)
+	if err != nil {
+		return cursor, offset, false, err
+	}
+	type item struct {
+		id   string
+		refs int
+	}
+	var items []item
+	for rows.Next() {
+		var it item
+		if err = rows.Scan(&it.id, &it.refs); err != nil {
+			rows.Close()
+			return cursor, offset, false, err
+		}
+		items = append(items, it)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return cursor, offset, false, err
+	}
+	split := cursor
+	remaining := budget
+	for i, it := range items {
+		start := 0
+		if offset > 0 && it.id == split {
+			start = offset
+		}
+		left := max(it.refs-start, 1)
+		if left > remaining {
+			if i > 0 {
+				return cursor, offset, false, nil // the next chunk starts with this item
+			}
+			// Index one slice of an item larger than the whole budget.
+			end := start + remaining
+			if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefSliceSQL("i.id=?", " AND j.key>=? AND j.key<?"), it.id, start, end, it.id); err != nil {
+				return cursor, offset, false, err
+			}
+			return it.id, end, false, nil
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefSliceSQL("i.id=?", " AND j.key>=?"), it.id, start, it.id); err != nil {
+			return cursor, offset, false, err
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE derived_inbox_items SET lifecycle_hidden=`+inboxLifecycleHiddenSQL()+`,lifecycle_ready=1 WHERE id=?`, it.id); err != nil {
+			return cursor, offset, false, err
+		}
+		remaining -= left
+		cursor, offset = it.id, 0
+	}
+	return cursor, 0, len(items) < limit, nil
 }
 
 // RunInboxLifecycleMaintenance is owned by the server's maintenance context.

@@ -1148,6 +1148,8 @@ var migrations = []migration{
 	// Key revision and revision-artifact reference edges by their document.
 	// Installs triggers only; existing edges move in bounded maintenance.
 	{Version: 111, AfterApply: installDocumentAccessHistory},
+	// The inbox lifecycle backfill splits one item's refs across chunks.
+	{Version: 112, AfterApply: installInboxLifecycleRefOffset},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

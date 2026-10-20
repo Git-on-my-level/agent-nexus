@@ -110,6 +110,28 @@ func TestMaintenanceDeadlineEventuallyCommitsCursor(t *testing.T) {
 					if failures != 0 || count != 8 {
 						t.Fatalf("failures=%d progress=%v rows=%d", failures, progress, count)
 					}
+					// The overrun's job state committed with its rows.
+					if kind == "asks" {
+						var finished int
+						if e := ws.DB().QueryRowContext(ctx, `SELECT done FROM ask_subjects_job WHERE singleton=1`).Scan(&finished); e != nil {
+							t.Fatal(e)
+						}
+						if finished != 1 || cursor < "legacy-07" {
+							t.Fatalf("ask job state cursor=%q done=%d", cursor, finished)
+						}
+					} else {
+						var phase, offset, ownersReady, finished int
+						if e := ws.DB().QueryRowContext(ctx, `SELECT phase,ref_offset,owners_ready,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &offset, &ownersReady, &finished); e != nil {
+							t.Fatal(e)
+						}
+						if phase != 5 || cursor != "" || offset != 0 || ownersReady != 1 || finished != 1 {
+							t.Fatalf("inbox job state phase=%d cursor=%q offset=%d owners_ready=%d done=%d", phase, cursor, offset, ownersReady, finished)
+						}
+						var pending int
+						if e := ws.DB().QueryRowContext(ctx, `SELECT count(*) FROM derived_inbox_items WHERE lifecycle_ready=0`).Scan(&pending); e != nil || pending != 0 {
+							t.Fatalf("%d items left unready: %v", pending, e)
+						}
+					}
 					return
 				}
 			}
