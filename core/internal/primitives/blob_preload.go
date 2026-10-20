@@ -2,6 +2,8 @@ package primitives
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 
 	"golang.org/x/sync/errgroup"
@@ -150,33 +152,42 @@ func (s *Store) discardBlobs(ctx context.Context, hashes []string) {
 
 type replayPreloadKey struct{}
 
+// ErrBlobStorageUnavailable reports that blob storage could not store content
+// before a mutation opened its write transaction. Nothing was written; the
+// request can be retried.
+var ErrBlobStorageUnavailable = errors.New("blob storage is temporarily unavailable")
+
 // PreloadDocumentContentForReplay preloads the revision content a
 // replay-wrapped document create or revise will store, before the replay opens
 // its outer write transaction. Run the replay with the returned context, then
 // call finish: it collects the preloaded object if no committed row references
 // it, so a failed replay (or content the mutation did not store) leaves nothing
-// behind. Content that cannot be encoded, or a failed preload, is left to the
-// mutation itself.
-func (s *Store) PreloadDocumentContentForReplay(ctx context.Context, content any, contentType string) (context.Context, func()) {
+// behind. Content that cannot be encoded is left to the mutation, which rejects
+// it before any storage I/O.
+//
+// A failed preload returns ErrBlobStorageUnavailable. The caller must fail the
+// request then, rather than run the replay: the nested create would otherwise
+// retry the upload while holding the write lock.
+func (s *Store) PreloadDocumentContentForReplay(ctx context.Context, content any, contentType string) (context.Context, func(), error) {
 	noop := func() {}
 	if s == nil || s.blob == nil {
-		return ctx, noop
+		return ctx, noop, nil
 	}
 	if _, ok := s.blob.(blob.ContentPreloader); !ok {
-		return ctx, noop
+		return ctx, noop, nil
 	}
 	contentType, err := normalizeDocumentContentType(contentType)
 	if err != nil {
-		return ctx, noop
+		return ctx, noop, nil
 	}
 	data, err := encodeContent(content, contentType)
 	if err != nil {
-		return ctx, noop
+		return ctx, noop, nil
 	}
 	hash := sha256Hex(data)
 	p, err := s.preloadBlobContent(ctx, blobContent{hash: hash, data: data})
 	if err != nil {
-		return ctx, noop
+		return ctx, noop, fmt.Errorf("%w: %v", ErrBlobStorageUnavailable, err)
 	}
 	already, _ := ctx.Value(replayPreloadKey{}).(map[string]struct{})
 	next := make(map[string]struct{}, len(already)+1)
@@ -184,7 +195,7 @@ func (s *Store) PreloadDocumentContentForReplay(ctx context.Context, content any
 		next[h] = struct{}{}
 	}
 	next[hash] = struct{}{}
-	return context.WithValue(ctx, replayPreloadKey{}, next), p.discardUnlessCommitted
+	return context.WithValue(ctx, replayPreloadKey{}, next), p.discardUnlessCommitted, nil
 }
 
 // promoteStagedBlobs promotes a batch's staged writes inside its write

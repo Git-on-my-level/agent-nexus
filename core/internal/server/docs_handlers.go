@@ -179,7 +179,10 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 	}
 
-	replayCtx, finishPreload := preloadReplayDocumentContent(r.Context(), opts.primitiveStore, req.RequestKey, req.Content, req.ContentType)
+	replayCtx, finishPreload, ok := preloadReplayDocumentContent(w, r.Context(), opts.primitiveStore, req.RequestKey, req.Content, req.ContentType)
+	if !ok {
+		return
+	}
 	status, response, err := executeAtomicMutation(replayCtx, opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
 		document, revision, err := opts.primitiveStore.CreateDocument(ctx, actorID, req.Document, req.Content, req.ContentType, refs)
 		if err != nil {
@@ -516,7 +519,10 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	replayCtx, finishPreload := preloadReplayDocumentContent(r.Context(), opts.primitiveStore, req.RequestKey, req.Content, req.ContentType)
+	replayCtx, finishPreload, ok := preloadReplayDocumentContent(w, r.Context(), opts.primitiveStore, req.RequestKey, req.Content, req.ContentType)
+	if !ok {
+		return
+	}
 	status, response, err := executeAtomicMutation(replayCtx, opts.primitiveStore, "docs.revise", actorID, req.RequestKey, struct {
 		ID   string
 		Body any

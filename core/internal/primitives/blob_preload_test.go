@@ -429,9 +429,12 @@ func TestReplayDocumentContentPreloadsOutsideOuterTransaction(t *testing.T) {
 		}
 	}
 	content := "preloaded replay bytes"
-	replayCtx, finish := s.PreloadDocumentContentForReplay(ctx, content, "text")
+	replayCtx, finish, err := s.PreloadDocumentContentForReplay(ctx, content, "text")
+	if err != nil {
+		t.Fatal(err)
+	}
 	var documentID string
-	_, err := s.ExecuteWithReplay(replayCtx, "docs.create", "writer", "key-2", "hash-2", 201, func(ctx context.Context) (map[string]any, error) {
+	_, err = s.ExecuteWithReplay(replayCtx, "docs.create", "writer", "key-2", "hash-2", 201, func(ctx context.Context) (map[string]any, error) {
 		inside.Store(true)
 		defer inside.Store(false)
 		document, _, err := s.CreateDocument(ctx, "writer", map[string]any{"title": "preloaded"}, content, "text", nil)
@@ -466,8 +469,11 @@ func TestFailedReplayDiscardsContentPreloadedBeforeIt(t *testing.T) {
 	ctx, s := newBlobGCTestStore(t)
 	newRemoteBlobBackend(s)
 	content := "abandoned replay bytes"
-	replayCtx, finish := s.PreloadDocumentContentForReplay(ctx, content, "text")
-	_, err := s.ExecuteWithReplay(replayCtx, "docs.create", "writer", "key-3", "hash-3", 201, func(ctx context.Context) (map[string]any, error) {
+	replayCtx, finish, err := s.PreloadDocumentContentForReplay(ctx, content, "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.ExecuteWithReplay(replayCtx, "docs.create", "writer", "key-3", "hash-3", 201, func(ctx context.Context) (map[string]any, error) {
 		if _, _, err := s.CreateDocument(ctx, "writer", map[string]any{"title": "abandoned"}, content, "text", nil); err != nil {
 			return nil, err
 		}
@@ -476,6 +482,25 @@ func TestFailedReplayDiscardsContentPreloadedBeforeIt(t *testing.T) {
 	finish()
 	if err == nil {
 		t.Fatal("replay succeeded")
+	}
+	assertBlobsAbsent(t, ctx, s, sha256Hex([]byte(content)))
+}
+
+// A failed pre-replay preload is a retryable storage error, and leaves nothing
+// written; the caller fails the request instead of opening the replay.
+func TestFailedReplayPreloadIsRetryable(t *testing.T) {
+	t.Parallel()
+	ctx, s := newBlobGCTestStore(t)
+	backend := newRemoteBlobBackend(s)
+	backend.failPreloadOn = 1
+	content := "unstorable replay bytes"
+	_, finish, err := s.PreloadDocumentContentForReplay(ctx, content, "text")
+	finish()
+	if !errors.Is(err, ErrBlobStorageUnavailable) {
+		t.Fatalf("preload error = %v, want ErrBlobStorageUnavailable", err)
+	}
+	if n := countRows(t, ctx, s, `SELECT COUNT(*) FROM documents`); n != 0 {
+		t.Fatalf("failed preload wrote %d documents", n)
 	}
 	assertBlobsAbsent(t, ctx, s, sha256Hex([]byte(content)))
 }

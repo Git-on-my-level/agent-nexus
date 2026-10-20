@@ -107,15 +107,23 @@ func executeAtomicMutation(ctx context.Context, store PrimitiveStore, scope, act
 // preloadReplayDocumentContent preloads document content before a
 // replay-wrapped create or revise opens its outer write transaction, so a
 // remote blob upload does not run under the workspace write lock. Without a
-// replay key the mutation preloads for itself.
-func preloadReplayDocumentContent(ctx context.Context, store PrimitiveStore, key string, content any, contentType string) (context.Context, func()) {
+// replay key the mutation preloads for itself. When the preload fails it
+// writes a retryable 503 and reports false; the caller must not run the
+// replay, whose nested create would retry the upload under the lock.
+func preloadReplayDocumentContent(w http.ResponseWriter, ctx context.Context, store PrimitiveStore, key string, content any, contentType string) (context.Context, func(), bool) {
 	preloader, ok := store.(interface {
-		PreloadDocumentContentForReplay(context.Context, any, string) (context.Context, func())
+		PreloadDocumentContentForReplay(context.Context, any, string) (context.Context, func(), error)
 	})
 	if strings.TrimSpace(key) == "" || !ok {
-		return ctx, func() {}
+		return ctx, func() {}, true
 	}
-	return preloader.PreloadDocumentContentForReplay(ctx, content, contentType)
+	ctx, finish, err := preloader.PreloadDocumentContentForReplay(ctx, content, contentType)
+	if err != nil {
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "blob storage is temporarily unavailable; retry the request")
+		return ctx, finish, false
+	}
+	return ctx, finish, true
 }
 
 func writeIdempotencyError(w http.ResponseWriter, err error) bool {
