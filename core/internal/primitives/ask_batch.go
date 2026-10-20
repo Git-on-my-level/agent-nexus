@@ -164,13 +164,14 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor, reques
 			return nil, false, err
 		}
 	}
-	if err = tx.Commit(); err != nil {
-		return nil, false, err
-	}
+	// Promote before committing so committed asks always have their content.
 	for _, staged := range stagedWrites {
 		if err = staged.Promote(); err != nil {
 			return nil, false, err
 		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, false, err
 	}
 	return response, false, nil
 }

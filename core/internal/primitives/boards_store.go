@@ -1759,8 +1759,8 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	}
 	// A statement that fails before Commit, once Rollback succeeds, changed
 	// nothing. Leave that error intact so the handler can log it as a 500
-	// (or 503 when SQLite is busy or locked). Only Commit and the
-	// post-commit blob promote are unknown outcomes.
+	// (or 503 when SQLite is busy or locked). Only Commit is an
+	// unknown outcome; content is promoted before it.
 	defer func() {
 		if mutationErr != nil {
 			mutationErr = classifyBoardCardRequestError(mutationErr)
@@ -1851,19 +1851,19 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			return BoardCardMutationResult{}, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		if stagedContent != nil {
+	// Promote before committing so a committed card always has its content; a
+	// failed promote rolls the card back.
+	if stagedContent != nil {
+		if err := stagedContent.Promote(); err != nil {
 			_ = stagedContent.Cleanup()
+			return BoardCardMutationResult{}, fmt.Errorf("finalize card content: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card create transaction: %w", err)}
-	}
-	if stagedContent != nil {
-		if err := stagedContent.Promote(); err != nil {
-			return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", err)}
-		}
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap, ReplayCommitted: input.CreateReplay != nil}, nil
 }
@@ -1905,7 +1905,7 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		return nil, fmt.Errorf("begin board cards batch transaction: %w", err)
 	}
 	// Same rule as CreateBoardCard: a rolled-back statement is not an
-	// unknown outcome. Commit and post-commit promote are.
+	// unknown outcome. Only Commit is; content is promoted before it.
 	defer func() {
 		if mutationErr != nil {
 			mutationErr = classifyBoardCardRequestError(mutationErr)
@@ -1967,19 +1967,24 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		}
 		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
 	}
-	if err := tx.Commit(); err != nil {
-		for _, staged := range stagedWrites {
-			_ = staged.Cleanup()
+	// Promote before committing so committed cards always have their content;
+	// a failed promote rolls the whole batch back.
+	for _, staged := range stagedWrites {
+		if err := staged.Promote(); err != nil {
+			for _, pending := range stagedWrites {
+				_ = pending.Cleanup()
+			}
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return nil, fmt.Errorf("finalize card content: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board cards batch transaction: %w", err)}
-	}
-	for _, staged := range stagedWrites {
-		if err := staged.Promote(); err != nil {
-			return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", err)}
-		}
 	}
 	return results, nil
 }

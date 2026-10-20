@@ -49,13 +49,14 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 			_ = staged.Cleanup()
 		}
 	}()
-	if err = tx.Commit(); err != nil {
-		return nil, err
-	}
+	// Promote before committing so a committed ask always has its content.
 	if staged != nil {
 		if err = staged.Promote(); err != nil {
 			return nil, err
 		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
 	}
 	return stored, nil
 }
@@ -63,7 +64,7 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 // appendTaskAttentionEventTx validates and inserts one task-addressed ask
 // inside an open transaction. Batch filing reuses it so N asks commit or roll
 // back together. On success the caller owns commit and the returned staged
-// write (promote after commit, or cleanup); on error this helper discards it.
+// write (promote before commit, or cleanup); on error this helper discards it.
 func (s *Store) appendTaskAttentionEventTx(ctx context.Context, tx *accessTx, actor string, body map[string]any) (map[string]any, blob.StagedWrite, []string, error) {
 	payload := cloneMap(asMapValue(body["payload"]))
 	body["payload"] = payload
