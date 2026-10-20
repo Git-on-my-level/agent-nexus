@@ -156,12 +156,27 @@ func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
 // allow spends one request from the scope's budget when one is left.
 // Its cost is O(log n) in the tracked scopes, full or not.
 func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bool, time.Duration) {
+	_, allowed, retryAfter := l.reserve(bucket, scope, now)
+	return allowed, retryAfter
+}
+
+// rateLimitReservation records the bucket one allowed request was charged
+// to, so a refund can return exactly that request.
+type rateLimitReservation struct {
+	limiter *routeRateLimiter
+	state   *rateLimitBucket
+	limit   int
+	burst   int
+}
+
+// reserve is allow that also returns a reservation for a later refund.
+func (l *routeRateLimiter) reserve(bucket string, scope string, now time.Time) (rateLimitReservation, bool, time.Duration) {
 	if l == nil || strings.TrimSpace(bucket) == "" {
-		return true, 0
+		return rateLimitReservation{}, true, 0
 	}
 	limit, burst := l.limitForBucket(bucket)
 	if limit <= 0 || burst <= 0 {
-		return true, 0
+		return rateLimitReservation{}, true, 0
 	}
 	ratePerSecond := float64(limit) / 60.0
 
@@ -178,36 +193,36 @@ func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bo
 				retryAfter = wait
 			}
 		}
-		return false, retryAfter
+		return rateLimitReservation{}, false, retryAfter
 	}
 	state.lastSeen = now
 	if state.tokens >= 1 {
 		state.tokens -= 1
 		l.updateFullAtLocked(state, limit, burst)
-		return true, 0
+		return rateLimitReservation{limiter: l, state: state, limit: limit, burst: burst}, true, 0
 	}
-	return false, rateLimitRetryAfter(state.tokens, ratePerSecond)
+	return rateLimitReservation{}, false, rateLimitRetryAfter(state.tokens, ratePerSecond)
 }
 
-// refund returns one request spent by allow, for work that turned out not
-// to count against the scope.
-func (l *routeRateLimiter) refund(bucket string, scope string, now time.Time) {
-	if l == nil || strings.TrimSpace(bucket) == "" {
+// refund returns the one request this reservation took. The bucket ends
+// where it would be had the request never been charged: refilled to now,
+// plus one, never above its burst. A refund to a bucket that was evicted
+// (and possibly recreated) since the charge does nothing, and a
+// reservation refunds at most once.
+func (r *rateLimitReservation) refund(now time.Time) {
+	if r == nil || r.limiter == nil || r.state == nil {
 		return
 	}
-	limit, burst := l.limitForBucket(bucket)
-	if limit <= 0 || burst <= 0 {
-		return
-	}
+	l, state := r.limiter, r.state
+	r.state = nil
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	state, ok := l.buckets[rateLimitStateKey(bucket, scope)]
-	if !ok {
+	if l.buckets[state.key] != state {
 		return
 	}
-	refillRateLimitBucket(state, limit, burst, now)
-	state.tokens = math.Min(float64(burst), state.tokens+1)
-	l.updateFullAtLocked(state, limit, burst)
+	refillRateLimitBucket(state, r.limit, r.burst, now)
+	state.tokens = math.Min(float64(r.burst), state.tokens+1)
+	l.updateFullAtLocked(state, r.limit, r.burst)
 }
 
 func rateLimitStateKey(bucket string, scope string) string {

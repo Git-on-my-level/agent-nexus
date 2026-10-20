@@ -420,11 +420,31 @@ func TestRouteRateLimiterEvictsIdleScopesBeforeLimitedOnes(t *testing.T) {
 	}
 }
 
+func withBeforeGrantConsume(fn func()) HandlerOption {
+	return func(opts *handlerOptions) { opts.beforeGrantConsume = fn }
+}
+
 func TestWorkspaceGrantConcurrentReplaysDoNotSpendPrincipalBudget(t *testing.T) {
 	t.Parallel()
-	h := newGrantExchangeHarness(t)
-
 	const copies = 10
+	// Hold every copy after it passes the unused-jti check and is charged,
+	// until all copies are there, so all of them race the atomic consume.
+	var arrived atomic.Int64
+	allArrived := make(chan struct{})
+	barrier := func() {
+		if arrived.Add(1) == copies {
+			close(allArrived)
+		}
+		select {
+		case <-allArrived:
+		case <-time.After(10 * time.Second):
+		}
+	}
+	// Refill one request a minute so a slow run (the copies serialize on
+	// the database write lock) cannot refill the budget being measured.
+	h := newGrantExchangeHarness(t, withBeforeGrantConsume(barrier),
+		WithWorkspaceGrantSubjectRateLimits(RouteRateLimits{AuthRequestsPerMinute: 1, AuthBurst: 10}))
+
 	codes := make([]int, copies)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -450,6 +470,9 @@ func TestWorkspaceGrantConcurrentReplaysDoNotSpendPrincipalBudget(t *testing.T) 
 	}
 	if succeeded != 1 {
 		t.Fatalf("exactly one copy of a grant must succeed, got %d: %v", succeeded, codes)
+	}
+	if got := arrived.Load(); got < copies {
+		t.Fatalf("only %d of %d copies reached the consume race", got, copies)
 	}
 	// Only the one success spent the principal's budget: 9 remain.
 	for i := 0; i < 9; i++ {
@@ -505,5 +528,52 @@ func BenchmarkFullPrincipalLimiterAllow(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		limiter.allow("auth", fmt.Sprintf("new-%d", i), now)
+	}
+}
+
+func TestRateLimitReservationRefundNeverExceedsBurst(t *testing.T) {
+	t.Parallel()
+	limiter := newWorkspaceGrantPrincipalRateLimiter(RouteRateLimits{AuthRequestsPerMinute: 60, AuthBurst: 3})
+	now := time.Now().UTC()
+
+	reservation, ok, _ := limiter.reserve("auth", "principal", now)
+	if !ok {
+		t.Fatal("reserve refused")
+	}
+	// The refund arrives long after the bucket refilled (as when a request
+	// waited on the database write lock).
+	reservation.refund(now.Add(time.Minute))
+	if got := limiter.buckets["auth:principal"].tokens; got != 3 {
+		t.Fatalf("delayed refund left %.2f tokens, want the burst of 3", got)
+	}
+	// A reservation refunds once.
+	reservation.refund(now.Add(time.Minute))
+	if got := limiter.buckets["auth:principal"].tokens; got != 3 {
+		t.Fatalf("second refund changed the bucket to %.2f", got)
+	}
+
+	// A partial refill plus the refund equals never having been charged.
+	for i := 0; i < 3; i++ {
+		limiter.allow("auth", "partial", now)
+	}
+	reservation, ok, _ = limiter.reserve("auth", "partial", now.Add(1500*time.Millisecond))
+	if !ok {
+		t.Fatal("reserve after partial refill refused")
+	}
+	reservation.refund(now.Add(1500 * time.Millisecond))
+	if got := limiter.buckets["auth:partial"].tokens; got != 1.5 {
+		t.Fatalf("refund after partial refill left %.2f tokens, want 1.5", got)
+	}
+
+	// A refund to a bucket evicted and recreated since the charge does
+	// nothing to the new bucket.
+	reservation, _, _ = limiter.reserve("auth", "evicted", now)
+	limiter.mu.Lock()
+	limiter.removeLocked(limiter.buckets["auth:evicted"])
+	limiter.mu.Unlock()
+	limiter.allow("auth", "evicted", now)
+	reservation.refund(now)
+	if got := limiter.buckets["auth:evicted"].tokens; got != 2 {
+		t.Fatalf("stale refund credited a recreated bucket: %.2f tokens, want 2", got)
 	}
 }

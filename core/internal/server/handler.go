@@ -225,11 +225,14 @@ type handlerOptions struct {
 	// workspaceGrantSubjectRateLimiter budgets verified grant exchanges per
 	// principal and grant type.
 	workspaceGrantSubjectRateLimiter *routeRateLimiter
-	workspaceID                      string
-	readinessChecks                  []namedReadinessCheck
-	opsHealthSections                map[string]OpsHealthSectionFunc
-	secretsStore                     *secrets.Store
-	workspaceAccessMode              string
+	// beforeGrantConsume, when set by tests, runs after a verified grant is
+	// charged and before its jti is consumed.
+	beforeGrantConsume  func()
+	workspaceID         string
+	readinessChecks     []namedReadinessCheck
+	opsHealthSections   map[string]OpsHealthSectionFunc
+	secretsStore        *secrets.Store
+	workspaceAccessMode string
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {

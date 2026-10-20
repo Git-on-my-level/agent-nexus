@@ -189,7 +189,8 @@ func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handler
 		addressScope = "addr:" + host
 	}
 	addressLimiter := opts.workspaceHumanGrantRateLimiter
-	if allowed, retryAfter := addressLimiter.allow("auth", addressScope, time.Now().UTC()); !allowed {
+	addressReservation, allowed, retryAfter := addressLimiter.reserve("auth", addressScope, time.Now().UTC())
+	if !allowed {
 		writeRateLimitedError(w, grant.grantType, retryAfter)
 		return
 	}
@@ -217,12 +218,16 @@ func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handler
 		writeReplay()
 		return
 	}
-	addressLimiter.refund("auth", addressScope, time.Now().UTC())
+	addressReservation.refund(time.Now().UTC())
 
 	principalScope := workspaceGrantPrincipalScope(grant.grantType, principalKey)
-	if allowed, retryAfter := opts.workspaceGrantSubjectRateLimiter.allow("auth", principalScope, time.Now().UTC()); !allowed {
+	principalReservation, allowed, retryAfter := opts.workspaceGrantSubjectRateLimiter.reserve("auth", principalScope, time.Now().UTC())
+	if !allowed {
 		writeRateLimitedError(w, grant.grantType, retryAfter)
 		return
+	}
+	if opts.beforeGrantConsume != nil {
+		opts.beforeGrantConsume()
 	}
 
 	options := auth.GrantExchangeOptions{AccessOnly: issueRefreshToken != nil && !*issueRefreshToken}
@@ -232,7 +237,7 @@ func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handler
 		case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
 			// A concurrent exchange consumed the jti after the check above.
 			// The replay must not cost the principal; charge the address.
-			opts.workspaceGrantSubjectRateLimiter.refund("auth", principalScope, time.Now().UTC())
+			principalReservation.refund(time.Now().UTC())
 			addressLimiter.allow("auth", addressScope, time.Now().UTC())
 			writeReplay()
 		case errors.Is(exchangeErr, auth.ErrAgentRevoked):
