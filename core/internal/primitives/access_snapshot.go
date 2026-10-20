@@ -41,7 +41,7 @@ func (s *denialSnapshot) deniesAtom(key string) bool {
 		s.prepareTargetIndex()
 		s.refIndex = map[string]struct{}{}
 		for target := range s.targetIndex {
-			if strings.HasPrefix(target.kind, "filter/") || target.kind == "brief_loop" || target.kind == "plan" || target.kind == "work_evidence_record" || target.kind == "work_evidence_alias" {
+			if strings.HasPrefix(target.kind, "filter/") || target.kind == "brief_loop" || target.kind == "plan" || target.kind == "work_evidence_record" || target.kind == "work_evidence_alias" || target.kind == resourceaccess.DocumentHistoryKind {
 				continue
 			}
 			s.refIndex[resourceaccess.AtomKey(target.id)] = struct{}{}

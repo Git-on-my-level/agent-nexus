@@ -1145,6 +1145,9 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_auth_refresh_sessions_expires_at ON auth_refresh_sessions(expires_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_refresh_sessions_revoked_at ON auth_refresh_sessions(revoked_at) WHERE revoked_at IS NOT NULL`,
 	}},
+	// Key revision and revision-artifact reference edges by their document.
+	// Installs triggers only; existing edges move in bounded maintenance.
+	{Version: 111, AfterApply: installDocumentAccessHistory},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

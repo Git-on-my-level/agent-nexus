@@ -52,7 +52,7 @@ func TestIdentityRefreshIgnoresTimestampWrites(t *testing.T) {
 			t.Fatal(err)
 		}
 		var count int
-		if err := ws.DB().QueryRow(`SELECT count(*) FROM resource_access_mentions m JOIN resource_access_identities i ON i.identity_id=m.identity_id WHERE i.origin=? AND i.origin_id=? AND i.ref=? AND m.source_id=?`, tc.table, id, newHandle, mention["id"]).Scan(&count); err != nil || count != 1 {
+		if err := ws.DB().QueryRow(`SELECT count(*) FROM resource_access_mentions m JOIN resource_access_identities i ON i.identity_id=m.identity_id WHERE i.origin=? AND i.origin_id=? AND i.ref=? AND m.source_kind='document' AND m.source_id=?`, tc.table, id, newHandle, mention["id"]).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("rename did not resolve existing prose: count=%d err=%v", count, err)
 		}
 	}
