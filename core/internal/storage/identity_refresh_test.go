@@ -64,6 +64,10 @@ func TestLegacyMaintenanceYieldsToWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ws.Close()
+	// A finished job returns before taking the write lock; give it work.
+	if _, err = ws.DB().Exec(`UPDATE inbox_lifecycle_job SET phase=0,cursor='',done=0`); err != nil {
+		t.Fatal(err)
+	}
 	writer, err := ws.DB().BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)

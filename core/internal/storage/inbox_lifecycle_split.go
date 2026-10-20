@@ -17,65 +17,92 @@ const inboxLifecycleRefBudget = 2000
 // expands (whichever of related_refs or legacy refs it uses).
 const inboxLifecycleItemRefs = `max(COALESCE(json_array_length(data_json,'$.related_refs'),0),COALESCE(json_array_length(data_json,'$.refs'),0))`
 
-// maintainInboxLifecycleItems indexes items whose refs fit the budget in the
-// caller's write transaction, with the trigger's SQL. It returns the new
-// cursor (the last complete item) and whether the item phase finished.
+// inboxLifecycleInlineBytes is the largest item (by data_json bytes) the
+// write chunk expands inline. Larger items take the split path even when
+// they have few refs, so no write transaction parses a large document.
+const inboxLifecycleInlineBytes = 64 << 10
+
+// inboxLifecycleCandidate is an item sized by a read before the write chunk.
+type inboxLifecycleCandidate struct {
+	id    string
+	bytes int64
+	refs  int
+	ready bool
+}
+
+// classifyInboxLifecycleItems sizes the next candidates in one read
+// statement that holds no write lock. octet_length comes from the record
+// header; json_array_length parses the document, outside the lock.
+func (w *Workspace) classifyInboxLifecycleItems(ctx context.Context, cursor string, limit int) ([]inboxLifecycleCandidate, error) {
+	rows, err := w.db.QueryContext(context.WithoutCancel(ctx), `SELECT id,octet_length(data_json),`+inboxLifecycleItemRefs+`,lifecycle_ready FROM derived_inbox_items WHERE id>? ORDER BY id LIMIT ?`, cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	candidates := []inboxLifecycleCandidate{}
+	for rows.Next() {
+		var c inboxLifecycleCandidate
+		var bytes sql.NullInt64
+		if err = rows.Scan(&c.id, &bytes, &c.refs, &c.ready); err != nil {
+			return nil, err
+		}
+		c.bytes = bytes.Int64
+		candidates = append(candidates, c)
+	}
+	return candidates, rows.Err()
+}
+
+// maintainInboxLifecycleItems indexes the planned candidates that fit the
+// budget in the caller's write transaction, with the trigger's SQL. Each is
+// re-checked first by its data_json byte length (O(1), from the record
+// header); a changed or missing item ends the chunk so it is re-planned. It
+// returns the new cursor (the last complete item) and whether the phase
+// finished.
 //
-// A first pending item too large for the budget becomes the job's split
+// A first candidate too large for inline expansion becomes the job's split
 // item instead (split_id); splitInboxLifecycleItem then indexes it slice by
 // slice. That costs one write of the one-row job table, not of the item.
-func maintainInboxLifecycleItems(ctx context.Context, tx *sql.Tx, cursor string, limit, budget int) (string, bool, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,`+inboxLifecycleItemRefs+`,lifecycle_ready FROM derived_inbox_items WHERE id>? ORDER BY id LIMIT ?`, cursor, limit)
-	if err != nil {
-		return cursor, false, err
-	}
-	type item struct {
-		id    string
-		refs  int
-		ready bool
-	}
-	var items []item
-	for rows.Next() {
-		var it item
-		if err = rows.Scan(&it.id, &it.refs, &it.ready); err != nil {
-			rows.Close()
+func maintainInboxLifecycleItems(ctx context.Context, tx *sql.Tx, cursor string, candidates []inboxLifecycleCandidate, limit, budget int) (string, bool, error) {
+	remaining := budget
+	for i, c := range candidates {
+		var bytes sql.NullInt64
+		err := tx.QueryRowContext(ctx, `SELECT octet_length(data_json) FROM derived_inbox_items WHERE id=?`, c.id).Scan(&bytes)
+		if errors.Is(err, sql.ErrNoRows) {
+			cursor = c.id // deleted since planning: nothing to index
+			continue
+		}
+		if err != nil {
 			return cursor, false, err
 		}
-		items = append(items, it)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return cursor, false, err
-	}
-	remaining := budget
-	for i, it := range items {
-		left := max(it.refs, 1)
-		if left > budget {
+		if bytes.Int64 != c.bytes {
+			return cursor, false, nil // rewritten since planning; its trigger indexed it
+		}
+		left := max(c.refs, 1)
+		if left > budget || c.bytes > inboxLifecycleInlineBytes {
 			if i > 0 {
 				return cursor, false, nil // the next chunk starts with it
 			}
-			if it.ready {
+			if c.ready {
 				// Its own trigger fully indexed it after the owner phases.
-				cursor = it.id
+				cursor = c.id
 				continue
 			}
-			_, err = tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET split_id=?,split_offset=0,split_hidden=0 WHERE singleton=1`, it.id)
+			_, err = tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET split_id=?,split_offset=0,split_hidden=0 WHERE singleton=1`, c.id)
 			return cursor, false, err
 		}
 		if left > remaining {
 			return cursor, false, nil
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefsSQL("i.id=?"), it.id, it.id); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefsSQL("i.id=?"), c.id, c.id, c.id); err != nil {
 			return cursor, false, err
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE derived_inbox_items SET lifecycle_hidden=`+inboxLifecycleHiddenSQL()+`,lifecycle_ready=1 WHERE id=?`, it.id); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE derived_inbox_items SET lifecycle_hidden=`+inboxLifecycleHiddenSQL()+`,lifecycle_ready=1 WHERE id=?`, c.id); err != nil {
 			return cursor, false, err
 		}
 		remaining -= left
-		cursor = it.id
+		cursor = c.id
 	}
-	return cursor, len(items) < limit, nil
+	return cursor, len(candidates) < limit, nil
 }
 
 // inboxLifecycleSlice is one budget-sized slice of an oversized item's refs,
@@ -134,7 +161,13 @@ func (w *Workspace) writeInboxLifecycleSlice(sqlCtx context.Context, id string, 
 		}
 		return tx.Commit()
 	}
-	if !slice.found {
+	// The id may have changed since the snapshot even if a trigger missed
+	// the split: never insert refs for an id that no longer exists.
+	var exists bool
+	if err = tx.QueryRowContext(sqlCtx, `SELECT EXISTS(SELECT 1 FROM derived_inbox_items WHERE id=?)`, id).Scan(&exists); err != nil {
+		return err
+	}
+	if !slice.found || !exists {
 		return finish()
 	}
 	norm := `SELECT CASE WHEN ? THEN value ELSE anx_unicode_trim(value) END AS ref FROM json_each(?)`

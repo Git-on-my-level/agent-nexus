@@ -69,7 +69,8 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
  UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=(SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) WHERE id=NEW.id;
  UPDATE inbox_lifecycle_job SET split_id='',split_offset=0,split_hidden=0 WHERE singleton=1 AND split_id=NEW.id;`
 		if strings.HasPrefix(event, "UPDATE") {
-			body = `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id;` + body
+			// A renamed split item ends its split under the old id too.
+			body = `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id;` + strings.Replace(body, "split_id=NEW.id;", "split_id IN (OLD.id,NEW.id);", 1)
 		}
 		if err = replaceInboxLifecycleTrigger(ctx, tx, name, event, "derived_inbox_items", body); err != nil {
 			return err
@@ -190,9 +191,13 @@ func inboxLifecycleArraySQL() string {
 	return `CASE WHEN (` + inboxLifecycleExplicitSQL() + `) THEN json_extract(i.data_json,'$.related_refs') ELSE CASE WHEN (` + inboxLifecycleLegacySQL() + `) THEN json_extract(i.data_json,'$.refs') ELSE '[]' END END`
 }
 
+// The explicit/legacy tests reference only i, so SQLite evaluates them once
+// per item in the outer loop. Selecting the array per element instead (a
+// CASE over the json_each row) re-ran them for every element: quadratic.
 func inboxLifecycleRefsSQL(where string) string {
 	explicit := inboxLifecycleExplicitSQL()
-	refs := `SELECT i.id AS inbox_id,CASE WHEN (` + explicit + `) THEN j.value ELSE anx_unicode_trim(j.value) END AS ref FROM derived_inbox_items i,json_each(` + inboxLifecycleArraySQL() + `) j WHERE j.type='text' AND (` + where + `)
+	refs := `SELECT i.id AS inbox_id,j.value AS ref FROM derived_inbox_items i,json_each(i.data_json,'$.related_refs') j WHERE (` + where + `) AND COALESCE((` + explicit + `),0) AND j.type='text'
+ UNION ALL SELECT i.id,anx_unicode_trim(j.value) FROM derived_inbox_items i,json_each(i.data_json,'$.refs') j WHERE (` + where + `) AND NOT COALESCE((` + explicit + `),0) AND COALESCE((` + inboxLifecycleLegacySQL() + `),0) AND j.type='text'
  UNION ALL SELECT i.id,'thread:'||anx_unicode_trim(i.thread_id) FROM derived_inbox_items i WHERE NOT COALESCE((` + explicit + `),0) AND (` + where + `)`
 	return `SELECT inbox_id,ref FROM (` + refs + `) WHERE ref<>''`
 }
@@ -233,29 +238,46 @@ func (w *Workspace) MaintainInboxLifecycleBatch(ctx context.Context, limit int) 
 }
 
 func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) (bool, error) {
+	sources := []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"derived_inbox_items", "inbox"}}
+	// The item phase sizes its candidates (and indexes an oversized item's
+	// slices) with reads that hold no write lock, before the write chunk.
+	var phase, done int
+	var cursor, split string
+	if err := w.db.QueryRowContext(ctx, `SELECT phase,cursor,done,split_id FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done, &split); err != nil {
+		return false, err
+	}
+	if done != 0 {
+		return true, nil
+	}
+	var candidates []inboxLifecycleCandidate
+	if sources[phase].kind == "inbox" {
+		if split != "" {
+			return false, w.splitInboxLifecycleItem(ctx, split, inboxLifecycleRefBudget)
+		}
+		var err error
+		if candidates, err = w.classifyInboxLifecycleItems(ctx, cursor, limit); err != nil {
+			return false, err
+		}
+	}
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err
 	}
 	defer cleanup()
-	var phase, done int
-	var cursor, split string
+	planned := cursor
 	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done,split_id FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done, &split); err != nil {
 		return false, err
 	}
 	if done != 0 {
 		return true, nil
 	}
-	sources := []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"derived_inbox_items", "inbox"}}
 	source := sources[phase]
 	if source.kind == "inbox" {
-		if split != "" {
-			// Release the write lock before reading the oversized item.
-			cleanup()
-			return false, w.splitInboxLifecycleItem(ctx, split, inboxLifecycleRefBudget)
+		if split != "" || cursor != planned || candidates == nil {
+			return false, nil // the job moved since planning; re-plan next tick
 		}
 		var finished bool
-		if cursor, finished, err = maintainInboxLifecycleItems(ctx, tx, cursor, limit, inboxLifecycleRefBudget); err != nil {
+		if cursor, finished, err = maintainInboxLifecycleItems(ctx, tx, cursor, candidates, limit, inboxLifecycleRefBudget); err != nil {
 			return false, err
 		}
 		if finished {
