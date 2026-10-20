@@ -29,7 +29,13 @@ func BeginMaintenanceChunkWithBusyWait(ctx context.Context, db *sql.DB, wait tim
 		return nil, nil, err
 	}
 	var tx *sql.Tx
+	released := false
+	// Idempotent: a chunk may release its lock early and still defer cleanup.
 	cleanup := func() {
+		if released {
+			return
+		}
+		released = true
 		if tx != nil {
 			tx.Rollback()
 		}

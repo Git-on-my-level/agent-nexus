@@ -43,7 +43,7 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TABLE IF NOT EXISTS inbox_hidden_subject_refs(owner_kind TEXT NOT NULL,owner_id TEXT NOT NULL,ref TEXT NOT NULL,PRIMARY KEY(owner_kind,owner_id,ref)) WITHOUT ROWID`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_hidden_subject_ref ON inbox_hidden_subject_refs(ref)`,
 		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_dirty(inbox_id TEXT PRIMARY KEY) WITHOUT ROWID`,
-		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_job(singleton INTEGER PRIMARY KEY CHECK(singleton=1),phase INTEGER NOT NULL DEFAULT 0,cursor TEXT NOT NULL DEFAULT '',owners_ready INTEGER NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_job(singleton INTEGER PRIMARY KEY CHECK(singleton=1),phase INTEGER NOT NULL DEFAULT 0,cursor TEXT NOT NULL DEFAULT '',owners_ready INTEGER NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0,split_id TEXT NOT NULL DEFAULT '',split_offset INTEGER NOT NULL DEFAULT 0,split_hidden INTEGER NOT NULL DEFAULT 0)`,
 		`INSERT OR IGNORE INTO inbox_lifecycle_job(singleton,phase,owners_ready,done) SELECT 1,CASE WHEN populated THEN 0 ELSE 5 END,NOT populated,NOT populated FROM (SELECT (EXISTS(SELECT 1 FROM boards LIMIT 1) OR EXISTS(SELECT 1 FROM documents LIMIT 1) OR EXISTS(SELECT 1 FROM threads LIMIT 1) OR EXISTS(SELECT 1 FROM topics LIMIT 1) OR EXISTS(SELECT 1 FROM cards LIMIT 1) OR EXISTS(SELECT 1 FROM derived_inbox_items LIMIT 1)) AS populated)`,
 		`DROP TRIGGER IF EXISTS access_epoch_derived_inbox_items_update`,
 		`CREATE TRIGGER access_epoch_derived_inbox_items_update AFTER UPDATE OF id,thread_id,category,trigger_at,due_at,has_due_at,source_event_id,source_card_id,generated_at,data_json,source_hash ON derived_inbox_items BEGIN UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1; END`,
@@ -55,6 +55,10 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 			return fmt.Errorf("inbox lifecycle projection: %w", err)
 		}
 	}
+	// Job tables created before the split columns existed.
+	if err = installInboxLifecycleSplit(ctx, tx); err != nil {
+		return err
+	}
 	for _, event := range []string{"INSERT", "UPDATE OF id,data_json,thread_id,category"} {
 		name := "inbox_lifecycle_insert"
 		if strings.HasPrefix(event, "UPDATE") {
@@ -62,15 +66,17 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 		}
 		body := `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=NEW.id;
  INSERT OR IGNORE INTO inbox_lifecycle_refs ` + inboxLifecycleRefsSQL("i.id=NEW.id") + `;
- UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=(SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) WHERE id=NEW.id;`
+ UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=(SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) WHERE id=NEW.id;
+ UPDATE inbox_lifecycle_job SET split_id='',split_offset=0,split_hidden=0 WHERE singleton=1 AND split_id=NEW.id;`
 		if strings.HasPrefix(event, "UPDATE") {
-			body = `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id;` + body
+			// A renamed split item ends its split under the old id too.
+			body = `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id;` + strings.Replace(body, "split_id=NEW.id;", "split_id IN (OLD.id,NEW.id);", 1)
 		}
 		if err = replaceInboxLifecycleTrigger(ctx, tx, name, event, "derived_inbox_items", body); err != nil {
 			return err
 		}
 	}
-	if err = replaceInboxLifecycleTrigger(ctx, tx, "inbox_lifecycle_delete", "DELETE", "derived_inbox_items", `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id;`); err != nil {
+	if err = replaceInboxLifecycleTrigger(ctx, tx, "inbox_lifecycle_delete", "DELETE", "derived_inbox_items", `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id; UPDATE inbox_lifecycle_job SET split_id='',split_offset=0,split_hidden=0 WHERE singleton=1 AND split_id=OLD.id;`); err != nil {
 		return err
 	}
 	for _, source := range []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"work_metadata", ""}} {
@@ -97,7 +103,8 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
  DELETE FROM inbox_hidden_subject_refs WHERE ` + owners + `;
  INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE ` + owners + `;
  INSERT OR IGNORE INTO inbox_lifecycle_dirty SELECT r.inbox_id FROM inbox_lifecycle_refs r JOIN inbox_hidden_subject_refs h ON h.ref=r.ref WHERE ` + owners + `;
- UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=(SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) WHERE id IN (SELECT inbox_id FROM inbox_lifecycle_dirty);
+ UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=CASE WHEN id=(SELECT split_id FROM inbox_lifecycle_job WHERE singleton=1) THEN 0 ELSE (SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) END WHERE id IN (SELECT inbox_id FROM inbox_lifecycle_dirty);
+ UPDATE inbox_lifecycle_job SET split_hidden=EXISTS(SELECT 1 FROM inbox_lifecycle_refs r JOIN inbox_hidden_subject_refs h ON h.ref=r.ref WHERE r.inbox_id=inbox_lifecycle_job.split_id) WHERE singleton=1 AND split_id<>'' AND split_id IN (SELECT inbox_id FROM inbox_lifecycle_dirty);
  DELETE FROM inbox_lifecycle_dirty;`
 			triggerEvent := event
 			if event == "UPDATE" {
@@ -135,6 +142,32 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+// installInboxLifecycleSplit adds the item phase's split state to the
+// one-row job table: the item being split, elements done, and whether an
+// indexed ref of it names a hidden subject. Metadata-only column adds.
+func installInboxLifecycleSplit(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "inbox_lifecycle_job")
+	if err != nil || !exists {
+		return err
+	}
+	for column, definition := range map[string]string{
+		"split_id":     `TEXT NOT NULL DEFAULT ''`,
+		"split_offset": `INTEGER NOT NULL DEFAULT 0`,
+		"split_hidden": `INTEGER NOT NULL DEFAULT 0`,
+	} {
+		present, err := sqliteTableHasColumn(ctx, tx, "inbox_lifecycle_job", column)
+		if err != nil {
+			return err
+		}
+		if !present {
+			if _, err = tx.ExecContext(ctx, `ALTER TABLE inbox_lifecycle_job ADD COLUMN `+column+` `+definition); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func replaceInboxLifecycleTrigger(ctx context.Context, tx *sql.Tx, name, event, table, body string) error {
 	if _, err := tx.ExecContext(ctx, "DROP TRIGGER IF EXISTS "+name); err != nil {
 		return err
@@ -145,16 +178,37 @@ func replaceInboxLifecycleTrigger(ctx context.Context, tx *sql.Tx, name, event, 
 
 // Match the payload shaper: explicit related_refs supersede legacy refs; when
 // absent or empty, legacy refs and the indexed backing thread are used.
+func inboxLifecycleExplicitSQL() string {
+	return `json_type(i.data_json,'$.related_refs')='array' AND json_array_length(i.data_json,'$.related_refs')>0 AND NOT EXISTS (SELECT 1 FROM json_each(i.data_json,'$.related_refs') WHERE type<>'text')`
+}
+
+func inboxLifecycleLegacySQL() string {
+	return `json_type(i.data_json,'$.refs')='array' AND NOT EXISTS (SELECT 1 FROM json_each(i.data_json,'$.refs') WHERE type<>'text')`
+}
+
+// inboxLifecycleArraySQL is the ref array an item's lifecycle uses.
+func inboxLifecycleArraySQL() string {
+	return `CASE WHEN (` + inboxLifecycleExplicitSQL() + `) THEN json_extract(i.data_json,'$.related_refs') ELSE CASE WHEN (` + inboxLifecycleLegacySQL() + `) THEN json_extract(i.data_json,'$.refs') ELSE '[]' END END`
+}
+
+// The explicit/legacy tests reference only i, so SQLite evaluates them once
+// per item in the outer loop. Selecting the array per element instead (a
+// CASE over the json_each row) re-ran them for every element: quadratic.
 func inboxLifecycleRefsSQL(where string) string {
-	explicit := `json_type(i.data_json,'$.related_refs')='array' AND json_array_length(i.data_json,'$.related_refs')>0 AND NOT EXISTS (SELECT 1 FROM json_each(i.data_json,'$.related_refs') WHERE type<>'text')`
-	legacy := `json_type(i.data_json,'$.refs')='array' AND NOT EXISTS (SELECT 1 FROM json_each(i.data_json,'$.refs') WHERE type<>'text')`
-	refs := `SELECT i.id AS inbox_id,CASE WHEN (` + explicit + `) THEN j.value ELSE anx_unicode_trim(j.value) END AS ref FROM derived_inbox_items i,json_each(CASE WHEN (` + explicit + `) THEN json_extract(i.data_json,'$.related_refs') ELSE CASE WHEN (` + legacy + `) THEN json_extract(i.data_json,'$.refs') ELSE '[]' END END) j WHERE j.type='text' AND (` + where + `)
+	explicit := inboxLifecycleExplicitSQL()
+	refs := `SELECT i.id AS inbox_id,j.value AS ref FROM derived_inbox_items i,json_each(i.data_json,'$.related_refs') j WHERE (` + where + `) AND COALESCE((` + explicit + `),0) AND j.type='text'
+ UNION ALL SELECT i.id,anx_unicode_trim(j.value) FROM derived_inbox_items i,json_each(i.data_json,'$.refs') j WHERE (` + where + `) AND NOT COALESCE((` + explicit + `),0) AND COALESCE((` + inboxLifecycleLegacySQL() + `),0) AND j.type='text'
  UNION ALL SELECT i.id,'thread:'||anx_unicode_trim(i.thread_id) FROM derived_inbox_items i WHERE NOT COALESCE((` + explicit + `),0) AND (` + where + `)`
 	return `SELECT inbox_id,ref FROM (` + refs + `) WHERE ref<>''`
 }
 
+// inboxLifecycleHideableSQL is the kind test of inboxLifecycleHiddenSQL.
+func inboxLifecycleHideableSQL(row string) string {
+	return `anx_unicode_lower(anx_unicode_trim(COALESCE(NULLIF(anx_unicode_trim(CASE WHEN json_type(` + row + `data_json,'$.kind')='text' THEN json_extract(` + row + `data_json,'$.kind') ELSE '' END),''),` + row + `category))) NOT IN ('ask','review','escalate')`
+}
+
 func inboxLifecycleHiddenSQL() string {
-	return `anx_unicode_lower(anx_unicode_trim(COALESCE(NULLIF(anx_unicode_trim(CASE WHEN json_type(data_json,'$.kind')='text' THEN json_extract(data_json,'$.kind') ELSE '' END),''),category))) NOT IN ('ask','review','escalate') AND EXISTS (SELECT 1 FROM inbox_lifecycle_refs r JOIN inbox_hidden_subject_refs h ON h.ref=r.ref WHERE r.inbox_id=derived_inbox_items.id)`
+	return inboxLifecycleHideableSQL("") + ` AND EXISTS (SELECT 1 FROM inbox_lifecycle_refs r JOIN inbox_hidden_subject_refs h ON h.ref=r.ref WHERE r.inbox_id=derived_inbox_items.id)`
 }
 
 func inboxLifecycleSubjectsView() string {
@@ -184,21 +238,54 @@ func (w *Workspace) MaintainInboxLifecycleBatch(ctx context.Context, limit int) 
 }
 
 func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) (bool, error) {
-	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
-	if err != nil {
-		return false, err
-	}
-	defer cleanup()
+	sources := []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"derived_inbox_items", "inbox"}}
+	// The item phase sizes its candidates (and indexes an oversized item's
+	// slices) with reads that hold no write lock, before the write chunk.
 	var phase, done int
-	var cursor string
-	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done); err != nil {
+	var cursor, split string
+	if err := w.db.QueryRowContext(ctx, `SELECT phase,cursor,done,split_id FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done, &split); err != nil {
 		return false, err
 	}
 	if done != 0 {
 		return true, nil
 	}
-	sources := []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"derived_inbox_items", "inbox"}}
+	var candidates []inboxLifecycleCandidate
+	if sources[phase].kind == "inbox" {
+		if split != "" {
+			return false, w.splitInboxLifecycleItem(ctx, split, inboxLifecycleRefBudget)
+		}
+		var err error
+		if candidates, err = w.classifyInboxLifecycleItems(ctx, cursor, limit); err != nil {
+			return false, err
+		}
+	}
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
+	planned := cursor
+	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done,split_id FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done, &split); err != nil {
+		return false, err
+	}
+	if done != 0 {
+		return true, nil
+	}
 	source := sources[phase]
+	if source.kind == "inbox" {
+		if split != "" || cursor != planned || candidates == nil {
+			return false, nil // the job moved since planning; re-plan next tick
+		}
+		var finished bool
+		if cursor, finished, err = maintainInboxLifecycleItems(ctx, tx, cursor, candidates, limit, inboxLifecycleRefBudget); err != nil {
+			return false, err
+		}
+		if finished {
+			phase++
+			cursor = ""
+		}
+		return finishInboxLifecycleChunk(ctx, tx, phase, cursor, len(sources))
+	}
 	rows, err := tx.QueryContext(ctx, "SELECT id FROM "+source.table+" WHERE id>? ORDER BY id LIMIT ?", cursor, limit)
 	if err != nil {
 		return false, err
@@ -220,15 +307,7 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 	}
 	if len(ids) > 0 {
 		marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-		if source.kind == "inbox" {
-			if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefsSQL("i.id IN ("+marks+")"), append(append([]any{}, ids...), ids...)...); err != nil {
-				return false, err
-			}
-			_, err = tx.ExecContext(ctx, `UPDATE derived_inbox_items SET lifecycle_hidden=`+inboxLifecycleHiddenSQL()+`,lifecycle_ready=1 WHERE id IN (`+marks+`)`, ids...)
-		} else {
-			_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE owner_kind='`+source.kind+`' AND owner_id IN (`+marks+`)`, ids...)
-		}
-		if err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE owner_kind='`+source.kind+`' AND owner_id IN (`+marks+`)`, ids...); err != nil {
 			return false, err
 		}
 	}
@@ -236,19 +315,23 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 		phase++
 		cursor = ""
 	}
-	done = 0
-	if phase == len(sources) {
+	return finishInboxLifecycleChunk(ctx, tx, phase, cursor, len(sources))
+}
+
+func finishInboxLifecycleChunk(ctx context.Context, tx *sql.Tx, phase int, cursor string, sources int) (bool, error) {
+	done := 0
+	if phase == sources {
 		done = 1
-		phase = len(sources) - 1
+		phase = sources - 1
 	}
 	ownersReady := 0
-	if phase >= len(sources)-1 {
+	if phase >= sources-1 {
 		ownersReady = 1
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET phase=?,cursor=?,owners_ready=?,done=? WHERE singleton=1`, phase, cursor, ownersReady, done); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET phase=?,cursor=?,owners_ready=?,done=? WHERE singleton=1`, phase, cursor, ownersReady, done); err != nil {
 		return false, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return done != 0, nil
