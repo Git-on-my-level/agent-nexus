@@ -21,8 +21,9 @@ import (
 // hash gets its own short write transaction that recounts, removes the ledger
 // entry and deletes the object before committing. That transaction holds the
 // SQLite write lock (shared by every process that opens the workspace) from its
-// first statement until the delete is done. Every creator promotes its staged
-// blob inside the write transaction that commits its reference, so:
+// first statement until the delete is done. Every creator promotes (or, after
+// a preload, confirms and if needed restores) its staged blob inside the write
+// transaction that commits its reference (see blob_preload.go), so:
 //   - a creator that committed before the collection is counted, and the blob
 //     is kept;
 //   - a creator that commits after it finds the object gone when it promotes
@@ -75,6 +76,9 @@ func (s *Store) collectUnreferencedBlob(ctx context.Context, contentHash string)
 	}
 	if err := s.removeBlobLedgerEntryTx(ctx, tx, contentHash); err != nil {
 		return err
+	}
+	if s.blobCollectLockedHook != nil {
+		s.blobCollectLockedHook(contentHash)
 	}
 	if s.blob != nil {
 		if err := s.blob.Delete(ctx, contentHash); err != nil && !errors.Is(err, blob.ErrBlobNotFound) {

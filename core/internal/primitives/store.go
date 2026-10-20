@@ -198,6 +198,12 @@ type Store struct {
 	// blobCollectHook is a test seam that runs after a purge commits and before
 	// it collects unreferenced blobs.
 	blobCollectHook func(hashes []string)
+	// blobCollectLockedHook is a test seam that runs inside a blob collection
+	// transaction, after its recount and before its delete.
+	blobCollectLockedHook func(hash string)
+	// blobPreloadedHook is a test seam that runs after a create preloads its
+	// blobs and before its write transaction begins.
+	blobPreloadedHook func(hashes []string)
 }
 
 type eventExec interface {
@@ -492,6 +498,11 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("stage artifact content: %w", err)
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: stagedContent})
+	if err != nil {
+		return nil, fmt.Errorf("preload artifact content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	refsJSON, err := json.Marshal(refs)
 	if err != nil {
@@ -567,6 +578,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		}
 		return nil, fmt.Errorf("commit artifact transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	return metadata, nil
 }
@@ -630,6 +642,11 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("stage artifact content: %w", err)
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: stagedContent})
+	if err != nil {
+		return nil, nil, fmt.Errorf("preload artifact content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	artifactRefsJSON, err := json.Marshal(artifactRefs)
 	if err != nil {
@@ -716,6 +733,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		}
 		return nil, nil, fmt.Errorf("commit transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	return metadata, preparedEvent.Body, nil
 }

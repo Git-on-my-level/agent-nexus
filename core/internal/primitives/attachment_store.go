@@ -317,6 +317,12 @@ func (s *Store) createArtifactAttachment(ctx context.Context, actorID string, ar
 		return nil, fmt.Errorf("marshal artifact metadata: %w", err)
 	}
 
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: staged})
+	if err != nil {
+		return nil, fmt.Errorf("preload attachment content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin attachment transaction: %w", err)
@@ -413,6 +419,7 @@ func (s *Store) createArtifactAttachment(ctx context.Context, actorID string, ar
 		}
 		return nil, fmt.Errorf("commit attachment transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	return metadata, nil
 }

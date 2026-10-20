@@ -566,6 +566,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, fmt.Errorf("stage document content: %w", err)
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: stagedContent})
+	if err != nil {
+		return nil, nil, fmt.Errorf("preload document content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	revisionHash := computeRevisionHash(contentHash, "", documentID, revisionNumber, now, actorID)
 
@@ -763,6 +768,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("commit document create transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	docMap, err := documentRow{
 		ID:              documentID,
@@ -1197,6 +1203,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("stage document content: %w", err)
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: stagedContent})
+	if err != nil {
+		return nil, nil, fmt.Errorf("preload document content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	var prevRevisionHash string
 	err = s.db.QueryRowContext(ctx,
@@ -1430,6 +1441,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		return nil, nil, fmt.Errorf("commit document update transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	docMap, err := documentRow{
 		ID:              documentID,
