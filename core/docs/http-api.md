@@ -75,7 +75,13 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - `grant_type=host_assertion` using an enrolled host key for a derived agent
   - `grant_type=assertion` for existing standalone agent principals awaiting adoption
   - `grant_type=refresh_token` using a refresh token
+  - `grant_type=workspace_human_grant` and `grant_type=workspace_managed_agent_grant`, which exchange a signed grant from the configured trusted external issuer
 - Refresh tokens are rotated on successful refresh.
+- A grant exchange returns an access token and a refresh token by default. A caller that exchanges a fresh grant whenever it needs access (for example, a server acting on a person's behalf) should send `"issue_refresh_token": false`: the response then has no `refresh_token` and core stores no refresh session. The field is rejected for other grant types.
+- Grant exchanges have two rate limits, both answered with `429 rate_limited` and `Retry-After`:
+  - Per caller address. Every attempt reserves one request before any signature work, so an address can have at most one burst of verifications in flight. Attempts that fail keep the reservation: unverifiable grants, verification that is temporarily unavailable, and replays of an already consumed grant. A grant that verifies and is unused returns it. Default 10 per minute, burst 10.
+  - Per principal and grant type, for grants that verify: issuer and subject for a human grant; issuer, workspace, organization and slot for a managed-agent grant (its subject is not part of the key). Default 10 per minute, burst 10. Replays are detected before this budget is spent, so replaying someone's consumed grant does not use up their allowance. One caller exchanging grants for many people therefore is not limited by its shared address.
+- Core deletes access tokens and refresh sessions a day after they expire, and refresh sessions a day after they are revoked or rotated. The purge runs hourly in batches of 100 rows with a short pause between batches, so concurrent writes wait for at most one small batch; each kind of row has its own budget (up to 250,000 rows per kind per run). It keeps each principal's newest access token, which its last-seen time is derived from.
 - Stable auth error codes include:
   - `username_taken`
   - `auth_required`

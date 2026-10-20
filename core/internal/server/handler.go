@@ -222,11 +222,17 @@ type handlerOptions struct {
 	routeRateLimits                RouteRateLimits
 	rateLimiter                    *routeRateLimiter
 	workspaceHumanGrantRateLimiter *routeRateLimiter
-	workspaceID                    string
-	readinessChecks                []namedReadinessCheck
-	opsHealthSections              map[string]OpsHealthSectionFunc
-	secretsStore                   *secrets.Store
-	workspaceAccessMode            string
+	// workspaceGrantSubjectRateLimiter budgets verified grant exchanges per
+	// principal and grant type.
+	workspaceGrantSubjectRateLimiter *routeRateLimiter
+	// beforeGrantConsume, when set by tests, runs after a verified grant is
+	// charged and before its jti is consumed.
+	beforeGrantConsume  func()
+	workspaceID         string
+	readinessChecks     []namedReadinessCheck
+	opsHealthSections   map[string]OpsHealthSectionFunc
+	secretsStore        *secrets.Store
+	workspaceAccessMode string
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -476,10 +482,31 @@ func WithRouteRateLimits(limits RouteRateLimits) HandlerOption {
 	}
 }
 
+// WithWorkspaceGrantRateLimits sets the per-address budget for grant
+// exchange attempts: each reserves one, and grants that verify return it.
 func WithWorkspaceGrantRateLimits(limits RouteRateLimits) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(limits.normalize())
 	}
+}
+
+// WithWorkspaceGrantSubjectRateLimits sets the budget for verified grant
+// exchanges, per principal and grant type. The Auth fields apply.
+func WithWorkspaceGrantSubjectRateLimits(limits RouteRateLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceGrantSubjectRateLimiter = newWorkspaceGrantPrincipalRateLimiter(limits)
+	}
+}
+
+// Principal buckets are created only for grants that verify, so the limiter
+// can fail closed when full rather than reset a limited principal. A bucket
+// refills within a minute, so filling it takes that many distinct principals
+// exchanging grants within a minute.
+func newWorkspaceGrantPrincipalRateLimiter(limits RouteRateLimits) *routeRateLimiter {
+	limiter := newRouteRateLimiter(limits.normalize())
+	limiter.maxKeys = defaultWorkspaceGrantPrincipalMaxKeys
+	limiter.failClosedWhenFull = true
+	return limiter
 }
 
 type routeAccessBucket string
@@ -686,6 +713,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(RouteRateLimits{
 			AuthRequestsPerMinute:  10,
 			AuthBurst:              10,
+			WriteRequestsPerMinute: 1,
+			WriteBurst:             1,
+		})
+	}
+	if (opts.workspaceHumanGrantVerifier != nil || opts.workspaceManagedGrantVerifier != nil) && opts.workspaceGrantSubjectRateLimiter == nil {
+		opts.workspaceGrantSubjectRateLimiter = newWorkspaceGrantPrincipalRateLimiter(RouteRateLimits{
+			AuthRequestsPerMinute:  defaultWorkspaceGrantSubjectRequestsPerMinute,
+			AuthBurst:              defaultWorkspaceGrantSubjectBurst,
 			WriteRequestsPerMinute: 1,
 			WriteBurst:             1,
 		})

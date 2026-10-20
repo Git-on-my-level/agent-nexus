@@ -1136,6 +1136,15 @@ var migrations = []migration{
 	// Channel options (addressing, kinds, label) and the one channel a
 	// grant-created agent may declare.
 	{Version: 109, AfterApply: installChannelDeclarations},
+	// The periodic auth purge seeks expired access tokens and expired or
+	// revoked refresh sessions, and keeps each principal's newest access
+	// token by probing (agent_id, created_at).
+	{Version: 110, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_auth_access_tokens_expires_at ON auth_access_tokens(expires_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_access_tokens_agent_created ON auth_access_tokens(agent_id, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_refresh_sessions_expires_at ON auth_refresh_sessions(expires_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_refresh_sessions_revoked_at ON auth_refresh_sessions(revoked_at) WHERE revoked_at IS NOT NULL`,
+	}},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

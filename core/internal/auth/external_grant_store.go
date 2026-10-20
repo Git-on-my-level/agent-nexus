@@ -14,7 +14,23 @@ import (
 	"time"
 )
 
-func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity WorkspaceHumanGrantIdentity) (Agent, TokenBundle, error) {
+// GrantExchangeOptions are the caller's choices for one grant exchange. They
+// can only narrow what the exchange issues, so they need no signature.
+type GrantExchangeOptions struct {
+	// AccessOnly issues an access token without a refresh session, for
+	// callers that exchange a fresh grant whenever they need access.
+	AccessOnly bool
+}
+
+func (s *Store) issueGrantTokensTx(ctx context.Context, tx Transaction, agentID string, now time.Time, options GrantExchangeOptions) (TokenBundle, error) {
+	if options.AccessOnly {
+		return s.issueAccessTokenTx(ctx, tx, agentID, now)
+	}
+	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
+	return tokens, err
+}
+
+func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity WorkspaceHumanGrantIdentity, options GrantExchangeOptions) (Agent, TokenBundle, error) {
 	if s == nil || s.db == nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("auth store database is not initialized")
 	}
@@ -120,7 +136,7 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 		return Agent{}, TokenBundle{}, ErrAgentRevoked
 	}
 
-	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
+	tokens, err := s.issueGrantTokensTx(ctx, tx, agentID, now, options)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -139,7 +155,7 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 	return agent, tokens, nil
 }
 
-func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, identity WorkspaceManagedAgentGrantIdentity) (Agent, TokenBundle, error) {
+func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, identity WorkspaceManagedAgentGrantIdentity, options GrantExchangeOptions) (Agent, TokenBundle, error) {
 	if s == nil || s.db == nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("auth store database is not initialized")
 	}
@@ -265,7 +281,7 @@ func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, id
 		}
 	}
 
-	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
+	tokens, err := s.issueGrantTokensTx(ctx, tx, agentID, now, options)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -331,6 +347,37 @@ func consumeWorkspaceGrantJTI(ctx context.Context, db *sql.DB, jti string, consu
 		return ErrExternalGrantReplay
 	}
 	return nil
+}
+
+// WorkspaceHumanGrantPrincipalKey identifies the principal a human grant
+// acts for, from the same fields its stable IDs derive from.
+func WorkspaceHumanGrantPrincipalKey(identity WorkspaceHumanGrantIdentity) string {
+	agentID, _, _ := stableExternalGrantPrincipalIDs(identity.Issuer, identity.Subject)
+	return agentID
+}
+
+// WorkspaceManagedAgentGrantPrincipalKey identifies the managed agent a grant
+// acts for. The grant's subject is not part of it: the principal is the slot.
+func WorkspaceManagedAgentGrantPrincipalKey(identity WorkspaceManagedAgentGrantIdentity) string {
+	agentID, _, _ := stableManagedGrantPrincipalIDs(identity.Issuer, identity.WorkspaceID, identity.OrganizationID, identity.SlotID)
+	return agentID
+}
+
+// GrantJTIConsumed reports whether a grant jti has already been exchanged.
+// It is a cheap pre-check; the exchange still consumes the jti atomically.
+func (s *Store) GrantJTIConsumed(ctx context.Context, jti string) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("auth store database is not initialized")
+	}
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM consumed_grant_jtis WHERE jti = ?`, strings.TrimSpace(jti)).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check consumed grant jti: %w", err)
+	}
+	return true, nil
 }
 
 func stableExternalGrantPrincipalIDs(issuer string, subject string) (string, string, string) {

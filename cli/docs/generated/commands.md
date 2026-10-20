@@ -715,7 +715,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Assertion or refresh-token exchange for bearer access.
 - Concepts: `auth`
-- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_handle_taken`, `agent_revoked`
+- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_handle_taken`, `agent_revoked`, `rate_limited`, `auth_unavailable`
 - Output: Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope.
 
 ## `boards.archive`

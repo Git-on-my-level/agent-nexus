@@ -1,6 +1,7 @@
 package server
 
 import (
+	"container/heap"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,17 +22,22 @@ const (
 	defaultAuthRequestBodyLimit    int64 = 256 << 10
 	defaultContentRequestBodyLimit int64 = 8 << 20
 
-	defaultAuthRequestsPerMinute             = 600
-	defaultAuthRequestsBurst                 = 100
-	defaultEnrollmentRequestsPerMinute       = 12
-	defaultEnrollmentRequestsBurst           = 8
-	defaultWriteRequestsPerMinute            = 1200
-	defaultWriteRequestsBurst                = 200
-	requestTooLargeRetryAfterSecs            = 1
-	defaultRouteRateLimitMaxKeys             = 4096
-	defaultRouteRateLimitBucketTTL           = 15 * time.Minute
-	routeRateLimitPruneInterval              = time.Minute
-	defaultAttachmentRequestBodyLimit  int64 = 50 << 20
+	defaultAuthRequestsPerMinute       = 600
+	defaultAuthRequestsBurst           = 100
+	defaultEnrollmentRequestsPerMinute = 12
+	defaultEnrollmentRequestsBurst     = 8
+	defaultWriteRequestsPerMinute      = 1200
+	defaultWriteRequestsBurst          = 200
+	requestTooLargeRetryAfterSecs      = 1
+	// One person or managed agent gets the budget a single caller address
+	// had before verified exchanges were keyed by subject.
+	defaultWorkspaceGrantSubjectRequestsPerMinute       = 10
+	defaultWorkspaceGrantSubjectBurst                   = 10
+	defaultWorkspaceGrantPrincipalMaxKeys               = 65536
+	defaultRouteRateLimitMaxKeys                        = 4096
+	defaultRouteRateLimitBucketTTL                      = 15 * time.Minute
+	routeRateLimitPruneInterval                         = time.Minute
+	defaultAttachmentRequestBodyLimit             int64 = 50 << 20
 )
 
 type RequestBodyLimits struct {
@@ -89,18 +95,53 @@ func (l RouteRateLimits) normalize() RouteRateLimits {
 }
 
 type routeRateLimiter struct {
-	mu        sync.Mutex
-	buckets   map[string]*rateLimitBucket
+	mu      sync.Mutex
+	buckets map[string]*rateLimitBucket
+	// byFullAt orders buckets by when they refill to their burst, so idle
+	// buckets are found at the top without scanning.
+	byFullAt  rateLimitBucketHeap
 	limits    RouteRateLimits
 	maxKeys   int
 	bucketTTL time.Duration
 	lastPrune time.Time
+	// failClosedWhenFull refuses a new scope when every tracked bucket
+	// still carries state, instead of evicting one and handing that scope a
+	// fresh burst.
+	failClosedWhenFull bool
 }
 
 type rateLimitBucket struct {
+	key        string
 	tokens     float64
 	lastRefill time.Time
 	lastSeen   time.Time
+	// fullAt is when the bucket will have refilled to its burst; from then
+	// on forgetting it loses nothing.
+	fullAt time.Time
+	index  int
+}
+
+type rateLimitBucketHeap []*rateLimitBucket
+
+func (h rateLimitBucketHeap) Len() int           { return len(h) }
+func (h rateLimitBucketHeap) Less(i, j int) bool { return h[i].fullAt.Before(h[j].fullAt) }
+func (h rateLimitBucketHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+	h[i].index = i
+	h[j].index = j
+}
+func (h *rateLimitBucketHeap) Push(x any) {
+	bucket := x.(*rateLimitBucket)
+	bucket.index = len(*h)
+	*h = append(*h, bucket)
+}
+func (h *rateLimitBucketHeap) Pop() any {
+	old := *h
+	last := old[len(old)-1]
+	old[len(old)-1] = nil
+	*h = old[:len(old)-1]
+	last.index = -1
+	return last
 }
 
 func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
@@ -112,65 +153,160 @@ func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
 	}
 }
 
+// allow spends one request from the scope's budget when one is left.
+// Its cost is O(log n) in the tracked scopes, full or not.
 func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bool, time.Duration) {
-	if l == nil || strings.TrimSpace(bucket) == "" {
-		return true, 0
-	}
+	_, allowed, retryAfter := l.reserve(bucket, scope, now)
+	return allowed, retryAfter
+}
 
+// rateLimitReservation records the bucket one allowed request was charged
+// to, so a refund can return exactly that request.
+type rateLimitReservation struct {
+	limiter *routeRateLimiter
+	state   *rateLimitBucket
+	limit   int
+	burst   int
+}
+
+// reserve is allow that also returns a reservation for a later refund.
+func (l *routeRateLimiter) reserve(bucket string, scope string, now time.Time) (rateLimitReservation, bool, time.Duration) {
+	if l == nil || strings.TrimSpace(bucket) == "" {
+		return rateLimitReservation{}, true, 0
+	}
 	limit, burst := l.limitForBucket(bucket)
 	if limit <= 0 || burst <= 0 {
-		return true, 0
+		return rateLimitReservation{}, true, 0
 	}
+	ratePerSecond := float64(limit) / 60.0
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.pruneBuckets(now)
-
-	stateKey := bucket
-	scope = strings.TrimSpace(scope)
-	if scope != "" {
-		stateKey = bucket + ":" + scope
-	}
-
-	state, ok := l.buckets[stateKey]
-	if !ok {
-		l.evictOldestBucketIfFull()
-		state = &rateLimitBucket{
-			tokens:     float64(burst),
-			lastRefill: now,
-			lastSeen:   now,
+	state := l.bucketLocked(rateLimitStateKey(bucket, scope), limit, burst, now)
+	if state == nil {
+		// No bucket could be tracked without discarding another scope's
+		// state; refuse until the nearest one refills.
+		retryAfter := time.Second
+		if len(l.byFullAt) > 0 {
+			if wait := l.byFullAt[0].fullAt.Sub(now); wait > retryAfter {
+				retryAfter = wait
+			}
 		}
-		l.buckets[stateKey] = state
+		return rateLimitReservation{}, false, retryAfter
 	}
 	state.lastSeen = now
-
-	if now.Before(state.lastRefill) {
-		state.lastRefill = now
-	}
-
-	ratePerSecond := float64(limit) / 60.0
-	elapsed := now.Sub(state.lastRefill).Seconds()
-	if elapsed > 0 && ratePerSecond > 0 {
-		state.tokens = math.Min(float64(burst), state.tokens+elapsed*ratePerSecond)
-		state.lastRefill = now
-	}
-
 	if state.tokens >= 1 {
 		state.tokens -= 1
-		return true, 0
+		l.updateFullAtLocked(state, limit, burst)
+		return rateLimitReservation{limiter: l, state: state, limit: limit, burst: burst}, true, 0
 	}
+	return rateLimitReservation{}, false, rateLimitRetryAfter(state.tokens, ratePerSecond)
+}
 
+// refund returns the one request this reservation took. The bucket ends
+// where it would be had the request never been charged: refilled to now,
+// plus one, never above its burst. A refund to a bucket that was evicted
+// (and possibly recreated) since the charge does nothing, and a
+// reservation refunds at most once.
+func (r *rateLimitReservation) refund(now time.Time) {
+	if r == nil || r.limiter == nil || r.state == nil {
+		return
+	}
+	l, state := r.limiter, r.state
+	r.state = nil
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.buckets[state.key] != state {
+		return
+	}
+	refillRateLimitBucket(state, r.limit, r.burst, now)
+	state.tokens = math.Min(float64(r.burst), state.tokens+1)
+	l.updateFullAtLocked(state, r.limit, r.burst)
+}
+
+func rateLimitStateKey(bucket string, scope string) string {
+	if scope = strings.TrimSpace(scope); scope != "" {
+		return bucket + ":" + scope
+	}
+	return bucket
+}
+
+func rateLimitRetryAfter(tokens float64, ratePerSecond float64) time.Duration {
 	if ratePerSecond <= 0 {
-		return false, requestTooLargeRetryAfterSecs * time.Second
+		return requestTooLargeRetryAfterSecs * time.Second
 	}
-
-	deficit := 1 - state.tokens
-	retryAfter := time.Duration(math.Ceil(deficit / ratePerSecond * float64(time.Second)))
+	retryAfter := time.Duration(math.Ceil((1 - tokens) / ratePerSecond * float64(time.Second)))
 	if retryAfter < time.Second {
 		retryAfter = time.Second
 	}
-	return false, retryAfter
+	return retryAfter
+}
+
+func refillRateLimitBucket(state *rateLimitBucket, limit int, burst int, now time.Time) {
+	if now.Before(state.lastRefill) {
+		state.lastRefill = now
+	}
+	ratePerSecond := float64(limit) / 60.0
+	if elapsed := now.Sub(state.lastRefill).Seconds(); elapsed > 0 && ratePerSecond > 0 {
+		state.tokens = math.Min(float64(burst), state.tokens+elapsed*ratePerSecond)
+		state.lastRefill = now
+	}
+}
+
+// updateFullAtLocked recomputes when a just-refilled bucket reaches its
+// burst and restores heap order.
+func (l *routeRateLimiter) updateFullAtLocked(state *rateLimitBucket, limit int, burst int) {
+	missing := float64(burst) - state.tokens
+	state.fullAt = state.lastRefill
+	if missing > 0 {
+		ratePerSecond := float64(limit) / 60.0
+		state.fullAt = state.lastRefill.Add(time.Duration(math.Ceil(missing / ratePerSecond * float64(time.Second))))
+	}
+	if state.index >= 0 && state.index < len(l.byFullAt) && l.byFullAt[state.index] == state {
+		heap.Fix(&l.byFullAt, state.index)
+	}
+}
+
+func (l *routeRateLimiter) removeLocked(state *rateLimitBucket) {
+	if state.index >= 0 && state.index < len(l.byFullAt) && l.byFullAt[state.index] == state {
+		heap.Remove(&l.byFullAt, state.index)
+	}
+	delete(l.buckets, state.key)
+}
+
+// bucketLocked returns the refilled bucket for a key, creating it when
+// there is room. It returns nil only for a fail-closed limiter whose
+// buckets all still carry state.
+func (l *routeRateLimiter) bucketLocked(stateKey string, limit int, burst int, now time.Time) *rateLimitBucket {
+	if state, ok := l.buckets[stateKey]; ok {
+		refillRateLimitBucket(state, limit, burst, now)
+		return state
+	}
+	l.pruneBuckets(now)
+	if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys && !l.evictBucketLocked(now) {
+		return nil
+	}
+	state := &rateLimitBucket{key: stateKey, tokens: float64(burst), lastRefill: now, lastSeen: now, fullAt: now}
+	l.buckets[stateKey] = state
+	heap.Push(&l.byFullAt, state)
+	return state
+}
+
+// evictBucketLocked frees one slot, in O(log n). The bucket nearest to
+// refilled goes first; if it has refilled, nothing is lost. If none has, a
+// fail-closed limiter keeps every bucket and reports false; otherwise the
+// nearest-to-refilled bucket, which carries the least state, is evicted.
+func (l *routeRateLimiter) evictBucketLocked(now time.Time) bool {
+	if len(l.byFullAt) == 0 {
+		return false
+	}
+	nearest := l.byFullAt[0]
+	if nearest.fullAt.After(now) && l.failClosedWhenFull {
+		return false
+	}
+	l.removeLocked(nearest)
+	return true
 }
 
 func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {
@@ -186,46 +322,21 @@ func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {
 	}
 }
 
+// pruneBuckets forgets buckets that have been refilled for at least the
+// bucket TTL, at most once per prune interval, popping them from the top of
+// the refill order.
 func (l *routeRateLimiter) pruneBuckets(now time.Time) {
-	if l == nil || len(l.buckets) == 0 {
+	if l == nil || len(l.buckets) == 0 || l.bucketTTL <= 0 {
 		return
 	}
-	if now.Sub(l.lastPrune) < routeRateLimitPruneInterval && len(l.buckets) < l.maxKeys {
+	if now.Sub(l.lastPrune) < routeRateLimitPruneInterval {
 		return
 	}
-	if l.bucketTTL > 0 {
-		for key, bucket := range l.buckets {
-			lastTouched := bucket.lastSeen
-			if lastTouched.Before(bucket.lastRefill) {
-				lastTouched = bucket.lastRefill
-			}
-			if now.Sub(lastTouched) >= l.bucketTTL {
-				delete(l.buckets, key)
-			}
-		}
+	cutoff := now.Add(-l.bucketTTL)
+	for len(l.byFullAt) > 0 && !l.byFullAt[0].fullAt.After(cutoff) {
+		l.removeLocked(l.byFullAt[0])
 	}
 	l.lastPrune = now
-}
-
-func (l *routeRateLimiter) evictOldestBucketIfFull() {
-	if l == nil || l.maxKeys <= 0 || len(l.buckets) < l.maxKeys {
-		return
-	}
-	var oldestKey string
-	var oldestSeen time.Time
-	for key, bucket := range l.buckets {
-		lastTouched := bucket.lastSeen
-		if lastTouched.Before(bucket.lastRefill) {
-			lastTouched = bucket.lastRefill
-		}
-		if oldestKey == "" || lastTouched.Before(oldestSeen) {
-			oldestKey = key
-			oldestSeen = lastTouched
-		}
-	}
-	if oldestKey != "" {
-		delete(l.buckets, oldestKey)
-	}
 }
 
 func requestBodyLimitForRequest(path string, method string, bucket routeAccessRequirement, limits RequestBodyLimits) int64 {
