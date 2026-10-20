@@ -357,3 +357,91 @@ func TestDocumentRevisionAccessBackfill(t *testing.T) {
 		t.Fatal("fixture recorded no visible outcome")
 	}
 }
+
+// One revision artifact backing revisions of two documents keeps its own
+// edges, so deleting either document cannot release the other.
+func TestDocumentRevisionAccessSharedArtifact(t *testing.T) {
+	t.Parallel()
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%v", legacy), func(t *testing.T) {
+			t.Parallel()
+			f := newDocumentHistoryFixture(t)
+			db := f.ws.DB()
+			var triggers [][2]string
+			if legacy {
+				rows, err := db.Query(`SELECT name,sql FROM sqlite_schema WHERE type='trigger' AND name LIKE 'access_document_history_%'`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for rows.Next() {
+					var tr [2]string
+					if err = rows.Scan(&tr[0], &tr[1]); err != nil {
+						t.Fatal(err)
+					}
+					triggers = append(triggers, tr)
+				}
+				rows.Close()
+				for _, tr := range triggers {
+					if _, err = db.Exec(`DROP TRIGGER ` + tr[0]); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			// The artifact alone carries the private ref; neither revision row does.
+			a, aFirst, err := f.s.CreateDocument(f.ctx, "owner", map[string]any{"title": "shared source"}, dashboard(0, f.secretRef), "structured", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.revise(t, a, aFirst, 2, func(i int) any { return dashboard(i) })
+			b, bFirst, err := f.s.CreateDocument(f.ctx, "owner", map[string]any{"title": "shared reader"}, dashboard(0), "structured", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bRevisions := f.revise(t, b, bFirst, 2, func(i int) any { return dashboard(i) })
+			var artifact string
+			if err = db.QueryRow(`SELECT artifact_id FROM document_revisions WHERE revision_id=?`, aFirst["revision_id"]).Scan(&artifact); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.Exec(`INSERT INTO document_revisions(revision_id,document_id,revision_number,artifact_id,created_at,created_by) VALUES('shared-revision',?,99,?,'t','owner')`, b["id"], artifact); err != nil {
+				t.Fatal(err)
+			}
+			bID := anyStringValue(b["id"])
+			hidden := func(stage string) {
+				t.Helper()
+				if got := f.outcome(t, "stranger", bID, bRevisions, "Dashboard"); got != (documentAccessOutcome{}) {
+					t.Fatalf("%s: shared private artifact escaped: %+v", stage, got)
+				}
+				if got := f.outcome(t, "owner", bID, bRevisions, "Dashboard"); got != allowedOutcome(true) {
+					t.Fatalf("%s: owner lost document: %+v", stage, got)
+				}
+			}
+			hidden("shared")
+			if legacy {
+				for _, tr := range triggers {
+					if _, err = db.Exec(tr[1]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err = db.Exec(`UPDATE resource_access_document_history_job SET cursor='',done=0`); err != nil {
+					t.Fatal(err)
+				}
+				for done, chunk := false, 0; !done; chunk++ {
+					if done, err = f.ws.MaintainDocumentAccessHistoryBatch(f.ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+						t.Fatal(err)
+					}
+					hidden(fmt.Sprintf("backfill chunk %d", chunk))
+				}
+			}
+			if n := f.count(t, `SELECT count(*) FROM resource_access_edges WHERE source_kind='artifact' AND source_id=?`, artifact); n == 0 {
+				t.Fatal("shared artifact lost its own edges")
+			}
+			// Delete the first document directly, keeping the shared artifact.
+			for _, q := range []string{`DELETE FROM document_revisions WHERE document_id=?`, `DELETE FROM documents WHERE id=?`} {
+				if _, err = db.Exec(q, a["id"]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			hidden("after deleting the other owner")
+		})
+	}
+}

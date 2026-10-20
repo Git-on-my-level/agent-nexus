@@ -21,9 +21,10 @@ import (
 //
 // Writers are unchanged. Triggers redirect revision and revision-artifact edge
 // inserts into the document's set, and a new revision row moves its artifact's
-// edges (written before the revision existed) into that set. Artifacts that
-// also back a card revision keep their own edges: their card shares their
-// fate and the document set would not reach it.
+// edges (written before the revision existed) into that set. An artifact
+// shared by revisions of more than one document, or also backing a card
+// revision, keeps its own edges: one document's set would not reach the other
+// owners, and deleting that document must not remove the others' path.
 //
 // The set only grows on ordinary writes. When a direct write changes or
 // removes a revision's reference-bearing fields, the affected documents'
@@ -44,15 +45,14 @@ func installDocumentAccessHistory(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	kind := "'" + resourceaccess.DocumentHistoryKind + "'"
-	// Artifacts that also back a card revision keep their own edges.
+	// Only an artifact owned by exactly one document (and no card revision)
+	// moves into that document's set; shared artifacts keep their own edges.
 	unshared := func(artifact string) string {
+		single := "(SELECT count(DISTINCT document_id) FROM document_revisions WHERE artifact_id=" + artifact + ")=1"
 		if !cards {
-			return "1"
+			return single
 		}
-		return "NOT EXISTS(SELECT 1 FROM card_revisions c WHERE c.artifact_id=" + artifact + ")"
-	}
-	ownedArtifact := func(artifact string) string {
-		return "EXISTS(SELECT 1 FROM document_revisions r WHERE r.artifact_id=" + artifact + ") AND " + unshared(artifact)
+		return single + " AND NOT EXISTS(SELECT 1 FROM card_revisions c WHERE c.artifact_id=" + artifact + ")"
 	}
 	// Regenerate edges through the existing per-table triggers, which the
 	// redirect then routes into each owning document's set. These self
@@ -83,22 +83,22 @@ func installDocumentAccessHistory(ctx context.Context, tx *sql.Tx) error {
 		`DROP TRIGGER IF EXISTS access_document_history_card_revision_update`,
 		// RAISE(IGNORE) skips only this row; the redirected row fires the
 		// usual mirror, mention and epoch triggers.
-		`CREATE TRIGGER access_document_history_artifact_redirect BEFORE INSERT ON resource_access_edges WHEN NEW.source_kind='artifact' AND ` + ownedArtifact("NEW.source_id") + ` BEGIN
+		`CREATE TRIGGER access_document_history_artifact_redirect BEFORE INSERT ON resource_access_edges WHEN NEW.source_kind='artifact' AND ` + unshared("NEW.source_id") + ` BEGIN
  INSERT INTO resource_access_edges(source_kind,source_id,target_ref) SELECT DISTINCT ` + kind + `,r.document_id,NEW.target_ref FROM document_revisions r WHERE r.artifact_id=NEW.source_id ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;
  SELECT RAISE(IGNORE); END`,
 		`CREATE TRIGGER access_document_history_revision_redirect BEFORE INSERT ON resource_access_edges WHEN NEW.source_kind='document_revision' AND EXISTS(SELECT 1 FROM document_revisions r WHERE r.revision_id=NEW.source_id) BEGIN
  INSERT INTO resource_access_edges(source_kind,source_id,target_ref) SELECT ` + kind + `,r.document_id,NEW.target_ref FROM document_revisions r WHERE r.revision_id=NEW.source_id ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;
  SELECT RAISE(IGNORE); END`,
-		// The revision artifact is written before its revision row. A shared
-		// artifact has no own edges left, so regenerate it into every owner.
+		// The revision artifact is written before its revision row. An
+		// artifact that this row makes shared regains its own edges.
 		`CREATE TRIGGER access_document_history_revision_insert AFTER INSERT ON document_revisions BEGIN ` +
 			move("artifact", "NEW.artifact_id", "NEW.document_id", unshared("NEW.artifact_id")) +
 			move("document_revision", "NEW.revision_id", "NEW.document_id", "1") +
-			` UPDATE artifacts SET refs_json=refs_json WHERE id=NEW.artifact_id AND EXISTS(SELECT 1 FROM document_revisions WHERE artifact_id=NEW.artifact_id AND revision_id<>NEW.revision_id) AND ` + unshared("NEW.artifact_id") + `; END`,
+			` UPDATE artifacts SET refs_json=refs_json WHERE id=NEW.artifact_id AND EXISTS(SELECT 1 FROM document_revisions WHERE artifact_id=NEW.artifact_id AND document_id<>NEW.document_id); END`,
 		`CREATE TRIGGER access_document_history_revision_update AFTER UPDATE OF revision_id,document_id,artifact_id,refs_json,prev_revision_id ON document_revisions WHEN OLD.revision_id IS NOT NEW.revision_id OR OLD.document_id IS NOT NEW.document_id OR OLD.artifact_id IS NOT NEW.artifact_id OR OLD.refs_json IS NOT NEW.refs_json OR OLD.prev_revision_id IS NOT NEW.prev_revision_id BEGIN ` +
 			rebuild("OLD.document_id,NEW.document_id") +
-			// A detached artifact regains its own edges.
-			` UPDATE artifacts SET refs_json=refs_json WHERE id=OLD.artifact_id;` +
+			// A detached or newly shared artifact regains its own edges.
+			` UPDATE artifacts SET refs_json=refs_json WHERE id IN (OLD.artifact_id,NEW.artifact_id);` +
 			removeOrphanSet("OLD.document_id") + ` END`,
 		`CREATE TRIGGER access_document_history_revision_delete AFTER DELETE ON document_revisions BEGIN
  UPDATE artifacts SET refs_json=refs_json WHERE id=OLD.artifact_id AND NOT EXISTS(SELECT 1 FROM document_revisions WHERE artifact_id=OLD.artifact_id); ` +
@@ -169,9 +169,10 @@ func moveDocumentAccessHistory(ctx context.Context, tx *sql.Tx, limit int) (bool
 	if err != nil {
 		return false, err
 	}
-	shared := `SELECT 0`
+	// Shared artifacts keep their own edges (see installDocumentAccessHistory).
+	shared := `SELECT (SELECT count(DISTINCT document_id) FROM document_revisions WHERE artifact_id=?1)<>1`
 	if cards {
-		shared = `SELECT EXISTS(SELECT 1 FROM card_revisions WHERE artifact_id=?)`
+		shared += ` OR EXISTS(SELECT 1 FROM card_revisions WHERE artifact_id=?1)`
 	}
 	budget, visited := limit, 0
 	for budget > 0 && visited < 4*limit {
@@ -187,12 +188,7 @@ func moveDocumentAccessHistory(ctx context.Context, tx *sql.Tx, limit int) (bool
 		visited++
 		sources := [][2]string{{"document_revision", revision}}
 		var isShared bool
-		if cards {
-			err = tx.QueryRowContext(ctx, shared, artifact).Scan(&isShared)
-		} else {
-			err = tx.QueryRowContext(ctx, shared).Scan(&isShared)
-		}
-		if err != nil {
+		if err = tx.QueryRowContext(ctx, shared, artifact).Scan(&isShared); err != nil {
 			return false, err
 		}
 		if !isShared {

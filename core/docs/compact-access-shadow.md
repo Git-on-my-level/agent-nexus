@@ -132,9 +132,9 @@ build that changes implicit PM cursor IDs even though access-edge IDs are stable
 
 ## Document revision edges
 
-Before migration 110, every document revision and its revision artifact kept a
+Before migration 111, every document revision and its revision artifact kept a
 full copy of its reference edges, so a frequently revised document grew the
-access graph by revisions times refs. Migration 110 installs triggers only; a
+access graph by revisions times refs. Migration 111 installs triggers only; a
 bounded maintenance cursor (`resource_access_document_history_job`) then moves
 legacy per-revision edges into one deduplicated set per document, a few hundred
 edges per short transaction. It is safe while serving, resumes after restart,
