@@ -15,8 +15,9 @@ import (
 
 // preparedArtifactWrite stages content before a caller's transaction and then
 // records its metadata, refs, and blob ledger entry inside that transaction.
-// Promote happens before commit: a crash may leave an unreferenced blob, but
-// cannot leave a committed artifact row pointing at a missing blob.
+// The caller preloads the content before its transaction and Promote confirms
+// it before commit (see blob_preload.go): a crash may leave an unreferenced
+// blob, but cannot leave a committed artifact row pointing at a missing blob.
 type preparedArtifactWrite struct {
 	encodedContent   []byte
 	actorID          string

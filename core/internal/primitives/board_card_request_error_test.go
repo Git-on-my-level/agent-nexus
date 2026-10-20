@@ -27,18 +27,17 @@ func TestClassifyBoardCardRequestErrorKeepsClientFailures(t *testing.T) {
 	}
 	// A statement error that rolled back committed nothing. It must stay a
 	// plain internal error so the handler logs the chain as a 500. Only a
-	// failed commit or post-commit promote is an unknown outcome.
+	// failed commit is an unknown outcome; content is promoted before it.
 	internal := classifyBoardCardRequestError(errors.New("disk i/o error"))
 	if errors.As(internal, &unknown) || internal.Error() != "disk i/o error" {
 		t.Fatalf("rolled-back statement error changed: %v", internal)
 	}
 	for _, err := range []error{
 		&MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card create transaction: %w", errors.New("disk i/o error"))},
-		&MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", errors.New("promote failed"))},
 	} {
 		classified := classifyBoardCardRequestError(err)
 		if !errors.As(classified, &unknown) || !errors.Is(classified, err) {
-			t.Fatalf("commit or promote failure lost outcome_unknown: %v", classified)
+			t.Fatalf("commit failure lost outcome_unknown: %v", classified)
 		}
 	}
 }

@@ -314,6 +314,33 @@ type cardRevisionInsert struct {
 	EncodedContent []byte
 }
 
+// cardRevisionContent is the stored blob content of a card revision.
+func cardRevisionContent(title, summary string, definitionOfDone []string) ([]byte, error) {
+	return encodeContent(map[string]any{
+		"title":              strings.TrimSpace(title),
+		"summary":            strings.TrimSpace(summary),
+		"definition_of_done": uniqueSortedStrings(definitionOfDone),
+	}, "structured")
+}
+
+// preloadCardContent preloads the first-revision content of cards about to be
+// inserted. A card without a title takes one from its thread inside the
+// transaction, so its content is only known there; it is promoted there.
+func (s *Store) preloadCardContent(ctx context.Context, preps ...boardCardInsertPrep) (*blobPreload, error) {
+	contents := make([]blobContent, 0, len(preps))
+	for _, prep := range preps {
+		if strings.TrimSpace(prep.Title) == "" {
+			continue
+		}
+		data, err := cardRevisionContent(prep.Title, prep.Body, prep.DefinitionOfDone)
+		if err != nil {
+			return nil, err
+		}
+		contents = append(contents, blobContent{hash: sha256Hex(data), data: data})
+	}
+	return s.preloadBlobContent(ctx, contents...)
+}
+
 func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID string, revisionNumber int, prevRevisionID sql.NullString, threadID, title, summary string, definitionOfDone []string, refs []string) (cardRevisionInsert, blob.StagedWrite, error) {
 	if s == nil || s.blob == nil {
 		return cardRevisionInsert{}, nil, fmt.Errorf("blob backend is not configured")
@@ -323,12 +350,7 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	revisionID := uuid.NewString()
 	artifactID := revisionID
-	content := map[string]any{
-		"title":              strings.TrimSpace(title),
-		"summary":            strings.TrimSpace(summary),
-		"definition_of_done": uniqueSortedStrings(definitionOfDone),
-	}
-	encodedContent, err := encodeContent(content, "structured")
+	encodedContent, err := cardRevisionContent(title, summary, definitionOfDone)
 	if err != nil {
 		return cardRevisionInsert{}, nil, err
 	}
@@ -1753,14 +1775,19 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err != nil {
 		return BoardCardMutationResult{}, err
 	}
+	preload, err := s.preloadCardContent(ctx, prep)
+	if err != nil {
+		return BoardCardMutationResult{}, fmt.Errorf("preload card content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card create transaction: %w", err)
 	}
 	// A statement that fails before Commit, once Rollback succeeds, changed
 	// nothing. Leave that error intact so the handler can log it as a 500
-	// (or 503 when SQLite is busy or locked). Only Commit and the
-	// post-commit blob promote are unknown outcomes.
+	// (or 503 when SQLite is busy or locked). Only Commit is an
+	// unknown outcome; content is promoted before it.
 	defer func() {
 		if mutationErr != nil {
 			mutationErr = classifyBoardCardRequestError(mutationErr)
@@ -1851,20 +1878,21 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			return BoardCardMutationResult{}, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		if stagedContent != nil {
+	// Promote before committing so a committed card always has its content; a
+	// failed promote rolls the card back.
+	if stagedContent != nil {
+		if err := stagedContent.Promote(); err != nil {
 			_ = stagedContent.Cleanup()
+			return BoardCardMutationResult{}, fmt.Errorf("finalize card content: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card create transaction: %w", err)}
 	}
-	if stagedContent != nil {
-		if err := stagedContent.Promote(); err != nil {
-			return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", err)}
-		}
-	}
+	preload.markCommitted()
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap, ReplayCommitted: input.CreateReplay != nil}, nil
 }
 
@@ -1900,12 +1928,17 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		}
 		preps[i] = prep
 	}
+	preload, err := s.preloadCardContent(ctx, preps...)
+	if err != nil {
+		return nil, fmt.Errorf("preload card content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("begin board cards batch transaction: %w", err)
 	}
 	// Same rule as CreateBoardCard: a rolled-back statement is not an
-	// unknown outcome. Commit and post-commit promote are.
+	// unknown outcome. Only Commit is; content is promoted before it.
 	defer func() {
 		if mutationErr != nil {
 			mutationErr = classifyBoardCardRequestError(mutationErr)
@@ -1967,20 +2000,24 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		}
 		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
 	}
-	if err := tx.Commit(); err != nil {
-		for _, staged := range stagedWrites {
-			_ = staged.Cleanup()
+	// Promote before committing so committed cards always have their content;
+	// a failed promote rolls the whole batch back.
+	if err := promoteStagedBlobs(stagedWrites); err != nil {
+		for _, pending := range stagedWrites {
+			_ = pending.Cleanup()
 		}
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return nil, fmt.Errorf("finalize card content: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board cards batch transaction: %w", err)}
 	}
-	for _, staged := range stagedWrites {
-		if err := staged.Promote(); err != nil {
-			return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("finalize card content: %w", err)}
-		}
-	}
+	preload.markCommitted()
 	return results, nil
 }
 
@@ -2987,35 +3024,10 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 	if err != nil {
 		return err
 	}
-	blobHashesToDelete := make([]string, 0)
-	for _, contentHash := range uniqueSortedStrings(contentHashes) {
-		if contentHash == "" {
-			continue
-		}
-		var cnt int
-		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
-			return fmt.Errorf("count card blob references: %w", err)
-		}
-		if cnt == 0 {
-			if err := s.removeBlobLedgerEntryTx(ctx, tx, contentHash); err != nil {
-				return err
-			}
-			blobHashesToDelete = append(blobHashesToDelete, contentHash)
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit purge card transaction: %w", err)
 	}
-	for _, contentHash := range blobHashesToDelete {
-		if contentHash == "" || s.blob == nil {
-			continue
-		}
-		if err := s.blob.Delete(ctx, contentHash); err != nil && !errors.Is(err, blob.ErrBlobNotFound) {
-			return fmt.Errorf("delete card blob object: %w", err)
-		}
-	}
-	return nil
+	return s.collectUnreferencedBlobs(ctx, contentHashes)
 }
 
 // TrashBoardCard records an operational soft-delete and clears archive columns (distinct soft-delete lanes).

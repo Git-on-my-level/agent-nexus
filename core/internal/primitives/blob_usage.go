@@ -36,8 +36,11 @@ func (p blobLedgerWritePlan) growthBytes() int64 {
 	return p.sizeBytes
 }
 
+// needsLedgerInsert is true even when the plan saw a ledger entry: plans are
+// prepared before the write transaction, and a purge may have collected the
+// blob and removed its entry since. The insert is idempotent.
 func (p blobLedgerWritePlan) needsLedgerInsert() bool {
-	return strings.TrimSpace(p.contentHash) != "" && !p.ledgerPresent
+	return strings.TrimSpace(p.contentHash) != ""
 }
 
 func (s *Store) prepareBlobLedgerWritePlan(ctx context.Context, contentHash string, uploadBytes int64) (blobLedgerWritePlan, error) {

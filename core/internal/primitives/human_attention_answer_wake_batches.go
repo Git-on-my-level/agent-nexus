@@ -229,6 +229,11 @@ func (s *Store) deliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch 
 		return false, err
 	}
 	defer func() { _ = preparedArtifact.stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: preparedArtifact.contentHash, write: preparedArtifact.stagedContent})
+	if err != nil {
+		return false, fmt.Errorf("preload answer wake artifact content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -251,6 +256,7 @@ func (s *Store) deliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch 
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit answer wake delivery transaction: %w", err)
 	}
+	preload.markCommitted()
 	return true, nil
 }
 

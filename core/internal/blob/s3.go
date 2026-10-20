@@ -327,6 +327,63 @@ type s3StagedWrite struct {
 	promoted bool
 }
 
+// putObject uploads body under key unless an object already exists there. It
+// reports whether this call created the object.
+func (b *S3Backend) putObject(ctx context.Context, hash, key string, body io.Reader, size int64) (bool, error) {
+	_, err := b.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        &b.config.Bucket,
+		Key:           stringPtr(key),
+		Body:          body,
+		ContentLength: int64Ptr(size),
+		IfNoneMatch:   stringPtr("*"),
+	})
+	if err == nil {
+		return true, nil
+	}
+
+	exists, statErr := b.Exists(ctx, hash)
+	if !isS3ConditionalWriteFailure(err) {
+		if statErr == nil && exists {
+			return false, nil
+		}
+		if statErr != nil && !errors.Is(statErr, ErrBlobNotFound) {
+			return false, fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", hash, err, statErr)
+		}
+		return false, fmt.Errorf("put blob %q: %w", hash, err)
+	}
+	if statErr != nil {
+		return false, fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", hash, err, statErr)
+	}
+	if !exists {
+		return false, fmt.Errorf("put blob %q: %w", hash, err)
+	}
+	return false, nil
+}
+
+// PreloadContent stores data under hash before the caller's write transaction.
+func (b *S3Backend) PreloadContent(ctx context.Context, hash string, data []byte) (bool, error) {
+	ctx = contextOrBackground(ctx)
+	hash = strings.TrimSpace(hash)
+	if exists, err := b.Exists(ctx, hash); err == nil && exists {
+		return false, nil
+	}
+	return b.putObject(ctx, hash, b.objectKey(hash), bytes.NewReader(data), int64(len(data)))
+}
+
+// Preload uploads the object now and keeps the staged bytes, so a later
+// Promote only confirms the object and can restore it if it was removed.
+func (w *s3StagedWrite) Preload() (bool, error) {
+	if w == nil || w.promoted || w.data == nil {
+		return false, nil
+	}
+	if w.backend == nil {
+		return false, fmt.Errorf("S3 blob staged write backend is not configured")
+	}
+	return w.backend.putObject(contextOrBackground(w.ctx), w.hash, w.key, bytes.NewReader(w.data), int64(len(w.data)))
+}
+
+// Promote confirms the object exists with one HEAD request and uploads the
+// staged bytes only when it does not.
 func (w *s3StagedWrite) Promote() error {
 	if w == nil || w.promoted {
 		return nil
@@ -340,40 +397,14 @@ func (w *s3StagedWrite) Promote() error {
 	}
 
 	ctx := contextOrBackground(w.ctx)
-	_, err := w.backend.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:        &w.backend.config.Bucket,
-		Key:           stringPtr(w.key),
-		Body:          bytes.NewReader(w.data),
-		ContentLength: int64Ptr(int64(len(w.data))),
-		IfNoneMatch:   stringPtr("*"),
-	})
-	if err == nil {
+	if exists, err := w.backend.Exists(ctx, w.hash); err == nil && exists {
 		w.data = nil
 		w.promoted = true
 		return nil
 	}
-
-	if !isS3ConditionalWriteFailure(err) {
-		exists, statErr := w.backend.Exists(ctx, w.hash)
-		if statErr == nil && exists {
-			w.data = nil
-			w.promoted = true
-			return nil
-		}
-		if statErr != nil && !errors.Is(statErr, ErrBlobNotFound) {
-			return fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", w.hash, err, statErr)
-		}
-		return fmt.Errorf("put blob %q: %w", w.hash, err)
+	if _, err := w.backend.putObject(ctx, w.hash, w.key, bytes.NewReader(w.data), int64(len(w.data))); err != nil {
+		return err
 	}
-
-	exists, statErr := w.backend.Exists(ctx, w.hash)
-	if statErr != nil {
-		return fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", w.hash, err, statErr)
-	}
-	if !exists {
-		return fmt.Errorf("put blob %q: %w", w.hash, err)
-	}
-
 	w.data = nil
 	w.promoted = true
 	return nil
@@ -387,6 +418,37 @@ func (w *s3StagedWrite) Cleanup() error {
 	return nil
 }
 
+func (w *s3StagedWriteStream) body() (io.Reader, error) {
+	if w.size == 0 {
+		return bytes.NewReader(nil), nil
+	}
+	if w.file == nil {
+		return nil, fmt.Errorf("staged blob %q is no longer available", w.hash)
+	}
+	if _, err := w.file.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("rewind staged blob %q: %w", w.hash, err)
+	}
+	return w.file, nil
+}
+
+// Preload uploads the object now and keeps the staged file, so a later Promote
+// only confirms the object and can restore it if it was removed.
+func (w *s3StagedWriteStream) Preload() (bool, error) {
+	if w == nil || w.promoted {
+		return false, nil
+	}
+	if w.backend == nil {
+		return false, fmt.Errorf("S3 blob staged write backend is not configured")
+	}
+	body, err := w.body()
+	if err != nil {
+		return false, err
+	}
+	return w.backend.putObject(contextOrBackground(w.ctx), w.hash, w.key, body, w.size)
+}
+
+// Promote confirms the object exists with one HEAD request and uploads the
+// staged file only when it does not.
 func (w *s3StagedWriteStream) Promote() error {
 	if w == nil || w.promoted {
 		return nil
@@ -395,60 +457,19 @@ func (w *s3StagedWriteStream) Promote() error {
 		return fmt.Errorf("S3 blob staged write backend is not configured")
 	}
 	ctx := contextOrBackground(w.ctx)
+	defer func() { _ = w.Cleanup() }()
 
-	defer func() {
-		if w.file != nil {
-			_ = w.file.Close()
-			w.file = nil
-		}
-		if w.tempPath != "" {
-			_ = os.Remove(w.tempPath)
-			w.tempPath = ""
-		}
-	}()
-
-	var body io.Reader
-	if w.size == 0 {
-		body = bytes.NewReader(nil)
-	} else {
-		if _, err := w.file.Seek(0, 0); err != nil {
-			return fmt.Errorf("rewind staged blob %q: %w", w.hash, err)
-		}
-		body = w.file
-	}
-
-	_, err := w.backend.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:        &w.backend.config.Bucket,
-		Key:           stringPtr(w.key),
-		Body:          body,
-		ContentLength: int64Ptr(w.size),
-		IfNoneMatch:   stringPtr("*"),
-	})
-	if err == nil {
+	if exists, err := w.backend.Exists(ctx, w.hash); err == nil && exists {
 		w.promoted = true
 		return nil
 	}
-
-	if !isS3ConditionalWriteFailure(err) {
-		exists, statErr := w.backend.Exists(ctx, w.hash)
-		if statErr == nil && exists {
-			w.promoted = true
-			return nil
-		}
-		if statErr != nil && !errors.Is(statErr, ErrBlobNotFound) {
-			return fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", w.hash, err, statErr)
-		}
-		return fmt.Errorf("put blob %q: %w", w.hash, err)
+	body, err := w.body()
+	if err != nil {
+		return err
 	}
-
-	exists, statErr := w.backend.Exists(ctx, w.hash)
-	if statErr != nil {
-		return fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", w.hash, err, statErr)
+	if _, err := w.backend.putObject(ctx, w.hash, w.key, body, w.size); err != nil {
+		return err
 	}
-	if !exists {
-		return fmt.Errorf("put blob %q: %w", w.hash, err)
-	}
-
 	w.promoted = true
 	return nil
 }

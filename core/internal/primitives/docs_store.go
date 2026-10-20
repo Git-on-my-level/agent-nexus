@@ -566,6 +566,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, fmt.Errorf("stage document content: %w", err)
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: stagedContent})
+	if err != nil {
+		return nil, nil, fmt.Errorf("preload document content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	revisionHash := computeRevisionHash(contentHash, "", documentID, revisionNumber, now, actorID)
 
@@ -763,6 +768,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("commit document create transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	docMap, err := documentRow{
 		ID:              documentID,
@@ -1197,6 +1203,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("stage document content: %w", err)
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
+	preload, err := s.preloadStagedBlobs(ctx, stagedBlob{hash: contentHash, write: stagedContent})
+	if err != nil {
+		return nil, nil, fmt.Errorf("preload document content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 
 	var prevRevisionHash string
 	err = s.db.QueryRowContext(ctx,
@@ -1430,6 +1441,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		return nil, nil, fmt.Errorf("commit document update transaction: %w", err)
 	}
+	preload.markCommitted()
 
 	docMap, err := documentRow{
 		ID:              documentID,
@@ -2054,24 +2066,9 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		return fmt.Errorf("delete document revisions: %w", err)
 	}
 
-	hashes := make(map[string]struct{})
+	contentHashes := make([]string, 0, len(owned))
 	for _, item := range owned {
-		if item.contentHash != "" {
-			hashes[item.contentHash] = struct{}{}
-		}
-	}
-	blobsToDelete := make([]string, 0, len(hashes))
-	for contentHash := range hashes {
-		var cnt int
-		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
-			return fmt.Errorf("count remaining artifact blob references: %w", err)
-		}
-		if cnt == 0 {
-			if err := s.removeBlobLedgerEntryTx(ctx, tx, contentHash); err != nil {
-				return err
-			}
-			blobsToDelete = append(blobsToDelete, contentHash)
-		}
+		contentHashes = append(contentHashes, item.contentHash)
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM documents WHERE id = ?`, documentID); err != nil {
@@ -2081,14 +2078,7 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		return fmt.Errorf("commit purge document: %w", err)
 	}
 
-	if s.blob != nil {
-		for _, contentHash := range blobsToDelete {
-			if err := s.blob.Delete(ctx, contentHash); err != nil && !errors.Is(err, blob.ErrBlobNotFound) {
-				return fmt.Errorf("delete document revision blob object: %w", err)
-			}
-		}
-	}
-	return nil
+	return s.collectUnreferencedBlobs(ctx, contentHashes)
 }
 
 func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documentRow, error) {

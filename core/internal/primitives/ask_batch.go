@@ -113,6 +113,11 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor, reques
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(dbBytes)}, blobLedgerWritePlan{}); err != nil {
 		return nil, false, err
 	}
+	preload, err := s.preloadAskCardContent(ctx, bodies...)
+	if err != nil {
+		return nil, false, fmt.Errorf("preload ask card content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, false, err
@@ -164,14 +169,14 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor, reques
 			return nil, false, err
 		}
 	}
+	// Promote before committing so committed asks always have their content.
+	if err = promoteStagedBlobs(stagedWrites); err != nil {
+		return nil, false, err
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, false, err
 	}
-	for _, staged := range stagedWrites {
-		if err = staged.Promote(); err != nil {
-			return nil, false, err
-		}
-	}
+	preload.markCommitted()
 	return response, false, nil
 }
 

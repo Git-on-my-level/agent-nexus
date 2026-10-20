@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -35,6 +36,11 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 4096)}, blobLedgerWritePlan{}); err != nil {
 		return nil, err
 	}
+	preload, err := s.preloadAskCardContent(ctx, body)
+	if err != nil {
+		return nil, fmt.Errorf("preload ask card content: %w", err)
+	}
+	defer preload.discardUnlessCommitted()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -49,21 +55,48 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 			_ = staged.Cleanup()
 		}
 	}()
-	if err = tx.Commit(); err != nil {
-		return nil, err
-	}
+	// Promote before committing so a committed ask always has its content.
 	if staged != nil {
 		if err = staged.Promote(); err != nil {
 			return nil, err
 		}
 	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	preload.markCommitted()
 	return stored, nil
+}
+
+// askCompatibilityCardInput is the card an ask about a non-card subject
+// creates. Its content is preloaded before the filing transaction.
+func askCompatibilityCardInput(payload, body map[string]any) AddBoardCardInput {
+	return AddBoardCardInput{Title: firstNonEmpty(anyStringValue(payload["title"]), anyStringValue(body["summary"])), ColumnKey: "ready"}
+}
+
+// preloadAskCardContent preloads the compatibility cards the asks in bodies
+// will create.
+func (s *Store) preloadAskCardContent(ctx context.Context, bodies ...map[string]any) (*blobPreload, error) {
+	preps := make([]boardCardInsertPrep, 0, len(bodies))
+	for _, body := range bodies {
+		payload := asMapValue(body["payload"])
+		subjectType, _, err := schema.SplitTypedRef(strings.TrimSpace(anyStringValue(payload["subject_ref"])))
+		if err != nil || subjectType == "card" {
+			continue
+		}
+		prep, err := prepareBoardCardInsert(askCompatibilityCardInput(payload, body))
+		if err != nil {
+			continue
+		}
+		preps = append(preps, prep)
+	}
+	return s.preloadCardContent(ctx, preps...)
 }
 
 // appendTaskAttentionEventTx validates and inserts one task-addressed ask
 // inside an open transaction. Batch filing reuses it so N asks commit or roll
 // back together. On success the caller owns commit and the returned staged
-// write (promote after commit, or cleanup); on error this helper discards it.
+// write (promote before commit, or cleanup); on error this helper discards it.
 func (s *Store) appendTaskAttentionEventTx(ctx context.Context, tx *accessTx, actor string, body map[string]any) (map[string]any, blob.StagedWrite, []string, error) {
 	payload := cloneMap(asMapValue(body["payload"]))
 	body["payload"] = payload
@@ -126,7 +159,7 @@ func (s *Store) appendTaskAttentionEventTx(ctx context.Context, tx *accessTx, ac
 		cardEvidence = uniqueSortedStrings(cardEvidence)
 		// These are evidence dependencies, not an instruction to reparent the
 		// legacy thread (several asks may share it).
-		prep, err := prepareBoardCardInsert(AddBoardCardInput{Title: firstNonEmpty(anyStringValue(payload["title"]), anyStringValue(body["summary"])), ColumnKey: "ready"})
+		prep, err := prepareBoardCardInsert(askCompatibilityCardInput(payload, body))
 		if err != nil {
 			return nil, nil, nil, err
 		}
