@@ -163,6 +163,55 @@ test("a lost confirmation and reload mid-send replay once across tabs", async ({
   await expect(page.locator("[data-unsent-indicator]")).toHaveCount(0);
 });
 
+test("a tab waiting on the send lock honours a failed retry's backoff", async ({
+  page,
+  context,
+}) => {
+  // Waits out two real backoffs (4s, then 8s).
+  test.slow();
+  const sends = [];
+  let failedAt = 0;
+  let release;
+  const waiting = new Promise((resolve) => (release = resolve));
+  await setup(context, async (route) => {
+    sends.push({ at: Date.now(), body: route.request().postDataJSON() });
+    if (sends.length === 1)
+      return json(route, { upstream: "private upstream failure" }, 524);
+    if (sends.length === 2) {
+      await waiting;
+      failedAt = Date.now();
+      return json(route, { upstream: "private upstream failure" }, 524);
+    }
+    return json(route, { event: { id: "response-one" } }, 201);
+  });
+  await begin(page);
+  await sendReply(page);
+  await flush(page);
+  // The scheduled retry is in flight, so its persisted row reads "sending"
+  // and is already due.
+  await expect.poll(() => sends.length, { timeout: 10000 }).toBe(2);
+  const other = await context.newPage();
+  await other.goto(URL);
+  // The second tab lists that row as due and queues on the send lock the
+  // first tab holds until the uncertain response arrives.
+  await expect(other.locator("[data-unsent-indicator]")).toBeVisible();
+  // A busy or background sending tab handles its failure slowly; the backoff
+  // must not depend on that tab winning the race to storage.
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 20 });
+  release();
+  await expect.poll(() => sends.length, { timeout: 15000 }).toBe(3);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  // The failed retry's full backoff (attempt 2: 2s * 2^2 = 8s) must hold
+  // across tabs. It starts when the sending tab checkpoints the failure,
+  // which is after the reply below was fulfilled, so no resend may come
+  // earlier than failedAt + 8s (less clock rounding). A waiting tab that
+  // resends once the lock is released, however late, cannot meet this.
+  expect(sends[2].at - failedAt).toBeGreaterThanOrEqual(8000 - 100);
+  for (const send of sends) expect(send.body).toEqual(sends[0].body);
+  await expect.poll(async () => (await records(other)).length).toBe(0);
+});
+
 test("definitive failures keep editable text without automatic retry", async ({
   page,
   context,

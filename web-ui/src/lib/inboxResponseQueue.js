@@ -144,63 +144,26 @@ async function durableSend(entry) {
   if (navigator.onLine === false) throw new Error("The device is offline.");
   try {
     return await requestMutationSendLock(entry.identity, async (lease) => {
-      if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
-        throw new Error("This identity has signed out.");
-      }
-      const record = await loadLocalWorkRecord(
-        entry.identity,
-        "inbox-send",
-        entry.request.idempotency_key,
-      );
-      if (record?.deleted && record.deletionReason === "confirmed") return {};
-      const stored = record && !record.deleted ? record.value : null;
-      if (record?.deletionReason === "undo" || stored?.state === "superseded") {
-        const error = new Error("This response was returned to a draft.");
-        error.cancelled = true;
+      try {
+        return await sendLocked(lease);
+      } catch (error) {
+        if (
+          !error ||
+          typeof error !== "object" ||
+          error.deferred ||
+          error.cancelled ||
+          error.leaseLost ||
+          lease?.isHeld?.() === false ||
+          entry.localEpoch !== localWorkEpoch(entry.identity)
+        )
+          throw error;
+        // Checkpoint the failure before releasing the send lock. While the
+        // send is in flight the persisted row says "sending" and is already
+        // due; a tab waiting on this lock would otherwise read that row and
+        // resend at once, skipping the backoff.
+        error.checkpoint = await checkpointFailure(entry, error, lease);
         throw error;
       }
-      if (!stored)
-        throw new Error(
-          "The saved request could not be read. Keep the original response for retry.",
-        );
-      if (replayExpired(stored.createdAt)) throw expiredReplayError();
-      if (
-        stored.state === "retrying" &&
-        stored.nextAt > Date.now() &&
-        !entry.manualRetry
-      ) {
-        const error = new Error("Another tab scheduled the next retry.");
-        error.deferred = true;
-        throw error;
-      }
-      // An old timer cannot bypass another tab's definitive failure/backoff.
-      if (stored.state === "attention" && !entry.manualRetry) {
-        const error = new Error(
-          stored.failure?.detail || "Review this response before retrying.",
-        );
-        error.status = stored.failure?.status || 400;
-        throw error;
-      }
-      entry.attempts = (stored.attempts || 0) + 1;
-      await persistResponse(entry, "sending", null, lease);
-      const result = await entry.send(entry.itemId, entry.request);
-      await removePersistedResponse(entry, "confirmed");
-      await consumeUploadedAttachments(
-        entry.identity,
-        entry.request.related_refs,
-        entry.localEpoch,
-      );
-      // Do not clear a newer draft written while this response was sending.
-      for (const field of ["reply", "context"]) {
-        const target = `inbox:${entry.itemId}:${field}`;
-        const draft = await loadLocalWork(entry.identity, "draft", target);
-        if (draft === entry.request.response_text) {
-          await saveLocalWork(entry.identity, "draft", target, null, {
-            epoch: entry.localEpoch,
-          });
-        }
-      }
-      return result;
     });
   } catch (error) {
     if (error?.leaseLost) {
@@ -209,6 +172,96 @@ async function durableSend(entry) {
     }
     throw error;
   }
+
+  async function sendLocked(lease) {
+    if (entry.localEpoch !== localWorkEpoch(entry.identity)) {
+      throw new Error("This identity has signed out.");
+    }
+    const record = await loadLocalWorkRecord(
+      entry.identity,
+      "inbox-send",
+      entry.request.idempotency_key,
+    );
+    if (record?.deleted && record.deletionReason === "confirmed") return {};
+    const stored = record && !record.deleted ? record.value : null;
+    if (record?.deletionReason === "undo" || stored?.state === "superseded") {
+      const error = new Error("This response was returned to a draft.");
+      error.cancelled = true;
+      throw error;
+    }
+    if (!stored)
+      throw new Error(
+        "The saved request could not be read. Keep the original response for retry.",
+      );
+    if (replayExpired(stored.createdAt)) throw expiredReplayError();
+    if (
+      stored.state === "retrying" &&
+      stored.nextAt > Date.now() &&
+      !entry.manualRetry
+    ) {
+      const error = new Error("Another tab scheduled the next retry.");
+      error.deferred = true;
+      throw error;
+    }
+    // An old timer cannot bypass another tab's definitive failure/backoff.
+    if (stored.state === "attention" && !entry.manualRetry) {
+      const error = new Error(
+        stored.failure?.detail || "Review this response before retrying.",
+      );
+      error.status = stored.failure?.status || 400;
+      throw error;
+    }
+    entry.attempts = (stored.attempts || 0) + 1;
+    await persistResponse(entry, "sending", null, lease);
+    const result = await entry.send(entry.itemId, entry.request);
+    await removePersistedResponse(entry, "confirmed");
+    await consumeUploadedAttachments(
+      entry.identity,
+      entry.request.related_refs,
+      entry.localEpoch,
+    );
+    // Do not clear a newer draft written while this response was sending.
+    for (const field of ["reply", "context"]) {
+      const target = `inbox:${entry.itemId}:${field}`;
+      const draft = await loadLocalWork(entry.identity, "draft", target);
+      if (draft === entry.request.response_text) {
+        await saveLocalWork(entry.identity, "draft", target, null, {
+          epoch: entry.localEpoch,
+        });
+      }
+    }
+    return result;
+  }
+}
+
+/** Classify a failed send and persist its retry state and backoff. */
+async function checkpointFailure(entry, err, lease = null) {
+  const classification = mutationFailure(err);
+  entry.nextAt =
+    Date.now() +
+    Math.min(60_000, 2_000 * 2 ** Math.min(entry.attempts || 0, 5));
+  const failure = {
+    ...classification,
+    error: classification.message,
+    // Core's error code, so a row can offer the fix it names (for example
+    // answering without notifying an unreachable requester).
+    code: String(err?.body?.error?.code ?? ""),
+    nextAt: classification.state === "retrying" ? entry.nextAt : null,
+    outcome: String(entry.request?.outcome ?? ""),
+    response_text: String(entry.request?.response_text ?? ""),
+    at: new Date().toISOString(),
+  };
+  // A persistence failure leaves the original in-memory entry intact.
+  let volatile = false;
+  try {
+    await persistResponse(entry, classification.state, failure, lease);
+  } catch (saveError) {
+    // A lost lease defers to lease-lost recovery; the row is untouched.
+    if (saveError?.leaseLost) throw saveError;
+    volatile = true;
+    /* Copy remains available in the item. */
+  }
+  return { classification, failure, volatile };
 }
 
 function scheduleRecovery(delay = 0) {
@@ -952,29 +1005,9 @@ async function commit(entry, recovered = false) {
      * Handled — and the failure takes its place, so the row comes back
      * carrying the reason and a Retry rather than silently reappearing.
      */
-    const classification = mutationFailure(err);
-    entry.nextAt =
-      Date.now() +
-      Math.min(60_000, 2_000 * 2 ** Math.min(entry.attempts || 0, 5));
-    const failure = {
-      ...classification,
-      error: classification.message,
-      // Core's error code, so a row can offer the fix it names (for example
-      // answering without notifying an unreachable requester).
-      code: String(err?.body?.error?.code ?? ""),
-      nextAt: classification.state === "retrying" ? entry.nextAt : null,
-      outcome: String(entry.request?.outcome ?? ""),
-      response_text: String(entry.request?.response_text ?? ""),
-      at: new Date().toISOString(),
-    };
-    // A persistence failure leaves the original in-memory entry intact.
-    let volatile = false;
-    try {
-      await persistResponse(entry, classification.state, failure);
-    } catch {
-      volatile = true;
-      /* Copy remains available in the item. */
-    }
+    // Sends that failed under the lock were already checkpointed there.
+    const { classification, failure, volatile } =
+      err?.checkpoint ?? (await checkpointFailure(entry, err));
     const failed = {
       id: entry.id,
       itemId: entry.itemId,
