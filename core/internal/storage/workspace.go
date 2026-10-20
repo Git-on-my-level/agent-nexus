@@ -23,15 +23,14 @@ type Layout struct {
 }
 
 type Workspace struct {
-	layout               Layout
-	db                   *sql.DB
-	processLock          *scopeProcessLease
-	closeOnce            sync.Once
-	askSubjectsBatch     adaptiveMaintenanceBatch
-	inboxLifecycleBatch  adaptiveMaintenanceBatch
-	compactAccessBatch   adaptiveMaintenanceBatch
-	documentHistoryBatch adaptiveMaintenanceBatch
-	closeErr             error
+	layout              Layout
+	db                  *sql.DB
+	processLock         *scopeProcessLease
+	closeOnce           sync.Once
+	askSubjectsBatch    adaptiveMaintenanceBatch
+	inboxLifecycleBatch adaptiveMaintenanceBatch
+	compactAccessBatch  adaptiveMaintenanceBatch
+	closeErr            error
 }
 
 func NewLayout(root string) Layout {

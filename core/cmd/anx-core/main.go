@@ -668,7 +668,7 @@ func main() {
 			}
 		}
 		workspace.RunDocumentAccessHistoryMaintenance(maintenanceCtx, func(err error) {
-			fmt.Fprintln(os.Stderr, "document access history maintenance: retrying bounded batch")
+			fmt.Fprintf(os.Stderr, "document access history maintenance: retrying bounded batch: %v\n", err)
 		})
 	}()
 	defer func() { maintenanceCancel(); <-documentHistoryDone }()

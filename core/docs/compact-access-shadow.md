@@ -138,7 +138,13 @@ access graph by revisions times refs. Migration 111 installs triggers only; a
 bounded maintenance cursor (`resource_access_document_history_job`) then moves
 legacy per-revision edges into one deduplicated set per document, a few hundred
 edges per short transaction. It is safe while serving, resumes after restart,
-and every committed chunk preserves authorization. Progress is visible with:
+and every committed chunk preserves authorization. Each chunk's time budget
+is checked between statements; SQL inside the write transaction is never
+cancelled. Failed chunks back off exponentially up to five minutes and log the
+revision and error class; after ten consecutive failures the log line reads
+`stuck at revision <id> after <n> consecutive failures (<class>)`. A revision is
+never skipped, because leaving its edges in place is always safe. Progress is
+visible with:
 
 ```sql
 SELECT cursor, done FROM resource_access_document_history_job;

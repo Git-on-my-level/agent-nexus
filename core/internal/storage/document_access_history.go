@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
@@ -131,20 +133,33 @@ func installDocumentAccessHistory(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// MaintainDocumentAccessHistoryBatch moves at most a bounded number of legacy
+// MaintainDocumentAccessHistoryBatch moves a bounded number of legacy
 // per-revision edges into their document's set in one short transaction.
 // Each committed chunk preserves authorization; the cursor makes it resumable.
 func (w *Workspace) MaintainDocumentAccessHistoryBatch(ctx context.Context) (bool, error) {
-	return w.documentHistoryBatch.run(ctx, 200, w.maintainDocumentAccessHistoryChunk)
+	return w.maintainDocumentAccessHistoryChunk(ctx, 1000, documentHistoryChunkBudget)
 }
 
-func (w *Workspace) maintainDocumentAccessHistoryChunk(ctx context.Context, limit int) (bool, error) {
-	tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(ctx, w.db, 20*time.Millisecond)
+// documentHistoryChunkBudget bounds one chunk's write transaction. It is
+// enforced between statements, never by cancelling a statement.
+const documentHistoryChunkBudget = 50 * time.Millisecond
+
+// documentHistoryEdgeBatch is the most edges one statement pair moves.
+const documentHistoryEdgeBatch = 25
+
+func (w *Workspace) maintainDocumentAccessHistoryChunk(ctx context.Context, limit int, budget time.Duration) (bool, error) {
+	// Cancelling a statement inside this write transaction can leave the
+	// driver connection open outside the pool with the write lock held, which
+	// blocks every later writer until the process exits. Statements therefore
+	// run uncancelled; the time budget and shutdown are checked between them.
+	sqlCtx := context.WithoutCancel(ctx)
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(sqlCtx, w.db, 20*time.Millisecond)
 	if err != nil {
 		return false, err
 	}
 	defer cleanup()
-	done, err := moveDocumentAccessHistory(ctx, tx, limit)
+	deadline := time.Now().Add(budget)
+	done, err := moveDocumentAccessHistoryUntil(sqlCtx, tx, limit, func() bool { return ctx.Err() != nil || time.Now().After(deadline) })
 	if err != nil {
 		return false, err
 	}
@@ -155,6 +170,12 @@ func (w *Workspace) maintainDocumentAccessHistoryChunk(ctx context.Context, limi
 // 4*limit revisions. A revision is committed to the cursor only once it has no
 // own edges left, so a partial revision resumes on the next chunk.
 func moveDocumentAccessHistory(ctx context.Context, tx *sql.Tx, limit int) (bool, error) {
+	return moveDocumentAccessHistoryUntil(ctx, tx, limit, func() bool { return false })
+}
+
+// moveDocumentAccessHistoryUntil also stops, keeping committed-cursor
+// semantics, once stop reports true after at least one statement pair.
+func moveDocumentAccessHistoryUntil(ctx context.Context, tx *sql.Tx, limit int, stop func() bool) (bool, error) {
 	limit = max(1, limit)
 	var exists bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='`+documentHistoryJobTable+`')`).Scan(&exists); err != nil || !exists {
@@ -174,7 +195,7 @@ func moveDocumentAccessHistory(ctx context.Context, tx *sql.Tx, limit int) (bool
 	if cards {
 		shared += ` OR EXISTS(SELECT 1 FROM card_revisions WHERE artifact_id=?1)`
 	}
-	budget, visited := limit, 0
+	budget, visited, progressed := limit, 0, false
 	for budget > 0 && visited < 4*limit {
 		var revision, document, artifact string
 		err := tx.QueryRowContext(ctx, `SELECT revision_id,document_id,artifact_id FROM document_revisions WHERE revision_id>? ORDER BY revision_id LIMIT 1`, cursor).Scan(&revision, &document, &artifact)
@@ -195,22 +216,39 @@ func moveDocumentAccessHistory(ctx context.Context, tx *sql.Tx, limit int) (bool
 			sources = append(sources, [2]string{"artifact", artifact})
 		}
 		complete := true
-		for _, source := range sources {
-			moved, err := moveDocumentAccessEdges(ctx, tx, source[0], source[1], document, budget)
-			if err != nil {
-				return false, err
-			}
-			budget -= moved
-			if budget <= 0 {
-				// Re-check on the next chunk; there may be nothing left.
+	sources:
+		for i, source := range sources {
+			if i > 0 && progressed && stop() {
+				// Out of budget between this revision's sources: leave the
+				// cursor on it; the next chunk finishes the remaining source.
 				complete = false
 				break
+			}
+			for {
+				request := min(budget, documentHistoryEdgeBatch)
+				moved, err := moveDocumentAccessEdges(ctx, tx, source[0], source[1], document, request)
+				if err != nil {
+					return false, err
+				}
+				budget -= moved
+				progressed = progressed || moved > 0
+				if moved < request {
+					break // this source has no own edges left
+				}
+				if budget <= 0 || stop() {
+					// Re-check on the next chunk; there may be nothing left.
+					complete = false
+					break sources
+				}
 			}
 		}
 		if !complete {
 			break
 		}
 		cursor = revision
+		if stop() {
+			break
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE `+documentHistoryJobTable+` SET cursor=?,done=? WHERE singleton=1`, cursor, done); err != nil {
 		return false, err
@@ -254,22 +292,81 @@ func moveDocumentAccessEdges(ctx context.Context, tx *sql.Tx, kind, id, document
 // RunDocumentAccessHistoryMaintenance drains the legacy per-revision edges
 // after startup. Freed pages are reused by later writes; shrinking the file
 // is a separate offline step (see the runbook).
+//
+// Failures back off exponentially (capped at five minutes) and report the
+// revision the cursor is waiting on. A revision is never skipped: leaving its
+// edges in place is always authorization-safe, so a persistent failure keeps
+// blocking the job cheaply instead of spinning.
 func (w *Workspace) RunDocumentAccessHistoryMaintenance(ctx context.Context, report func(error)) {
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
+	w.runDocumentAccessHistoryMaintenance(ctx, report, documentHistoryRetry{base: 50 * time.Millisecond, max: 5 * time.Minute, stuckAfter: 10})
+}
+
+type documentHistoryRetry struct {
+	base, max  time.Duration
+	stuckAfter int
+}
+
+func (w *Workspace) runDocumentAccessHistoryMaintenance(ctx context.Context, report func(error), retry documentHistoryRetry) {
+	delay, failures := retry.base, 0
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			done, err := w.MaintainDocumentAccessHistoryBatch(ctx)
-			if err != nil {
-				if report != nil && ctx.Err() == nil {
-					report(err)
-				}
-			} else if done {
+		case <-timer.C:
+		}
+		done, err := w.MaintainDocumentAccessHistoryBatch(ctx)
+		if err == nil {
+			if done {
 				return
 			}
+			delay, failures = retry.base, 0
+			timer.Reset(delay)
+			continue
 		}
+		if ctx.Err() != nil {
+			return
+		}
+		failures++
+		delay = retry.base
+		for i := 1; i < failures && delay < retry.max; i++ {
+			delay *= 2
+		}
+		delay = min(delay, retry.max)
+		if report != nil {
+			revision := w.documentHistoryNextRevision(ctx)
+			if failures >= retry.stuckAfter {
+				err = fmt.Errorf("stuck at revision %s after %d consecutive failures (%s), next retry in %s: %w", revision, failures, maintenanceErrorClass(err), delay, err)
+			} else {
+				err = fmt.Errorf("revision %s (%s), retry %d in %s: %w", revision, maintenanceErrorClass(err), failures, delay, err)
+			}
+			report(err)
+		}
+		timer.Reset(delay)
+	}
+}
+
+// documentHistoryNextRevision names the revision the cursor will process next.
+func (w *Workspace) documentHistoryNextRevision(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	var revision sql.NullString
+	err := w.db.QueryRowContext(ctx, `SELECT (SELECT revision_id FROM document_revisions WHERE revision_id>j.cursor ORDER BY revision_id LIMIT 1) FROM `+documentHistoryJobTable+` j WHERE singleton=1`).Scan(&revision)
+	if err != nil || !revision.Valid {
+		return "unknown"
+	}
+	return revision.String
+}
+
+func maintenanceErrorClass(err error) string {
+	var code interface{ Code() int }
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "lease timeout"
+	case errors.As(err, &code) && (code.Code()&255 == 5 || code.Code()&255 == 6):
+		return "database busy"
+	default:
+		return "error"
 	}
 }
