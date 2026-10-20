@@ -202,9 +202,12 @@ test("a tab waiting on the send lock honours a failed retry's backoff", async ({
   release();
   await expect.poll(() => sends.length, { timeout: 15000 }).toBe(3);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-  // The failed retry's backoff must hold across tabs, rather than the
-  // waiting tab resending as soon as the lock is released.
-  expect(sends[2].at - failedAt).toBeGreaterThanOrEqual(1500);
+  // The failed retry's full backoff (attempt 2: 2s * 2^2 = 8s) must hold
+  // across tabs. It starts when the sending tab checkpoints the failure,
+  // which is after the reply below was fulfilled, so no resend may come
+  // earlier than failedAt + 8s (less clock rounding). A waiting tab that
+  // resends once the lock is released, however late, cannot meet this.
+  expect(sends[2].at - failedAt).toBeGreaterThanOrEqual(8000 - 100);
   for (const send of sends) expect(send.body).toEqual(sends[0].body);
   await expect.poll(async () => (await records(other)).length).toBe(0);
 });

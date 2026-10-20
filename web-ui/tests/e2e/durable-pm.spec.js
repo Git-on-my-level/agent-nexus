@@ -238,9 +238,10 @@ test("a tab waiting on the send lock honours the failed attempt's backoff", asyn
   await expect(other.locator("[data-unsent-indicator]")).toBeVisible();
   release();
   await expect.poll(() => sends.length, { timeout: 10000 }).toBe(2);
-  // The 2s backoff from the first failure must hold across tabs, rather
-  // than the waiting tab resending as soon as the lock is released.
-  expect(sends[1].at - failedAt).toBeGreaterThanOrEqual(1500);
+  // The first failure's full 2s backoff must hold across tabs. It starts
+  // when the sending tab checkpoints the failure, after the reply above was
+  // fulfilled, so no resend may come earlier (less clock rounding).
+  expect(sends[1].at - failedAt).toBeGreaterThanOrEqual(2000 - 100);
   expect(sends[1].body).toEqual(sends[0].body);
 });
 
