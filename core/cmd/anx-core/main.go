@@ -623,6 +623,7 @@ func main() {
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
 	// Do not allow background writers or HTTP admission to compete with install.
+	var compactWait <-chan struct{}
 	if compactAccessMigration {
 		compactCtx, compactCancel := context.WithTimeout(maintenanceCtx, 10*time.Minute)
 		defer compactCancel()
@@ -638,6 +639,7 @@ func main() {
 			report(proof, err)
 		} else {
 			compactDone := make(chan struct{})
+			compactWait = compactDone
 			go func() { defer close(compactDone); workspace.RunCompactAccessMigration(compactCtx, report) }()
 			defer func() { maintenanceCancel(); <-compactDone }()
 		}
@@ -653,6 +655,23 @@ func main() {
 	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
 	go workspace.RunAskSubjectsMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask subject maintenance: retrying bounded batch") })
 	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
+	documentHistoryDone := make(chan struct{})
+	go func() {
+		defer close(documentHistoryDone)
+		// Moving edges advances the authorization epoch, which would restart
+		// compact access certification; let a resumed certification finish.
+		if compactWait != nil {
+			select {
+			case <-compactWait:
+			case <-maintenanceCtx.Done():
+				return
+			}
+		}
+		workspace.RunDocumentAccessHistoryMaintenance(maintenanceCtx, func(err error) {
+			fmt.Fprintln(os.Stderr, "document access history maintenance: retrying bounded batch")
+		})
+	}()
+	defer func() { maintenanceCancel(); <-documentHistoryDone }()
 	go server.RunCurationFormulaLoop(maintenanceCtx, primitiveStore, func(err error) { fmt.Fprintf(os.Stderr, "curation formula pass: %v\n", err) })
 
 	replayGCDone := make(chan struct{})

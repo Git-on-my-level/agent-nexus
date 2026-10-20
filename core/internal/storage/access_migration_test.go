@@ -45,6 +45,8 @@ func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
 		}
 	}
 	for _, sql := range []string{
+		// Migration 110 postdates this schema; its triggers reference the column.
+		`DROP TRIGGER access_document_history_artifact_update`,
 		`DROP INDEX idx_access_unknown_artifacts`,
 		`ALTER TABLE artifacts DROP COLUMN content_refs_json`,
 		`DELETE FROM resource_access_edges`,

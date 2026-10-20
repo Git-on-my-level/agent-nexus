@@ -156,6 +156,13 @@ and revision content before MATCH/rank/limit. Series rollups retain reference
 provenance after compaction; full adapter data deletion removes that provenance. Ambiguous preview57 ledger
 atoms are conservatively retained because compacted historical states cannot be
 reconstructed; never remove them speculatively.
+Migration 110 keys revision and revision-artifact reference edges by their
+document (`document_history` source kind). A document, its revisions and their
+artifacts share one denial outcome, so superseded revisions still constrain the
+document and every revision, but each target is stored once per document rather
+than once per revision. Triggers redirect those edge inserts; artifacts that also
+back a card revision keep their own edges. A bounded maintenance cursor moves
+legacy per-revision edges after startup; never drop superseded revision targets.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.

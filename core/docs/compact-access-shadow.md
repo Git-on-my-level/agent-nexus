@@ -130,6 +130,39 @@ Do not copy/swap a file while writers continue: later commits could be lost.
 Do not apply unverified VACUUM output. In particular, the helper rejects a SQLite
 build that changes implicit PM cursor IDs even though access-edge IDs are stable.
 
+## Document revision edges
+
+Before migration 110, every document revision and its revision artifact kept a
+full copy of its reference edges, so a frequently revised document grew the
+access graph by revisions times refs. Migration 110 installs triggers only; a
+bounded maintenance cursor (`resource_access_document_history_job`) then moves
+legacy per-revision edges into one deduplicated set per document, a few hundred
+edges per short transaction. It is safe while serving, resumes after restart,
+and every committed chunk preserves authorization. Progress is visible with:
+
+```sql
+SELECT cursor, done FROM resource_access_document_history_job;
+SELECT count(*) FROM resource_access_edges
+ WHERE source_kind IN ('artifact','document_revision');
+```
+
+To estimate the saving before upgrading, compare per-revision edges with the
+distinct targets per document (read-only):
+
+```sql
+SELECT document_id, count(*) AS edges, count(DISTINCT lower(target_ref)) AS targets FROM (
+  SELECT r.document_id, e.target_ref FROM document_revisions r JOIN resource_access_edges e
+    ON e.source_kind='artifact' AND e.source_id=r.artifact_id
+  UNION ALL
+  SELECT r.document_id, e.target_ref FROM document_revisions r JOIN resource_access_edges e
+    ON e.source_kind='document_revision' AND e.source_id=r.revision_id
+) GROUP BY document_id ORDER BY edges DESC LIMIT 10;
+```
+
+Freed pages are reused by later writes; the file does not shrink on its own
+(`auto_vacuum=NONE`). After `done=1`, shrink it with the offline reclamation
+procedure above. Never run a full `VACUUM` against a serving core.
+
 ## Evidence and cost
 
 The disposable 4,096-resource-per-family fixture contains **243,770 exact edges**.

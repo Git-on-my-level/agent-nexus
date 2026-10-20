@@ -2040,9 +2040,8 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM document_revisions WHERE document_id = ?`, documentID); err != nil {
-		return fmt.Errorf("delete document revisions: %w", err)
-	}
+	// Delete artifacts before their revision rows: a revision delete restores
+	// own access edges to an artifact that survives it.
 	for _, item := range owned {
 		if item.artifactID == "" {
 			continue
@@ -2050,6 +2049,9 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM artifacts WHERE id = ?`, item.artifactID); err != nil {
 			return fmt.Errorf("delete document revision artifact: %w", err)
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM document_revisions WHERE document_id = ?`, documentID); err != nil {
+		return fmt.Errorf("delete document revisions: %w", err)
 	}
 
 	hashes := make(map[string]struct{})
