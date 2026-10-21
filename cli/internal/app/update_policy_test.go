@@ -56,7 +56,7 @@ func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
 			t.Errorf("eligible command did not trigger update check: %s", command)
 		}
 	}
-	for _, command := range []string{"await", "help", "update status", "update --check", "api call", "pm install"} {
+	for _, command := range []string{"await", "help", "update status", "update --check", "update --version v0.12.11", "api call", "pm install"} {
 		if updateInvocationEligible(command, strings.Fields(command)) {
 			t.Errorf("ineligible command triggered update: %s", command)
 		}
@@ -264,11 +264,96 @@ func TestScheduledServerVersionWorkerRecordsNoWorkspaceSkip(t *testing.T) {
 	}
 }
 
-func TestServerUpdateWorkerReceivesResolvedWorkspaceAsAnArgument(t *testing.T) {
-	args := serverUpdateWorkerArgs("/tmp/anx-config", "https://workspace.example")
-	want := []string{"--config-dir", "/tmp/anx-config", "--base-url", "https://workspace.example", "update", "now", "--scheduled", "--server-trigger"}
+func TestNoWorkspaceSkipWaitsForInstallerLock(t *testing.T) {
+	a, cfg, path := managedUpdateFixture(t)
+	cfg.BaseURL = config.DefaultBaseURL
+	cfg.Sources = map[string]string{"base_url": "default"}
+	dir := mustUpdateDir(t, a, cfg)
+	initial := updateState{LastAutomaticAttemptAt: "prior", LastAutomaticTrigger: "daily", LastAutomaticResult: "current"}
+	if err := writeUpdateJSON(filepath.Join(dir, "state.json"), initial); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := lockUpdateInstall(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+
+	_, err = a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+	if errnorm.Normalize(err).Code != "update_locked" {
+		t.Fatalf("no-workspace worker ignored installer lock: %v", err)
+	}
+	state, err := readUpdateState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state != initial {
+		t.Fatalf("state changed without owning installer lock: before=%+v after=%+v", initial, state)
+	}
+}
+
+func TestServerUpdateWorkerPassesWorkspaceOnlyInEnvironment(t *testing.T) {
+	args := serverUpdateWorkerArgs("/tmp/anx-config")
+	want := []string{"--config-dir", "/tmp/anx-config", "update", "now", "--scheduled", "--server-trigger"}
 	if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("worker args=%q; want %q", args, want)
+	}
+	baseURL := "https://user:secret@workspace.example/ws/team/project"
+	workerEnv := replaceEnvironment([]string{"ANX_BASE_URL=https://stale.example", "KEEP=value"}, "ANX_BASE_URL", baseURL)
+	count := 0
+	for _, entry := range workerEnv {
+		if strings.HasPrefix(entry, "ANX_BASE_URL=") {
+			count++
+			if entry != "ANX_BASE_URL="+baseURL {
+				t.Fatalf("worker base URL env=%q; want resolved workspace", entry)
+			}
+		}
+		if strings.Contains(entry, "secret") && !strings.HasPrefix(entry, "ANX_BASE_URL=") {
+			t.Fatalf("workspace URL leaked outside its environment entry: %q", entry)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("worker environment has %d ANX_BASE_URL entries; want exactly one", count)
+	}
+}
+
+func TestServerHandshakeFailureFallsBackToDailyReleaseCheck(t *testing.T) {
+	a, cfg, _ := managedUpdateFixture(t)
+	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/meta/handshake" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("public handshake unexpectedly required auth: %q", r.Header.Get("Authorization"))
+		}
+		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+	}))
+	defer core.Close()
+	cfg.BaseURL = core.URL
+	cfg.Sources = map[string]string{"base_url": "flag:--workspace"}
+	release := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"tag_name":"v0.12.10"}`))
+	}))
+	defer release.Close()
+	oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+	t.Cleanup(func() { updateReleaseAPIURL, updateReleaseBaseURL = oldAPI, oldBase })
+	updateReleaseAPIURL = release.URL + "/api"
+	updateReleaseBaseURL = release.URL + "/releases"
+
+	_, err := a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+	if err != nil {
+		t.Fatalf("transient handshake failure blocked daily release check: %v", err)
+	}
+	state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastAutomaticResult != "current" || state.ServerTriggerResult != "handshake_failed_fallback_daily" {
+		t.Fatalf("fallback result=%+v", state)
 	}
 }
 

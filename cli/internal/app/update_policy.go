@@ -616,8 +616,8 @@ func startDetachedUpdateWorker(path, configDir string) error {
 }
 
 func startDetachedServerUpdateWorker(path, configDir, baseURL string) error {
-	args := serverUpdateWorkerArgs(configDir, baseURL)
-	cmd := exec.Command(path, args...)
+	cmd := exec.Command(path, serverUpdateWorkerArgs(configDir)...)
+	cmd.Env = replaceEnvironment(os.Environ(), "ANX_BASE_URL", baseURL)
 	null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
 		return err
@@ -633,12 +633,23 @@ func startDetachedServerUpdateWorker(path, configDir, baseURL string) error {
 	return cmd.Process.Release()
 }
 
-func serverUpdateWorkerArgs(configDir, baseURL string) []string {
-	args := []string{"--base-url", baseURL, "update", "now", "--scheduled", "--server-trigger"}
+func serverUpdateWorkerArgs(configDir string) []string {
+	args := []string{"update", "now", "--scheduled", "--server-trigger"}
 	if configDir != "" {
 		args = append([]string{"--config-dir", configDir}, args...)
 	}
 	return args
+}
+
+func replaceEnvironment(environment []string, key, value string) []string {
+	prefix := key + "="
+	updated := make([]string, 0, len(environment)+1)
+	for _, entry := range environment {
+		if !strings.HasPrefix(entry, prefix) {
+			updated = append(updated, entry)
+		}
+	}
+	return append(updated, prefix+value)
 }
 
 var updateProbeBinary = func(ctx context.Context, path, version string) error {
@@ -719,7 +730,16 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		_ = writeUpdateJSON(filepath.Join(dir, "state.json"), state)
 		return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "policy_changed", "state": state}}, nil
 	}
+	path, record, _, reason := inspectUpdateInstall()
 	if o.serverTrigger && !hasResolvedUpdateWorkspace(cfg) {
+		if path == "" {
+			return nil, errnorm.Local("install_path_unavailable", "cannot lock update state without the installed executable path")
+		}
+		lock, lockErr := lockUpdateInstall(path)
+		if lockErr != nil {
+			return nil, lockErr
+		}
+		defer lock.Close()
 		state, _ := readUpdateState(dir)
 		at := a.clockNow().UTC().Format(time.RFC3339Nano)
 		if state.LastAutomaticTrigger == "server_version" && state.LastAutomaticAttemptAt != "" {
@@ -739,7 +759,6 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		}
 		return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "no_workspace", "state": state}}, nil
 	}
-	path, record, _, reason := inspectUpdateInstall()
 	if _, journalErr := os.Stat(updateTransactionPath(path)); reason != "" && errors.Is(journalErr, os.ErrNotExist) {
 		if o.scheduled {
 			state, _ := readUpdateState(dir)
