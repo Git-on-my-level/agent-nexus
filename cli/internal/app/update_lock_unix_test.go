@@ -4,6 +4,7 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,5 +88,48 @@ func TestUpdateContenderCloseCannotReleaseAnotherOwnersLock(t *testing.T) {
 	if contender, err := lockUpdateInstall(path); err == nil {
 		contender.Close()
 		t.Fatal("contender cleanup released owner's lock")
+	}
+}
+
+func TestScheduledUpdateWaitsForTheExistingInstallerLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anx")
+	owner, err := lockUpdateInstall(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	type result struct {
+		lock *os.File
+		err  error
+	}
+	finished := make(chan result, 1)
+	go func() {
+		lock, err := lockScheduledUpdateInstall(ctx, path)
+		finished <- result{lock: lock, err: err}
+	}()
+	select {
+	case got := <-finished:
+		if got.lock != nil {
+			got.lock.Close()
+		}
+		t.Fatalf("scheduled worker did not wait for lock release: %v", got.err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-finished:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		defer got.lock.Close()
+		if contender, err := lockUpdateInstall(path); err == nil {
+			contender.Close()
+			t.Fatal("scheduled updater did not retain exclusive lock ownership")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduled worker did not acquire lock after release")
 	}
 }

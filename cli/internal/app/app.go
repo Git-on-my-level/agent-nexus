@@ -19,26 +19,28 @@ import (
 )
 
 type App struct {
-	Stdin              io.Reader
-	Stdout             io.Writer
-	Stderr             io.Writer
-	Getenv             func(string) string
-	UserHomeDir        func() (string, error)
-	Getwd              func() (string, error)
-	ReadFile           func(string) ([]byte, error)
-	StdinIsTTY         func() bool
-	StdoutIsTTY        func() bool
-	hasOMPAncestor     func() bool
-	now                func() time.Time
-	pmTurns            *pmTurnMemory
-	runtimeIdentity    func() (*runtimeIdentityReport, error)
-	startUpdateWorker  func(executable, configDir string) error
-	startSkillsRefresh func(executable, configDir, home string) error
-	skillLookPath      func(string) (string, error)
-	stdinConsumed      bool
-	outputStarted      bool
-	writes             writeTracker
-	webURL             *webURLLookup
+	Stdin                          io.Reader
+	Stdout                         io.Writer
+	Stderr                         io.Writer
+	Getenv                         func(string) string
+	UserHomeDir                    func() (string, error)
+	Getwd                          func() (string, error)
+	ReadFile                       func(string) ([]byte, error)
+	StdinIsTTY                     func() bool
+	StdoutIsTTY                    func() bool
+	hasOMPAncestor                 func() bool
+	now                            func() time.Time
+	pmTurns                        *pmTurnMemory
+	runtimeIdentity                func() (*runtimeIdentityReport, error)
+	startUpdateWorker              func(executable, configDir string) error
+	startServerUpdateWorker        func(executable, configDir, baseURL string) error
+	startSkillsRefresh             func(executable, configDir, home string) error
+	skillLookPath                  func(string) (string, error)
+	runScheduledMaintenanceInTests bool
+	stdinConsumed                  bool
+	outputStarted                  bool
+	writes                         writeTracker
+	webURL                         *webURLLookup
 }
 
 func (a *App) clockNow() time.Time {
@@ -84,18 +86,19 @@ func isTrailingHelpOnlyInvocation(remaining []string) bool {
 
 func New() *App {
 	app := &App{
-		Stdin:              os.Stdin,
-		Stdout:             os.Stdout,
-		Stderr:             os.Stderr,
-		Getenv:             os.Getenv,
-		UserHomeDir:        os.UserHomeDir,
-		Getwd:              os.Getwd,
-		ReadFile:           os.ReadFile,
-		hasOMPAncestor:     ompAncestor,
-		pmTurns:            newPMTurnMemory(),
-		startSkillsRefresh: startDetachedSkillsRefresh,
-		startUpdateWorker:  startDetachedUpdateWorker,
-		skillLookPath:      exec.LookPath,
+		Stdin:                   os.Stdin,
+		Stdout:                  os.Stdout,
+		Stderr:                  os.Stderr,
+		Getenv:                  os.Getenv,
+		UserHomeDir:             os.UserHomeDir,
+		Getwd:                   os.Getwd,
+		ReadFile:                os.ReadFile,
+		hasOMPAncestor:          ompAncestor,
+		pmTurns:                 newPMTurnMemory(),
+		startSkillsRefresh:      startDetachedSkillsRefresh,
+		startUpdateWorker:       startDetachedUpdateWorker,
+		startServerUpdateWorker: startDetachedServerUpdateWorker,
+		skillLookPath:           exec.LookPath,
 	}
 	app.StdinIsTTY = func() bool {
 		stream := app.Stdin
@@ -123,6 +126,15 @@ func isTTYStream(stream any) bool {
 func (a *App) writeOutput(w io.Writer, s string) {
 	if _, err := io.WriteString(w, s); err != nil && w != a.Stderr && w != os.Stderr {
 		fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
+	}
+}
+
+func (a *App) writeUpdateFollowUpWarnings(warnings []output.Warning) {
+	if a == nil || a.Stderr == nil {
+		return
+	}
+	for _, warning := range warnings {
+		a.writeOutput(a.Stderr, fmt.Sprintf("warning code=%s message=%q\n", warning.Code, warning.Message))
 	}
 }
 
@@ -246,12 +258,18 @@ func (a *App) Run(args []string) int {
 		runErr = a.withWorkspaceHint(context.Background(), resolved, normalizedArgs, runErr)
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
-	if !isGoTestBinary() && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
+	if (!isGoTestBinary() || a.runScheduledMaintenanceInTests) && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
 		if !strings.HasPrefix(identity.Command, "update") {
 			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
 		}
+		var updateWarnings []output.Warning
+		var afterOutput func()
+		updateWarnings, afterOutput = a.prepareUpdateSchedule(identity.Command, normalizedArgs, resolved, result)
 		if result != nil {
-			result.Warnings = append(result.Warnings, a.maybeScheduleUpdate(identity.Command, normalizedArgs, resolved, result)...)
+			result.Warnings = append(result.Warnings, updateWarnings...)
+		}
+		if afterOutput != nil {
+			defer afterOutput()
 		}
 	}
 
@@ -268,26 +286,33 @@ func (a *App) Run(args []string) int {
 	if identity.Command == "url" && !resolved.JSON {
 		if resourceURL := anyString(asMap(value)["url"]); resourceURL != "" {
 			a.writeOutput(a.Stdout, resourceURL+"\n")
+			a.writeUpdateFollowUpWarnings(a.updateFollowUpWarnings(resolved))
 			return 0
 		}
 	}
 	if identity.Command == "link" && !resolved.JSON && result != nil && result.Text != "" && anyString(asMap(value)["help_text"]) == "" {
 		a.writeOutput(a.Stdout, result.Text+"\n")
+		a.writeUpdateFollowUpWarnings(a.updateFollowUpWarnings(resolved))
 		return 0
 	}
 	if identity.Command == "work receipt" && !resolved.JSON {
 		if id := anyString(asMap(asMap(value)["event"])["id"]); id != "" {
 			a.writeOutput(a.Stdout, id+"\n")
+			a.writeUpdateFollowUpWarnings(a.updateFollowUpWarnings(resolved))
 			return 0
 		}
 	}
 	if identity.Command == "host token" && !resolved.JSON {
 		if token := anyString(asMap(value)["token"]); token != "" {
 			a.writeOutput(a.Stdout, token+"\n")
+			a.writeUpdateFollowUpWarnings(a.updateFollowUpWarnings(resolved))
 			return 0
 		}
 	}
 	warnings, repairs := resultWarnings(identity.Command, normalizedArgs, value)
+	if !isScheduledUpdateInvocation(identity.Command, normalizedArgs) {
+		warnings = append(a.updateFollowUpWarnings(resolved), warnings...)
+	}
 	if result != nil && len(result.Warnings) > 0 {
 		warnings = append(result.Warnings, warnings...)
 	}

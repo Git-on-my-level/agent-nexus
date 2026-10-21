@@ -111,6 +111,25 @@ func lockUpdateInstall(path string) (*os.File, error) {
 	}
 	return f, nil // Close releases only this owner's kernel lock; inode stays.
 }
+
+func lockScheduledUpdateInstall(ctx context.Context, path string) (*os.File, error) {
+	for {
+		lock, err := lockUpdateInstall(path)
+		if err == nil {
+			return lock, nil
+		}
+		if errnorm.Normalize(err).Code != "update_locked" {
+			return nil, err
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, errnorm.Wrap(errnorm.KindLocal, "update_locked", "scheduled updater timed out waiting for the installer lock", ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
 func syncUpdateDirectory(dir string) error {
 	f, err := os.Open(dir)
 	if err != nil {

@@ -545,7 +545,7 @@ ANX environment variables
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
-ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day only from an interactive terminal when CI is unset and the caller is not a PM turn; checks run in a quiet detached worker. anx update status stays offline. Inspect anx update status or anx help update.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks once per UTC day from interactive terminals or recognized non-interactive agent invocations when CI is unset; ordinary scripts are skipped. Checks run in a quiet detached worker after command output. anx update status stays offline. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
@@ -5799,13 +5799,18 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
-  - notify checks without installing and emits one daily warning when a newer release is known
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
+  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
+  - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
+  - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check
+  - notify checks without installing and emits one daily warning when a newer release is known; non-interactive agent invocations stay skipped
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
-  - runs the new binary's managed skills sync after replacement
+  - runs the new binary's managed skills sync after replacement; a sync conflict is recorded and surfaced once without retrying the update
+  - the next command after replacement shows a one-line notice that the anx skill may need reloading
   - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
@@ -5834,13 +5839,18 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
-  - notify checks without installing and emits one daily warning when a newer release is known
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
+  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
+  - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
+  - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check
+  - notify checks without installing and emits one daily warning when a newer release is known; non-interactive agent invocations stay skipped
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
-  - runs the new binary's managed skills sync after replacement
+  - runs the new binary's managed skills sync after replacement; a sync conflict is recorded and surfaced once without retrying the update
+  - the next command after replacement shows a one-line notice that the anx skill may need reloading
   - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
@@ -5869,13 +5879,18 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
-  - notify checks without installing and emits one daily warning when a newer release is known
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
+  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
+  - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
+  - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check
+  - notify checks without installing and emits one daily warning when a newer release is known; non-interactive agent invocations stay skipped
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
-  - runs the new binary's managed skills sync after replacement
+  - runs the new binary's managed skills sync after replacement; a sync conflict is recorded and surfaced once without retrying the update
+  - the next command after replacement shows a one-line notice that the anx skill may need reloading
   - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
