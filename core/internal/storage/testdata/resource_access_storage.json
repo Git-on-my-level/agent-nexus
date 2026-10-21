@@ -1340,7 +1340,7 @@
     "../../cmd/anx-core/blob_backend.go:blobBackendConfig:Normalize": "3c01540ff7ae0fbacbb936c3a010c8ce771f75a6904d63950b633805daa740bf",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-    "../../cmd/anx-core/main.go:main": "12aa65e374794a95dde3263cd7bcccbc1253bc8268a642861aec2e8b4c45e913",
+    "../../cmd/anx-core/main.go:main": "7274bec10e1ec26407928f36464740755782eda156c7715f6ecb5eeb74dd4637",
     "../../cmd/anx-core/main.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
     "../../cmd/anx-observe/main.go:load": "07b08a12c195d92fa958af2c0f460af0ca25a9acd678f9db3ce624675b73407f",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
