@@ -2,9 +2,10 @@
 
 `anx update status` is offline. It shows the effective policy and its source,
 installer ownership, the running CLI's version/digest versus the installer
-receipt, the last release observation, failure stage/code, rollback outcome,
-and the time, trigger, and result of the latest automatic attempt. It also shows
-the workspace server-version check and any managed-skills sync attention.
+receipt, the last release observation, failure stage/code/reason, rollback
+outcome, and the time, trigger, and result of the latest automatic attempt. It
+also shows the workspace server-version check and its diagnostic reason, plus
+any managed-skills sync attention.
 `anx update now` checks and installs the latest release synchronously. The existing
 `anx update --check` (a pure release read) and `--version vX.Y.Z` remain available.
 An explicit update works even when automatic policy is off.
@@ -39,9 +40,14 @@ from launching duplicate release checks. A second per-install claim allows one
 workspace-version probe per UTC day, even after the regular daily check has run.
 When `/meta/handshake` exposes a `core_version` newer than the CLI, that worker
 checks the release channel; an absent version is recorded as
-`skipped_no_server_version`. `anx update status`, help, `await`, local maintenance,
-and dry runs stay offline. The gate uses the parsed command result, including
-every accepted true spelling of `--dry-run`.
+`skipped_no_server_version`. The server worker receives the exact workspace URL
+resolved by the triggering command. If that command resolved no workspace, the
+server trigger records `skipped_no_workspace` while the daily release check can
+still run. If the handshake fails, status keeps a short non-secret reason and
+the worker falls back to the regular release check instead of failing the day.
+`anx update status`, help, `await`, local maintenance, and dry runs stay offline.
+The gate uses the parsed command result, including every accepted true spelling
+of `--dry-run`.
 
 `notify` runs the same release discovery without installing. A known newer release
 produces one warning per UTC day on eligible reads and writes. An initial check

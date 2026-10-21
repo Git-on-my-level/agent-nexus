@@ -58,7 +58,10 @@ starts after command output and cannot change that command's output or exit code
 A separate worker checks `/meta/handshake` at most once per UTC day and runs the
 release check when `core_version` is newer than the CLI. `anx update status`
 reports the last automatic attempt and server-version trigger; when the handshake
-does not expose `core_version`, status reports `skipped_no_server_version`.
+does not expose `core_version`, status reports `skipped_no_server_version`. The
+server check uses the workspace selected by the triggering command; with no
+resolved workspace it records `skipped_no_workspace`. A failed handshake keeps a
+short diagnostic and falls back to the daily release check.
 Help, `update status`, dry runs, local maintenance, and `ANX_UPDATE_POLICY=off`
 or `notify` keep automatic installation disabled for non-interactive agents.
 After replacement, the next command emits a one-line `warning code=...` notice
