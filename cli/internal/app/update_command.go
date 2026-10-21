@@ -162,17 +162,17 @@ func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string
 			err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release)
 			_ = resp.Body.Close()
 			if err != nil {
-				return "", err
+				return "", errnorm.Wrap(errnorm.KindRemote, "invalid_response", "release API returned an invalid response", err)
 			}
 			if err := validateReleaseTag(release.Tag); err != nil {
-				return "", err
+				return "", errnorm.Wrap(errnorm.KindRemote, "invalid_response", "release API returned an invalid version tag", err)
 			}
 			return normalizeReleaseTag(release.Tag), nil
 		}
 		status := resp.StatusCode
 		_ = resp.Body.Close()
 		if status != http.StatusForbidden && status != http.StatusTooManyRequests {
-			return "", fmt.Errorf("release API returned status %d", status)
+			return "", updateHTTPStatusError{status: status}
 		}
 	}
 	entry := strings.TrimRight(updateReleaseBaseURL, "/") + "/latest"
@@ -190,17 +190,17 @@ func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("latest release page returned status %d", resp.StatusCode)
+		return "", updateHTTPStatusError{status: resp.StatusCode}
 	}
 	// The final path must be a release tag on the same origin.
 	base, _ := http.NewRequest(http.MethodGet, entry, nil)
 	prefix := strings.TrimSuffix(base.URL.Path, "latest") + "tag/"
 	if !strings.HasPrefix(resp.Request.URL.Path, prefix) {
-		return "", fmt.Errorf("latest release redirect did not resolve a tag")
+		return "", errnorm.New(errnorm.KindRemote, "invalid_response", "latest release page did not resolve a version tag")
 	}
 	tag := pathBase(resp.Request.URL.Path)
 	if err := validateReleaseTag(tag); err != nil {
-		return "", err
+		return "", errnorm.Wrap(errnorm.KindRemote, "invalid_response", "latest release page returned an invalid version tag", err)
 	}
 	return normalizeReleaseTag(tag), nil
 }

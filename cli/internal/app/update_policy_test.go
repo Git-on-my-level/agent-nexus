@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -364,6 +365,7 @@ func TestScheduledServerVersionTriggerSkipsMissingVersionAndChecksNewerVersion(t
 			if r.URL.Path != "/meta/handshake" {
 				t.Errorf("unexpected path %s", r.URL.Path)
 			}
+			w.Header().Set("X-Private", "header-secret-value")
 			http.Error(w, "upstream included bearer-secret-value", http.StatusServiceUnavailable)
 		}))
 		defer core.Close()
@@ -396,6 +398,9 @@ func TestScheduledServerVersionTriggerSkipsMissingVersionAndChecksNewerVersion(t
 		if state.FailureStage != "server_handshake" || state.FailureCode != "update_handshake_failed" || strings.TrimSpace(state.FailureReason) == "" {
 			t.Fatalf("handshake failure diagnostics missing: %+v", state)
 		}
+		if state.FailureCategory != "http_503" || state.ServerTriggerFailureCategory != "http_503" {
+			t.Fatalf("handshake failure category missing: %+v", state)
+		}
 		if strings.Contains(state.FailureReason, "bearer-secret-value") || strings.Contains(state.ServerTriggerReason, "bearer-secret-value") {
 			t.Fatalf("failure reason exposed upstream content: %+v", state)
 		}
@@ -404,8 +409,15 @@ func TestScheduledServerVersionTriggerSkipsMissingVersionAndChecksNewerVersion(t
 			t.Fatal(err)
 		}
 		serverTrigger := asMap(asMap(status.Data)["server_version_trigger"])
-		if anyString(serverTrigger["result"]) != state.ServerTriggerResult || anyString(serverTrigger["reason"]) != state.ServerTriggerReason {
+		if anyString(serverTrigger["result"]) != state.ServerTriggerResult || anyString(serverTrigger["reason"]) != state.ServerTriggerReason || anyString(serverTrigger["failure_category"]) != "http_503" {
 			t.Fatalf("status diagnostics=%v state=%+v", serverTrigger, state)
+		}
+		encodedStatus, err := json.Marshal(status.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encodedStatus), "bearer-secret-value") || strings.Contains(string(encodedStatus), "header-secret-value") {
+			t.Fatalf("status exposed response details: %s", encodedStatus)
 		}
 	})
 
@@ -488,6 +500,45 @@ func TestScheduledServerVersionTriggerSkipsMissingVersionAndChecksNewerVersion(t
 			t.Fatalf("state=%+v err=%v", state, err)
 		}
 	})
+}
+
+func TestScheduledDailyReleaseFailureCategoryIsRecorded(t *testing.T) {
+	a, cfg, _ := managedUpdateFixture(t)
+	release := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Private", "header-secret-value")
+		http.Error(w, "response-body-secret", http.StatusServiceUnavailable)
+	}))
+	defer release.Close()
+	oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+	t.Cleanup(func() { updateReleaseAPIURL = oldAPI; updateReleaseBaseURL = oldBase })
+	updateReleaseAPIURL = release.URL + "/secret-release-path"
+	updateReleaseBaseURL = release.URL + "/releases"
+
+	if _, err := a.runUpdate(context.Background(), []string{"now", "--scheduled"}, cfg); err == nil {
+		t.Fatal("scheduled daily release check unexpectedly succeeded")
+	}
+	state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.FailureStage != "resolve_release" || state.FailureCategory != "http_503" {
+		t.Fatalf("daily release failure category missing: %+v", state)
+	}
+	status, err := a.runUpdateStatus(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastAttempt := asMap(asMap(status.Data)["last_automatic_attempt"])
+	if anyString(lastAttempt["failure_category"]) != "http_503" {
+		t.Fatalf("daily release failure category absent from status: %v", lastAttempt)
+	}
+	encodedStatus, err := json.Marshal(status.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encodedStatus), "response-body-secret") || strings.Contains(string(encodedStatus), "header-secret-value") || strings.Contains(string(encodedStatus), release.URL) {
+		t.Fatalf("status exposed release error details: %s", encodedStatus)
+	}
 }
 
 func TestScheduledSkillsSyncFailureIsRecordedAndSurfacedOnce(t *testing.T) {

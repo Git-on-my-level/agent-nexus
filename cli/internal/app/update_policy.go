@@ -28,24 +28,26 @@ type updateInstallRecord struct {
 	InstalledAt string `json:"installed_at"`
 }
 type updateState struct {
-	CheckedOn              string `json:"checked_on,omitempty"`
-	LatestVersion          string `json:"latest_version,omitempty"`
-	FailureStage           string `json:"failure_stage,omitempty"`
-	FailureCode            string `json:"failure_code,omitempty"`
-	FailureReason          string `json:"failure_reason,omitempty"`
-	Rollback               string `json:"rollback"`
-	BackupPath             string `json:"backup_path,omitempty"`
-	SkillsSynced           bool   `json:"skills_synced"`
-	SkillsSyncError        string `json:"skills_sync_error,omitempty"`
-	FollowUpNoticePending  bool   `json:"follow_up_notice_pending,omitempty"`
-	FollowUpNoticeID       string `json:"follow_up_notice_id,omitempty"`
-	LastAutomaticAttemptAt string `json:"last_automatic_attempt_at,omitempty"`
-	LastAutomaticTrigger   string `json:"last_automatic_trigger,omitempty"`
-	LastAutomaticResult    string `json:"last_automatic_result,omitempty"`
-	ServerVersion          string `json:"server_version,omitempty"`
-	ServerTriggerCheckedAt string `json:"server_trigger_checked_at,omitempty"`
-	ServerTriggerResult    string `json:"server_trigger_result,omitempty"`
-	ServerTriggerReason    string `json:"server_trigger_reason,omitempty"`
+	CheckedOn                    string `json:"checked_on,omitempty"`
+	LatestVersion                string `json:"latest_version,omitempty"`
+	FailureStage                 string `json:"failure_stage,omitempty"`
+	FailureCode                  string `json:"failure_code,omitempty"`
+	FailureReason                string `json:"failure_reason,omitempty"`
+	FailureCategory              string `json:"failure_category,omitempty"`
+	Rollback                     string `json:"rollback"`
+	BackupPath                   string `json:"backup_path,omitempty"`
+	SkillsSynced                 bool   `json:"skills_synced"`
+	SkillsSyncError              string `json:"skills_sync_error,omitempty"`
+	FollowUpNoticePending        bool   `json:"follow_up_notice_pending,omitempty"`
+	FollowUpNoticeID             string `json:"follow_up_notice_id,omitempty"`
+	LastAutomaticAttemptAt       string `json:"last_automatic_attempt_at,omitempty"`
+	LastAutomaticTrigger         string `json:"last_automatic_trigger,omitempty"`
+	LastAutomaticResult          string `json:"last_automatic_result,omitempty"`
+	ServerVersion                string `json:"server_version,omitempty"`
+	ServerTriggerCheckedAt       string `json:"server_trigger_checked_at,omitempty"`
+	ServerTriggerResult          string `json:"server_trigger_result,omitempty"`
+	ServerTriggerReason          string `json:"server_trigger_reason,omitempty"`
+	ServerTriggerFailureCategory string `json:"server_trigger_failure_category,omitempty"`
 }
 type updateOptions struct {
 	verb, policy, version string
@@ -228,6 +230,12 @@ func readUpdateState(dir string) (updateState, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		err = nil
 	}
+	if !validUpdateFailureCategory(s.FailureCategory) {
+		s.FailureCategory = ""
+	}
+	if !validUpdateFailureCategory(s.ServerTriggerFailureCategory) {
+		s.ServerTriggerFailureCategory = ""
+	}
 	return s, err
 }
 func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
@@ -265,8 +273,8 @@ func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
 		"policy": policy, "policy_source": source, "managed": reason == "", "skip_reason": reason, "install_path": path,
 		"observed_binary":  map[string]any{"version": httpclient.CLIVersion, "sha256": digest, "bookkeeping_matches": record.SHA256 == digest && digest != "" && normalizeReleaseTag(record.Version) == normalizeReleaseTag(httpclient.CLIVersion)},
 		"installer_record": record, "transaction": transaction, "state": state, "state_path": filepath.Join(dir, "state.json"),
-		"last_automatic_attempt": map[string]any{"at": state.LastAutomaticAttemptAt, "trigger": state.LastAutomaticTrigger, "result": state.LastAutomaticResult},
-		"server_version_trigger": map[string]any{"server_version": state.ServerVersion, "checked_at": state.ServerTriggerCheckedAt, "result": state.ServerTriggerResult, "reason": state.ServerTriggerReason},
+		"last_automatic_attempt": map[string]any{"at": state.LastAutomaticAttemptAt, "trigger": state.LastAutomaticTrigger, "result": state.LastAutomaticResult, "failure_category": state.FailureCategory},
+		"server_version_trigger": map[string]any{"server_version": state.ServerVersion, "checked_at": state.ServerTriggerCheckedAt, "result": state.ServerTriggerResult, "reason": state.ServerTriggerReason, "failure_category": state.ServerTriggerFailureCategory},
 	}}, nil
 }
 
@@ -414,6 +422,7 @@ func markAutomaticAttempt(state updateState, day, at, trigger string) updateStat
 	state.FailureStage = ""
 	state.FailureCode = ""
 	state.FailureReason = ""
+	state.FailureCategory = ""
 	state.LastAutomaticAttemptAt = at
 	state.LastAutomaticTrigger = trigger
 	state.LastAutomaticResult = "scheduled"
@@ -421,6 +430,7 @@ func markAutomaticAttempt(state updateState, day, at, trigger string) updateStat
 		state.ServerTriggerCheckedAt = at
 		state.ServerTriggerResult = "scheduled"
 		state.ServerTriggerReason = ""
+		state.ServerTriggerFailureCategory = ""
 	}
 	return state
 }
@@ -441,6 +451,7 @@ func markServerTriggerNoWorkspace(state *updateState, at string) {
 	state.ServerTriggerCheckedAt = at
 	state.ServerTriggerResult = "skipped_no_workspace"
 	state.ServerTriggerReason = "no workspace was resolved for the triggering command"
+	state.ServerTriggerFailureCategory = ""
 	state.ServerVersion = ""
 }
 
@@ -487,10 +498,12 @@ func (a *App) recordUpdateWorkerStartFailure(path, directory, day, at, trigger s
 	state.FailureStage = "worker_start"
 	state.FailureCode = "update_worker_start_failed"
 	state.FailureReason = updateFailureReason(state.FailureStage)
+	state.FailureCategory = ""
 	state.LastAutomaticResult = "failed"
 	if trigger == "server_version" {
 		state.ServerTriggerResult = "worker_start_failed"
 		state.ServerTriggerReason = state.FailureReason
+		state.ServerTriggerFailureCategory = ""
 	}
 	_ = writeUpdateJSON(filepath.Join(directory, "state.json"), state)
 }
@@ -727,6 +740,8 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		state, _ := readUpdateState(dir)
 		state.LastAutomaticResult = "skipped_policy_changed"
 		state.ServerTriggerResult = "skipped_policy_changed"
+		state.FailureCategory = ""
+		state.ServerTriggerFailureCategory = ""
 		_ = writeUpdateJSON(filepath.Join(dir, "state.json"), state)
 		return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "policy_changed", "state": state}}, nil
 	}
@@ -753,6 +768,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		state.FailureStage = ""
 		state.FailureCode = ""
 		state.FailureReason = ""
+		state.FailureCategory = ""
 		state.LastAutomaticResult = "skipped_no_workspace"
 		if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
 			return nil, err
@@ -774,6 +790,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 			state.FailureStage = ""
 			state.FailureCode = ""
 			state.FailureReason = ""
+			state.FailureCategory = ""
 			_ = writeUpdateJSON(filepath.Join(dir, "state.json"), state)
 			return &commandResult{Data: map[string]any{"updated": false, "skip_reason": reason, "state": state}}, nil
 		}
@@ -854,6 +871,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 	state.FailureStage = ""
 	state.FailureCode = ""
 	state.FailureReason = ""
+	state.FailureCategory = ""
 	state.Rollback = "not_needed"
 	state.BackupPath = ""
 	if o.scheduled {
@@ -865,6 +883,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 			state.ServerTriggerCheckedAt = state.LastAutomaticAttemptAt
 			state.ServerTriggerResult = "checking"
 			state.ServerTriggerReason = ""
+			state.ServerTriggerFailureCategory = ""
 			state.ServerVersion = ""
 		}
 		if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
@@ -876,6 +895,9 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		state.FailureStage = stage
 		state.FailureCode = errnorm.Normalize(err).Code
 		state.FailureReason = updateFailureReason(stage)
+		if stage == "resolve_release" {
+			state.FailureCategory = updateFailureCategory(err)
+		}
 		if o.scheduled {
 			state.LastAutomaticResult = "failed"
 			if o.serverTrigger {
@@ -912,7 +934,9 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 			state.FailureStage = stage
 			state.FailureCode = "update_handshake_failed"
 			state.FailureReason = updateFailureReason(stage)
+			state.FailureCategory = updateFailureCategory(err)
 			state.ServerTriggerReason = state.FailureReason
+			state.ServerTriggerFailureCategory = state.FailureCategory
 			state.ServerTriggerResult = "handshake_failed_fallback_daily"
 		} else {
 			serverVersion := strings.TrimSpace(anyString(handshake["core_version"]))
