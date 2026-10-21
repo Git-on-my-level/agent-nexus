@@ -48,12 +48,25 @@ are excluded along with cards on archived boards.
 ## Release updates
 
 `anx update status|now|policy auto|notify|off` manages installer-owned CLI releases.
-The default `auto` starts a short-lived daily worker after the first successful
-read or coordination write; `anx update status`, help, local maintenance, and dry
-runs remain offline. `ANX_UPDATE_POLICY=off` disables automatic checks in CI.
-Existing installs need one rerun of `scripts/install-anx.sh` to obtain
-a digest-bound ownership receipt. See [self-update policy](docs/self-update.md) for
-rollback, skill sync, compatibility, and the agentctl ergonomics audit.
+The default `auto` starts a detached daily worker after the first successful read
+or coordination write in an interactive terminal, or in a non-interactive agent
+invocation identified by `--as`/`ANX_AS`, agentctl caller evidence, or a recognized
+harness marker. Known CI provider markers always skip updates. Recognized harness
+markers such as Cursor, Claude Code, Codex, Hermes, and agentctl can override
+generic `CI=1`; `--as`/`ANX_AS` alone cannot. Ordinary non-interactive scripts are skipped. The worker
+starts after command output and cannot change that command's output or exit code.
+A separate worker checks `/meta/handshake` at most once per UTC day and runs the
+release check when `core_version` is newer than the CLI. `anx update status`
+reports the last automatic attempt and server-version trigger; when the handshake
+does not expose `core_version`, status reports `skipped_no_server_version`.
+Help, `update status`, dry runs, local maintenance, and `ANX_UPDATE_POLICY=off`
+or `notify` keep automatic installation disabled for non-interactive agents.
+After replacement, the next command emits a one-line `warning code=...` notice
+that the `anx` skill may need reloading. A managed skill conflict is recorded and
+surfaced once without counting as an update failure or retrying the update.
+Existing installs need one rerun of `scripts/install-anx.sh` to obtain a
+digest-bound ownership receipt. See [self-update policy](docs/self-update.md) for
+rollback, skill sync, and compatibility details.
 
 ## Harness integrations
 

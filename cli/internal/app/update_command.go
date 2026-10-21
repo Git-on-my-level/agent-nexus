@@ -414,13 +414,20 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
-  - notify checks without installing and emits one daily warning when a newer release is known
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation
+  - known CI provider markers (Jenkins, GitHub Actions, GitLab CI, Buildkite, CircleCI, Azure Pipelines, TeamCity) always skip automatic updates
+  - a recognized harness marker such as Cursor, Claude Code, Codex, Hermes or agentctl can override generic CI=1; --as/ANX_AS alone cannot
+  - arbitrary scripts do not qualify; non-interactive agent detection uses --as/ANX_AS, agentctl caller evidence, or a recognized harness marker
+  - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
+  - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
+  - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check
+  - notify checks without installing and emits one daily warning when a newer release is known; non-interactive agent invocations stay skipped
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
-  - runs the new binary's managed skills sync after replacement
+  - runs the new binary's managed skills sync after replacement; a sync conflict is recorded and surfaced once without retrying the update
+  - the next command after replacement shows a one-line notice that the anx skill may need reloading
   - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary

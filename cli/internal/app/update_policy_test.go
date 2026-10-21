@@ -70,28 +70,29 @@ func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
 
 func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 	a, cfg, _ := managedUpdateFixture(t)
-	var starts atomic.Int32
-	a.startUpdateWorker = func(string, string) error { starts.Add(1); return nil }
+	var dailyStarts, serverStarts atomic.Int32
+	a.startUpdateWorker = func(string, string) error { dailyStarts.Add(1); return nil }
+	a.startServerUpdateWorker = func(string, string, string) error { serverStarts.Add(1); return nil }
 	var group sync.WaitGroup
 	for i := 0; i < 30; i++ {
 		group.Add(1)
 		go func() { defer group.Done(); a.maybeScheduleUpdate("orient", nil, cfg) }()
 	}
 	group.Wait()
-	if starts.Load() != 1 {
-		t.Fatalf("starts=%d", starts.Load())
+	if dailyStarts.Load() != 1 || serverStarts.Load() != 1 {
+		t.Fatalf("daily starts=%d server starts=%d", dailyStarts.Load(), serverStarts.Load())
 	}
 	// A different workspace/config cannot bypass the installation's daily claim.
 	other := cfg
 	other.ConfigDir = filepath.Join(t.TempDir(), "config")
 	a.maybeScheduleUpdate("cards create", nil, other)
-	if starts.Load() != 1 {
+	if dailyStarts.Load() != 1 || serverStarts.Load() != 1 {
 		t.Fatal("second config bypassed daily claim")
 	}
 	a.now = func() time.Time { return time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC) }
 	a.maybeScheduleUpdate("version", []string{"version"}, cfg)
-	if starts.Load() != 2 {
-		t.Fatal("read on next UTC day did not trigger")
+	if dailyStarts.Load() != 2 || serverStarts.Load() != 2 {
+		t.Fatal("read on next UTC day did not trigger both checks")
 	}
 	a.Getenv = func(key string) string {
 		if key == "ANX_UPDATE_POLICY" {
@@ -101,53 +102,76 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 	}
 	a.now = func() time.Time { return time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC) }
 	a.maybeScheduleUpdate("cards create", nil, cfg)
-	if starts.Load() != 2 {
+	if dailyStarts.Load() != 2 || serverStarts.Load() != 2 {
 		t.Fatal("off triggered worker")
 	}
 }
 
-func TestUpdateSchedulerSkipsAutomationNonTTYAndPMContexts(t *testing.T) {
+func TestUpdateSchedulerAgentAndCISkipMatrix(t *testing.T) {
 	cases := []struct {
-		name      string
-		ci        string
-		stdinTTY  bool
-		stdoutTTY bool
-		as        string
-		agent     string
-		pmEnv     string
-		pmTurnID  string
+		name       string
+		env        map[string]string
+		stdinTTY   bool
+		stdoutTTY  bool
+		as         string
+		omp        bool
+		policy     string
+		wantDaily  bool
+		wantServer bool
 	}{
-		{name: "CI", ci: "true", stdinTTY: true, stdoutTTY: true},
-		{name: "stdin redirected", stdinTTY: false, stdoutTTY: true},
-		{name: "stdout redirected", stdinTTY: true, stdoutTTY: false},
-		{name: "PM profile", stdinTTY: true, stdoutTTY: true, as: "pm"},
-		{name: "resolved PM agent", stdinTTY: true, stdoutTTY: true, agent: "pm"},
-		{name: "PM service environment", stdinTTY: true, stdoutTTY: true, pmEnv: "pm"},
-		{name: "PM turn environment", stdinTTY: true, stdoutTTY: true, pmTurnID: "turn-1"},
+		{name: "interactive human", stdinTTY: true, stdoutTTY: true, wantDaily: true, wantServer: true},
+		{name: "explicit agent in noninteractive run", as: "worker", wantDaily: true, wantServer: true},
+		{name: "ANX_AS agent in noninteractive run", env: map[string]string{"ANX_AS": "worker"}, wantDaily: true, wantServer: true},
+		{name: "generic CI excludes ANX_AS", env: map[string]string{"ANX_AS": "worker", "CI": "1"}},
+		{name: "agentctl caller overrides generic CI", env: map[string]string{"AGENTCTL_CALLER_HARNESS": "codex", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "agentctl execution identity overrides generic CI", env: map[string]string{"AGENTCTL_EXECUTION_ID": "execution", "AGENTCTL_ADAPTER": "codex", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Claude Code overrides generic CI", env: map[string]string{"CLAUDECODE": "1", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Codex thread overrides generic CI", env: map[string]string{"CODEX_THREAD_ID": "thread", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Cursor agent overrides generic CI", env: map[string]string{"CURSOR_AGENT": "1", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Cursor completion marker overrides generic CI", env: map[string]string{"CURSOR_AGENT_COMPLETED_PATH": "/tmp/cursor-agent", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Hermes agent marker overrides generic CI", env: map[string]string{"HERMES_AGENT": "true", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "AI agent Hermes marker overrides generic CI", env: map[string]string{"AI_AGENT": "hermes-agent", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Hermes session overrides generic CI", env: map[string]string{"HERMES_SESSION_ID": "session", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "OMP agent marker overrides generic CI", env: map[string]string{"AGENT": "1", "CI": "1"}, omp: true, wantDaily: true, wantServer: true},
+		{name: "PM agent turn", as: "pm", wantDaily: true, wantServer: true},
+		{name: "generic CI excludes explicit principal", env: map[string]string{"CI": "1"}, as: "worker"},
+		{name: "generic CI excludes interactive human", env: map[string]string{"CI": "1"}, stdinTTY: true, stdoutTTY: true},
+		{name: "Jenkins URL excludes explicit principal", env: map[string]string{"JENKINS_URL": "https://jenkins.example"}, as: "ci-bot"},
+		{name: "Jenkins build markers exclude explicit principal", env: map[string]string{"BUILD_ID": "42", "JENKINS_HOME": "/var/lib/jenkins"}, as: "ci-bot"},
+		{name: "GitHub Actions beats agent harness", env: map[string]string{"GITHUB_ACTIONS": "true", "AGENTCTL_CALLER_HARNESS": "codex"}, as: "ci-bot"},
+		{name: "GitLab CI excludes explicit principal", env: map[string]string{"GITLAB_CI": "true"}, as: "ci-bot"},
+		{name: "Buildkite excludes explicit principal", env: map[string]string{"BUILDKITE": "true"}, as: "ci-bot"},
+		{name: "CircleCI excludes explicit principal", env: map[string]string{"CIRCLECI": "true"}, as: "ci-bot"},
+		{name: "Azure Pipelines excludes explicit principal", env: map[string]string{"TF_BUILD": "True"}, as: "ci-bot"},
+		{name: "TeamCity excludes explicit principal", env: map[string]string{"TEAMCITY_VERSION": "2026.10"}, as: "ci-bot"},
+		{name: "BUILD_ID without Jenkins home is not sufficient", env: map[string]string{"BUILD_ID": "42"}, as: "worker", wantDaily: true, wantServer: true},
+		{name: "ordinary redirected script"},
+		{name: "policy off", as: "worker", policy: "off"},
+		{name: "policy notify for agent", as: "worker", policy: "notify"},
+		{name: "policy notify for human", stdinTTY: true, stdoutTTY: true, policy: "notify", wantDaily: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			a, cfg, _ := managedUpdateFixture(t)
-			var started atomic.Bool
-			a.startUpdateWorker = func(string, string) error { started.Store(true); return nil }
+			var daily, server atomic.Bool
+			a.startUpdateWorker = func(string, string) error { daily.Store(true); return nil }
+			a.startServerUpdateWorker = func(string, string, string) error { server.Store(true); return nil }
 			a.StdinIsTTY = func() bool { return tc.stdinTTY }
 			a.StdoutIsTTY = func() bool { return tc.stdoutTTY }
-			a.Getenv = func(key string) string {
-				switch key {
-				case "CI":
-					return tc.ci
-				case "ANX_PM_AGENT":
-					return tc.pmEnv
-				case "ANX_PM_TURN_ID":
-					return tc.pmTurnID
+			a.hasOMPAncestor = func() bool { return tc.omp }
+			a.Getenv = func(key string) string { return tc.env[key] }
+			if tc.policy != "" {
+				a.Getenv = func(key string) string {
+					if key == "ANX_UPDATE_POLICY" {
+						return tc.policy
+					}
+					return tc.env[key]
 				}
-				return ""
 			}
 			cfg.As = tc.as
-			cfg.Agent = tc.agent
 			a.maybeScheduleUpdate("work list", []string{"work", "list"}, cfg)
-			if started.Load() {
-				t.Fatal("automatic update started outside an attended non-PM terminal")
+			if daily.Load() != tc.wantDaily || server.Load() != tc.wantServer {
+				t.Fatalf("daily started=%t server started=%t; want daily=%t server=%t", daily.Load(), server.Load(), tc.wantDaily, tc.wantServer)
 			}
 		})
 	}
@@ -172,6 +196,183 @@ func TestNotifyWarnsOnceWithoutInstalling(t *testing.T) {
 	}
 }
 
+func TestServerVersionTriggerCanRunAfterTheDailyClaim(t *testing.T) {
+	a, cfg, path := managedUpdateFixture(t)
+	a.startUpdateWorker = func(string, string) error { t.Fatal("daily claim already exists"); return nil }
+	var serverStarts atomic.Int32
+	a.startServerUpdateWorker = func(string, string, string) error { serverStarts.Add(1); return nil }
+	claims := path + ".anx-update-days"
+	if err := os.MkdirAll(claims, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if !claimUpdateDay(claims, a.clockNow().UTC().Format("2006-01-02")) {
+		t.Fatal("failed to seed the regular daily claim")
+	}
+	a.maybeScheduleUpdate("orient", nil, cfg)
+	a.maybeScheduleUpdate("work list", nil, cfg)
+	if serverStarts.Load() != 1 {
+		t.Fatalf("server trigger starts=%d; want one after the daily claim", serverStarts.Load())
+	}
+}
+
+func TestScheduledServerVersionTriggerSkipsMissingVersionAndChecksNewerVersion(t *testing.T) {
+	t.Run("missing version is recorded", func(t *testing.T) {
+		a, cfg, path := managedUpdateFixture(t)
+		core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/meta/handshake" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			_, _ = w.Write([]byte(`{"workspace_id":"ws"}`))
+		}))
+		defer core.Close()
+		cfg.BaseURL = core.URL
+		oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+		t.Cleanup(func() { updateReleaseAPIURL = oldAPI; updateReleaseBaseURL = oldBase })
+		updateReleaseAPIURL = ""
+		updateReleaseBaseURL = "https://release.invalid/releases"
+		result, err := a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if anyString(asMap(result.Data)["skip_reason"]) != "no_server_version" {
+			t.Fatalf("result=%v", result.Data)
+		}
+		state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+		if err != nil || state.ServerTriggerResult != "skipped_no_server_version" || state.LastAutomaticResult != "skipped_no_server_version" || state.ServerTriggerCheckedAt == "" {
+			t.Fatalf("state=%+v err=%v", state, err)
+		}
+		binary, _ := os.ReadFile(path)
+		if string(binary) != "original" {
+			t.Fatal("missing server version changed the binary")
+		}
+	})
+
+	t.Run("newer version checks release channel", func(t *testing.T) {
+		a, cfg, path := managedUpdateFixture(t)
+		core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/meta/handshake" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			_, _ = w.Write([]byte(`{"core_version":"v0.12.11"}`))
+		}))
+		defer core.Close()
+		cfg.BaseURL = core.URL
+		version := "v0.12.11"
+		archive, _ := updateArchiveName(version)
+		content := buildReleaseArchiveForTest(t, archive, []byte("updated"))
+		release := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api":
+				_, _ = w.Write([]byte(`{"tag_name":"v0.12.11"}`))
+			case "/releases/download/" + version + "/" + archive:
+				_, _ = w.Write(content)
+			case "/releases/download/" + version + "/checksums.txt":
+				_, _ = w.Write([]byte(sha256HexForTest(content) + "  " + archive + "\n"))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer release.Close()
+		oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+		oldSync := updateSyncSkills
+		t.Cleanup(func() { updateReleaseAPIURL = oldAPI; updateReleaseBaseURL = oldBase; updateSyncSkills = oldSync })
+		updateReleaseAPIURL = release.URL + "/api"
+		updateReleaseBaseURL = release.URL + "/releases"
+		updateSyncSkills = func(context.Context, string, string) error { return nil }
+		result, err := a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !asBool(asMap(result.Data)["updated"]) {
+			t.Fatalf("result=%v", result.Data)
+		}
+		binary, _ := os.ReadFile(path)
+		if string(binary) != "updated" {
+			t.Fatalf("binary=%q", binary)
+		}
+		state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+		if err != nil || state.ServerVersion != version || state.ServerTriggerResult != "updated" || state.LastAutomaticResult != "updated" {
+			t.Fatalf("state=%+v err=%v", state, err)
+		}
+	})
+}
+
+func TestScheduledSkillsSyncFailureIsRecordedAndSurfacedOnce(t *testing.T) {
+	a, cfg, path := managedUpdateFixture(t)
+	version := "v0.12.11"
+	archive, _ := updateArchiveName(version)
+	content := buildReleaseArchiveForTest(t, archive, []byte("updated"))
+	release := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api":
+			_, _ = w.Write([]byte(`{"tag_name":"v0.12.11"}`))
+		case "/releases/download/" + version + "/" + archive:
+			_, _ = w.Write(content)
+		case "/releases/download/" + version + "/checksums.txt":
+			_, _ = w.Write([]byte(sha256HexForTest(content) + "  " + archive + "\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer release.Close()
+	oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+	oldSync := updateSyncSkills
+	t.Cleanup(func() { updateReleaseAPIURL = oldAPI; updateReleaseBaseURL = oldBase; updateSyncSkills = oldSync })
+	updateReleaseAPIURL = release.URL + "/api"
+	updateReleaseBaseURL = release.URL + "/releases"
+	var syncCalls atomic.Int32
+	updateSyncSkills = func(context.Context, string, string) error {
+		syncCalls.Add(1)
+		return errors.New("managed skill drift")
+	}
+	result, err := a.runUpdate(context.Background(), []string{"now", "--scheduled"}, cfg)
+	if err != nil || !asBool(asMap(result.Data)["updated"]) {
+		t.Fatalf("scheduled update result=%v err=%v", result, err)
+	}
+	binary, err := os.ReadFile(path)
+	if err != nil || string(binary) != "updated" {
+		t.Fatalf("binary=%q err=%v", binary, err)
+	}
+	state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+	if err != nil || state.FailureStage != "" || state.LastAutomaticResult != "updated_skills_sync_attention" || state.SkillsSyncError == "" || !state.FollowUpNoticePending {
+		t.Fatalf("state=%+v err=%v", state, err)
+	}
+	status, err := a.runUpdateStatus(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastAttempt := asMap(asMap(status.Data)["last_automatic_attempt"])
+	if anyString(lastAttempt["at"]) == "" || anyString(lastAttempt["result"]) != "updated_skills_sync_attention" {
+		t.Fatalf("automatic attempt status=%v", lastAttempt)
+	}
+	if syncCalls.Load() != 1 {
+		t.Fatalf("skills sync calls=%d", syncCalls.Load())
+	}
+	var starts atomic.Int32
+	a.startUpdateWorker = func(string, string) error { starts.Add(1); return nil }
+	a.startServerUpdateWorker = func(string, string, string) error { return nil }
+	a.maybeScheduleUpdate("orient", nil, cfg)
+	a.maybeScheduleUpdate("work list", nil, cfg)
+	if starts.Load() != 1 || syncCalls.Load() != 1 {
+		t.Fatalf("daily workers=%d skills sync calls=%d", starts.Load(), syncCalls.Load())
+	}
+	if warnings := a.updateFollowUpWarnings(cfg); len(warnings) != 1 || warnings[0].Code != "cli_update_follow_up" || !strings.Contains(warnings[0].Message, "anx skills status") || !strings.Contains(warnings[0].Message, "reload the anx skill") {
+		t.Fatalf("warnings=%+v", warnings)
+	}
+	if warnings := a.updateFollowUpWarnings(cfg); len(warnings) != 0 {
+		t.Fatalf("follow-up surfaced more than once: %+v", warnings)
+	}
+}
+
+func mustUpdateDir(t *testing.T, a *App, cfg config.Resolved) string {
+	t.Helper()
+	dir, err := a.updateDirectory(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func TestUnmanagedInstallIsOffline(t *testing.T) {
 	a, cfg, path := managedUpdateFixture(t)
 	_ = os.Remove(installRecordPath(path))
@@ -185,6 +386,14 @@ func TestUnmanagedInstallIsOffline(t *testing.T) {
 	}
 	a.startUpdateWorker = func(string, string) error { t.Fatal("unmanaged worker started"); return nil }
 	a.maybeScheduleUpdate("cards create", nil, cfg)
+	scheduled, scheduledErr := a.runUpdate(context.Background(), []string{"now", "--scheduled"}, cfg)
+	if scheduledErr != nil || anyString(asMap(scheduled.Data)["skip_reason"]) != "no_installer_receipt" {
+		t.Fatalf("scheduled unmanaged result=%v err=%v", scheduled, scheduledErr)
+	}
+	state, _ := readUpdateState(mustUpdateDir(t, a, cfg))
+	if state.LastAutomaticResult != "skipped_unmanaged" {
+		t.Fatalf("automatic skip result=%+v", state)
+	}
 	if _, err := a.runUpdate(context.Background(), []string{"now"}, cfg); errnorm.Normalize(err).Code != "unmanaged_install" {
 		t.Fatalf("err=%v", err)
 	}

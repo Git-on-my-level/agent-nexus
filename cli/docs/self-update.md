@@ -2,7 +2,9 @@
 
 `anx update status` is offline. It shows the effective policy and its source,
 installer ownership, the running CLI's version/digest versus the installer
-receipt, the last release observation, failure stage/code, and rollback outcome.
+receipt, the last release observation, failure stage/code, rollback outcome,
+and the time, trigger, and result of the latest automatic attempt. It also shows
+the workspace server-version check and any managed-skills sync attention.
 `anx update now` checks and installs the latest release synchronously. The existing
 `anx update --check` (a pure release read) and `--version vX.Y.Z` remain available.
 An explicit update works even when automatic policy is off.
@@ -22,21 +24,30 @@ once. A command that already read stdin, or that read a non-regular input such a
 on any other HTTP status does not update or retry. Policy `notify` or `off`,
 and unmanaged installs, print the same command instead of replacing the binary.
 Separately, the first successful read or coordination write per UTC day starts
-a detached worker with a two-minute deadline only when stdin and stdout are
-terminals, `CI` is unset, and the invocation is outside a PM turn. Piped commands,
-CI jobs and PM service turns never schedule this daily replacement. The foreground command never waits
-for release networking, verification, replacement, or skill synchronization. A
-per-install atomic daily claim prevents simultaneous commands and separate
-workspace config directories from launching duplicate checks. Read-only commands
-such as `orient`, `inbox list`, `doctor`, and `work list` now trigger the daily
-check. `anx update status`, help, `await`, local maintenance, and dry runs stay
-offline. The gate uses the parsed command result, including every accepted true
-spelling of `--dry-run`.
+a detached worker after the foreground command has emitted its output. Interactive
+terminals retain the existing behavior. A non-interactive call qualifies only
+when it carries `--as`/`ANX_AS`, agentctl caller evidence, or a recognized harness
+marker; ordinary scripts are not inferred to be agents. Known CI provider markers
+always exclude the invocation. Recognized harness markers take precedence over
+generic `CI=1` (for example, Cursor agent shells set both); `--as`/`ANX_AS` alone
+does not override generic CI. PM turns qualify when they carry one of those agent
+signals. The worker has a
+two-minute deadline and the foreground command never waits for release networking,
+verification, replacement, or skill synchronization. A per-install atomic daily
+claim prevents simultaneous commands and separate workspace config directories
+from launching duplicate release checks. A second per-install claim allows one
+workspace-version probe per UTC day, even after the regular daily check has run.
+When `/meta/handshake` exposes a `core_version` newer than the CLI, that worker
+checks the release channel; an absent version is recorded as
+`skipped_no_server_version`. `anx update status`, help, `await`, local maintenance,
+and dry runs stay offline. The gate uses the parsed command result, including
+every accepted true spelling of `--dry-run`.
 
 `notify` runs the same release discovery without installing. A known newer release
 produces one warning per UTC day on eligible reads and writes. An initial check
 can finish after the triggering command; the warning then appears on the next
-eligible invocation.
+eligible interactive invocation. Non-interactive agent calls with `notify` do not
+schedule automatic checks. The `off` policy disables automatic checks everywhere.
 `off` launches no worker and makes no automatic release request. Policy preferences
 and observations live below the selected ANX config directory, independently of
 workspace credentials. `ANX_UPDATE_POLICY` takes precedence over the saved policy.
@@ -74,9 +85,11 @@ verification and receipt commit succeed. On failure it restores the original; if
 restoration fails, status records the retained backup path. The new executable
 runs `skills sync`, preserving edits, unmanaged copies, and agentctl-owned skills.
 A drifted (edited), conflicted, or outdated skill requires attention and is not
-reported as synchronized. A skills failure leaves the verified new CLI installed
-and reports `skills_sync`
-with runnable repairs; it does not downgrade a healthy binary.
+reported as synchronized. A scheduled skills failure leaves the verified CLI
+installed, records the sync error separately from update failure, and surfaces one
+follow-up warning. It does not retry the update on each command. The next command
+after a replacement also emits a one-line reminder that the `anx` skill may need
+reloading.
 
 Both installer and updater acquire a kernel process lock on the same permanent
 `anx.anx-update.lock` inode. They never reclaim by age or unlink that inode;
@@ -140,10 +153,10 @@ verifier and an explicit policy for older unattested releases before enforcing
 this gate. Current updates verify checksums and executable behavior; they do not
 yet enforce attestations.
 
-CLI/core compatibility remains the existing handshake-based doctor check (minimum
-and recommended CLI versions). `orient` does not currently learn a core version;
-this change adds no handshake/network request to orientation or update gating.
-The updater never refuses an update because of a server version.
+CLI/core compatibility remains the handshake-based doctor check (minimum and
+recommended CLI versions). The automatic server-version trigger compares the
+handshake's `core_version` with the running CLI only to decide whether to run an
+additional release check; it never rejects a release based on the server version.
 
 ## Ergonomics audit against agentctl v0.14.0
 
@@ -167,11 +180,12 @@ output contract, registry, mutation parsers, doctor, and managed skill code.
 
 - Default automatic release updates apply only to installer-owned binaries; an
   old/manual installation needs explicit installer enrollment once.
-- Successful classified reads and coordination writes trigger daily maintenance
-  only in an attended terminal session outside CI and PM turns. Local maintenance
-  remains exempt. Explicit updates ignore the automatic off policy.
-- Skill conflicts are visible and preserved; a skill sync failure does not roll
-  back an independently verified binary update.
+- Successful classified reads and coordination writes trigger the daily worker
+  in attended terminals or recognized non-interactive agent contexts, outside CI.
+  Ordinary non-interactive scripts do not qualify. Local maintenance remains
+  exempt. Explicit updates ignore the automatic off policy.
+- Skill conflicts are visible and preserved; scheduled sync failures do not roll
+  back a verified binary and do not count as automatic update failures.
 - Keep universal idempotency, a composed recent-work surface, action preconditions,
   envelope schema export, and global instruction pointers out of this release PR
   until their authority and compatibility contracts are agreed.
