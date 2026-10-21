@@ -20,6 +20,7 @@ func TestUpdateFailureCategories(t *testing.T) {
 		want string
 	}{
 		{name: "HTTP status", err: errnorm.FromHTTPFailure(503, []byte("private response body")), want: "http_503"},
+		{name: "HTTP status overrides body code", err: errnorm.FromHTTPFailure(503, []byte(`{"error":{"code":"invalid_response","message":"body supplied code"}}`)), want: "http_503"},
 		{name: "timeout", err: fmt.Errorf("request: %w", context.DeadlineExceeded), want: "timeout"},
 		{name: "network", err: errors.New("https://user:secret@example.invalid/path"), want: "network"},
 		{name: "TLS record header", err: tls.RecordHeaderError{Msg: "private TLS detail"}, want: "tls"},

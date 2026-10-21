@@ -34,14 +34,16 @@ func updateFailureCategory(err error) string {
 	}
 	for cause := err; cause != nil; cause = errors.Unwrap(cause) {
 		if typed, ok := cause.(*errnorm.Error); ok {
-			if typed.Code == "invalid_response" {
-				return "invalid_response"
-			}
 			if details, ok := typed.Details.(map[string]any); ok {
 				if status, ok := details["status"].(int); ok && validUpdateHTTPStatus(status) {
 					return "http_" + strconv.Itoa(status)
 				}
 			}
+		}
+	}
+	for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+		if typed, ok := cause.(*errnorm.Error); ok && typed.Code == "invalid_response" {
+			return "invalid_response"
 		}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
