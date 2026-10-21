@@ -44,9 +44,13 @@ func (a *App) workspaceWebURL(ctx context.Context, cfg config.Resolved) (string,
 }
 
 func normalizeWorkspaceWebURL(raw string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "invalid_response", "workspace handshake reported an invalid web_url; it must be an absolute http(s) URL without query or fragment"), map[string]any{"web_url": raw})
+	// Matches core's ANX_WEB_BASE_URL validation, so a nonconforming core
+	// cannot make the CLI print credentials, a query or a fragment.
+	trimmed := strings.TrimSpace(raw)
+	parsed, err := url.Parse(trimmed)
+	if err != nil || strings.ContainsAny(trimmed, "?#") || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		// The raw value is not echoed: it may carry credentials.
+		return "", errnorm.New(errnorm.KindRemote, "invalid_response", "workspace handshake reported an invalid web_url; it must be an absolute http(s) URL without credentials, query or fragment")
 	}
 	return strings.TrimRight(parsed.String(), "/"), nil
 }

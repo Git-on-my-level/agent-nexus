@@ -331,45 +331,69 @@ func TestCreateTextReplacesAPIURLWithWebLink(t *testing.T) {
 	}
 }
 
-func TestURLCommandPrefersWebLink(t *testing.T) {
-	core := newWebLinkCore(t, webLinkHandshake, 0)
-	base := "https://example.com/o/acme/w/main/r/"
-	for _, tc := range []struct {
-		args []string
-		ref  string
-	}{
-		{[]string{"card:launch"}, "card:launch"},
-		{[]string{"card", "launch"}, "card:launch"},
-		{[]string{"document:runbook"}, "document:runbook"},
-		{[]string{"board", "board:main"}, "board:main"},
-	} {
-		text, stderr, code := runWebLinkCLI(t, append([]string{"--base-url", core.server.URL, "url"}, tc.args...)...)
-		if code != 0 || text != base+tc.ref+"\n" {
-			t.Fatalf("%v: code=%d text=%q stderr=%s", tc.args, code, text, stderr)
-		}
-		out, _, code := runWebLinkCLI(t, append([]string{"--json", "--base-url", core.server.URL, "url"}, tc.args...)...)
-		result := asMap(assertEnvelopeOK(t, out)["result"])
-		if code != 0 || anyString(result["web_url"]) != base+tc.ref || !strings.HasPrefix(anyString(result["url"]), core.server.URL+"/") || result["kind"] == nil || result["id"] == nil {
-			t.Fatalf("%v: result=%v", tc.args, result)
-		}
-	}
-}
-
-func TestURLCommandKeepsAPIURLWithoutWebURL(t *testing.T) {
-	for _, handshake := range []string{`{"workspace_id":"ws_1"}`, ""} {
+// `anx url` is the API locator scripts substitute into API calls, so it keeps
+// printing it even when the workspace reports a web_url. `anx link` is the
+// human-facing command.
+func TestURLCommandKeepsAPILocator(t *testing.T) {
+	for _, handshake := range []string{webLinkHandshake, `{"workspace_id":"ws_1"}`, ""} {
 		core := newWebLinkCore(t, handshake, 0)
-		text, _, code := runWebLinkCLI(t, "--base-url", core.server.URL, "url", "document:runbook")
-		if code != 0 || text != core.server.URL+"/docs/runbook\n" {
-			t.Fatalf("handshake=%q: code=%d text=%q", handshake, code, text)
+		for _, args := range [][]string{{"document:runbook"}, {"document", "runbook"}} {
+			text, _, code := runWebLinkCLI(t, append([]string{"--base-url", core.server.URL, "url"}, args...)...)
+			if code != 0 || text != core.server.URL+"/docs/runbook\n" {
+				t.Fatalf("handshake=%q args=%v: code=%d text=%q", handshake, args, code, text)
+			}
 		}
 		out, _, _ := runWebLinkCLI(t, "--json", "--base-url", core.server.URL, "url", "document:runbook")
 		result := asMap(assertEnvelopeOK(t, out)["result"])
-		if _, ok := result["web_url"]; ok || anyString(result["url"]) != core.server.URL+"/docs/runbook" {
+		if _, ok := result["web_url"]; ok || anyString(result["url"]) != core.server.URL+"/docs/runbook" || result["kind"] == nil || result["id"] == nil {
 			t.Fatalf("handshake=%q: result=%v", handshake, result)
 		}
 	}
 	text, _ := helpTopicText("url")
 	if strings.Contains(text, "shareable") || !strings.Contains(text, "anx link") || !strings.Contains(text, "ANX_WEB_BASE_URL") {
 		t.Fatalf("url help=%q", text)
+	}
+}
+
+// The CLI applies the same rules as core's ANX_WEB_BASE_URL validation, so a
+// nonconforming core cannot make `anx link` print credentials.
+func TestNormalizeWorkspaceWebURLMatchesCore(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want string
+	}{
+		{"https://example.com/o/acme/w/main/", "https://example.com/o/acme/w/main"},
+		{" http://127.0.0.1:5173/o/local/w/local ", "http://127.0.0.1:5173/o/local/w/local"},
+		{"https://ui.example.com", "https://ui.example.com"},
+	} {
+		got, err := normalizeWorkspaceWebURL(tc.raw)
+		if err != nil || got != tc.want {
+			t.Errorf("%q: got %q err=%v, want %q", tc.raw, got, err, tc.want)
+		}
+	}
+	for _, raw := range []string{
+		"https://user:secret@example.com/o/a/w/b",
+		"https://user@example.com/o/a/w/b",
+		"https://example.com/o/a/w/b?token=x",
+		"https://example.com/o/a/w/b?",
+		"https://example.com/o/a/w/b#top",
+		"ftp://example.com/o/a/w/b",
+		"javascript:alert(1)",
+		"/o/a/w/b",
+		"https:///o/a/w/b",
+	} {
+		got, err := normalizeWorkspaceWebURL(raw)
+		if err == nil {
+			t.Errorf("%q: accepted as %q", raw, got)
+			continue
+		}
+		if strings.Contains(err.Error(), "secret") {
+			t.Errorf("%q: error echoes credentials: %v", raw, err)
+		}
+	}
+	core := newWebLinkCore(t, `{"web_url":"https://user:secret@example.com/o/a/w/b"}`, 0)
+	out, _, code := runWebLinkCLI(t, "--json", "--base-url", core.server.URL, "link", "card:launch")
+	if code == 0 || strings.Contains(out, "secret") {
+		t.Fatalf("credentialed web_url must be rejected without echoing it: code=%d out=%s", code, out)
 	}
 }

@@ -5062,7 +5062,7 @@ paths:
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns the current principal-scoped read projection.
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
-      x-anx-agent-notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.
+      x-anx-agent-notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200. Resolves card, document, topic, board, series and external refs, plus document_revision and card_revision refs by revision id or `<parent>-r<N>` handle through their parent.
       x-anx-cli-path: refs resolve
       x-anx-why: Resolve ref chips and previews in one read request; unknown refs remain in the result.
       x-anx-input-mode: json-body
@@ -12102,7 +12102,8 @@ components:
           properties:
             done: {type: integer}
             total: {type: integer}
-        url: {type: string, nullable: true, description: "Null when source evidence has no URL. Workspace-relative route; hosted clients prefix /o/<org>/w/<ws>. Absolute source URLs are used as-is."}
+        url: {type: string, nullable: true, description: "Null when source evidence has no URL. Workspace-relative route; hosted clients prefix /o/<org>/w/<ws>. Absolute source URLs are used as-is. A document_revision opens its document at that revision (`/docs/<handle>?revision=<revision handle>`); a card_revision opens its card."}
+        parent_ref: {type: string, description: "For document_revision and card_revision refs, the canonical ref of the document or card that owns the revision. A revision resolves only when its parent is visible to the reader."}
 
     Card:
       type: object

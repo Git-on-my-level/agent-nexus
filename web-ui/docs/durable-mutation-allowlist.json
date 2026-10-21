@@ -108,6 +108,14 @@
       "markHomeRead": 1
     }
   },
+  "lib/refRoute.js": {
+    "classification": "read-helper",
+    "reason": "POST resolveRefs is a bounded read helper that resolves one /r/ link ref, not authored mutation data.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "resolveRefs": 1
+    }
+  },
   "lib/sharedReadFetch.js": {
     "classification": "transport",
     "reason": "Finite GET sharing and cancellation transport; mutations pass through unchanged to existing durable senders.",

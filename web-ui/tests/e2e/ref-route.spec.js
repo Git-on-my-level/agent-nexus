@@ -87,6 +87,49 @@ test("a doc ref opens the doc, percent-encoded colon included", async ({
   ).toBeVisible();
 });
 
+test("a document revision opens its doc at that revision with one lookup", async ({
+  page,
+}) => {
+  await installRefApi(page);
+  const resolved = [];
+  const listed = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/docs" && request.method() === "GET")
+      listed.push(url.pathname);
+  });
+  await page.route("**/refs/resolve", async (route) => {
+    const { refs } = route.request().postDataJSON();
+    resolved.push(refs);
+    return route.fulfill({
+      json: {
+        items: refs.map((ref) =>
+          ref === "document_revision:handbook-r1"
+            ? {
+                ref,
+                resolvable: true,
+                kind: "document_revision",
+                title: "Team handbook",
+                parent_ref: "document:handbook",
+                url: "/docs/handbook?revision=handbook-r1",
+              }
+            : { ref, resolvable: false },
+        ),
+      },
+    });
+  });
+  await page.goto(`${WORKSPACE}/r/document_revision:handbook-r1`);
+  await expect(page).toHaveURL(
+    `${WORKSPACE}/docs/handbook?revision=handbook-r1`,
+  );
+  expect(resolved[0]).toEqual(["document_revision:handbook-r1"]);
+  // The old revision page listed every document; this link must not.
+  expect(listed).toEqual([]);
+
+  await page.goto(`${WORKSPACE}/r/document_revision:handbook-r9`);
+  await expect(page.locator('[data-ref-route="not-found"]')).toBeVisible();
+});
+
 test("an unknown or missing ref shows the friendly page", async ({ page }) => {
   await installRefApi(page);
   for (const ref of ["widget:launch-plan", "card:missing-card"]) {

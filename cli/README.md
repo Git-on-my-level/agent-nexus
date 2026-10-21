@@ -159,13 +159,11 @@ not-found error unchanged. Set `ANX_WORKSPACE_HINTS=0` to disable these reads.
 JSON errors expose `error.details.workspace_hint` and an exact retry command in
 `error.next_actions`. No command is automatically retried in another workspace.
 
-`anx url card:ship-fix` prints one URL, suitable for shell substitution.
-Board, topic, document, artifact and thread refs also work. The legacy
-`anx url card ship-fix` form remains supported. When the workspace core reports
-`web_url` (set `ANX_WEB_BASE_URL` on the core), it prints the same
-`<web_url>/r/<ref>` web link as `anx link`, and `--json` adds `web_url` beside
-the existing `url`, kind and id. Otherwise it prints a URL derived from the API
-base URL, which is not meant for humans; use `anx link` to share with a human.
+`anx url card:ship-fix` prints the resource's API locator, derived from the API
+base URL, suitable for shell substitution in scripts. Board, topic, document,
+artifact and thread refs also work. The legacy `anx url card ship-fix` form
+remains supported. The locator is not a link for humans: it answers with JSON or
+requires API auth. Use `anx link` to share a web UI link with a human.
 
 `anx link card:ship-fix document:runbook event:<ask-id>` prints one browser URL
 per typed ref, one per line, to share with a human. Links come from the

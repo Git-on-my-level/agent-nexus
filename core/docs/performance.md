@@ -1108,3 +1108,14 @@ exact query-plan exception was widened.
 go test -C core ./internal/auth -run 'TestHostBridge.*Budget' -count=1 -v
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Revision refs in batch ref resolve
+
+`POST /refs/resolve` resolves `document_revision:` and `card_revision:` refs
+through their parent. Per revision kind present in the batch (at most 200 refs)
+it runs one statement by revision primary key and one by `<parent>-r<N>`
+handle, which seeks the parent through its handle or primary key and the
+revision through `UNIQUE(parent, revision_number)`, then one presentation-only
+parent projection batch for visibility and title. A batch with no revision refs
+runs nothing extra. `TestResolveRevisionQueriesAreIndexed` rejects a table scan
+or temporary structure in either plan.

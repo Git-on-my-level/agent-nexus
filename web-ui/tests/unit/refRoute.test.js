@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  REF_ROUTE_KINDS,
+  documentRevisionPath,
   isSafeAppPath,
   parseRouteRef,
   refRouteHref,
@@ -32,6 +36,21 @@ function clientFor(records = {}) {
     getEvent: vi.fn((id) => answer("getEvent", id)),
     getAgent: vi.fn((id) => answer("getAgent", id)),
     getArtifact: vi.fn((id) => answer("getArtifact", id)),
+    getHost: vi.fn((id) => answer("getHost", id)),
+    getRun: vi.fn((id) => answer("getRun", id)),
+    // The batch resolve read: unknown refs come back unresolvable, as core
+    // answers them; an Error under the ref makes the whole request fail.
+    resolveRefs: vi.fn((refs) => {
+      const failure = refs
+        .map((ref) => records.resolveRefs?.[ref])
+        .find((row) => row instanceof Error);
+      if (failure) return Promise.reject(failure);
+      return Promise.resolve({
+        items: refs.map(
+          (ref) => records.resolveRefs?.[ref] ?? { ref, resolvable: false },
+        ),
+      });
+    }),
   };
 }
 
@@ -121,10 +140,171 @@ describe("resolveRefRoute", () => {
     }
   });
 
-  it("sends a document revision to the revision page", async () => {
+  it("opens a document revision on its document with one bounded read", async () => {
+    const client = clientFor({
+      resolveRefs: {
+        "document_revision:rev-uuid": {
+          ref: "document_revision:rev-uuid",
+          resolvable: true,
+          kind: "document_revision",
+          parent_ref: "document:handbook",
+          url: "/docs/handbook?revision=handbook-r2",
+        },
+        "document_revision:handbook-r2": {
+          ref: "document_revision:handbook-r2",
+          resolvable: true,
+          kind: "document_revision",
+          parent_ref: "document:handbook",
+          url: "/docs/handbook?revision=handbook-r2",
+        },
+      },
+    });
+    for (const ref of [
+      "document_revision:rev-uuid",
+      "document_revision:handbook-r2",
+    ]) {
+      expect(await resolveRefRoute(ref, client)).toMatchObject({
+        status: "redirect",
+        path: "/docs/handbook?revision=handbook-r2",
+      });
+    }
+    expect(client.resolveRefs).toHaveBeenCalledTimes(2);
+    for (const call of client.resolveRefs.mock.calls) {
+      expect(call[0]).toHaveLength(1);
+    }
+    expect(client.getDocument).not.toHaveBeenCalled();
+  });
+
+  it("reports a missing revision as not found and a failed read as retryable", async () => {
     expect(
-      (await resolveRefRoute("document_revision:rev-1", clientFor())).path,
-    ).toBe("/docs/revisions/rev-1");
+      await resolveRefRoute("document_revision:gone-r9", clientFor()),
+    ).toMatchObject({ status: "not_found" });
+    expect(
+      await resolveRefRoute("card_revision:gone-r9", clientFor()),
+    ).toMatchObject({ status: "not_found" });
+    const failing = clientFor({
+      resolveRefs: { "document_revision:handbook-r2": httpError(503) },
+    });
+    expect(
+      await resolveRefRoute("document_revision:handbook-r2", failing),
+    ).toMatchObject({ status: "error" });
+  });
+
+  it("does not let a revision's parent steer the path", async () => {
+    const client = clientFor({
+      resolveRefs: {
+        "document_revision:r1": {
+          ref: "document_revision:r1",
+          resolvable: true,
+          parent_ref: "document://evil.test",
+          url: "https://evil.test/?revision=x",
+        },
+        "document_revision:r2": {
+          ref: "document_revision:r2",
+          resolvable: true,
+          parent_ref: "document:handbook",
+          url: "/docs/handbook?revision=../../x",
+        },
+      },
+    });
+    expect(await resolveRefRoute("document_revision:r1", client)).toMatchObject(
+      { status: "not_found" },
+    );
+    // An unsafe revision value from core falls back to the reader's own.
+    expect((await resolveRefRoute("document_revision:r2", client)).path).toBe(
+      "/docs/handbook?revision=r2",
+    );
+  });
+
+  it("shares the bounded revision lookup with the revision page", async () => {
+    const client = clientFor({
+      resolveRefs: {
+        "document_revision:handbook-r1": {
+          ref: "document_revision:handbook-r1",
+          resolvable: true,
+          parent_ref: "document:handbook",
+          url: "/docs/handbook?revision=handbook-r1",
+        },
+      },
+    });
+    expect(
+      await documentRevisionPath(
+        client,
+        "document_revision:handbook-r1",
+        "handbook-r1",
+      ),
+    ).toBe("/docs/handbook?revision=handbook-r1");
+    expect(
+      await documentRevisionPath(client, "document_revision:nope", "nope"),
+    ).toBe("");
+  });
+
+  it("opens a card revision on its card", async () => {
+    const client = clientFor({
+      resolveRefs: {
+        "card_revision:launch-plan-r3": {
+          ref: "card_revision:launch-plan-r3",
+          resolvable: true,
+          kind: "card_revision",
+          parent_ref: "card:launch-plan",
+          url: "/tasks/launch-plan",
+        },
+      },
+    });
+    expect(
+      await resolveRefRoute("card_revision:launch-plan-r3", client),
+    ).toMatchObject({
+      status: "redirect",
+      path: "/initiatives/card%3Alaunch-plan",
+    });
+  });
+
+  it("opens a host on its Access card", async () => {
+    const client = clientFor({
+      getHost: { "build-box": { host: { id: "host_1", slug: "build-box" } } },
+    });
+    expect(await resolveRefRoute("host:build-box", client)).toMatchObject({
+      status: "redirect",
+      path: "/access#host-build-box",
+    });
+    expect(await resolveRefRoute("host:missing", clientFor())).toMatchObject({
+      status: "not_found",
+    });
+  });
+
+  it("opens a run on its agent with the run selected", async () => {
+    const client = clientFor({
+      getRun: {
+        "nightly-1": { run: { id: "run_1", agent_id: "agent_7" } },
+        orphan: { run: { id: "run_2", agent_id: "" } },
+      },
+    });
+    expect(await resolveRefRoute("run:nightly-1", client)).toMatchObject({
+      status: "redirect",
+      path: "/agents/agent_7?run=run_1#runs",
+    });
+    expect(await resolveRefRoute("run:orphan", client)).toMatchObject({
+      status: "no_page",
+      kind: "run",
+    });
+    expect(await resolveRefRoute("run:missing", clientFor())).toMatchObject({
+      status: "not_found",
+    });
+  });
+
+  it("says a series has no page of its own, after checking it exists", async () => {
+    const ref = "series:deploys?env=prod&_range=7d";
+    const client = clientFor({
+      resolveRefs: { [ref]: { ref, resolvable: true, title: "Deploys" } },
+    });
+    expect(await resolveRefRoute(ref, client)).toMatchObject({
+      status: "no_page",
+      kind: "series",
+      title: "Deploys",
+    });
+    expect(await resolveRefRoute("series:nothing", clientFor())).toMatchObject({
+      status: "not_found",
+    });
   });
 
   it("opens a topic as the filtered initiatives list", async () => {
@@ -354,5 +534,27 @@ describe("signing in from a ref link", () => {
 
   it("drops a traversal attempt back to the workspace home", () => {
     expect(sanitizeReturnPath("/r/card:..%2F..%2Fevil")).toBe("/");
+  });
+});
+
+describe("schema ref coverage", () => {
+  it("handles every ref prefix the shared schema defines", () => {
+    const schema = readFileSync(
+      fileURLToPath(
+        new URL("../../../contracts/anx-schema.yaml", import.meta.url),
+      ),
+      "utf8",
+    );
+    const block = schema.slice(
+      schema.indexOf("ref_format:"),
+      schema.indexOf("identity_concepts:"),
+    );
+    const prefixes = [...block.matchAll(/^\s+"([a-z_]+):<[^"]*":/gm)].map(
+      (match) => match[1],
+    );
+    // A guard on the guard: the schema lists well over a dozen prefixes.
+    expect(prefixes.length).toBeGreaterThan(10);
+    const missing = prefixes.filter((prefix) => !REF_ROUTE_KINDS[prefix]);
+    expect(missing).toEqual([]);
   });
 });

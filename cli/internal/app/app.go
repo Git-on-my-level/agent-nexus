@@ -266,7 +266,7 @@ func (a *App) Run(args []string) int {
 		value = map[string]any{"text": result.Text}
 	}
 	if identity.Command == "url" && !resolved.JSON {
-		if resourceURL := firstNonEmpty(anyString(asMap(value)["web_url"]), anyString(asMap(value)["url"])); resourceURL != "" {
+		if resourceURL := anyString(asMap(value)["url"]); resourceURL != "" {
 			a.writeOutput(a.Stdout, resourceURL+"\n")
 			return 0
 		}

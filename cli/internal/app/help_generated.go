@@ -1100,7 +1100,7 @@ Core Commands:
   report        Validate and publish visual report documents
   move          Move cards and topics between configured workspaces
   read          Read an ANX resource from a URL or typed ref
-  url           Print a resource URL (web link when the core reports web_url)
+  url           Print a resource's API locator for scripts (use link for humans)
   link          Print the workspace web UI link for typed refs
   api call      Perform an arbitrary HTTP API request
   debug         Inspect diagnostic resource groups

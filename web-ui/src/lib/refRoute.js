@@ -26,6 +26,7 @@ import { workspacePath } from "./workspacePaths.js";
 /** Accepted prefixes, mapped to the resource kind they name. */
 export const REF_ROUTE_KINDS = Object.freeze({
   card: "card",
+  card_revision: "card_revision",
   doc: "document",
   document: "document",
   document_revision: "document_revision",
@@ -37,8 +38,18 @@ export const REF_ROUTE_KINDS = Object.freeze({
   actor: "actor",
   agent: "actor",
   artifact: "artifact",
+  host: "host",
+  run: "run",
+  series: "series",
   url: "url",
 });
+
+/*
+ * Kinds whose value is not a handle: a `url:` is a URL and a `series:` carries
+ * URL-encoded label selectors. Neither is ever placed in a path we build, so
+ * neither is validated as a path segment.
+ */
+const OPAQUE_VALUE_KINDS = new Set(["url", "series"]);
 
 /** Event type an `anx ask` writes; its page is the decision. */
 const ASK_EVENT_TYPE = "human_attention_requested";
@@ -98,9 +109,9 @@ export function parseRouteRef(raw) {
   }
   const kind = REF_ROUTE_KINDS[prefix] ?? "";
   if (!kind) return fail("unknown_type", { prefix });
-  // An external link is not a workspace page; its value is a URL and is never
-  // validated as a path segment, because it is never placed in one.
-  if (kind === "url") {
+  // An external link or a series selector is not a workspace page; its value
+  // is never validated as a path segment, because it is never placed in one.
+  if (OPAQUE_VALUE_KINDS.has(kind)) {
     return { ok: true, ref, prefix, kind, value: asText(value) };
   }
   if (!isSafeRefValue(value)) return fail("malformed", { prefix });
@@ -226,6 +237,48 @@ function artifactPath(artifact) {
 }
 
 /**
+ * Read one ref through the batch resolve read, which answers revisions (by id
+ * or `<parent>-r<N>` handle) through their parent and series by selector, in
+ * one bounded request.
+ */
+async function resolveOne(client, ref) {
+  const response = (await client.resolveRefs([ref])) ?? {};
+  const items = Array.isArray(response.items) ? response.items : [];
+  const row = items.find((item) => asText(item?.ref) === ref) ?? null;
+  return row && row.resolvable !== false ? row : null;
+}
+
+/** The value of a typed ref, when it has the expected prefix and is safe. */
+function typedRefValue(ref, prefix) {
+  const parsed = parseRef(asText(ref));
+  return parsed.prefix === prefix && isSafeRefValue(parsed.value)
+    ? parsed.value
+    : "";
+}
+
+/** The `revision` query value of a workspace-relative URL from core. */
+function revisionParam(url) {
+  const text = asText(url);
+  const query = text.includes("?") ? text.slice(text.indexOf("?") + 1) : "";
+  const value = asText(
+    new URLSearchParams(query.split("#", 1)[0]).get("revision"),
+  );
+  return isSafeRefValue(value) ? value : "";
+}
+
+/**
+ * Where a document revision opens: its document at that revision. Exported so
+ * the revision page shares the one bounded lookup instead of scanning.
+ */
+export async function documentRevisionPath(client, ref, value) {
+  const row = await resolveOne(client, ref);
+  const documentId = typedRefValue(row?.parent_ref, "document");
+  if (!documentId) return "";
+  const revision = revisionParam(row?.url) || value;
+  return `/docs/${segment(documentId)}?revision=${segment(revision)}`;
+}
+
+/**
  * Where a ref should open.
  *
  * @param {unknown} raw the decoded route parameter
@@ -258,9 +311,43 @@ export async function resolveRefRoute(raw, client) {
           `/docs/${segment(routeSegment(document, "document", value))}`,
         );
       }
-      case "document_revision":
-        // The revision page finds its document and reports its own misses.
-        return redirectTo(ref, `/docs/revisions/${segment(value)}`);
+      case "document_revision": {
+        const path = await documentRevisionPath(client, ref, value);
+        return path ? redirectTo(ref, path) : notFound(ref);
+      }
+      case "card_revision": {
+        const row = await resolveOne(client, ref);
+        const cardId = typedRefValue(row?.parent_ref, "card");
+        if (!cardId) return notFound(ref);
+        return redirectTo(ref, `/initiatives/${segment(`card:${cardId}`)}`);
+      }
+      case "host": {
+        const { host } = (await client.getHost(value)) ?? {};
+        if (!host) return notFound(ref);
+        const slug = asText(host.slug);
+        return redirectTo(
+          ref,
+          isSafeRefValue(slug)
+            ? `/access#${segment(`host-${slug}`)}`
+            : "/access",
+        );
+      }
+      case "run": {
+        const { run } = (await client.getRun(value)) ?? {};
+        if (!run) return notFound(ref);
+        const agentId = asText(run.agent_id);
+        const runId = isSafeRefValue(asText(run.id)) ? asText(run.id) : value;
+        if (!isSafeRefValue(agentId)) return noPage(ref, kind, run.title);
+        return redirectTo(
+          ref,
+          `/agents/${segment(agentId)}?run=${segment(runId)}#runs`,
+        );
+      }
+      case "series": {
+        const row = await resolveOne(client, ref);
+        if (!row) return notFound(ref);
+        return noPage(ref, kind, row.title);
+      }
       case "topic": {
         const { topic } = (await client.getTopic(value)) ?? {};
         if (!topic) return notFound(ref);
