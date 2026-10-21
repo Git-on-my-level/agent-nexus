@@ -46,7 +46,7 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 	a.StdinIsTTY = func() bool { return true }
 	a.StdoutIsTTY = func() bool { return true }
 	a.now = func() time.Time { return time.Date(2026, 10, 5, 23, 59, 0, 0, time.FixedZone("east", 3600)) }
-	cfg := config.Resolved{ConfigDir: filepath.Join(home, "config"), Timeout: time.Second}
+	cfg := config.Resolved{BaseURL: "https://workspace.example", ConfigDir: filepath.Join(home, "config"), Timeout: time.Second, Sources: map[string]string{"base_url": "fixture"}}
 	return a, cfg, path
 }
 
@@ -56,7 +56,7 @@ func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
 			t.Errorf("eligible command did not trigger update check: %s", command)
 		}
 	}
-	for _, command := range []string{"await", "help", "update status", "update --check", "api call", "pm install"} {
+	for _, command := range []string{"await", "help", "update status", "update --check", "update --version v0.12.11", "api call", "pm install"} {
 		if updateInvocationEligible(command, strings.Fields(command)) {
 			t.Errorf("ineligible command triggered update: %s", command)
 		}
@@ -200,7 +200,12 @@ func TestServerVersionTriggerCanRunAfterTheDailyClaim(t *testing.T) {
 	a, cfg, path := managedUpdateFixture(t)
 	a.startUpdateWorker = func(string, string) error { t.Fatal("daily claim already exists"); return nil }
 	var serverStarts atomic.Int32
-	a.startServerUpdateWorker = func(string, string, string) error { serverStarts.Add(1); return nil }
+	var selectedWorkspace string
+	a.startServerUpdateWorker = func(_, _, baseURL string) error {
+		selectedWorkspace = baseURL
+		serverStarts.Add(1)
+		return nil
+	}
 	claims := path + ".anx-update-days"
 	if err := os.MkdirAll(claims, 0700); err != nil {
 		t.Fatal(err)
@@ -213,9 +218,197 @@ func TestServerVersionTriggerCanRunAfterTheDailyClaim(t *testing.T) {
 	if serverStarts.Load() != 1 {
 		t.Fatalf("server trigger starts=%d; want one after the daily claim", serverStarts.Load())
 	}
+	if selectedWorkspace != cfg.BaseURL {
+		t.Fatalf("server trigger workspace=%q; want resolved workspace %q", selectedWorkspace, cfg.BaseURL)
+	}
+}
+
+func TestServerVersionTriggerSkipsWhenNoWorkspaceWasResolved(t *testing.T) {
+	a, cfg, _ := managedUpdateFixture(t)
+	cfg.BaseURL = config.DefaultBaseURL
+	cfg.Sources = map[string]string{"base_url": "default"}
+	var dailyStarts, serverStarts atomic.Int32
+	a.startUpdateWorker = func(string, string) error { dailyStarts.Add(1); return nil }
+	a.startServerUpdateWorker = func(string, string, string) error { serverStarts.Add(1); return nil }
+
+	a.maybeScheduleUpdate("work list", []string{"work", "list"}, cfg)
+	if dailyStarts.Load() != 1 || serverStarts.Load() != 0 {
+		t.Fatalf("daily starts=%d server starts=%d; want daily fallback and no server worker", dailyStarts.Load(), serverStarts.Load())
+	}
+	state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ServerTriggerResult != "skipped_no_workspace" || state.ServerTriggerReason == "" || state.LastAutomaticTrigger != "daily" {
+		t.Fatalf("no-workspace skip was not recorded: %+v", state)
+	}
+}
+
+func TestScheduledServerVersionWorkerRecordsNoWorkspaceSkip(t *testing.T) {
+	a, cfg, _ := managedUpdateFixture(t)
+	cfg.BaseURL = config.DefaultBaseURL
+	cfg.Sources = map[string]string{"base_url": "default"}
+	result, err := a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anyString(asMap(result.Data)["skip_reason"]) != "no_workspace" {
+		t.Fatalf("result=%v", result.Data)
+	}
+	state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ServerTriggerResult != "skipped_no_workspace" || state.LastAutomaticResult != "skipped_no_workspace" || state.FailureStage != "" {
+		t.Fatalf("no-workspace worker state=%+v", state)
+	}
+}
+
+func TestNoWorkspaceSkipWaitsForInstallerLock(t *testing.T) {
+	a, cfg, path := managedUpdateFixture(t)
+	cfg.BaseURL = config.DefaultBaseURL
+	cfg.Sources = map[string]string{"base_url": "default"}
+	dir := mustUpdateDir(t, a, cfg)
+	initial := updateState{LastAutomaticAttemptAt: "prior", LastAutomaticTrigger: "daily", LastAutomaticResult: "current"}
+	if err := writeUpdateJSON(filepath.Join(dir, "state.json"), initial); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := lockUpdateInstall(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+
+	_, err = a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+	if errnorm.Normalize(err).Code != "update_locked" {
+		t.Fatalf("no-workspace worker ignored installer lock: %v", err)
+	}
+	state, err := readUpdateState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state != initial {
+		t.Fatalf("state changed without owning installer lock: before=%+v after=%+v", initial, state)
+	}
+}
+
+func TestServerUpdateWorkerPassesWorkspaceOnlyInEnvironment(t *testing.T) {
+	args := serverUpdateWorkerArgs("/tmp/anx-config")
+	want := []string{"--config-dir", "/tmp/anx-config", "update", "now", "--scheduled", "--server-trigger"}
+	if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("worker args=%q; want %q", args, want)
+	}
+	baseURL := "https://user:secret@workspace.example/ws/team/project"
+	workerEnv := replaceEnvironment([]string{"ANX_BASE_URL=https://stale.example", "KEEP=value"}, "ANX_BASE_URL", baseURL)
+	count := 0
+	for _, entry := range workerEnv {
+		if strings.HasPrefix(entry, "ANX_BASE_URL=") {
+			count++
+			if entry != "ANX_BASE_URL="+baseURL {
+				t.Fatalf("worker base URL env=%q; want resolved workspace", entry)
+			}
+		}
+		if strings.Contains(entry, "secret") && !strings.HasPrefix(entry, "ANX_BASE_URL=") {
+			t.Fatalf("workspace URL leaked outside its environment entry: %q", entry)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("worker environment has %d ANX_BASE_URL entries; want exactly one", count)
+	}
+}
+
+func TestServerHandshakeFailureFallsBackToDailyReleaseCheck(t *testing.T) {
+	a, cfg, _ := managedUpdateFixture(t)
+	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/meta/handshake" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("public handshake unexpectedly required auth: %q", r.Header.Get("Authorization"))
+		}
+		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+	}))
+	defer core.Close()
+	cfg.BaseURL = core.URL
+	cfg.Sources = map[string]string{"base_url": "flag:--workspace"}
+	release := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"tag_name":"v0.12.10"}`))
+	}))
+	defer release.Close()
+	oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+	t.Cleanup(func() { updateReleaseAPIURL, updateReleaseBaseURL = oldAPI, oldBase })
+	updateReleaseAPIURL = release.URL + "/api"
+	updateReleaseBaseURL = release.URL + "/releases"
+
+	_, err := a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+	if err != nil {
+		t.Fatalf("transient handshake failure blocked daily release check: %v", err)
+	}
+	state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastAutomaticResult != "current" || state.ServerTriggerResult != "handshake_failed_fallback_daily" {
+		t.Fatalf("fallback result=%+v", state)
+	}
 }
 
 func TestScheduledServerVersionTriggerSkipsMissingVersionAndChecksNewerVersion(t *testing.T) {
+	t.Run("handshake failure falls back to the daily release check", func(t *testing.T) {
+		a, cfg, _ := managedUpdateFixture(t)
+		core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/meta/handshake" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			http.Error(w, "upstream included bearer-secret-value", http.StatusServiceUnavailable)
+		}))
+		defer core.Close()
+		cfg.BaseURL = core.URL
+		cfg.Sources = map[string]string{"base_url": "flag:--workspace"}
+		release := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api" {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write([]byte(`{"tag_name":"v0.12.10"}`))
+		}))
+		defer release.Close()
+		oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
+		t.Cleanup(func() { updateReleaseAPIURL, updateReleaseBaseURL = oldAPI, oldBase })
+		updateReleaseAPIURL = release.URL + "/api"
+		updateReleaseBaseURL = release.URL + "/releases"
+
+		_, err := a.runUpdate(context.Background(), []string{"now", "--scheduled", "--server-trigger"}, cfg)
+		if err != nil {
+			t.Fatalf("server handshake prevented the daily release check: %v", err)
+		}
+		state, err := readUpdateState(mustUpdateDir(t, a, cfg))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state.ServerTriggerResult != "handshake_failed_fallback_daily" || state.LastAutomaticResult != "current" {
+			t.Fatalf("fallback result not recorded: %+v", state)
+		}
+		if state.FailureStage != "server_handshake" || state.FailureCode != "update_handshake_failed" || strings.TrimSpace(state.FailureReason) == "" {
+			t.Fatalf("handshake failure diagnostics missing: %+v", state)
+		}
+		if strings.Contains(state.FailureReason, "bearer-secret-value") || strings.Contains(state.ServerTriggerReason, "bearer-secret-value") {
+			t.Fatalf("failure reason exposed upstream content: %+v", state)
+		}
+		status, err := a.runUpdateStatus(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverTrigger := asMap(asMap(status.Data)["server_version_trigger"])
+		if anyString(serverTrigger["result"]) != state.ServerTriggerResult || anyString(serverTrigger["reason"]) != state.ServerTriggerReason {
+			t.Fatalf("status diagnostics=%v state=%+v", serverTrigger, state)
+		}
+	})
+
 	t.Run("missing version is recorded", func(t *testing.T) {
 		a, cfg, path := managedUpdateFixture(t)
 		core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

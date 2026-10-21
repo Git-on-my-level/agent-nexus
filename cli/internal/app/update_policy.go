@@ -32,6 +32,7 @@ type updateState struct {
 	LatestVersion          string `json:"latest_version,omitempty"`
 	FailureStage           string `json:"failure_stage,omitempty"`
 	FailureCode            string `json:"failure_code,omitempty"`
+	FailureReason          string `json:"failure_reason,omitempty"`
 	Rollback               string `json:"rollback"`
 	BackupPath             string `json:"backup_path,omitempty"`
 	SkillsSynced           bool   `json:"skills_synced"`
@@ -44,6 +45,7 @@ type updateState struct {
 	ServerVersion          string `json:"server_version,omitempty"`
 	ServerTriggerCheckedAt string `json:"server_trigger_checked_at,omitempty"`
 	ServerTriggerResult    string `json:"server_trigger_result,omitempty"`
+	ServerTriggerReason    string `json:"server_trigger_reason,omitempty"`
 }
 type updateOptions struct {
 	verb, policy, version string
@@ -251,18 +253,20 @@ func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
 			if state.Rollback != "failed" {
 				state.Rollback = "pending"
 				state.FailureStage = "transaction_pending"
+				state.FailureReason = updateFailureReason(state.FailureStage)
 			}
 		}
 	}
 	if txErr != nil && !errors.Is(txErr, os.ErrNotExist) {
 		state.FailureStage = "transaction_invalid"
+		state.FailureReason = updateFailureReason(state.FailureStage)
 	}
 	return &commandResult{Data: map[string]any{
 		"policy": policy, "policy_source": source, "managed": reason == "", "skip_reason": reason, "install_path": path,
 		"observed_binary":  map[string]any{"version": httpclient.CLIVersion, "sha256": digest, "bookkeeping_matches": record.SHA256 == digest && digest != "" && normalizeReleaseTag(record.Version) == normalizeReleaseTag(httpclient.CLIVersion)},
 		"installer_record": record, "transaction": transaction, "state": state, "state_path": filepath.Join(dir, "state.json"),
 		"last_automatic_attempt": map[string]any{"at": state.LastAutomaticAttemptAt, "trigger": state.LastAutomaticTrigger, "result": state.LastAutomaticResult},
-		"server_version_trigger": map[string]any{"server_version": state.ServerVersion, "checked_at": state.ServerTriggerCheckedAt, "result": state.ServerTriggerResult},
+		"server_version_trigger": map[string]any{"server_version": state.ServerVersion, "checked_at": state.ServerTriggerCheckedAt, "result": state.ServerTriggerResult, "reason": state.ServerTriggerReason},
 	}}, nil
 }
 
@@ -357,10 +361,11 @@ func (a *App) prepareUpdateSchedule(command string, args []string, cfg config.Re
 	if a.startUpdateWorker != nil && claimUpdateDay(claims, day) {
 		workers = append(workers, scheduledUpdateWorker{trigger: "daily", start: func() error { return a.startUpdateWorker(path, cfg.ConfigDir) }})
 	}
-	if policy == "auto" && a.startServerUpdateWorker != nil && claimUpdateDay(claims, day+".server") {
+	skipServerTriggerNoWorkspace := policy == "auto" && !hasResolvedUpdateWorkspace(cfg)
+	if policy == "auto" && hasResolvedUpdateWorkspace(cfg) && a.startServerUpdateWorker != nil && claimUpdateDay(claims, day+".server") {
 		workers = append(workers, scheduledUpdateWorker{trigger: "server_version", start: func() error { return a.startServerUpdateWorker(path, cfg.ConfigDir, cfg.BaseURL) }})
 	}
-	if len(workers) == 0 {
+	if len(workers) == 0 && !skipServerTriggerNoWorkspace {
 		return warnings, nil
 	}
 	if stateLock, lockErr := lockUpdateInstall(path); lockErr == nil {
@@ -368,8 +373,14 @@ func (a *App) prepareUpdateSchedule(command string, args []string, cfg config.Re
 		for _, worker := range workers {
 			latestState = markAutomaticAttempt(latestState, day, attemptAt, worker.trigger)
 		}
+		if skipServerTriggerNoWorkspace {
+			markServerTriggerNoWorkspace(&latestState, attemptAt)
+		}
 		_ = writeUpdateJSON(filepath.Join(dir, "state.json"), latestState)
 		_ = stateLock.Close()
+	}
+	if len(workers) == 0 {
+		return warnings, nil
 	}
 	afterOutput := func() {
 		for _, worker := range workers {
@@ -402,14 +413,64 @@ func markAutomaticAttempt(state updateState, day, at, trigger string) updateStat
 	state.CheckedOn = day
 	state.FailureStage = ""
 	state.FailureCode = ""
+	state.FailureReason = ""
 	state.LastAutomaticAttemptAt = at
 	state.LastAutomaticTrigger = trigger
 	state.LastAutomaticResult = "scheduled"
 	if trigger == "server_version" {
 		state.ServerTriggerCheckedAt = at
 		state.ServerTriggerResult = "scheduled"
+		state.ServerTriggerReason = ""
 	}
 	return state
+}
+
+func hasResolvedUpdateWorkspace(cfg config.Resolved) bool {
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	if baseURL == "" {
+		return false
+	}
+	source := strings.TrimSpace(cfg.Sources["base_url"])
+	if source == "default" || strings.HasPrefix(source, "unresolved:") {
+		return false
+	}
+	return source != "" || strings.TrimRight(baseURL, "/") != config.DefaultBaseURL
+}
+
+func markServerTriggerNoWorkspace(state *updateState, at string) {
+	state.ServerTriggerCheckedAt = at
+	state.ServerTriggerResult = "skipped_no_workspace"
+	state.ServerTriggerReason = "no workspace was resolved for the triggering command"
+	state.ServerVersion = ""
+}
+
+func updateFailureReason(stage string) string {
+	switch stage {
+	case "transaction_pending":
+		return "an interrupted update needs recovery"
+	case "transaction_invalid":
+		return "the update transaction record is invalid"
+	case "worker_start":
+		return "could not start the automatic update worker"
+	case "crash_recovery":
+		return "the interrupted update could not be recovered"
+	case "inspect_install":
+		return "the installed executable is no longer managed by anx"
+	case "server_handshake":
+		return "workspace handshake failed; the daily release check continued"
+	case "observe_binary":
+		return "could not verify the installed executable"
+	case "resolve_release":
+		return "could not resolve a verified release"
+	case "download_verify":
+		return "release download or checksum verification failed"
+	case "replace":
+		return "could not safely replace the installed executable"
+	case "skills_sync":
+		return "the binary updated, but managed skill sync needs attention"
+	default:
+		return "automatic update failed"
+	}
 }
 
 func (a *App) recordUpdateWorkerStartFailure(path, directory, day, at, trigger string) {
@@ -425,9 +486,11 @@ func (a *App) recordUpdateWorkerStartFailure(path, directory, day, at, trigger s
 	state.CheckedOn = day
 	state.FailureStage = "worker_start"
 	state.FailureCode = "update_worker_start_failed"
+	state.FailureReason = updateFailureReason(state.FailureStage)
 	state.LastAutomaticResult = "failed"
 	if trigger == "server_version" {
 		state.ServerTriggerResult = "worker_start_failed"
+		state.ServerTriggerReason = state.FailureReason
 	}
 	_ = writeUpdateJSON(filepath.Join(directory, "state.json"), state)
 }
@@ -553,11 +616,7 @@ func startDetachedUpdateWorker(path, configDir string) error {
 }
 
 func startDetachedServerUpdateWorker(path, configDir, baseURL string) error {
-	args := []string{"update", "now", "--scheduled", "--server-trigger"}
-	if configDir != "" {
-		args = append([]string{"--config-dir", configDir}, args...)
-	}
-	cmd := exec.Command(path, args...)
+	cmd := exec.Command(path, serverUpdateWorkerArgs(configDir)...)
 	cmd.Env = replaceEnvironment(os.Environ(), "ANX_BASE_URL", baseURL)
 	null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
@@ -572,6 +631,14 @@ func startDetachedServerUpdateWorker(path, configDir, baseURL string) error {
 		return err
 	}
 	return cmd.Process.Release()
+}
+
+func serverUpdateWorkerArgs(configDir string) []string {
+	args := []string{"update", "now", "--scheduled", "--server-trigger"}
+	if configDir != "" {
+		args = append([]string{"--config-dir", configDir}, args...)
+	}
+	return args
 }
 
 func replaceEnvironment(environment []string, key, value string) []string {
@@ -664,6 +731,34 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "policy_changed", "state": state}}, nil
 	}
 	path, record, _, reason := inspectUpdateInstall()
+	if o.serverTrigger && !hasResolvedUpdateWorkspace(cfg) {
+		if path == "" {
+			return nil, errnorm.Local("install_path_unavailable", "cannot lock update state without the installed executable path")
+		}
+		lock, lockErr := lockUpdateInstall(path)
+		if lockErr != nil {
+			return nil, lockErr
+		}
+		defer lock.Close()
+		state, _ := readUpdateState(dir)
+		at := a.clockNow().UTC().Format(time.RFC3339Nano)
+		if state.LastAutomaticTrigger == "server_version" && state.LastAutomaticAttemptAt != "" {
+			at = state.LastAutomaticAttemptAt
+		} else {
+			state.LastAutomaticAttemptAt = at
+			state.LastAutomaticTrigger = "server_version"
+		}
+		state.CheckedOn = a.clockNow().UTC().Format("2006-01-02")
+		markServerTriggerNoWorkspace(&state, at)
+		state.FailureStage = ""
+		state.FailureCode = ""
+		state.FailureReason = ""
+		state.LastAutomaticResult = "skipped_no_workspace"
+		if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
+			return nil, err
+		}
+		return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "no_workspace", "state": state}}, nil
+	}
 	if _, journalErr := os.Stat(updateTransactionPath(path)); reason != "" && errors.Is(journalErr, os.ErrNotExist) {
 		if o.scheduled {
 			state, _ := readUpdateState(dir)
@@ -678,6 +773,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 			}
 			state.FailureStage = ""
 			state.FailureCode = ""
+			state.FailureReason = ""
 			_ = writeUpdateJSON(filepath.Join(dir, "state.json"), state)
 			return &commandResult{Data: map[string]any{"updated": false, "skip_reason": reason, "state": state}}, nil
 		}
@@ -707,17 +803,21 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		state.BackupPath = backup
 		if recoveryErr != nil {
 			state.FailureCode = "update_recovery_failed"
+			state.FailureReason = updateFailureReason(state.FailureStage)
 			if o.scheduled {
 				state.LastAutomaticResult = "failed"
 			}
-		} else if o.scheduled {
-			state.LastAutomaticAttemptAt = a.clockNow().UTC().Format(time.RFC3339Nano)
-			state.LastAutomaticTrigger = "daily"
-			state.LastAutomaticResult = "recovered"
-			if o.serverTrigger {
-				state.LastAutomaticTrigger = "server_version"
-				state.ServerTriggerCheckedAt = state.LastAutomaticAttemptAt
-				state.ServerTriggerResult = "recovered"
+		} else {
+			state.FailureReason = ""
+			if o.scheduled {
+				state.LastAutomaticAttemptAt = a.clockNow().UTC().Format(time.RFC3339Nano)
+				state.LastAutomaticTrigger = "daily"
+				state.LastAutomaticResult = "recovered"
+				if o.serverTrigger {
+					state.LastAutomaticTrigger = "server_version"
+					state.ServerTriggerCheckedAt = state.LastAutomaticAttemptAt
+					state.ServerTriggerResult = "recovered"
+				}
 			}
 		}
 		if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
@@ -739,6 +839,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 			state.LastAutomaticResult = "failed"
 			state.FailureStage = "inspect_install"
 			state.FailureCode = "unmanaged_install"
+			state.FailureReason = updateFailureReason(state.FailureStage)
 			if o.serverTrigger {
 				state.LastAutomaticTrigger = "server_version"
 				state.ServerTriggerCheckedAt = state.LastAutomaticAttemptAt
@@ -752,6 +853,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 	state.CheckedOn = a.clockNow().UTC().Format("2006-01-02")
 	state.FailureStage = ""
 	state.FailureCode = ""
+	state.FailureReason = ""
 	state.Rollback = "not_needed"
 	state.BackupPath = ""
 	if o.scheduled {
@@ -762,6 +864,8 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 			state.LastAutomaticTrigger = "server_version"
 			state.ServerTriggerCheckedAt = state.LastAutomaticAttemptAt
 			state.ServerTriggerResult = "checking"
+			state.ServerTriggerReason = ""
+			state.ServerVersion = ""
 		}
 		if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
 			return nil, err
@@ -771,10 +875,15 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 	fail := func(err error) (*commandResult, error) {
 		state.FailureStage = stage
 		state.FailureCode = errnorm.Normalize(err).Code
+		state.FailureReason = updateFailureReason(stage)
 		if o.scheduled {
 			state.LastAutomaticResult = "failed"
 			if o.serverTrigger {
-				state.ServerTriggerResult = "failed"
+				if state.ServerTriggerResult == "handshake_failed_fallback_daily" {
+					state.ServerTriggerResult = "handshake_failed_daily_check_failed"
+				} else {
+					state.ServerTriggerResult = "failed"
+				}
 			}
 		}
 		_ = writeUpdateJSON(filepath.Join(dir, "state.json"), state)
@@ -800,36 +909,41 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		stage = "server_handshake"
 		handshake, err := a.hostCall(ctx, cfg, "GET", "/meta/handshake", nil, nil)
 		if err != nil {
-			return fail(errnorm.Wrap(errnorm.KindNetwork, "update_handshake_failed", "failed to read workspace server version", err))
-		}
-		serverVersion := strings.TrimSpace(anyString(handshake["core_version"]))
-		state.ServerVersion = serverVersion
-		if serverVersion == "" {
-			state.ServerTriggerResult = "skipped_no_server_version"
-			state.LastAutomaticResult = "skipped_no_server_version"
-			if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
-				return nil, err
+			state.FailureStage = stage
+			state.FailureCode = "update_handshake_failed"
+			state.FailureReason = updateFailureReason(stage)
+			state.ServerTriggerReason = state.FailureReason
+			state.ServerTriggerResult = "handshake_failed_fallback_daily"
+		} else {
+			serverVersion := strings.TrimSpace(anyString(handshake["core_version"]))
+			state.ServerVersion = serverVersion
+			if serverVersion == "" {
+				state.ServerTriggerResult = "skipped_no_server_version"
+				state.LastAutomaticResult = "skipped_no_server_version"
+				if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
+					return nil, err
+				}
+				return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "no_server_version", "state": state}}, nil
 			}
-			return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "no_server_version", "state": state}}, nil
-		}
-		cmp, compareErr := compareSemanticVersions(httpclient.CLIVersion, serverVersion)
-		if compareErr != nil {
-			state.ServerTriggerResult = "skipped_uncomparable_server_version"
-			state.LastAutomaticResult = "skipped_uncomparable_server_version"
-			if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
-				return nil, err
+			cmp, compareErr := compareSemanticVersions(httpclient.CLIVersion, serverVersion)
+			if compareErr != nil {
+				state.ServerTriggerResult = "skipped_uncomparable_server_version"
+				state.LastAutomaticResult = "skipped_uncomparable_server_version"
+				if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
+					return nil, err
+				}
+				return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "uncomparable_server_version", "state": state}}, nil
 			}
-			return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "uncomparable_server_version", "state": state}}, nil
-		}
-		if cmp >= 0 {
-			state.ServerTriggerResult = "not_newer"
-			state.LastAutomaticResult = "not_newer"
-			if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
-				return nil, err
+			if cmp >= 0 {
+				state.ServerTriggerResult = "not_newer"
+				state.LastAutomaticResult = "not_newer"
+				if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
+					return nil, err
+				}
+				return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "server_not_newer", "state": state}}, nil
 			}
-			return &commandResult{Data: map[string]any{"updated": false, "skip_reason": "server_not_newer", "state": state}}, nil
+			state.ServerTriggerResult = "newer"
 		}
-		state.ServerTriggerResult = "newer"
 	}
 	stage = "resolve_release"
 	plan, err := buildUpdatePlan(ctx, cfg, o.version)
@@ -885,8 +999,9 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		if o.scheduled {
 			state.FailureStage = ""
 			state.FailureCode = ""
+			state.FailureReason = ""
 			state.LastAutomaticResult = "updated_skills_sync_attention"
-			if o.serverTrigger {
+			if o.serverTrigger && state.ServerTriggerResult != "handshake_failed_fallback_daily" {
 				state.ServerTriggerResult = "updated_skills_sync_attention"
 			}
 			if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
@@ -904,7 +1019,7 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 	state.FollowUpNoticeID = a.clockNow().UTC().Format(time.RFC3339Nano) + ":" + plan.TargetVersion
 	if o.scheduled {
 		state.LastAutomaticResult = "updated"
-		if o.serverTrigger {
+		if o.serverTrigger && state.ServerTriggerResult != "handshake_failed_fallback_daily" {
 			state.ServerTriggerResult = "updated"
 		}
 	}
