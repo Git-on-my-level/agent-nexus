@@ -92,6 +92,7 @@ func main() {
 		coreVersion                 = envString("ANX_CORE_VERSION", buildinfo.Current)
 		coreBaseURL                 = envString("ANX_CORE_BASE_URL", "")
 		publicWebUIWorkspaceURL     = envString("ANX_PUBLIC_WEB_UI_WORKSPACE_URL", "")
+		webBaseURL                  = envString("ANX_WEB_BASE_URL", "")
 		apiVersion                  = envString("ANX_API_VERSION", defaultAPIVersion)
 		minCLIVersion               = envString("ANX_MIN_CLI_VERSION", buildinfo.MinCompatibleCLI)
 		recommendedCLIVersion       = envString("ANX_RECOMMENDED_CLI_VERSION", buildinfo.Current)
@@ -165,6 +166,7 @@ func main() {
 	flag.StringVar(&recommendedCLIVersion, "recommended-cli-version", recommendedCLIVersion, "recommended CLI version (defaults to this core release)")
 	flag.StringVar(&cliDownloadURL, "cli-download-url", cliDownloadURL, "CLI download URL included in compatibility metadata")
 	flag.StringVar(&publicWebUIWorkspaceURL, "public-web-ui-workspace-url", publicWebUIWorkspaceURL, "public workspace-scoped web UI URL used for host enrollment verification")
+	flag.StringVar(&webBaseURL, "web-base-url", webBaseURL, "absolute URL of this workspace's web UI root, advertised as web_url for browser links (defaults to --public-web-ui-workspace-url)")
 	flag.StringVar(&coreInstanceID, "core-instance-id", coreInstanceID, "stable core instance identifier for handshake metadata")
 	flag.StringVar(&metaCommandsPath, "meta-commands-path", metaCommandsPath, "path to generated commands metadata JSON")
 	flag.DurationVar(&streamPollInterval, "stream-poll-interval", streamPollInterval, "poll interval used by SSE stream endpoints")
@@ -218,6 +220,11 @@ func main() {
 		os.Exit(1)
 	}
 	verificationURL, err := server.HostEnrollmentVerificationURL(publicWebUIWorkspaceURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	workspaceWebURL, err := server.WorkspaceWebURL(webBaseURL, publicWebUIWorkspaceURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -599,6 +606,7 @@ func main() {
 		server.WithRecommendedCLIVersion(recommendedCLIVersion),
 		server.WithCLIDownloadURL(cliDownloadURL),
 		server.WithHostEnrollmentVerificationURL(verificationURL),
+		server.WithWebURL(workspaceWebURL),
 		server.WithCoreInstanceID(coreInstanceID),
 		server.WithMetaCommandsPath(metaCommandsPath),
 		server.WithStreamPollInterval(streamPollInterval),

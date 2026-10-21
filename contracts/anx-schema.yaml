@@ -163,6 +163,7 @@ ref_format:
     - "Public APIs SHOULD accept typed refs and resource handles before falling back to internal UUID lookup."
     - "Reverse lookups MUST be derived from typed refs and ref_edge records."
     - "Unknown prefixes MUST be preserved and round-tripped."
+    - "A browser link for any typed ref is `<web_url>/r/<path-escaped ref>`, where `web_url` comes from the workspace handshake. The web UI resolves the ref (handle or id) to its page, or shows a not-found page. Clients MUST NOT guess a web URL when `web_url` is absent."
 
 identity_concepts:
   ResourceRef:

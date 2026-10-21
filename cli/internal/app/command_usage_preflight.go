@@ -356,6 +356,12 @@ func preflightKnownCommandShape(args []string) error {
 		}
 		_, err := parseURLArgs(args[1:])
 		return err
+	case "link":
+		if len(args) == 1 || (len(args) == 2 && isHelpToken(args[1])) {
+			return nil
+		}
+		_, err := parseLinkArgs(args[1:])
+		return err
 	case "actors":
 		return preflightSubcommand(args[1:], actorsSubcommandSpec)
 	case "threads":
@@ -629,7 +635,7 @@ func preflightDocsIngestArgs(args []string) error {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}

@@ -106,6 +106,10 @@ describe("no card read is left opted out", () => {
    */
   const NO_STATE_SHOWN = new Map([
     [
+      "getWork src/lib/refRoute.js",
+      "resolves a /r/ link to the task's handle and redirects; shows no state",
+    ],
+    [
       "listWork src/lib/inboxSources.js",
       "names the source behind an inbox row",
     ],

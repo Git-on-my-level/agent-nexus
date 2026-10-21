@@ -38,6 +38,7 @@ type App struct {
 	stdinConsumed      bool
 	outputStarted      bool
 	writes             writeTracker
+	webURL             *webURLLookup
 }
 
 func (a *App) clockNow() time.Time {
@@ -270,6 +271,10 @@ func (a *App) Run(args []string) int {
 			return 0
 		}
 	}
+	if identity.Command == "link" && !resolved.JSON && result != nil && result.Text != "" && anyString(asMap(value)["help_text"]) == "" {
+		a.writeOutput(a.Stdout, result.Text+"\n")
+		return 0
+	}
 	if identity.Command == "work receipt" && !resolved.JSON {
 		if id := anyString(asMap(asMap(value)["event"])["id"]); id != "" {
 			a.writeOutput(a.Stdout, id+"\n")
@@ -291,12 +296,13 @@ func (a *App) Run(args []string) int {
 		actions = append(result.NextActions, actions...)
 	}
 	a.writeAskAutoCreatedWarning(warnings)
+	openURL := a.decorateWebURL(resolved, identity.Command, value)
 	if root, ok := value.(map[string]any); ok {
 		if ref := ensureCreatedRef(identity.Command, root); ref != "" && !resolved.JSON {
 			a.writeOutput(a.Stdout, ref+"\n")
 		}
 	}
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions}, resolved.Verbose || resolved.Headers); err != nil {
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return 0
@@ -335,7 +341,7 @@ func needsAgentIdentity(args []string) bool {
 	switch args[0] {
 	case "api":
 		return len(args) > 1 && args[1] != "call" && !isHelpToken(args[1])
-	case "help", "version", "doctor", "config", "update", "install", "skills", "integrations", "git", "sync", "hook", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth":
+	case "help", "version", "doctor", "config", "update", "install", "skills", "integrations", "git", "sync", "hook", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "link":
 		return false
 	}
 	return true

@@ -50,6 +50,7 @@ type RefPreview struct {
 	NextStep                *PreviewStep    `json:"next_step,omitempty"`
 	Progress                *plans.Progress `json:"progress,omitempty"`
 	URL                     string          `json:"url,omitempty"`
+	ParentRef               string          `json:"parent_ref,omitempty"`
 	Resolvable              bool            `json:"resolvable"`
 	ID                      string          `json:"-"`
 	MovementAt              time.Time       `json:"-"`
@@ -466,6 +467,9 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	defer closeRead()
 	out, err := s.readRefFacts(ctx, refs, visible)
 	if err != nil {
+		return nil, err
+	}
+	if err = resolveRevisionPreviews(ctx, s.db, refs, out, visible); err != nil {
 		return nil, err
 	}
 	if err = s.resolveSeriesPreviews(ctx, out, now); err != nil {

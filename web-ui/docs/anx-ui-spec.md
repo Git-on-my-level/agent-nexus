@@ -179,6 +179,37 @@ operator who needs it and unexplained to everyone else.
 `/decide/{id}`, `/watch` and `/initiatives/**`, because links to them already
 sit in notifications and agent output. The pages themselves are gone.
 
+`/r/{ref}` is the one link a client hands a human for any typed ref: core
+advertises the workspace's `web_url` and a client appends `/r/` plus the
+path-escaped ref (a raw `:` and `%3A` both work). The page waits for a session
+(a signed-out reader signs in and returns to the same `/r/{ref}`), reads the
+ref through the route its destination uses, and replaces itself with that page:
+
+| Ref                  | Opens                                                                          |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `card:`              | `/initiatives/card:{handle}`                                                   |
+| `card_revision:`     | its card's initiative page                                                     |
+| `doc:`, `document:`  | `/docs/{handle}`                                                               |
+| `document_revision:` | `/docs/{handle}?revision={revision handle}` (one bounded `/refs/resolve` read) |
+| `topic:`             | `/initiatives?project_ref=topic:{handle}`                                      |
+| `thread:`            | `/threads/{id}`                                                                |
+| `inbox:`             | `/decide/{inbox item id}`                                                      |
+| `event:` (an ask)    | `/decide/event:{id}`                                                           |
+| `event:` (other)     | its thread's message or timeline entry, else `/events#{id}`                    |
+| `actor:`, `agent:`   | `/agents/{id}`                                                                 |
+| `artifact:`          | the doc or initiative it belongs to, else the notice below                     |
+| `host:`              | its card on Access (`/access#host-{slug}`)                                     |
+| `run:`               | its agent with the run selected (`/agents/{id}?run={run}#runs`)                |
+| `board:`, `series:`  | a "doesn't have its own page" notice, after checking the ref exists            |
+| `url:`               | the same notice; external links are shown, never followed                      |
+
+An unknown prefix, a malformed value, or a ref that is missing or not visible
+shows "We couldn't find this" with the ref and a link home; a core outage shows
+Retry. The destination is always a path inside this workspace
+(`src/lib/refRoute.js`). A unit test fails when `ref_format` in
+`contracts/anx-schema.yaml` gains a prefix this table does not handle.
+`/docs/revisions/{id}` uses the same single revision lookup.
+
 ### 2.2 Topic detail: timeline + workspace
 
 There is no topic detail destination. `/threads/{threadId}` is a **read-only diagnostic** view of one backing thread, reached from a typed ref, an inbox deep link, or the `/threads` Diagnostics list. It presents two complementary layers:

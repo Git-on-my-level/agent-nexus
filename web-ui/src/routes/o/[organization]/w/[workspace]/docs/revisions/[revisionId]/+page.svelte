@@ -3,9 +3,10 @@
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
   import {
-    resourceRouteSegment,
-    revisionRouteSegment,
-  } from "$lib/resourceIdentity.js";
+    documentRevisionPath,
+    isNotFoundFailure,
+    isSafeRefValue,
+  } from "$lib/refRoute.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
@@ -19,14 +20,6 @@
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
-
-  function documentRevisionHref(documentId, targetRevisionId) {
-    const baseHref = workspaceHref(
-      `/docs/${encodeURIComponent(String(documentId ?? "").trim())}`,
-    );
-    const search = new URLSearchParams({ revision: targetRevisionId });
-    return `${baseHref}?${search.toString()}`;
-  }
 
   $effect(() => {
     if (!workspaceSlug || !revisionId) {
@@ -47,56 +40,29 @@
     error = "";
 
     try {
-      const listResponse = await coreClient.listDocuments({
-        state: ["active", "archived", "trashed"],
-      });
-      const documents = listResponse.documents ?? [];
-
-      const headMatch = documents.find(
-        (document) =>
-          String(document?.head_revision_id ?? "").trim() ===
-            targetRevisionId ||
-          String(document?.head_revision_ref ?? "").trim() === targetRevisionId,
-      );
-      if (headMatch?.id) {
-        await goto(
-          documentRevisionHref(
-            resourceRouteSegment(headMatch, "document"),
-            targetRevisionId,
-          ),
-        );
+      /*
+       * One bounded batch-resolve read finds the revision's document by
+       * revision id or `<document>-r<N>` handle. Listing every document and
+       * walking their histories made one link cost O(workspace) requests.
+       */
+      const ref = targetRevisionId.startsWith("document_revision:")
+        ? targetRevisionId
+        : `document_revision:${targetRevisionId}`;
+      const value = ref.slice("document_revision:".length);
+      const path = isSafeRefValue(value)
+        ? await documentRevisionPath(coreClient, ref, value)
+        : "";
+      if (activeLookupKey !== lookupKey) return;
+      if (path) {
+        await goto(workspaceHref(path), { replaceState: true });
         return;
       }
-
-      for (const document of documents) {
-        const documentId = resourceRouteSegment(document, "document");
-        if (!documentId) {
-          continue;
-        }
-
-        const historyResponse = await coreClient.getDocumentHistory(documentId);
-        const revisions = historyResponse.revisions ?? [];
-        const revisionMatch = revisions.find(
-          (revision) =>
-            String(revision?.revision_id ?? "").trim() === targetRevisionId ||
-            String(revision?.ref ?? "").trim() === targetRevisionId ||
-            String(revision?.handle ?? "").trim() === targetRevisionId,
-        );
-        if (revisionMatch) {
-          await goto(
-            documentRevisionHref(
-              documentId,
-              revisionRouteSegment(revisionMatch, "document_revision") ||
-                targetRevisionId,
-            ),
-          );
-          return;
-        }
-      }
-
       error = `Document version '${targetRevisionId}' was not found.`;
     } catch (e) {
-      error = `Failed to resolve document version: ${e instanceof Error ? e.message : String(e)}`;
+      if (activeLookupKey !== lookupKey) return;
+      error = isNotFoundFailure(e)
+        ? `Document version '${targetRevisionId}' was not found.`
+        : `Failed to resolve document version: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       if (activeLookupKey === lookupKey) {
         loading = false;

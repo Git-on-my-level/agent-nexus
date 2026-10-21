@@ -2195,7 +2195,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Surface schema version, command registry digest, CLI gates, and instance metadata.
 - Concepts: `compatibility`
 - Error codes: `meta_unavailable`
-- Output: Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`.
+- Output: Returns `{ core_version, api_version, schema_version, command_registry_digest, web_url?, ... }`.
 
 ## `meta.health`
 
@@ -2732,7 +2732,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `read`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns the current principal-scoped read projection.
-- Agent notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.
+- Agent notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200. Resolves card, document, topic, board, series and external refs, plus document_revision and card_revision refs by revision id or `<parent>-r<N>` handle through their parent.
 
 ## `report.preview`
 

@@ -116,6 +116,11 @@ func TestWorkRequestsUseCentralAPI(t *testing.T) {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			calls := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/meta/handshake" {
+					// Best-effort web_url decoration; the mock reports none.
+					http.NotFound(w, r)
+					return
+				}
 				calls++
 				if r.Method != tc.method || r.URL.Path != tc.path || r.URL.RawQuery != tc.query {
 					t.Errorf("request=%s %s, want %s %s?%s", r.Method, r.URL, tc.method, tc.path, tc.query)
@@ -160,6 +165,10 @@ func TestWorkRequestsUseCentralAPI(t *testing.T) {
 func TestWorkContextReadOnlyAndFreshnessHonest(t *testing.T) {
 	calls := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/meta/handshake" {
+			http.NotFound(w, r)
+			return
+		}
 		calls = append(calls, r.URL.RequestURI())
 		if r.Method != "GET" {
 			t.Errorf("read triggered %s", r.Method)

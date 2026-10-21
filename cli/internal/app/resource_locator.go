@@ -537,7 +537,7 @@ func urlCommandHelpText() string {
 	return strings.TrimSpace(`Local Help: url
 
 - Kind: local helper
-- Summary: Print only the shareable URL to stdout; --json includes resource details.
+- Summary: Print the resource's API locator, derived from the API base URL, for scripts; --json includes resource details. It is not a link for humans: use anx link to share a web UI link (the workspace core needs ANX_WEB_BASE_URL).
 - Examples:
   - anx url card:<card-handle>
   - anx url topic:<topic-handle>

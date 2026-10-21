@@ -2,8 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -44,7 +46,43 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 		"human_auth_mode":         humanAuthMode,
 		"workspace_access_mode":   strings.TrimSpace(opts.workspaceAccessMode),
 	}
+	if opts.webURL != "" {
+		payload["web_url"] = opts.webURL
+	}
 	return payload, nil
+}
+
+// WorkspaceWebURL returns the absolute URL of this workspace's web UI root,
+// the base that browser links such as `<web_url>/r/<ref>` are built from.
+// webBaseURL (ANX_WEB_BASE_URL) wins; otherwise the workspace URL already
+// configured for host enrollment (ANX_PUBLIC_WEB_UI_WORKSPACE_URL) is reused.
+// Both are deployment configuration: core never derives a web route from its
+// own API origin. An empty result means no web URL is advertised.
+func WorkspaceWebURL(webBaseURL, publicWorkspaceURL string) (string, error) {
+	if configured := strings.TrimSpace(webBaseURL); configured != "" {
+		normalized, ok := normalizeWebURL(configured)
+		if !ok {
+			return "", errors.New("ANX_WEB_BASE_URL must be an absolute HTTP(S) URL without credentials, query, or fragment")
+		}
+		return normalized, nil
+	}
+	if fallback := strings.TrimSpace(publicWorkspaceURL); fallback != "" {
+		if normalized, ok := normalizeWebURL(fallback); ok {
+			return normalized, nil
+		}
+	}
+	return "", nil
+}
+
+func normalizeWebURL(raw string) (string, bool) {
+	if strings.ContainsAny(raw, "?#") {
+		return "", false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed == nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" {
+		return "", false
+	}
+	return strings.TrimRight(parsed.String(), "/"), true
 }
 
 func effectiveWorkspaceID(workspaceID string) string {

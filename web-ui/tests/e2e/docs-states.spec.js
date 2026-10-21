@@ -452,6 +452,34 @@ async function installDocsApi(page, overrides = {}) {
     }));
   });
 
+  // The revision resolver's one lookup. Revisions are answered through their
+  // document's history fixture; anything else is unresolvable, as core says.
+  await apiRoute(/^\/refs\/resolve$/, (route) =>
+    respond(route, "resolveRefs", () => {
+      const refs = route.request().postDataJSON()?.refs ?? [];
+      return {
+        items: refs.map((ref) => {
+          const value = String(ref).replace(/^document_revision:/, "");
+          for (const id of Object.keys(api.detail)) {
+            const match = (api.history ?? historyFor(id)).find(
+              (rev) => rev.revision_id === value,
+            );
+            if (String(ref).startsWith("document_revision:") && match) {
+              return {
+                ref,
+                resolvable: true,
+                kind: "document_revision",
+                parent_ref: `document:${id}`,
+                url: `/docs/${id}?revision=${value}`,
+              };
+            }
+          }
+          return { ref, resolvable: false };
+        }),
+      };
+    }),
+  );
+
   await apiRoute(/^\/docs\/[^/]+\/revisions\/[^/]+$/, (route, pathname) => {
     const [id, revisionId] = pathname
       .split("/docs/")[1]
@@ -1092,15 +1120,21 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
     test("revision resolver: loading and not found", async ({ page }) => {
       const api = await installDocsApi(page);
-      api.hold.listDocuments = deferred();
+      api.hold.resolveRefs = deferred();
       await page.goto(`${DOCS_PATH}/revisions/rev-${LONG_HASH}`);
       await expect(page.getByText("Resolving document version…")).toBeVisible();
       await expectCleanLayout(page, "resolver loading");
-      api.hold.listDocuments.resolve();
+      api.hold.resolveRefs.resolve();
       api.hold = {};
 
       await expect(page.getByText(/was not found/)).toBeVisible();
       await expectCleanLayout(page, "resolver not found", bothEnds);
+      // One bounded lookup; the resolver no longer lists every document.
+      expect(api.calls.filter((name) => name === "resolveRefs")).toHaveLength(
+        1,
+      );
+      expect(api.calls).not.toContain("listDocuments");
+      expect(api.calls).not.toContain("getDocumentHistory");
     });
   });
 }

@@ -9515,7 +9515,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`.",
+    "output_envelope": "Returns `{ core_version, api_version, schema_version, command_registry_digest, web_url?, ... }`.",
     "error_codes": [
       "meta_unavailable"
     ],
@@ -12252,7 +12252,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.",
+    "agent_notes": "Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200. Resolves card, document, topic, board, series and external refs, plus document_revision and card_revision refs by revision id or `\u003cparent\u003e-r\u003cN\u003e` handle through their parent.",
     "body_schema": {
       "required": [
         {

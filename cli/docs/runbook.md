@@ -327,6 +327,8 @@ anx threads inspect thread_123 --max-events 50
 anx threads context --state active
 anx threads workspace thread_123
 anx docs content product-constitution
+# Browser link for a human; requires ANX_WEB_BASE_URL on the core (see README).
+anx link card:rescue-digest document:product-constitution
 anx docs message product-constitution --body-file note.md
 anx docs messages product-constitution --max-events 10
 anx artifacts inspect --artifact-id incident-42-log

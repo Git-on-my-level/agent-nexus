@@ -159,9 +159,37 @@ not-found error unchanged. Set `ANX_WORKSPACE_HINTS=0` to disable these reads.
 JSON errors expose `error.details.workspace_hint` and an exact retry command in
 `error.next_actions`. No command is automatically retried in another workspace.
 
-`anx url card:ship-fix` prints only the URL, suitable for shell substitution.
-Board, topic, document, artifact and thread refs also work. The legacy
-`anx url card ship-fix` form remains supported; `--json` retains URL, kind and id.
+`anx url card:ship-fix` prints the resource's API locator, derived from the API
+base URL, suitable for shell substitution in scripts. Board, topic, document,
+artifact and thread refs also work. The legacy `anx url card ship-fix` form
+remains supported. The locator is not a link for humans: it answers with JSON or
+requires API auth. Use `anx link` to share a web UI link with a human.
+
+`anx link card:ship-fix document:runbook event:<ask-id>` prints one browser URL
+per typed ref, one per line, to share with a human. Links come from the
+workspace core: it reports its web UI root as `web_url` in `GET /meta/handshake`,
+set from `ANX_WEB_BASE_URL` on the core (for example
+`https://example.com/o/<org>/w/<workspace>`). Each link is
+`<web_url>/r/<path-escaped ref>`; the web UI resolves handles and ids. Refs must
+be typed (`<prefix>:<value>`). `--json` returns `result.links[]` with `ref` and
+`web_url`. When the core reports no `web_url`, `anx link` fails with
+`needs_context` (exit 10); the CLI never derives web links from the API URL.
+
+Single-object reads and writes (`work get|create`, `context`, `cards get|create|patch|revise|move|assign|resolve|reopen|message|reply`,
+`docs get|create|put|patch|revise|message|reply`, `topics get|create|message|reply`,
+`boards get|create`, `artifacts create`, and `ask|review|escalate`) add `result.web_url` for their
+primary ref, and default text ends the result with one `open url=<web_url>` line. This is
+best effort: one handshake read per invocation, bounded to 2 seconds (or
+`--timeout` when shorter). A failed handshake or a workspace without `web_url`
+omits the field and the line; the command still succeeds. Other commands never
+read the handshake for this.
+
+Create commands (`cards|work|docs|topics|boards|artifacts create`, `docs put`)
+also return `result.url`, which the CLI derives from the API base URL. It is an
+API-side locator kept in JSON for existing scripts, not a link for humans: it may
+answer with JSON or require API auth. When `web_url` is available, default text
+omits that `url` fact (and the `url=` field on `created` lines) and shows only the
+`open url=` line. Share `web_url` or `anx link` output with humans.
 
 Choose a stable card name with
 `anx cards create --board board:tasks --handle ship-fix --title "Ship fix" --body "Acceptance criteria"`. For JSON-backed work
@@ -170,7 +198,7 @@ overrides the JSON handle. Slugs use lowercase ASCII letters and digits separate
 by single hyphens, up to 64 characters; reserved names and UUIDs are rejected.
 A reserved handle fails with conflict instead of being silently renamed. Omitted
 handles derive from the title with a 40-character cap; existing handles stay intact.
-Create text confirms the ref, handle and URL. `--verbose` retains full details.
+Create text confirms the ref, handle and, when the workspace reports `web_url`, the web link. `--verbose` retains full details.
 
 `anx note card:ship-fix "Progress" --next 1d "Acceptance checks"` confirms the saved
 note ref and resolved promise date/text. Suggestions render as one shell command;

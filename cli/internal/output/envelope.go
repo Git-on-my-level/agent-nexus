@@ -48,6 +48,10 @@ type Envelope struct {
 	Warnings      []Warning     `json:"warnings"`
 	NextActions   []NextAction  `json:"next_actions"`
 	Error         *ErrorPayload `json:"error,omitempty"`
+	// OpenURL is the browser link already stored as result.web_url. Text
+	// renders it once as an `open url=<url>` line instead of result facts for
+	// web_url and the API-base-derived result.url, which is not for humans.
+	OpenURL string `json:"-"`
 }
 
 func (e *Envelope) Init() {
@@ -101,16 +105,23 @@ func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) er
 		project(&lines, "detail", envelope.Error.Details)
 	} else {
 		lines = append(lines, "ok command="+quote(envelope.Command))
+		result := envelope.Result
+		if envelope.OpenURL != "" {
+			result = withoutWebURL(result)
+		}
 		if !detailed && isPlanCommand(envelope.Command) {
-			projectPlan(&lines, envelope.Result)
+			projectPlan(&lines, result)
 		} else if !detailed && envelope.Command == "note" {
-			projectNote(&lines, envelope.Result)
+			projectNote(&lines, result)
 		} else if !detailed && (envelope.Command == "cards create" || envelope.Command == "work create") {
-			projectCardCreate(&lines, envelope.Result)
+			projectCardCreate(&lines, result)
 		} else if envelope.Command == "cards list" {
-			projectCardsList(&lines, envelope.Result)
+			projectCardsList(&lines, result)
 		} else {
-			project(&lines, "result", envelope.Result)
+			project(&lines, "result", result)
+		}
+		if envelope.OpenURL != "" {
+			lines = append(lines, "open url="+quote(envelope.OpenURL))
 		}
 	}
 	for _, warning := range envelope.Warnings {
@@ -314,4 +325,20 @@ func projectCardCreate(lines *[]string, result any) {
 		line += " url=" + quote(fmt.Sprint(u))
 	}
 	*lines = append(*lines, line)
+}
+
+// withoutWebURL drops the top-level web_url and API-derived url facts that the
+// open line replaces. JSON keeps both fields.
+func withoutWebURL(result any) any {
+	root, ok := result.(map[string]any)
+	if !ok {
+		return result
+	}
+	out := make(map[string]any, len(root))
+	for key, value := range root {
+		if key != "web_url" && key != "url" {
+			out[key] = value
+		}
+	}
+	return out
 }
