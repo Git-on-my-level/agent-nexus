@@ -122,6 +122,7 @@ func TestUpdateSchedulerAgentAndCISkipMatrix(t *testing.T) {
 		{name: "interactive human", stdinTTY: true, stdoutTTY: true, wantDaily: true, wantServer: true},
 		{name: "explicit agent in noninteractive run", as: "worker", wantDaily: true, wantServer: true},
 		{name: "ANX_AS agent in noninteractive run", env: map[string]string{"ANX_AS": "worker"}, wantDaily: true, wantServer: true},
+		{name: "generic CI excludes ANX_AS", env: map[string]string{"ANX_AS": "worker", "CI": "1"}},
 		{name: "agentctl caller overrides generic CI", env: map[string]string{"AGENTCTL_CALLER_HARNESS": "codex", "CI": "1"}, wantDaily: true, wantServer: true},
 		{name: "agentctl execution identity overrides generic CI", env: map[string]string{"AGENTCTL_EXECUTION_ID": "execution", "AGENTCTL_ADAPTER": "codex", "CI": "1"}, wantDaily: true, wantServer: true},
 		{name: "Claude Code overrides generic CI", env: map[string]string{"CLAUDECODE": "1", "CI": "1"}, wantDaily: true, wantServer: true},
