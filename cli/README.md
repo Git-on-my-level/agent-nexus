@@ -51,7 +51,9 @@ are excluded along with cards on archived boards.
 The default `auto` starts a detached daily worker after the first successful read
 or coordination write in an interactive terminal, or in a non-interactive agent
 invocation identified by `--as`/`ANX_AS`, agentctl caller evidence, or a recognized
-harness marker. CI and ordinary non-interactive scripts are skipped. The worker
+harness marker. Known CI provider markers always skip updates. Recognized harness
+markers such as Cursor, Claude Code, Codex, Hermes, and agentctl can override
+generic `CI=1`; `--as`/`ANX_AS` alone cannot. Ordinary non-interactive scripts are skipped. The worker
 starts after command output and cannot change that command's output or exit code.
 A separate worker checks `/meta/handshake` at most once per UTC day and runs the
 release check when `core_version` is newer than the CLI. `anx update status`

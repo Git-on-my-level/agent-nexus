@@ -110,20 +110,40 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 func TestUpdateSchedulerAgentAndCISkipMatrix(t *testing.T) {
 	cases := []struct {
 		name       string
-		ci         string
+		env        map[string]string
 		stdinTTY   bool
 		stdoutTTY  bool
 		as         string
-		harness    string
+		omp        bool
 		policy     string
 		wantDaily  bool
 		wantServer bool
 	}{
 		{name: "interactive human", stdinTTY: true, stdoutTTY: true, wantDaily: true, wantServer: true},
 		{name: "explicit agent in noninteractive run", as: "worker", wantDaily: true, wantServer: true},
-		{name: "agentctl caller in noninteractive run", harness: "codex", wantDaily: true, wantServer: true},
+		{name: "ANX_AS agent in noninteractive run", env: map[string]string{"ANX_AS": "worker"}, wantDaily: true, wantServer: true},
+		{name: "agentctl caller overrides generic CI", env: map[string]string{"AGENTCTL_CALLER_HARNESS": "codex", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "agentctl execution identity overrides generic CI", env: map[string]string{"AGENTCTL_EXECUTION_ID": "execution", "AGENTCTL_ADAPTER": "codex", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Claude Code overrides generic CI", env: map[string]string{"CLAUDECODE": "1", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Codex thread overrides generic CI", env: map[string]string{"CODEX_THREAD_ID": "thread", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Cursor agent overrides generic CI", env: map[string]string{"CURSOR_AGENT": "1", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Cursor completion marker overrides generic CI", env: map[string]string{"CURSOR_AGENT_COMPLETED_PATH": "/tmp/cursor-agent", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Hermes agent marker overrides generic CI", env: map[string]string{"HERMES_AGENT": "true", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "AI agent Hermes marker overrides generic CI", env: map[string]string{"AI_AGENT": "hermes-agent", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "Hermes session overrides generic CI", env: map[string]string{"HERMES_SESSION_ID": "session", "CI": "1"}, wantDaily: true, wantServer: true},
+		{name: "OMP agent marker overrides generic CI", env: map[string]string{"AGENT": "1", "CI": "1"}, omp: true, wantDaily: true, wantServer: true},
 		{name: "PM agent turn", as: "pm", wantDaily: true, wantServer: true},
-		{name: "CI with explicit agent", ci: "true", as: "worker"},
+		{name: "generic CI excludes explicit principal", env: map[string]string{"CI": "1"}, as: "worker"},
+		{name: "generic CI excludes interactive human", env: map[string]string{"CI": "1"}, stdinTTY: true, stdoutTTY: true},
+		{name: "Jenkins URL excludes explicit principal", env: map[string]string{"JENKINS_URL": "https://jenkins.example"}, as: "ci-bot"},
+		{name: "Jenkins build markers exclude explicit principal", env: map[string]string{"BUILD_ID": "42", "JENKINS_HOME": "/var/lib/jenkins"}, as: "ci-bot"},
+		{name: "GitHub Actions beats agent harness", env: map[string]string{"GITHUB_ACTIONS": "true", "AGENTCTL_CALLER_HARNESS": "codex"}, as: "ci-bot"},
+		{name: "GitLab CI excludes explicit principal", env: map[string]string{"GITLAB_CI": "true"}, as: "ci-bot"},
+		{name: "Buildkite excludes explicit principal", env: map[string]string{"BUILDKITE": "true"}, as: "ci-bot"},
+		{name: "CircleCI excludes explicit principal", env: map[string]string{"CIRCLECI": "true"}, as: "ci-bot"},
+		{name: "Azure Pipelines excludes explicit principal", env: map[string]string{"TF_BUILD": "True"}, as: "ci-bot"},
+		{name: "TeamCity excludes explicit principal", env: map[string]string{"TEAMCITY_VERSION": "2026.10"}, as: "ci-bot"},
+		{name: "BUILD_ID without Jenkins home is not sufficient", env: map[string]string{"BUILD_ID": "42"}, as: "worker", wantDaily: true, wantServer: true},
 		{name: "ordinary redirected script"},
 		{name: "policy off", as: "worker", policy: "off"},
 		{name: "policy notify for agent", as: "worker", policy: "notify"},
@@ -137,16 +157,15 @@ func TestUpdateSchedulerAgentAndCISkipMatrix(t *testing.T) {
 			a.startServerUpdateWorker = func(string, string, string) error { server.Store(true); return nil }
 			a.StdinIsTTY = func() bool { return tc.stdinTTY }
 			a.StdoutIsTTY = func() bool { return tc.stdoutTTY }
-			a.Getenv = func(key string) string {
-				switch key {
-				case "CI":
-					return tc.ci
-				case "AGENTCTL_CALLER_HARNESS":
-					return tc.harness
-				case "ANX_UPDATE_POLICY":
-					return tc.policy
+			a.hasOMPAncestor = func() bool { return tc.omp }
+			a.Getenv = func(key string) string { return tc.env[key] }
+			if tc.policy != "" {
+				a.Getenv = func(key string) string {
+					if key == "ANX_UPDATE_POLICY" {
+						return tc.policy
+					}
+					return tc.env[key]
 				}
-				return ""
 			}
 			cfg.As = tc.as
 			a.maybeScheduleUpdate("work list", []string{"work", "list"}, cfg)

@@ -414,8 +414,10 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
-  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation
+  - known CI provider markers (Jenkins, GitHub Actions, GitLab CI, Buildkite, CircleCI, Azure Pipelines, TeamCity) always skip automatic updates
+  - a recognized harness marker such as Cursor, Claude Code, Codex, Hermes or agentctl can override generic CI=1; --as/ANX_AS alone cannot
+  - arbitrary scripts do not qualify; non-interactive agent detection uses --as/ANX_AS, agentctl caller evidence, or a recognized harness marker
   - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
   - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
   - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check

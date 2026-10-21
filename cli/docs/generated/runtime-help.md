@@ -545,7 +545,7 @@ ANX environment variables
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
-ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks once per UTC day from interactive terminals or recognized non-interactive agent invocations when CI is unset; ordinary scripts are skipped. Checks run in a quiet detached worker after command output. anx update status stays offline. Inspect anx update status or anx help update.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks once per UTC day from interactive terminals or recognized non-interactive agent invocations. Known CI provider markers always skip updates; recognized harness markers can override generic CI=1, while --as/ANX_AS alone cannot. Ordinary scripts are skipped. Checks run in a quiet detached worker after command output. anx update status stays offline. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
@@ -5799,8 +5799,10 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
-  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation
+  - known CI provider markers (Jenkins, GitHub Actions, GitLab CI, Buildkite, CircleCI, Azure Pipelines, TeamCity) always skip automatic updates
+  - a recognized harness marker such as Cursor, Claude Code, Codex, Hermes or agentctl can override generic CI=1; --as/ANX_AS alone cannot
+  - arbitrary scripts do not qualify; non-interactive agent detection uses --as/ANX_AS, agentctl caller evidence, or a recognized harness marker
   - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
   - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
   - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check
@@ -5839,8 +5841,10 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
-  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation
+  - known CI provider markers (Jenkins, GitHub Actions, GitLab CI, Buildkite, CircleCI, Azure Pipelines, TeamCity) always skip automatic updates
+  - a recognized harness marker such as Cursor, Claude Code, Codex, Hermes or agentctl can override generic CI=1; --as/ANX_AS alone cannot
+  - arbitrary scripts do not qualify; non-interactive agent detection uses --as/ANX_AS, agentctl caller evidence, or a recognized harness marker
   - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
   - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
   - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check
@@ -5879,8 +5883,10 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation; CI is skipped
-  - non-interactive agent detection requires --as/ANX_AS, agentctl caller evidence, or a recognized harness marker; arbitrary scripts do not qualify
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal or a recognized non-interactive agent invocation
+  - known CI provider markers (Jenkins, GitHub Actions, GitLab CI, Buildkite, CircleCI, Azure Pipelines, TeamCity) always skip automatic updates
+  - a recognized harness marker such as Cursor, Claude Code, Codex, Hermes or agentctl can override generic CI=1; --as/ANX_AS alone cannot
+  - arbitrary scripts do not qualify; non-interactive agent detection uses --as/ANX_AS, agentctl caller evidence, or a recognized harness marker
   - detached workers start after command output; they do not change that command's output or exit code, and the updater has a two-minute deadline
   - a separate workspace server-version check runs at most once per UTC day when /meta/handshake reports a newer core_version; status says when no server version is available
   - status reports the latest automatic attempt, trigger, result, time, and workspace server-version check

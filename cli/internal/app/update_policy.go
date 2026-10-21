@@ -437,28 +437,52 @@ func (a *App) updateSchedulingInteractive() bool {
 }
 
 func (a *App) updateSchedulingAllowed(cfg config.Resolved, interactive bool) bool {
+	if a.updateKnownCIInvocation() {
+		return false
+	}
+	if a.updateHarnessInvocation() {
+		return true
+	}
 	if a.Getenv != nil && strings.TrimSpace(a.Getenv("CI")) != "" {
 		return false
 	}
-	return interactive || a.updateAgentInvocation(cfg)
+	return interactive || a.updatePrincipalInvocation(cfg)
 }
 
-func (a *App) updateAgentInvocation(cfg config.Resolved) bool {
-	if strings.TrimSpace(cfg.As) != "" {
-		return true
-	}
+func (a *App) updateKnownCIInvocation() bool {
 	if a.Getenv == nil {
 		return false
 	}
-	for _, key := range []string{"ANX_AS", "AGENTCTL_CALLER_HARNESS"} {
+	for _, key := range []string{
+		"JENKINS_URL", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "TF_BUILD", "TEAMCITY_VERSION",
+	} {
 		if strings.TrimSpace(a.Getenv(key)) != "" {
 			return true
 		}
 	}
-	if strings.TrimSpace(a.Getenv("AGENTCTL_EXECUTION_ID")) != "" && strings.TrimSpace(a.Getenv("AGENTCTL_ADAPTER")) != "" {
+	return strings.TrimSpace(a.Getenv("BUILD_ID")) != "" && strings.TrimSpace(a.Getenv("JENKINS_HOME")) != ""
+}
+
+func (a *App) updatePrincipalInvocation(cfg config.Resolved) bool {
+	if strings.TrimSpace(cfg.As) != "" {
 		return true
 	}
-	if a.Getenv("CLAUDECODE") == "1" || strings.TrimSpace(a.Getenv("CODEX_THREAD_ID")) != "" || strings.TrimSpace(a.Getenv("CURSOR_AGENT_COMPLETED_PATH")) != "" {
+	return a.Getenv != nil && strings.TrimSpace(a.Getenv("ANX_AS")) != ""
+}
+
+func (a *App) updateHarnessInvocation() bool {
+	if a.Getenv == nil {
+		return false
+	}
+	for _, key := range []string{"AGENTCTL_CALLER_HARNESS", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_AGENT_COMPLETED_PATH", "HERMES_SESSION_ID"} {
+		if strings.TrimSpace(a.Getenv(key)) != "" {
+			return true
+		}
+	}
+	if a.Getenv("CURSOR_AGENT") == "1" || strings.EqualFold(strings.TrimSpace(a.Getenv("HERMES_AGENT")), "true") || strings.EqualFold(strings.TrimSpace(a.Getenv("AI_AGENT")), "hermes-agent") {
+		return true
+	}
+	if strings.TrimSpace(a.Getenv("AGENTCTL_EXECUTION_ID")) != "" && strings.TrimSpace(a.Getenv("AGENTCTL_ADAPTER")) != "" {
 		return true
 	}
 	return a.Getenv("AGENT") == "1" && a.hasOMPAncestor != nil && a.hasOMPAncestor()

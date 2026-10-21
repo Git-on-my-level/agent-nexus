@@ -27,8 +27,11 @@ Separately, the first successful read or coordination write per UTC day starts
 a detached worker after the foreground command has emitted its output. Interactive
 terminals retain the existing behavior. A non-interactive call qualifies only
 when it carries `--as`/`ANX_AS`, agentctl caller evidence, or a recognized harness
-marker; ordinary scripts are not inferred to be agents. CI remains excluded.
-PM turns qualify when they carry one of those agent signals. The worker has a
+marker; ordinary scripts are not inferred to be agents. Known CI provider markers
+always exclude the invocation. Recognized harness markers take precedence over
+generic `CI=1` (for example, Cursor agent shells set both); `--as`/`ANX_AS` alone
+does not override generic CI. PM turns qualify when they carry one of those agent
+signals. The worker has a
 two-minute deadline and the foreground command never waits for release networking,
 verification, replacement, or skill synchronization. A per-install atomic daily
 claim prevents simultaneous commands and separate workspace config directories
