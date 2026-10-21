@@ -2195,7 +2195,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Surface schema version, command registry digest, CLI gates, and instance metadata.
 - Concepts: `compatibility`
 - Error codes: `meta_unavailable`
-- Output: Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`.
+- Output: Returns `{ core_version, api_version, schema_version, command_registry_digest, web_url?, ... }`.
 
 ## `meta.health`
 

@@ -1053,6 +1053,7 @@ Loop (stable):
   ask <title> --recommend <text> [--by <when>] [--blocks <ref>]  Request a human decision (remote_coordination_write)
   await <ask-id|card-ref|access-request:<id>>  Wait for an answer or access decision (read_only)
   done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
+  link <ref>...           Browser link to share with a human (read_only)
   plan show|set|step <card>  Read or change an initiative's plan (remote_coordination_write)
   series push <name> <value>  Push one live data point (remote_coordination_write)
 
@@ -1099,7 +1100,8 @@ Core Commands:
   report        Validate and publish visual report documents
   move          Move cards and topics between configured workspaces
   read          Read an ANX resource from a URL or typed ref
-  url           Print a shareable ANX URL for a resource
+  url           Print a resource URL (web link when the core reports web_url)
+  link          Print the workspace web UI link for typed refs
   api call      Perform an arbitrary HTTP API request
   debug         Inspect diagnostic resource groups
   help [topic]  Show onboarding help or generated command help
@@ -1435,6 +1437,9 @@ Tip: this is a diagnostic surface; normal agents usually start with anx doctor, 
 	}
 	if topic == "url" {
 		return urlCommandHelpText() + "\n", true
+	}
+	if topic == "link" {
+		return linkCommandHelpText() + "\n", true
 	}
 	if topic == "agent-guide" {
 		return agentGuideText(), true

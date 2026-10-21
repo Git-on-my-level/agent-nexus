@@ -212,6 +212,7 @@ type handlerOptions struct {
 	recommendedCLIVersion          string
 	cliDownloadURL                 string
 	hostEnrollmentVerificationURL  string
+	webURL                         string
 	coreInstanceID                 string
 	metaCommandsPath               string
 	streamPollInterval             time.Duration
@@ -408,6 +409,14 @@ func WithCLIDownloadURL(downloadURL string) HandlerOption {
 func WithHostEnrollmentVerificationURL(verificationURL string) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.hostEnrollmentVerificationURL = verificationURL
+	}
+}
+
+// WithWebURL sets the workspace web UI root advertised as `web_url` in the
+// handshake. See WorkspaceWebURL.
+func WithWebURL(webURL string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.webURL = strings.TrimRight(strings.TrimSpace(webURL), "/")
 	}
 }
 

@@ -340,6 +340,10 @@ func TestGetCommandResolvesUniqueSlugPrefixAfterNotFound(t *testing.T) {
 	seen := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/meta/handshake" {
+			http.NotFound(w, r)
+			return
+		}
 		seen = append(seen, r.URL.EscapedPath())
 		switch r.URL.EscapedPath() {
 		case "/topics/anx-dog":
@@ -427,6 +431,10 @@ func TestCardsGetPassesTypedRefAndHandleToCore(t *testing.T) {
 	seen := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/meta/handshake" {
+			http.NotFound(w, r)
+			return
+		}
 		seen = append(seen, r.URL.EscapedPath())
 		switch r.URL.EscapedPath() {
 		case "/cards/card:cli-json-body-input", "/cards/cli-json-body-input":
@@ -618,6 +626,10 @@ func TestHumanAskCommandResolvesThreadIDFromCardSubjectRef(t *testing.T) {
 	var captured map[string]any
 	var seen []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/meta/handshake" {
+			http.NotFound(w, r)
+			return
+		}
 		seen = append(seen, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		switch {

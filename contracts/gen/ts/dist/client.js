@@ -9464,7 +9464,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`.",
+        "output_envelope": "Returns `{ core_version, api_version, schema_version, command_registry_digest, web_url?, ... }`.",
         "error_codes": [
             "meta_unavailable"
         ],

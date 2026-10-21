@@ -454,6 +454,15 @@ Actions:
 2. Check forwarded host/origin handling at the reverse proxy.
 3. Do not assume path-prefix routing changes WebAuthn identity boundaries.
 
+## Ref links
+
+`/o/{org}/w/{workspace}/r/{ref}` opens any typed ref (for example
+`/r/card:launch-plan`) on its page; the mapping lives in `src/lib/refRoute.js`
+and the table in `docs/anx-ui-spec.md`. A signed-out reader returns to the same
+link after sign-in. Unknown or invisible refs render a not-found page in the
+workspace shell; nothing redirects off-origin. Covered by
+`tests/unit/refRoute.test.js` and `tests/e2e/ref-route.spec.js`.
+
 ## Shared task participation
 
 Task details read `GET /work/{card_ref}/participants` through the generated

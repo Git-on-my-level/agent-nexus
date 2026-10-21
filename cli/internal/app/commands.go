@@ -205,6 +205,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "url":
 		result, err := a.runURLCommand(ctx, args[1:], cfg)
 		return "url", result, err
+	case "link":
+		result, err := a.runLinkCommand(ctx, args[1:], cfg)
+		return "link", result, err
 	case "concepts":
 		if len(args) > 1 {
 			return "concepts", nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx concepts`")

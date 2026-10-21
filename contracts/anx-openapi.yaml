@@ -6989,7 +6989,7 @@ paths:
       x-anx-why: Surface schema version, command registry digest, CLI gates, and instance metadata.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`."
+      x-anx-output-envelope: "Returns `{ core_version, api_version, schema_version, command_registry_digest, web_url?, ... }`."
       x-anx-error-codes: [meta_unavailable]
       x-anx-concepts: [compatibility]
       x-anx-stability: stable
@@ -11587,13 +11587,23 @@ components:
         core_version, api_version, schema_version, command_registry_digest,
         min_cli_version, recommended_cli_version, cli_download_url,
         core_instance_id, workspace_id, dev_actor_mode, human_auth_mode, and
-        optional workspace_service_identity_id. capabilities includes host_bridge_v1
+        optional workspace_service_identity_id and web_url. capabilities includes host_bridge_v1
         when signed host snapshots and per-agent bridge jobs are supported.
       properties:
         capabilities:
           type: array
           items: {type: string}
           description: Optional supported protocol capabilities; absent means unsupported.
+        web_url:
+          type: string
+          format: uri
+          description: >
+            Optional absolute URL of this workspace's web UI root, without a
+            trailing slash, query, or fragment. Clients build a browser link for
+            any typed ref as `<web_url>/r/<path-escaped ref>`. Configured with
+            ANX_WEB_BASE_URL; when unset it falls back to
+            ANX_PUBLIC_WEB_UI_WORKSPACE_URL. Absent when neither is configured;
+            clients must not guess a web URL from the API base.
 
     TypedRef:
       type: string

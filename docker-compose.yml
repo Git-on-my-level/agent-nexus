@@ -15,6 +15,8 @@ services:
       ANX_WEBAUTHN_ORIGIN: "${ANX_WEBAUTHN_ORIGIN:-}"
       ANX_WEBAUTHN_RP_DISPLAY_NAME: "${ANX_WEBAUTHN_RP_DISPLAY_NAME:-ANX}"
       ANX_CORE_INSTANCE_ID: "${ANX_CORE_INSTANCE_ID:-core-local}"
+      # Workspace web UI root for `anx link` browser links, e.g. http://localhost:3000/o/<org>/w/<workspace>
+      ANX_WEB_BASE_URL: "${ANX_WEB_BASE_URL:-}"
       ANX_BOOTSTRAP_TOKEN: "${ANX_BOOTSTRAP_TOKEN:-}"
       ANX_SHUTDOWN_TIMEOUT: "${ANX_SHUTDOWN_TIMEOUT:-15s}"
     healthcheck:
@@ -39,7 +41,13 @@ services:
       core:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 15s
       timeout: 5s
       start_period: 10s

@@ -252,6 +252,7 @@ func (a *App) runURLCommand(ctx context.Context, args []string, cfg config.Resol
 	if err != nil {
 		return nil, err
 	}
+	webRef := urlCommandWebRef(loc)
 	loc, err = a.resolveLocatorForURL(ctx, cfg, loc)
 	if err != nil {
 		return nil, err
@@ -260,14 +261,36 @@ func (a *App) runURLCommand(ctx context.Context, args []string, cfg config.Resol
 	if err != nil {
 		return nil, err
 	}
-	return &commandResult{
-		Text: resourceURL,
-		Data: map[string]any{
-			"url":  resourceURL,
-			"kind": canonicalResourceKind(loc.Kind),
-			"id":   loc.ID,
-		},
-	}, nil
+	data := map[string]any{
+		"url":  resourceURL,
+		"kind": canonicalResourceKind(loc.Kind),
+		"id":   loc.ID,
+	}
+	text := resourceURL
+	// Prefer the workspace web link, as `anx link` prints it. Without a
+	// reported web_url, the API-base-derived url remains the output.
+	if webRef != "" {
+		lookupCtx, cancel := context.WithTimeout(ctx, webURLDecorationTimeout)
+		webURL, lookupErr := a.workspaceWebURL(lookupCtx, cfg)
+		cancel()
+		if lookupErr == nil && webURL != "" {
+			data["web_url"] = webLinkForRef(webURL, webRef)
+			text = anyString(data["web_url"])
+		}
+	}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
+// urlCommandWebRef is the typed ref the caller named, before any card lookup.
+func urlCommandWebRef(loc resourceLocator) string {
+	ref := strings.TrimSpace(loc.ID)
+	if _, err := parseLinkRef(ref); err != nil || canonicalResourceKind(strings.SplitN(ref, ":", 2)[0]) != canonicalResourceKind(loc.Kind) {
+		ref = canonicalResourceKind(loc.Kind) + ":" + refID(ref)
+	}
+	if _, err := parseLinkRef(ref); err != nil {
+		return ""
+	}
+	return ref
 }
 
 func parseURLArgs(args []string) (resourceLocator, error) {
@@ -537,7 +560,7 @@ func urlCommandHelpText() string {
 	return strings.TrimSpace(`Local Help: url
 
 - Kind: local helper
-- Summary: Print only the shareable URL to stdout; --json includes resource details.
+- Summary: Print one URL for a resource. When the workspace core reports web_url (set ANX_WEB_BASE_URL on the core), this is the same web link as anx link; otherwise it is derived from the API base URL and is not meant for humans. Use anx link to share with a human. --json keeps url, kind and id and adds web_url when available.
 - Examples:
   - anx url card:<card-handle>
   - anx url topic:<topic-handle>
