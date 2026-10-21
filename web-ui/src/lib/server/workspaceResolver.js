@@ -25,16 +25,62 @@ function workspaceLabel(rawOrg, rawWs) {
   return org && ws ? `'${org}/${ws}'` : ws ? `'${ws}'` : `'${org}'`;
 }
 
+/**
+ * The static catalog is the only source of workspaces on this server, so the
+ * operator-facing fix is to add the workspace to it.
+ */
 function createWorkspaceNotConfiguredError(rawOrg, rawWs) {
   return {
     status: 404,
     payload: {
       error: {
         code: "workspace_not_configured",
-        message: `Workspace ${workspaceLabel(rawOrg, rawWs)} is not configured in ANX_WORKSPACES and could not be resolved from the control plane.`,
+        message: `Workspace ${workspaceLabel(rawOrg, rawWs)} is not configured on this server. Check the URL, or add the workspace to ANX_WORKSPACES.`,
       },
     },
   };
+}
+
+/**
+ * An out-of-workspace provider answered and this viewer cannot open the
+ * workspace. Whether it exists is not disclosed: the copy is the same for a
+ * workspace that does not exist and one the viewer cannot access.
+ */
+function createWorkspaceNotAccessibleError() {
+  return {
+    status: 404,
+    payload: {
+      error: {
+        code: "workspace_not_accessible",
+        message:
+          "You don't have access to this workspace, or it doesn't exist.",
+      },
+    },
+  };
+}
+
+function createWorkspaceLookupUnavailableError() {
+  return {
+    status: 503,
+    payload: {
+      error: {
+        code: "workspace_lookup_unavailable",
+        message:
+          "We couldn't look up this workspace right now. Please retry in a few seconds.",
+      },
+    },
+  };
+}
+
+/**
+ * Self-hosted servers (`local` provider) only know their static catalog, so a
+ * miss names the setting that fixes it. With an out-of-workspace provider the
+ * catalog is not something the viewer controls, so a miss reads as access.
+ */
+function createWorkspaceMissError(provider, rawOrg, rawWs) {
+  return provider.mode === "local"
+    ? createWorkspaceNotConfiguredError(rawOrg, rawWs)
+    : createWorkspaceNotAccessibleError();
 }
 
 function createWorkspaceProvisioningError(rawOrg, rawWs, status) {
@@ -202,7 +248,7 @@ export async function resolveWorkspaceInRoute({
       workspace: null,
       coreBaseUrl: "",
       outOfWorkspaceUnauthenticated: false,
-      error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
+      error: createWorkspaceMissError(provider, rawOrg, rawSlug),
     };
   }
 
@@ -211,6 +257,7 @@ export async function resolveWorkspaceInRoute({
   let cpLookupAttempted = false;
   let cpLookupHit = false;
   let cpLookupUnauthenticated = false;
+  let cpLookupUnavailable = false;
   if (!workspace) {
     cpLookupAttempted = true;
     const cpWorkspace = await provider.resolveWorkspaceBySlug({
@@ -223,6 +270,8 @@ export async function resolveWorkspaceInRoute({
       workspace = cpWorkspace.workspace;
     } else if (cpWorkspace.kind === "unauthenticated") {
       cpLookupUnauthenticated = true;
+    } else if (cpWorkspace.kind === "unavailable") {
+      cpLookupUnavailable = true;
     }
   }
 
@@ -234,9 +283,11 @@ export async function resolveWorkspaceInRoute({
         slug: normalizedSlug,
         cp_lookup: cpLookupUnauthenticated
           ? "unauthenticated"
-          : cpLookupAttempted
-            ? "miss"
-            : "skipped",
+          : cpLookupUnavailable
+            ? "unavailable"
+            : cpLookupAttempted
+              ? "miss"
+              : "skipped",
       },
       { level: "warn" },
     );
@@ -247,7 +298,9 @@ export async function resolveWorkspaceInRoute({
       workspace: null,
       coreBaseUrl: "",
       outOfWorkspaceUnauthenticated: cpLookupUnauthenticated,
-      error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
+      error: cpLookupUnavailable
+        ? createWorkspaceLookupUnavailableError()
+        : createWorkspaceMissError(provider, rawOrg, rawSlug),
     };
   }
 

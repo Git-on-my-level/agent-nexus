@@ -9,6 +9,10 @@ vi.mock("$env/dynamic/private", () => ({
 }));
 
 import {
+  mockHostedProvider,
+  mockLocalProvider,
+} from "../fixtures/workspaceAuth.js";
+import {
   clearWorkspaceResolutionCache,
   getWorkspaceResolutionCacheSize,
   resolveWorkspaceCatalog,
@@ -171,5 +175,82 @@ describe("workspaceResolver", () => {
   it("keeps cache APIs as no-op for OSS static resolver", () => {
     clearWorkspaceResolutionCache();
     expect(getWorkspaceResolutionCacheSize()).toBe(0);
+  });
+  describe("viewer-facing miss copy", () => {
+    const SELF_HOST_JARGON = /ANX_WORKSPACES|control plane/i;
+
+    function providerEvent(provider) {
+      return { locals: { outOfWorkspace: provider } };
+    }
+
+    it("names the setting to fix on a self-hosted miss, without control-plane jargon", async () => {
+      const resolved = await resolveWorkspaceInRoute({
+        organizationSlug: "local",
+        workspaceSlug: "missing",
+        event: providerEvent(mockLocalProvider()),
+      });
+      const err = resolved.error.payload.error;
+      expect(err.code).toBe("workspace_not_configured");
+      expect(err.message).toContain("ANX_WORKSPACES");
+      expect(err.message).not.toMatch(/control plane/i);
+    });
+
+    it("answers a provider miss as no-access-or-missing, without self-host jargon", async () => {
+      const resolved = await resolveWorkspaceInRoute({
+        organizationSlug: "acme",
+        workspaceSlug: "alpha",
+        event: providerEvent(mockHostedProvider()),
+      });
+      expect(resolved.outOfWorkspaceUnauthenticated).toBe(false);
+      expect(resolved.error.status).toBe(404);
+      const err = resolved.error.payload.error;
+      expect(err.code).toBe("workspace_not_accessible");
+      expect(err.message).toBe(
+        "You don't have access to this workspace, or it doesn't exist.",
+      );
+      // The answer never names the workspace, so it cannot confirm it exists.
+      expect(err.message).not.toContain("acme");
+      expect(err.message).not.toMatch(SELF_HOST_JARGON);
+    });
+
+    it("flags an unauthenticated provider lookup without self-host jargon", async () => {
+      const resolved = await resolveWorkspaceInRoute({
+        organizationSlug: "acme",
+        workspaceSlug: "alpha",
+        event: providerEvent(
+          mockHostedProvider({
+            async resolveWorkspaceBySlug() {
+              return { kind: "unauthenticated" };
+            },
+          }),
+        ),
+      });
+      expect(resolved.outOfWorkspaceUnauthenticated).toBe(true);
+      expect(resolved.error.payload.error.message).not.toMatch(
+        SELF_HOST_JARGON,
+      );
+    });
+
+    it("reports a provider that could not answer as a retryable lookup failure", async () => {
+      const resolved = await resolveWorkspaceInRoute({
+        organizationSlug: "acme",
+        workspaceSlug: "alpha",
+        event: providerEvent(
+          mockHostedProvider({
+            async resolveWorkspaceBySlug() {
+              return { kind: "unavailable" };
+            },
+          }),
+        ),
+      });
+      expect(resolved.outOfWorkspaceUnauthenticated).toBe(false);
+      expect(resolved.error.status).toBe(503);
+      expect(resolved.error.payload.error.code).toBe(
+        "workspace_lookup_unavailable",
+      );
+      expect(resolved.error.payload.error.message).not.toMatch(
+        SELF_HOST_JARGON,
+      );
+    });
   });
 });

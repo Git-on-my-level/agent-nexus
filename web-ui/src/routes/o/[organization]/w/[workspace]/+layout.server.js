@@ -135,31 +135,41 @@ export async function load(event) {
       { level: "warn" },
     );
 
-    if (
-      code === "workspace_not_configured" &&
-      provider.mode === "hosted" &&
-      resolved.outOfWorkspaceUnauthenticated
-    ) {
-      const signInUrl = provider.buildSignInUrl({
-        organizationSlug: event.params.organization,
-        workspaceSlug: event.params.workspace,
-        returnPath: workspaceRelativeReturnPath(
-          event,
-          event.params.organization,
-          event.params.workspace,
-        ),
+    /*
+     * The provider's sign-in, carrying this page as the return. A viewer with
+     * no usable login (signed out, expired) is sent there. A viewer whose
+     * login cannot open the workspace is offered it as "use another account"
+     * instead: redirecting a signed-in viewer would loop through sign-in.
+     */
+    const needsSignInUrl =
+      resolved.outOfWorkspaceUnauthenticated ||
+      code === "workspace_not_accessible";
+    const signInUrl = needsSignInUrl
+      ? provider.buildSignInUrl({
+          organizationSlug: event.params.organization,
+          workspaceSlug: event.params.workspace,
+          returnPath: workspaceRelativeReturnPath(
+            event,
+            event.params.organization,
+            event.params.workspace,
+          ),
+        })
+      : null;
+
+    if (resolved.outOfWorkspaceUnauthenticated && signInUrl) {
+      logServerEvent("workspace.layout.redirect_to_signin", {
+        org: event.params.organization,
+        slug: event.params.workspace,
+        target: signInUrl,
       });
-      if (signInUrl) {
-        logServerEvent("workspace.layout.redirect_to_signin", {
-          org: event.params.organization,
-          slug: event.params.workspace,
-          target: signInUrl,
-        });
-        throw redirect(307, signInUrl);
-      }
+      throw redirect(307, signInUrl);
     }
 
-    throw error(resolved.error.status, { message, code });
+    throw error(resolved.error.status, {
+      message,
+      code,
+      ...(signInUrl ? { signInUrl } : {}),
+    });
   }
 
   if (provider.mode !== "hosted")

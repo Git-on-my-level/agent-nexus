@@ -43,7 +43,15 @@
  * @typedef {{ kind: "found", workspace: CatalogEntry }} ResolveResultFound
  * @typedef {{ kind: "missing" }} ResolveResultMissing
  * @typedef {{ kind: "unauthenticated" }} ResolveResultUnauthenticated
- * @typedef {ResolveResultFound | ResolveResultMissing | ResolveResultUnauthenticated} ResolveResult
+ * @typedef {{ kind: "unavailable" }} ResolveResultUnavailable
+ * @typedef {ResolveResultFound | ResolveResultMissing | ResolveResultUnauthenticated | ResolveResultUnavailable} ResolveResult
+ *
+ * `missing` means the provider answered and this viewer cannot open the
+ * workspace: it may not exist, or the viewer may not have access. The two are
+ * deliberately one answer, so a viewer cannot probe which workspaces exist.
+ * `unauthenticated` means the viewer has no usable login and should sign in.
+ * `unavailable` means the provider could not answer (network failure, 5xx):
+ * a retryable condition that says nothing about the workspace.
  */
 
 /**

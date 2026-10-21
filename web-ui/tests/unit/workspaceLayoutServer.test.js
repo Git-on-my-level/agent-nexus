@@ -211,4 +211,73 @@ describe("workspace +layout.server.js", () => {
     expect(event.cookies.set).not.toHaveBeenCalled();
     expect(event.cookies.delete).not.toHaveBeenCalled();
   });
+  it("sends an unauthenticated viewer to sign-in whatever the miss code is", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: {
+        status: 404,
+        payload: {
+          error: {
+            code: "workspace_not_accessible",
+            message:
+              "You don't have access to this workspace, or it doesn't exist.",
+          },
+        },
+      },
+      outOfWorkspaceUnauthenticated: true,
+    });
+    const event = createEvent({
+      pathname: "/o/my-org/w/my-ws/r/card:abc",
+      outOfWorkspace: mockHostedProvider(),
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 307,
+      location:
+        "/hosted/signin?organization=my-org&workspace=my-ws&return_path=%2Fr%2Fcard%3Aabc",
+    });
+  });
+
+  it("offers sign-in with another account, without redirecting, when the login cannot open the workspace", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: {
+        status: 404,
+        payload: {
+          error: {
+            code: "workspace_not_accessible",
+            message:
+              "You don't have access to this workspace, or it doesn't exist.",
+          },
+        },
+      },
+      outOfWorkspaceUnauthenticated: false,
+    });
+    const event = createEvent({
+      pathname: "/o/my-org/w/my-ws/r/card:abc",
+      outOfWorkspace: mockHostedProvider(),
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 404,
+      body: {
+        code: "workspace_not_accessible",
+        signInUrl:
+          "/hosted/signin?organization=my-org&workspace=my-ws&return_path=%2Fr%2Fcard%3Aabc",
+      },
+    });
+  });
+
+  it("offers no sign-in link on a self-hosted miss", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: {
+        status: 404,
+        payload: {
+          error: { code: "workspace_not_configured", message: "missing" },
+        },
+      },
+      outOfWorkspaceUnauthenticated: false,
+    });
+    const thrown = await load(createEvent()).catch((err) => err);
+    expect(thrown.status).toBe(404);
+    expect(thrown.body.signInUrl).toBeUndefined();
+  });
 });

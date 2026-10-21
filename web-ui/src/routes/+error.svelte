@@ -18,6 +18,12 @@
   let status = $derived($page.status);
   let code = $derived(errorObj?.code);
   let workspaceName = $derived(errorObj?.workspace_name);
+  // Same-origin sign-in offered when the viewer's login cannot open the
+  // workspace. Only a root-relative path is followed, never another origin.
+  let signInHref = $derived.by(() => {
+    const raw = String(errorObj?.signInUrl ?? "").trim();
+    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "";
+  });
 
   let cpOrigin = $derived(
     String(data?.shellCapabilities?.publicOrigin ?? "").replace(/\/+$/, ""),
@@ -36,10 +42,22 @@
     workspace_not_ready: {
       heading: "Workspace is starting up",
       body: "The workspace exists but its compute backend isn't ready yet. This usually clears in a few seconds — try refreshing.",
+      useServerMessage: true,
     },
     workspace_not_configured: {
       heading: "Workspace not found",
-      body: "We couldn't locate this workspace in the control plane. Double-check the URL or pick another workspace from the dashboard.",
+      body: "This server has no workspace at this address. Double-check the URL.",
+      useServerMessage: true,
+    },
+    // Deliberately one answer for "does not exist" and "no access", so the
+    // page does not tell a viewer which workspaces exist.
+    workspace_not_accessible: {
+      heading: "You don't have access to this workspace, or it doesn't exist",
+      body: "Check the link, or sign in with an account that's a member of this workspace.",
+    },
+    workspace_lookup_unavailable: {
+      heading: "We couldn't open this workspace",
+      body: "Looking up the workspace failed. This is usually temporary — try again in a moment.",
     },
     workspace_route_incomplete: {
       heading: "Invalid workspace URL",
@@ -74,10 +92,11 @@
       return b ?? errorObj?.message ?? CALLBACK_COPY.UNKNOWN.body;
     }
     if (friendly) {
-      // Prefer the server-provided message when present so we surface, e.g.,
-      // the actual workspace status ("suspended", "provisioning") that the
-      // resolver attached.
-      return errorObj?.message || friendly.body;
+      // Codes whose server message carries detail (the workspace status, the
+      // setting to fix) prefer it; the rest keep the page's own copy.
+      return friendly.useServerMessage
+        ? errorObj?.message || friendly.body
+        : friendly.body;
     }
     return errorObj?.message ?? "An unexpected error occurred.";
   });
@@ -92,6 +111,7 @@
   // Show a primary "Try again" button for any code that's likely transient.
   let isTransient = $derived(
     code === "workspace_not_ready" ||
+      code === "workspace_lookup_unavailable" ||
       code === "session_exchange_unreachable" ||
       code === "workspace_core_unreachable",
   );
@@ -151,6 +171,29 @@
             href={dashboardHref || undefined}
             class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
             disabled={!dashboardHref}
+          >
+            Return to dashboard
+          </Button>
+        {/if}
+      </div>
+    {:else if code === "workspace_not_accessible"}
+      <div
+        class="mt-6 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-center"
+      >
+        {#if signInHref}
+          <Button
+            variant="primary"
+            href={signInHref}
+            class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          >
+            Switch account
+          </Button>
+        {/if}
+        {#if dashboardHref}
+          <Button
+            variant={signInHref ? "secondary" : "primary"}
+            href={dashboardHref}
+            class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
           >
             Return to dashboard
           </Button>
