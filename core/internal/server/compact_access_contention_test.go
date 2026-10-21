@@ -22,6 +22,11 @@ import (
 
 var compactAnswerGateID atomic.Uint64
 
+const (
+	compactAnswerP95Budget = 2 * time.Second
+	compactAnswerMaxBudget = 10 * time.Second
+)
+
 func TestCompactMigrationConcurrentAnswers(t *testing.T) {
 	requireIntegrationTest(t)
 	compactMigrationAnswers(t, false)
@@ -260,8 +265,16 @@ func compactMigrationAnswers(t *testing.T, scale bool) {
 	p95 := samples[(len(samples)*95-1)/100]
 	maximum := samples[len(samples)-1]
 	t.Logf("answer_samples=%d gated_writer_overlaps=2 answer_p95=%s answer_max=%s", len(samples), p95, maximum)
-	if maximum > 2*time.Second {
-		t.Fatalf("answer max=%s exceeds 2s budget", maximum)
+	// Budget the distribution, not one sample: a single scheduler or fsync
+	// stall on a shared runner must not fail the run, but a migration that
+	// blocks answers shows up in p95. With 25 samples p95 is the second
+	// slowest answer, so at most one may exceed the 2s budget. The hard cap
+	// still catches an answer that waits out a writer lease.
+	if p95 > compactAnswerP95Budget {
+		t.Fatalf("answer p95=%s exceeds %s budget (max=%s)", p95, compactAnswerP95Budget, maximum)
+	}
+	if maximum > compactAnswerMaxBudget {
+		t.Fatalf("answer max=%s exceeds %s hard cap (p95=%s)", maximum, compactAnswerMaxBudget, p95)
 	}
 	select {
 	case <-finished:

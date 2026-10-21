@@ -31,6 +31,11 @@ func TestCompactAccessRetiredCleanupResumesWithoutChangingProof(t *testing.T) {
 	if err := w.db.QueryRow(`SELECT count(*) FROM resource_access_unstable_edges`).Scan(&n); err != nil || n != 450 {
 		t.Fatalf("retired rows=%d err=%v", n, err)
 	}
+	// Certification and cutover share this adaptive cap, and a slow runner can
+	// halve it when one of their chunks overruns the lease. Restore the full
+	// cap so the next chunk's bound is exactly the requested 200 rows. A lease
+	// overrun during this chunk only lowers the cap for later chunks.
+	w.compactAccessBatch.limit.Store(200)
 	if done, err := w.maintainCompactAccessRetiredBatch(context.Background()); err != nil || done {
 		t.Fatalf("first cleanup: %v %v", done, err)
 	}
