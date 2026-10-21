@@ -87,14 +87,17 @@ it.each([false, true])(
   },
 );
 
-it("never follows an off-origin sign-in link", () => {
+it.each([
+  "/\\evil.example/signin",
+  "\\\\evil.example/signin",
+  "/%5Cevil.example/signin",
+  "//evil.example/signin",
+  "https://evil.example/signin",
+  "javascript:alert(1)",
+])("never follows an off-origin sign-in link %j", (signInUrl) => {
   pageState.current = {
     status: 404,
-    error: {
-      code: "workspace_not_accessible",
-      message: "x",
-      signInUrl: "//evil.example/signin",
-    },
+    error: { code: "workspace_not_accessible", message: "x", signInUrl },
     url: new URL("https://example.com/o/acme/w/omi"),
   };
   const { queryByRole } = render(ErrorPage, { data: {} });

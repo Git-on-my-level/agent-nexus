@@ -280,4 +280,59 @@ describe("workspace +layout.server.js", () => {
     expect(thrown.status).toBe(404);
     expect(thrown.body.signInUrl).toBeUndefined();
   });
+  it.each([
+    "/\\evil.example/signin",
+    "\\\\evil.example/signin",
+    "/%5Cevil.example/signin",
+    "//evil.example/signin",
+    "https://evil.example/signin",
+    "javascript:alert(1)",
+  ])(
+    "drops a provider sign-in URL that would leave this origin: %j",
+    async (providerUrl) => {
+      workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+        error: {
+          status: 404,
+          payload: {
+            error: { code: "workspace_not_accessible", message: "x" },
+          },
+        },
+        outOfWorkspaceUnauthenticated: false,
+      });
+      const event = createEvent({
+        outOfWorkspace: mockHostedProvider({
+          buildSignInUrl: vi.fn(() => providerUrl),
+        }),
+      });
+      const thrown = await load(event).catch((err) => err);
+      expect(thrown.status).toBe(404);
+      expect(thrown.body.signInUrl).toBeUndefined();
+    },
+  );
+  it.each([
+    ["/o/My-Org/w/my-ws/r/card:abc", "My-Org", "my-ws"],
+    ["/o/my-org/w/My-WS/r/card:abc", "my-org", "My-WS"],
+    ["/o/MY-ORG/w/MY-WS/r/card:abc", "MY-ORG", "MY-WS"],
+  ])(
+    "keeps return_path relative to the workspace for %s",
+    async (pathname, organization, workspace) => {
+      workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+        error: {
+          status: 404,
+          payload: {
+            error: { code: "workspace_not_accessible", message: "x" },
+          },
+        },
+        outOfWorkspaceUnauthenticated: true,
+      });
+      const event = {
+        ...createEvent({ pathname, outOfWorkspace: mockHostedProvider() }),
+        params: { organization, workspace },
+      };
+      const thrown = await load(event).catch((err) => err);
+      expect(thrown.status).toBe(307);
+      const target = new URL(thrown.location, "https://ui.example.test");
+      expect(target.searchParams.get("return_path")).toBe("/r/card:abc");
+    },
+  );
 });

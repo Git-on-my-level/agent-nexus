@@ -5,6 +5,7 @@
   import { technicalTroubleshootingEnabled } from "$lib/extensions/supportLink.js";
 
   import Button from "$lib/components/Button.svelte";
+  import { sameOriginAppPath } from "$lib/workspaceLaunchFlow.js";
   import {
     CALLBACK_COPY,
     CALLBACK_ERROR_SURFACE_CODES,
@@ -19,11 +20,10 @@
   let code = $derived(errorObj?.code);
   let workspaceName = $derived(errorObj?.workspace_name);
   // Same-origin sign-in offered when the viewer's login cannot open the
-  // workspace. Only a root-relative path is followed, never another origin.
-  let signInHref = $derived.by(() => {
-    const raw = String(errorObj?.signInUrl ?? "").trim();
-    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "";
-  });
+  // workspace. Anything that would resolve to another origin is dropped.
+  let signInHref = $derived(
+    sameOriginAppPath(errorObj?.signInUrl, $page.url?.origin),
+  );
 
   let cpOrigin = $derived(
     String(data?.shellCapabilities?.publicOrigin ?? "").replace(/\/+$/, ""),

@@ -4,6 +4,7 @@ import {
   buildSignInPath,
   confineWorkspaceReturnPath,
   readLaunchParams,
+  sameOriginAppPath,
   sanitizeReturnPath,
 } from "../../src/lib/workspaceLaunchFlow.js";
 
@@ -174,5 +175,38 @@ describe("confineWorkspaceReturnPath", () => {
         returnPath: "https://evil.test/x",
       }),
     ).toBe("/o/acme/w/alpha");
+  });
+});
+
+describe("sameOriginAppPath", () => {
+  const origin = "https://app.example.test";
+
+  it("keeps a same-origin path and its encoded query", () => {
+    expect(
+      sameOriginAppPath(
+        "/signin?organization=acme&return_path=%2Fr%2Fcard%3Aabc",
+        origin,
+      ),
+    ).toBe("/signin?organization=acme&return_path=%2Fr%2Fcard%3Aabc");
+  });
+
+  it.each([
+    "/\\evil.example/signin",
+    "\\\\evil.example/signin",
+    "/%5Cevil.example/signin",
+    "/%5cevil.example/signin",
+    "//evil.example/signin",
+    "https://evil.example/signin",
+    "javascript:alert(1)",
+    "/\tevil.example",
+    "signin",
+    "",
+    null,
+  ])("rejects %j", (value) => {
+    expect(sameOriginAppPath(value, origin)).toBe("");
+  });
+
+  it("rejects everything when the origin cannot be parsed", () => {
+    expect(sameOriginAppPath("/signin", "")).toBe("");
   });
 });
