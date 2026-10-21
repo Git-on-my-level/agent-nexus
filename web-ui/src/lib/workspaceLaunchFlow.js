@@ -164,6 +164,35 @@ export function sanitizeReturnPath(value, fallback = "/") {
 }
 
 /**
+ * A link target that must stay on this origin, or "" when it would not.
+ *
+ * {@link sanitizeReturnPath} is the separator check (backslashes, encoded
+ * separators, protocol-relative and absolute forms, schemes). The survivor is
+ * then resolved the way a browser will resolve it and required to keep the
+ * given origin, so the guarantee does not rest on the sanitizer alone.
+ *
+ * @param {unknown} value
+ * @param {string} origin the origin the link is rendered on
+ * @returns {string} the normalized same-origin path and query, or ""
+ */
+export function sameOriginAppPath(value, origin) {
+  const candidate = String(value ?? "").trim();
+  if (!candidate || sanitizeReturnPath(candidate, "/") !== candidate) {
+    return "";
+  }
+  try {
+    const base = new URL(String(origin ?? "").trim());
+    const resolved = new URL(candidate, base);
+    if (resolved.origin !== base.origin) {
+      return "";
+    }
+    return `${resolved.pathname}${resolved.search}`;
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Where inside a workspace a caller-supplied return path may send the viewer.
  *
  * {@link sanitizeReturnPath} rejects the forms that carry a separator, but the

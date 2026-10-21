@@ -7,7 +7,10 @@ import {
   verifyCoreSchemaVersion,
 } from "$lib/anxCoreClient";
 import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
-import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
+import {
+  sameOriginAppPath,
+  sanitizeReturnPath,
+} from "$lib/workspaceLaunchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession.js";
 import { logServerEvent } from "$lib/server/devLog";
 import {
@@ -31,7 +34,7 @@ import {
 } from "$lib/server/workspaceResolver";
 import {
   WORKSPACE_HEADER,
-  stripWorkspacePath,
+  stripBasePath,
   workspaceCompositeKey,
 } from "$lib/workspacePaths";
 
@@ -90,12 +93,21 @@ function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
 
-function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
-  const appPath = stripWorkspacePath(
-    event.url.pathname,
-    organizationSlug,
-    workspaceSlug,
-  );
+/**
+ * The page path below this workspace, taken from the request's own segments.
+ * The route matched `/o/<org>/w/<ws>`, so those four segments are the prefix
+ * whatever their spelling: comparing against the normalized slugs would miss
+ * `/o/Acme/w/...` and return the whole path, doubling the prefix on return.
+ */
+function workspaceRelativeAppPath(event) {
+  const pathname = stripBasePath(event.url.pathname);
+  const prefix = /^\/o\/[^/]+\/w\/[^/]+(?=\/|$)/.exec(pathname);
+  if (!prefix) return pathname;
+  return pathname.slice(prefix[0].length) || "/";
+}
+
+function workspaceRelativeReturnPath(event) {
+  const appPath = workspaceRelativeAppPath(event);
   if (appPath === "/login") {
     return sanitizeReturnPath(
       event.url.searchParams.get("return_to") ??
@@ -135,31 +147,39 @@ export async function load(event) {
       { level: "warn" },
     );
 
-    if (
-      code === "workspace_not_configured" &&
-      provider.mode === "hosted" &&
-      resolved.outOfWorkspaceUnauthenticated
-    ) {
-      const signInUrl = provider.buildSignInUrl({
-        organizationSlug: event.params.organization,
-        workspaceSlug: event.params.workspace,
-        returnPath: workspaceRelativeReturnPath(
-          event,
-          event.params.organization,
-          event.params.workspace,
-        ),
+    /*
+     * The provider's sign-in, carrying this page as the return. A viewer with
+     * no usable login (signed out, expired) is sent there. A viewer whose
+     * login cannot open the workspace is offered it as "use another account"
+     * instead: redirecting a signed-in viewer would loop through sign-in.
+     */
+    const needsSignInUrl =
+      resolved.outOfWorkspaceUnauthenticated ||
+      code === "workspace_not_accessible";
+    const signInUrl = needsSignInUrl
+      ? provider.buildSignInUrl({
+          organizationSlug: event.params.organization,
+          workspaceSlug: event.params.workspace,
+          returnPath: workspaceRelativeReturnPath(event),
+        })
+      : null;
+
+    if (resolved.outOfWorkspaceUnauthenticated && signInUrl) {
+      logServerEvent("workspace.layout.redirect_to_signin", {
+        org: event.params.organization,
+        slug: event.params.workspace,
+        target: signInUrl,
       });
-      if (signInUrl) {
-        logServerEvent("workspace.layout.redirect_to_signin", {
-          org: event.params.organization,
-          slug: event.params.workspace,
-          target: signInUrl,
-        });
-        throw redirect(307, signInUrl);
-      }
+      throw redirect(307, signInUrl);
     }
 
-    throw error(resolved.error.status, { message, code });
+    // The page renders this as a link, so only a same-origin target travels.
+    const switchAccountUrl = sameOriginAppPath(signInUrl, event.url.origin);
+    throw error(resolved.error.status, {
+      message,
+      code,
+      ...(switchAccountUrl ? { signInUrl: switchAccountUrl } : {}),
+    });
   }
 
   if (provider.mode !== "hosted")

@@ -211,4 +211,128 @@ describe("workspace +layout.server.js", () => {
     expect(event.cookies.set).not.toHaveBeenCalled();
     expect(event.cookies.delete).not.toHaveBeenCalled();
   });
+  it("sends an unauthenticated viewer to sign-in whatever the miss code is", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: {
+        status: 404,
+        payload: {
+          error: {
+            code: "workspace_not_accessible",
+            message:
+              "You don't have access to this workspace, or it doesn't exist.",
+          },
+        },
+      },
+      outOfWorkspaceUnauthenticated: true,
+    });
+    const event = createEvent({
+      pathname: "/o/my-org/w/my-ws/r/card:abc",
+      outOfWorkspace: mockHostedProvider(),
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 307,
+      location:
+        "/hosted/signin?organization=my-org&workspace=my-ws&return_path=%2Fr%2Fcard%3Aabc",
+    });
+  });
+
+  it("offers sign-in with another account, without redirecting, when the login cannot open the workspace", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: {
+        status: 404,
+        payload: {
+          error: {
+            code: "workspace_not_accessible",
+            message:
+              "You don't have access to this workspace, or it doesn't exist.",
+          },
+        },
+      },
+      outOfWorkspaceUnauthenticated: false,
+    });
+    const event = createEvent({
+      pathname: "/o/my-org/w/my-ws/r/card:abc",
+      outOfWorkspace: mockHostedProvider(),
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 404,
+      body: {
+        code: "workspace_not_accessible",
+        signInUrl:
+          "/hosted/signin?organization=my-org&workspace=my-ws&return_path=%2Fr%2Fcard%3Aabc",
+      },
+    });
+  });
+
+  it("offers no sign-in link on a self-hosted miss", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: {
+        status: 404,
+        payload: {
+          error: { code: "workspace_not_configured", message: "missing" },
+        },
+      },
+      outOfWorkspaceUnauthenticated: false,
+    });
+    const thrown = await load(createEvent()).catch((err) => err);
+    expect(thrown.status).toBe(404);
+    expect(thrown.body.signInUrl).toBeUndefined();
+  });
+  it.each([
+    "/\\evil.example/signin",
+    "\\\\evil.example/signin",
+    "/%5Cevil.example/signin",
+    "//evil.example/signin",
+    "https://evil.example/signin",
+    "javascript:alert(1)",
+  ])(
+    "drops a provider sign-in URL that would leave this origin: %j",
+    async (providerUrl) => {
+      workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+        error: {
+          status: 404,
+          payload: {
+            error: { code: "workspace_not_accessible", message: "x" },
+          },
+        },
+        outOfWorkspaceUnauthenticated: false,
+      });
+      const event = createEvent({
+        outOfWorkspace: mockHostedProvider({
+          buildSignInUrl: vi.fn(() => providerUrl),
+        }),
+      });
+      const thrown = await load(event).catch((err) => err);
+      expect(thrown.status).toBe(404);
+      expect(thrown.body.signInUrl).toBeUndefined();
+    },
+  );
+  it.each([
+    ["/o/My-Org/w/my-ws/r/card:abc", "My-Org", "my-ws"],
+    ["/o/my-org/w/My-WS/r/card:abc", "my-org", "My-WS"],
+    ["/o/MY-ORG/w/MY-WS/r/card:abc", "MY-ORG", "MY-WS"],
+  ])(
+    "keeps return_path relative to the workspace for %s",
+    async (pathname, organization, workspace) => {
+      workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+        error: {
+          status: 404,
+          payload: {
+            error: { code: "workspace_not_accessible", message: "x" },
+          },
+        },
+        outOfWorkspaceUnauthenticated: true,
+      });
+      const event = {
+        ...createEvent({ pathname, outOfWorkspace: mockHostedProvider() }),
+        params: { organization, workspace },
+      };
+      const thrown = await load(event).catch((err) => err);
+      expect(thrown.status).toBe(307);
+      const target = new URL(thrown.location, "https://ui.example.test");
+      expect(target.searchParams.get("return_path")).toBe("/r/card:abc");
+    },
+  );
 });
