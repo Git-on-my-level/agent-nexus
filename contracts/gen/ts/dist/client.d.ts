@@ -90,6 +90,14 @@ export declare class AnxClient {
     asksGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksStream(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksSubscribe(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    attentionAgentGet(options?: RequestOptions): Promise<InvokeResult>;
+    attentionAgentSet(options?: RequestOptions): Promise<InvokeResult>;
+    attentionChanges(options?: RequestOptions): Promise<InvokeResult>;
+    attentionFeedbackCreate(options?: RequestOptions): Promise<InvokeResult>;
+    attentionFeedbackList(options?: RequestOptions): Promise<InvokeResult>;
+    attentionItems(options?: RequestOptions): Promise<InvokeResult>;
+    attentionPlace(options?: RequestOptions): Promise<InvokeResult>;
+    attentionVisits(options?: RequestOptions): Promise<InvokeResult>;
     authAccessRequestsApprove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAccessRequestsDeny(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAccessRequestsList(options?: RequestOptions): Promise<InvokeResult>;

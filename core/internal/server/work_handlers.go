@@ -67,7 +67,7 @@ func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, 409, "conflict", "card handle is already reserved; choose another handle")
 	case errors.Is(err, primitives.ErrConflict):
 		writeError(w, 409, "conflict", "work changed or idempotency key conflicts; reload before retry")
-	case errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidCursor):
+	case errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidCursor), errors.Is(err, primitives.ErrInvalidResourceRef):
 		writeError(w, 400, "invalid_request", err.Error())
 	default:
 		logUnmappedWorkError(w, r, err)

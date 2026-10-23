@@ -2177,6 +2177,30 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
+	registerRoute("/attention/placements", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleAttentionPlace(w, r, opts) })
+	registerRoute("/attention/items", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleAttentionItems(w, r, opts) })
+	registerRoute("/attention/visits", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleAttentionVisit(w, r, opts) })
+	registerRoute("/attention/changes", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleAttentionChanges(w, r, opts) })
+	registerRoute("/attention/agent", func(r *http.Request) routeAccessRequirement {
+		switch r.Method {
+		case http.MethodGet:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		case http.MethodPut:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, mutation: routeMutationBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) { handleAttentionAgent(w, r, opts) })
+	registerRoute("/attention/feedback", func(r *http.Request) routeAccessRequirement {
+		switch r.Method {
+		case http.MethodGet:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		case http.MethodPost:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, mutation: routeMutationBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) { handleAttentionFeedback(w, r, opts) })
 	registerRoute("/brief", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetBriefV1(w, r, opts) })
 	registerRoute("/overview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetOverview(w, r, opts) })
 	registerRoute("/overview/changes", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleOverviewChanges(w, r, opts) })

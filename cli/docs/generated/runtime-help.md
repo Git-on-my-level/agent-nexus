@@ -36,6 +36,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth` (group): Inspect the enrolled host and derived-agent identity
 - `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
 - `boards` (group): Track active work with boards, columns, and cards
+- `attention` (group): Place updates and read human feedback
 - `overview` (group): Read the executive Overview projection shown in the web UI
 - `workspace` (group): Summarize workspace boards and counts for first-run orientation
 - `docs` (group): Create and revise durable context and institutional knowledge
@@ -49,6 +50,12 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `ref-edges` (group): Diagnostic typed-ref edge inspection
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
+- `attention place` (command): Place a subject on a principal attention surface
+- `attention items` (command): Read effective attention placements and mandatory human asks
+- `attention changes` (command): Read dashboard changes without moving its visit marker
+- `attention agent get` (command): Read the designated workspace attention agent
+- `attention agent set` (command): Set or clear the designated attention agent as a human
+- `attention feedback list` (command): Read human attention feedback for workspace agents
 - `runs list` (command): List launcher runs
 - `runs get` (command): Get one run
 - `host list` (command): List workspace hosts
@@ -1286,6 +1293,30 @@ Global flags:
 Tip: `anx help <command path>` for full command-level generated details.
 ```
 
+## `attention`
+
+Place updates and read human feedback
+
+```text
+Generated Help: attention
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
+```
+
 ## `overview`
 
 Read the executive Overview projection shown in the web UI
@@ -1635,6 +1666,150 @@ Reference commands:
   meta commands   Inspect generated command metadata.
   meta concepts   Inspect generated concepts metadata.
   meta ops        Inspect operational metadata helpers.
+```
+
+## `attention place`
+
+Place a subject on a principal attention surface
+
+```text
+Generated Help: attention place
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
+```
+
+## `attention items`
+
+Read effective attention placements and mandatory human asks
+
+```text
+Generated Help: attention items
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
+```
+
+## `attention changes`
+
+Read dashboard changes without moving its visit marker
+
+```text
+Generated Help: attention changes
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
+```
+
+## `attention agent get`
+
+Read the designated workspace attention agent
+
+```text
+Generated Help: attention agent get
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
+```
+
+## `attention agent set`
+
+Set or clear the designated attention agent as a human
+
+```text
+Generated Help: attention agent set
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
+```
+
+## `attention feedback list`
+
+Read human attention feedback for workspace agents
+
+```text
+Generated Help: attention feedback list
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page.
 ```
 
 ## `runs list`
@@ -3147,7 +3322,7 @@ Inputs:
   - body `event.provenance.notes` (string)
   - body `event.ref` (typed_ref)
   - body `event.thread_ref` (string)
-  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information

@@ -250,6 +250,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					if p.Path == "/stream/agent-notification-receipts" {
 						path += "?thread_id=" + threadID
 					}
+					if path == "/attention/changes" {
+						path += "?scope_ref=builtin:initiatives"
+					}
 					if path == "/docs/search" {
 						path += "?q=Confidential"
 					}
@@ -432,6 +435,12 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"actor_id": actor, "group_ref": "thread:" + thread}
 	case "/workspace/dashboard/pins":
 		return map[string]any{"document_refs": []string{"document:" + doc}}
+	case "/attention/placements":
+		return map[string]any{"subject_ref": "card:" + card, "for": "actor:" + actor, "to": "watch", "reason": "attempt"}
+	case "/attention/feedback":
+		return map[string]any{"subject_ref": "card:" + card, "surface": "watch", "signal": "not_relevant"}
+	case "/attention/visits":
+		return map[string]any{"scope_ref": "document:" + doc}
 	case "/workspace/dashboard":
 		return map[string]any{"actor_id": actor, "document_ref": "document:" + doc}
 	case "/agent-inbox/answers/read":

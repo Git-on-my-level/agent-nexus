@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `262`
+- Command operations: `270`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `215`
+- Missing recommended examples: `223`
 
 ## Baseline gap counts
 
@@ -175,6 +175,14 @@ Generated from `contracts/anx-openapi.yaml`.
 - `asks.get` `GET /asks/{ask_id}`
 - `asks.stream` `GET /stream/asks/{ask_id}`
 - `asks.subscribe` `POST /asks/{ask_id}/subscriptions`
+- `attention.agent.get` `GET /attention/agent`
+- `attention.agent.set` `PUT /attention/agent`
+- `attention.changes` `GET /attention/changes`
+- `attention.feedback.create` `POST /attention/feedback`
+- `attention.feedback.list` `GET /attention/feedback`
+- `attention.items` `GET /attention/items`
+- `attention.place` `POST /attention/placements`
+- `attention.visits` `POST /attention/visits`
 - `auth.access-requests.approve` `POST /auth/access-requests/{request_id}/approve`
 - `auth.access-requests.deny` `POST /auth/access-requests/{request_id}/deny`
 - `auth.access-requests.list` `GET /auth/access-requests`

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `36`
+- Concepts: `37`
 
 ## `actors`
 
@@ -54,6 +54,19 @@ Generated from `contracts/anx-openapi.yaml`.
   - `artifacts.restore`
   - `artifacts.trash`
   - `artifacts.unarchive`
+
+## `attention`
+
+- Commands: `8`
+- Command IDs:
+  - `attention.agent.get`
+  - `attention.agent.set`
+  - `attention.changes`
+  - `attention.feedback.create`
+  - `attention.feedback.list`
+  - `attention.items`
+  - `attention.place`
+  - `attention.visits`
 
 ## `audit`
 
@@ -124,10 +137,18 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `65`
+- Commands: `73`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
+  - `attention.agent.get`
+  - `attention.agent.set`
+  - `attention.changes`
+  - `attention.feedback.create`
+  - `attention.feedback.list`
+  - `attention.items`
+  - `attention.place`
+  - `attention.visits`
   - `boards.cards.batch_add`
   - `boards.cards.get`
   - `boards.cards.list`

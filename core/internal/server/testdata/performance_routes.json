@@ -1490,5 +1490,50 @@
     "reason": "At most 12 principal pins, keyed by (principal_id,position), followed by scoped document primary-key and revision reads.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/attention/agent",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Indexed principal-local bounded attention read; includes authentication and scoped canonical event visibility.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/attention/changes",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Indexed principal-local bounded attention read; includes authentication and scoped canonical event visibility.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000,
+    "query": "scope_ref=builtin:initiatives"
+  },
+  {
+    "method": "GET",
+    "path": "/attention/feedback",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Indexed principal-local bounded attention read; includes authentication and scoped canonical event visibility.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/attention/items",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Indexed principal-local bounded attention read; includes authentication and scoped canonical event visibility.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

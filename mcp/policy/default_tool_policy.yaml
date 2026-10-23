@@ -790,6 +790,30 @@ commands:
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
 
+  "attention.agent.get":
+    classification: exposed_read
+    reason: "Read the workspace's human-designated attention agent."
+  "attention.agent.set":
+    classification: unsupported_interactive
+    reason: "Only a human may designate the workspace attention agent."
+  "attention.changes":
+    classification: exposed_read
+    reason: "Bounded principal-scoped dashboard changes without advancing visit markers."
+  "attention.feedback.create":
+    classification: unsupported_interactive
+    reason: "Attention feedback records human judgment and requires a human principal."
+  "attention.feedback.list":
+    classification: exposed_read
+    reason: "Workspace feedback available to agents under canonical resource visibility."
+  "attention.items":
+    classification: exposed_read
+    reason: "Bounded recipient-scoped attention placements and mandatory human asks."
+  "attention.place":
+    classification: exposed_write
+    reason: "Reversible attention placement with a reason and optional replay key."
+  "attention.visits":
+    classification: exposed_write
+    reason: "Advance only the authenticated agent's own dashboard visit marker."
   "overview.changes":
     classification: exposed_read
     reason: "Principal-scoped bounded visit digest; reads without advancing the baseline."

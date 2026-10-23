@@ -490,5 +490,21 @@
   {
     "key": "POST /secrets/{secret_id}/reveal",
     "milliseconds": 25359
+  },
+  {
+    "key": "GET /attention/agent",
+    "milliseconds": 10000
+  },
+  {
+    "key": "GET /attention/changes",
+    "milliseconds": 10000
+  },
+  {
+    "key": "GET /attention/feedback",
+    "milliseconds": 10000
+  },
+  {
+    "key": "GET /attention/items",
+    "milliseconds": 10000
   }
 ]

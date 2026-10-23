@@ -1175,3 +1175,25 @@ go test -C core ./internal/server -run '^TestWatch' -count=1 -v
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 -parallel=1 ./internal/server -run '^TestPerformanceWatch(CollectionBudget|AgentCollectionAdmission)$' -count=1 -v
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Attention records
+
+Attention reads admit at most 101 candidates for 100-item pages. Recipient/subject
+routing seeks the `attention_subjects` primary key, and winner selection uses
+one preferred-placer primary-key seek and one newest-placer seek through
+`idx_attention_placements_latest` per admitted subject. No all-placer window or
+workspace-wide sort runs on reads. Asks seek
+`idx_attention_asks_recipient(recipient,state,ask_id)` before scoped canonical
+event joins. Feedback uses `idx_attention_feedback_page` or
+`idx_attention_feedback_for_page`; admission precedes privacy filtering. Empty
+pages retain encrypted, reader-bound continuations, so dense denied prefixes do
+not require unbounded refill work. Titles and subject timestamps hydrate in
+bounded batches. Default work uses the existing bounded work cursor.
+
+Visit baselines seek `(principal_id,scope_ref)` on `overview_visits`. Builtin
+snapshots admit at most 50 recent work subjects; document snapshots reuse bounded
+report queries and retain at most 100 rendered subjects. Changes compare bounded
+in-memory snapshots, never workspace history. Loop goal values use the existing
+bounded loop facts/series readers. Visit writes compare timestamps atomically;
+legacy markers are migrated by migration 114 to `builtin:overview`. New read budgets are in
+`performance_routes.json`; no existing budget or plan allowance is widened.

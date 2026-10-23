@@ -74,6 +74,7 @@
       "values": [
         "agent_notification_dismissed",
         "agent_notification_read",
+        "attention_feedback",
         "board_created",
         "board_updated",
         "card_archived",
@@ -174,6 +175,7 @@
   },
   "event_groups": {
     "attention": [
+      "attention_feedback",
       "human_attention_requested",
       "human_attention_responded",
       "human_attention_withdrawn"
@@ -227,6 +229,9 @@
     ],
     "agent_notification_read": [
       "notifications"
+    ],
+    "attention_feedback": [
+      "attention"
     ],
     "board_created": [
       "boards"

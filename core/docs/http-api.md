@@ -813,3 +813,7 @@ Presence never grants authorization. Host proof replay/skew/key revocation rules
 remain in force; paths, callback commands, prompts, errors and cross-workspace
 identity are never heartbeat fields. Costs/indexes and native budgets are in
 [performance.md](performance.md#host-bridge-presence-migration-107).
+
+Attention placement, human feedback, and per-dashboard visit endpoints are
+specified in [attention records](../../docs/attention.md). The API stores records
+and enforces open-human-ask delivery to Decide; it runs no models.

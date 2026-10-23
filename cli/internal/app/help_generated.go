@@ -41,6 +41,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
+	{Path: "attention", Description: "Place updates and read human feedback"},
 	{Path: "overview", Description: "Read the executive Overview projection shown in the web UI"},
 	{Path: "workspace", Description: "Summarize workspace boards and counts for first-run orientation"},
 	{Path: "docs", Description: "Create and revise durable context and institutional knowledge"},
@@ -1382,6 +1383,10 @@ Core commands:
 
 Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
 	}
+	switch topic {
+	case "attention", "attention place", "attention items", "attention changes", "attention agent", "attention agent get", "attention agent set", "attention feedback", "attention feedback list":
+		return "Generated Help: " + topic + "\n\n" + attentionHelp, true
+	}
 	if topic == "overview" {
 		return "Executive Overview\n\nUsage: anx overview [--json]\n       anx overview changes [--json]\n\nChanges reads the digest without advancing the viewer visit baseline.\n\nReads Needs you, the selected dashboard, active initiatives and work details from the same core projection as the web UI.\n", true
 	}
@@ -2095,6 +2100,9 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
+		{command: "attention", valid: []string{"place", "items", "changes"}},
+		{command: "attention agent", valid: []string{"get", "set"}},
+		{command: "attention feedback", valid: []string{"list"}},
 		integrationsSpec,
 		{command: "series", valid: []string{"list", "show", "query", "push"}},
 		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},

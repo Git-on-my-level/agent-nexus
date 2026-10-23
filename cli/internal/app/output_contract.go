@@ -99,6 +99,12 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "api" {
 		return "external_side_effect"
 	}
+	if strings.HasPrefix(command, "attention ") {
+		if command == "attention place" || command == "attention agent set" || command == "attention feedback create" || command == "attention visits" {
+			return "remote_coordination_write"
+		}
+		return "read_only"
+	}
 	if command == "workspace dashboard set" || command == "workspace dashboard pins set" {
 		return "remote_coordination_write"
 	}
