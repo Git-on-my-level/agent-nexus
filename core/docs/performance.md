@@ -1136,7 +1136,9 @@ annotated candidates through the partial `idx_brief_loop_annotated_recent` index
 project filters use `idx_work_metadata_project`. Admission caps are 200/50/100
 for initiatives/loops/agents; displayed rows cap at 48. Plan and loop enrichment
 reuse the existing bounded batches. Agent project filtering occurs inside the
-100-agent cohort and preserves its truncation marker. Agent stuck state uses
+100-agent cohort and preserves its truncation marker. Principal-kind admission
+seeks `idx_agents_collection_roster` before username ordering and the cohort
+limit; unrelated human principals do not add scan work. Agent stuck state uses
 per-admitted-actor `idx_brief_asks_requester` existence probes, avoiding the
 Overview roster's workspace-wide ask window. Actor labels are hydrated in batches.
 
@@ -1147,7 +1149,7 @@ history. Their grouping has at most fourteen buckets per admitted row. Scoped
 activity admits at most 201 events per explicit backing thread or subject key,
 then sorts the bounded union before the existing 200-event budget. The subject
 expression index `idx_events_report_subject_ts` covers asks posted outside the
-subject's backing thread. Migration 113 installs that index and the pin table.
+subject's backing thread. Migration 113 installs those indexes and the pin table.
 
 Pin reads seek `(principal_id,position)` for at most twelve IDs, then batch the
 scoped document/revision/artifact heads by primary key. At most twelve report
@@ -1163,8 +1165,13 @@ are the acceptance gate. A separate collection fixture includes 4,096 unrelated
 cards and tests both principals. No existing performance budget or plan exception
 is widened.
 
+Agent admission also tests 22 agents after 4,096 unrelated human principals.
+The username scan used 62,535 VM steps; `idx_agents_collection_roster` reduces
+the same collection read to 5,124 steps and an indexed principal-kind SEARCH.
+That regression keeps the standard 50,000-step ceiling.
+
 ```sh
 go test -C core ./internal/server -run '^TestWatch' -count=1 -v
-ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 -parallel=1 ./internal/server -run '^TestPerformanceWatchCollectionBudget$' -count=1 -v
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 -parallel=1 ./internal/server -run '^TestPerformanceWatch(CollectionBudget|AgentCollectionAdmission)$' -count=1 -v
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testutil/perfguard"
 	reports "agent-nexus-visualreport"
@@ -219,5 +220,62 @@ func TestPerformanceWatchCollectionBudget(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestPerformanceWatchAgentCollectionAdmission(t *testing.T) {
+	requirePerformanceTest(t)
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	// Humans sort before agents: a return-row LIMIT alone cannot bound a scan
+	// through unrelated principal kinds.
+	if _, err := h.workspace.DB().Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<4096) INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) SELECT printf('human-%05d',i),printf('a-human-%05d',i),printf('human-actor-%05d',i),'now','now','{"principal_kind":"human"}' FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.workspace.DB().Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<22) INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) SELECT printf('agent-%05d',i),printf('z-agent-%05d',i),printf('agent-actor-%05d',i),'now','now','{"principal_kind":"agent"}' FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	pool, capture, err := perfguard.Open("file:" + h.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	opts := handlerOptions{
+		primitiveStore: primitives.NewTestStore(pool, h.workspace.Layout().ArtifactContentDir),
+		runStore:       commandcenter.NewStore(pool, commandcenter.SQLIdentities{DB: pool}),
+	}
+	req := httptest.NewRequest("GET", "/docs/watch/report", nil).WithContext(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "viewer"}))
+	capture.Start()
+	_, rows := materializeReportPanels(req, opts, []reports.Panel{{ID: "agents", Type: "live-collection", Query: reports.Query{Collection: "agents", Limit: 24, GroupBy: "none"}}})
+	statements, queries, returned := capture.Stop()
+	work := capture.Work()
+	if err := capture.WorkError(); err != nil {
+		t.Fatal(err)
+	}
+	if rows[0]["status"] != "ok" || reportMap(rows[0]["data"])["has_more"] != false {
+		t.Fatal(rows)
+	}
+	groups := reportMap(rows[0]["data"])["groups"].([]map[string]any)
+	if len(groups) != 1 || len(groups[0]["rows"].([]map[string]any)) != 22 {
+		t.Fatal(groups)
+	}
+	t.Logf("22 agents +4096 unrelated humans: queries=%d rows=%d vm=%d", queries, returned, work.VMSteps)
+	indexedAdmission := false
+	for _, statement := range statements {
+		if strings.Contains(statement.SQL, "FROM agents a") {
+			details, err := perfguard.Explain(ctx, h.workspace.DB(), statement)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan := strings.Join(details, "\n")
+			t.Logf("agent admission plan:\n%s", plan)
+			indexedAdmission = strings.Contains(plan, "SEARCH a USING INDEX idx_agents_collection_roster") || strings.Contains(plan, "SEARCH _row USING INDEX idx_agents_collection_roster")
+		}
+	}
+	if !indexedAdmission {
+		t.Error("agent admission must seek principal kind through idx_agents_collection_roster")
+	}
+	if queries > 50 || returned > 512 || work.VMSteps > 50000 {
+		t.Fatalf("agent collection exceeded standard VM budget: queries=%d rows=%d vm=%d", queries, returned, work.VMSteps)
 	}
 }

@@ -3401,7 +3401,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "18eb7c5ea6d9f5292c91f2085aeb58204242d89f94af9747a28726ab7c38e920",
+    "../storage/migrations.go:migrations": "52fc00c2c1af18e3c1c2910525bd67ab00067fe7ecc6ca811b6a9570d013ed1e",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
