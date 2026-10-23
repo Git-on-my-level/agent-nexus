@@ -15,14 +15,15 @@ SCA-781 permits reviewable stages. The existing changes cover the human-attentio
 response path, the production timeout trigger, shared discussion composers, Inbox PM answers, Ask PM chat attachment uploads, task creation and document authoring. It does not claim that every UI
 mutation already satisfies the invariant.
 
-| Stage                     | Coverage                                                                                                              | Acceptance gate                                                                                                                                                 |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inbox response foundation | Freeform responses, suggested picks, acknowledgement/access/review outcomes, and context notes in both Inbox surfaces | IndexedDB/journal recovery, persisted requests, original-key retries, attention UX, cross-tab lock, privacy cleanup, timeout/524/offline/reload/duplicate tests |
-| Discussion foundation     | Shared thread, topic, card and document replies/comments, including reply targets and selected-quote anchors          | Atomic message-event replay, durable composer context, shared scope lock, exact-key recovery and attention UX                                                   |
-| PM foundation             | Inbox PM decision responses and Ask PM chat                                                                           | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter             |
-| Attachment foundation     | Inbox and discussion file selections, upload bytes and completed refs                                                 | Atomic upload replay, original-byte/key recovery, storage denial, downloadable failures and privacy fences                                                      |
-| Task/document authoring   | New tasks; new documents, document descriptions, revisions and inline titles                                          | Atomic nested mutation/replay, frozen original concurrency tokens, reload/offline/attention recovery and explicit rebase                                        |
-| Remaining authoring       | Remaining card/plan/settings/lifecycle mutations and all other forms                                                  | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard                                        |
+| Stage                            | Coverage                                                                                                                                               | Acceptance gate                                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inbox response foundation        | Freeform responses, suggested picks, acknowledgement/access/review outcomes, and context notes in both Inbox surfaces                                  | IndexedDB/journal recovery, persisted requests, original-key retries, attention UX, cross-tab lock, privacy cleanup, timeout/524/offline/reload/duplicate tests           |
+| Discussion foundation            | Shared thread, topic, card and document replies/comments, including reply targets and selected-quote anchors                                           | Atomic message-event replay, durable composer context, shared scope lock, exact-key recovery and attention UX                                                             |
+| PM foundation                    | Inbox PM decision responses and Ask PM chat                                                                                                            | Reusable mutation outbox adapters; atomic replay audit for event creation, document/card comments and PM decisions; same recovery tests per adapter                       |
+| Attachment foundation            | Inbox and discussion file selections, upload bytes and completed refs                                                                                  | Atomic upload replay, original-byte/key recovery, storage denial, downloadable failures and privacy fences                                                                |
+| Task/document authoring          | New tasks; new documents, document descriptions, revisions and inline titles                                                                           | Atomic nested mutation/replay, frozen original concurrency tokens, reload/offline/attention recovery and explicit rebase                                                  |
+| Existing card/settings authoring | Assignment, moves/completion evidence, initiative creation and notification channel fields are already migrated; no card-content or plan editor exists | Existing adapter recovery gates; do not add editors merely to claim migration                                                                                             |
+| Remaining authoring              | Host exclusion names now have durable drafts; access, setup, secrets and other unaudited mutations remain explicit exceptions                          | Explicit draft target keys, replay-safe server endpoints, every mutation in the outbox, complete surface inventory guard (expanded here; remaining exceptions still open) |
 
 Decide replaced both Inbox surfaces. `DecisionCard` keeps the Inbox response
 foundation unchanged: proposal taps and replies go through
@@ -545,9 +546,13 @@ channel form is a device draft under `notifications:settings` in the existing
 organization/workspace/principal scope; it restores on reload and is reconciled
 with the latest available channels. Save freezes the body (only rows with an
 address) and a UUID into the `notifications.settings.set` outbox adapter before
-any send. The `PUT` replaces the whole list and carries no request key, so a
-timeout or lost acknowledgement is recovered by replaying the identical frozen
-body, which is idempotent. Failures show the closed technical-details
+any send. The existing `PUT` adapter replaces the whole list and carries no
+request key or optimistic base. It replays the identical frozen body after a
+timeout, but replacement idempotence alone cannot protect intervening edits or
+recover an original receipt. This is an existing replay gap, not a keyed endpoint
+eligible for a new migration in this lane. Follow-up: add atomic actor/key/body
+receipts and version protection before treating notification recovery as fully
+replay-safe. Failures show the closed technical-details
 disclosure only; Copy/Edit/Retry come from `MutationSendStatus`. Confirmation
 adopts the response and keeps newer typing. Raw upstream bodies are never page
 copy.
@@ -561,6 +566,43 @@ modules and statically named computed calls. The test rejects added calls and
 stale exceptions. This finite AST inventory does not prove arbitrary JavaScript
 dataflow or whole-UI durability. Authentication and private credential controls
 need protocol-specific review before persistence, not blind generic retries.
+
+The guard also counts destructured SDK methods (including renamed bindings),
+detached `fetch` references and dynamic extraction from `coreClient`. Browser
+`.js`, `.mjs`, `.cjs`, `.ts` and Svelte sources are scanned; server modules remain
+outside the browser boundary. The allowlist is exact by file, method and count,
+with a reason and follow-up for every exception; adding a durable draft alone
+does not exempt a direct network sender. Run
+`pnpm -C web-ui exec vitest run tests/unit/durableInputContract.test.js`.
+This is a conservative syntactic guard, not arbitrary JavaScript dataflow proof.
+
+### Host exclusion draft recovery
+
+Access's host exclusion input checkpoints every keystroke under
+`host:<canonical-host-id>:exclusion` in the shared workspace/principal device
+scope. Done closes the editor without deleting its text; remount/reload reopens
+the draft. The existing explicit save checkpoints before its single network
+attempt, refuses sending on storage failure, and retains text on uncertain
+failure. Confirmation clears only matching local and persisted text, preserving
+newer edits; identity changes and unmount fence late confirmation. No automatic
+retry or new outbox adapter is enabled for this endpoint. The direct `patchHost`
+call remains in the allowlist.
+
+`PATCH /hosts/{host_id}` has no `request_key` or optimistic base in
+`HostPatchRequest`. It replaces exclusions and invalidates sessions; retrying a
+stale replacement could overwrite intervening administrator changes. Follow-up:
+audit atomic actor/body/target/base-bound receipts and current authorization,
+then migrate the full submitted intent to the outbox. Enrollment/invite/admin,
+dev actor creation and secret controls also remain replay/privacy prerequisites.
+Card-content/plan editors are absent and notification text fields are already
+migrated, so this lane adds no new editor or blind retry to meet a coverage count.
+Host revocation confirmation text remains an explicit fresh confirmation, outside
+the exclusion draft. This partial draft improvement does not close Stage 2.
+
+`hostExclusionDraft.test.js` covers close/remount, persistence before send,
+uncertain results, newer typing, another tab's newer draft, storage refusal and
+identity fencing. The targeted Access browser test covers reload and confirms
+that a 524 followed by reload/online does not resend the unkeyed write.
 
 | Surface                         | Remaining direct mutations                                                                                         |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -656,9 +698,10 @@ groups in separate reviewable PRs; do not expand the merged Stage 1 PR.
   unaudited server replay: audit nested writes, quota locking, current authority,
   original receipts, tombstones and physical blob deletion. Purge cannot safely
   inherit generic retry semantics without its deletion/recovery protocol.
-- Replace finite exceptions with whole-UI enforcement, including dynamically
-  aliased senders, raw transport, authored controls and protocol-specific auth
-  exclusions. Existing exceptions are not permission for new bypasses.
+- The SDK/raw-transport inventory now covers renamed destructuring, detached
+  fetch, dynamic coreClient extraction and TypeScript/ES module helpers. Continue
+  auditing arbitrary dataflow and authored controls; protocol-specific auth
+  exclusions remain explicit. Existing exceptions are not permission for new bypasses.
 
 Review boundary: the invariant tests enforce migrated Inbox/discussion/PM,
 uploads, task/document authoring, assignments, moves, document lifecycle, topic

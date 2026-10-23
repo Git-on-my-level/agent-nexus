@@ -459,6 +459,31 @@ async function gotoAccessAsHosted(page) {
 
 const bothEnds = { scrollPositions: ["top", "bottom"] };
 
+test("host exclusion draft survives closing and reload without retrying an unkeyed write", async ({
+  page,
+}) => {
+  // This can be the first route through the cold dev shell and Access compiler.
+  test.slow();
+  const api = await installAccessApi(page, { pending: [] });
+  await page.goto(ACCESS_PATH);
+  const card = page.locator('[data-host="workstation-a"]');
+  const input = card.getByLabel("Name to exclude on workstation-a");
+  await card.getByRole("button", { name: "Edit" }).click();
+  await input.fill("cursor");
+  await card.getByRole("button", { name: "Done" }).click();
+  await page.reload();
+  await expect(input).toHaveValue("cursor");
+  expect(api.calls.filter((call) => call === "patchHost")).toHaveLength(0);
+  api.fail.patchHost = { status: 524, message: "Private upstream details" };
+  await card.getByRole("button", { name: "Exclude", exact: true }).click();
+  await expect(card.getByRole("alert")).toContainText("could not be confirmed");
+  await expect(card).not.toContainText("Private upstream details");
+  await page.reload();
+  await expect(input).toHaveValue("cursor");
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  expect(api.calls.filter((call) => call === "patchHost")).toHaveLength(1);
+});
+
 for (const viewport of AUDIT_VIEWPORTS) {
   test.describe(`access page states @ ${viewport.name}`, () => {
     test.use({

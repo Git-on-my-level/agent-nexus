@@ -110,6 +110,48 @@ it("the inventory catches SDK writes in helpers, computed names, templates and r
   });
 });
 
+it("the inventory catches destructured SDK writes and detached fetch references", () => {
+  const methods = mutationMethods(
+    readFileSync(`${root}/lib/anxCoreClient.js`, "utf8"),
+  );
+  expect(
+    mutationReferences(
+      `const { updateBoardCard: save, createSecret } = coreClient;
+       const { fetch: send } = window;
+       const post = fetch;
+       save(id, body); createSecret(body); send(url, {method: "POST"});
+       post(url, {method: "DELETE"});`,
+      false,
+      methods,
+    ),
+  ).toEqual({
+    createSecret: 2,
+    "raw-fetch": 2,
+    updateBoardCard: 1,
+  });
+});
+
+it("the inventory catches dynamic extraction and fetch passed as an option", () => {
+  expect(
+    mutationReferences(
+      `const send = coreClient[method]; const { [method]: other } = coreClient;
+     transport({ sender: fetch });`,
+      false,
+      new Set(),
+    ),
+  ).toEqual({ "computed-dispatch": 2, "raw-fetch": 1 });
+});
+
+it("the inventory scans TypeScript and ES module browser helpers too", () => {
+  const fixture = fileURLToPath(
+    new URL("../fixtures/durable-inventory", import.meta.url),
+  );
+  expect(browserMutationInventory(fixture)).toEqual({
+    "authoring.ts": { updateBoardCard: 1 },
+    "transport.mjs": { "transport:fetch": 1 },
+  });
+});
+
 it("discussion text and metadata use a durable composer and outbox", () => {
   const ast = parse(
     readFileSync(`${root}/lib/components/timeline/MessagesTab.svelte`, "utf8"),

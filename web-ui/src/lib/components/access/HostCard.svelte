@@ -1,4 +1,13 @@
 <script>
+  import { onMount } from "svelte";
+  import { get } from "svelte/store";
+  import { durableForm } from "$lib/actions/durableForm.js";
+  import { localWorkScope, canUseLocalWorkScope } from "$lib/localWorkScope.js";
+  import {
+    loadLocalWork,
+    localWorkEpoch,
+    saveLocalWork,
+  } from "$lib/localWorkStore.js";
   import {
     KNOWN_ADAPTERS,
     agentPath,
@@ -42,6 +51,22 @@
   let newName = $state("");
   let savingExclusions = $state(false);
   let exclusionsError = $state("");
+  let draftReady = $state(false);
+  let draftError = $state("");
+  let draftTarget = $derived(`host:${host.id}:exclusion`);
+  let alive = true;
+  onMount(() => () => {
+    alive = false;
+  });
+  function exclusionDraft() {
+    return newName ? { name: newName } : null;
+  }
+  function restoreExclusion(value) {
+    newName = value?.name ?? "";
+    editing = Boolean(value?.name);
+    draftError = "";
+    exclusionsError = "";
+  }
 
   let revoking = $state(false);
   let revokeTyped = $state("");
@@ -55,16 +80,41 @@
   );
 
   async function saveExclusions(names) {
+    if (savingExclusions || !draftReady) return;
+    const scope = get(localWorkScope);
+    const epoch = localWorkEpoch(scope);
+    const target = draftTarget;
+    const submitted = newName;
+    const adding =
+      names.includes(submitted.trim()) && !excluded.includes(submitted.trim());
+    const current = () =>
+      alive &&
+      scope === get(localWorkScope) &&
+      epoch === localWorkEpoch(scope) &&
+      target === draftTarget;
     savingExclusions = true;
     exclusionsError = "";
     try {
+      if (!canUseLocalWorkScope(scope))
+        throw new Error("Sign in before saving.");
+      await saveLocalWork(scope, "draft", target, exclusionDraft(), { epoch });
+      if (!current()) return;
       await onexclusions(host, names);
+      if (!adding) return;
+      const latest = await loadLocalWork(scope, "draft", target);
+      if (!current() || newName !== submitted) return;
+      if (
+        JSON.stringify(latest) !==
+        JSON.stringify(submitted ? { name: submitted } : null)
+      )
+        return;
+      const clearing = saveLocalWork(scope, "draft", target, null, { epoch });
       newName = "";
-    } catch (error) {
+      await clearing;
+    } catch {
+      if (!current()) return;
       exclusionsError =
-        error?.details ||
-        (error instanceof Error ? error.message : "") ||
-        "Exclusions were not saved.";
+        "The change could not be confirmed. Your draft is saved if device storage is available. Check the current exclusions before trying again.";
     } finally {
       savingExclusions = false;
     }
@@ -107,6 +157,19 @@
     ? 'opacity-60'
     : ''}"
   data-host={host.slug}
+  use:durableForm={{
+    target: draftTarget,
+    value: exclusionDraft(),
+    read: exclusionDraft,
+    onRestore: restoreExclusion,
+    onReady: (ready) => {
+      draftReady = ready;
+    },
+    checkpointClicks: false,
+  }}
+  onlocal-save-error={(event) => {
+    draftError = event.detail;
+  }}
 >
   <header class="flex flex-wrap items-start gap-x-4 gap-y-1 px-4 py-3">
     <div class="min-w-0 flex-1">
@@ -231,6 +294,7 @@
           <button
             class="text-fg-muted hover:text-fg hover:underline"
             type="button"
+            disabled={!draftReady}
             onclick={() => (editing = true)}>Edit</button
           >
         {/if}
@@ -270,14 +334,14 @@
             variant="secondary"
             size="compact"
             busy={savingExclusions}
-            disabled={!newName.trim() || Boolean(nameError)}>Exclude</Button
+            disabled={!draftReady || !newName.trim() || Boolean(nameError)}
+            >Exclude</Button
           >
           <Button
             variant="ghost"
             size="compact"
             onclick={() => {
               editing = false;
-              newName = "";
               exclusionsError = "";
             }}>Done</Button
           >
@@ -286,6 +350,9 @@
             and its history stays.
           </p>
         </form>
+      {/if}
+      {#if draftError}
+        <p class="text-micro text-danger-text" role="alert">{draftError}</p>
       {/if}
       {#if exclusionsError}
         <p class="text-micro text-danger-text" role="alert">
