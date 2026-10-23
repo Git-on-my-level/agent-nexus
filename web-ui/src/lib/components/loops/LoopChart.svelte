@@ -12,23 +12,30 @@
   import { goalGeometry, withUnit } from "$lib/loops.js";
   import { bucketLabels, formatTime } from "$lib/time/format.js";
 
-  let { goal, size = "spark", label = "" } = $props();
+  let {
+    goal,
+    size = "spark",
+    label = "",
+    /** The chart spans this many days ending now, not first-to-last point. */
+    windowDays = 30,
+    now = Date.now(),
+  } = $props();
 
+  const DAY_MS = 86_400_000;
   let large = $derived(size === "large");
   let width = $derived(large ? 960 : 300);
   let height = $derived(large ? 220 : 56);
+  let span = $derived({ start: now - windowDays * DAY_MS, end: now });
   let geo = $derived(
-    goalGeometry(goal, { width, height, pad: large ? 10 : 4 }),
+    goalGeometry(goal, { width, height, pad: large ? 10 : 4, window: span }),
   );
-  let first = $derived(goal?.points?.[0]?.at ?? "");
-  let last = $derived(goal?.points?.at(-1)?.at ?? "");
 
   const day = (iso) => formatTime(iso, { style: "date" });
-  let ends = $derived(
-    first && last
-      ? (bucketLabels([first, last]) ?? [day(first), day(last)])
-      : ["", ""],
-  );
+  let ends = $derived.by(() => {
+    const start = new Date(span.start).toISOString();
+    const end = new Date(span.end).toISOString();
+    return bucketLabels([start, end]) ?? [day(start), day(end)];
+  });
   let summary = $derived.by(() => {
     if (!goal?.points?.length) return "";
     const parts = [
@@ -73,6 +80,17 @@
         points={geo.best}
         vector-effect="non-scaling-stroke"
       />
+      {#if geo.silence}
+        <line
+          class="silence"
+          x1={geo.silence.x1}
+          x2={geo.silence.x2}
+          y1={geo.silence.y}
+          y2={geo.silence.y}
+          vector-effect="non-scaling-stroke"
+          data-loop-chart-silence
+        />
+      {/if}
       {#each geo.markers as marker, i (i)}
         <circle
           class="marker marker--{marker.decision}"
@@ -128,6 +146,12 @@
   }
   .loop-chart--large .best {
     stroke-width: 2.5;
+  }
+  .silence {
+    stroke: var(--fg-subtle);
+    stroke-width: 1.5;
+    stroke-dasharray: 3 5;
+    opacity: 0.7;
   }
   .target {
     stroke: var(--ok-text);

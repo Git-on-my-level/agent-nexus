@@ -161,7 +161,7 @@
       {#if chart}
         <div class="w-full min-w-0 max-w-[22rem] self-center justify-self-end">
           {#if goal.points.length > 1}
-            <LoopChart {goal} label="{title}: {goal.metric}" />
+            <LoopChart {goal} {now} label="{title}: {goal.metric}" />
           {:else}
             <p class="text-right text-micro text-fg-subtle">
               {goal.points.length

@@ -386,6 +386,49 @@ function groupRows(states, rows) {
   };
 }
 
+/**
+ * The same collection without brief field tags, for report panels: their
+ * data is a panel render, not brief.v1, so they must not claim brief fields.
+ */
+export function untagged(collection) {
+  const strip = (part) => (part ? { ...part, field: "" } : part);
+  return {
+    ...collection,
+    groups: collection.groups.map((g) => ({
+      ...g,
+      rows: g.rows.map((r) => ({
+        ...r,
+        stateField: "",
+        subtitle: r.subtitle?.parts
+          ? { parts: r.subtitle.parts.map(strip) }
+          : strip(r.subtitle),
+        time: strip(r.time),
+        next: strip(r.next),
+        progress: r.progress ? { ...r.progress, untagged: true } : null,
+      })),
+    })),
+  };
+}
+
+/**
+ * When most rows share one quiet state (every loop stopped reporting), say
+ * it once instead of on every row: `{ state, count, total }` or null.
+ */
+export function dominantQuietState(collection, share = 0.8) {
+  const quiet = new Set(
+    collection.states.filter((s) => s.tone === "quiet").map((s) => s.key),
+  );
+  const rows = collection.groups.flatMap((g) => g.rows);
+  if (rows.length < 3) return null;
+  for (const key of quiet) {
+    if (key === "done") continue;
+    const count = rows.filter((r) => r.state === key).length;
+    if (count / rows.length >= share)
+      return { state: key, count, total: rows.length };
+  }
+  return null;
+}
+
 /** Rows filtered to one state (or all), in state order. */
 export function filterRows(collection, stateKey) {
   const order = new Map(collection.states.map((s, i) => [s.key, i]));

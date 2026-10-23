@@ -116,7 +116,7 @@
   {:else if p.kind === "spark"}
     <span
       class="flex min-w-0 items-center gap-2"
-      data-source="computed:initiatives.loop"
+      data-source={p.untagged ? undefined : "computed:initiatives.loop"}
     >
       {#if p.values.length > 1}
         <svg
@@ -309,10 +309,11 @@
             class="truncate text-micro text-fg-muted"
             title={row.subtitle.parts.map((part) => part.text).join(" · ")}
           >
-            {#each row.subtitle.parts as part, i (part.field)}{#if i > 0}<span
+            {#each row.subtitle.parts as part, i (i)}{#if i > 0}<span
                   aria-hidden="true"
                   class="mx-1 text-fg-subtle">·</span
-                >{/if}<span data-source="computed:{part.field}"
+                >{/if}<span
+                data-source={part.field ? `computed:${part.field}` : undefined}
                 >{part.text}</span
               >{/each}
           </div>
