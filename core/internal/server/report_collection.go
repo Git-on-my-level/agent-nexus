@@ -167,7 +167,10 @@ func (reader *reportReader) collection(q reports.Query) (map[string]any, bool, e
 			if next == "human" || next == "agent" {
 				nextRef = ""
 			}
-			if next != "" {
+			// A concrete actor ref does not establish human/agent kind. The
+			// requesting principal is known; other actors need authoritative
+			// kind enrichment before this nullable presentation can name them.
+			if next == "human" || next == "agent" || isViewer {
 				row["next_actor"] = map[string]any{"kind": kind, "ref": nullableText(nextRef), "label": strings.ReplaceAll(next, "_", " "), "is_viewer": isViewer}
 			}
 			health, _ := w["plan_health"].(plans.Health)

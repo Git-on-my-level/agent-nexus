@@ -3123,7 +3123,7 @@
     "../server/report_cache.go:*reportReader:renderPanel": "ac369ec5969d05f3b001334b0e5712b73d63fde3a8d33ccdaa7d071ca04d911d",
     "../server/report_cache.go:materializeReportPanels": "ae83c6f4f58c338c5ae8ece40d1c1fd96fb41bc4af1bda3e59ae5eecc7b1aee4",
     "../server/report_cache.go:selectReportPanels": "9a5231f075a682466057d258c08676ab895ef506e0b0a894d449d1046871d852",
-    "../server/report_collection.go:*reportReader:collection": "6f980f5dc2067467ccb6de0f1e53eff75e5c441545ef3ec8090782b1b028ce09",
+    "../server/report_collection.go:*reportReader:collection": "a8f08228e89d097e2f1f2b906df5ca1c60b4ec75093c52fc23c15ef116132001",
     "../server/report_fleet.go:*reportReader:fleetHealth": "ea5ec2880ee963b27b62820ad3b5d7bc1d9c37a4370d18c971bbe41263941193",
     "../server/report_handlers.go:*reportReader:activeEvent": "521c80fd40750a353539de8ceb06a8c3884da73f683a1e111eb0ff3fd9c83d7e",
     "../server/report_handlers.go:*reportReader:activeRef": "45d111c4513f5e8f8a82f5e578df9ee353f27c9645de0e17ad52417a858f457e",

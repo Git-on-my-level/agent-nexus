@@ -25,6 +25,10 @@ them. A slipped promise or high risk makes it at risk; no promise or blocked
 work is stalled. Progress comes from the reader-visible plan and time from the
 current promise. Hidden linked plan text remains hidden.
 
+The next actor is returned for generic human/agent assignments and concrete
+assignments to the viewer. Other concrete actor refs return `next_actor: null`
+until authoritative principal-kind enrichment is available.
+
 Loops are open cards with a cadence. Existing health maps failing → `failing`,
 overdue → `stopped_reporting`, stalled → `flat`, healthy → `improving`, and
 unknown → `unknown`. A goal gives a fourteen-day sparkline when it has points.

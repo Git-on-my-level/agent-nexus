@@ -5,6 +5,7 @@
     "baseline": 42,
     "best": 42,
     "direction": "up",
+    "label": null,
     "latest": 42,
     "metric": "score",
     "points": [

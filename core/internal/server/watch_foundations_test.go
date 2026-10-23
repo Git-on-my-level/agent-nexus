@@ -90,6 +90,13 @@ func TestWatchCollectionsScopeAndHealth(t *testing.T) {
 				if row["state"] != expected {
 					t.Fatal(row)
 				}
+				if viewer == "viewer" {
+					if reportMap(row["next_actor"])["kind"] != "human" || reportMap(row["next_actor"])["is_viewer"] != true {
+						t.Fatal("viewer next actor lost its known kind", row)
+					}
+				} else if row["next_actor"] != nil {
+					t.Fatal("non-viewer actor kind must not be guessed", row)
+				}
 				if reportMap(row["progress"])["kind"] != "segments" {
 					t.Fatal(row)
 				}
