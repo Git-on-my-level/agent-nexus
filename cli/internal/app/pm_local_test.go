@@ -3456,13 +3456,6 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 }
 
 func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
-	prevStart, prevCap := heartbeatRetryStart, heartbeatRetryCap
-	heartbeatRetryStart = 20 * time.Millisecond
-	heartbeatRetryCap = 80 * time.Millisecond
-	t.Cleanup(func() {
-		heartbeatRetryStart = prevStart
-		heartbeatRetryCap = prevCap
-	})
 	var mu sync.Mutex
 	var statuses []int
 	heartbeatRetried := make(chan struct{})

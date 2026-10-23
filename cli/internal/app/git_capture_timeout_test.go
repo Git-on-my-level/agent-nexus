@@ -72,6 +72,8 @@ func TestGitCaptureRequestTimeouts(t *testing.T) {
 				// The hook budget may end during Git collection on a busy host,
 				// before a pending record exists. Either way, explicit sync must
 				// recover and deliver the original commit exactly once.
+				// Advance this App's clock past the deferred entry's retry backoff.
+				f.a.now = func() time.Time { return time.Now().Add(time.Minute) }
 				f.run(t, "git", "sync")
 				recovered, err := integrations.LoadCapture(integrations.CapturePath(f.dir, gd))
 				if err != nil {
