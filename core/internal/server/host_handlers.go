@@ -132,7 +132,7 @@ func hostRouteAccess(r *http.Request) routeAccessRequirement {
 	return unsupported
 }
 
-func hostError(w http.ResponseWriter, err error) {
+func hostError(w http.ResponseWriter, r *http.Request, err error) {
 	status, code := http.StatusInternalServerError, "internal_error"
 	switch {
 	case errors.Is(err, auth.ErrAuthAdminRequired):
@@ -171,6 +171,9 @@ func hostError(w http.ResponseWriter, err error) {
 		status, code = http.StatusConflict, "enrollment_consumed"
 	case errors.Is(err, auth.ErrEnrollmentCapacity):
 		status, code = http.StatusTooManyRequests, "enrollment_capacity"
+	default:
+		writeInternalError(w, r, err, code)
+		return
 	}
 	writeError(w, status, code, code)
 }
@@ -210,7 +213,7 @@ func hostProof(w http.ResponseWriter, r *http.Request, opts handlerOptions, id, 
 		return false
 	}
 	if err := opts.authStore.VerifyHostProof(r.Context(), id, key, signed, sig, kind, body); err != nil {
-		hostError(w, err)
+		hostCeremonyError(w, r, err)
 		return false
 	}
 	// Host identity alone grants no private-board access. Wakeup ceremonies
@@ -233,7 +236,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		out, err := opts.authStore.StartHostEnrollment(r.Context(), in, requestClientHost(r))
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		response := map[string]any{"enrollment_id": out.EnrollmentID, "user_code": out.UserCode, "poll_token": out.PollToken, "poll_interval_seconds": out.PollIntervalSeconds, "expires_at": out.ExpiresAt}
@@ -250,7 +253,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		h, err := opts.authStore.CompleteHeadlessHostEnrollment(r.Context(), in)
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		opts.agentChanges.publish()
@@ -263,7 +266,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		out, err := opts.authStore.PendingHostEnrollments(r.Context())
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		writeJSON(w, 200, map[string]any{"enrollments": out})
@@ -278,7 +281,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 		case http.MethodGet:
 			out, err := opts.authStore.ListHostEnrollmentTokens(r.Context())
 			if err != nil {
-				hostError(w, err)
+				hostError(w, r, err)
 				return
 			}
 			writeJSON(w, 200, map[string]any{"enrollment_tokens": out})
@@ -297,25 +300,25 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			var err error
 			if in.ExpiresInSeconds != nil {
 				if in.ExpiresAt != nil || *in.ExpiresInSeconds < 600 || *in.ExpiresInSeconds > 86400 {
-					hostError(w, auth.ErrInvalidRequest)
+					hostError(w, r, auth.ErrInvalidRequest)
 					return
 				}
 				item, secret, err = opts.authStore.CreateHostEnrollmentTokenWithTTL(r.Context(), in.Label, time.Duration(*in.ExpiresInSeconds)*time.Second, *admin)
 			} else {
 				var expiry time.Time
 				if in.ExpiresAt == nil {
-					hostError(w, auth.ErrInvalidRequest)
+					hostError(w, r, auth.ErrInvalidRequest)
 					return
 				}
 				expiry, err = time.Parse(time.RFC3339, *in.ExpiresAt)
 				if err != nil {
-					hostError(w, auth.ErrInvalidRequest)
+					hostError(w, r, auth.ErrInvalidRequest)
 					return
 				}
 				item, secret, err = opts.authStore.CreateHostEnrollmentToken(r.Context(), in.Label, expiry, *admin)
 			}
 			if err != nil {
-				hostError(w, err)
+				hostError(w, r, err)
 				return
 			}
 			writeJSON(w, 201, map[string]any{"enrollment_token": item, "token": secret})
@@ -331,7 +334,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			}
 			out, err := opts.authStore.RevokeHostEnrollmentToken(r.Context(), parts[0], *admin)
 			if err != nil {
-				hostError(w, err)
+				hostError(w, r, err)
 				return
 			}
 			writeJSON(w, 200, map[string]any{"enrollment_token": out})
@@ -344,7 +347,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 		if len(parts) == 1 && r.Method == http.MethodGet {
 			e, err := opts.authStore.PollHostEnrollment(r.Context(), id, r.Header.Get("X-ANX-Enrollment-Token"))
 			if err != nil {
-				hostError(w, err)
+				hostError(w, r, err)
 				return
 			}
 			writeJSON(w, 200, map[string]any{"enrollment": e, "poll_interval_seconds": 3})
@@ -359,7 +362,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 				}
 				e, err := opts.authStore.DecideHostEnrollment(r.Context(), id, parts[1] == "approve", *admin)
 				if err != nil {
-					hostError(w, err)
+					hostError(w, r, err)
 					return
 				}
 				writeJSON(w, 200, map[string]any{"enrollment": e, "poll_interval_seconds": 3})
@@ -374,7 +377,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 				}
 				h, err := opts.authStore.CompleteHostEnrollment(r.Context(), id, in.PollToken, in.Signature)
 				if err != nil {
-					hostError(w, err)
+					hostError(w, r, err)
 					return
 				}
 				opts.agentChanges.publish()
@@ -401,12 +404,12 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 			return
 		}
 		if in.HostIDs == nil {
-			hostError(w, auth.ErrInvalidRequest)
+			hostError(w, r, auth.ErrInvalidRequest)
 			return
 		}
 		out, err := opts.authStore.HostBridgeStatus(r.Context(), in.HostIDs)
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		writeJSON(w, 200, map[string]any{"as_of": time.Now().UTC().Format(time.RFC3339Nano), "hosts": out})
@@ -422,13 +425,13 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 				var e error
 				limit, e = strconv.Atoi(raw)
 				if e != nil {
-					hostError(w, auth.ErrInvalidRequest)
+					hostError(w, r, auth.ErrInvalidRequest)
 					return
 				}
 			}
 			hosts, e := opts.authStore.ListHostSummaries(r.Context(), limit)
 			if e != nil {
-				hostError(w, e)
+				hostError(w, r, e)
 				return
 			}
 			writeJSON(w, 200, map[string]any{"hosts": hosts})
@@ -441,7 +444,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		items, err := opts.authStore.ListHosts(r.Context())
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		views := make([]hostRosterView, 0, len(items))
@@ -466,14 +469,14 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 			return
 		}
 		if len(raw) > 256<<10 {
-			hostError(w, auth.ErrInvalidRequest)
+			hostError(w, r, auth.ErrInvalidRequest)
 			return
 		}
 		var in auth.BridgeCheckIn
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
 		if dec.Decode(&in) != nil {
-			hostError(w, auth.ErrInvalidRequest)
+			hostError(w, r, auth.ErrInvalidRequest)
 			return
 		}
 		if !ensureJSONBodyEOF(w, dec) {
@@ -481,7 +484,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		b, err := opts.authStore.CheckInHostBridge(r.Context(), id, r.Header.Get("X-ANX-Host-Signed-At"), in)
 		if err != nil {
-			hostError(w, err)
+			hostCeremonyError(w, r, err)
 			return
 		}
 		opts.agentChanges.publish()
@@ -504,7 +507,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		h, err := opts.authStore.GetHost(r.Context(), id)
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		writeJSON(w, 200, map[string]any{"host": hostWithRoster(h, byID)})
@@ -531,7 +534,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if v, ok := in["display_name"]; ok {
 			var x string
 			if json.Unmarshal(v, &x) != nil {
-				hostError(w, auth.ErrInvalidRequest)
+				hostError(w, r, auth.ErrInvalidRequest)
 				return
 			}
 			display = &x
@@ -539,24 +542,24 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if v, ok := in["excluded_names"]; ok {
 			var x []string
 			if json.Unmarshal(v, &x) != nil {
-				hostError(w, auth.ErrInvalidRequest)
+				hostError(w, r, auth.ErrInvalidRequest)
 				return
 			}
 			excluded = &x
 		}
 		if len(in) == 0 || len(in) > 2 {
-			hostError(w, auth.ErrInvalidRequest)
+			hostError(w, r, auth.ErrInvalidRequest)
 			return
 		}
 		for k := range in {
 			if k != "display_name" && k != "excluded_names" {
-				hostError(w, auth.ErrInvalidRequest)
+				hostError(w, r, auth.ErrInvalidRequest)
 				return
 			}
 		}
 		h, err := opts.authStore.PatchHost(r.Context(), id, display, excluded, admin)
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		opts.agentChanges.publish()
@@ -573,7 +576,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		h, err := opts.authStore.RevokeHost(r.Context(), id, *admin)
 		if err != nil {
-			hostError(w, err)
+			hostError(w, r, err)
 			return
 		}
 		opts.agentChanges.publish()

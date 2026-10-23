@@ -107,6 +107,15 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 ## Authoritative HTTP catalog
 
+Signed host proofs, bridge check-ins and token exchanges retain SQLite's
+serving busy wait. When their SQLite operation is still contended, they return HTTP 503 `busy` with
+`recoverable=true` and `Retry-After: 1`. Wait before trying again and sign a
+fresh proof for a signed request: bridge proof consumption and presence updates
+are separate transactions, so a refused presence update can follow an already
+consumed proof. Other store failures keep their existing public error while
+the server records the sanitized cause with the request ID. A context or
+transport error alone does not establish whether a credential was consumed.
+
 **Do not treat this file as a per-path API list.** Machine-verifiable workspace HTTP is defined only in:
 
 - [`contracts/anx-openapi.yaml`](../../contracts/anx-openapi.yaml) — paths, methods, request/response schemas, and `x-anx-surface` / `x-anx-command-id`.

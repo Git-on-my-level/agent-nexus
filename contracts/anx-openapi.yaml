@@ -7586,7 +7586,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `{ host }`.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, key_mismatch, host_revoked, not_found]
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, key_mismatch, host_revoked, not_found, busy]
       x-anx-concepts: [hosts, agents]
       x-anx-stability: beta
       x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
@@ -7602,6 +7602,11 @@ paths:
         '401': {$ref: '#/components/responses/ErrorResponse'}
         '403': {$ref: '#/components/responses/ErrorResponse'}
         '404': {$ref: '#/components/responses/ErrorResponse'}
+        '503':
+          description: Workspace writer contention during authentication; recoverable busy error. Wait for Retry-After and retry with a fresh signed proof. An earlier proof may already have been consumed.
+          headers:
+            Retry-After: {schema: {type: integer}, description: Seconds to wait before retrying.}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     delete:
       operationId: revokeHost
       summary: Revoke host and all derived agents
@@ -7661,7 +7666,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `{ bridge }`.
-      x-anx-error-codes: [auth_required, invalid_request, key_mismatch, host_revoked, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, key_mismatch, host_revoked, not_found, busy]
       x-anx-concepts: [hosts, agents]
       x-anx-stability: beta
       x-anx-agent-notes: Host proof is required; no agent bearer or per-agent bridge proof is accepted.
@@ -7677,6 +7682,11 @@ paths:
         '401': {$ref: '#/components/responses/ErrorResponse'}
         '403': {$ref: '#/components/responses/ErrorResponse'}
         '404': {$ref: '#/components/responses/ErrorResponse'}
+        '503':
+          description: Workspace writer contention during authentication; recoverable busy error. Wait for Retry-After and retry with a fresh signed proof. An earlier proof may already have been consumed.
+          headers:
+            Retry-After: {schema: {type: integer}, description: Seconds to wait before retrying.}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 
   /runs:
     get:
@@ -7885,7 +7895,7 @@ paths:
     post:
       operationId: issueAuthToken
       summary: Exchange host assertion or refresh auth tokens
-      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address (each attempt reserves a request before signature work; grants that verify and are unused return it) and per principal and grant type for grants that verify (issuer and subject for humans; issuer, workspace, organization and slot for managed agents); replays never spend the principal budget. Both return 429 with Retry-After.'
+      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address (each attempt reserves a request before signature work; grants that verify and are unused return it) and per principal and grant type for grants that verify (issuer and subject for humans; issuer, workspace, organization and slot for managed agents); replays never spend the principal budget. Both return 429 with Retry-After. SQLite writer contention returns a recoverable 503 busy error with Retry-After; retry signed requests with a fresh proof.'
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: auth.token
@@ -7894,7 +7904,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope."
-      x-anx-error-codes: [invalid_request, invalid_token, key_mismatch, host_revoked, agent_excluded, agent_handle_taken, agent_revoked, rate_limited, auth_unavailable]
+      x-anx-error-codes: [invalid_request, invalid_token, key_mismatch, host_revoked, agent_excluded, agent_handle_taken, agent_revoked, rate_limited, auth_unavailable, busy]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       requestBody:
@@ -7921,7 +7931,10 @@ paths:
         '429':
           $ref: '#/components/responses/ErrorResponse'
         '503':
-          $ref: '#/components/responses/ErrorResponse'
+          description: Authentication temporarily unavailable, or workspace writer contention. Contention returns recoverable busy with Retry-After; wait and retry signed requests with a fresh proof.
+          headers:
+            Retry-After: {schema: {type: integer}, description: Seconds to wait before retrying.}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 
   /auth/passkey/register/options:
     post:
