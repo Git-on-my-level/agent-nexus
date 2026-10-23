@@ -32,6 +32,13 @@ func (e *Error) Error() string {
 	if e == nil {
 		return ""
 	}
+	// Classified network messages are safe for logs as well as CLI rendering.
+	// Keep the original cause available through Unwrap, never through its URL text.
+	if e.Kind == KindNetwork {
+		if details, ok := e.Details.(map[string]any); ok && details["failure_class"] != nil {
+			return e.Message
+		}
+	}
 	if e.Cause == nil {
 		return e.Message
 	}
@@ -69,7 +76,11 @@ func Internal(code string, message string) *Error {
 }
 
 func Wrap(kind Kind, code string, message string, cause error) *Error {
-	return &Error{Kind: kind, Code: code, Message: message, Cause: cause}
+	err := &Error{Kind: kind, Code: code, Message: message, Cause: cause}
+	if kind == KindNetwork && cause != nil && (code == "request_failed" || code == "outcome_unknown" || code == "stream_connect_failed" || code == "stream_read_failed") {
+		enrichTransport(err)
+	}
+	return err
 }
 
 func WithDetails(err *Error, details any) *Error {
@@ -110,6 +121,23 @@ func ExitCode(err error) int {
 	var typed *Error
 	if !errors.As(err, &typed) {
 		return 1
+	}
+	if typed.Kind == KindNetwork && typed.Code != "outcome_unknown" {
+		if details, ok := typed.Details.(map[string]any); ok && details["failure_class"] == "timeout" {
+			return 8
+		}
+	}
+	if typed.Code == "remote_error" {
+		if details, ok := typed.Details.(map[string]any); ok {
+			if status, ok := details["status"].(int); ok {
+				if status == 401 || status == 403 {
+					return 5
+				}
+				if status >= 500 {
+					return 6
+				}
+			}
+		}
 	}
 	if strings.HasSuffix(typed.Code, "_not_found") {
 		return 3
@@ -180,7 +208,11 @@ func Normalize(err error) *Error {
 func FromHTTPFailure(status int, body []byte) *Error {
 	code := "remote_error"
 	message := fmt.Sprintf("request failed with status %d", status)
-	payload := map[string]any{"status": status}
+	class := "http_status"
+	if status == 401 || status == 403 {
+		class = "auth_rejection"
+	}
+	payload := map[string]any{"status": status, "failure_class": class}
 
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err == nil {
@@ -215,6 +247,16 @@ func FromHTTPFailure(status int, body []byte) *Error {
 	}
 	if rawHint, ok := payload["hint"].(string); ok {
 		out.Hint = strings.TrimSpace(rawHint)
+	}
+	if code == "remote_error" {
+		retryable := status >= 500
+		out.Recoverable = &retryable
+		if class == "auth_rejection" {
+			out.Message = fmt.Sprintf("authentication or authorization rejected (HTTP %d)", status)
+			out.Hint = "The server rejected authentication or authorization. Run `anx --as <name> auth whoami` to verify host enrollment and access with an auth-admin."
+		} else if status >= 500 {
+			out.Hint = "The server or gateway is unavailable. Retry the read with backoff."
+		}
 	}
 	applyErrorMetadata(out)
 	enrichRemoteError(out, status)
@@ -266,7 +308,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"network_error":                 {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
 	"not_found":                     {Recoverable: true, Hint: "Verify the target id/path exists and retry."},
 	"profile_not_found":             {Recoverable: true, Hint: "Run `anx host enroll` to establish a host identity."},
-	"request_failed":                {Recoverable: true, Hint: "Check connectivity and credentials, then retry."},
+	"request_failed":                {Recoverable: true, Hint: "Check network and server availability, then retry the read."},
 	"stream_connect_failed":         {Recoverable: true, Hint: "Retry with `--follow` after verifying stream endpoint availability."},
 	"stream_read_failed":            {Recoverable: true, Hint: "Retry with `--follow` or use `--last-event-id` to resume."},
 	"timeout_exceeded":              {Recoverable: true, Hint: "Increase `--timeout` or reduce request scope."},
