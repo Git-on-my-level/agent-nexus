@@ -69,21 +69,45 @@ export default defineConfig(() => {
 
   return {
     plugins: [sveltekit(), e2eIdentityPlugin()],
+    ...(process.env.ANX_REPORT_PREVIEW_WORK_DIR
+      ? {
+          // The chart renderer is imported only after mount. Optimize its
+          // complete dependency set before serving any browser modules, so a
+          // first chart cannot invalidate the shell's dependency URLs.
+          optimizeDeps: {
+            noDiscovery: true,
+            include: [
+              "isomorphic-dompurify",
+              "marked",
+              "echarts/core",
+              "echarts/charts",
+              "echarts/components",
+              "echarts/features",
+              "echarts/renderers",
+            ],
+          },
+        }
+      : {}),
     // Playwright starts root and base-path Vite servers together. Their
     // optimizer hashes differ; sharing a cache makes one server reject the
     // other's dependencies with 504 Outdated Optimize Dep before hydration.
-    cacheDir: path.resolve(
-      "node_modules",
-      `.vite-${createHash("sha256")
-        .update(process.env.ANX_UI_BASE_PATH ?? "")
-        .digest("hex")
-        .slice(0, 12)}`,
-    ),
+    cacheDir: process.env.ANX_REPORT_PREVIEW_WORK_DIR
+      ? path.join(process.env.ANX_REPORT_PREVIEW_WORK_DIR, "vite")
+      : path.resolve(
+          "node_modules",
+          `.vite-${createHash("sha256")
+            .update(process.env.ANX_UI_BASE_PATH ?? "")
+            .digest("hex")
+            .slice(0, 12)}`,
+        ),
     server: {
       fs: {
         allow: [
           searchForWorkspaceRoot(process.cwd()),
           ...linkedPackageRoots(),
+          ...(process.env.ANX_REPORT_PREVIEW_WORK_DIR
+            ? [process.env.ANX_REPORT_PREVIEW_WORK_DIR]
+            : []),
           ...(process.env.ANX_UI_SHARED_ROOT
             ? [path.resolve(process.env.ANX_UI_SHARED_ROOT)]
             : []),

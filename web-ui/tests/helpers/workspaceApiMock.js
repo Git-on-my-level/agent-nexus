@@ -16,6 +16,7 @@ import { expect } from "@playwright/test";
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import { holdOpenStream } from "./openStream.js";
+import { normalizeBasePath } from "../../src/lib/pathUtils.js";
 
 /**
  * Text painted outside the viewport that the reader cannot get to.
@@ -142,7 +143,12 @@ const SELF = {
  * @param {import("@playwright/test").Page} page
  * @param {Record<string, unknown>} [overrides] seed fields merged into `api`
  */
-export async function installWorkspaceApi(page, overrides = {}) {
+export async function installWorkspaceApi(
+  page,
+  overrides = {},
+  { basePath = "" } = {},
+) {
+  const prefix = normalizeBasePath(basePath);
   const digest = await getExpectedCommandRegistryDigest();
   const api = {
     self: SELF,
@@ -206,7 +212,11 @@ export async function installWorkspaceApi(page, overrides = {}) {
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    const path = decodeURIComponent(url.pathname);
+    const pathname = decodeURIComponent(url.pathname);
+    const path =
+      prefix && pathname.startsWith(`${prefix}/`)
+        ? pathname.slice(prefix.length)
+        : pathname;
     const method = request.method();
 
     if (

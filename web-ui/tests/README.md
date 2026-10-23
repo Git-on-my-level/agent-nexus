@@ -61,6 +61,27 @@ a regression on the branch under test — SCA-767 was filed as four `main`
 regressions on exactly that evidence. Reusing a server from _this_ worktree
 still works; only a foreign or swapped one is refused.
 
+After identity verification, setup opens a disposable, mocked workspace on
+each server and waits for its Agents heading. This pays for cold client
+compilation and hydration before the first spec's assertion budget begins.
+`server-readiness.spec.js` holds a client module behind a gate to verify that
+listening/serving HTML alone never completes startup, including under `/anx`.
+
+## Report renderer isolation
+
+`scripts/preview-visual-report.mjs` gives each invocation its own temporary
+SvelteKit output and Vite dependency cache, pre-optimizes the markdown/chart
+dependencies, and removes that directory after stopping the server. It cannot
+invalidate modules in the suite's already-running dev server.
+
+The single-report arguments remain supported. `--batch <json>` accepts a
+nonempty JSON array of argument arrays, each containing `--report`,
+`--observations`, `--output` and optional repeated `--expect-text` arguments.
+Sandbox policy applies once to the whole invocation. The template spec uses
+one batch, with fresh browser pages and staged input per fixture, so nine
+templates need one cold compile. Every fixture still checks its own text and
+PNG, and the first failure stops the batch.
+
 ## Helpers
 
 - `tests/helpers/pageReady.js` — `waitForAppReady(page)`; use it instead of `waitForLoadState("networkidle")`, which never settles on pages holding the live event stream.

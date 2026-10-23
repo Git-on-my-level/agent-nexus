@@ -14,6 +14,7 @@ import (
 	"agent-nexus-core/internal/scopemigrate"
 	"agent-nexus-core/internal/scopes"
 	"agent-nexus-core/internal/storage"
+	"modernc.org/sqlite"
 )
 
 type completedMetadataSource struct{}
@@ -125,8 +126,10 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 	}
 	b := &workerLifecycleBridge{scope: "scope"}
 	runner := &scopemigrate.Runner{DB: db, Source: completedMetadataSource{}, Job: "b-lifecycle", Owner: "owner-1", SealedScope: "sealed", LeaseDuration: time.Minute, MaxBytes: 4096, Rebuilder: b}
-	token, err := runner.Acquire(ctx)
-	if err != nil {
+	// Lease acquisition has its own tests. Seed an unexpired lease here so
+	// the lifecycle test has no wall-clock dependency on acquisition/renewal.
+	token := int64(1)
+	if _, err = db.Exec(`INSERT INTO scope_migration_jobs(job,owner,token,lease_until) VALUES('b-lifecycle','owner-1',1,9223372036854775807)`); err != nil {
 		t.Fatal(err)
 	}
 	checkCursor := func(want int64) {
@@ -153,15 +156,41 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 		}
 		return cursor, staged
 	}
+	sawDeadline := false
+	step := func() (bool, error) {
+		t.Helper()
+		// Run's contract is resumable bounded slices, not one guaranteed 50ms
+		// success. A slow runner may yield before reaching the injected fault.
+		// Every yield must preserve both the cursor and all staged writes; never
+		// accept a deadline as proof that the requested fault was exercised.
+		for pauses := 0; pauses < 32; pauses++ {
+			cursorBefore, stagedBefore := lifecycleSnapshot()
+			done, stepErr := runner.LifecycleStep(ctx, token)
+			var busy *sqlite.Error
+			deadline := errors.Is(stepErr, context.DeadlineExceeded)
+			contention := errors.As(stepErr, &busy) && busy.Code()&255 == 5
+			if !deadline && !contention {
+				return done, stepErr
+			}
+			cursorAfter, stagedAfter := lifecycleSnapshot()
+			if done || cursorAfter != cursorBefore || stagedAfter != stagedBefore {
+				t.Fatal("yield committed partial lifecycle work", done, cursorBefore, cursorAfter, stagedBefore, stagedAfter, stepErr)
+			}
+			sawDeadline = sawDeadline || deadline
+			b.delay = 0
+		}
+		t.Fatal("bounded lifecycle slices did not resume")
+		return false, nil
+	}
 	b.fault = readmodel.CheckpointJob
-	if _, err = runner.LifecycleStep(ctx, token); err == nil {
+	if _, err = step(); err == nil || err.Error() != "injected transaction fault" {
 		t.Fatal("checkpoint fault ignored")
 	}
 	checkCursor(0)
 	checkNoStagedWrites()
 	b.fault = ""
 	b.expire = true
-	if _, err = runner.LifecycleStep(ctx, token); !errors.Is(err, scopemigrate.ErrLeaseLost) {
+	if _, err = step(); !errors.Is(err, scopemigrate.ErrLeaseLost) {
 		t.Fatal("late lease loss", err)
 	}
 	checkCursor(0)
@@ -170,44 +199,30 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 	if _, err = db.Exec(`UPDATE scope_migration_jobs SET lease_until=0 WHERE job='b-lifecycle'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = runner.LifecycleStep(ctx, token); !errors.Is(err, scopemigrate.ErrLeaseLost) {
+	if _, err = step(); !errors.Is(err, scopemigrate.ErrLeaseLost) {
 		t.Fatal("expired lease", err)
 	}
 	checkCursor(0)
-	token, err = runner.Acquire(ctx)
-	if err != nil {
+	token++
+	if _, err = db.Exec(`UPDATE scope_migration_jobs SET token=?,lease_until=9223372036854775807 WHERE job='b-lifecycle'`, token); err != nil {
 		t.Fatal(err)
 	}
 	examined := 0
-	deadlinePauses := 0
-	sawDeadline := false
+	// Exercise a real deadline after deterministic fault/lease checks.
+	sawDeadline = false
 	for examined < 10002 {
 		// One slice is held past the production 50ms deadline so a yield is
 		// observed every run. Later slices still pause on their own if -race
 		// makes the same deadline fire, and only resume when nothing committed.
-		if examined == 0 && deadlinePauses == 0 {
+		if examined == 0 && !sawDeadline {
 			b.delay = 80 * time.Millisecond
 		} else {
 			b.delay = 0
 		}
-		cursorBefore, stagedBefore := lifecycleSnapshot()
-		done, err := runner.LifecycleStep(ctx, token)
+		done, err := step()
 		if err != nil {
-			cursorAfter, stagedAfter := lifecycleSnapshot()
-			// LifecycleStep's production deadline is 50ms. Under -race a chunk
-			// can exceed it and roll back. That yield is resumable; a commit
-			// during the error, or any other error, is a semantic failure.
-			if errors.Is(err, context.DeadlineExceeded) && !done && cursorAfter == cursorBefore && stagedAfter == stagedBefore {
-				deadlinePauses++
-				sawDeadline = true
-				if deadlinePauses == 32 {
-					t.Fatal("deadline pause did not resume", cursorAfter)
-				}
-				continue
-			}
 			t.Fatal("bounded slice", done, b.examined, err)
 		}
-		deadlinePauses = 0
 		if done || b.examined < 1 || b.examined > 64 {
 			t.Fatal("bounded slice", done, b.examined, err)
 		}
@@ -231,7 +246,7 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 		t.Fatal("worker did not yield at the slice deadline")
 	}
 	checkCursor(10002)
-	if _, err = runner.LifecycleStep(ctx, token); err == nil {
+	if _, err = step(); err == nil {
 		t.Fatal("activated without trusted receipts")
 	}
 	checkCursor(10002)
@@ -240,7 +255,7 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 	if _, err = db.Exec(`INSERT INTO scope_feed_generations VALUES('scope',3,1,1,1,1,7)`); err != nil {
 		t.Fatal(err)
 	}
-	done, err := runner.LifecycleStep(ctx, token)
+	done, err := step()
 	if err != nil || !done {
 		t.Fatal("activation", done, err)
 	}
