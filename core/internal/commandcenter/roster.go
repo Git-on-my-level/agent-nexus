@@ -174,7 +174,16 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 func (s *Store) OverviewRoster(ctx context.Context, now time.Time) ([]Summary, bool, error) {
 	return s.roster(ctx, now, 100)
 }
+
+// CollectionRoster is the bounded roster projection for collection panels. It
+// needs only ask existence, never an aggregate over all workspace asks.
+func (s *Store) CollectionRoster(ctx context.Context, now time.Time) ([]Summary, bool, error) {
+	return s.rosterMode(ctx, now, 100, true)
+}
 func (s *Store) roster(ctx context.Context, now time.Time, limit int) ([]Summary, bool, error) {
+	return s.rosterMode(ctx, now, limit, false)
+}
+func (s *Store) rosterMode(ctx context.Context, now time.Time, limit int, collection bool) ([]Summary, bool, error) {
 	var identities []Identity
 	var e error
 	if bounded, ok := s.Identities.(interface {
@@ -311,7 +320,12 @@ func (s *Store) roster(ctx context.Context, now time.Time, limit int) ([]Summary
 		return nil, false, e
 	}
 	identityJSON, _ := json.Marshal(identities)
-	asks, e := s.openAsksLimit(ctx, limit, string(idJSON), string(identityJSON))
+	var asks []OpenAsk
+	if collection {
+		asks, e = s.collectionAsks(ctx, actors)
+	} else {
+		asks, e = s.openAsksLimit(ctx, limit, string(idJSON), string(identityJSON))
+	}
 	if e != nil {
 		return nil, false, e
 	}
@@ -532,4 +546,27 @@ func (s *Store) AgentDetail(ctx context.Context, id string, now time.Time) (Deta
 		}
 	}
 	return d, nil
+}
+
+// One indexed open-ask existence seek per admitted actor. No historical window
+// or workspace inbox is materialized to compute the collection's stuck state.
+func (s *Store) collectionAsks(ctx context.Context, actors []string) ([]OpenAsk, error) {
+	raw, _ := json.Marshal(actors)
+	rows, err := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT j.value,EXISTS(SELECT 1 FROM brief_asks a JOIN events e ON e.id=a.ask_id JOIN threads t ON t.id=e.thread_id WHERE a.requester IN (j.value,'actor:'||j.value) AND a.state='open' AND COALESCE(e.trashed_at,'')='' LIMIT 1) FROM json_each(?) j`, string(raw))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []OpenAsk{}
+	for rows.Next() {
+		var actor string
+		var yes bool
+		if err = rows.Scan(&actor, &yes); err != nil {
+			return nil, err
+		}
+		if yes {
+			out = append(out, OpenAsk{Total: 1, RequesterActorID: actor})
+		}
+	}
+	return out, rows.Err()
 }

@@ -1479,5 +1479,16 @@
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Bounded machine identity selection through idx_hosts_created_id without roster enrichment; separate native budget uses 100 rows."
+  },
+  {
+    "method": "GET",
+    "path": "/workspace/dashboard/pins",
+    "max_queries": 40,
+    "max_rows": 64,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "At most 12 principal pins, keyed by (principal_id,position), followed by scoped document primary-key and revision reads.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

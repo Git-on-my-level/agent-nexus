@@ -1152,6 +1152,7 @@ var migrations = []migration{
 	// adds the job's ref_offset and the item's lifecycle_partial columns and
 	// reinstalls the lifecycle triggers. DDL only; no rows are scanned.
 	{Version: 112, AfterApply: indexInboxLifecycle},
+	{Version: 113, Statements: []string{`CREATE TABLE IF NOT EXISTS dashboard_pins (principal_id TEXT NOT NULL, position INTEGER NOT NULL CHECK(position>=0 AND position<12), document_id TEXT NOT NULL, PRIMARY KEY(principal_id,position), UNIQUE(principal_id,document_id));`, `CREATE INDEX IF NOT EXISTS idx_events_report_subject_ts ON events(COALESCE(json_extract(payload_json,'$.subject_ref'),json_extract(payload_json,'$.payload.subject_ref')),ts DESC,id DESC);`}},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

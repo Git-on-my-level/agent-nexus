@@ -81,7 +81,7 @@ func validateLoopMetadata(m map[string]any) error {
 				return workInvalid("invalid cadence.stop_rule")
 			}
 		} else {
-			if err := loopKeys(obj, "metric", "direction", "target", "baseline", "unit", "series_ref"); err != nil {
+			if err := loopKeys(obj, "metric", "direction", "target", "baseline", "unit", "label", "series_ref"); err != nil {
 				return err
 			}
 			metric, ok := obj["metric"].(string)
@@ -97,6 +97,9 @@ func validateLoopMetadata(m map[string]any) error {
 						return workInvalid("goal.%s must be finite", k)
 					}
 				}
+			}
+			if v, has := obj["label"]; has && !loopText(v, 200, false) {
+				return workInvalid("invalid goal.label")
 			}
 			if v, has := obj["unit"]; has && !loopText(v, 80, false) {
 				return workInvalid("invalid goal.unit")

@@ -26,7 +26,7 @@ const (
 var panelTypes = []string{
 	"explanation", "evidence-table", "milestone-timeline", "dependency-diagram",
 	"metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison",
-	"live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "metric", "table",
+	"live-collection", "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "metric", "table",
 }
 
 // PanelTypes returns the panel types accepted by the shared visual-report contract.
@@ -405,9 +405,27 @@ func (v *validator) report(r map[string]any) {
 	}
 	for i, raw := range panels {
 		p := fmt.Sprintf("panels[%d]", i)
-		item, ok := object(raw, p, []string{"id", "project_id", "type", "title", "author", "provenance", "observed_at", "freshness", "source_ids", "data"}, []string{"appearance", "density", "source", "fallback", "authored_at", "review_by"}, v.add)
+		item, ok := object(raw, p, []string{"id", "project_id", "type", "title", "author", "provenance", "observed_at", "freshness", "source_ids"}, []string{"data", "query", "role", "appearance", "density", "source", "fallback", "authored_at", "review_by"}, v.add)
 		if !ok {
 			continue
+		}
+		if role, exists := item["role"]; exists {
+			v.enum(role, p+".role", "primary", "secondary", "context")
+		}
+		_, hasData := item["data"]
+		query, hasQuery := item["query"]
+		if hasQuery {
+			if !IsLive(fmt.Sprint(item["type"])) || item["source"] != nil || hasData {
+				v.add(p+".query", "requires a live query panel without data or source")
+			}
+			copy := map[string]any{}
+			for key, value := range item {
+				copy[key] = value
+			}
+			copy["data"] = query
+			item = copy
+		} else if !hasData {
+			v.add(p+".data", "required fields are missing")
 		}
 		if id, ok := item["project_id"].(string); !ok || !projectIDs[id] {
 			v.add(p+".project_id", "references a missing project")
@@ -456,7 +474,7 @@ func (v *validator) report(r map[string]any) {
 func (v *validator) panelData(panel map[string]any, path string, panelSources map[string]bool, reference func(any, string, map[string]bool)) {
 	data, dp := panel["data"], path+".data"
 	switch panel["type"] {
-	case "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards":
+	case "live-collection", "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards":
 		raw, _ := json.Marshal(data)
 		if _, err := ParseQuery(panel["type"].(string), raw); err != nil {
 			v.add(dp, err.Error())

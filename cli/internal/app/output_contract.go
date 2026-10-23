@@ -99,7 +99,7 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "api" {
 		return "external_side_effect"
 	}
-	if command == "workspace dashboard set" {
+	if command == "workspace dashboard set" || command == "workspace dashboard pins set" {
 		return "remote_coordination_write"
 	}
 	if parts[0] == "overview" {

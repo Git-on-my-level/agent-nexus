@@ -1274,6 +1274,16 @@
   },
   {
     "method": "GET",
+    "path": "/workspace/dashboard/pins",
+    "policy": "collection"
+  },
+  {
+    "method": "PUT",
+    "path": "/workspace/dashboard/pins",
+    "policy": "reference-write"
+  },
+  {
+    "method": "GET",
     "path": "/workspace/dashboard/reports",
     "policy": "collection"
   }

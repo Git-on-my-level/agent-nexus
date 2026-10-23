@@ -22,6 +22,9 @@ import (
 const MaxRows = 2000
 
 type Query struct {
+	Collection          string   `json:"collection,omitempty"`
+	StatusKeys          []string `json:"-"`
+	SubjectRefs         []string `json:"subject_refs,omitempty"`
 	Board               string   `json:"board,omitempty"`
 	Card                string   `json:"card,omitempty"`
 	Health              string   `json:"health,omitempty"`
@@ -41,6 +44,7 @@ type Query struct {
 }
 
 type Panel struct {
+	Role              string          `json:"role"`
 	ID                string          `json:"id"`
 	Type              string          `json:"type"`
 	Author            string          `json:"author"`
@@ -58,9 +62,23 @@ var boardRef = regexp.MustCompile(`^board:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 var projectRef = regexp.MustCompile(`^topic:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 var cardRef = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
+func PanelRole(kind, role string) string {
+	if role != "" {
+		return role
+	}
+	switch kind {
+	case "live-activity":
+		return "secondary"
+	case "explanation", "callout", "artifact-preview", "comparison":
+		return "context"
+	default:
+		return "primary"
+	}
+}
+
 func IsLive(kind string) bool {
 	switch kind {
-	case "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline":
+	case "live-collection", "live-loops", "live-loop", "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline":
 		return true
 	}
 	return false
@@ -105,6 +123,8 @@ func ParseAll(content any) ([]Panel, error) {
 	seen := map[string]bool{}
 	for _, rawPanel := range report.Panels {
 		var p struct {
+			Role       string          `json:"role"`
+			Query      json.RawMessage `json:"query"`
 			Author     string          `json:"author"`
 			AuthoredAt string          `json:"authored_at"`
 			ReviewBy   string          `json:"review_by"`
@@ -118,8 +138,12 @@ func ParseAll(content any) ([]Panel, error) {
 			return nil, fmt.Errorf("panel ids must be valid and unique")
 		}
 		seen[p.ID] = true
+		if len(p.Query) > 0 {
+			p.Data = p.Query
+		}
+		p.Role = PanelRole(p.Type, p.Role)
 		if p.Source != nil {
-			out = append(out, Panel{ID: p.ID, Type: p.Type, Source: p.Source, Fallback: p.Fallback})
+			out = append(out, Panel{Role: p.Role, ID: p.ID, Type: p.Type, Source: p.Source, Fallback: p.Fallback})
 			continue
 		}
 		if !IsLive(p.Type) {
@@ -134,14 +158,14 @@ func ParseAll(content any) ([]Panel, error) {
 			}
 			var data map[string]any
 			_ = json.Unmarshal(p.Data, &data)
-			out = append(out, Panel{ID: p.ID, Type: p.Type, Author: p.Author, AuthoredAt: authored, ReviewBy: deadline.UTC().Format(time.RFC3339Nano), ReviewByDefaulted: p.ReviewBy == "", StaticData: data})
+			out = append(out, Panel{Role: p.Role, ID: p.ID, Type: p.Type, Author: p.Author, AuthoredAt: authored, ReviewBy: deadline.UTC().Format(time.RFC3339Nano), ReviewByDefaulted: p.ReviewBy == "", StaticData: data})
 			continue
 		}
 		query, err := ParseQuery(p.Type, p.Data)
 		if err != nil {
 			return nil, fmt.Errorf("panel %s: %w", p.ID, err)
 		}
-		out = append(out, Panel{ID: p.ID, Type: p.Type, Query: query})
+		out = append(out, Panel{Role: p.Role, ID: p.ID, Type: p.Type, Query: query})
 	}
 	return out, nil
 }
@@ -154,6 +178,10 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	}
 	allowed := map[string]bool{}
 	switch kind {
+	case "live-collection":
+		q.Limit = 24
+		q.GroupBy = "project"
+		allowed = map[string]bool{"collection": true, "project_ref": true, "status": true, "group_by": true, "limit": true}
 	case "live-loops":
 		q.Limit = 24
 		allowed = map[string]bool{"board": true, "health": true, "limit": true}
@@ -168,7 +196,7 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	case "live-work-mix":
 		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "group_by": true}
 	case "live-activity":
-		allowed = map[string]bool{"limit": true, "min_impact": true}
+		allowed = map[string]bool{"limit": true, "min_impact": true, "subject_refs": true, "collection": true}
 	case "live-fleet-health":
 		allowed = map[string]bool{}
 	default:
@@ -194,9 +222,52 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 			fields[key], _ = json.Marshal(int(number))
 		}
 	}
+	if kind == "live-collection" {
+		if raw, ok := fields["status"]; ok {
+			if json.Unmarshal(raw, &q.StatusKeys) != nil || q.StatusKeys == nil || len(q.StatusKeys) > 8 {
+				return q, fmt.Errorf("status must be an array of at most 8 state keys")
+			}
+			delete(fields, "status")
+		}
+	}
 	normalized, _ := json.Marshal(fields)
 	if err := json.Unmarshal(normalized, &q); err != nil {
 		return q, fmt.Errorf("invalid query field type")
+	}
+	if kind == "live-collection" {
+		states := map[string][]string{"initiatives": {"waiting_on_you", "at_risk", "stalled", "on_track"}, "loops": {"failing", "stopped_reporting", "flat", "improving", "unknown"}, "agents": {"stuck", "offline", "idle", "working"}}
+		allowed, ok := states[q.Collection]
+		if !ok || q.Limit > 48 || (q.GroupBy != "project" && q.GroupBy != "none") {
+			return q, fmt.Errorf("invalid collection query")
+		}
+		seen := map[string]bool{}
+		for _, state := range q.StatusKeys {
+			valid := false
+			for _, s := range allowed {
+				if state == s {
+					valid = true
+				}
+			}
+			if !valid || seen[state] {
+				return q, fmt.Errorf("invalid or duplicate collection state")
+			}
+			seen[state] = true
+		}
+	}
+	if kind == "live-activity" {
+		if q.Collection != "" && q.Collection != "loops" && q.Collection != "initiatives" {
+			return q, fmt.Errorf("invalid activity collection")
+		}
+		if len(q.SubjectRefs) > 100 {
+			return q, fmt.Errorf("too many subject refs")
+		}
+		seen := map[string]bool{}
+		for _, ref := range q.SubjectRefs {
+			if len(ref) > 2048 || !strings.Contains(ref, ":") || strings.TrimSpace(ref) != ref || seen[ref] {
+				return q, fmt.Errorf("invalid or duplicate subject ref")
+			}
+			seen[ref] = true
+		}
 	}
 	if q.Limit < 1 || q.Limit > 100 || len(q.BoardRefs) > 16 || q.AnsweredWithinHours < 1 || q.AnsweredWithinHours > 720 {
 		return q, fmt.Errorf("query exceeds limits")
@@ -246,7 +317,7 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	if q.Sort != "priority" && q.Sort != "updated" && q.Sort != "title" {
 		return q, fmt.Errorf("sort must be priority, updated, or title")
 	}
-	if q.GroupBy != "phase" && q.GroupBy != "board" {
+	if kind != "live-collection" && q.GroupBy != "phase" && q.GroupBy != "board" {
 		return q, fmt.Errorf("group_by must be phase or board")
 	}
 	return q, nil

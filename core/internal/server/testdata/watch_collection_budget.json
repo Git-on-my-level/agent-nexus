@@ -1,0 +1,9 @@
+{
+  "fixture_unrelated_cards": 4096,
+  "fixture_loops": 22,
+  "max_queries": 50,
+  "max_rows": 512,
+  "max_vm_steps": 100000,
+  "warm_report_max_queries": 32,
+  "warm_report_max_vm_steps": 50000
+}

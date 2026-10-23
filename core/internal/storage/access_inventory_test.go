@@ -53,6 +53,7 @@ func validStorageClassification(policy string) bool {
 		"opaque:credential",
 		"scope",
 		"scope:board-cache",
+		"scope:dashboard-pins",
 		"scope:claim",
 		"scope:edge-endpoints",
 		"scope:inbox",

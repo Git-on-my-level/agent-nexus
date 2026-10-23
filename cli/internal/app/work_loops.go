@@ -42,7 +42,7 @@ func loopWorkValueFlags(name string) []string {
 	case "work cadence":
 		return []string{"every", "budget", "stop-rule"}
 	case "work goal":
-		return []string{"metric", "direction", "target", "baseline", "unit", "series"}
+		return []string{"metric", "direction", "target", "baseline", "unit", "label", "series"}
 	case "work receipt":
 		return []string{"run-id", "outcome", "summary", "candidate", "decision", "score-before", "score-after", "started-at"}
 	}
@@ -150,6 +150,12 @@ func parseLoopWork(name string, args []string) (string, map[string]any, error) {
 				}
 				m[k] = n
 			}
+		}
+		if values["label"].set {
+			if len([]rune(values["label"].value)) > 200 {
+				return bad("label exceeds 200 characters")
+			}
+			m["label"] = values["label"].value
 		}
 		if values["unit"].set {
 			if len([]rune(values["unit"].value)) > 80 {

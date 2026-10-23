@@ -45,7 +45,14 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, 400, "invalid_request", err.Error())
 		return
 	}
-	observedAt, results := materializeReportPanels(r, opts, panels)
+	selected, err := selectReportPanels(r, panels)
+	if err != nil {
+		writeError(w, 400, "invalid_request", err.Error())
+		return
+	}
+	r = r.Clone(r.Context())
+	r.Header.Set("X-ANX-Report-Revision", anyString(revision["ref"]))
+	observedAt, results := materializeReportPanels(r, opts, selected)
 	if err := checkReportReviews(r, opts, doc, revision, panels); err != nil {
 		writeError(w, 503, "unavailable", "report review reminders are unavailable")
 		return
@@ -86,80 +93,42 @@ func handlePreviewReport(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		}
 		defer release()
 	}
-	if canonical, ok := opts.primitiveStore.(*primitives.Store); ok {
-		ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
-		if err != nil {
-			writeError(w, 503, "unavailable", "report data is unavailable")
-			return
-		}
-		defer closeRead()
-		r = r.WithContext(ctx)
-	}
+
 	observedAt, results := materializeReportPanels(r, opts, panels)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"observed_at": observedAt, "panels": results})
 }
 
-func materializeReportPanels(r *http.Request, opts handlerOptions, panels []reports.Panel) (string, []map[string]any) {
-	now := time.Now().UTC()
-	reader := reportReader{r: r, opts: opts, now: now, visibility: map[string]bool{}}
-	for _, panel := range panels {
-		if panel.Type == "live-activity" {
-			reader.decisionLimit = max(reader.decisionLimit, min(maxReportCandidates, panel.Query.Limit+1))
-		}
-	}
-	results := []map[string]any{}
-	for _, panel := range panels {
-		if !reports.IsLive(panel.Type) && panel.Source == nil {
-			due, _ := time.Parse(time.RFC3339Nano, panel.ReviewBy)
-			results = append(results, map[string]any{"id": panel.ID, "type": panel.Type, "status": "ok", "observed_at": panel.AuthoredAt, "truncated": false, "data": panel.StaticData, "provenance_class": "authored", "author": panel.Author, "authored_at": panel.AuthoredAt, "review_by": panel.ReviewBy, "review_by_defaulted": panel.ReviewByDefaulted, "review_due": !now.Before(due)})
-			continue
-		}
-		if panel.Source != nil {
-			result := reader.materializeSeries(panel)
-			result["provenance_class"] = "live"
-			results = append(results, result)
-			continue
-		}
-		data, truncated, err := reader.materialize(panel)
-		result := map[string]any{"id": panel.ID, "type": panel.Type, "status": "ok", "observed_at": now.Format(time.RFC3339Nano), "truncated": truncated, "data": data, "provenance_class": "live"}
-		if err != nil {
-			result["status"] = "unavailable"
-			result["data"] = map[string]any{}
-			result["message"] = "This panel could not be read with your current access. Try again or check the source."
-		}
-		results = append(results, result)
-	}
-	return now.Format(time.RFC3339Nano), results
-}
-
 // Reads are shared across panels, scoped to this request and principal. Nothing is
-// cached between requests or written back into the report document.
+// written back into the report document; rendered results have a short per-scope cache.
 const maxReportCandidates = 200
 
 type reportReader struct {
-	decisionLimit    int
-	r                *http.Request
-	opts             handlerOptions
-	now              time.Time
-	labels           map[string]string
-	actorLabels      map[string]string
-	activitySubjects map[string]map[string]any
-	visibility       map[string]bool
-	hidden           map[string]bool
-	work             []map[string]any
-	boards           map[string]map[string]any
-	workScopes       map[string]reportWorkRead
-	workPartial      bool
-	workErr          error
-	events           []map[string]any
-	eventsRead       bool
-	eventsPartial    bool
-	eventsErr        error
-	decisionsRead    bool
-	decisions        []map[string]any
-	decisionsPartial bool
-	decisionsErr     error
+	decisionLimit        int
+	activityRefs         []string
+	activityScoped       bool
+	activityScopePartial bool
+	r                    *http.Request
+	opts                 handlerOptions
+	now                  time.Time
+	labels               map[string]string
+	actorLabels          map[string]string
+	activitySubjects     map[string]map[string]any
+	visibility           map[string]bool
+	hidden               map[string]bool
+	work                 []map[string]any
+	boards               map[string]map[string]any
+	workScopes           map[string]reportWorkRead
+	workPartial          bool
+	workErr              error
+	events               []map[string]any
+	eventsRead           bool
+	eventsPartial        bool
+	eventsErr            error
+	decisionsRead        bool
+	decisions            []map[string]any
+	decisionsPartial     bool
+	decisionsErr         error
 }
 
 func reportActive(row map[string]any) bool {
@@ -410,6 +379,8 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			items = append(items, item)
 		}
 		return map[string]any{"items": items}, partial, nil
+	case "live-collection":
+		return reader.collection(q)
 	case "live-loops", "live-loop":
 		store, ok := reader.opts.primitiveStore.(*primitives.Store)
 		if !ok {
@@ -443,9 +414,13 @@ func (reader *reportReader) loadEvents() {
 			}
 		}
 	}
+	eventIDs := reader.scopedEventIDs()
+	if reader.eventsErr != nil {
+		return
+	}
 	cursor := ""
 	for count := 0; count < maxReportCandidates; {
-		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"run_recorded", "human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated", "card_created", "board_updated", "document_updated", "document_created", "topic_updated", "topic_created", "message_posted"}, Limit: 200, Cursor: cursor})
+		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, ReportEventIDs: eventIDs, Types: []string{"run_recorded", "human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated", "card_created", "board_updated", "document_updated", "document_created", "topic_updated", "topic_created", "message_posted"}, Limit: 200, Cursor: cursor})
 		if err != nil {
 			reader.eventsErr = err
 			return
@@ -473,6 +448,10 @@ func (reader *reportReader) loadEvents() {
 		var err error
 		reader.hidden, err = store.HiddenSubjectRefsFor(reader.r.Context(), refs)
 		if err != nil {
+			reader.eventsErr = err
+			return
+		}
+		if err := reader.prepareResourceRefs(refs); err != nil {
 			reader.eventsErr = err
 			return
 		}
@@ -655,6 +634,9 @@ func (reader *reportReader) asks(q reports.Query) (map[string]any, bool, error) 
 }
 
 func (reader *reportReader) activity(q reports.Query) (map[string]any, bool, error) {
+	if err := reader.scopeActivity(q); err != nil {
+		return nil, false, err
+	}
 	reader.loadEvents()
 	if reader.eventsErr != nil {
 		return nil, false, reader.eventsErr
@@ -701,12 +683,12 @@ func (reader *reportReader) activity(q reports.Query) (map[string]any, bool, err
 	items = coalesceReportActivity(items)
 	filtered := items[:0]
 	for _, item := range items {
-		if activityImpactRank(anyString(item["impact"])) >= activityImpactRank(q.MinImpact) {
+		if reader.activityMatches(item) && activityImpactRank(anyString(item["impact"])) >= activityImpactRank(q.MinImpact) {
 			filtered = append(filtered, item)
 		}
 	}
 	items = filtered
-	partial := reader.eventsPartial || decisionsPartial || len(items) > q.Limit
+	partial := reader.activityScopePartial || reader.eventsPartial || decisionsPartial || len(items) > q.Limit
 	if len(items) > q.Limit {
 		items = items[:q.Limit]
 	}
@@ -821,6 +803,17 @@ func (reader *reportReader) prepareCardRefs(refs []string) error {
 		pending = pending[n:]
 		snapshots, err := store.ReportWorkSnapshots(reader.r.Context(), batch)
 		if err != nil {
+			return err
+		}
+		parents := []string{}
+		for _, w := range snapshots {
+			for _, key := range []string{"board_ref", "project_ref"} {
+				if ref := anyString(w[key]); ref != "" {
+					parents = append(parents, ref)
+				}
+			}
+		}
+		if err := reader.prepareResourceRefs(parents); err != nil {
 			return err
 		}
 		for _, ref := range batch {

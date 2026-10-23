@@ -1392,6 +1392,8 @@ Use this group for first-run workspace orientation before drilling into topics, 
 
 Core commands:
   workspace summary    Summarize active boards plus card/doc/inbox counts.
+  workspace dashboard pins list        Read your dashboard tabs.
+  workspace dashboard pins set <doc>... Set ordered tabs (up to 12); none clears.
   workspace dashboard list             Read validated report choices.
   workspace dashboard set <doc|none>    Pin a dashboard or return to newest report.
 

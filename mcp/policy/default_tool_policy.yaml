@@ -832,6 +832,12 @@ commands:
   "workspace.dashboard.list":
     classification: exposed_read
     reason: "Validated dashboard report selector candidates."
+  "workspace.dashboard.pins.list":
+    classification: exposed_read
+    reason: "Read only the requesting principal's ordered dashboard pins."
+  "workspace.dashboard.pins.set":
+    classification: exposed_write
+    reason: "Reversibly replace only the requesting principal's dashboard pins."
   "workspace.dashboard.set":
     classification: exposed_write
     reason: "Reversible workspace dashboard document pin."

@@ -463,6 +463,10 @@ func preflightWorkspaceSubcommand(args []string) error {
 		return nil
 	}
 	if args[0] == "dashboard" {
+		if len(args) >= 2 && args[1] == "pins" {
+			return validateDashboardPinsArgs(args[2:])
+		}
+
 		if len(args) == 2 && args[1] == "list" {
 			return nil
 		}

@@ -430,6 +430,8 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"actor_id": actor, "topic": map[string]any{"title": "attempt", "summary": "attempt", "related_refs": refs}}
 	case "/home/read":
 		return map[string]any{"actor_id": actor, "group_ref": "thread:" + thread}
+	case "/workspace/dashboard/pins":
+		return map[string]any{"document_refs": []string{"document:" + doc}}
 	case "/workspace/dashboard":
 		return map[string]any{"actor_id": actor, "document_ref": "document:" + doc}
 	case "/agent-inbox/answers/read":

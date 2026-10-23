@@ -3275,7 +3275,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"home", "documents"},
-		Adjacent:  []string{"workspace.dashboard.set"},
+		Adjacent:  []string{"workspace.dashboard.pins.list", "workspace.dashboard.pins.set", "workspace.dashboard.set"},
+	},
+	{
+		CommandID: "workspace.dashboard.pins.list",
+		CLIPath:   "workspace dashboard pins list",
+		Group:     "workspace",
+		Method:    "GET",
+		Path:      "/workspace/dashboard/pins",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"workspace", "docs"},
+		Adjacent:  []string{"workspace.dashboard.list", "workspace.dashboard.pins.set", "workspace.dashboard.set"},
+	},
+	{
+		CommandID: "workspace.dashboard.pins.set",
+		CLIPath:   "workspace dashboard pins set",
+		Group:     "workspace",
+		Method:    "PUT",
+		Path:      "/workspace/dashboard/pins",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"workspace", "docs"},
+		Adjacent:  []string{"workspace.dashboard.list", "workspace.dashboard.pins.list", "workspace.dashboard.set"},
 	},
 	{
 		CommandID: "workspace.dashboard.set",
@@ -3286,7 +3308,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"home", "documents", "cards"},
-		Adjacent:  []string{"workspace.dashboard.list"},
+		Adjacent:  []string{"workspace.dashboard.list", "workspace.dashboard.pins.list", "workspace.dashboard.pins.set"},
 	},
 }
 
@@ -4357,6 +4379,14 @@ func (c *Client) WorkRefreshRequest(ctx context.Context, pathParams map[string]s
 
 func (c *Client) WorkspaceDashboardList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "workspace.dashboard.list", nil, opts)
+}
+
+func (c *Client) WorkspaceDashboardPinsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "workspace.dashboard.pins.list", nil, opts)
+}
+
+func (c *Client) WorkspaceDashboardPinsSet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "workspace.dashboard.pins.set", nil, opts)
 }
 
 func (c *Client) WorkspaceDashboardSet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

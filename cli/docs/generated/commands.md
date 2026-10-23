@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `260`
+- Commands: `262`
 
 ## `actors.create`
 
@@ -3350,6 +3350,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`
 - Output: Returns the dashboard report selector projection.
 - Agent notes: Overview returns its selected dashboard only. Use this read for other pin candidates.
+
+## `workspace.dashboard.pins.list`
+
+- CLI path: `workspace dashboard pins list`
+- HTTP: `GET /workspace/dashboard/pins`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read the requesting principal's dashboard tabs.
+- Concepts: `workspace`, `docs`
+- Error codes: `auth_required`, `forbidden`, `unavailable`
+- Output: Returns document_refs and source (personal or workspace_default).
+- Agent notes: Pins belong to the authenticated principal. No for or actor override is accepted.
+
+## `workspace.dashboard.pins.set`
+
+- CLI path: `workspace dashboard pins set`
+- HTTP: `PUT /workspace/dashboard/pins`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Choose up to twelve dashboards for the requesting principal.
+- Concepts: `workspace`, `docs`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `unavailable`
+- Output: Returns the effective visible dashboard pins.
+- Agent notes: Replace all pins atomically in order. Pass an empty array to return to the workspace default.
 
 ## `workspace.dashboard.set`
 

@@ -28,14 +28,14 @@ type workCommandSpec struct {
 
 var workCommands = map[string]workCommandSpec{
 	"work cadence":               {method: "PATCH", summary: "Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear."},
-	"work goal":                  {method: "PATCH", summary: "Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear."},
+	"work goal":                  {method: "PATCH", summary: "Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear."},
 	"work receipt":               {method: "POST", summary: "Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay."},
 	"pm card":                    {method: "POST", summary: "Read any visible card in full under the requesting reader."},
 	"pm propose":                 {method: "POST", summary: "Propose a card status or note for human approval in Inbox."},
 	"pm disconnect":              {path: "/pm/disconnect", method: "POST", summary: "Reset workspace PM onboarding after explicit uninstall."},
 	"pm connect":                 {path: "/pm/connect", method: "POST", body: true, summary: "Register a local PM connection with bounded runner and host labels."},
 	"pm presence":                {path: "/pm/presence", method: "GET", summary: "Read recent PM connection state."},
-	"report render":              {path: "/docs/{id}/report", method: "GET", idFlag: "document-id", summary: "Materialize a visual report’s live panels from current, authorized workspace data."},
+	"report render":              {path: "/docs/{id}/report", method: "GET", idFlag: "document-id", summary: "Materialize authorized report panels; --panels id,id selects individual panels.", filters: []string{"panels"}},
 	"sessions register":          {path: "/sessions", method: "POST", body: true, summary: "Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work."},
 	"sessions get":               {path: "/sessions/{id}", method: "GET", idFlag: "session-id", summary: "Read your own registered provider session and bounded activity; does not expose conversation history."},
 	"work participants register": {path: "/work/{id}/participants", method: "POST", idFlag: "work-id", body: true, summary: "Record nonlocking task participation with session_id and monotonic sequence; never changes task assignees, phase or completion."},

@@ -290,5 +290,7 @@ export declare class AnxClient {
     workRefreshGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshRequest(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workspaceDashboardList(options?: RequestOptions): Promise<InvokeResult>;
+    workspaceDashboardPinsList(options?: RequestOptions): Promise<InvokeResult>;
+    workspaceDashboardPinsSet(options?: RequestOptions): Promise<InvokeResult>;
     workspaceDashboardSet(options?: RequestOptions): Promise<InvokeResult>;
 }
