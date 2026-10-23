@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -93,28 +92,55 @@ func TestDocumentAccessHistoryRetryBacksOffAndReportsStuckRevision(t *testing.T)
 		t.Fatal(err)
 	}
 	defer holder.Close()
+	// Open the worker's physical connection before taking the lock. Otherwise
+	// its connection-initialization PRAGMAs can wait on the writer before the
+	// maintenance code has installed its short busy handler.
+	warm, err := w.DB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = warm.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = holder.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
 		t.Fatal(err)
 	}
-	var mu sync.Mutex
-	var reports []string
+	defer holder.ExecContext(context.Background(), `ROLLBACK`)
+	type report struct {
+		message string
+		at      time.Time
+	}
+	reports := make(chan report, 5)
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
 		w.runDocumentAccessHistoryMaintenance(ctx, func(err error) {
-			mu.Lock()
-			reports = append(reports, err.Error())
-			mu.Unlock()
+			select {
+			case reports <- report{message: err.Error(), at: time.Now()}:
+			case <-ctx.Done():
+			}
 		}, documentHistoryRetry{base: 10 * time.Millisecond, max: 80 * time.Millisecond, stuckAfter: 3})
 	}()
-	time.Sleep(700 * time.Millisecond)
-	mu.Lock()
-	failures := append([]string(nil), reports...)
-	mu.Unlock()
-	// Without backoff a 10ms cadence makes about 25 attempts in this window
-	// (each waits up to 20ms for the lock); 10,20,40,80,80... makes about 9.
-	if len(failures) < 3 || len(failures) > 12 {
-		t.Fatalf("%d failed attempts while locked: %q", len(failures), failures)
+	// Wait for actual attempts, not an assumed amount of scheduler time.
+	// Backoff must never run early; scheduling delays have no upper bound.
+	delays := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 80 * time.Millisecond}
+	failures := make([]string, 0, len(delays))
+	var previous time.Time
+	deadline := time.After(10 * time.Second)
+	for i, delay := range delays {
+		select {
+		case result := <-reports:
+			failures = append(failures, result.message)
+			if !strings.Contains(result.message, "in "+delay.String()+":") {
+				t.Fatalf("attempt %d has wrong backoff: %s", i+1, result.message)
+			}
+			if i > 0 && result.at.Sub(previous) < delays[i-1] {
+				t.Fatalf("attempt %d ran before its backoff: %s", i+1, result.at.Sub(previous))
+			}
+			previous = result.at
+		case <-deadline:
+			t.Fatalf("worker did not report the locked revision: %q", failures)
+		}
 	}
 	if !strings.Contains(failures[0], "revision rev-1 (database busy)") {
 		t.Fatalf("first report lacks revision and class: %s", failures[0])

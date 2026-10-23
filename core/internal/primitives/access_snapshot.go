@@ -234,15 +234,15 @@ func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable s
 	p, _ := resourceaccess.PolicyFrom(ctx)
 	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
 		if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); ok && pin.db == db && pin.scope == scope && epochTable == "resource_access_epoch" && resourceaccess.AnonymousSQLParameters(query) {
-			scoped := scopeReadSnapshot(c, query, pin.snapshot, true)
+			scoped, needsBinding := scopedReadSnapshotQuery(c, query, pin.snapshot, true)
+			if !needsBinding {
+				return scoped, args
+			}
 			value := any(pin.snapshot.rows)
 			if strings.HasPrefix(scoped, "WITH RECURSIVE _anx_point_snapshot(") {
 				value = pin.snapshot.pointToken
 			}
 			bound := append([]any{value}, args...)
-			if accessCTEs(scope, query) == "" {
-				return scopeRead(c, query), args
-			}
 			return scoped, bound
 		}
 		// Identity/service SQL with no resource relation needs no closure.

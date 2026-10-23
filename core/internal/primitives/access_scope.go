@@ -294,9 +294,17 @@ func scopeReadWithSnapshot(ctx context.Context, query string, snapshot *denialSn
 	return scopeReadSnapshot(ctx, query, snapshot, false)
 }
 func scopeReadSnapshot(ctx context.Context, query string, snapshot *denialSnapshot, pinned bool) string {
+	q, _ := scopedReadSnapshotQuery(ctx, query, snapshot, pinned)
+	return q
+}
+
+// Return whether the rewrite needs the snapshot binding along with the SQL.
+// Callers must not build and discard a second full ownership CTE just to find
+// out whether the first rewrite scoped a relation.
+func scopedReadSnapshotQuery(ctx context.Context, query string, snapshot *denialSnapshot, pinned bool) (string, bool) {
 	scope, scoped := accessScopeFrom(ctx)
 	if !scoped {
-		return query
+		return query, false
 	}
 	q := briefIndexHint.ReplaceAllString(strings.TrimSpace(query), "")
 	// Scoped relation shadows have no named physical indexes. The optimizer
@@ -312,22 +320,22 @@ func scopeReadSnapshot(ctx context.Context, query string, snapshot *denialSnapsh
 		switch fields[0] {
 		case "WITH":
 			if graph == "" {
-				return q
+				return q, false
 			}
 			rest := strings.TrimSpace(q[len("WITH"):])
 			if strings.HasPrefix(strings.ToUpper(rest), "RECURSIVE") {
 				rest = strings.TrimSpace(rest[len("RECURSIVE"):])
 			}
-			return prefix + ", " + rest
+			return prefix + ", " + rest, true
 		case "SELECT":
 			if graph == "" {
-				return q
+				return q, false
 			}
-			return prefix + " " + q
+			return prefix + " " + q, true
 		}
 	}
 	// Scoped reads must be SELECTs; new query forms require deliberate review.
-	return "SELECT * FROM _anx_unsupported_scoped_read"
+	return "SELECT * FROM _anx_unsupported_scoped_read", graph != ""
 }
 
 // CanAccessResource is the principal-can-access predicate. Point resolution,

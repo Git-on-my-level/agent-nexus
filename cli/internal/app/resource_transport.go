@@ -248,7 +248,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 
 	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
 	defer cancel()
-	resp, responseBody, invokeErr := client.Generated().Invoke(callCtx, commandID, pathParams, contractsclient.RequestOptions{
+	resp, responseBody, invokeErr := client.Invoke(callCtx, commandID, pathParams, contractsclient.RequestOptions{
 		Query:   queryValues,
 		Headers: generatedHeaders(authCfg),
 		Body:    body,

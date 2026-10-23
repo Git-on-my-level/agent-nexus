@@ -3456,15 +3456,9 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 }
 
 func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
-	prevStart, prevCap := heartbeatRetryStart, heartbeatRetryCap
-	heartbeatRetryStart = 20 * time.Millisecond
-	heartbeatRetryCap = 80 * time.Millisecond
-	t.Cleanup(func() {
-		heartbeatRetryStart = prevStart
-		heartbeatRetryCap = prevCap
-	})
 	var mu sync.Mutex
 	var statuses []int
+	heartbeatRetried := make(chan struct{})
 	completes := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/pm/connect" {
@@ -3486,6 +3480,9 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 			statuses = append(statuses, http.StatusOK)
 			mu.Unlock()
 			fmt.Fprintf(w, `{"id":"turn-1","lease_expires_at":%q}`, time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano))
+			if n == 1 {
+				close(heartbeatRetried)
+			}
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			mu.Lock()
 			completes++
@@ -3505,12 +3502,20 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
-		time.Sleep(150 * time.Millisecond)
-		return []byte("Approve the restock."), nil, nil
+		waitCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		select {
+		case <-heartbeatRetried:
+			return []byte("Approve the restock."), nil, nil
+		case <-waitCtx.Done():
+			return nil, nil, waitCtx.Err()
+		}
 	})
 	defer restore()
 	turn := claimedTurn()
-	turn["lease_expires_at"] = time.Now().Add(80 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	// Allow setup time on a busy host; the runner waits for the actual retry
+	// instead of racing a 150ms sleep against an 80ms fixture lease.
+	turn["lease_expires_at"] = time.Now().Add(5 * time.Second).UTC().Format(time.RFC3339Nano)
 	if !app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, turn, nil) {
 		t.Fatal("expected settled")
 	}

@@ -12,7 +12,7 @@ import (
 const (
 	DefaultBaseURL = "http://127.0.0.1:8000"
 	DefaultAgent   = "default"
-	DefaultTimeout = 10 * time.Second
+	DefaultTimeout = 60 * time.Second
 )
 
 type Overrides struct {

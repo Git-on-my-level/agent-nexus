@@ -67,18 +67,59 @@ export function mountBrief() {
   if (mounts === 1) {
     // Answers persisted before a reload or crash resume sending from here.
     void recoverInboxResponses().catch(() => {});
+    let dirtyOnDisconnect = false;
     unmount = store.mount({
       connect: (refresh) => {
+        // A hidden/offline gap must not discard an invalidation whose timer
+        // was canceled, even when the display snapshot is still young.
+        if (dirtyOnDisconnect) {
+          dirtyOnDisconnect = false;
+          void refresh();
+        }
+        // Both streams can describe the same write. Bound the combined live
+        // read rate, including sustained receipts, with a trailing refresh.
+        // Confirmed local mutations still use refreshBrief immediately.
+        let lastStarted = Date.now();
+        let timer = null;
+        let dirty = false;
+        let running = false;
+        let stopped = false;
+        const schedule = () => {
+          if (stopped || running || timer !== null || !dirty) return;
+          timer = setTimeout(
+            async () => {
+              timer = null;
+              if (stopped) return;
+              dirty = false;
+              running = true;
+              lastStarted = Date.now();
+              try {
+                await refresh();
+              } finally {
+                running = false;
+                schedule();
+              }
+            },
+            Math.max(0, 5000 - (Date.now() - lastStarted)),
+          );
+        };
+        const invalidate = () => {
+          dirty = true;
+          schedule();
+        };
         const stopInbox = liveInboxChanges({
           client: coreClient,
-          onChange: refresh,
+          onChange: invalidate,
         });
         const stopEvents = liveWorkspaceEvents({
           client: coreClient,
-          onChange: refresh,
+          onChange: invalidate,
           debounceMs: 800,
         });
         return () => {
+          dirtyOnDisconnect ||= dirty;
+          stopped = true;
+          clearTimeout(timer);
           stopInbox();
           stopEvents();
         };

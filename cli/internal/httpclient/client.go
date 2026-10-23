@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -19,6 +20,29 @@ import (
 
 var CLIVersion = buildinfo.Current
 
+var stockTransport = http.DefaultTransport
+var networkTransport = func() *http.Transport {
+	transport := stockTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext
+	transport.TLSHandshakeTimeout = connectTimeout
+	return transport
+}()
+
+type noWriteReplay struct{ base http.RoundTripper }
+
+func (t noWriteReplay) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		req = req.Clone(req.Context())
+		req.GetBody = nil
+		// A non-nil, non-rewindable body also protects empty keyed writes from
+		// net/http's implicit replay policy without removing the on-wire key.
+		if req.Body == nil || req.Body == http.NoBody {
+			req.Body = io.NopCloser(bytes.NewReader(nil))
+		}
+	}
+	return t.base.RoundTrip(req)
+}
+
 type Client struct {
 	baseURL     string
 	httpClient  *http.Client
@@ -26,6 +50,7 @@ type Client struct {
 	agent       string
 	runID       string
 	generated   *contractsclient.Client
+	timeout     time.Duration
 }
 
 type RawRequest struct {
@@ -49,7 +74,15 @@ func New(resolved config.Resolved) (*Client, error) {
 	if _, err := url.Parse(baseURL); err != nil {
 		return nil, fmt.Errorf("parse base url: %w", err)
 	}
-	httpClient := &http.Client{Timeout: resolved.Timeout}
+	timeout := resolved.Timeout
+	if timeout <= 0 {
+		timeout = config.DefaultTimeout
+	}
+	transport := http.DefaultTransport
+	if transport == stockTransport {
+		transport = networkTransport
+	}
+	httpClient := &http.Client{Timeout: timeout, Transport: noWriteReplay{base: transport}}
 	return &Client{
 		baseURL:     strings.TrimRight(baseURL, "/"),
 		httpClient:  httpClient,
@@ -57,6 +90,7 @@ func New(resolved config.Resolved) (*Client, error) {
 		agent:       strings.TrimSpace(resolved.Agent),
 		runID:       strings.TrimSpace(resolved.RunID),
 		generated:   contractsclient.New(strings.TrimRight(baseURL, "/"), httpClient),
+		timeout:     timeout,
 	}, nil
 }
 
@@ -68,6 +102,15 @@ func (c *Client) Generated() *contractsclient.Client {
 }
 
 func (c *Client) RawCall(ctx context.Context, req RawRequest) (RawResponse, error) {
+	if c == nil {
+		return RawResponse{}, fmt.Errorf("client is nil")
+	}
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	safe := method == "" || method == http.MethodGet || method == http.MethodHead
+	return c.retry(ctx, safe, func(attempt context.Context) (RawResponse, error) { return c.rawCallOnce(attempt, req) })
+}
+
+func (c *Client) rawCallOnce(ctx context.Context, req RawRequest) (RawResponse, error) {
 	if c == nil {
 		return RawResponse{}, fmt.Errorf("client is nil")
 	}

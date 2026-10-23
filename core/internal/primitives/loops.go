@@ -37,6 +37,14 @@ type loopFacts struct {
 // Histories are bounded by indexed subject/time ranges; only 60 receipts/points
 // per card cross the SQL boundary. Counts aggregate the 14-day indexed window.
 func (s *Store) loadLoopStates(ctx context.Context, ids []string, now time.Time) (map[string]map[string]any, map[string]loopFacts, error) {
+	return s.loadLoopStatesForRead(ctx, ids, now, false)
+}
+
+func (s *Store) loadBriefLoopStates(ctx context.Context, ids []string, now time.Time) (map[string]map[string]any, map[string]loopFacts, error) {
+	return s.loadLoopStatesForRead(ctx, ids, now, true)
+}
+
+func (s *Store) loadLoopStatesForRead(ctx context.Context, ids []string, now time.Time, briefOnly bool) (map[string]map[string]any, map[string]loopFacts, error) {
 	out := map[string]map[string]any{}
 	facts := map[string]loopFacts{}
 	if len(ids) == 0 {
@@ -79,7 +87,7 @@ func (s *Store) loadLoopStates(ctx context.Context, ids []string, now time.Time)
 		return out, facts, nil
 	}
 
-	cached, err := s.cachedLoopFacts(ctx, ids, now)
+	cached, err := s.cachedLoopFactsForRead(ctx, ids, now, briefOnly)
 	if err != nil {
 		return nil, nil, err
 	}
