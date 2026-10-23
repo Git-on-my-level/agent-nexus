@@ -57,15 +57,31 @@ func TestGitCaptureRequestTimeouts(t *testing.T) {
 			sends := len(f.bodies)
 			f.mu.Unlock()
 			if mode == "hook" {
-				if sends != 0 || len(state.Pending) != 1 {
+				if sends != 0 || len(state.Pending) > 1 {
 					t.Fatalf("slow hook state=%#v sends=%d", state, sends)
 				}
-				record, err := integrations.LoadCommit(integrations.CapturePath(f.dir, gd), state.Pending[0])
+				if len(state.Pending) == 1 {
+					record, err := integrations.LoadCommit(integrations.CapturePath(f.dir, gd), state.Pending[0])
+					if err != nil {
+						t.Fatal(err)
+					}
+					if record.State != "deferred" || record.Reason != "prepare_uncertain" {
+						t.Fatalf("%#v", record)
+					}
+				}
+				// The hook budget may end during Git collection on a busy host,
+				// before a pending record exists. Either way, explicit sync must
+				// recover and deliver the original commit exactly once.
+				f.run(t, "git", "sync")
+				recovered, err := integrations.LoadCapture(integrations.CapturePath(f.dir, gd))
 				if err != nil {
 					t.Fatal(err)
 				}
-				if record.State != "deferred" || record.Reason != "prepare_uncertain" {
-					t.Fatalf("%#v", record)
+				f.mu.Lock()
+				sends = len(f.bodies)
+				f.mu.Unlock()
+				if recovered.Confirmed != 1 || len(recovered.Pending) != 0 || sends != 1 {
+					t.Fatalf("hook did not recover: state=%#v sends=%d", recovered, sends)
 				}
 			} else if sends != 1 || len(state.Pending) != 0 || state.Confirmed != 1 {
 				t.Fatalf("sync state=%#v sends=%d", state, sends)

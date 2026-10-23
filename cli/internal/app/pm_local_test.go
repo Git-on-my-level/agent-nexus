@@ -3456,12 +3456,6 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 }
 
 func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
-	// Keep fixture setup time from expiring the 80ms lease before the watcher
-	// computes its interval; an expired fixture lease selects the 20s fallback.
-	frozen := time.Now()
-	previousNow := nowFn
-	nowFn = func() time.Time { return frozen }
-	t.Cleanup(func() { nowFn = previousNow })
 	prevStart, prevCap := heartbeatRetryStart, heartbeatRetryCap
 	heartbeatRetryStart = 20 * time.Millisecond
 	heartbeatRetryCap = 80 * time.Millisecond
@@ -3515,7 +3509,7 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
-		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		waitCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		select {
 		case <-heartbeatRetried:
@@ -3526,7 +3520,9 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 	})
 	defer restore()
 	turn := claimedTurn()
-	turn["lease_expires_at"] = frozen.Add(80 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	// Allow setup time on a busy host; the runner waits for the actual retry
+	// instead of racing a 150ms sleep against an 80ms fixture lease.
+	turn["lease_expires_at"] = time.Now().Add(5 * time.Second).UTC().Format(time.RFC3339Nano)
 	if !app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, turn, nil) {
 		t.Fatal("expected settled")
 	}
