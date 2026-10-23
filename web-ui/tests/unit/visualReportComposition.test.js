@@ -8,6 +8,7 @@ import {
   portfolioReviewReport,
 } from "../../src/lib/fixtures/expressiveReportExamples.js";
 import { liveDashboardExample } from "../../src/lib/fixtures/liveDashboardExample.js";
+import { collectionDashboardExample } from "../../src/lib/fixtures/collectionDashboardExample.js";
 import { seriesDashboardExample } from "../../src/lib/fixtures/seriesDashboardExample.js";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 import { validateReportLayout } from "../../src/lib/visualReportLayout.js";
@@ -26,6 +27,7 @@ describe("expressive composition", () => {
           portfolioReviewReport,
           liveDashboardExample,
           seriesDashboardExample,
+          collectionDashboardExample,
         ].flatMap((report) => report.panels.map((panel) => panel.type)),
       ),
     ).toEqual(new Set(VISUAL_REPORT_TYPES));
@@ -35,6 +37,7 @@ describe("expressive composition", () => {
     portfolioReviewReport,
     liveDashboardExample,
     seriesDashboardExample,
+    collectionDashboardExample,
   ]) {
     it(`accepts ${report.title}`, () => {
       expect(parse(report).errors).toEqual([]);

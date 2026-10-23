@@ -2,6 +2,7 @@ import { withSeriesObservation } from "./seriesReports.js";
 import { formatAgeSeconds } from "./time/format.js";
 
 export const LIVE_REPORT_TYPES = Object.freeze([
+  "live-collection",
   "live-loops",
   "live-loop",
   "live-initiatives",
@@ -14,6 +15,13 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   // is here for the panel-type list and never reaches `validateLiveQuery`.
   "live-timeline",
 ]);
+
+/** State keys each collection accepts in a `live-collection` status filter. */
+export const COLLECTION_STATES = Object.freeze({
+  initiatives: ["waiting_on_you", "at_risk", "stalled", "on_track"],
+  loops: ["failing", "stopped_reporting", "flat", "improving", "unknown"],
+  agents: ["stuck", "offline", "idle", "working"],
+});
 
 /** The live types that carry a query. `live-timeline` binds a series instead. */
 export const LIVE_QUERY_TYPES = Object.freeze(
@@ -78,7 +86,14 @@ export function validateLiveQuery(type, data) {
       "answered_within_hours",
       "card_ref",
     ],
-    "live-activity": ["limit", "min_impact"],
+    "live-collection": [
+      "collection",
+      "project_ref",
+      "status",
+      "group_by",
+      "limit",
+    ],
+    "live-activity": ["limit", "min_impact", "subject_refs", "collection"],
     "live-fleet-health": [],
   }[type];
   if (!fields || !data || typeof data !== "object" || Array.isArray(data))
@@ -112,6 +127,48 @@ export function validateLiveQuery(type, data) {
       !/^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(data.card))
   )
     errors.push("card is required");
+  if (type === "live-collection") {
+    // Mirrors contracts/visualreport/query.go: one of three collections,
+    // its own state keys, project or no grouping, at most 48 rows.
+    const states = COLLECTION_STATES[data.collection];
+    if (!states) errors.push("invalid collection query");
+    if (
+      data.status !== undefined &&
+      (!Array.isArray(data.status) ||
+        data.status.length > 8 ||
+        new Set(data.status).size !== data.status.length ||
+        data.status.some((key) => !states?.includes(key)))
+    )
+      errors.push("invalid or duplicate collection state");
+    if (
+      data.group_by !== undefined &&
+      !["project", "none"].includes(data.group_by)
+    )
+      errors.push("group_by must be project or none");
+    if (data.limit !== undefined && data.limit > 48)
+      errors.push("collection limit exceeds 48");
+  }
+  if (type === "live-activity") {
+    if (
+      data.collection !== undefined &&
+      !["loops", "initiatives"].includes(data.collection)
+    )
+      errors.push("invalid activity collection");
+    if (
+      data.subject_refs !== undefined &&
+      (!Array.isArray(data.subject_refs) ||
+        data.subject_refs.length > 100 ||
+        new Set(data.subject_refs).size !== data.subject_refs.length ||
+        data.subject_refs.some(
+          (ref) =>
+            typeof ref !== "string" ||
+            ref.length > 2048 ||
+            !ref.includes(":") ||
+            goTrimSpace(ref) !== ref,
+        ))
+    )
+      errors.push("invalid or duplicate subject ref");
+  }
   if (Object.keys(data).some((key) => !fields.includes(key)))
     errors.push("contains unsupported query fields");
   if (
@@ -149,6 +206,7 @@ export function validateLiveQuery(type, data) {
   )
     errors.push("sort must be priority, updated, or title");
   if (
+    type !== "live-collection" &&
     data.group_by !== undefined &&
     !["phase", "board"].includes(data.group_by)
   )
@@ -160,6 +218,7 @@ export function validateLiveQuery(type, data) {
   // here would call it valid and leave the write gate to reject it.
   for (const key of ["label", "role", "status"])
     if (
+      !(type === "live-collection" && key === "status") &&
       data[key] !== undefined &&
       (typeof data[key] !== "string" ||
         !goTrimSpace(data[key]) ||

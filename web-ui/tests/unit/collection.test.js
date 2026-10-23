@@ -13,6 +13,7 @@ import {
   normalizeCollection,
   sparkPoints,
 } from "../../src/lib/collection.js";
+import { validateLiveQuery } from "../../src/lib/liveReports.js";
 
 const NOW = Date.parse("2026-10-15T09:00:00Z");
 const brief = normalizeBrief(
@@ -169,5 +170,35 @@ describe("helpers", () => {
   it("draws a flat sparkline in the middle and needs two points", () => {
     expect(sparkPoints([5])).toBe("");
     expect(sparkPoints([5, 5], 10, 10, 0)).toBe("0.0,5.0 10.0,5.0");
+  });
+});
+
+describe("live-collection query validation (mirrors core)", () => {
+  const ok = (type, data) => expect(validateLiveQuery(type, data)).toEqual([]);
+  const bad = (type, data) =>
+    expect(validateLiveQuery(type, data).length).toBeGreaterThan(0);
+  it("accepts each collection with its own states", () => {
+    ok("live-collection", { collection: "initiatives", group_by: "project" });
+    ok("live-collection", {
+      collection: "loops",
+      status: ["failing", "stopped_reporting"],
+      group_by: "none",
+      limit: 48,
+    });
+    ok("live-collection", { collection: "agents", status: ["working"] });
+  });
+  it("rejects what core rejects", () => {
+    bad("live-collection", { collection: "cards" });
+    bad("live-collection", { collection: "loops", status: ["working"] });
+    bad("live-collection", { collection: "loops", status: ["flat", "flat"] });
+    bad("live-collection", { collection: "loops", group_by: "phase" });
+    bad("live-collection", { collection: "loops", limit: 49 });
+    bad("live-collection", { collection: "loops", sort: "title" });
+  });
+  it("scopes activity to subjects or a collection", () => {
+    ok("live-activity", { collection: "loops", subject_refs: ["card:a"] });
+    bad("live-activity", { collection: "agents" });
+    bad("live-activity", { subject_refs: ["card:a", "card:a"] });
+    bad("live-activity", { subject_refs: ["no-colon"] });
   });
 });

@@ -489,6 +489,7 @@ function validateReport(report) {
         [
           "appearance",
           "density",
+          "role",
           "source",
           "fallback",
           "authored_at",
@@ -507,6 +508,12 @@ function validateReport(report) {
       ]);
     if (panel.density !== undefined)
       enumeration(panel.density, `${path}.density`, ["compact", "comfortable"]);
+    if (panel.role !== undefined)
+      enumeration(panel.role, `${path}.role`, [
+        "primary",
+        "secondary",
+        "context",
+      ]);
     string(panel.title, `${path}.title`);
     string(panel.author, `${path}.author`);
     reviewDeadline(panel, path, report.generated_at);

@@ -211,10 +211,18 @@ export function gridPlacement(node, children, panelsById) {
  * and `context` (explanations) fold to their header line on a phone.
  */
 export const PANEL_ROLES = ["primary", "secondary", "context"];
+const CONTEXT_TYPES = new Set([
+  "explanation",
+  "callout",
+  "artifact-preview",
+  "comparison",
+]);
 export function panelRole(panel) {
   if (PANEL_ROLES.includes(panel?.role)) return panel.role;
   if (panel?.type === "live-activity") return "secondary";
-  if (panel?.type === "explanation") return "context";
+  // Same defaults as core (contracts/visualreport/query.go PanelRole); core
+  // also returns the resolved role, which wins above.
+  if (CONTEXT_TYPES.has(panel?.type)) return "context";
   return "primary";
 }
 
