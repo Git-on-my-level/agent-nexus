@@ -204,10 +204,25 @@ export function gridPlacement(node, children, panelsById) {
  * every panel underneath, so each panel id keeps one node for the life of the
  * report.
  */
+/**
+ * A panel's role: what the reader needs first. Report authors (usually
+ * agents) say `role` instead of writing phone-specific layout; without one,
+ * the type decides. `primary` stays open everywhere; `secondary` (activity)
+ * and `context` (explanations) fold to their header line on a phone.
+ */
+export const PANEL_ROLES = ["primary", "secondary", "context"];
+export function panelRole(panel) {
+  if (PANEL_ROLES.includes(panel?.role)) return panel.role;
+  if (panel?.type === "live-activity") return "secondary";
+  if (panel?.type === "explanation") return "context";
+  return "primary";
+}
+
 export function createAutoGrid() {
   const nodes = new Map();
   return (panels) => ({
     type: "grid",
+    // The author's order stands; roles only decide what folds on a phone.
     children: panels.map((panel) => {
       let node = nodes.get(panel.id);
       if (!node) {

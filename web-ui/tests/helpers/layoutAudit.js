@@ -661,3 +661,13 @@ export async function expectCleanLayout(page, label, options = {}) {
       .toBe(0);
   }
 }
+
+/**
+ * On a phone, report panels other than primary fold to their header line.
+ * Open every folded panel so a test can read and audit what is inside.
+ */
+export async function unfoldPanels(page) {
+  await page.locator("[data-report-panel]").first().waitFor();
+  const folds = page.locator('[data-report-fold][aria-expanded="false"]');
+  while ((await folds.count()) > 0) await folds.first().click();
+}

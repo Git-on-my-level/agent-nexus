@@ -5,7 +5,11 @@ import { expect, test } from "@playwright/test";
 
 import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 
-import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
+import {
+  AUDIT_VIEWPORTS,
+  expectCleanLayout,
+  unfoldPanels,
+} from "../helpers/layoutAudit.js";
 import {
   expectNoClippedContent,
   installWorkspaceApi,
@@ -492,6 +496,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
   }) => {
     test.setTimeout(120_000);
     await open(page, OVERVIEW, viewport.width, viewport.height);
+    // On a phone, secondary and context panels fold to a line; open them.
+    await unfoldPanels(page);
 
     // A header that wraps is fine. A header that is cut off is not: the chip
     // is the one thing on the panel the reader must be able to finish reading.

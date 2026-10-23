@@ -174,8 +174,16 @@ export const LOOP_STATES = [
   { key: "silent", label: "Stopped reporting", tone: "quiet" },
   { key: "flat", label: "Not improving", tone: "neutral" },
   { key: "moving", label: "Healthy", tone: "good" },
+  { key: "no_runs", label: "No runs yet", tone: "neutral" },
   { key: "done", label: "Done", tone: "quiet" },
 ];
+
+/** groupLoops calls a loop with no receipts "moving"; say what it is. */
+function loopState(group, row) {
+  return group === "moving" && row.loop?.condition === "unknown"
+    ? "no_runs"
+    : group;
+}
 
 function loopProgress(row) {
   const goal = row.loop?.goal;
@@ -247,7 +255,7 @@ export function collectionFromLoops(
           ? { text: row.loop.reason, field: "initiatives.loop" }
           : null,
       owner: null,
-      state: group.group,
+      state: loopState(group.group, row),
       stateField:
         group.group === "waiting"
           ? "initiatives.waiting_on_you_count"
