@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -246,14 +245,16 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 		}
 	}
 	if cached.Token == "" || cached.ExpiresAt.Sub(a.clockNow()) < 30*time.Second {
-		signed := time.Now().UTC().Format(time.RFC3339Nano)
-		msg := "anx-host-agent-token|" + host.ID + "|" + host.KeyID + "|" + name + "|" + signed
-		body, _ := json.Marshal(map[string]any{"grant_type": "host_assertion", "host_id": host.ID, "key_id": host.KeyID, "agent_name": name, "signed_at": signed, "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(key, []byte(msg)))})
 		client, err := httpclient.New(cfg)
 		if err != nil {
 			return cfg, err
 		}
-		resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/auth/token", Body: body})
+		resp, err := client.HostAssertion(ctx, func() []byte {
+			signed := time.Now().UTC().Format(time.RFC3339Nano)
+			msg := "anx-host-agent-token|" + host.ID + "|" + host.KeyID + "|" + name + "|" + signed
+			body, _ := json.Marshal(map[string]any{"grant_type": "host_assertion", "host_id": host.ID, "key_id": host.KeyID, "agent_name": name, "signed_at": signed, "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(key, []byte(msg)))})
+			return body
+		})
 		if err != nil {
 			return cfg, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "host assertion failed", err)
 		}

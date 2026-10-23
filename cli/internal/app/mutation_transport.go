@@ -25,7 +25,12 @@ func mutationTransportError(command, method string, body any, cause error) error
 	}
 	if payload, ok := body.(map[string]any); ok {
 		if key := strings.TrimSpace(anyString(payload["request_key"])); key != "" {
-			err.Details = map[string]any{"request_key": key, "outcome": "unknown"}
+			details, _ := err.Details.(map[string]any)
+			if details == nil {
+				details = map[string]any{}
+			}
+			details["request_key"], details["outcome"] = key, "unknown"
+			err.Details = details
 			err.Hint += " Retry the original command and body with --request-key " + key + " (or the same request_key in JSON)."
 		}
 	}

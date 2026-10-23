@@ -1147,7 +1147,8 @@ Global Flags:
   --no-color
   --verbose
   --headers
-  --timeout <duration>
+  --timeout <duration>  Total HTTP exchange budget including retries (default 60s).
+                        Default read attempt: 20s; connect and TLS: at most 10s each.
 `) + "\n")
 
 	return b.String()

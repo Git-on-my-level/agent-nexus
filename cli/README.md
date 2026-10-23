@@ -31,6 +31,40 @@ Default text output uses payload-first summaries and is the preferred mode for n
 
 See `docs/runbook.md` for command, integration-test, and Pi dogfood details.
 
+## Network timeouts and retries
+
+`--timeout` (or `ANX_TIMEOUT`) defaults to **60 seconds per exchange**, including
+response-body reads and retry backoff. Host token exchange and the subsequent API
+read have separate budgets. An earlier caller deadline always wins. TCP connect
+and TLS handshake each have a **10 second** limit, further bounded by the attempt
+and total budgets.
+
+GET/HEAD reads, generated `refs resolve` reads, and host assertions get at most
+three attempts. Each read attempt is capped at `min(total, max(20s, total/3))`
+(20 seconds by default), with 200 ms then 400 ms backoff (scaled down for short
+budgets). A short explicit timeout can be spent on one attempt; increasing the
+total above 60 seconds also increases the attempt limit.
+Retries cover timeouts, broken/refused connections, temporary DNS failures and
+5xx responses. `Retry-After` is honored within the remaining total budget; if it
+cannot fit, the last failure is returned. Permanent DNS failures, TLS verification
+failures and 4xx/auth rejections stop immediately. Host assertions are signed
+afresh for every attempt because core consumes each proof once.
+
+Ordinary writes are not automatically retried, even with a `request_key` or an
+`Idempotency-Key` header: a key alone does not establish that the server supports
+atomic replay for that route. An uncertain write keeps its request key and
+`outcome_unknown` recovery guidance. Streaming connections keep their existing
+resume policy.
+
+Error envelopes retain schema v2 and their existing fields/codes. Network errors
+add `error.details.failure_class` (`timeout`, `connection_refused`,
+`connection_reset`, `connection_closed`, `connection_error`, `dns`, `tls`,
+`canceled` or `network_error`), `phase`, `attempts`, `timeout_ms`,
+`attempt_timeout_ms` and `connect_timeout_ms`. HTTP errors add `failure_class`
+(`http_status` or `auth_rejection`) alongside `status`. Timeout failures exit 8;
+connection failures exit 6 and auth rejections exit 5. The text error names the
+network failure without printing request URLs, credentials or signed proofs.
+
 The manual agent-ergonomics dogfood lane lives under `dogfood/pi/`. It is an
 intentional CLI-owned support package with its own docs, scenario seed data,
 and runner tests; it is not part of the shipped `anx` runtime surface.

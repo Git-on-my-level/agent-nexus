@@ -51,7 +51,7 @@ func TestCreateTransportUnknownOutcomePreservesRequestKey(t *testing.T) {
 
 func TestReadTransportFailureRemainsRetryable(t *testing.T) {
 	err := mutationTransportError("cards list", "GET", nil, context.DeadlineExceeded).(*errnorm.Error)
-	if err.Code != "request_failed" || err.Recoverable != nil {
+	if err.Code != "request_failed" || err.Recoverable == nil || !*err.Recoverable || errnorm.ExitCode(err) != 8 {
 		t.Fatalf("read changed: %#v", err)
 	}
 }

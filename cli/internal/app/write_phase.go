@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"strings"
+	"sync/atomic"
 )
 
 // writeTracker records whether this invocation sent a mutating request, so
@@ -11,11 +12,11 @@ import (
 // outcome is unknown) or postflight (a write succeeded and a later step,
 // such as a readback or follow-up read, failed).
 //
-// A command runs its requests sequentially, so plain fields suffice; App is
-// copied by value in tests, which a mutex would forbid.
+// Background heartbeats can overlap a command's completion request. Raw atomic
+// fields keep recording safe while preserving App's existing value-copy usage.
 type writeTracker struct {
-	succeeded int
-	failed    bool
+	succeeded uint32
+	failed    uint32
 }
 
 func isMutatingMethod(method string) bool {
@@ -34,17 +35,17 @@ func (t *writeTracker) record(method string, err error) {
 		return
 	}
 	if err != nil {
-		t.failed = true
+		atomic.StoreUint32(&t.failed, 1)
 		return
 	}
-	t.succeeded++
+	atomic.StoreUint32(&t.succeeded, 1)
 }
 
 func (t *writeTracker) phase() (string, bool) {
 	switch {
-	case t.failed:
+	case atomic.LoadUint32(&t.failed) != 0:
 		return "write", true
-	case t.succeeded > 0:
+	case atomic.LoadUint32(&t.succeeded) > 0:
 		return "postflight", true
 	default:
 		return "preflight", false
