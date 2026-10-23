@@ -29,6 +29,44 @@ afterEach(async () => {
 });
 
 describe("report renderer sandbox contract", () => {
+  it("validates every batch job before launching a browser", async () => {
+    const batch = join(directory, "batch.json");
+    const invalid = join(directory, "invalid-observations.json");
+    await writeFile(invalid, "{}");
+    await writeFile(
+      batch,
+      JSON.stringify([
+        args,
+        args.map((value) =>
+          value === join(directory, "observations.json") ? invalid : value,
+        ),
+      ]),
+    );
+    const launchBrowser = vi.fn();
+    await expect(main(["--batch", batch], { launchBrowser })).rejects.toThrow(
+      "observations must be an array",
+    );
+    expect(launchBrowser).not.toHaveBeenCalled();
+  });
+
+  it("keeps sandbox policy for an entire batch", async () => {
+    const batch = join(directory, "batch.json");
+    await writeFile(batch, JSON.stringify([args, args]));
+    const launchBrowser = vi.fn(async () => {
+      throw new Error("Chromium sandboxing failed!");
+    });
+    expect(await main(["--batch", batch], { launchBrowser })).toEqual({
+      rendered: false,
+      reason: "sandbox_unavailable",
+    });
+    expect(launchBrowser).toHaveBeenCalledTimes(1);
+    expect(launchBrowser).toHaveBeenCalledWith({
+      headless: true,
+      channel: "chromium",
+      chromiumSandbox: true,
+    });
+  });
+
   it.each([
     [[], true],
     [["--chromium-sandbox", "true"], true],

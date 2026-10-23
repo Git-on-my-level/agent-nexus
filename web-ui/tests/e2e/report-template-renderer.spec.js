@@ -62,6 +62,7 @@ const fixtureText = {
 // eslint-disable-next-line no-empty-pattern
 test("browser renders every report template against live fixtures", async ({}, testInfo) => {
   test.setTimeout(300_000);
+  const jobs = [];
   for (const name of templateNames) {
     const fixture = JSON.parse(
       await readFile(join(fixtureRoot, name + ".json"), "utf8"),
@@ -74,21 +75,28 @@ test("browser renders every report template against live fixtures", async ({}, t
       writeFile(reportPath, JSON.stringify(fixture.report), "utf8"),
       writeFile(observationsPath, JSON.stringify(fixture.observations), "utf8"),
     ]);
-    await runReportRenderer(
-      process.execPath,
-      [
-        renderer.pathname,
-        "--report",
-        reportPath,
-        "--observations",
-        observationsPath,
-        "--output",
-        outputPath,
-        ...fixtureText[name].flatMap((text) => ["--expect-text", text]),
-      ],
-      { cwd: webRoot, timeout: 100_000 },
+    jobs.push([
+      "--report",
+      reportPath,
+      "--observations",
+      observationsPath,
+      "--output",
       outputPath,
-    );
+      ...fixtureText[name].flatMap((text) => ["--expect-text", text]),
+    ]);
+  }
+  const batchPath = testInfo.outputPath("renderer-batch.json");
+  await writeFile(batchPath, JSON.stringify(jobs), "utf8");
+  // One isolated Vite session: compile the renderer once, then give each
+  // fixture a fresh page. Starting nine optimizers races the suite's server.
+  await runReportRenderer(
+    process.execPath,
+    [renderer.pathname, "--batch", batchPath],
+    { cwd: webRoot, timeout: 100_000 },
+    testInfo.outputPath(templateNames.at(-1) + ".png"),
+  );
+  for (const name of templateNames) {
+    const outputPath = testInfo.outputPath(name + ".png");
     const png = await readFile(outputPath);
     expect(png.subarray(0, 8), name).toEqual(
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

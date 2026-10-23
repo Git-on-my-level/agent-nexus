@@ -214,7 +214,7 @@ func TestWorkCursorReaderFiltersRestartAndNoEviction(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	reader := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"})
+	reader := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "reader"})
 	first, err := s.ListWork(reader, primitives.WorkListFilter{Limit: 1})
 	if err != nil || first.NextCursor == "" {
 		t.Fatal(first, err)
@@ -237,11 +237,19 @@ func TestWorkCursorReaderFiltersRestartAndNoEviction(t *testing.T) {
 		}
 	}
 	// Previously the 257th key evicted an issued cursor.
+	// Exercise cursor issuance under the same read boundary as HTTP handlers.
+	// This loop tests key retention, not 260 repeated canonical policy compiles.
+	read, closeRead, err := s.BeginResourceRead(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 260; i++ {
-		if _, err = s.ListWork(reader, primitives.WorkListFilter{Limit: 1}); err != nil {
+		if _, err = s.ListWork(read, primitives.WorkListFilter{Limit: 1}); err != nil {
+			closeRead()
 			t.Fatal(err)
 		}
 	}
+	closeRead()
 	if err = ws.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -250,6 +258,7 @@ func TestWorkCursorReaderFiltersRestartAndNoEviction(t *testing.T) {
 		t.Fatal(err)
 	}
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	reader = primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "reader"})
 	resumed, err := s.ListWork(reader, primitives.WorkListFilter{Limit: 2, Cursor: first.NextCursor})
 	if err != nil || len(resumed.Work) != len(expected.Work) {
 		t.Fatal(resumed, err)

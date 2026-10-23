@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
@@ -12,13 +13,14 @@ function args(argv) {
     const key = argv[index];
     if (!key.startsWith("--") || !argv[index + 1])
       throw new Error(
-        "usage: preview-visual-report.mjs --report <file> --observations <file> --output <png> [--expect-text <text>] [--chromium-sandbox <true|false>]",
+        "usage: preview-visual-report.mjs (--report <file> --observations <file> --output <png> [--expect-text <text>] | --batch <json>) [--chromium-sandbox <true|false>]",
       );
     const name = key.slice(2);
     const value = argv[++index];
     if (name === "expect-text") result[name] = [...(result[name] ?? []), value];
     else result[name] = value;
   }
+  if (result.batch) return result;
   for (const key of ["report", "observations", "output"])
     if (!result[key]) throw new Error(`missing --${key}`);
   return result;
@@ -60,13 +62,20 @@ async function waitUntilReady(child, url) {
 }
 
 async function stop(child) {
-  if (child.exitCode !== null) return;
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");
+  let timer;
   await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    new Promise((resolve) => setTimeout(resolve, 5_000)),
+    exited,
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, 5_000);
+    }),
   ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
+  clearTimeout(timer);
+  if (child.exitCode === null && child.signalCode === null)
+    child.kill("SIGKILL");
+  await exited;
 }
 
 export function isSandboxLaunchFailure(error) {
@@ -83,15 +92,30 @@ export async function main(
   const sandbox = input["chromium-sandbox"] ?? "true";
   if (sandbox !== "true" && sandbox !== "false")
     throw new Error("--chromium-sandbox must be true or false");
-  JSON.parse(await readFile(input.report, "utf8"));
-  const observations = JSON.parse(await readFile(input.observations, "utf8"));
-  if (!Array.isArray(observations))
-    throw new Error("observations must be an array");
-  const expectedTexts = (input["expect-text"] ?? [])
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const output = path.resolve(input.output);
-  await mkdir(path.dirname(output), { recursive: true });
+  const batch = input.batch
+    ? JSON.parse(await readFile(input.batch, "utf8"))
+    : null;
+  if (
+    input.batch &&
+    (!Array.isArray(batch) ||
+      !batch.length ||
+      batch.some(
+        (job) =>
+          !Array.isArray(job) ||
+          job.includes("--batch") ||
+          job.includes("--chromium-sandbox"),
+      ))
+  )
+    throw new Error(
+      "batch must be a nonempty array of renderer argument arrays",
+    );
+  const jobs = batch ? batch.map(args) : [input];
+  for (const job of jobs) {
+    JSON.parse(await readFile(job.report, "utf8"));
+    if (!Array.isArray(JSON.parse(await readFile(job.observations, "utf8"))))
+      throw new Error("observations must be an array");
+    await mkdir(path.dirname(path.resolve(job.output)), { recursive: true });
+  }
   const webRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
@@ -116,7 +140,17 @@ export async function main(
   }
 
   let server;
+  let workDir;
+  let serverLog = "";
   try {
+    workDir = await mkdtemp(path.join(tmpdir(), "anx-report-preview-"));
+    const stagedReport = path.join(workDir, "report.json");
+    const stagedObservations = path.join(workDir, "observations.json");
+    const stage = async (job) => {
+      await writeFile(stagedReport, await readFile(job.report));
+      await writeFile(stagedObservations, await readFile(job.observations));
+    };
+    await stage(jobs[0]);
     const port = await freePort();
     server = spawn(
       process.execPath,
@@ -133,49 +167,83 @@ export async function main(
         cwd: webRoot,
         env: {
           ...process.env,
-          ANX_REPORT_PREVIEW_REPORT: path.resolve(input.report),
-          ANX_REPORT_PREVIEW_OBSERVATIONS: path.resolve(input.observations),
+          // Both generated Kit modules and optimized dependencies belong to
+          // this renderer. Other dev servers must not replace active chunks.
+          ANX_REPORT_PREVIEW_WORK_DIR: workDir,
+          ANX_REPORT_PREVIEW_REPORT: stagedReport,
+          ANX_REPORT_PREVIEW_OBSERVATIONS: stagedObservations,
+          ANX_UI_BASE_PATH: "",
         },
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
       },
     );
+    for (const stream of [server.stdout, server.stderr])
+      stream.on("data", (chunk) => {
+        serverLog = (serverLog + chunk.toString()).slice(-16_384);
+      });
     const url = `http://127.0.0.1:${port}/internal/report-preview`;
     await waitUntilReady(server, url);
-    const page = await browser.newPage({
-      viewport: { width: 1440, height: 1000 },
-      colorScheme: "light",
-    });
-    const pageErrors = [];
-    page.on("pageerror", (error) => pageErrors.push(error.message));
-    await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
-    if (pageErrors.length)
-      throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
-    const reportSurface = page.locator('[aria-label="Visual report"]');
-    await reportSurface.waitFor({ state: "visible", timeout: 15_000 });
-    await page.waitForFunction(
-      () => {
-        const surface = document.querySelector('[aria-label="Visual report"]');
-        return surface && !surface.innerText.includes("Reading workspace…");
-      },
-      null,
-      { timeout: 15_000 },
-    );
-    const renderedText = await reportSurface.innerText();
-    if (pageErrors.length)
-      throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
-    if (renderedText.includes("Reading workspace…"))
-      throw new Error("report preview retained a loading placeholder");
-    for (const expectedText of expectedTexts) {
-      if (!renderedText.includes(expectedText))
-        throw new Error(
-          `report preview did not render fixture content: ${expectedText}`,
+    for (const job of jobs) {
+      await stage(job);
+      const expectedTexts = (job["expect-text"] ?? [])
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const output = path.resolve(job.output);
+      const page = await browser.newPage({
+        viewport: { width: 1440, height: 1000 },
+        colorScheme: "light",
+      });
+      try {
+        const pageErrors = [];
+        page.on("pageerror", (error) => pageErrors.push(error.message));
+        await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+        if (pageErrors.length)
+          throw new Error(
+            `report preview page error: ${pageErrors.join("; ")}`,
+          );
+        const reportSurface = page.locator('[aria-label="Visual report"]');
+        await reportSurface.waitFor({ state: "visible", timeout: 15_000 });
+        await page.waitForFunction(
+          () => {
+            const surface = document.querySelector(
+              '[aria-label="Visual report"]',
+            );
+            return surface && !surface.innerText.includes("Reading workspace…");
+          },
+          null,
+          { timeout: 15_000 },
         );
+        const renderedText = await reportSurface.innerText();
+        if (pageErrors.length)
+          throw new Error(
+            `report preview page error: ${pageErrors.join("; ")}`,
+          );
+        if (renderedText.includes("Reading workspace…"))
+          throw new Error("report preview retained a loading placeholder");
+        for (const expectedText of expectedTexts) {
+          if (!renderedText.includes(expectedText))
+            throw new Error(
+              `report preview did not render fixture content: ${expectedText}`,
+            );
+        }
+        await reportSurface.screenshot({
+          path: output,
+          animations: "disabled",
+        });
+      } finally {
+        await page.close();
+      }
     }
-    await reportSurface.screenshot({ path: output, animations: "disabled" });
     return { rendered: true };
+  } catch (error) {
+    throw new Error(
+      `${error.message}${serverLog ? `\nRenderer server:\n${serverLog}` : ""}`,
+      { cause: error },
+    );
   } finally {
     if (server) await stop(server);
     await browser.close();
+    if (workDir) await rm(workDir, { recursive: true, force: true });
   }
 }
 
