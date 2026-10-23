@@ -6,7 +6,32 @@ import (
 	"time"
 )
 
+func decodeBriefLoopFacts(raw []byte, facts *loopFacts) error {
+	// The brief renders twelve recent runs. Leave the rest encoded instead of
+	// constructing full receipt maps (metrics, context, evidence) just to drop
+	// them in computeLoop. Counts, goal points and incumbent facts stay complete.
+	type withoutRuns loopFacts
+	wire := struct {
+		*withoutRuns
+		Runs []json.RawMessage `json:"runs"`
+	}{withoutRuns: (*withoutRuns)(facts)}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return err
+	}
+	facts.Runs = make([]map[string]any, min(12, len(wire.Runs)))
+	for i := range facts.Runs {
+		if err := json.Unmarshal(wire.Runs[i], &facts.Runs[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) cachedLoopFacts(ctx context.Context, ids []string, now time.Time) (map[string]loopFacts, error) {
+	return s.cachedLoopFactsForRead(ctx, ids, now, false)
+}
+
+func (s *Store) cachedLoopFactsForRead(ctx context.Context, ids []string, now time.Time, briefOnly bool) (map[string]loopFacts, error) {
 	out := map[string]loopFacts{}
 	if len(ids) == 0 {
 		return out, nil
@@ -23,7 +48,12 @@ func (s *Store) cachedLoopFacts(ctx context.Context, ids []string, now time.Time
 			return nil, err
 		}
 		var f loopFacts
-		if err = json.Unmarshal([]byte(raw), &f); err != nil {
+		if briefOnly {
+			err = decodeBriefLoopFacts([]byte(raw), &f)
+		} else {
+			err = json.Unmarshal([]byte(raw), &f)
+		}
+		if err != nil {
 			return nil, err
 		}
 		out[id] = f

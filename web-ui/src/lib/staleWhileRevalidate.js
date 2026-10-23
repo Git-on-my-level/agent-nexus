@@ -133,7 +133,7 @@ export function staleWhileRevalidate({
       if (document.visibilityState === "hidden" || !valid()) return;
       stopLive();
       stopLive = connect(() => {
-        if (!denied) void refresh();
+        if (!denied) return refresh();
       });
       if (!denied) void refresh({ force, returning });
     };

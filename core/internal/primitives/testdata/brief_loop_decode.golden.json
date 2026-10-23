@@ -1,0 +1,95 @@
+{
+  "effects_7d": 50,
+  "every_seconds": 3600,
+  "goal": {
+    "baseline": 42,
+    "best": 42,
+    "direction": "up",
+    "latest": 42,
+    "metric": "score",
+    "points": [
+      {
+        "at": "2026-10-22T23:00:00Z",
+        "decision": "kept",
+        "value": 42
+      }
+    ],
+    "target": null,
+    "unit": null
+  },
+  "health": "healthy",
+  "health_reason": "effect within progress budget",
+  "last_effect_at": "2026-10-22T23:00:00Z",
+  "last_run_at": "2026-10-22T23:00:00Z",
+  "next_run_due_at": "2026-10-23T00:00:00Z",
+  "progress_budget_seconds": null,
+  "recent_runs": [
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    },
+    {
+      "at": "2026-10-22T23:00:00Z",
+      "decision": "kept",
+      "outcome": "acted"
+    }
+  ],
+  "runs_7d": {
+    "acted": 50,
+    "infra_error": 0,
+    "measured": 0,
+    "no_op": 0
+  },
+  "stop_rule": null
+}

@@ -909,7 +909,7 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 			loopIDs = append(loopIDs, r.cardID)
 		}
 	}
-	loops, _, loopErr := b.s.loadLoopStates(b.ctx, loopIDs, b.now)
+	loops, _, loopErr := b.s.loadBriefLoopStates(b.ctx, loopIDs, b.now)
 	if loopErr != nil {
 		return nil, false, loopErr
 	}
