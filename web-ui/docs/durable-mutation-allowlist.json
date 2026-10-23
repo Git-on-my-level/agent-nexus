@@ -1,9 +1,10 @@
 {
   "lib/anxCoreClient.js": {
     "classification": "transport",
-    "reason": "Generated SDK adapter and direct upload/read transport; entrypoints counted, not safe-retry exemptions.",
+    "reason": "Generated SDK adapter, default detached browser fetch and direct upload/read transport; entrypoints counted, not safe-retry exemptions.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
+      "raw-fetch": 1,
       "transport:baseFetchFn": 1,
       "transport:fetchFn": 1,
       "transport:invokeCommand": 6,
@@ -126,9 +127,10 @@
   },
   "lib/workspaceActivation.js": {
     "classification": "stage-2",
-    "reason": "TODO: workspace activation POST needs an authority/session recovery audit.",
+    "reason": "TODO: unkeyed workspace activation POST (including its default detached fetch binding) needs an authority/session recovery audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
+      "raw-fetch": 1,
       "transport:fetchFn": 1
     }
   },
@@ -151,7 +153,7 @@
   },
   "routes/o/[organization]/w/[workspace]/access/+page.svelte": {
     "classification": "stage-2",
-    "reason": "TODO: approval/denial, host/enrollment/invite/principal lifecycle and private token results.",
+    "reason": "TODO: host exclusion text is drafted, but unkeyed host patches and approval/enrollment/invite/principal writes still need atomic replay and private-result audits.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "approveAccessRequest": 1,
