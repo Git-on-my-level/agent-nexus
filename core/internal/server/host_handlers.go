@@ -559,7 +559,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		h, err := opts.authStore.PatchHost(r.Context(), id, display, excluded, admin)
 		if err != nil {
-			hostError(w, r, err)
+			hostCeremonyError(w, r, err)
 			return
 		}
 		opts.agentChanges.publish()

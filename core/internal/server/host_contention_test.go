@@ -18,7 +18,7 @@ import (
 // in the fixture, rather than making the suite wait twenty seconds per failure.
 func TestHostCeremoniesWriterContention(t *testing.T) {
 	requireIntegrationTest(t)
-	for _, ceremony := range []string{"token", "bridge", "refresh", "workspace-grant"} {
+	for _, ceremony := range []string{"token", "bridge", "refresh", "workspace-grant", "host-patch"} {
 		t.Run(ceremony, func(t *testing.T) {
 			env := newAuthIntegrationEnv(t, authIntegrationOptions{workspaceHumanGrantVerifier: subjectGrantVerifier{}, servingPool: func(ws *storage.Workspace) *sql.DB {
 				db, err := sql.Open("sqlite", "file:"+ws.Layout().DatabasePath+"?_pragma=busy_timeout(25)&_txlock=immediate")
@@ -29,11 +29,12 @@ func TestHostCeremoniesWriterContention(t *testing.T) {
 				return db
 			}})
 			agent := seedNotificationTestAgent(t, env, "worker.contention")
-			var refresh string
-			if ceremony == "refresh" {
+			var refresh, bearer string
+			if ceremony == "refresh" || ceremony == "host-patch" {
 				status, payload := hostHTTP(t, "POST", env.server.URL+"/auth/token", "", humanGrantBody("valid:person:seed-refresh"))
 				hostStatus(t, status, http.StatusOK, payload)
 				refresh = payload["tokens"].(map[string]any)["refresh_token"].(string)
+				bearer = payload["tokens"].(map[string]any)["access_token"].(string)
 			}
 			held, err := env.workspace.DB().BeginTx(context.Background(), nil)
 			if err != nil {
@@ -44,6 +45,11 @@ func TestHostCeremoniesWriterContention(t *testing.T) {
 			// marker must not be consumed until a transaction can actually start.
 			signed := time.Now().UTC().Format(time.RFC3339Nano)
 			request := func() (int, map[string]any) {
+				if ceremony == "host-patch" {
+					// Bearer auth reaches the shared PatchHost transaction directly,
+					// rather than failing first in signed-proof admission.
+					return hostHTTP(t, "PATCH", env.server.URL+"/hosts/"+agent.Host.ID, bearer, map[string]any{"display_name": "Recovered host"})
+				}
 				if ceremony == "refresh" {
 					return hostHTTP(t, "POST", env.server.URL+"/auth/token", "", map[string]any{"grant_type": "refresh_token", "refresh_token": refresh})
 				}
@@ -60,14 +66,24 @@ func TestHostCeremoniesWriterContention(t *testing.T) {
 			if status != http.StatusServiceUnavailable || payload["error"].(map[string]any)["code"] != "busy" || payload["error"].(map[string]any)["recoverable"] != true {
 				t.Errorf("writer contention should be retryable: status=%d payload=%v", status, payload)
 			}
+			if ceremony == "host-patch" {
+				host, err := env.authStore.GetHost(context.Background(), agent.Host.ID)
+				if err != nil || host.DisplayName == "Recovered host" {
+					t.Fatalf("refused update changed the host: %+v %v", host, err)
+				}
+			}
 			if err = held.Rollback(); err != nil {
 				t.Fatal(err)
 			}
 			status, payload = request()
 			hostStatus(t, status, http.StatusOK, payload)
-			// Successful assertions remain single-use.
+			// Host profile replacement is idempotent; assertions remain single-use.
 			status, payload = request()
-			hostStatus(t, status, http.StatusUnauthorized, payload)
+			if ceremony == "host-patch" {
+				hostStatus(t, status, http.StatusOK, payload)
+			} else {
+				hostStatus(t, status, http.StatusUnauthorized, payload)
+			}
 		})
 	}
 }

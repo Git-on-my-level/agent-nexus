@@ -7603,7 +7603,7 @@ paths:
         '403': {$ref: '#/components/responses/ErrorResponse'}
         '404': {$ref: '#/components/responses/ErrorResponse'}
         '503':
-          description: Workspace writer contention during authentication; recoverable busy error. Wait for Retry-After and retry with a fresh signed proof. An earlier proof may already have been consumed.
+          description: Workspace writer contention during host proof verification or profile update; recoverable busy error. Wait for Retry-After and retry signed requests with a fresh proof. An earlier proof may already have been consumed.
           headers:
             Retry-After: {schema: {type: integer}, description: Seconds to wait before retrying.}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

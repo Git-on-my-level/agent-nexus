@@ -20,7 +20,7 @@ func writeAuthContentionError(w http.ResponseWriter, r *http.Request, err error)
 	if !errors.As(err, &coded) || (coded.Code()&255 != 5 && coded.Code()&255 != 6) {
 		return false
 	}
-	const message = "workspace writer is busy; wait and retry authentication"
+	const message = "workspace writer is busy; wait and retry the request"
 	emitServerFault(w, r, http.StatusServiceUnavailable, err, message)
 	w.Header().Set("Retry-After", "1")
 	payload := errorPayload("busy", message)
