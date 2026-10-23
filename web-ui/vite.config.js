@@ -11,6 +11,67 @@ import { defineConfig, searchForWorkspaceRoot } from "vite";
 // tests/serverIdentity.js. No build hook, so it never reaches the bundle.
 export const E2E_IDENTITY_PATH = "/__anx/e2e-identity";
 
+// Initial optimization can invalidate SSR modules too. Keep the first report
+// request outside that window, rather than letting a reload split Svelte's
+// server component/context runtime during the first render.
+export function rendererWarmupPlugin() {
+  let resolveReady;
+  let rejectReady;
+  const ready = new Promise((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  ready.catch(() => {});
+  return {
+    name: "anx-report-renderer-warmup",
+    enforce: "pre",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split("?")[0] !== "/internal/report-preview")
+          return next();
+        ready.then(next, () => {
+          res.statusCode = 503;
+          res.end("Report renderer startup failed.");
+        });
+      });
+      server.httpServer.once("listening", async () => {
+        try {
+          const modules = await Promise.all([
+            server.transformRequest("/src/lib/markdown.js"),
+            server.transformRequest(
+              "/src/lib/components/reports/reportChartRenderer.js",
+            ),
+          ]);
+          const dependencies = new Set(
+            modules.flatMap((module) =>
+              [...module.code.matchAll(/from\s*["']([^"']+)["']/g)]
+                .map((match) => match[1])
+                .filter((url) => url.includes("/deps/")),
+            ),
+          );
+          if (!dependencies.size)
+            throw new Error(
+              "Renderer dependency warmup found no optimized imports",
+            );
+          // Loading optimized modules waits for their initial bundling to
+          // finish. Transforming only the source does not wait for that work.
+          await Promise.all(
+            [...dependencies].map((url) => server.transformRequest(url)),
+          );
+          await server.waitForRequestsIdle();
+          resolveReady();
+        } catch (error) {
+          rejectReady(error);
+          server.config.logger.error(
+            `Report renderer warmup failed: ${error.message}`,
+          );
+          await server.close();
+        }
+      });
+    },
+  };
+}
+
 function e2eIdentityPlugin() {
   let root = process.cwd();
   const handler = (_req, res) => {
@@ -68,7 +129,13 @@ export default defineConfig(() => {
   }
 
   return {
-    plugins: [sveltekit(), e2eIdentityPlugin()],
+    plugins: [
+      sveltekit(),
+      e2eIdentityPlugin(),
+      ...(process.env.ANX_REPORT_PREVIEW_WORK_DIR
+        ? [rendererWarmupPlugin()]
+        : []),
+    ],
     ...(process.env.ANX_REPORT_PREVIEW_WORK_DIR
       ? {
           // The chart renderer is imported only after mount. Optimize its

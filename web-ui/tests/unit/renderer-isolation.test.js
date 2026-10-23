@@ -2,9 +2,85 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { afterEach, expect, it, vi } from "vitest";
 
+function warmupServer(bundle) {
+  let request;
+  let listening;
+  const server = {
+    middlewares: {
+      use: (handler) => {
+        request = handler;
+      },
+    },
+    httpServer: {
+      once: (_event, handler) => {
+        listening = handler;
+      },
+    },
+    transformRequest: vi.fn((url) =>
+      url.includes("/deps/")
+        ? bundle()
+        : Promise.resolve({
+            code: 'import dep from "/cache/deps/renderer.js?v=hash";',
+          }),
+    ),
+    waitForRequestsIdle: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+    config: { logger: { error: vi.fn() } },
+  };
+  return {
+    server,
+    request: (...args) => request(...args),
+    listening: () => listening(),
+  };
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetModules();
+});
+
+it("holds report SSR until optimized dependencies finish loading", async () => {
+  const { rendererWarmupPlugin } = await import("../../vite.config.js");
+  let release;
+  let requested;
+  const loading = new Promise((resolve) => {
+    requested = resolve;
+  });
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const fixture = warmupServer(() => {
+    requested();
+    return pending;
+  });
+  rendererWarmupPlugin().configureServer(fixture.server);
+  const next = vi.fn();
+  fixture.request({ url: "/internal/report-preview" }, {}, next);
+  const startup = fixture.listening();
+  await loading;
+  expect(next).not.toHaveBeenCalled();
+  release({ code: "export default {};" });
+  await startup;
+  expect(next).toHaveBeenCalledTimes(1);
+  expect(fixture.server.waitForRequestsIdle).toHaveBeenCalledTimes(1);
+});
+
+it("closes the renderer on optimization failure without admitting report SSR", async () => {
+  const { rendererWarmupPlugin } = await import("../../vite.config.js");
+  const fixture = warmupServer(async () => {
+    throw new Error("broken dependency");
+  });
+  rendererWarmupPlugin().configureServer(fixture.server);
+  const next = vi.fn();
+  const response = { end: vi.fn() };
+  fixture.request({ url: "/internal/report-preview" }, response, next);
+  await fixture.listening();
+  expect(next).not.toHaveBeenCalled();
+  expect(response.statusCode).toBe(503);
+  expect(fixture.server.close).toHaveBeenCalledTimes(1);
+  expect(fixture.server.config.logger.error).toHaveBeenCalledWith(
+    expect.stringContaining("broken dependency"),
+  );
 });
 
 it("keeps renderer generated modules and dependencies outside the suite's directories", async () => {

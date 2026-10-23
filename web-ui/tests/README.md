@@ -73,6 +73,8 @@ listening/serving HTML alone never completes startup, including under `/anx`.
 SvelteKit output and Vite dependency cache, pre-optimizes the markdown/chart
 dependencies, and removes that directory after stopping the server. It cannot
 invalidate modules in the suite's already-running dev server.
+The first report request also waits for the optimized dependency modules to
+finish loading, so the initial optimizer reload cannot interrupt cold SSR.
 
 The single-report arguments remain supported. `--batch <json>` accepts a
 nonempty JSON array of argument arrays, each containing `--report`,
