@@ -30,6 +30,7 @@
   import {
     collectionFromLoops,
     dominantQuietState,
+    normalizeCollection,
     untagged,
   } from "$lib/collection.js";
   import CollectionTable from "$lib/components/collection/CollectionTable.svelte";
@@ -98,6 +99,15 @@
         href: (row) => refHref(row.ref),
       }),
     ),
+  );
+  /** `live-collection`: core's rows for initiatives, loops or agents. */
+  let liveCollection = $derived(
+    panel.type === "live-collection"
+      ? normalizeCollection(live?.data, { href: (row) => refHref(row.ref) })
+      : null,
+  );
+  let collectionRows = $derived(
+    liveCollection?.groups.reduce((n, g) => n + g.rows.length, 0) ?? 0,
   );
   /** "All 22 loops stopped reporting around Oct 16", said once. */
   let loopSilence = $derived.by(() => {
@@ -330,6 +340,18 @@
         {/each}
       </ol>
     {:else}<p class="muted">No recent activity in this view.</p>{/if}
+  {:else if panel.type === "live-collection"}
+    {#if collectionRows}
+      <div class="mt-1" data-live-collection>
+        <CollectionTable
+          collection={liveCollection}
+          folded={["done"]}
+          label={panel.title || "items"}
+        />
+      </div>
+    {:else}
+      <p class="muted">Nothing in this view yet.</p>
+    {/if}
   {:else if panel.type === "live-loops"}
     {#if loopStats}
       <LoopTotals totals={loopStats} />
