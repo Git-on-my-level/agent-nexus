@@ -518,7 +518,7 @@ test("one initiative reads the same on the Watch list, the Watch board and its p
   };
 
   await page.goto(WATCH);
-  const list = await read(page.locator(`[data-watch-row="${ref}"]`));
+  const list = await read(page.locator(`[data-collection-row="${ref}"]`));
   await page.goto(`${WATCH}?view=board`);
   const board = await read(
     page.locator(`[data-watch-row="${ref}"][data-watch-variant="card"]`),

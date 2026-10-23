@@ -34,6 +34,8 @@
     onselect = null,
     /** Pin `ref`, or unpin with `null`. */
     onpin = null,
+    /** Fixed trigger text (Watch's "More dashboards"); default shows the selection. */
+    triggerLabel = "",
   } = $props();
 
   let open = $state(false);
@@ -268,10 +270,14 @@
     onkeydown={onTriggerKeydown}
   >
     <span class="picker-value"
-      >{selected?.title || selected?.id || "Choose a report"}</span
+      >{triggerLabel ||
+        selected?.title ||
+        selected?.id ||
+        "Choose a report"}</span
     >
-    {#if pinnedSelected}<span class="picker-pinned" data-overview-report-pinned
-        >Pinned</span
+    {#if pinnedSelected && !triggerLabel}<span
+        class="picker-pinned"
+        data-overview-report-pinned>Pinned</span
       >{/if}
     <span class="picker-caret" aria-hidden="true">▾</span>
   </button>

@@ -30,7 +30,7 @@ const WORKSPACE = "/o/local/w/local";
 const DOC_ID = "provenance-dashboard";
 const DOC_PATH = `${WORKSPACE}/docs/${DOC_ID}`;
 // The old Overview's pinned dashboard now lives below the initiatives on Watch.
-const OVERVIEW = `${WORKSPACE}/watch`;
+const OVERVIEW = `${WORKSPACE}/watch?tab=dashboard`;
 const NOW = "2026-10-06T12:00:00Z";
 const ago = (days) =>
   new Date(Date.parse(NOW) - days * 86_400_000).toISOString();

@@ -48,12 +48,16 @@ test("lists initiatives by computed state with sources tagged", async ({
 }) => {
   await setup(context);
   await page.goto(WATCH);
-  const groups = page.locator("[data-watch-group]");
-  await expect(groups.first()).toHaveAttribute(
-    "data-watch-group",
-    "past_promise",
+  // Initiatives is where Watch lands; a decision for the reader sorts first.
+  await expect(page.locator('[data-watch-tab="initiatives"]')).toHaveAttribute(
+    "aria-selected",
+    "true",
   );
-  const battery = page.locator('[data-watch-row="card:battery-measurement"]');
+  const rows = page.locator("[data-collection-row]");
+  await expect(rows.first()).toHaveAttribute("data-state", "waiting_on_you");
+  const battery = page.locator(
+    '[data-collection-row="card:battery-measurement"]',
+  );
   await expect(battery).toContainText("9d past");
   await expect(
     battery.locator('[data-source="computed:initiatives.past_promise_for"]'),
@@ -61,9 +65,32 @@ test("lists initiatives by computed state with sources tagged", async ({
   await expect(
     page.locator('[data-source="computed:generated_at"]'),
   ).toContainText("as of");
-  // Waiting-on-you is a badge linking into Decide, not a state.
+  // Done and no-promise start folded.
+  await expect(
+    page.locator('[data-collection-row="card:docs-refresh"]'),
+  ).toHaveCount(0);
+  await page.locator("[data-collection-folded]").click();
+  await expect(
+    page.locator('[data-collection-row="card:docs-refresh"]'),
+  ).toBeVisible();
+  // Watch is read-only: the header points to Decide.
+  await expect(page.locator("[data-watch-decide-link]")).toBeVisible();
+  if (process.env.WATCH_SHOTS) {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.screenshot({
+      path: `${process.env.WATCH_SHOTS}/watch-initiatives.png`,
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: `${process.env.WATCH_SHOTS}/watch-initiatives-phone.png`,
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
+  // "You" in the next column links into Decide for that initiative.
   await battery
-    .locator('[data-source="computed:initiatives.waiting_on_you_count"]')
+    .locator('a[data-source="computed:initiatives.waiting_on_you_count"]')
     .click();
   await expect(page).toHaveURL(
     /\/decide\?initiative=card%3Abattery-measurement|\/decide\?initiative=card:battery-measurement/,
@@ -190,7 +217,7 @@ test("a failed read shows a banner with Retry, never the raw body", async ({
   });
   await expect(page.getByText("cloudflare-secret-error-body")).toHaveCount(0);
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(page.locator("[data-watch-row]").first()).toBeVisible();
+  await expect(page.locator("[data-collection-row]").first()).toBeVisible();
 });
 
 /** The fixture plus loops in every Loops group. */
@@ -251,37 +278,23 @@ test("Loops lists measured initiatives by what they need", async ({
 }) => {
   await setup(context, (route) => json(route, loopsBrief()));
   await page.goto(WATCH);
-  const loopsButton = page.locator('[data-watch-view="loops"]');
-  // The fixture's loop plus four added ones.
-  await expect(loopsButton).toContainText("5");
-  await loopsButton.click();
-  await expect(page).toHaveURL(/view=loops/);
-  const groups = page.locator("[data-watch-loop-group]");
-  await expect(groups.first()).toHaveAttribute(
-    "data-watch-loop-group",
-    "waiting",
-  );
-  await expect(page.locator('[data-watch-loop-group="silent"]')).toContainText(
-    "Retention nudges",
-  );
-  await expect(page.locator('[data-watch-loop-group="flat"]')).toContainText(
-    "Pricing page test",
-  );
-  await expect(
-    page.locator(
-      '[data-watch-loop-group="flat"] [data-source="computed:initiatives.metric_flat"]',
-    ),
-  ).toContainText(/^flat /);
-  await expect(page.locator('[data-watch-loop-group="moving"]')).toContainText(
-    "Onboarding emails",
-  );
+  const loopsTab = page.locator('[data-watch-tab="loops"]');
+  // The badge counts loops that need the reader: the two waiting on a decision.
+  await expect(loopsTab).toContainText("2");
+  await loopsTab.click();
+  await expect(page).toHaveURL(/tab=loops/);
+  const rows = page.locator("[data-collection-row]");
+  await expect(rows.first()).toHaveAttribute("data-state", "waiting");
+  const row = (ref) => page.locator(`[data-collection-row="${ref}"]`);
+  await expect(row("card:loop-quiet")).toHaveAttribute("data-state", "silent");
+  await expect(row("card:loop-flat")).toHaveAttribute("data-state", "flat");
+  await expect(row("card:loop-moving")).toHaveAttribute("data-state", "moving");
   // Only loops: an initiative without a series is not listed.
-  await expect(
-    page.locator('[data-watch-row="card:observability"]'),
-  ).toHaveCount(0);
-  await expect(
-    page.locator('[data-watch-row="card:loop-ask"] [data-watch-metrics]'),
-  ).toContainText("0.42");
+  await expect(row("card:observability")).toHaveCount(0);
+  await expect(row("card:loop-ask")).toContainText("0.42");
+  // The state pills filter the rows.
+  await page.locator('[data-collection-filter="flat"]').click();
+  await expect(rows).toHaveCount(1);
 });
 
 /** Loops with run receipts: one per computed condition, one climbing a goal. */
@@ -403,27 +416,26 @@ test("Loops with run receipts show cards, totals and the climb", async ({
 }) => {
   await setup(context, (route) => json(route, receiptLoopsBrief()));
   await page.goto(`${WATCH}?view=loops`);
-  await expect(page.locator("[data-loop-totals]")).toBeVisible();
-  await expect(
-    page.locator(
-      '[data-watch-loop-group="failing"] [data-loop="card:cost-watch"]',
-    ),
-  ).toBeVisible();
-  await expect(
-    page.locator(
-      '[data-watch-loop-group="silent"] [data-loop="card:retention-check"]',
-    ),
-  ).toContainText("run overdue by 2d");
-  await expect(
-    page.locator(
-      '[data-watch-loop-group="flat"] [data-loop="card:pr-monitor"]',
-    ),
-  ).toContainText("Stalled");
-  const climber = page.locator('[data-loop="card:avo-cleanup"]');
-  await expect(climber.locator("[data-loop-chart] polyline")).toHaveCount(2);
-  await expect(climber.locator("[data-loop-runs] li")).toHaveCount(6);
-  await expect(climber).toContainText("reclaimable_gb");
-  await expect(page.locator("[data-watch-loops]")).not.toContainText("NaN");
+  const row = (ref) => page.locator(`[data-collection-row="${ref}"]`);
+  await expect(row("card:cost-watch")).toHaveAttribute("data-state", "failing");
+  await expect(row("card:retention-check")).toHaveAttribute(
+    "data-state",
+    "silent",
+  );
+  await expect(row("card:pr-monitor")).toHaveAttribute("data-state", "flat");
+  // A loop's row shows its goal as a sparkline; expanding it shows the card.
+  const climber = row("card:avo-cleanup");
+  await expect(climber.locator("polyline")).toHaveCount(1);
+  await climber.getByRole("button", { name: /Show details/ }).click();
+  const card = climber.locator('[data-loop="card:avo-cleanup"]');
+  await expect(card.locator("[data-loop-chart] polyline")).toHaveCount(2);
+  await expect(card.locator("[data-loop-runs] li")).toHaveCount(6);
+  await expect(card).toContainText("reclaimable_gb");
+  await row("card:retention-check")
+    .getByRole("button", { name: /Show details/ })
+    .click();
+  await expect(row("card:retention-check")).toContainText("run overdue by 2d");
+  await expect(page.locator("[data-collection]")).not.toContainText("NaN");
   if (process.env.LOOP_SHOTS) {
     await page.setViewportSize({ width: 1400, height: 1500 });
     await page.screenshot({
@@ -456,6 +468,6 @@ test("Loops says how to add one when there are none", async ({
   );
   await page.goto(`${WATCH}?view=loops`);
   await expect(page.locator("[data-watch-loops-empty]")).toContainText(
-    "series:",
+    "anx work receipt",
   );
 });
