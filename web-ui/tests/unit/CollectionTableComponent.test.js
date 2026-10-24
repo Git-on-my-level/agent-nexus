@@ -34,6 +34,44 @@ describe("CollectionTable state filter", () => {
     });
     expect(container.querySelectorAll("[data-collection-row]")).toHaveLength(2);
   });
+  it("clears that selection, so it does not return with its state", async () => {
+    const { container, rerender } = render(CollectionTable, {
+      collection: collection([row("a", "failing"), row("b", "healthy")]),
+    });
+    await fireEvent.click(
+      container.querySelector('[data-collection-filter="failing"]'),
+    );
+    await rerender({
+      collection: collection([row("a", "healthy"), row("b", "healthy")]),
+    });
+    // One loop fails again: the reader did not pick Failing this time.
+    await rerender({
+      collection: collection([row("a", "failing"), row("b", "healthy")]),
+    });
+    expect(container.querySelectorAll("[data-collection-row]")).toHaveLength(2);
+    expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
+  });
+  it("keeps a way to clear the filter when every row matches it", async () => {
+    const { container, rerender } = render(CollectionTable, {
+      collection: collection([row("a", "failing"), row("b", "healthy")]),
+    });
+    await fireEvent.click(
+      container.querySelector('[data-collection-filter="failing"]'),
+    );
+    await rerender({
+      collection: collection([row("a", "failing"), row("b", "failing")]),
+    });
+    const all = container.querySelector("[data-collection-filter-all]");
+    expect(all).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-collection-filter="failing"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    await fireEvent.click(all);
+    expect(container.querySelector("[data-collection-filter-all]")).toBeNull();
+    expect(container.querySelector("[data-collection-filter]")).toBeNull();
+  });
   it("keeps a picked state that still has rows", async () => {
     const { container, rerender } = render(CollectionTable, {
       collection: collection([row("a", "failing"), row("b", "healthy")]),

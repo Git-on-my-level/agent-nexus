@@ -45,9 +45,12 @@
     collection.states.filter((s) => (collection.counts[s.key] ?? 0) > 0),
   );
   // A refresh can empty the picked state (every failing loop recovers). Its
-  // pill is gone then, so applying it would hide every row with no control
-  // left to clear it: drop it instead.
+  // pill is gone then, so applying it would hide every row: never apply it,
+  // and clear it, so it does not come back when that state does.
   let filter = $derived(pills.some((s) => s.key === picked) ? picked : "");
+  $effect(() => {
+    if (picked && !filter) picked = "";
+  });
   let groups = $derived(filterRows(collection, filter));
   let visibleGroups = $derived(
     groups.map((g) => ({
@@ -155,12 +158,21 @@
 
 <div class="collection" data-collection>
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-    {#if filters && pills.length > 1}
+    <!-- While a filter is on, its controls stay, even with one state left. -->
+    {#if filters && (pills.length > 1 || filter)}
       <div
         class="flex flex-wrap items-center gap-1.5"
         role="group"
         aria-label="Filter {label} by state"
       >
+        {#if filter}
+          <button
+            type="button"
+            class="pill"
+            onclick={() => (picked = "")}
+            data-collection-filter-all>All</button
+          >
+        {/if}
         {#each pills as s (s.key)}
           <button
             type="button"
