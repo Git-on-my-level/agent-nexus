@@ -263,3 +263,8 @@ outbox/mirror binding. Enabling registers a default-off files job in the one hos
 bridge; it never installs a service. A sandbox needs only the writable outbox and
 no credentials or network. Notes and optional next promises only; mirror timestamps
 must be checked by readers. See [File transport](docs/file-transport.md).
+
+Attention placement and feedback: `anx help attention` documents `anx attention
+place`, `anx attention agent get|set`, and `anx attention feedback list`. See
+[attention records](../docs/attention.md) for principal refs, pagination, replay
+keys, and the guarantee that an open human ask remains in Decide.

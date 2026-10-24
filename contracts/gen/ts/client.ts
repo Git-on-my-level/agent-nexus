@@ -1638,6 +1638,432 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "asksSubscribe"
   },
   {
+    "command_id": "attention.agent.get",
+    "cli_path": "attention agent get",
+    "group": "attention",
+    "method": "GET",
+    "path": "/attention/agent",
+    "operation_id": "getAttentionAgent",
+    "summary": "Read the designated workspace attention agent",
+    "why": "Read the designated workspace attention agent",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "adjacent_commands": [
+      "attention.agent.set",
+      "attention.changes",
+      "attention.feedback.create",
+      "attention.feedback.list",
+      "attention.items",
+      "attention.place",
+      "attention.visits"
+    ],
+    "go_method": "AttentionAgentGet",
+    "ts_method": "attentionAgentGet"
+  },
+  {
+    "command_id": "attention.agent.set",
+    "cli_path": "attention agent set",
+    "group": "attention",
+    "method": "PUT",
+    "path": "/attention/agent",
+    "operation_id": "setAttentionAgent",
+    "summary": "Set or clear the designated attention agent as a human",
+    "why": "Set or clear the designated attention agent as a human",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "attention_agent",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.changes",
+      "attention.feedback.create",
+      "attention.feedback.list",
+      "attention.items",
+      "attention.place",
+      "attention.visits"
+    ],
+    "go_method": "AttentionAgentSet",
+    "ts_method": "attentionAgentSet"
+  },
+  {
+    "command_id": "attention.changes",
+    "cli_path": "attention changes",
+    "group": "attention",
+    "method": "GET",
+    "path": "/attention/changes",
+    "operation_id": "getAttentionChanges",
+    "summary": "Read dashboard changes without moving its visit marker",
+    "why": "Read dashboard changes without moving its visit marker",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.agent.set",
+      "attention.feedback.create",
+      "attention.feedback.list",
+      "attention.items",
+      "attention.place",
+      "attention.visits"
+    ],
+    "go_method": "AttentionChanges",
+    "ts_method": "attentionChanges"
+  },
+  {
+    "command_id": "attention.feedback.create",
+    "cli_path": "attention feedback create",
+    "group": "attention",
+    "method": "POST",
+    "path": "/attention/feedback",
+    "operation_id": "createAttentionFeedback",
+    "summary": "Record human feedback against a displayed attention item",
+    "why": "Record human feedback against a displayed attention item",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "signal",
+          "type": "string",
+          "enum_values": [
+            "already_knew",
+            "didnt_need_me",
+            "less_like_this",
+            "more_like_this",
+            "needed_sooner",
+            "not_enough_context",
+            "not_relevant",
+            "should_be_decide",
+            "should_be_watch",
+            "snooze",
+            "wanted_to_see",
+            "wrong_person"
+          ]
+        },
+        {
+          "name": "subject_ref",
+          "type": "string"
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "enum_values": [
+            "decide",
+            "digest",
+            "routine",
+            "watch"
+          ]
+        }
+      ],
+      "optional": [
+        {
+          "name": "note",
+          "type": "string"
+        },
+        {
+          "name": "placed_by",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
+          "name": "seconds_visible",
+          "type": "number"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.agent.set",
+      "attention.changes",
+      "attention.feedback.list",
+      "attention.items",
+      "attention.place",
+      "attention.visits"
+    ],
+    "go_method": "AttentionFeedbackCreate",
+    "ts_method": "attentionFeedbackCreate"
+  },
+  {
+    "command_id": "attention.feedback.list",
+    "cli_path": "attention feedback list",
+    "group": "attention",
+    "method": "GET",
+    "path": "/attention/feedback",
+    "operation_id": "listAttentionFeedback",
+    "summary": "Read human attention feedback; any human may read it, and workspace agents read all workspace feedback",
+    "why": "Read human attention feedback; any human may read it, and workspace agents read all workspace feedback",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.agent.set",
+      "attention.changes",
+      "attention.feedback.create",
+      "attention.items",
+      "attention.place",
+      "attention.visits"
+    ],
+    "go_method": "AttentionFeedbackList",
+    "ts_method": "attentionFeedbackList"
+  },
+  {
+    "command_id": "attention.items",
+    "cli_path": "attention items",
+    "group": "attention",
+    "method": "GET",
+    "path": "/attention/items",
+    "operation_id": "listAttentionItems",
+    "summary": "Read effective attention placements and mandatory human asks",
+    "why": "Read effective attention placements and mandatory human asks",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.agent.set",
+      "attention.changes",
+      "attention.feedback.create",
+      "attention.feedback.list",
+      "attention.place",
+      "attention.visits"
+    ],
+    "go_method": "AttentionItems",
+    "ts_method": "attentionItems"
+  },
+  {
+    "command_id": "attention.place",
+    "cli_path": "attention place",
+    "group": "attention",
+    "method": "POST",
+    "path": "/attention/placements",
+    "operation_id": "placeAttention",
+    "summary": "Place a subject on a principal attention surface",
+    "why": "Place a subject on a principal attention surface",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "for",
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        },
+        {
+          "name": "subject_ref",
+          "type": "string"
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "enum_values": [
+            "decide",
+            "digest",
+            "routine",
+            "watch"
+          ]
+        }
+      ],
+      "optional": [
+        {
+          "name": "rank",
+          "type": "integer"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.agent.set",
+      "attention.changes",
+      "attention.feedback.create",
+      "attention.feedback.list",
+      "attention.items",
+      "attention.visits"
+    ],
+    "go_method": "AttentionPlace",
+    "ts_method": "attentionPlace"
+  },
+  {
+    "command_id": "attention.visits",
+    "cli_path": "attention visits",
+    "group": "attention",
+    "method": "POST",
+    "path": "/attention/visits",
+    "operation_id": "recordAttentionVisit",
+    "summary": "Record the authenticated principal dashboard visit",
+    "why": "Record the authenticated principal dashboard visit",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns workspace-local attention records.",
+    "error_codes": [
+      "auth_required",
+      "forbidden",
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "attention",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Pure records and deterministic rules. Reads never advance human visits.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "scope_ref",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "attention.agent.get",
+      "attention.agent.set",
+      "attention.changes",
+      "attention.feedback.create",
+      "attention.feedback.list",
+      "attention.items",
+      "attention.place"
+    ],
+    "go_method": "AttentionVisits",
+    "ts_method": "attentionVisits"
+  },
+  {
     "command_id": "auth.access-requests.approve",
     "cli_path": "auth access-requests approve",
     "group": "auth",
@@ -7147,6 +7573,7 @@ export const commandRegistry: CommandSpec[] = [
           "enum_values": [
             "agent_notification_dismissed",
             "agent_notification_read",
+            "attention_feedback",
             "board_created",
             "board_updated",
             "card_archived",
@@ -15400,6 +15827,38 @@ export class AnxClient {
 
   asksSubscribe(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("asks.subscribe", pathParams, options);
+  }
+
+  attentionAgentGet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.agent.get", {}, options);
+  }
+
+  attentionAgentSet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.agent.set", {}, options);
+  }
+
+  attentionChanges(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.changes", {}, options);
+  }
+
+  attentionFeedbackCreate(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.feedback.create", {}, options);
+  }
+
+  attentionFeedbackList(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.feedback.list", {}, options);
+  }
+
+  attentionItems(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.items", {}, options);
+  }
+
+  attentionPlace(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.place", {}, options);
+  }
+
+  attentionVisits(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("attention.visits", {}, options);
   }
 
   authAccessRequestsApprove(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

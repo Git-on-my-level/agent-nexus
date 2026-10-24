@@ -176,6 +176,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		name := "work " + args[1]
 		return name, preflightFlagUsage(args[2:], preflightFlagSpecs()[name])
 	}
+	if args[0] == "attention" {
+		p, err := parseAttentionCommand(args[1:])
+		return p.name, err
+	}
 	if args[0] == "overview" {
 		name, _, err := parseOverviewCommand(args)
 		return name, err
@@ -343,6 +347,9 @@ func preflightKnownCommandShape(args []string) error {
 		return nil
 	case "secret":
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
+	case "attention":
+		_, err := parseAttentionCommand(args[1:])
+		return err
 	case "workspace":
 		return preflightWorkspaceSubcommand(args[1:])
 	case "move":
@@ -639,7 +646,7 @@ func preflightDocsIngestArgs(args []string) error {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}
@@ -1048,12 +1055,19 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"from-file":           valueFlag,
 			"dry-run":             boolFlag,
 		},
-		"cards reopen":            {"card-id": valueFlag},
-		"threads message":         {"thread": valueFlag, "thread-id": valueFlag},
-		"threads reply":           {"thread": valueFlag, "thread-id": valueFlag},
-		"boards workspace":        {"board-id": valueFlag},
-		"boards cards list":       {"board-id": valueFlag},
-		"workspace summary":       {"full-id": boolFlag},
+		"cards reopen":              {"card-id": valueFlag},
+		"threads message":           {"thread": valueFlag, "thread-id": valueFlag},
+		"threads reply":             {"thread": valueFlag, "thread-id": valueFlag},
+		"boards workspace":          {"board-id": valueFlag},
+		"boards cards list":         {"board-id": valueFlag},
+		"workspace summary":         {"full-id": boolFlag},
+		"attention place":           {"for": valueFlag, "to": valueFlag, "reason": valueFlag, "rank": valueFlag, "request-key": valueFlag},
+		"attention items":           {"for": valueFlag, "surface": valueFlag, "since": valueFlag, "scope-ref": valueFlag, "cursor": valueFlag},
+		"attention feedback list":   {"for": valueFlag, "since": valueFlag, "cursor": valueFlag},
+		"attention feedback create": {"signal": valueFlag, "surface": valueFlag, "note": valueFlag, "placed-by": valueFlag, "seconds-visible": valueFlag, "request-key": valueFlag},
+		"attention visits":          {"scope-ref": valueFlag},
+		"attention changes":         {"scope-ref": valueFlag},
+		"attention agent get":       {}, "attention agent set": {},
 		"overview":                {},
 		"workspace dashboard set": {},
 	}

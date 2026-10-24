@@ -288,7 +288,7 @@ func TestReaderTelemetryDoesNotInvalidateMigration(t *testing.T) {
 		`INSERT INTO home_read_cursors VALUES('reader','group','now','event','now')`,
 		`UPDATE home_read_cursors SET updated_at='later' WHERE reader_id='reader'`,
 		`DELETE FROM home_read_cursors WHERE reader_id='reader'`,
-		`INSERT INTO overview_visits VALUES('reader','now','{}')`,
+		`INSERT INTO overview_visits(principal_id,visited_at,snapshot_json) VALUES('reader','now','{}')`,
 		`UPDATE overview_visits SET visited_at='later' WHERE principal_id='reader'`,
 		`DELETE FROM overview_visits WHERE principal_id='reader'`,
 		`INSERT INTO series_request_budgets VALUES('reader',1,1)`,

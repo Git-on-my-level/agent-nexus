@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `41`
+- Groups: `42`
 
 ## `topics`
 
@@ -98,6 +98,19 @@ Generated from `contracts/anx-openapi.yaml`.
   - `asks.get` (`asks get`)
   - `asks.stream` (`asks stream`)
   - `asks.subscribe` (`asks subscribe`)
+
+## `attention`
+
+- Commands: `8`
+- Command IDs:
+  - `attention.agent.get` (`attention agent get`)
+  - `attention.agent.set` (`attention agent set`)
+  - `attention.changes` (`attention changes`)
+  - `attention.feedback.create` (`attention feedback create`)
+  - `attention.feedback.list` (`attention feedback list`)
+  - `attention.items` (`attention items`)
+  - `attention.place` (`attention place`)
+  - `attention.visits` (`attention visits`)
 
 ## `auth`
 

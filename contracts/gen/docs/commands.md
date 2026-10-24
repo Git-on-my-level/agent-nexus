@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `262`
+- Commands: `270`
 
 ## `actors.create`
 
@@ -446,6 +446,110 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `not_found`, `auth_required`, `invalid_request`, `quota_exceeded`
 - Output: Returns subscription or receipt.
 - Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
+
+## `attention.agent.get`
+
+- CLI path: `attention agent get`
+- HTTP: `GET /attention/agent`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read the designated workspace attention agent
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.agent.set`
+
+- CLI path: `attention agent set`
+- HTTP: `PUT /attention/agent`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Set or clear the designated attention agent as a human
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.changes`
+
+- CLI path: `attention changes`
+- HTTP: `GET /attention/changes`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read dashboard changes without moving its visit marker
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.feedback.create`
+
+- CLI path: `attention feedback create`
+- HTTP: `POST /attention/feedback`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Record human feedback against a displayed attention item
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.feedback.list`
+
+- CLI path: `attention feedback list`
+- HTTP: `GET /attention/feedback`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.items`
+
+- CLI path: `attention items`
+- HTTP: `GET /attention/items`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read effective attention placements and mandatory human asks
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.place`
+
+- CLI path: `attention place`
+- HTTP: `POST /attention/placements`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Place a subject on a principal attention surface
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
+
+## `attention.visits`
+
+- CLI path: `attention visits`
+- HTTP: `POST /attention/visits`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Record the authenticated principal dashboard visit
+- Concepts: `attention`, `cards`
+- Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns workspace-local attention records.
+- Agent notes: Pure records and deterministic rules. Reads never advance human visits.
 
 ## `auth.access-requests.approve`
 

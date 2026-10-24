@@ -1157,6 +1157,7 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_events_report_subject_ts ON events(COALESCE(json_extract(payload_json,'$.subject_ref'),json_extract(payload_json,'$.payload.subject_ref')),ts DESC,id DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_agents_collection_roster ON agents(COALESCE(json_extract(metadata_json,'$.principal_kind'),'agent'),username);`,
 	}},
+	{Version: 114, AfterApply: installAttentionRecords},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

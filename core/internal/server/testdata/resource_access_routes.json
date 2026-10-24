@@ -178,6 +178,48 @@
   },
   {
     "method": "GET",
+    "path": "/attention/agent",
+    "policy": "independent",
+    "reason": "Workspace-local principal setting; humans alone designate the attention agent."
+  },
+  {
+    "method": "PUT",
+    "path": "/attention/agent",
+    "policy": "independent",
+    "reason": "Workspace-local principal setting; humans alone designate the attention agent."
+  },
+  {
+    "method": "GET",
+    "path": "/attention/changes",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/attention/feedback",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/attention/feedback",
+    "policy": "reference-write"
+  },
+  {
+    "method": "GET",
+    "path": "/attention/items",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/attention/placements",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/attention/visits",
+    "policy": "reference-write"
+  },
+  {
+    "method": "GET",
     "path": "/auth/access-requests",
     "policy": "collection"
   },

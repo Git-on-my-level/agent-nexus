@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 262
+- Command count: 270
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -17,6 +17,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | artifacts | 10 |
 | ask | 1 |
 | asks | 4 |
+| attention | 8 |
 | auth | 22 |
 | boards | 13 |
 | bridge | 8 |
@@ -57,12 +58,12 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 87 |
-| exposed_write | 69 |
+| exposed_read | 91 |
+| exposed_write | 71 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
-| unsupported_interactive | 12 |
+| unsupported_interactive | 14 |
 | unsupported_other | 9 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
@@ -71,11 +72,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 156 | exposed_read + exposed_write + adapted |
+| standalone default | 162 | exposed_read + exposed_write + adapted |
 | hosted default | 67 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 64 | not represented as direct MCP tools in v1 |
+| unsupported | 66 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -116,6 +117,14 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | asks.get | asks | GET | /asks/{ask_id} | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | asks.stream | asks | GET | /stream/asks/{ask_id} | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | asks.subscribe | asks | POST | /asks/{ask_id}/subscriptions | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
+| attention.agent.get | attention | GET | /attention/agent | exposed_read | Read the workspace's human-designated attention agent. |
+| attention.agent.set | attention | PUT | /attention/agent | unsupported_interactive | Only a human may designate the workspace attention agent. |
+| attention.changes | attention | GET | /attention/changes | exposed_read | Bounded principal-scoped dashboard changes without advancing visit markers. |
+| attention.feedback.create | attention | POST | /attention/feedback | unsupported_interactive | Attention feedback records human judgment and requires a human principal. |
+| attention.feedback.list | attention | GET | /attention/feedback | exposed_read | Workspace feedback available to agents under canonical resource visibility. |
+| attention.items | attention | GET | /attention/items | exposed_read | Bounded recipient-scoped attention placements and mandatory human asks. |
+| attention.place | attention | POST | /attention/placements | exposed_write | Reversible attention placement with a reason and optional replay key. |
+| attention.visits | attention | POST | /attention/visits | exposed_write | Advance only the authenticated agent's own dashboard visit marker. |
 | auth.access-requests.approve | auth | POST | /auth/access-requests/{request_id}/approve | unsupported_interactive | human-only privileged grant approval requires human judgment |
 | auth.access-requests.deny | auth | POST | /auth/access-requests/{request_id}/deny | unsupported_interactive | human-only privileged grant denial requires human judgment |
 | auth.access-requests.list | auth | GET | /auth/access-requests | unsupported_interactive | human-only pending access inventory |

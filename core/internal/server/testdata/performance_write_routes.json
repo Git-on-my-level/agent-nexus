@@ -656,5 +656,25 @@
     "body": {
       "document_refs": ["{document_ref}"]
     }
+  },
+  {
+    "method": "PUT",
+    "path": "/attention/agent",
+    "reason": "Principal-scoped mutation; canonical events and replay commit atomically. Visits always use the authenticated principal."
+  },
+  {
+    "method": "POST",
+    "path": "/attention/feedback",
+    "reason": "Principal-scoped mutation; canonical events and replay commit atomically. Visits always use the authenticated principal."
+  },
+  {
+    "method": "POST",
+    "path": "/attention/placements",
+    "reason": "Principal-scoped mutation; canonical events and replay commit atomically. Visits always use the authenticated principal."
+  },
+  {
+    "method": "POST",
+    "path": "/attention/visits",
+    "reason": "Principal-scoped mutation; canonical events and replay commit atomically. Visits always use the authenticated principal."
   }
 ]

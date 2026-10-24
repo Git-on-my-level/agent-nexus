@@ -401,6 +401,12 @@ Receipt snapshots use `receipt_access_epoch`; ordinary snapshots use
 `resource_access_epoch`. The table name stays in the fingerprint. Mixed tables
 or additional gates retain their exact literals.
 
+The scoped Overview baseline SELECT opts into the existing `PointPlanSQLHash`
+rule for its single admitted point-snapshot epoch. This applies only to the
+`overview_visits` read fixing `scope_ref='builtin:overview'`; other route pins
+retain their existing rules. Business SQL and scope literals, referenced views,
+findings and the full ordered plan remain exact.
+
 Receipt-stream cases retain the private-thread 200/404 case and add a public
 thread for both principals. Initial and fresh payloads must have valid receipt
 IDs and digests; comments and empty flushes cannot complete a receipt sample.
@@ -1175,3 +1181,25 @@ go test -C core ./internal/server -run '^TestWatch' -count=1 -v
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 -parallel=1 ./internal/server -run '^TestPerformanceWatch(CollectionBudget|AgentCollectionAdmission)$' -count=1 -v
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Attention records
+
+Attention reads admit at most 101 candidates for 100-item pages. Recipient/subject
+routing seeks the `attention_subjects` primary key, and winner selection uses
+one preferred-placer primary-key seek and one newest-placer seek through
+`idx_attention_placements_latest` per admitted subject. No all-placer window or
+workspace-wide sort runs on reads. Asks seek
+`idx_attention_asks_recipient(recipient,state,ask_id)` before scoped canonical
+event joins. Feedback uses `idx_attention_feedback_page` or
+`idx_attention_feedback_for_page`; admission precedes privacy filtering. Empty
+pages retain encrypted, reader-bound continuations, so dense denied prefixes do
+not require unbounded refill work. Titles and subject timestamps hydrate in
+bounded batches. Default work uses the existing bounded work cursor.
+
+Visit baselines seek `(principal_id,scope_ref)` on `overview_visits`. Builtin
+snapshots admit at most 50 recent work subjects; document snapshots reuse bounded
+report queries and retain at most 100 rendered subjects. Changes compare bounded
+in-memory snapshots, never workspace history. Loop goal values use the existing
+bounded loop facts/series readers. Visit writes compare timestamps atomically;
+legacy markers are migrated by migration 114 to `builtin:overview`. New read budgets are in
+`performance_routes.json`; no existing budget or plan allowance is widened.

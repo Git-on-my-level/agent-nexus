@@ -15,6 +15,7 @@ func attachResourceAccessScope(r *http.Request, opts handlerOptions) {
 	scope := primitives.AccessScope{}
 	if principal, ok := cachedAuthenticatedPrincipal(r); ok {
 		scope.ActorID = principal.ActorID
+		scope.AuthAdmin = isAuthAdminPrincipal(principal)
 	}
 	ctx := primitives.WithAccessScope(r.Context(), scope)
 	if (r.Method == http.MethodGet && !strings.HasPrefix(r.URL.Path, "/stream/")) || (r.Method == http.MethodPost && (r.URL.Path == "/refs/resolve" || strings.HasPrefix(r.URL.Path, "/inbox/") && strings.HasSuffix(r.URL.Path, "/respond"))) {

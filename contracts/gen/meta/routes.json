@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 244,
+  "route_count": 252,
   "routes": [
     {
       "method": "GET",
@@ -170,6 +170,46 @@
     {
       "method": "POST",
       "path": "/asks/{ask_id}/subscriptions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/attention/agent",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/attention/agent",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/attention/changes",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/attention/feedback",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/attention/feedback",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/attention/items",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/attention/placements",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/attention/visits",
       "access_class": "workspace_business_surface"
     },
     {

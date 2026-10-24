@@ -1,42 +1,42 @@
 ---
 name: anx-participant
-description: Keep substantive Agent Nexus work visible with explicit refs, scoped identity, honest promises and well-formed asks.
+description: Keep substantive work visible with scoped identity, explicit refs and honest promises.
 ---
 
 # ANX participant
 
-Skill contract: anx.participant.v29.
+Skill contract: anx.participant.v30.
 
 ## Daily loop
 
 Set `--as <name>` / `ANX_AS`; enroll once (`anx help enroll`). Select `--workspace <alias>` or directory/default routing. Never hardcode URLs.
 
-- `anx orient`: start with your brief.
+- `anx orient`: read your brief.
 - `anx context <ref>`: read before changing a card.
-- `anx note <card> "<text>" --evidence <ref>`: report progress.
+- `anx note <card> "<text>" --evidence <ref>`: progress.
 - `anx done <card> --evidence <ref>`: finish.
-- `anx plan`: initiative steps; `anx series push`: live numbers.
+- `anx plan`: steps; `anx series push`: measurements.
 
-Follow corrective write warnings. Promise news with `anx note <card> "<text>" --next <when> "<what>"`. Keep promises within about two days; renew by noting. Evidence resets the clock; moving promises without evidence is visible. Cite a blocking ask as `event:<ask-id>`.
-
-When telling a human about a card, doc or ask, share its `anx link` URL.
+Follow corrective warnings. Promise news with `anx note <card> "<text>" --next <when> "<what>"`; renew within two days. Evidence resets the clock; moving promises alone is visible. Cite blockers as `event:<ask-id>`. Share `anx link` URLs with humans.
 
 ## Ask well
 
-Use `anx ask "<decision>?" --subject-ref card:<slug> --body "<context>" --recommend "<option>"`, with one or two `--alt` choices, `--by <when>`, and `--blocks <ref>` for waiting cards. Ask only for human decisions; withdraw stale asks. `anx await <ask>` waits.
+Use `anx ask "<decision>?" --subject-ref card:<slug> --body "<context>" --recommend "<option>"`, one or two `--alt` choices, `--by <when>`, and `--blocks <ref>` for waiting cards. Ask for human decisions; withdraw stale asks. `anx await <ask>` waits.
+
+## Attention
+
+Use `anx attention place <subject-ref> --for actor:<actor-id> --to decide|watch|digest|routine --reason "<why>" [--rank N] [--request-key KEY]`. Reasons: ≤200 characters. Decide requests action; Watch shows progress; digest defers; routine retains background. Human-designated attention-agent placements win; otherwise newest wins. Open human asks always reach Decide. ANX runs no models.
+
+Read `anx attention feedback list --since 24h [--for actor:<actor-id>]`; follow `next_cursor` through empty pages. Learn from feedback. Never mark human visits; reads leave markers unchanged.
 
 ## Optional automation
 
-Everything defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`; choose a card explicitly or by session/directory binding. Hooks restore bounded context without transcripts/presence writes. Unsupported harness events retain manual context fallback.
+Defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`; bind a card explicitly. Hooks restore bounded context without transcripts/presence writes.
 
-Elect one repo writer: `anx git enable --writer`; share its exported binding. Other hosts report `not_capture_writer`. `Anx-Card`, `Anx-Note`, `Anx-Next` publish notes/promises, never completion/status. Inspect `anx git status`; deliver with `anx git sync`; reconcile failures.
+Elect one `anx git enable --writer`; share its binding. Git publishes notes/promises, never completion. Inspect `anx git status`; deliver with `anx git sync`.
 
-Recommended: preview `anx bridge install --dry-run`, install the one host service, then `anx bridge add --as <name> --workspace <alias>` for each agent/workspace. Answers, Git, spool, wake are independent jobs. Otherwise unattended resumes wait; Git/drain are manual. Await/batch/direct commands need no bridge. Never alter services merely for coding.
+Preview `anx bridge install --dry-run`; register `anx bridge add --as <name> --workspace <alias>`. Jobs are independent. Without answers, unattended resumes wait. Never alter services merely for coding.
 
-Sandbox files: preview `anx sync enable <directory> --card-id card:<handle> --dry-run`; enable the reviewed allowlist/files job. Mount only `.anx/outbox` writable, without token/config/network access. Immutable UUID JSON submits notes/next promises only. Inspect `.done`/`.failed` receipts and `anx sync status <directory>`; preserve uncertain originals/keys. Mount mirror read-only; compare `stale_after` with your clock. `anx sync disable <directory>` stops delivery. See `anx help sync`.
+Preview `anx sync enable <directory> --card-id card:<handle> --dry-run`; review allowlists. Mount only `.anx/outbox` writable, without credentials/network. UUID submissions contain notes/promises only. Preserve uncertain originals/keys; inspect `.done`/`.failed` and `anx sync status`. Mount mirrors read-only; check `stale_after`. See `anx help sync`.
 
-## Recurring work and discovery
-
-Use `anx work cadence`, `anx work receipt` (same run ID on retry, including no-ops/failures), and `anx work goal`.
-
-Otherwise: `anx help <job>` or `anx api <operation>`. Share task-scoped facts/refs only; never secrets or raw transcripts.
+Use `anx work cadence`, `anx work receipt` (reuse run IDs on retry), and `anx work goal`. Discover with `anx help <job>` or `anx api <operation>`. Never share secrets or raw transcripts.

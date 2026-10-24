@@ -87,7 +87,7 @@ func (s *Store) RecordOverviewVisit(ctx context.Context, principal string, work 
 	// A slower old request cannot replace a newer visit or its snapshot.
 	ctx = context.WithValue(ctx, overviewVisitValidationKey{}, true)
 	_, err = s.db.ExecContext(ctx, `INSERT INTO overview_visits(principal_id,visited_at,snapshot_json) VALUES(?,?,?)
- ON CONFLICT(principal_id) DO UPDATE SET visited_at=excluded.visited_at,snapshot_json=excluded.snapshot_json
+ ON CONFLICT(principal_id,scope_ref) DO UPDATE SET visited_at=excluded.visited_at,snapshot_json=excluded.snapshot_json
  WHERE excluded.visited_at>overview_visits.visited_at`, principal, now.UTC().Format("2006-01-02T15:04:05.000000000Z"), string(raw))
 	return err
 }
@@ -102,7 +102,7 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 	err := s.db.QueryRowContext(ctx, `SELECT visited_at,snapshot_json,EXISTS(SELECT 1 FROM events
  WHERE type='human_attention_responded' AND trashed_at IS NULL AND archived_at IS NULL
  AND julianday(ts)>=julianday(overview_visits.visited_at) AND julianday(ts)<=julianday(?) LIMIT 1)
- FROM overview_visits WHERE principal_id=?`, now.Format(time.RFC3339Nano), principal).Scan(&since, &raw, &anyAnswers)
+ FROM overview_visits WHERE principal_id=? AND scope_ref='builtin:overview'`, now.Format(time.RFC3339Nano), principal).Scan(&since, &raw, &anyAnswers)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, nil
 	}

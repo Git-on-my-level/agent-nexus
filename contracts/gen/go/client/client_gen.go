@@ -437,6 +437,94 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"asks.delivery", "asks.get", "asks.stream"},
 	},
 	{
+		CommandID: "attention.agent.get",
+		CLIPath:   "attention agent get",
+		Group:     "attention",
+		Method:    "GET",
+		Path:      "/attention/agent",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.set", "attention.changes", "attention.feedback.create", "attention.feedback.list", "attention.items", "attention.place", "attention.visits"},
+	},
+	{
+		CommandID: "attention.agent.set",
+		CLIPath:   "attention agent set",
+		Group:     "attention",
+		Method:    "PUT",
+		Path:      "/attention/agent",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.changes", "attention.feedback.create", "attention.feedback.list", "attention.items", "attention.place", "attention.visits"},
+	},
+	{
+		CommandID: "attention.changes",
+		CLIPath:   "attention changes",
+		Group:     "attention",
+		Method:    "GET",
+		Path:      "/attention/changes",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.agent.set", "attention.feedback.create", "attention.feedback.list", "attention.items", "attention.place", "attention.visits"},
+	},
+	{
+		CommandID: "attention.feedback.create",
+		CLIPath:   "attention feedback create",
+		Group:     "attention",
+		Method:    "POST",
+		Path:      "/attention/feedback",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.agent.set", "attention.changes", "attention.feedback.list", "attention.items", "attention.place", "attention.visits"},
+	},
+	{
+		CommandID: "attention.feedback.list",
+		CLIPath:   "attention feedback list",
+		Group:     "attention",
+		Method:    "GET",
+		Path:      "/attention/feedback",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.agent.set", "attention.changes", "attention.feedback.create", "attention.items", "attention.place", "attention.visits"},
+	},
+	{
+		CommandID: "attention.items",
+		CLIPath:   "attention items",
+		Group:     "attention",
+		Method:    "GET",
+		Path:      "/attention/items",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.agent.set", "attention.changes", "attention.feedback.create", "attention.feedback.list", "attention.place", "attention.visits"},
+	},
+	{
+		CommandID: "attention.place",
+		CLIPath:   "attention place",
+		Group:     "attention",
+		Method:    "POST",
+		Path:      "/attention/placements",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.agent.set", "attention.changes", "attention.feedback.create", "attention.feedback.list", "attention.items", "attention.visits"},
+	},
+	{
+		CommandID: "attention.visits",
+		CLIPath:   "attention visits",
+		Group:     "attention",
+		Method:    "POST",
+		Path:      "/attention/visits",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"attention", "cards"},
+		Adjacent:  []string{"attention.agent.get", "attention.agent.set", "attention.changes", "attention.feedback.create", "attention.feedback.list", "attention.items", "attention.place"},
+	},
+	{
 		CommandID:  "auth.access-requests.approve",
 		CLIPath:    "auth access-requests approve",
 		Group:      "auth",
@@ -3579,6 +3667,38 @@ func (c *Client) AsksStream(ctx context.Context, pathParams map[string]string, o
 
 func (c *Client) AsksSubscribe(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "asks.subscribe", pathParams, opts)
+}
+
+func (c *Client) AttentionAgentGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.agent.get", nil, opts)
+}
+
+func (c *Client) AttentionAgentSet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.agent.set", nil, opts)
+}
+
+func (c *Client) AttentionChanges(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.changes", nil, opts)
+}
+
+func (c *Client) AttentionFeedbackCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.feedback.create", nil, opts)
+}
+
+func (c *Client) AttentionFeedbackList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.feedback.list", nil, opts)
+}
+
+func (c *Client) AttentionItems(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.items", nil, opts)
+}
+
+func (c *Client) AttentionPlace(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.place", nil, opts)
+}
+
+func (c *Client) AttentionVisits(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "attention.visits", nil, opts)
 }
 
 func (c *Client) AuthAccessRequestsApprove(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

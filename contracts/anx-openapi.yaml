@@ -5646,6 +5646,260 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /attention/placements:
+    post:
+      operationId: placeAttention
+      summary: Place a subject on a principal attention surface
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.place
+      x-anx-cli-path: attention place
+      x-anx-why: Place a subject on a principal attention surface
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AttentionPlacementRequest'}
+      responses:
+        '201':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionItem'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /attention/items:
+    get:
+      operationId: listAttentionItems
+      summary: Read effective attention placements and mandatory human asks
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.items
+      x-anx-cli-path: attention items
+      x-anx-why: Read effective attention placements and mandatory human asks
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      parameters:
+        - {name: for, in: query, schema: {type: string}, description: "me (default) or principal ref. Any human or auth-admin may select another principal; other agents read only their own"}
+        - {name: surface, in: query, schema: {type: string}, description: "decide, watch, digest, routine or all"}
+        - {name: since, in: query, schema: {type: string}, description: "RFC3339 or positive duration lower bound on changed items"}
+        - {name: scope_ref, in: query, schema: {type: string}, description: "Dashboard baseline; default builtin:initiatives"}
+        - {name: cursor, in: query, schema: {type: string}, description: "Opaque continuation; keep all selectors unchanged"}
+      responses:
+        '200':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionItems'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /attention/agent:
+    get:
+      operationId: getAttentionAgent
+      summary: Read the designated workspace attention agent
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.agent.get
+      x-anx-cli-path: attention agent get
+      x-anx-why: Read the designated workspace attention agent
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionAgent'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+    put:
+      operationId: setAttentionAgent
+      summary: Set or clear the designated attention agent as a human
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.agent.set
+      x-anx-cli-path: attention agent set
+      x-anx-why: Set or clear the designated attention agent as a human
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AttentionAgent'}
+      responses:
+        '200':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionAgent'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /attention/feedback:
+    get:
+      operationId: listAttentionFeedback
+      summary: Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.feedback.list
+      x-anx-cli-path: attention feedback list
+      x-anx-why: Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      parameters:
+        - {name: since, in: query, schema: {type: string}, description: "RFC3339 or positive duration lower bound; continuation preserves the original window"}
+        - {name: for, in: query, schema: {type: string}, description: "me or recipient principal ref. Defaults to me for humans and to all workspace feedback for agents"}
+        - {name: cursor, in: query, schema: {type: string}, description: "Opaque continuation"}
+      responses:
+        '200':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionFeedbackPage'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+    post:
+      operationId: createAttentionFeedback
+      summary: Record human feedback against a displayed attention item
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.feedback.create
+      x-anx-cli-path: attention feedback create
+      x-anx-why: Record human feedback against a displayed attention item
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AttentionFeedbackRequest'}
+      responses:
+        '201':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionFeedbackEvent'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /attention/visits:
+    post:
+      operationId: recordAttentionVisit
+      summary: Record the authenticated principal dashboard visit
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.visits
+      x-anx-cli-path: attention visits
+      x-anx-why: Record the authenticated principal dashboard visit
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AttentionVisitRequest'}
+      responses:
+        '200':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionVisit'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /attention/changes:
+    get:
+      operationId: getAttentionChanges
+      summary: Read dashboard changes without moving its visit marker
+      tags: [attention]
+      x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
+      x-anx-surface: projection
+      x-anx-command-id: attention.changes
+      x-anx-cli-path: attention changes
+      x-anx-why: Read dashboard changes without moving its visit marker
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns workspace-local attention records.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, conflict]
+      x-anx-concepts: [attention, cards]
+      x-anx-stability: beta
+      parameters:
+        - {name: scope_ref, in: query, required: true, schema: {type: string}, description: "Document ref or builtin:initiatives"}
+      responses:
+        '200':
+          description: Attention result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttentionChanges'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
   /overview:
     get:
       operationId: getOverview
@@ -9372,6 +9626,116 @@ components:
       description: Base64 Ed25519 signature required for host self-access.
 
   schemas:
+    AttentionSurface:
+      type: string
+      enum: [decide, watch, digest, routine]
+    AttentionPlacementRequest:
+      type: object
+      additionalProperties: false
+      required: [subject_ref, for, to, reason]
+      properties:
+        subject_ref: {type: string}
+        for: {type: string, description: 'actor:<actor_id>; human:<principal_id> and agent:<principal_id> are accepted and normalized.'}
+        to: {$ref: '#/components/schemas/AttentionSurface'}
+        reason: {type: string, minLength: 1, maxLength: 200}
+        rank: {type: integer, default: 0}
+        request_key: {type: string, maxLength: 200, description: 'Optional actor-scoped replay key, at most 200 bytes. Reuse for retries; a different canonical payload with the same key returns 409.'}
+    AttentionItem:
+      type: object
+      required: [subject_ref, title, surface, reason, placed_by, rank, placed_at, changed_since_last_visit]
+      properties:
+        subject_ref: {type: string}
+        title: {type: string}
+        surface: {$ref: '#/components/schemas/AttentionSurface'}
+        reason: {type: string}
+        placed_by: {type: string}
+        rank: {type: integer}
+        placed_at: {type: string, nullable: true, format: date-time}
+        changed_since_last_visit: {type: boolean}
+    AttentionItems:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AttentionItem'}}
+        next_cursor: {type: string, nullable: true}
+    AttentionAgent:
+      type: object
+      additionalProperties: false
+      required: [attention_agent]
+      properties:
+        attention_agent: {type: string, nullable: true, description: 'Agent actor ref; null restores newest-placer precedence.'}
+    AttentionFeedbackSignal:
+      type: string
+      enum: [more_like_this, less_like_this, not_relevant, should_be_decide, should_be_watch, already_knew, didnt_need_me, needed_sooner, not_enough_context, wrong_person, snooze, wanted_to_see]
+    AttentionFeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [subject_ref, signal, surface]
+      properties:
+        subject_ref: {type: string}
+        signal: {$ref: '#/components/schemas/AttentionFeedbackSignal'}
+        note: {type: string, maxLength: 500}
+        surface: {$ref: '#/components/schemas/AttentionSurface'}
+        placed_by: {type: string}
+        seconds_visible: {type: number, minimum: 0}
+        request_key: {type: string, maxLength: 200, description: 'Supply a stable actor-scoped key from the durable mutation outbox. Retries return the original event; a different canonical payload with the same key returns 409. At most 200 bytes.'}
+    AttentionFeedbackEvent:
+      type: object
+      required: [id, type, ts, for, payload]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [attention_feedback]}
+        ts: {type: string, format: date-time}
+        for: {type: string}
+        payload: {$ref: '#/components/schemas/AttentionFeedbackPayload'}
+    AttentionFeedbackPayload:
+      type: object
+      additionalProperties: false
+      description: Recorded feedback. request_key is retry identity only and is never stored in the payload.
+      required: [subject_ref, signal, surface]
+      properties:
+        subject_ref: {type: string}
+        signal: {$ref: '#/components/schemas/AttentionFeedbackSignal'}
+        note: {type: string, maxLength: 500}
+        surface: {$ref: '#/components/schemas/AttentionSurface'}
+        placed_by: {type: string}
+        seconds_visible: {type: number, minimum: 0}
+    AttentionFeedbackPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AttentionFeedbackEvent'}}
+        next_cursor: {type: string, nullable: true}
+    AttentionVisitRequest:
+      type: object
+      additionalProperties: false
+      required: [scope_ref]
+      properties:
+        scope_ref: {type: string}
+    AttentionVisit:
+      type: object
+      required: [scope_ref, visited_at]
+      properties:
+        scope_ref: {type: string}
+        visited_at: {type: string, format: date-time}
+    AttentionChanges:
+      type: object
+      required: [since, items, changed_refs, truncated]
+      properties:
+        since: {type: string, nullable: true, format: date-time}
+        items:
+          type: array
+          items:
+            type: object
+            required: [ref, kind, title]
+            properties:
+              ref: {type: string}
+              kind: {type: string}
+              title: {type: string}
+              from: {}
+              to: {}
+        changed_refs: {type: array, items: {type: string}}
+        truncated: {type: boolean}
     ReportPreviewRequest:
       type: object
       additionalProperties: false

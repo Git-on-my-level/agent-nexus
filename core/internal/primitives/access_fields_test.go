@@ -146,6 +146,11 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixtures["derived_inbox_items"] = "field-inbox"
+	if _, err = ws.DB().Exec(`INSERT INTO attention_placements(for_actor,subject_ref,placed_by,record_id,placed_at,payload_json) VALUES('reader','card:public','actor:writer','field-placement','now','{}')`); err != nil {
+		t.Fatal(err)
+	}
+	fixtures["attention_placements"] = "field-placement"
+
 	for _, source := range resourceaccess.OwnershipSources {
 		if source.Table == "work_evidence_records" || source.Table == "work_evidence_index" {
 			// Earlier metadata-field cases replace the evidence projection. Seed
@@ -179,7 +184,7 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 				}()
 				for _, actor := range []string{"stranger", "unauthorized-agent", "owner", "selected-pm"} {
 					var count int
-					if err := resourceaccess.NewDB(ws.DB()).QueryRowContext(WithAccessScope(ctx, AccessScope{ActorID: actor, PMActorID: "selected-pm"}), query, rowID).Scan(&count); err != nil {
+					if err := resourceaccess.NewDB(ws.DB()).QueryRowContext(WithAccessScope(ctx, AccessScope{ActorID: actor, PMActorID: "selected-pm", AuthAdmin: source.Table == "attention_placements"}), query, rowID).Scan(&count); err != nil {
 						t.Fatal(err)
 					}
 					want := 0

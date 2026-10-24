@@ -177,17 +177,18 @@ const (
 	EventTypeHumanAttentionRequested    = "human_attention_requested"
 	EventTypeHumanAttentionResponded    = "human_attention_responded"
 	EventTypeHumanAttentionWithdrawn    = "human_attention_withdrawn"
+	EventTypeAttentionFeedback          = "attention_feedback"
 	EventTypeAgentNotificationRead      = "agent_notification_read"
 	EventTypeAgentNotificationDismissed = "agent_notification_dismissed"
 )
 
 // EventTypeValues lists every event_type value in contract order. Do not modify it.
-var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
+var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
 
 // IsEventType reports whether value is exactly a canonical event_type value.
 func IsEventType(value string) bool {
 	switch value {
-	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
+	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
 		return true
 	}
 	return false

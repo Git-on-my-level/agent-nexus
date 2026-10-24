@@ -11,7 +11,10 @@ type OwnershipSource struct {
 	Columns         []string
 }
 
+var AttentionPlacementSource = OwnershipSource{Table: "attention_placements", Kind: "filter/attention_placement", ID: "record_id", Columns: []string{"payload_json"}}
+
 var OwnershipSources = []OwnershipSource{
+	AttentionPlacementSource,
 	{"events", "event", "id", []string{"refs_json", "payload_json", "trash_reason"}},
 	{"threads", "thread", "id", []string{"body_json", "provenance_json", "trash_reason"}},
 	{"topics", "topic", "id", []string{"title", "summary", "provenance_json", "extensions_json", "trash_reason"}},

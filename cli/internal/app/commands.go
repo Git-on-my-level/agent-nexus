@@ -186,6 +186,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "secret":
 		result, name, err := a.runSecretCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "attention":
+		result, name, err := a.runAttentionCommand(ctx, args[1:], cfg)
+		return name, result, err
 	case "overview":
 		name, id, err := parseOverviewCommand(args)
 		if err != nil {
