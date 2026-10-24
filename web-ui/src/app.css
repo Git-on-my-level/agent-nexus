@@ -1145,17 +1145,21 @@
   }
 
   @media (min-width: 1024px) {
-    .page-dock-layout--mobile-only {
-      display: block;
-      min-height: 0;
-      max-height: none;
+    .page-dock-layout {
+      min-height: calc(100dvh - 3.5rem);
+      max-height: calc(100dvh - 3.5rem);
     }
   }
 
+  /* After the desktop rule, and with the base class in the selector, so the
+     mobile-only variant really returns to natural flow from lg up. Before,
+     the later desktop rule won and gave docs a viewport-tall minimum, so the
+     page scrolled past the end of short documents. */
   @media (min-width: 1024px) {
-    .page-dock-layout {
-      min-height: calc(100vh - 3.5rem);
-      max-height: calc(100vh - 3.5rem);
+    .page-dock-layout.page-dock-layout--mobile-only {
+      display: block;
+      min-height: 0;
+      max-height: none;
     }
   }
 

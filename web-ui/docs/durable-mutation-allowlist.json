@@ -106,7 +106,8 @@
       "updateTopic": 1,
       "acknowledgePmAction": 1,
       "archiveCard": 1,
-      "markHomeRead": 1
+      "markHomeRead": 1,
+      "setDashboardPins": 1
     }
   },
   "lib/refRoute.js": {
@@ -258,14 +259,6 @@
       "createSecret": 1,
       "deleteSecret": 1,
       "revealSecret": 1
-    }
-  },
-  "routes/o/[organization]/w/[workspace]/watch/+page.svelte": {
-    "classification": "stage-2",
-    "reason": "TODO: dashboard selection (moved from Overview) needs complete intent and original receipt recovery.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "setWorkspaceDashboard": 1
     }
   }
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/svelte";
 
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 import { sortWorkBoardItems, workKey } from "../../src/lib/pm/presentation.js";
@@ -13,6 +13,9 @@ import {
   insertIndexAtY,
   placeWorkInPhase,
 } from "../../src/lib/workBoardDrag.js";
+
+// Unmount every board: a board left in the document is still hit-testable.
+afterEach(() => cleanup());
 
 function rect(left, top, width, height) {
   return {

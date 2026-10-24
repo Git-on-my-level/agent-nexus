@@ -27,6 +27,13 @@ import { isPmNotOnboardedRefusal, PM_STATES } from "$lib/pm/onboardingState.js";
 import { publishPmPresence } from "$lib/pm/presence.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
 import {
+  MAX_DASHBOARD_PINS,
+  PINS_OPERATION,
+  applyPinOp,
+  personalPins,
+  pinEditWaits,
+} from "$lib/dashboardPins.js";
+import {
   replayExpired,
   expiredReplayError,
   intentFingerprint,
@@ -261,6 +268,39 @@ async function send(entry, lease = null) {
       throw new Error("Move receipt is incomplete.");
     return result;
   }
+  if (entry.operation === PINS_OPERATION) {
+    // Apply this one edit to core's current set, never to a set this device
+    // read earlier: whatever another tab or device pinned since survives.
+    const read = async () => {
+      const current = await client.getDashboardPins();
+      if (!Array.isArray(current?.document_refs))
+        throw new Error("Pins read is incomplete.");
+      return current;
+    };
+    const current = await read();
+    const next = applyPinOp(personalPins(current), entry.request);
+    if (next.full)
+      throw Object.assign(new Error("Dashboard pins are full."), {
+        publicMessage: `You already have ${MAX_DASHBOARD_PINS} pinned dashboards. Unpin one, then pin this again.`,
+      });
+    // Already in effect, including a replay whose first send landed.
+    if (!next.changed) return current;
+    let result;
+    try {
+      result = await client.setDashboardPins({
+        request_key: entry.request.request_key,
+        document_refs: next.refs,
+      });
+    } catch (error) {
+      // Core already holds this request_key with a different set: an earlier
+      // send of this edit landed, then the set moved on. The edit is done.
+      if (Number(error?.status) === 409) return read();
+      throw error;
+    }
+    if (!Array.isArray(result?.document_refs))
+      throw new Error("Pins receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "curation.ungroup") {
     const result = await client.ungroupCurationBatch(entry.request.body);
     if (typeof result?.ungrouped !== "boolean")
@@ -409,7 +449,11 @@ async function send(entry, lease = null) {
   throw Object.assign(new Error("Unknown saved operation"), { status: 400 });
 }
 
-function confirm(entry, result = null) {
+/**
+ * `confirmedAt` is when core's receipt landed, as persisted with it, so a
+ * receipt recovered later keeps its own time instead of looking new.
+ */
+function confirm(entry, result = null, confirmedAt = null) {
   const decision = result?.decision || entry.receipt?.decision;
   if (entry.operation === "pm.decision.answer" && decision)
     commitInboxView(entry.scope, { decision });
@@ -417,10 +461,27 @@ function confirm(entry, result = null) {
     rows.filter((row) => row.key !== entry.key || row.scope !== entry.scope),
   );
   if (active(entry))
-    mutationConfirmations.update((rows) => ({
-      ...rows,
-      [entry.target]: { ...entry, state: "sent", result },
-    }));
+    mutationConfirmations.update((rows) => {
+      const pins = entry.operation === PINS_OPERATION;
+      // Pins receipts are whole sets: an older one never replaces a newer.
+      if (
+        pins &&
+        (rows[entry.target]?.confirmedAt ?? 0) > (confirmedAt ?? Date.now())
+      )
+        return rows;
+      return {
+        ...rows,
+        [entry.target]: {
+          ...entry,
+          state: "sent",
+          result,
+          // Watch orders a pins receipt against reads by when it landed.
+          // Other confirmations stay unstamped so recovery still swaps in
+          // the persisted receipt they render from.
+          ...(pins ? { confirmedAt: confirmedAt ?? Date.now() } : {}),
+        },
+      };
+    });
   window.dispatchEvent(
     new CustomEvent("anx:mutation-confirmed", { detail: { ...entry, result } }),
   );
@@ -743,6 +804,30 @@ export function enqueuePmDecisionAnswer({
   });
 }
 
+export const DASHBOARD_PINS_TARGET = "workspace:dashboard-pins";
+
+// Same-tab edits made in one millisecond still keep the order they were made.
+let lastPinOrder = 0;
+
+/**
+ * Pin (`op: "add"`) or unpin (`op: "remove"`) one dashboard for the reader.
+ * The saved edit is the operation, not a set: the sender applies it to a
+ * fresh read (see send), so no edit can drop a pin it never saw.
+ */
+export function enqueueDashboardPin({ op, ref, ...options }) {
+  const key = randomUUID();
+  lastPinOrder = Math.max(Date.now(), lastPinOrder + 1);
+  return enqueueLocalMutation({
+    title: op === "add" ? "Pin dashboard" : "Unpin dashboard",
+    preview: ref,
+    ...options,
+    key,
+    target: DASHBOARD_PINS_TARGET,
+    operation: PINS_OPERATION,
+    request: { op, ref, order: lastPinOrder, request_key: key },
+  });
+}
+
 /**
  * Undo an accepted batch. Ungrouping by key is idempotent in core, so a
  * retry of the saved request is replay-safe.
@@ -851,7 +936,11 @@ async function attempt(entry) {
       if (latest?.deleted && latest.deletionReason === "confirmed") {
         confirmedInTab.set(tabKey, latest.confirmation ?? null);
         volatile.delete(entry.key);
-        confirm(entry, latest.confirmation ?? null);
+        confirm(
+          entry,
+          latest.confirmation ?? null,
+          latest.submission?.confirmedAt,
+        );
         return;
       }
       volatile.delete(entry.key);
@@ -878,7 +967,11 @@ async function attempt(entry) {
       if (latest.deletionReason === "confirmed") {
         confirmedInTab.set(tabKey, latest.confirmation ?? null);
         volatile.delete(entry.key);
-        confirm(entry, latest.confirmation ?? null);
+        confirm(
+          entry,
+          latest.confirmation ?? null,
+          latest.submission?.confirmedAt,
+        );
       } else {
         volatile.delete(entry.key);
       }
@@ -949,6 +1042,11 @@ async function attempt(entry) {
     try {
       if (!active(entry)) return;
       const result = adopted ? adopted.confirmation : await send(entry, lease);
+      // An adopted pins receipt is as old as the send that produced it.
+      const confirmedAt =
+        (entry.operation === PINS_OPERATION &&
+          adopted?.submission?.confirmedAt) ||
+        Date.now();
       confirmedInTab.set(tabKey, result);
       if (entry.epoch !== localWorkEpoch(entry.scope)) return;
       try {
@@ -961,7 +1059,7 @@ async function attempt(entry) {
             target: entry.target,
             operation: entry.operation,
             fingerprint,
-            confirmedAt: Date.now(),
+            confirmedAt,
           },
         });
       } catch (confirmSaveErr) {
@@ -998,7 +1096,7 @@ async function attempt(entry) {
           entry.epoch,
         );
       }
-      confirm(entry, result);
+      confirm(entry, result, confirmedAt);
     } finally {
       inFlightInTab.delete(tabKey);
     }
@@ -1013,7 +1111,18 @@ async function attempt(entry) {
     if (latest?.deleted && latest.deletionReason === "confirmed") {
       confirmedInTab.set(tabKey, latest.confirmation ?? null);
       volatile.delete(entry.key);
-      confirm(entry, latest.confirmation ?? null);
+      confirm(
+        entry,
+        latest.confirmation ?? null,
+        latest.submission?.confirmedAt,
+      );
+      return;
+    }
+    // Superseded while this send was in flight: the replacement owns the
+    // intent now. Re-persisting the failure would resurrect the old request
+    // and let it replay over the newer one.
+    if (latest?.value?.state === "superseded") {
+      volatile.delete(entry.key);
       return;
     }
     if (
@@ -1099,17 +1208,34 @@ export async function recoverMutations() {
         for (const record of records) {
           const receipt = record.confirmation;
           const submitted = record.submission;
-          if (
-            !record.deleted ||
-            record.deletionReason !== "confirmed" ||
-            submitted?.operation !== "docs.lifecycle" ||
-            !Array.isArray(receipt?.documents)
-          )
+          if (!record.deleted || record.deletionReason !== "confirmed")
             continue;
-          const current = next[submitted.target];
+          const current = next[submitted?.target];
           if (
             (current?.confirmedAt ?? current?.createdAt ?? 0) >
-            submitted.confirmedAt
+            submitted?.confirmedAt
+          )
+            continue;
+          // Another tab's pin edit landed: its receipt is core's newer set.
+          if (
+            submitted?.operation === PINS_OPERATION &&
+            Array.isArray(receipt?.document_refs)
+          ) {
+            next[submitted.target] = {
+              key: record.target,
+              scope,
+              epoch: record.epoch,
+              target: submitted.target,
+              operation: submitted.operation,
+              state: "sent",
+              confirmedAt: submitted.confirmedAt,
+              result: receipt,
+            };
+            continue;
+          }
+          if (
+            submitted?.operation !== "docs.lifecycle" ||
+            !Array.isArray(receipt?.documents)
           )
             continue;
           next[submitted.target] = {
@@ -1145,7 +1271,7 @@ export async function recoverMutations() {
         if (!active(entry) || rows.has(entry.key)) continue;
         const latest = await loadLocalWorkRecord(scope, "mutation", entry.key);
         if (latest?.deleted && latest.deletionReason === "confirmed")
-          confirm(entry, latest.confirmation);
+          confirm(entry, latest.confirmation, latest.submission?.confirmedAt);
       }
       let entries = [...rows.values()]
         .filter((entry) => active(entry) && visible(entry))
@@ -1169,7 +1295,10 @@ export async function recoverMutations() {
       mutationOutbox.set(entries.map(snapshot));
       if (navigator.onLine !== false) {
         const due = entries.find(
-          (entry) => entry.state !== "attention" && entry.nextAt <= Date.now(),
+          (entry) =>
+            entry.state !== "attention" &&
+            entry.nextAt <= Date.now() &&
+            !pinEditWaits(entry, entries),
         );
         if (due) {
           await attempt(due);

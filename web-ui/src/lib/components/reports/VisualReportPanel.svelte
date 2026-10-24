@@ -12,6 +12,8 @@
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import { metricValue } from "$lib/unavailableValue.js";
   import { safeReportUrl } from "$lib/visualReports.js";
+  import { onMount } from "svelte";
+  import { panelRole } from "./reportLayout.js";
 
   let {
     compact = false,
@@ -102,6 +104,24 @@
         )
       : 1,
   );
+  /*
+   * On a phone, anything but a primary panel folds to its header line, so
+   * activity feeds and explanations do not push the main panel off screen.
+   * Tapping the header opens it.
+   */
+  let role = $derived(panelRole(panel));
+  let phone = $state(false);
+  let unfolded = $state(false);
+  let folded = $derived(phone && role !== "primary" && !unfolded);
+  onMount(() => {
+    const query = window.matchMedia?.("(max-width: 760px)");
+    if (!query) return;
+    phone = query.matches;
+    const update = (event) => (phone = event.matches);
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  });
+
   function claimsForSource(sourceId) {
     if (panel.type === "evidence-table")
       return (panel.data.rows ?? [])
@@ -123,304 +143,337 @@
   data-density={panel.density ?? "comfortable"}
   data-provenance-class={provenance.class}
   data-provenance-state={provenance.state}
+  data-report-role={role}
+  data-report-folded={folded || undefined}
 >
-  <header class="report-panel-header">
-    <div class="min-w-0">
-      <!--
+  {#if phone && role !== "primary"}
+    <button
+      type="button"
+      class="report-panel-fold"
+      aria-expanded={!folded}
+      onclick={() => (unfolded = !unfolded)}
+      data-report-fold
+    >
+      <span class="min-w-0 truncate">{panel.title}</span>
+      <span class="text-accent-text">{folded ? "Show" : "Hide"}</span>
+    </button>
+  {/if}
+  {#if !folded}
+    <header class="report-panel-header">
+      <div class="min-w-0">
+        <!--
         The eyebrow names the kind of panel; it is dropped when the title
         already does. "NEEDS AN ANSWER" over a panel called "Needs an answer"
         is the heading in small caps.
       -->
-      {#if eyebrow}<p class="report-eyebrow">{eyebrow}</p>{/if}
-      <h3 class="text-meta font-semibold text-fg" class:mt-1={eyebrow}>
-        {panel.title}
-      </h3>
-    </div>
-    <div class="report-panel-marks">
-      <!--
+        {#if eyebrow}<p class="report-eyebrow">{eyebrow}</p>{/if}
+        <h3 class="text-meta font-semibold text-fg" class:mt-1={eyebrow}>
+          {panel.title}
+        </h3>
+      </div>
+      <div class="report-panel-marks">
+        <!--
         Every panel says what it is, in every context: the Overview's compact
         embed carries no footer, and before this it was the context where a
         nine-day-old snapshot was least distinguishable from a live read.
       -->
-      <ProvenanceChip {panel} {freshness} {now} />
-      {#if stateLabels[freshness] && provenance.class !== "live" && provenance.state !== "due-for-review"}
-        <!--
+        <ProvenanceChip {panel} {freshness} {now} />
+        {#if stateLabels[freshness] && provenance.class !== "live" && provenance.state !== "due-for-review"}
+          <!--
           Never for a live panel — a read in flight arrives as `unavailable`
           here, and the line beside this already says it is still reading. And
           never beside "May be stale", which would be the same warning twice.
         -->
-        <span
-          class="report-state"
-          class:report-state-warn={freshness === "stale"}
-          >{stateLabels[freshness]}</span
-        >
-      {/if}
-    </div>
-  </header>
-
-  <div class="report-panel-body">
-    {#if panel.source}
-      <SeriesReportPanel {panel} {freshness} {now} />
-    {:else if isLivePanel(panel)}
-      <LiveReportPanel {panel} {now} {...refProps()} />
-    {:else if freshness === "unavailable"}
-      <div class="report-unavailable">
-        <span class="text-title text-fg-muted" aria-hidden="true">∅</span>
-        <p class="font-medium text-fg">Evidence unavailable</p>
-        <p class="mt-1 text-fg-muted">
-          This panel cannot establish an outcome. Inspect its sources for
-          context.
-        </p>
+          <span
+            class="report-state"
+            class:report-state-warn={freshness === "stale"}
+            >{stateLabels[freshness]}</span
+          >
+        {/if}
       </div>
-    {:else}
-      {#if provenance.state === "due-for-review"}
-        <!--
+    </header>
+
+    <div class="report-panel-body">
+      {#if panel.source}
+        <SeriesReportPanel {panel} {freshness} {now} />
+      {:else if isLivePanel(panel)}
+        <LiveReportPanel {panel} {now} {...refProps()} />
+      {:else if freshness === "unavailable"}
+        <div class="report-unavailable">
+          <span class="text-title text-fg-muted" aria-hidden="true">∅</span>
+          <p class="font-medium text-fg">Evidence unavailable</p>
+          <p class="mt-1 text-fg-muted">
+            This panel cannot establish an outcome. Inspect its sources for
+            context.
+          </p>
+        </div>
+      {:else}
+        {#if provenance.state === "due-for-review"}
+          <!--
           Only once the panel is actually overdue. Tied to the 24-hour evidence
           window, this amber line argued with the quiet "Written by claude · 3d
           ago" beside it: one of them said the panel was fine and the other
           said to stop. The header owns that verdict now; this says what to do
           about it.
         -->
-        <p class="mb-3 text-micro text-warn-text">
-          Historical evidence. Refresh the source before acting.
-        </p>
-      {/if}
-      {#if panel.type === "chart"}
-        <ReportChart data={panel.data} title={panel.title} />
-      {:else if panel.type === "metric"}
-        {@const metric = metricValue(panel.data.value, {
-          unit: panel.data.unit ?? "",
-        })}
-        <p class="text-title">
-          {#if metric.available}{metric.text}{:else}<UnavailableValue
-              reason={metric.reason}
-            />{/if}
-        </p>
-      {:else if ["metric-strip", "callout", "comparison"].includes(panel.type)}
-        <ReportDetails {panel} {...refProps()} />
-      {:else if panel.type === "explanation"}
-        <p class="report-explanation">
-          <RefText text={panel.data.text} {...refProps()} />
-        </p>
-      {:else if ["evidence-table", "table"].includes(panel.type)}
-        <!-- Keyboard access is required for horizontally scrollable tables. -->
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <div
-          class="report-table-scroll"
-          tabindex="0"
-          role="region"
-          aria-label={`${panel.title} table`}
-        >
-          <table>
-            <thead
-              ><tr
-                >{#each panel.data.columns as column}<th scope="col"
-                    >{column}</th
-                  >{/each}</tr
-              ></thead
-            >
-            <tbody
-              >{#each panel.data.rows as row}<tr
-                  >{#each row.cells as cell}<td
-                      ><RefText text={cell} {...refProps()} /></td
+          <p class="mb-3 text-micro text-warn-text">
+            Historical evidence. Refresh the source before acting.
+          </p>
+        {/if}
+        {#if panel.type === "chart"}
+          <ReportChart data={panel.data} title={panel.title} />
+        {:else if panel.type === "metric"}
+          {@const metric = metricValue(panel.data.value, {
+            unit: panel.data.unit ?? "",
+          })}
+          <p class="text-title">
+            {#if metric.available}{metric.text}{:else}<UnavailableValue
+                reason={metric.reason}
+              />{/if}
+          </p>
+        {:else if ["metric-strip", "callout", "comparison"].includes(panel.type)}
+          <ReportDetails {panel} {...refProps()} />
+        {:else if panel.type === "explanation"}
+          <p class="report-explanation">
+            <RefText text={panel.data.text} {...refProps()} />
+          </p>
+        {:else if ["evidence-table", "table"].includes(panel.type)}
+          <!-- Keyboard access is required for horizontally scrollable tables. -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <div
+            class="report-table-scroll"
+            tabindex="0"
+            role="region"
+            aria-label={`${panel.title} table`}
+          >
+            <table>
+              <thead
+                ><tr
+                  >{#each panel.data.columns as column}<th scope="col"
+                      >{column}</th
                     >{/each}</tr
-                >{/each}</tbody
-            >
-          </table>
-        </div>
-      {:else if panel.type === "milestone-timeline"}
-        <ol class="report-timeline">
-          {#each panel.data.items as item}
-            <li>
-              <span
-                class="report-milestone-dot"
-                class:report-milestone-complete={item.status === "complete"}
-                aria-hidden="true"
-                >{item.status === "complete" ? "✓" : "·"}</span
+                ></thead
               >
-              <div class="min-w-0">
-                <div
-                  class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
+              <tbody
+                >{#each panel.data.rows as row}<tr
+                    >{#each row.cells as cell}<td
+                        ><RefText text={cell} {...refProps()} /></td
+                      >{/each}</tr
+                  >{/each}</tbody
+              >
+            </table>
+          </div>
+        {:else if panel.type === "milestone-timeline"}
+          <ol class="report-timeline">
+            {#each panel.data.items as item}
+              <li>
+                <span
+                  class="report-milestone-dot"
+                  class:report-milestone-complete={item.status === "complete"}
+                  aria-hidden="true"
+                  >{item.status === "complete" ? "✓" : "·"}</span
                 >
-                  <h4 class="font-medium text-fg">
-                    <RefText text={item.label} {...refProps()} />
-                  </h4>
-                  <span class="report-status-label">{item.status}</span>
+                <div class="min-w-0">
+                  <div
+                    class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
+                  >
+                    <h4 class="font-medium text-fg">
+                      <RefText text={item.label} {...refProps()} />
+                    </h4>
+                    <span class="report-status-label">{item.status}</span>
+                  </div>
+                  <p class="mt-1 text-micro text-fg-muted">
+                    {#if item.date}{item.date}{:else}<UnavailableValue
+                        reason="No date established for this milestone."
+                      />{/if}
+                  </p>
+                  <p class="mt-1 text-meta text-fg-muted">
+                    <RefText text={item.detail} {...refProps()} />
+                  </p>
                 </div>
+              </li>
+            {/each}
+          </ol>
+        {:else if panel.type === "dependency-diagram"}
+          <div class="report-dependency-nodes" aria-label="Dependency nodes">
+            {#each panel.data.nodes as node}
+              <div
+                class="report-dependency-node"
+                class:report-dependency-complete={node.status === "complete"}
+              >
+                <span class="text-micro text-fg-muted">{node.status}</span
+                ><strong><RefText text={node.label} {...refProps()} /></strong>
+              </div>
+            {/each}
+          </div>
+          <ul
+            class="report-dependency-edges"
+            aria-label="Dependency relationships"
+          >
+            {#each panel.data.edges as edge}
+              <li>
+                <span
+                  >{panel.data.nodes.find((node) => node.id === edge.from)
+                    ?.label}</span
+                ><span class="text-accent-text" aria-label="leads to">
+                  →
+                </span><span
+                  >{panel.data.nodes.find((node) => node.id === edge.to)
+                    ?.label}</span
+                ><span class="block text-micro text-fg-muted"
+                  ><RefText text={edge.label} {...refProps()} /></span
+                >
+              </li>
+            {/each}
+          </ul>
+        {:else if panel.type === "metric-chart"}
+          {#if panel.data.illustrative}<p
+              class="mb-3 text-micro text-warn-text"
+            >
+              Illustrative values. Not live workspace metrics.
+            </p>{/if}
+          <p class="mb-3 text-meta font-medium text-fg">
+            {panel.data.label}
+            <span class="text-micro font-normal text-fg-muted"
+              >({panel.data.unit})</span
+            >
+          </p>
+          <div
+            class="report-chart"
+            role="img"
+            aria-label={`${panel.data.label}: ${panel.data.points.map((point) => `${point.label} ${point.value ?? "not reported"}`).join(", ")}. Unit: ${panel.data.unit}`}
+          >
+            {#each panel.data.points as point}
+              <div class="report-chart-row">
+                <span>{point.label}</span>
+                <div class="report-chart-track">
+                  {#if point.value !== null && point.value > 0}
+                    <div
+                      class="report-chart-bar"
+                      style:width={`${(point.value / maximum) * 100}%`}
+                    ></div>
+                  {/if}
+                </div>
+                <strong
+                  >{#if point.value !== null && point.value !== undefined}{point.value}{:else}<UnavailableValue
+                      reason="Not reported for this point, which is not the same as zero."
+                    />{/if}</strong
+                >
+              </div>
+            {/each}
+          </div>
+          {#if panel.data.points.some((point) => point.value === null)}<p
+              class="mt-3 text-micro text-fg-muted"
+            >
+              — means unavailable, never zero.
+            </p>{/if}
+        {:else if panel.type === "artifact-preview"}
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <h4 class="text-meta font-medium text-fg">{panel.data.label}</h4>
+            <span class="font-mono text-micro text-fg-muted"
+              >{panel.data.media_type}</span
+            >
+          </div>
+          <pre class="report-artifact-excerpt">{panel.data.excerpt}</pre>
+          {#if safeReportUrl(panel.data.url)}<a
+              class="text-micro text-accent-text hover:text-accent-hover"
+              href={safeReportUrl(panel.data.url)}
+              target="_blank"
+              rel="noopener noreferrer">Open source artifact ↗</a
+            >{/if}
+        {/if}
+      {/if}
+    </div>
+
+    {#if !compact && !isLivePanel(panel)}
+      <footer class="report-panel-footer">
+        <div class="report-provenance">
+          <!-- Who wrote it is in the header now. This line is the other axis:
+             how well the claim is evidenced, and when it was observed. -->
+          <span class="report-provenance-tag" data-provenance={panel.provenance}
+            >{provenanceLabels[panel.provenance]}</span
+          >
+          <p class="text-micro text-fg-muted">
+            {freshness === "current" ? "Current · " : ""}Observed
+            {#if instantIso(panel.observed_at)}<Time
+                value={panel.observed_at}
+                {now}
+              />{:else}<UnavailableValue
+                reason="This panel carries no observation time."
+              />{/if}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="report-evidence-button"
+          aria-expanded={evidenceOpen}
+          aria-controls={`report-evidence-${panel.id}`}
+          onclick={() => oninspect(panel.id)}
+          >Inspect evidence <span aria-hidden="true"
+            >{evidenceOpen ? "−" : "+"}</span
+          ></button
+        >
+      </footer>
+    {/if}
+    {#if !compact && evidenceOpen}
+      <div id={`report-evidence-${panel.id}`} class="report-evidence-detail">
+        <h4 class="text-meta font-medium text-fg">Source evidence</h4>
+        <p class="mt-1 text-micro text-fg-muted">
+          Author and verification labels are report claims. Review the linked
+          records to verify them.
+        </p>
+        {#if linkedSources.length}
+          <ul class="mt-3 space-y-3">
+            {#each linkedSources as source}<li>
+                <a
+                  class="text-meta text-accent-text hover:text-accent-hover"
+                  href={safeReportUrl(source.url)}
+                  target="_blank"
+                  rel="noopener noreferrer">{source.label} ↗</a
+                >
                 <p class="mt-1 text-micro text-fg-muted">
-                  {#if item.date}{item.date}{:else}<UnavailableValue
-                      reason="No date established for this milestone."
+                  {source.kind} · Observed {#if instantIso(source.observed_at)}<Time
+                      value={source.observed_at}
+                      {now}
+                    />{:else}<UnavailableValue
+                      reason="This source carries no observation time."
                     />{/if}
                 </p>
-                <p class="mt-1 text-meta text-fg-muted">
-                  <RefText text={item.detail} {...refProps()} />
-                </p>
-              </div>
-            </li>
-          {/each}
-        </ol>
-      {:else if panel.type === "dependency-diagram"}
-        <div class="report-dependency-nodes" aria-label="Dependency nodes">
-          {#each panel.data.nodes as node}
-            <div
-              class="report-dependency-node"
-              class:report-dependency-complete={node.status === "complete"}
-            >
-              <span class="text-micro text-fg-muted">{node.status}</span><strong
-                ><RefText text={node.label} {...refProps()} /></strong
-              >
-            </div>
-          {/each}
-        </div>
-        <ul
-          class="report-dependency-edges"
-          aria-label="Dependency relationships"
-        >
-          {#each panel.data.edges as edge}
-            <li>
-              <span
-                >{panel.data.nodes.find((node) => node.id === edge.from)
-                  ?.label}</span
-              ><span class="text-accent-text" aria-label="leads to">
-                →
-              </span><span
-                >{panel.data.nodes.find((node) => node.id === edge.to)
-                  ?.label}</span
-              ><span class="block text-micro text-fg-muted"
-                ><RefText text={edge.label} {...refProps()} /></span
-              >
-            </li>
-          {/each}
-        </ul>
-      {:else if panel.type === "metric-chart"}
-        {#if panel.data.illustrative}<p class="mb-3 text-micro text-warn-text">
-            Illustrative values. Not live workspace metrics.
-          </p>{/if}
-        <p class="mb-3 text-meta font-medium text-fg">
-          {panel.data.label}
-          <span class="text-micro font-normal text-fg-muted"
-            >({panel.data.unit})</span
-          >
-        </p>
-        <div
-          class="report-chart"
-          role="img"
-          aria-label={`${panel.data.label}: ${panel.data.points.map((point) => `${point.label} ${point.value ?? "not reported"}`).join(", ")}. Unit: ${panel.data.unit}`}
-        >
-          {#each panel.data.points as point}
-            <div class="report-chart-row">
-              <span>{point.label}</span>
-              <div class="report-chart-track">
-                {#if point.value !== null && point.value > 0}
-                  <div
-                    class="report-chart-bar"
-                    style:width={`${(point.value / maximum) * 100}%`}
-                  ></div>
-                {/if}
-              </div>
-              <strong
-                >{#if point.value !== null && point.value !== undefined}{point.value}{:else}<UnavailableValue
-                    reason="Not reported for this point, which is not the same as zero."
-                  />{/if}</strong
-              >
-            </div>
-          {/each}
-        </div>
-        {#if panel.data.points.some((point) => point.value === null)}<p
-            class="mt-3 text-micro text-fg-muted"
-          >
-            — means unavailable, never zero.
-          </p>{/if}
-      {:else if panel.type === "artifact-preview"}
-        <div class="flex flex-wrap items-start justify-between gap-2">
-          <h4 class="text-meta font-medium text-fg">{panel.data.label}</h4>
-          <span class="font-mono text-micro text-fg-muted"
-            >{panel.data.media_type}</span
-          >
-        </div>
-        <pre class="report-artifact-excerpt">{panel.data.excerpt}</pre>
-        {#if safeReportUrl(panel.data.url)}<a
-            class="text-micro text-accent-text hover:text-accent-hover"
-            href={safeReportUrl(panel.data.url)}
-            target="_blank"
-            rel="noopener noreferrer">Open source artifact ↗</a
-          >{/if}
-      {/if}
-    {/if}
-  </div>
-
-  {#if !compact && !isLivePanel(panel)}
-    <footer class="report-panel-footer">
-      <div class="report-provenance">
-        <!-- Who wrote it is in the header now. This line is the other axis:
-             how well the claim is evidenced, and when it was observed. -->
-        <span class="report-provenance-tag" data-provenance={panel.provenance}
-          >{provenanceLabels[panel.provenance]}</span
-        >
-        <p class="text-micro text-fg-muted">
-          {freshness === "current" ? "Current · " : ""}Observed
-          {#if instantIso(panel.observed_at)}<Time
-              value={panel.observed_at}
-              {now}
-            />{:else}<UnavailableValue
-              reason="This panel carries no observation time."
-            />{/if}
-        </p>
+                {#if claimsForSource(source.id).length}<p
+                    class="mt-1 text-micro text-fg-muted"
+                  >
+                    Supports: {claimsForSource(source.id).join("; ")}
+                  </p>{/if}
+              </li>{/each}
+          </ul>
+        {:else}
+          <p class="mt-3 text-meta text-fg-muted">
+            No source evidence supplied. This is not a verified outcome.
+          </p>
+        {/if}
+        <p class="mt-3 font-mono text-micro text-fg-muted">Panel {panel.id}</p>
       </div>
-      <button
-        type="button"
-        class="report-evidence-button"
-        aria-expanded={evidenceOpen}
-        aria-controls={`report-evidence-${panel.id}`}
-        onclick={() => oninspect(panel.id)}
-        >Inspect evidence <span aria-hidden="true"
-          >{evidenceOpen ? "−" : "+"}</span
-        ></button
-      >
-    </footer>
-  {/if}
-  {#if !compact && evidenceOpen}
-    <div id={`report-evidence-${panel.id}`} class="report-evidence-detail">
-      <h4 class="text-meta font-medium text-fg">Source evidence</h4>
-      <p class="mt-1 text-micro text-fg-muted">
-        Author and verification labels are report claims. Review the linked
-        records to verify them.
-      </p>
-      {#if linkedSources.length}
-        <ul class="mt-3 space-y-3">
-          {#each linkedSources as source}<li>
-              <a
-                class="text-meta text-accent-text hover:text-accent-hover"
-                href={safeReportUrl(source.url)}
-                target="_blank"
-                rel="noopener noreferrer">{source.label} ↗</a
-              >
-              <p class="mt-1 text-micro text-fg-muted">
-                {source.kind} · Observed {#if instantIso(source.observed_at)}<Time
-                    value={source.observed_at}
-                    {now}
-                  />{:else}<UnavailableValue
-                    reason="This source carries no observation time."
-                  />{/if}
-              </p>
-              {#if claimsForSource(source.id).length}<p
-                  class="mt-1 text-micro text-fg-muted"
-                >
-                  Supports: {claimsForSource(source.id).join("; ")}
-                </p>{/if}
-            </li>{/each}
-        </ul>
-      {:else}
-        <p class="mt-3 text-meta text-fg-muted">
-          No source evidence supplied. This is not a verified outcome.
-        </p>
-      {/if}
-      <p class="mt-3 font-mono text-micro text-fg-muted">Panel {panel.id}</p>
-    </div>
+    {/if}
   {/if}
 </section>
 
 <style>
+  .report-panel-fold {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    font-size: 13px;
+    text-align: left;
+    color: var(--fg);
+  }
+  .report-panel-fold:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: -2px;
+  }
   .report-panel {
     min-width: 0;
     display: flex;

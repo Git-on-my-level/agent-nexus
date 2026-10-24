@@ -124,3 +124,88 @@ describe("clamped live prose", () => {
     );
   });
 });
+
+describe("loop silence banner", () => {
+  it("dates the silence from the silent loops, not one that ran today", () => {
+    const loop = (health, at) => ({
+      health,
+      last_run_at: at,
+      runs_7d: {},
+    });
+    const { container } = render(LiveReportPanel, {
+      panel: {
+        type: "live-loops",
+        live: {
+          status: "ok",
+          data: {
+            loops: [
+              ...["a", "b", "c", "d"].map((id) => ({
+                ref: `card:${id}`,
+                title: id,
+                loop: loop("overdue", "2026-10-02T15:45:00Z"),
+              })),
+              {
+                ref: "card:e",
+                title: "e",
+                loop: loop("healthy", "2026-10-09T11:00:00Z"),
+              },
+            ],
+          },
+        },
+      },
+      now: NOW,
+    });
+    const text = container.textContent.replace(/\s+/g, " ");
+    expect(text).toContain("4 of 5 loops stopped reporting around Oct 2");
+    expect(text).not.toContain("around Oct 9");
+  });
+});
+
+describe("live collection truncation", () => {
+  const panel = (
+    hasMore,
+    rows = [{ ref: "agent:a", title: "a", state: "working" }],
+  ) => ({
+    type: "live-collection",
+    title: "Agents",
+    live: {
+      status: "ok",
+      data: {
+        states: [{ key: "working", label: "Working", tone: "good" }],
+        groups: [
+          {
+            key: "all",
+            rows,
+          },
+        ],
+        has_more: hasMore,
+      },
+    },
+  });
+  it("says when core returned only part of the collection", () => {
+    const { container } = render(LiveReportPanel, {
+      panel: panel(true),
+      now: NOW,
+    });
+    expect(
+      container.querySelector("[data-live-collection-more]")?.textContent,
+    ).toMatch(/Showing 1; there are more\./);
+  });
+  it("says so even when none of the rows core read matched", () => {
+    const { container } = render(LiveReportPanel, {
+      panel: panel(true, []),
+      now: NOW,
+    });
+    expect(
+      container.querySelector("[data-live-collection-more]")?.textContent,
+    ).toMatch(/Showing 0; there are more\./);
+    expect(container.textContent).not.toContain("Nothing in this view yet.");
+  });
+  it("stays quiet when the collection is complete", () => {
+    const { container } = render(LiveReportPanel, {
+      panel: panel(false),
+      now: NOW,
+    });
+    expect(container.querySelector("[data-live-collection-more]")).toBeNull();
+  });
+});

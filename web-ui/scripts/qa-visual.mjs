@@ -89,7 +89,9 @@ export const QA_SCENES = [
     path: "/o/local/w/local/watch",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector("[data-watch-group='past_promise']");
+      await page.waitForSelector(
+        "[data-collection-row][data-watch-state='past_promise']",
+      );
       await page.waitForSelector("text=Battery measurement");
     },
   },

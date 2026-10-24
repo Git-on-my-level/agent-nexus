@@ -95,6 +95,8 @@
   let pointerX = $state(0);
   let pointerY = $state(0);
   let suppressClick = false;
+  // Hit-test only this board: another board on the page must not take a drop.
+  let boardEl = $state();
 
   const PLACEHOLDER = "__watch-drag-hole";
 
@@ -133,7 +135,7 @@
   }
 
   function updateHover(x, y) {
-    const columnEl = columnAtPoint(x, y);
+    const columnEl = columnAtPoint(x, y, boardEl ?? document);
     const placement = columnEl?.getAttribute("data-work-phase") || "";
     hover =
       columnEl && placement
@@ -391,6 +393,7 @@
     ? 'select-none'
     : ''}"
   data-watch-board
+  bind:this={boardEl}
   data-dragging={dragging ? "" : undefined}
   onclickcapture={swallowClick}
   role="region"

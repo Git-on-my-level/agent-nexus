@@ -29,7 +29,7 @@ import {
 
 const WORKSPACE = "/o/local/w/local";
 // The old Overview's pinned dashboard now lives below the initiatives on Watch.
-const OVERVIEW = `${WORKSPACE}/watch`;
+const OVERVIEW = `${WORKSPACE}/watch?tab=dashboard`;
 const DOC_ID = "wide-dashboard";
 const NOW = "2026-10-06T12:00:00Z";
 

@@ -6,19 +6,34 @@
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
   import Time from "$lib/time/Time.svelte";
-  import { formatElapsed, instantIso, instantMs } from "$lib/time/format.js";
+  import {
+    formatElapsed,
+    formatTime,
+    instantIso,
+    instantMs,
+  } from "$lib/time/format.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { resolveRefLink } from "$lib/refLinkModel";
   import {
+    collapseRuns,
     compareLoops,
+    loopPanelRows,
     normalizeLoop,
     normalizeLoopStats,
     normalizeRunReceipt,
     runText,
     safeEffectHref,
+    shortCandidate,
     withUnit,
   } from "$lib/loops.js";
   import { formatMetricValue } from "$lib/brief.js";
+  import {
+    collectionFromLoops,
+    dominantQuietState,
+    normalizeCollection,
+    untagged,
+  } from "$lib/collection.js";
+  import CollectionTable from "$lib/components/collection/CollectionTable.svelte";
   import LoopCard from "$lib/components/loops/LoopCard.svelte";
   import LoopChart from "$lib/components/loops/LoopChart.svelte";
   import LoopTotals from "$lib/components/loops/LoopTotals.svelte";
@@ -76,6 +91,42 @@
       .sort(compareLoops),
   );
   let loopStats = $derived(normalizeLoopStats(live?.data?.stats));
+  /** The same rows Watch's Loops tab draws, without brief field tags. */
+  let loopCollection = $derived(
+    untagged(
+      collectionFromLoops(loopPanelRows(loopRows), {
+        now,
+        href: (row) => refHref(row.ref),
+      }),
+    ),
+  );
+  /** `live-collection`: core's rows for initiatives, loops or agents. */
+  let liveCollection = $derived(
+    panel.type === "live-collection"
+      ? normalizeCollection(live?.data, { href: (row) => refHref(row.ref) })
+      : null,
+  );
+  let collectionRows = $derived(
+    liveCollection?.groups.reduce((n, g) => n + g.rows.length, 0) ?? 0,
+  );
+  /** "All 22 loops stopped reporting around Oct 16", said once. */
+  let loopSilence = $derived.by(() => {
+    const dominant = dominantQuietState(loopCollection);
+    if (!dominant) return null;
+    // Only the silent loops date the silence; a healthy one ran since.
+    const latest = Math.max(
+      ...dominant.rows.map(
+        (row) => Date.parse(row.source?.initiative?.loop?.lastRunAt || "") || 0,
+      ),
+    );
+    return {
+      ...dominant,
+      since:
+        latest > 0
+          ? formatTime(new Date(latest).toISOString(), { style: "date" })
+          : "",
+    };
+  });
   /** `live-loop`: one loop's climb and its run receipts. */
   let oneLoop = $derived(
     panel.type === "live-loop" && live?.data?.ref
@@ -89,8 +140,10 @@
   );
   const RUNS_SHOWN = 8;
   let allRuns = $state(false);
+  /** Identical consecutive runs read as one "12× no-op" row. */
+  let runGroups = $derived(oneLoop ? collapseRuns(oneLoop.runs) : []);
   let shownRuns = $derived(
-    oneLoop ? (allRuns ? oneLoop.runs : oneLoop.runs.slice(0, RUNS_SHOWN)) : [],
+    allRuns ? runGroups : runGroups.slice(0, RUNS_SHOWN),
   );
   /** A run's metrics, minus the goal metric when the candidate score already shows it. */
   const runMetrics = (run) =>
@@ -126,6 +179,17 @@
     return at <= now ? "expired" : `expires in ${formatElapsed(at - now)}`;
   };
 </script>
+
+{#snippet loopPanelDetails(row)}
+  <LoopCard
+    ref={row.ref}
+    title={row.title}
+    href={row.href}
+    loop={row.source.initiative.loop}
+    {now}
+    source=""
+  />
+{/snippet}
 
 {#snippet prose(source)}
   <!-- Agent-written markdown: rendered, not printed, and clamped to a
@@ -279,22 +343,50 @@
         {/each}
       </ol>
     {:else}<p class="muted">No recent activity in this view.</p>{/if}
+  {:else if panel.type === "live-collection"}
+    {#if collectionRows}
+      <div class="mt-1" data-live-collection>
+        <CollectionTable
+          collection={liveCollection}
+          folded={["done"]}
+          label={panel.title || "items"}
+        />
+      </div>
+    {:else if !liveCollection?.hasMore}
+      <p class="muted">Nothing in this view yet.</p>
+    {/if}
+    {#if liveCollection?.hasMore}
+      <!-- Core stopped at its bound; say so rather than imply this is
+           everything, even when no row in that bound matched. -->
+      <p class="muted mt-2" data-live-collection-more>
+        Showing {collectionRows}; there are more.
+      </p>
+    {/if}
   {:else if panel.type === "live-loops"}
     {#if loopStats}
       <LoopTotals totals={loopStats} />
     {/if}
     {#if loopRows.length}
-      <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2" data-live-loops>
-        {#each loopRows as row (row.ref)}
-          <LoopCard
-            ref={row.ref}
-            title={row.title}
-            href={refHref(row.ref)}
-            loop={row.loop}
-            {now}
-            source=""
-          />
-        {/each}
+      <div class="mt-3 space-y-3" data-live-loops>
+        {#if loopSilence}
+          <p class="silence-banner" role="status" data-live-loops-silence>
+            <strong
+              >{loopSilence.count === loopSilence.total
+                ? `All ${loopSilence.total}`
+                : `${loopSilence.count} of ${loopSilence.total}`} loops stopped reporting{loopSilence.since
+                ? ` around ${loopSilence.since}`
+                : ""}.</strong
+            >
+            Their runs may still happen, but no receipts arrive, so their health is
+            unknown.
+          </p>
+        {/if}
+        <CollectionTable
+          collection={loopCollection}
+          folded={["done"]}
+          label="loops"
+          details={loopPanelDetails}
+        />
       </div>
     {:else}
       <p class="muted mt-3">
@@ -335,8 +427,9 @@
                 class="run-tag run-tag--{run.outcome} {run.decision
                   ? `run-tag--${run.decision}`
                   : ''}"
+                data-run-count={run.count}
               >
-                {runText(run)}
+                {run.count > 1 ? `${run.count}× ` : ""}{runText(run)}
               </span>
               <div class="min-w-0">
                 <p class="text-meta text-fg [overflow-wrap:anywhere]">
@@ -347,9 +440,10 @@
                     class="mt-0.5 flex flex-wrap gap-x-2 text-micro text-fg-muted"
                   >
                     {#if run.experiment?.candidate}
-                      <span
-                        >candidate {run.experiment
-                          .candidate}{#if run.experiment.before !== null && run.experiment.after !== null}:
+                      <span title={run.experiment.candidate}
+                        >candidate {shortCandidate(
+                          run.experiment.candidate,
+                        )}{#if run.experiment.before !== null && run.experiment.after !== null}:
                           {formatMetricValue(run.experiment.before)} → {formatMetricValue(
                             run.experiment.after,
                           )}{/if}</span
@@ -383,12 +477,13 @@
                 {/if}
               </div>
               <span class="text-micro text-fg-subtle"
-                ><Time value={run.at} {now} /></span
+                >{#if run.count > 1}<Time value={run.oldestAt} {now} /> –
+                {/if}<Time value={run.at} {now} /></span
               >
             </li>
           {/each}
         </ol>
-        {#if oneLoop.runs.length > RUNS_SHOWN}
+        {#if runGroups.length > RUNS_SHOWN}
           <button
             type="button"
             class="mt-1 text-micro text-accent-text hover:underline"
@@ -535,6 +630,14 @@
   .muted {
     color: var(--fg-muted);
     font-size: 11px;
+  }
+  .silence-banner {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.07);
+    color: var(--fg);
   }
   .activity {
     display: grid;

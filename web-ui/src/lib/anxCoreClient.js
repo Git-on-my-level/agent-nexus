@@ -349,6 +349,16 @@ const adapterCommandTable = [
     (payload) => ({ options: b(payload) }),
     true,
   ],
+  [
+    "getDashboardPins",
+    "workspace.dashboard.pins.list",
+    () => ({ options: {} }),
+  ],
+  [
+    "setDashboardPins",
+    "workspace.dashboard.pins.set",
+    (payload) => ({ options: b(payload) }),
+  ],
   ["listWork", "work.list", (filters) => ({ options: q(filters) })],
   // One request per page for every ref a page is about to chip, which is what
   // keeps a table of chips off an N+1. The contract caps a batch at 200.

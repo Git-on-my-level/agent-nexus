@@ -160,6 +160,61 @@ export function normalizeRunReceipt(raw) {
   };
 }
 
+/**
+ * Consecutive runs that say the same thing (same outcome, decision and
+ * summary, no candidate or effects) fold into one row with a count and a
+ * date span, so twelve identical no-ops read as "12× no-op".
+ */
+export function collapseRuns(runs) {
+  const out = [];
+  const plain = (run) =>
+    !run.experiment?.candidate && !(run.effectRefs?.length > 0);
+  for (const run of runs ?? []) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      plain(run) &&
+      plain(prev) &&
+      prev.outcome === run.outcome &&
+      prev.decision === run.decision &&
+      prev.summary === run.summary
+    ) {
+      prev.count += 1;
+      prev.oldestAt = run.at;
+      continue;
+    }
+    out.push({ ...run, count: 1, oldestAt: run.at });
+  }
+  return out;
+}
+
+/** A candidate id short enough to read: git-style 7 characters for hashes. */
+export function shortCandidate(candidate) {
+  const value = str(candidate);
+  return /^[0-9a-f]{12,}$/i.test(value) ? value.slice(0, 7) : value;
+}
+
+/**
+ * Brief-shaped rows for loop objects that came without an initiative (the
+ * `live-loops` panel), so the panel can use the shared collection rows.
+ */
+export function loopPanelRows(rows) {
+  return (rows ?? [])
+    .filter((row) => row?.loop)
+    .map((row) => ({
+      ref: row.ref,
+      id: String(row.ref).replace(/^card:/, ""),
+      title: row.title,
+      state: "moving",
+      waitingOnYouCount: 0,
+      series: [],
+      metricFlat: null,
+      promise: null,
+      lastEvidenceAt: row.loop.lastRunAt,
+      loop: row.loop,
+    }));
+}
+
 /** Attention order: failing, overdue, stalled, healthy, then no runs. */
 export function compareLoops(a, b) {
   const rank = (row) =>
@@ -237,7 +292,10 @@ export function isIncumbent(point) {
  * `pad` inside. Returns the raw polyline, the best-so-far step line, the
  * target's y, and marker positions for kept/reverted runs.
  */
-export function goalGeometry(goal, { width = 300, height = 64, pad = 4 } = {}) {
+export function goalGeometry(
+  goal,
+  { width = 300, height = 64, pad = 4, window = null } = {},
+) {
   const points = goal?.points ?? [];
   if (!points.length) return null;
   const values = points.map((point) => point.value);
@@ -250,14 +308,21 @@ export function goalGeometry(goal, { width = 300, height = 64, pad = 4 } = {}) {
     hi += spread;
   }
   const times = points.map((point) => Date.parse(point.at));
-  const t0 = times[0];
-  const t1 = times[times.length - 1];
+  // With a window, time runs across it (a burst of runs stays a burst, and a
+  // silence shows as empty space). Without one, first point to last.
+  const useWindow =
+    window && Number.isFinite(window.start) && window.end > window.start;
+  const t0 = useWindow ? window.start : times[0];
+  const t1 = useWindow
+    ? Math.max(window.end, times[times.length - 1])
+    : times[times.length - 1];
+  const clampX = (value) => Math.min(width - pad, Math.max(pad, value));
   const x = (index) =>
     t1 === t0
       ? points.length === 1
         ? width / 2
         : pad + (index / (points.length - 1)) * (width - 2 * pad)
-      : pad + ((times[index] - t0) / (t1 - t0)) * (width - 2 * pad);
+      : clampX(pad + ((times[index] - t0) / (t1 - t0)) * (width - 2 * pad));
   const y = (value) =>
     pad + (1 - (value - lo) / (hi - lo)) * (height - 2 * pad);
   const better = (a, b) => (goal.direction === "down" ? a < b : a > b);
@@ -293,6 +358,14 @@ export function goalGeometry(goal, { width = 300, height = 64, pad = 4 } = {}) {
       )
       .filter(Boolean),
     last: { x: coords[coords.length - 1][0], y: coords[coords.length - 1][1] },
+    // No data since the last point for over a tenth of the window: draw the
+    // silence as a dashed line to the window's end.
+    silence:
+      useWindow &&
+      t1 - times[times.length - 1] > (t1 - t0) / 10 &&
+      best !== null
+        ? { x1: coords[coords.length - 1][0], x2: width - pad, y: y(best) }
+        : null,
     lo,
     hi,
   };

@@ -1,5 +1,15 @@
 <script>
-  import { onMount } from "svelte";
+  /**
+   * Watch: where things stand, at a glance. Read-only — every action lives in
+   * Decide, and the header links there when something is waiting.
+   *
+   * Tabs, left to right: Initiatives (where Watch lands), Loops, then the
+   * pinned dashboard and any dashboard opened from "More dashboards". The
+   * first two are built from the brief; dashboards are report documents.
+   * Initiatives and Loops share one row layout (`CollectionTable`), so every
+   * tab reads the same way.
+   */
+  import { onMount, untrack } from "svelte";
   import { get } from "svelte/store";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
@@ -8,7 +18,16 @@
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   import { patchSearchParams } from "$lib/urlState.js";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
-  import { freshnessLabel, isLoop } from "$lib/brief.js";
+  import {
+    countWaitingDecisions,
+    freshnessLabel,
+    initiativeLine,
+  } from "$lib/brief.js";
+  import {
+    attentionCount,
+    collectionFromInitiatives,
+    collectionFromLoops,
+  } from "$lib/collection.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import { isNexusOwned } from "$lib/pm/presentation.js";
@@ -16,7 +35,15 @@
     mutationOutbox,
     mutationConfirmations,
     supersedeLocalMutation,
+    enqueueDashboardPin,
+    DASHBOARD_PINS_TARGET,
   } from "$lib/mutationOutbox.js";
+  import {
+    MAX_DASHBOARD_PINS,
+    PINS_OPERATION,
+    displayedPins,
+    personalPins,
+  } from "$lib/dashboardPins.js";
   import {
     enqueueTaskMove,
     taskMoveError,
@@ -28,16 +55,16 @@
     watchMoveAttention,
   } from "$lib/watchMove.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
-  import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import Banner from "$lib/components/Banner.svelte";
   import Button from "$lib/components/Button.svelte";
   import InlineAlert from "$lib/components/InlineAlert.svelte";
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
-  import WatchList from "$lib/components/watch/WatchList.svelte";
   import WatchBoard from "$lib/components/watch/WatchBoard.svelte";
-  import WatchLoops from "$lib/components/watch/WatchLoops.svelte";
+  import LoopCard from "$lib/components/loops/LoopCard.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import CollectionTable from "$lib/components/collection/CollectionTable.svelte";
 
   const store = briefStore();
   let brief = $derived($store.data);
@@ -48,21 +75,39 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
-  const VIEWS = ["list", "board", "loops"];
-  let view = $derived(
-    VIEWS.includes($page.url.searchParams.get("view") ?? "")
-      ? $page.url.searchParams.get("view")
+  const initiativeHref = (row) =>
+    workspaceHref(`/initiatives/${encodeURIComponent(row.id)}`);
+  const decideHref = (row) =>
+    workspaceHref(`/decide?initiative=${encodeURIComponent(row.ref)}`);
+
+  // ?tab=initiatives|loops|dashboard; the old ?view= links still land.
+  let params = $derived($page.url.searchParams);
+  let tab = $derived.by(() => {
+    const wanted = params.get("tab") || "";
+    if (["initiatives", "loops", "dashboard"].includes(wanted)) return wanted;
+    if (params.get("view") === "loops") return "loops";
+    if (params.get("dashboard")) return "dashboard";
+    return "initiatives";
+  });
+  let layout = $derived(
+    params.get("layout") === "board" || params.get("view") === "board"
+      ? "board"
       : "list",
   );
-  function setView(next) {
-    const params = patchSearchParams($page.url.searchParams, {
-      view: next === "list" ? "" : next,
-    });
-    const query = params.toString();
+  function navigate(patch) {
+    const next = patchSearchParams(params, { view: "", ...patch });
+    const query = next.toString();
     void goto(`${$page.url.pathname}${query ? `?${query}` : ""}`, {
       keepFocus: true,
       noScroll: true,
       replaceState: true,
+    });
+  }
+  function selectTab(next, dashboard = "") {
+    navigate({
+      tab: next === "initiatives" ? "" : next,
+      dashboard: next === "dashboard" ? dashboard : "",
+      layout: "",
     });
   }
 
@@ -82,7 +127,23 @@
       return placement ? { ...row, placement } : row;
     }),
   );
-  let loopCount = $derived(initiatives.filter(isLoop).length);
+  let initiativeCollection = $derived(
+    collectionFromInitiatives(initiatives, {
+      now,
+      href: initiativeHref,
+      decideHref,
+    }),
+  );
+  let loopCollection = $derived(
+    collectionFromLoops(initiatives, { now, href: initiativeHref, decideHref }),
+  );
+  let loopRows = $derived(
+    loopCollection.groups.reduce((n, g) => n + g.rows.length, 0),
+  );
+  let initiativeAttention = $derived(attentionCount(initiativeCollection));
+  let loopAttention = $derived(attentionCount(loopCollection));
+  let waitingDecisions = $derived(countWaitingDecisions(brief?.decisions));
+
   $effect(() => {
     const rows = brief?.initiatives ?? [];
     const outbox = $mutationOutbox;
@@ -146,7 +207,7 @@
     enqueue(draft) {
       return enqueueTaskMove(draft, {
         draftTarget: "tasks:move",
-        href: workspaceHref("/watch?view=board"),
+        href: workspaceHref("/watch?layout=board"),
       });
     },
     entries: () => get(mutationOutbox),
@@ -202,13 +263,67 @@
     return true;
   }
 
-  // Dashboards, kept from the old Overview below the initiatives.
+  // Dashboards: each of the reader's pins is a tab; any other opens as a tab
+  // from the "More dashboards" menu. Pins are per person; with none, core
+  // answers with the workspace default (`source: "workspace_default"`), which
+  // shows as a tab but is not the reader's pin to unpin or count.
   let dashboards = $state(null);
+  let dashboardsFailed = $state(false);
   let loadingMore = $state(false);
-  let pinning = $state(false);
   let pinError = $state("");
+  // Core's set as of `at`: the start of the read that returned it, or the
+  // moment an edit's receipt confirmed. The newer one wins, so a read that
+  // was in flight when an edit landed cannot roll the edit back.
+  let serverPins = $state(null);
+  let pinsReadFailed = $state(false);
+  function offerPins(value, at) {
+    if (!Array.isArray(value?.document_refs)) return;
+    if (serverPins && serverPins.at > at) return;
+    serverPins = {
+      document_refs: value.document_refs,
+      source: value.source,
+      at,
+    };
+    pinsReadFailed = false;
+  }
+  // A receipt from this tab, or recovered from another tab's confirmation.
+  let pinReceipt = $derived($mutationConfirmations[DASHBOARD_PINS_TARGET]);
+  $effect(() => {
+    const receipt = pinReceipt;
+    if (receipt?.result)
+      untrack(() => offerPins(receipt.result, receipt.confirmedAt ?? 0));
+  });
+  let pinAttention = $derived(
+    $mutationOutbox.find(
+      (row) => row.operation === PINS_OPERATION && row.state === "attention",
+    ),
+  );
   let reports = $derived(dashboards?.reports ?? []);
-  let wantedDashboard = $derived($page.url.searchParams.get("dashboard") || "");
+  /**
+   * The reader's own pins: core's set with every saved edit still on its way
+   * applied in order, so a reload or another tab's edit shows at once and no
+   * read can hide a pending one.
+   */
+  let pinnedRefs = $derived(
+    displayedPins(personalPins(serverPins), $mutationOutbox),
+  );
+  let defaultRefs = $derived(
+    serverPins
+      ? serverPins.source === "workspace_default"
+        ? serverPins.document_refs
+        : []
+      : dashboards?.pinned_ref
+        ? [dashboards.pinned_ref]
+        : [],
+  );
+  let tabRefs = $derived(pinnedRefs.length ? pinnedRefs : defaultRefs);
+  let pinnedReports = $derived(
+    tabRefs
+      .map((ref) => reports.find((entry) => entry.ref === ref))
+      .filter(Boolean),
+  );
+  let pinnedReport = $derived(pinnedReports[0] ?? null);
+  let wantedDashboard = $derived(params.get("dashboard") || "");
   let selectedReport = $derived(
     reports.find(
       (entry) =>
@@ -216,17 +331,29 @@
         entry.ref === wantedDashboard ||
         entry.requested_as === wantedDashboard,
     ) ||
+      pinnedReport ||
       reports[0] ||
       null,
   );
+  /** A dashboard opened from the menu that is not pinned. */
+  let extraReport = $derived(
+    tab === "dashboard" &&
+      selectedReport &&
+      !pinnedReports.includes(selectedReport)
+      ? selectedReport
+      : null,
+  );
   async function loadDashboards(cursor) {
+    if (!cursor) dashboardsFailed = false;
     try {
       const more = await coreClient.getDashboardReports(
         cursor ? { cursor } : {},
       );
       dashboards = mergeDashboardReports(cursor ? dashboards : {}, more);
     } catch {
-      // The dashboard is optional furniture; the initiatives stay usable.
+      // Dashboards are optional; initiatives and loops stay usable. A failed
+      // first read says so on the dashboard tab instead of loading forever.
+      if (!cursor) dashboardsFailed = true;
     }
   }
   async function loadMoreReports() {
@@ -235,33 +362,84 @@
     await loadDashboards(dashboards.next_cursor);
     loadingMore = false;
   }
-  function selectReport(id) {
-    const params = patchSearchParams($page.url.searchParams, {
-      dashboard: !id || id === reports[0]?.id ? "" : id,
-    });
-    const query = params.toString();
-    void goto(`${$page.url.pathname}${query ? `?${query}` : ""}`, {
-      keepFocus: true,
-      noScroll: true,
-      replaceState: true,
-    });
-  }
-  async function pinDashboard(ref) {
-    pinning = true;
-    pinError = "";
+  async function loadPins() {
+    const at = Date.now();
     try {
-      await coreClient.setWorkspaceDashboard({ document_ref: ref });
-      await loadDashboards();
+      offerPins(await coreClient.getDashboardPins(), at);
     } catch {
-      pinError = "Couldn't pin that dashboard. Try again.";
-    } finally {
-      pinning = false;
+      // The workspace default still shows as a tab. Editing stays safe: the
+      // outbox applies each edit to a fresh read when it sends.
+      if (!serverPins) pinsReadFailed = true;
     }
   }
+  async function editPin(op, ref) {
+    pinError = "";
+    try {
+      await enqueueDashboardPin({
+        op,
+        ref,
+        href: workspaceHref("/watch?tab=dashboard"),
+      });
+    } catch {
+      pinError = "Couldn't save your pin change. Try again.";
+    }
+  }
+  function pinDashboard(ref) {
+    if (!ref || pinnedRefs.includes(ref)) return;
+    // Known to be full. Unread pins are checked when the edit is sent.
+    if (serverPins && pinnedRefs.length >= MAX_DASHBOARD_PINS) {
+      pinError = `You can pin up to ${MAX_DASHBOARD_PINS} dashboards. Unpin one first.`;
+      return;
+    }
+    void editPin("add", ref);
+  }
+  function unpinDashboard(ref) {
+    if (!ref || !pinnedRefs.includes(ref)) return;
+    void editPin("remove", ref);
+  }
+
+  let tabs = $derived(
+    [
+      {
+        key: "initiatives",
+        label: "Initiatives",
+        badge: initiativeAttention,
+        active: tab === "initiatives",
+        select: () => selectTab("initiatives"),
+      },
+      loopRows || tab === "loops"
+        ? {
+            key: "loops",
+            label: "Loops",
+            badge: loopAttention,
+            active: tab === "loops",
+            select: () => selectTab("loops"),
+          }
+        : null,
+      ...pinnedReports.map((report) => ({
+        key: `dashboard:${report.id}`,
+        label: report.title || "Dashboard",
+        badge: 0,
+        pinned: pinnedRefs.includes(report.ref),
+        active: tab === "dashboard" && selectedReport === report,
+        select: () => selectTab("dashboard", report.id),
+      })),
+      extraReport
+        ? {
+            key: `dashboard:${extraReport.id}`,
+            label: extraReport.title || "Dashboard",
+            badge: 0,
+            active: true,
+            select: () => selectTab("dashboard", extraReport.id),
+          }
+        : null,
+    ].filter(Boolean),
+  );
 
   onMount(() => {
     const stop = mountBrief();
     void loadDashboards();
+    void loadPins();
     const clock = setInterval(() => (now = Date.now()), 30_000);
     return () => {
       clearInterval(clock);
@@ -272,50 +450,138 @@
   usePageTitle(() => "Watch · Agent Nexus");
 </script>
 
+{#snippet initiativeDetails(row)}
+  {@const initiative = row.source.initiative}
+  {@const line = initiativeLine(initiative, now)}
+  <div class="space-y-2 pt-1 text-meta">
+    {#if line.length}
+      <p class="flex flex-wrap gap-x-1.5 text-micro text-fg-muted">
+        {#each line as part, i (part.field)}
+          {#if i > 0}<span aria-hidden="true" class="text-fg-subtle">·</span
+            >{/if}<span data-source="computed:{part.field}">{part.text}</span>
+        {/each}
+      </p>
+    {/if}
+    {#if initiative.note}
+      <blockquote
+        class="border-l-2 border-line-strong pl-2 text-micro text-fg [overflow-wrap:anywhere]"
+      >
+        <MarkdownRenderer
+          inline
+          plain
+          source={initiative.note.text}
+          organizationSlug={$page.params.organization}
+          workspaceSlug={$page.params.workspace}
+        />
+        <span class="text-fg-muted" data-author-chip
+          >— {initiative.note.author?.display || "Unknown"}</span
+        >
+      </blockquote>
+    {/if}
+    <a class="text-micro text-accent-text hover:underline" href={row.href}
+      >Open initiative</a
+    >
+  </div>
+{/snippet}
+
+{#snippet loopDetails(row)}
+  {@const initiative = row.source.initiative}
+  {#if initiative.loop}
+    <LoopCard
+      ref={initiative.ref}
+      title={initiative.title}
+      href={row.href}
+      loop={initiative.loop}
+      {now}
+    />
+  {:else}
+    {@render initiativeDetails(row)}
+  {/if}
+{/snippet}
+
 <WorkspacePageShell>
-  <WorkspacePageHeader title="Watch">
-    {#snippet subtitle()}
-      {#if brief}
-        <span data-source="computed:generated_at"
-          >{freshnessLabel(brief.asOf, now)}</span
+  <header class="space-y-3" data-watch-header>
+    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div class="flex min-w-0 items-baseline gap-2">
+        <h1 class="text-title font-semibold text-fg">Watch</h1>
+        {#if brief}
+          <span
+            class="text-micro text-fg-muted"
+            data-source="computed:generated_at"
+            >{freshnessLabel(brief.asOf, now)}</span
+          >
+        {/if}
+        {#if refreshing}
+          <span
+            class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-line border-t-fg-muted align-middle"
+            role="status"
+            aria-label="Updating"
+          ></span>
+        {/if}
+      </div>
+      {#if waitingDecisions > 0}
+        <a
+          class="decide-link"
+          href={workspaceHref("/decide")}
+          data-watch-decide-link
+          >{waitingDecisions} waiting for you in Decide
+          <span aria-hidden="true">→</span></a
         >
       {/if}
-      {#if refreshing}
-        <span
-          class="ml-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-line border-t-fg-muted align-middle"
-          role="status"
-          aria-label="Updating"
-        ></span>
-      {/if}
-    {/snippet}
-    {#snippet actions()}
+    </div>
+    <div class="flex items-end gap-2 border-b border-line">
       <div
-        class="inline-flex rounded-md border border-line bg-bg-soft p-0.5"
-        role="group"
-        aria-label="View"
-        data-watch-view-toggle
+        class="tabs flex min-w-0 flex-1 gap-1 overflow-x-auto"
+        role="tablist"
+        aria-label="Watch views"
       >
-        {#each [["list", "List"], ["board", "By stage"], ["loops", "Loops"]] as [key, text] (key)}
+        {#each tabs as t (t.key)}
           <button
             type="button"
-            class="rounded px-3 py-1 text-meta font-medium transition-colors max-md:min-h-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {view ===
-            key
-              ? 'bg-panel-hover text-fg shadow-sm'
-              : 'text-fg-muted hover:text-fg'}"
-            aria-pressed={view === key}
-            aria-label={key === "loops" && loopCount
-              ? `${text}, ${loopCount}`
-              : undefined}
-            data-watch-view={key}
-            onclick={() => setView(key)}
-            >{text}{#if key === "loops" && loopCount}<span
-                class="ml-1 tabular-nums text-fg-subtle">{loopCount}</span
-              >{/if}</button
+            role="tab"
+            class="tab"
+            class:tab--on={t.active}
+            aria-selected={t.active}
+            onclick={t.select}
+            data-watch-tab={t.key}
           >
+            {#if t.pinned}<svg
+                class="h-3 w-3 text-fg-subtle"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-label="Pinned"
+                ><path d="M12 17v5" /><path d="M9 3h6l-1 6 4 4H6l4-4z" /></svg
+              >{/if}
+            <span class="truncate">{t.label}</span>
+            {#if t.badge > 0}<span
+                class="tab-badge"
+                aria-label="{t.badge} need you">{t.badge}</span
+              >{/if}
+          </button>
         {/each}
       </div>
-    {/snippet}
-  </WorkspacePageHeader>
+      {#if reports.length}
+        <div class="shrink-0 pb-1.5" data-watch-more-dashboards>
+          <DashboardPicker
+            {reports}
+            selected={tab === "dashboard" ? selectedReport : null}
+            {pinnedRefs}
+            triggerLabel="More dashboards"
+            pinLabel="Pin as tab"
+            unpinLabel="Unpin tab"
+            hasMore={Boolean(dashboards?.has_more)}
+            loading={loadingMore}
+            onload={() => void loadMoreReports()}
+            onselect={(id) => selectTab("dashboard", id || reports[0]?.id)}
+            onpin={(ref) =>
+              ref ? pinDashboard(ref) : unpinDashboard(selectedReport?.ref)}
+          />
+        </div>
+      {/if}
+    </div>
+  </header>
 
   {#if failed && brief}
     <Banner>
@@ -341,8 +607,79 @@
   {#if moveError}
     <InlineAlert>{moveError}</InlineAlert>
   {/if}
+  {#if pinError || pinAttention}<p
+      class="text-meta text-danger-text"
+      role="alert"
+      data-watch-pin-error
+    >
+      {pinError ||
+        pinAttention.failure?.message ||
+        "Couldn't save your pin change. It's kept in your unsent work."}
+    </p>{/if}
+  {#if tab === "dashboard" && pinsReadFailed}
+    <InlineAlert variant="warn">
+      Couldn't read your pinned tabs, so some may be missing here. Pinning still
+      works.
+      <button
+        type="button"
+        class="text-accent-text underline"
+        onclick={() => void loadPins()}
+        data-watch-pins-retry>Retry reading pins</button
+      >
+    </InlineAlert>
+  {/if}
 
-  {#if !brief && failed}
+  {#if tab === "dashboard"}
+    {#if selectedReport}
+      <section class="min-w-0 space-y-2" data-watch-dashboard>
+        <div class="flex items-center justify-end gap-3">
+          {#if selectedReport.ref && pinnedRefs.includes(selectedReport.ref)}
+            <Button
+              variant="secondary"
+              size="compact"
+              onclick={() => unpinDashboard(selectedReport.ref)}
+              >Unpin tab</Button
+            >
+          {:else if selectedReport.ref}
+            <Button
+              variant="secondary"
+              size="compact"
+              onclick={() => pinDashboard(selectedReport.ref)}
+              >Pin as tab</Button
+            >
+          {/if}
+          <a
+            class="text-meta text-accent-text hover:underline"
+            href={workspaceHref(
+              `/docs/${encodeURIComponent(selectedReport.segment)}`,
+            )}>Open document</a
+          >
+        </div>
+        <VisualReport
+          compact
+          report={selectedReport.report}
+          documentTitle={selectedReport.title || ""}
+          documentId={selectedReport.id}
+          revisionRef={selectedReport.revision_ref ?? ""}
+        />
+      </section>
+    {:else if dashboards}
+      <p class="text-meta text-fg-muted">That dashboard isn't available.</p>
+    {:else if dashboardsFailed}
+      <Banner>
+        Couldn't load dashboards. Initiatives and loops are unaffected.
+        {#snippet actions()}
+          <Button
+            variant="secondary"
+            size="compact"
+            onclick={() => loadDashboards()}>Retry</Button
+          >
+        {/snippet}
+      </Banner>
+    {:else}
+      <SkeletonList rows={4} />
+    {/if}
+  {:else if !brief && failed}
     <Banner>
       Couldn't load Watch. Your work is safe; try again in a moment.
       {#snippet actions()}
@@ -354,7 +691,29 @@
       {/snippet}
     </Banner>
   {:else if !brief}
-    <SkeletonList rows={4} />
+    <SkeletonList rows={6} />
+  {:else if tab === "loops"}
+    {#if !loopRows}
+      <div
+        class="rounded-md border border-dashed border-line px-4 py-8 text-center"
+        data-watch-loops-empty
+      >
+        <p class="text-meta text-fg">No loops yet.</p>
+        <p class="mt-1 text-micro text-fg-muted">
+          A loop is an initiative that runs on a cadence. Record each run with
+          <code>anx work receipt</code> and it shows up here.
+        </p>
+      </div>
+    {:else}
+      <CollectionTable
+        collection={loopCollection}
+        view={layout}
+        folded={["done"]}
+        label="loops"
+        details={loopDetails}
+        actions={loopActions}
+      />
+    {/if}
   {:else if !initiatives.length}
     <div
       class="rounded-md border border-dashed border-line px-4 py-8 text-center"
@@ -369,54 +728,106 @@
         >
       </p>
     </div>
-  {:else if view === "loops"}
-    <WatchLoops {initiatives} {now} />
-  {:else if view === "board"}
+  {:else if layout === "board"}
+    <div class="flex justify-end">{@render initiativeActions()}</div>
     <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
   {:else}
-    <WatchList {initiatives} {now} />
-  {/if}
-
-  {#if selectedReport}
-    <section class="min-w-0 space-y-2 pt-2" data-watch-dashboard>
-      <header
-        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
-      >
-        <h2 class="ui-label mb-0">Dashboard</h2>
-        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <DashboardPicker
-            {reports}
-            selected={selectedReport}
-            pinnedRef={dashboards?.pinned_ref ?? ""}
-            hasMore={Boolean(dashboards?.has_more)}
-            loading={loadingMore}
-            onload={() => void loadMoreReports()}
-            onselect={selectReport}
-            onpin={(ref) => void pinDashboard(ref)}
-          />
-          <a
-            class="text-meta text-accent-text hover:underline"
-            href={workspaceHref(
-              `/docs/${encodeURIComponent(selectedReport.segment)}`,
-            )}>Open document</a
-          >
-          {#if pinning}<span class="text-micro text-fg-muted" role="status"
-              >Pinning dashboard…</span
-            >{/if}
-        </div>
-      </header>
-      {#if pinError}<p class="text-meta text-danger-text" role="alert">
-          {pinError}
-        </p>{/if}
-      <div class="min-w-0">
-        <VisualReport
-          compact
-          report={selectedReport.report}
-          documentTitle={selectedReport.title || ""}
-          documentId={selectedReport.id}
-          revisionRef={selectedReport.revision_ref ?? ""}
-        />
-      </div>
-    </section>
+    <CollectionTable
+      collection={initiativeCollection}
+      folded={["done", "no_promise"]}
+      label="initiatives"
+      details={initiativeDetails}
+      actions={initiativeActions}
+    />
   {/if}
 </WorkspacePageShell>
+
+{#snippet initiativeActions()}
+  {@render layoutToggle([
+    ["list", "List"],
+    ["board", "By stage"],
+  ])}
+{/snippet}
+
+{#snippet loopActions()}
+  {@render layoutToggle([
+    ["list", "List"],
+    ["board", "Board"],
+  ])}
+{/snippet}
+
+{#snippet layoutToggle(options)}
+  <div
+    class="inline-flex rounded-md border border-line bg-bg-soft p-0.5"
+    role="group"
+    aria-label="Layout"
+    data-watch-view-toggle
+  >
+    {#each options as [key, text] (key)}
+      <button
+        type="button"
+        class="rounded px-3 py-1 text-meta font-medium transition-colors max-md:min-h-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {layout ===
+        key
+          ? 'bg-panel-hover text-fg shadow-sm'
+          : 'text-fg-muted hover:text-fg'}"
+        aria-pressed={layout === key}
+        data-watch-view={key}
+        onclick={() => navigate({ layout: key === "list" ? "" : key })}
+        >{text}</button
+      >
+    {/each}
+  </div>
+{/snippet}
+
+<style>
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 16rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    color: var(--fg-muted);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .tab:hover {
+    color: var(--fg);
+  }
+  .tab--on {
+    border-bottom-color: var(--accent-solid);
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .tab:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: -2px;
+  }
+  .tab-badge {
+    border-radius: 999px;
+    padding: 0 6px;
+    background: var(--warn-text);
+    color: var(--bg);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+  }
+  .decide-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+    color: var(--warn-text);
+    font-size: 13px;
+  }
+  .decide-link:hover {
+    background: rgba(245, 158, 11, 0.14);
+  }
+</style>

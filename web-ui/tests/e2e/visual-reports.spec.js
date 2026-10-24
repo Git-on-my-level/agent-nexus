@@ -10,7 +10,7 @@ import {
 } from "../../src/lib/fixtures/expressiveReportExamples.js";
 import { liveDashboardExample } from "../../src/lib/fixtures/liveDashboardExample.js";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
-import { expectCleanLayout } from "../helpers/layoutAudit.js";
+import { expectCleanLayout, unfoldPanels } from "../helpers/layoutAudit.js";
 import {
   expectNoClippedContent,
   installWorkspaceApi,
@@ -651,6 +651,7 @@ test("long accepted report strings stay readable on a 390px screen", async ({
   panel.data.text = "C".repeat(2_000);
   const state = await installReportDocument(page, example);
   await page.goto(DOC_PATH);
+  await unfoldPanels(page);
   const report = reportRegion(page);
   await expect(
     report.getByRole("heading", { name: example.title, exact: true }),
@@ -1170,6 +1171,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     const state = await installLiveDashboard(page);
     await page.goto(DOC_PATH);
+    await unfoldPanels(page);
     const report = reportRegion(page);
     await expect(
       report.getByRole("link", { name: "Launch readiness" }),
