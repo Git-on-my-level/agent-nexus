@@ -243,6 +243,66 @@ function decisionProposals(raw) {
   return proposals;
 }
 
+const count = (value) => Math.max(0, Math.trunc(Number(value) || 0));
+
+function normalizeChild(raw) {
+  const ref = text(raw?.ref);
+  if (!ref) return null;
+  return {
+    ref,
+    title: text(raw.title) || ref,
+    stepId: text(raw.step_id),
+    state: text(raw.state) || "unknown",
+    pastPromise: Boolean(raw.past_promise),
+    needsViewer: Boolean(raw.needs_viewer),
+  };
+}
+
+/**
+ * Child counts core folds into a parent. `byState` keys are work phases;
+ * unknown phases stay, so a newer core's phase is still counted.
+ */
+function normalizeRollup(raw) {
+  const byState = {};
+  for (const [phase, value] of Object.entries(raw?.by_state ?? {}))
+    if (count(value)) byState[phase] = count(value);
+  const children = (Array.isArray(raw?.children) ? raw.children : [])
+    .map(normalizeChild)
+    .filter(Boolean);
+  return {
+    total: Math.max(count(raw?.total), children.length),
+    byState,
+    pastPromise: count(raw?.past_promise),
+    needingViewer: count(raw?.needing_viewer),
+    children,
+    workstreams: (Array.isArray(raw?.workstreams) ? raw.workstreams : [])
+      .map(normalizeChild)
+      .filter(Boolean),
+    hasMore: Boolean(raw?.has_more),
+  };
+}
+
+/** `initiative_budget`, or null from a core that predates it. */
+function normalizeBudget(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    count: count(raw.count),
+    target: count(raw.target) || 15,
+    truncated: Boolean(raw.truncated),
+  };
+}
+
+/** Runnable suggestions. `argv` is kept whole; screens parse what they act on. */
+function normalizeNextAction(raw) {
+  const argv = Array.isArray(raw?.argv) ? raw.argv.map(String) : [];
+  if (!argv.length) return null;
+  return {
+    label: text(raw.label),
+    argv,
+    reasons: Array.isArray(raw.reasons) ? raw.reasons.map(String) : [],
+  };
+}
+
 function normalizeInitiative(raw) {
   const ref = text(raw?.ref);
   if (!ref) return null;
@@ -295,6 +355,8 @@ function normalizeInitiative(raw) {
     possiblyMoot: raw.possibly_moot?.flagged
       ? { reason: text(raw.possibly_moot.reason) }
       : null,
+    parentRef: text(raw.parent_ref) || null,
+    rollup: normalizeRollup(raw.rollup),
   };
 }
 
@@ -339,6 +401,10 @@ export function normalizeBrief(raw) {
       .map(normalizeInitiative)
       .filter(Boolean)
       .map((row) => ({ ...row, section: "loops" })),
+    initiativeBudget: normalizeBudget(brief?.initiative_budget),
+    nextActions: (Array.isArray(brief?.next_actions) ? brief.next_actions : [])
+      .map(normalizeNextAction)
+      .filter(Boolean),
     yourAsks: (Array.isArray(brief?.your_asks) ? brief.your_asks : [])
       .map(normalizeDecision)
       .filter(Boolean),

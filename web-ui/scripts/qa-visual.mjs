@@ -182,6 +182,22 @@ export const QA_SCENES = [
     },
   },
   {
+    name: "workspace-initiatives-lanes",
+    path: "/o/local/w/local/initiatives?view=lanes",
+    workspaceMode: "workspace-default",
+    briefState: "lanes",
+    waitFor: async (page) => {
+      await page.waitForSelector(
+        "[data-lane-ref='card:fleet-onboarding'] [data-work-ref='card:runbook-review']",
+      );
+      // Below `md` the tray is a closed sheet: its rows are in the DOM, not
+      // on screen.
+      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']", {
+        state: "attached",
+      });
+    },
+  },
+  {
     name: "workspace-docs",
     path: "/o/local/w/local/docs",
     workspaceMode: "workspace-default",
@@ -1315,11 +1331,99 @@ export async function installQaEnvironment(page, scene) {
   );
 }
 
+/** A child row as core folds it into a parent's rollup. */
+function qaChild(ref, title, state, extra = {}) {
+  return {
+    ref,
+    title,
+    step_id: `card-${ref.slice(5)}`,
+    state,
+    past_promise: false,
+    needs_viewer: false,
+    ...extra,
+  };
+}
+
+function qaRollup(children, extra = {}) {
+  const byState = {};
+  for (const row of children)
+    byState[row.state] = (byState[row.state] ?? 0) + 1;
+  return {
+    total: children.length,
+    by_state: byState,
+    past_promise: children.filter((row) => row.past_promise).length,
+    needing_viewer: children.filter((row) => row.needs_viewer).length,
+    workstreams: [],
+    children,
+    has_more: false,
+    ...extra,
+  };
+}
+
+/** Children for the swimlane board, keyed by the fixture's initiatives. */
+const QA_LANE_CHILDREN = {
+  "card:fleet-onboarding": [
+    qaChild("card:enroll-script", "Enrollment script", "done"),
+    qaChild("card:host-labels", "Host labels", "in_progress"),
+    qaChild("card:runbook-review", "Runbook review", "review", {
+      needs_viewer: true,
+    }),
+    qaChild("card:fleet-dashboards", "Fleet dashboards", "backlog"),
+  ],
+  "card:observability": [
+    qaChild("card:trace-sampling", "Trace sampling", "in_progress", {
+      past_promise: true,
+    }),
+    qaChild("card:alert-routing", "Alert routing", "blocked"),
+    qaChild("card:log-retention", "Log retention", "ready"),
+  ],
+  "card:ble-reliability": [
+    qaChild("card:reconnect-backoff", "Reconnect backoff", "in_progress"),
+  ],
+};
+
+/** `GET /work/ungrouped` for the lanes scene. */
+const QA_UNGROUPED = [
+  {
+    ref: "card:fleet-alerts",
+    title: "Fleet alert thresholds",
+    phase: "backlog",
+    parent_ref: null,
+    created_at: qaHoursAgo(1),
+    likely_home: [
+      {
+        ref: "card:fleet-onboarding",
+        title: "Fleet onboarding",
+        reasons: ["title_family"],
+      },
+    ],
+    next_actions: [],
+  },
+  {
+    ref: "card:ble-scan-window",
+    title: "BLE scan window tuning",
+    phase: "backlog",
+    parent_ref: null,
+    created_at: qaHoursAgo(5),
+    likely_home: [],
+    next_actions: [],
+  },
+];
+
 function qaBrief(scenario) {
   const body = {
     ...briefFixture,
     generated_at: QA_FIXED_NOW_ISO,
   };
+  if (scenario.briefState === "lanes")
+    return {
+      ...body,
+      initiatives: body.initiatives.map((row) => ({
+        ...row,
+        rollup: qaRollup(QA_LANE_CHILDREN[row.ref] ?? []),
+      })),
+      initiative_budget: { count: 5, target: 15, truncated: false },
+    };
   if (scenario.briefState !== "empty") return body;
   return {
     ...body,
@@ -1571,6 +1675,16 @@ async function handleWorkspaceApiRoute(
       jsonResponse(200, {
         items,
         generated_at: QA_FIXED_NOW_ISO,
+      }),
+    );
+    return;
+  }
+
+  if (pathname === "/work/ungrouped" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        work: scenario.briefState === "lanes" ? QA_UNGROUPED : [],
+        has_more: false,
       }),
     );
     return;

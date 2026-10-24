@@ -13,6 +13,7 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import WorkViews from "$lib/components/pm/WorkViews.svelte";
+  import SwimlaneBoard from "$lib/components/work/SwimlaneBoard.svelte";
   import {
     liveWorkspaceEvents,
     TASK_LIST_EVENT_TYPES,
@@ -191,8 +192,12 @@
    * tell a workspace that has a PM that it has none. Core is the authority.
    */
   let pmAbsent = $derived(pmKnownAbsent(pmState));
+  // `lanes` is driven by the brief, not by this page's work list: lanes are
+  // the top-level initiatives, which `/work` cannot select.
   let view = $derived(
-    $page.url.searchParams.get("view") === "board" ? "board" : "table",
+    ["board", "lanes"].includes($page.url.searchParams.get("view"))
+      ? $page.url.searchParams.get("view")
+      : "table",
   );
   let filters = $derived(
     Object.fromEntries(
@@ -330,7 +335,7 @@
     // Re-read when a local filter is toggled; neither is part of `filters`,
     // and both need more than the first page to narrow honestly.
     const local = humanOnly || initiativesOnly;
-    if (loaded)
+    if (loaded && view !== "lanes")
       void untrack(() => load(false, JSON.parse(key), { scanAll: local }));
   });
 
@@ -725,6 +730,10 @@
     );
   }
   function taskFocusTargets() {
+    if (view === "lanes")
+      return [
+        ...document.querySelectorAll("[data-swimlane-board] [data-work-ref]"),
+      ];
     return view === "board"
       ? [...document.querySelectorAll('[data-work-ref][tabindex="0"]')]
       : [...document.querySelectorAll("tr[data-work-ref] a[href]")];
@@ -784,6 +793,8 @@
       setViewFromKeyboard("board");
     } else if (event.key === "t") {
       setViewFromKeyboard("table");
+    } else if (event.key === "l") {
+      setViewFromKeyboard("lanes");
     }
   }
   onMount(() => {
@@ -874,8 +885,10 @@
       return params.get("human") === "1" || params.get("initiatives") === "1";
     }
     function refreshFromLiveEvent() {
-      // A drag or an evidence prompt in progress keeps its rows still.
+      // A drag or an evidence prompt in progress keeps its rows still. The
+      // lanes follow the brief's own live refresh.
       if (!loaded || evidenceFor) return;
+      if ($page.url.searchParams.get("view") === "lanes") return;
       /*
        * A local filter narrows rows this page read rather than rows core
        * selected, so a live re-read has to page as widely as the first read
@@ -947,6 +960,7 @@
     ["Move focused initiative to the previous or next placement", ["←", "→"]],
     ["Placement view", ["B"]],
     ["Table view", ["T"]],
+    ["Lanes view", ["L"]],
     ["Go to Decide, Watch, Initiatives or Ask", ["G", "D W I A"]],
     ["Commands and search", [formatShortcut("K")]],
     ["Shortcut help", ["?"]],
@@ -975,7 +989,11 @@
 <WorkspacePageShell>
   <WorkspacePageHeader title="Initiatives">
     {#snippet subtitle()}
-      {#if !visible.length && loading && !records.length}
+      {#if view === "lanes"}
+        <span class="text-fg-muted"
+          >Each initiative is a lane; its cards sit in their state.</span
+        >
+      {:else if !visible.length && loading && !records.length}
         <!-- Holds the counts line so the page does not shift when it lands. -->
         <span
           class="ui-skeleton-reveal inline-block h-2.5 w-32 rounded bg-panel-hover align-middle"
@@ -1035,7 +1053,7 @@
 
   <div class="flex flex-wrap items-center gap-2">
     <form
-      class="min-w-48 flex-1"
+      class="min-w-48 flex-1 {view === 'lanes' ? 'hidden' : ''}"
       onsubmit={(event) => {
         event.preventDefault();
         setFilter("q", search);
@@ -1050,10 +1068,11 @@
         placeholder="Search title, source ID or next action…"
       />
     </form>
-    <!-- The board is a desktop surface: 18rem columns cannot be dragged on a
-         390px screen, so the toggle that leads there is hidden below 640px. -->
+    <!-- The placement board is a desktop surface: 18rem columns cannot be
+         dragged on a 390px screen, so its toggle is hidden below 640px.
+         Lanes stack on a phone, so that toggle stays. -->
     <nav
-      class="hidden rounded-md border border-line bg-bg-soft p-0.5 sm:flex"
+      class="flex rounded-md border border-line bg-bg-soft p-0.5"
       aria-label="Initiative view"
     >
       <a
@@ -1064,377 +1083,395 @@
         aria-current={view === "table" ? "page" : undefined}>Table</a
       >
       <a
-        class="rounded px-2.5 py-1 text-micro font-medium {view === 'board'
+        class="hidden rounded px-2.5 py-1 text-micro font-medium sm:inline {view ===
+        'board'
           ? 'bg-panel text-fg'
           : 'text-fg-muted'}"
         href={queryHref({ view: "board" })}
         aria-current={view === "board" ? "page" : undefined}>By placement</a
       >
+      <a
+        class="rounded px-2.5 py-1 text-micro font-medium {view === 'lanes'
+          ? 'bg-panel text-fg'
+          : 'text-fg-muted'}"
+        href={queryHref({ view: "lanes" })}
+        aria-current={view === "lanes" ? "page" : undefined}
+        data-view-lanes>Lanes</a
+      >
     </nav>
   </div>
 
-  {#if initiativesOnly && !initiativesPending}
-    <p class="text-micro text-fg-muted" data-task-initiatives-filter>
-      {initiativeBoardRefs.size
-        ? "Showing initiatives only."
-        : "No initiatives are marked yet, so there is nothing to show. Mark one to use this filter."}
-      <a class="ui-prose-link" href={queryHref({ initiatives: "" })}>Clear</a>
-    </p>
-  {/if}
-
-  {#if humanOnly}
-    <p class="text-micro text-fg-muted" data-task-human-filter>
-      Showing tasks whose next actor is a person.
-      {#if peopleIncomplete}
-        <span class="text-warn-text" data-task-human-partial
-          >Next-actor count may be incomplete.</span
-        >
-      {/if}
-      <a class="ui-prose-link" href={queryHref({ human: "" })}>Clear</a>
-    </p>
-  {/if}
-
-  <WorkspaceListFilters
-    activeCount={filterCount}
-    toggleTestId="tasks-filters-toggle"
-    panelTestId="tasks-filter-panel"
-    openWhenFiltered={activeFilters}
-    onclear={() => void goto(workspaceHref(`/initiatives?view=${view}`))}
-  >
-    {#snippet children()}
-      <div class="flex items-end gap-2">
-        <label class="ui-label mb-0" for="task-filter-source">Source</label>
-        <select
-          id="task-filter-source"
-          class="ui-input w-auto"
-          value={filters.source}
-          onchange={(event) => setFilter("source", event.currentTarget.value)}
-        >
-          <option value="">All sources</option>
-          {#each SOURCES as [value, title]}<option {value}>{title}</option
-            >{/each}
-        </select>
-      </div>
-      <div class="flex items-end gap-2">
-        <label class="ui-label mb-0" for="task-filter-phase">Status</label>
-        <select
-          id="task-filter-phase"
-          class="ui-input w-auto"
-          value={filters.phase}
-          onchange={(event) => setFilter("phase", event.currentTarget.value)}
-        >
-          <option value="">All statuses</option>
-          {#each PHASES as phase}<option value={phase}>{label(phase)}</option
-            >{/each}
-        </select>
-      </div>
-      <!--
-        Initiatives, as a filter rather than a second view. Overview selects
-        its cards by the `initiatives` board role; this reuses that selection,
-        so "the initiatives" means one thing in the product.
-      -->
-      <div class="flex items-end gap-2">
-        <label class="ui-label mb-0" for="task-filter-initiatives"
-          >Initiatives</label
-        >
-        <select
-          id="task-filter-initiatives"
-          class="ui-input w-auto"
-          value={initiativesOnly ? "1" : ""}
-          onchange={(event) =>
-            setFilter("initiatives", event.currentTarget.value)}
-        >
-          <option value="">All initiatives</option>
-          <option value="1">Initiatives only</option>
-        </select>
-      </div>
-      <div class="flex items-end gap-2">
-        <label class="ui-label mb-0" for="task-filter-freshness"
-          >Freshness</label
-        >
-        <select
-          id="task-filter-freshness"
-          class="ui-input w-auto"
-          value={filters.freshness}
-          onchange={(event) =>
-            setFilter("freshness", event.currentTarget.value)}
-        >
-          <option value="">Any freshness</option>
-          <option value="fresh">Checked recently</option>
-          <option value="stale">Not checked lately</option>
-          <option value="error">Read failing</option>
-          <option value="unknown">Never checked</option>
-        </select>
-      </div>
-      <!-- The two free-text filters apply on Enter or on leaving the field,
-           like every other control here. They used to need a third click on
-           an Apply button that narrowed nothing the selects had not already
-           narrowed. A form so Enter still means "that one". -->
-      <form
-        class="flex flex-wrap items-end gap-2"
-        onsubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          navigateFilters({
-            project_ref: String(data.get("project_ref") || "").trim(),
-            owner: String(data.get("owner") || "").trim(),
-          });
-        }}
-      >
-        <div class="flex items-end gap-2">
-          <label class="ui-label mb-0" for="task-filter-project-ref"
-            >Project reference</label
-          >
-          <input
-            id="task-filter-project-ref"
-            name="project_ref"
-            class="ui-input w-auto"
-            value={filters.project_ref}
-            placeholder="project:name"
-            onchange={(event) =>
-              setFilter("project_ref", event.currentTarget.value.trim())}
-          />
-        </div>
-        <div class="flex items-end gap-2">
-          <label class="ui-label mb-0" for="task-filter-owner">Owner</label>
-          <input
-            id="task-filter-owner"
-            name="owner"
-            class="ui-input w-auto"
-            value={filters.owner}
-            placeholder="Owner identifier"
-            onchange={(event) =>
-              setFilter("owner", event.currentTarget.value.trim())}
-          />
-        </div>
-      </form>
-    {/snippet}
-  </WorkspaceListFilters>
-
-  <div
-    use:durableForm={{
-      target: "tasks:move",
-      value: evidenceFor,
-      read: () => evidenceFor,
-      onRestore: restoreMove,
-    }}
-  >
-    {#each savedMoves as entry (entry.key)}
-      <MutationSendStatus {entry} />
-    {/each}
-    {#if evidenceFor}
-      <form
-        class="flex flex-wrap items-end gap-2 rounded-md bg-bg-soft px-3 py-2 text-meta"
-        role="status"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void moveTask(evidenceFor.work, evidenceFor.phase);
-        }}
-      >
-        <!-- A wide enough minimum that the buttons wrap below on a phone instead
-           of squeezing the prompt and the field down to a few characters; the
-           task title comes from a source, so it can be one long token. -->
-        {#if evidenceFor.phase === "done"}
-          <label
-            class="min-w-56 flex-1 text-micro text-fg-muted [overflow-wrap:anywhere]"
-            >Marking “{evidenceFor.work.title}” done needs evidence. Ref of the
-            artifact or event that proves it<input
-              class="ui-input mt-1"
-              bind:value={evidenceFor.ref}
-              bind:this={evidenceInput}
-              list="done-evidence-suggestions"
-              placeholder="artifact:… or event:…"
-            /></label
-          >
-          <datalist id="done-evidence-suggestions">
-            {#each evidenceSuggestions as entry (entry.ref)}
-              <option value={entry.ref}>{entry.title}</option>
-            {/each}
-          </datalist>
-        {:else}
-          <p>
-            Saved move: “{evidenceFor.work.title}” to {label(
-              evidenceFor.phase,
-            )}.
-          </p>
-        {/if}
-        <button
-          class="ui-btn-primary"
-          type="submit"
-          disabled={movePending ||
-            (evidenceFor.phase === "done" && !evidenceFor.ref?.trim())}
-          >{evidenceFor.phase === "done" ? "Mark done" : "Send move"}</button
-        >
-        {#if pmVisible}
-          <a
-            class="ui-prose-link text-micro"
-            href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
-            >Ask the PM instead</a
-          >
-        {/if}
-        <button
-          class="ui-prose-link text-micro"
-          type="button"
-          onclick={cancelEvidence}>Discard draft</button
-        >
-        <button
-          type="button"
-          class="ui-prose-link text-micro"
-          disabled={movePending}
-          onclick={rebaseMove}>Use latest version</button
-        >
-      </form>
-    {/if}
-  </div>
-  <!--
-    In flow, like the evidence form above it. As a floating bar pinned near the
-    bottom of the viewport it sat on top of whatever board card happened to be
-    there, and stayed there until dismissed.
-  -->
-  {#if moveNotice}
-    <p
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg outline-none"
-      role="status"
-      tabindex="-1"
-      bind:this={moveNoticeElement}
-      data-work-move-notice
-    >
-      <span class="min-w-0 flex-1">{moveNotice.text}</span>
-      {#if moveNotice.undo}
-        <button
-          class="ui-prose-link text-micro"
-          type="button"
-          onclick={moveNotice.undo}>Undo</button
-        >
-      {/if}
-      {#if moveNotice.href}
-        <a class="ui-prose-link text-micro" href={moveNotice.href}
-          >{moveNotice.hrefLabel || "Open in Decide"}</a
-        >
-      {/if}
-      <button
-        class="ui-prose-link text-micro"
-        type="button"
-        onclick={() => setMoveNotice(null)}>Dismiss</button
-      >
-    </p>
-  {/if}
-  {#if moveError}
-    <StateError
-      message={moveError}
-      onretry={moveSessionExpired ? signInAgain : undefined}
-      retryLabel="Sign in again"
-    />
-  {/if}
-
-  {#if reconnecting}
-    <p class="text-micro text-fg-muted" role="status">Reconnecting…</p>
-  {/if}
-  {#if error}
-    <StateError
-      title="Initiatives could not be refreshed"
-      message={error}
-      onretry={sessionExpired ? signInAgain : () => load()}
-      retryLabel={sessionExpired ? "Sign in again" : "Retry"}
-      retrying={loading}
-    />
-  {/if}
-  {#if records.length && (error || reconnecting)}
-    <p class="text-micro text-warn-text">
-      Showing the previously loaded records. They may no longer match current
-      filters or source state.
-    </p>
-  {/if}
-
-  {#if (loading && !records.length) || initiativesPending}
-    <div aria-busy="true" data-tasks-loading>
-      <p class="sr-only" role="status">
-        {initiativesPending && !loading
-          ? "Reading initiatives…"
-          : "Loading initiatives…"}
-      </p>
-      {#if view === "board"}
-        <div
-          class="ui-skeleton-reveal flex gap-3 overflow-hidden"
-          aria-hidden="true"
-        >
-          {#each [3, 2, 1, 2] as cards, column (column)}
-            <div
-              class="flex w-[13.5rem] shrink-0 flex-col gap-2 rounded-md bg-panel p-2.5"
-            >
-              <span
-                class="block h-2.5 w-16 animate-pulse rounded bg-panel-hover"
-              ></span>
-              {#each Array.from({ length: cards }, (_, index) => index) as index (index)}
-                <span
-                  class="block h-16 animate-pulse rounded-md border border-line bg-bg-soft"
-                ></span>
-              {/each}
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <!-- The table's own frame: header strip, then 40px rows. -->
-        <div
-          class="ui-skeleton-reveal overflow-hidden rounded-md border border-line"
-          aria-hidden="true"
-        >
-          <div
-            class="hidden h-8 items-center gap-6 border-b border-line px-3 sm:flex"
-          >
-            <span class="block h-2 w-10 rounded bg-panel-hover"></span>
-            <span class="ml-[40%] block h-2 w-12 rounded bg-panel-hover"></span>
-            <span class="block h-2 w-12 rounded bg-panel-hover"></span>
-          </div>
-          <SkeletonList
-            bare
-            rows={6}
-            rowClass="h-12 sm:h-10"
-            class="bg-panel"
-          />
-        </div>
-      {/if}
-    </div>
-  {:else if !error && !visible.length}
-    <section class="py-14 text-center">
-      <h2 class="text-subtitle font-semibold text-fg">
-        {activeFilters ? "No matching initiatives" : "Nothing tracked yet"}
-      </h2>
-      <p class="mx-auto mt-2 max-w-md text-meta text-fg-muted">
-        {activeFilters
-          ? "Change or clear the filters."
-          : "Create an initiative here, or connect a source so its issues show up."}
-      </p>
-      <a
-        class="ui-prose-link mt-4 inline-block text-meta"
-        href={activeFilters
-          ? workspaceHref("/initiatives")
-          : workspaceHref("/initiatives/new")}
-        >{activeFilters ? "Clear filters" : "Create initiative"}</a
-      >
-    </section>
-  {:else if visible.length}
-    <WorkViews
-      records={visible}
-      {view}
-      {showClosed}
-      closedHref={queryHref({ closed: showClosed ? "" : "1" })}
+  {#if view === "lanes"}
+    <SwimlaneBoard
       {workspaceHref}
       {now}
-      {requested}
-      {requestedDecisions}
-      {boardTitles}
-      truncated={Boolean(nextCursor)}
-      onMove={moveTask}
+      boardHref={workspaceHref("/initiatives?view=lanes")}
     />
-  {/if}
+  {:else}
+    {#if initiativesOnly && !initiativesPending}
+      <p class="text-micro text-fg-muted" data-task-initiatives-filter>
+        {initiativeBoardRefs.size
+          ? "Showing initiatives only."
+          : "No initiatives are marked yet, so there is nothing to show. Mark one to use this filter."}
+        <a class="ui-prose-link" href={queryHref({ initiatives: "" })}>Clear</a>
+      </p>
+    {/if}
 
-  {#if nextCursor}
-    <button
-      class="ui-btn-secondary mx-auto"
-      onclick={() => load(true)}
-      disabled={loading}>{loading ? "Loading…" : "Load more"}</button
+    {#if humanOnly}
+      <p class="text-micro text-fg-muted" data-task-human-filter>
+        Showing tasks whose next actor is a person.
+        {#if peopleIncomplete}
+          <span class="text-warn-text" data-task-human-partial
+            >Next-actor count may be incomplete.</span
+          >
+        {/if}
+        <a class="ui-prose-link" href={queryHref({ human: "" })}>Clear</a>
+      </p>
+    {/if}
+
+    <WorkspaceListFilters
+      activeCount={filterCount}
+      toggleTestId="tasks-filters-toggle"
+      panelTestId="tasks-filter-panel"
+      openWhenFiltered={activeFilters}
+      onclear={() => void goto(workspaceHref(`/initiatives?view=${view}`))}
     >
+      {#snippet children()}
+        <div class="flex items-end gap-2">
+          <label class="ui-label mb-0" for="task-filter-source">Source</label>
+          <select
+            id="task-filter-source"
+            class="ui-input w-auto"
+            value={filters.source}
+            onchange={(event) => setFilter("source", event.currentTarget.value)}
+          >
+            <option value="">All sources</option>
+            {#each SOURCES as [value, title]}<option {value}>{title}</option
+              >{/each}
+          </select>
+        </div>
+        <div class="flex items-end gap-2">
+          <label class="ui-label mb-0" for="task-filter-phase">Status</label>
+          <select
+            id="task-filter-phase"
+            class="ui-input w-auto"
+            value={filters.phase}
+            onchange={(event) => setFilter("phase", event.currentTarget.value)}
+          >
+            <option value="">All statuses</option>
+            {#each PHASES as phase}<option value={phase}>{label(phase)}</option
+              >{/each}
+          </select>
+        </div>
+        <!--
+          Initiatives, as a filter rather than a second view. Overview selects
+          its cards by the `initiatives` board role; this reuses that selection,
+          so "the initiatives" means one thing in the product.
+        -->
+        <div class="flex items-end gap-2">
+          <label class="ui-label mb-0" for="task-filter-initiatives"
+            >Initiatives</label
+          >
+          <select
+            id="task-filter-initiatives"
+            class="ui-input w-auto"
+            value={initiativesOnly ? "1" : ""}
+            onchange={(event) =>
+              setFilter("initiatives", event.currentTarget.value)}
+          >
+            <option value="">All initiatives</option>
+            <option value="1">Initiatives only</option>
+          </select>
+        </div>
+        <div class="flex items-end gap-2">
+          <label class="ui-label mb-0" for="task-filter-freshness"
+            >Freshness</label
+          >
+          <select
+            id="task-filter-freshness"
+            class="ui-input w-auto"
+            value={filters.freshness}
+            onchange={(event) =>
+              setFilter("freshness", event.currentTarget.value)}
+          >
+            <option value="">Any freshness</option>
+            <option value="fresh">Checked recently</option>
+            <option value="stale">Not checked lately</option>
+            <option value="error">Read failing</option>
+            <option value="unknown">Never checked</option>
+          </select>
+        </div>
+        <!-- The two free-text filters apply on Enter or on leaving the field,
+             like every other control here. They used to need a third click on
+             an Apply button that narrowed nothing the selects had not already
+             narrowed. A form so Enter still means "that one". -->
+        <form
+          class="flex flex-wrap items-end gap-2"
+          onsubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            navigateFilters({
+              project_ref: String(data.get("project_ref") || "").trim(),
+              owner: String(data.get("owner") || "").trim(),
+            });
+          }}
+        >
+          <div class="flex items-end gap-2">
+            <label class="ui-label mb-0" for="task-filter-project-ref"
+              >Project reference</label
+            >
+            <input
+              id="task-filter-project-ref"
+              name="project_ref"
+              class="ui-input w-auto"
+              value={filters.project_ref}
+              placeholder="project:name"
+              onchange={(event) =>
+                setFilter("project_ref", event.currentTarget.value.trim())}
+            />
+          </div>
+          <div class="flex items-end gap-2">
+            <label class="ui-label mb-0" for="task-filter-owner">Owner</label>
+            <input
+              id="task-filter-owner"
+              name="owner"
+              class="ui-input w-auto"
+              value={filters.owner}
+              placeholder="Owner identifier"
+              onchange={(event) =>
+                setFilter("owner", event.currentTarget.value.trim())}
+            />
+          </div>
+        </form>
+      {/snippet}
+    </WorkspaceListFilters>
+
+    <div
+      use:durableForm={{
+        target: "tasks:move",
+        value: evidenceFor,
+        read: () => evidenceFor,
+        onRestore: restoreMove,
+      }}
+    >
+      {#each savedMoves as entry (entry.key)}
+        <MutationSendStatus {entry} />
+      {/each}
+      {#if evidenceFor}
+        <form
+          class="flex flex-wrap items-end gap-2 rounded-md bg-bg-soft px-3 py-2 text-meta"
+          role="status"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void moveTask(evidenceFor.work, evidenceFor.phase);
+          }}
+        >
+          <!-- A wide enough minimum that the buttons wrap below on a phone instead
+             of squeezing the prompt and the field down to a few characters; the
+             task title comes from a source, so it can be one long token. -->
+          {#if evidenceFor.phase === "done"}
+            <label
+              class="min-w-56 flex-1 text-micro text-fg-muted [overflow-wrap:anywhere]"
+              >Marking “{evidenceFor.work.title}” done needs evidence. Ref of
+              the artifact or event that proves it<input
+                class="ui-input mt-1"
+                bind:value={evidenceFor.ref}
+                bind:this={evidenceInput}
+                list="done-evidence-suggestions"
+                placeholder="artifact:… or event:…"
+              /></label
+            >
+            <datalist id="done-evidence-suggestions">
+              {#each evidenceSuggestions as entry (entry.ref)}
+                <option value={entry.ref}>{entry.title}</option>
+              {/each}
+            </datalist>
+          {:else}
+            <p>
+              Saved move: “{evidenceFor.work.title}” to {label(
+                evidenceFor.phase,
+              )}.
+            </p>
+          {/if}
+          <button
+            class="ui-btn-primary"
+            type="submit"
+            disabled={movePending ||
+              (evidenceFor.phase === "done" && !evidenceFor.ref?.trim())}
+            >{evidenceFor.phase === "done" ? "Mark done" : "Send move"}</button
+          >
+          {#if pmVisible}
+            <a
+              class="ui-prose-link text-micro"
+              href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
+              >Ask the PM instead</a
+            >
+          {/if}
+          <button
+            class="ui-prose-link text-micro"
+            type="button"
+            onclick={cancelEvidence}>Discard draft</button
+          >
+          <button
+            type="button"
+            class="ui-prose-link text-micro"
+            disabled={movePending}
+            onclick={rebaseMove}>Use latest version</button
+          >
+        </form>
+      {/if}
+    </div>
+    <!--
+      In flow, like the evidence form above it. As a floating bar pinned near the
+      bottom of the viewport it sat on top of whatever board card happened to be
+      there, and stayed there until dismissed.
+    -->
+    {#if moveNotice}
+      <p
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg outline-none"
+        role="status"
+        tabindex="-1"
+        bind:this={moveNoticeElement}
+        data-work-move-notice
+      >
+        <span class="min-w-0 flex-1">{moveNotice.text}</span>
+        {#if moveNotice.undo}
+          <button
+            class="ui-prose-link text-micro"
+            type="button"
+            onclick={moveNotice.undo}>Undo</button
+          >
+        {/if}
+        {#if moveNotice.href}
+          <a class="ui-prose-link text-micro" href={moveNotice.href}
+            >{moveNotice.hrefLabel || "Open in Decide"}</a
+          >
+        {/if}
+        <button
+          class="ui-prose-link text-micro"
+          type="button"
+          onclick={() => setMoveNotice(null)}>Dismiss</button
+        >
+      </p>
+    {/if}
+    {#if moveError}
+      <StateError
+        message={moveError}
+        onretry={moveSessionExpired ? signInAgain : undefined}
+        retryLabel="Sign in again"
+      />
+    {/if}
+
+    {#if reconnecting}
+      <p class="text-micro text-fg-muted" role="status">Reconnecting…</p>
+    {/if}
+    {#if error}
+      <StateError
+        title="Initiatives could not be refreshed"
+        message={error}
+        onretry={sessionExpired ? signInAgain : () => load()}
+        retryLabel={sessionExpired ? "Sign in again" : "Retry"}
+        retrying={loading}
+      />
+    {/if}
+    {#if records.length && (error || reconnecting)}
+      <p class="text-micro text-warn-text">
+        Showing the previously loaded records. They may no longer match current
+        filters or source state.
+      </p>
+    {/if}
+
+    {#if (loading && !records.length) || initiativesPending}
+      <div aria-busy="true" data-tasks-loading>
+        <p class="sr-only" role="status">
+          {initiativesPending && !loading
+            ? "Reading initiatives…"
+            : "Loading initiatives…"}
+        </p>
+        {#if view === "board"}
+          <div
+            class="ui-skeleton-reveal flex gap-3 overflow-hidden"
+            aria-hidden="true"
+          >
+            {#each [3, 2, 1, 2] as cards, column (column)}
+              <div
+                class="flex w-[13.5rem] shrink-0 flex-col gap-2 rounded-md bg-panel p-2.5"
+              >
+                <span
+                  class="block h-2.5 w-16 animate-pulse rounded bg-panel-hover"
+                ></span>
+                {#each Array.from({ length: cards }, (_, index) => index) as index (index)}
+                  <span
+                    class="block h-16 animate-pulse rounded-md border border-line bg-bg-soft"
+                  ></span>
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <!-- The table's own frame: header strip, then 40px rows. -->
+          <div
+            class="ui-skeleton-reveal overflow-hidden rounded-md border border-line"
+            aria-hidden="true"
+          >
+            <div
+              class="hidden h-8 items-center gap-6 border-b border-line px-3 sm:flex"
+            >
+              <span class="block h-2 w-10 rounded bg-panel-hover"></span>
+              <span class="ml-[40%] block h-2 w-12 rounded bg-panel-hover"
+              ></span>
+              <span class="block h-2 w-12 rounded bg-panel-hover"></span>
+            </div>
+            <SkeletonList
+              bare
+              rows={6}
+              rowClass="h-12 sm:h-10"
+              class="bg-panel"
+            />
+          </div>
+        {/if}
+      </div>
+    {:else if !error && !visible.length}
+      <section class="py-14 text-center">
+        <h2 class="text-subtitle font-semibold text-fg">
+          {activeFilters ? "No matching initiatives" : "Nothing tracked yet"}
+        </h2>
+        <p class="mx-auto mt-2 max-w-md text-meta text-fg-muted">
+          {activeFilters
+            ? "Change or clear the filters."
+            : "Create an initiative here, or connect a source so its issues show up."}
+        </p>
+        <a
+          class="ui-prose-link mt-4 inline-block text-meta"
+          href={activeFilters
+            ? workspaceHref("/initiatives")
+            : workspaceHref("/initiatives/new")}
+          >{activeFilters ? "Clear filters" : "Create initiative"}</a
+        >
+      </section>
+    {:else if visible.length}
+      <WorkViews
+        records={visible}
+        {view}
+        {showClosed}
+        closedHref={queryHref({ closed: showClosed ? "" : "1" })}
+        {workspaceHref}
+        {now}
+        {requested}
+        {requestedDecisions}
+        {boardTitles}
+        truncated={Boolean(nextCursor)}
+        onMove={moveTask}
+      />
+    {/if}
+
+    {#if nextCursor}
+      <button
+        class="ui-btn-secondary mx-auto"
+        onclick={() => load(true)}
+        disabled={loading}>{loading ? "Loading…" : "Load more"}</button
+      >
+    {/if}
   {/if}
   {#if shortcutsOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -113,4 +114,40 @@ func TestGroupingCreateRejectsBadParentWithoutAnOrphan(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The board queues group/fold/unfold in a device outbox and retries an
+// uncertain send with its original key. Concurrent exact retries must land
+// once, and reusing a key for another body must be a definitive conflict,
+// not a 500 the outbox would keep retrying.
+func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	p := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Reliability"}`, 201)["work"].(map[string]any)
+	other := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Pricing"}`, 201)["work"].(map[string]any)
+	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Cleanup"}`, 201)["work"].(map[string]any)
+	url := h.baseURL + "/work/" + asString(c["ref"])
+	group := fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group"}`, p["ref"])
+	var wg sync.WaitGroup
+	for range 6 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := postJSONExpectStatus(t, url+"/group", group, 200)
+			r.Body.Close()
+		}()
+	}
+	wg.Wait()
+	plan := workGetJSON(t, h.baseURL+"/cards/"+asString(p["ref"])+"/plan", 200)
+	if steps := plan["plan"].(map[string]any)["steps"].([]any); len(steps) != 1 {
+		t.Fatalf("concurrent replays added %d steps: %#v", len(steps), plan)
+	}
+	// Each verb's first send lands, then the same key with another body is
+	// refused.
+	workPostJSON(t, url+"/group", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group"}`, other["ref"]), 409)
+	fold := fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, p["ref"])
+	workPostJSON(t, url+"/fold", fold, 200)
+	workPostJSON(t, url+"/fold", fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, other["ref"]), 409)
+	workPostJSON(t, url+"/unfold", `{"actor_id":"grouper","request_key":"tray-unfold"}`, 200)
+	workPostJSON(t, url+"/unfold", `{"actor_id":"grouper","request_key":"tray-unfold","after":"x"}`, 409)
 }

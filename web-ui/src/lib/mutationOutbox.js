@@ -41,6 +41,7 @@ import {
   autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
+import { removeGroupedStep } from "$lib/groupingPlan.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -319,6 +320,52 @@ async function send(entry, lease = null) {
       entry.request.body,
     );
     if (!result.card?.id) throw new Error("Assignment receipt is incomplete.");
+    return result;
+  }
+  if (["work.group", "work.fold", "work.unfold"].includes(entry.operation)) {
+    const { ref, body } = entry.request;
+    const result =
+      entry.operation === "work.group"
+        ? await client.groupWork(ref, body)
+        : entry.operation === "work.fold"
+          ? await client.foldWork(ref, body)
+          : await client.unfoldWork(ref, body);
+    if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
+    return result;
+  }
+  if (entry.operation === "work.ungroup") {
+    // One exact plan write per undo, like the op-based pins edit: the first
+    // send reads the plan once, removes only the step this group added, and
+    // persists that write before sending it. Retries replay it byte for byte
+    // with the original key: a landed write replays its receipt, and a plan
+    // that moved on is refused by its if_updated_at fence. A retry never
+    // reads again, so it cannot remove a step someone else put back.
+    const { parent, ref, stepId, body } = entry.request;
+    if (!entry.request.write) {
+      const current = await client.getCardPlan(parent);
+      if (!current?.if_updated_at) throw new Error("Plan read is incomplete.");
+      const next = removeGroupedStep(current.plan, ref, stepId);
+      if (!next.changed) return current;
+      entry.request = {
+        ...entry.request,
+        stepId: next.stepId,
+        write: { plan: next.plan, if_updated_at: current.if_updated_at },
+      };
+      await persist(entry, lease);
+    }
+    let result;
+    try {
+      result = await client.setCardPlan(parent, {
+        ...body,
+        ...entry.request.write,
+      });
+    } catch (error) {
+      if (Number(error?.status) === 409)
+        error.publicMessage =
+          "This initiative’s plan changed after you pressed Undo, so nothing was removed. Edit the plan if you still want the card out.";
+      throw error;
+    }
+    if (!result?.if_updated_at) throw new Error("Plan receipt is incomplete.");
     return result;
   }
   if (entry.operation === "work.create") {
@@ -1151,7 +1198,10 @@ async function attempt(entry) {
                     ? "topic edit"
                     : entry.operation === "notifications.settings.set"
                       ? "notification settings"
-                      : "response",
+                      : entry.operation.startsWith("work.") &&
+                          entry.operation !== "work.create"
+                        ? "grouping change"
+                        : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =
