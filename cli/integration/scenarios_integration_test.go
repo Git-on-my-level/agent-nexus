@@ -545,6 +545,11 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 			}
 		}
 		_ = h.logFile.Close()
+		if t.Failed() {
+			if data, err := os.ReadFile(h.logPath); err == nil {
+				t.Logf("core log:\n%s", data)
+			}
+		}
 	})
 
 	waitForHealthy(t, baseURL, logPath)

@@ -3127,7 +3127,7 @@ Generated Help: events create
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`, `busy`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events archive`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 

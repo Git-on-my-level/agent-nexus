@@ -74,6 +74,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if err != nil {
+		if writeEventAppendContentionError(w, r, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
 		return
 	}
@@ -233,6 +236,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
 	if err != nil {
+		if writeEventAppendContentionError(w, r, err) {
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
@@ -262,6 +268,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					return
 				}
 				if replayErr != nil {
+					if writeEventAppendContentionError(w, r, replayErr) {
+						return
+					}
 					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
 					return
 				}
@@ -302,6 +311,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if err != nil {
+		if writeEventAppendContentionError(w, r, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
 		return
 	}

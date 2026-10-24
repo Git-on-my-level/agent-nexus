@@ -715,7 +715,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Assertion or refresh-token exchange for bearer access.
 - Concepts: `auth`
-- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_handle_taken`, `agent_revoked`, `rate_limited`, `auth_unavailable`
+- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_handle_taken`, `agent_revoked`, `rate_limited`, `auth_unavailable`, `busy`
 - Output: Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope.
 
 ## `boards.archive`
@@ -1576,7 +1576,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`, `busy`
 - Output: Returns `{ event }`.
 
 ## `events.get`
@@ -1774,7 +1774,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a host bridge heartbeat for wake routing.
 - Concepts: `hosts`, `agents`
-- Error codes: `auth_required`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`, `busy`
 - Output: Returns `{ bridge }`.
 - Agent notes: Host proof is required; no agent bearer or per-agent bridge proof is accepted.
 
@@ -1917,7 +1917,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Name a host or block agent names on it.
 - Concepts: `hosts`, `agents`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`, `busy`
 - Output: Returns `{ host }`.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
