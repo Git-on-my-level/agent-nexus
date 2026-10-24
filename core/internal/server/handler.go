@@ -2298,6 +2298,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/lease"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/lease/acquire"), strings.HasSuffix(remainder, "/lease/renew"), strings.HasSuffix(remainder, "/lease/release"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
 		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
@@ -2436,6 +2446,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleMoveCard(w, r, opts, cardID)
+			return
+		}
+		if cardID, action, ok := cardLeaseAction(remainder); ok {
+			handleCardLease(w, r, opts, cardID, action)
 			return
 		}
 		if strings.Contains(remainder, "/") {

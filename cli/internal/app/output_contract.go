@@ -84,6 +84,12 @@ func commandSideEffectClass(command string) string {
 		}
 		return "read_only"
 	}
+	if parts[0] == "lease" {
+		if len(parts) > 1 && parts[1] == "show" {
+			return "read_only"
+		}
+		return "remote_coordination_write"
+	}
 	if parts[0] == "deliveries" {
 		if len(parts) > 1 && parts[1] == "list" {
 			return "read_only"

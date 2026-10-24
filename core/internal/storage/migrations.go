@@ -1175,6 +1175,9 @@ var migrations = []migration{
 	}},
 	{Version: 116, ApplyChunk: accessAdmissionMigrationChunk, Verify: verifyAdmissionMigration},
 	{Version: 117, AfterApply: restrictAdmissionUpdatePrograms, Verify: verifyAdmissionUpdatePrograms},
+	// Card work leases: one row per card, CAS-updated inside the write
+	// transaction, plus the partial index the lease expiry clock seeks.
+	{Version: 118, AfterApply: installCardLeases},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

@@ -206,6 +206,10 @@ export declare class AnxClient {
     inboxRespond(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
     inboxSummary(options?: RequestOptions): Promise<InvokeResult>;
+    leaseAcquire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    leaseRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    leaseRenew(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    leaseShow(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsList(options?: RequestOptions): Promise<InvokeResult>;
     metaConceptsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

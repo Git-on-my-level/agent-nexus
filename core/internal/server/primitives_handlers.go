@@ -322,7 +322,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 func isGenericAppendProtectedEventType(eventType string) bool {
 	switch strings.TrimSpace(eventType) {
-	case humanAttentionRespondedEventType, humanAttentionWithdrawnEventType, "attention_feedback":
+	case humanAttentionRespondedEventType, humanAttentionWithdrawnEventType, "attention_feedback",
+		// Lease audit events are written only with the card_leases row.
+		"card_lease_acquired", "card_lease_renewed", "card_lease_released", "card_lease_expired":
 		return true
 	default:
 		return false

@@ -473,6 +473,26 @@
       "access_class": "workspace_business_surface"
     },
     {
+      "method": "GET",
+      "path": "/cards/{card_id}/lease",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/acquire",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/release",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/renew",
+      "access_class": "workspace_business_surface"
+    },
+    {
       "method": "POST",
       "path": "/cards/{card_id}/move",
       "access_class": "workspace_business_surface"

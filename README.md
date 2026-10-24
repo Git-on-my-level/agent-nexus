@@ -194,4 +194,6 @@ Recurring work: [cadence, goals, receipts and loop reports](docs/recurring-work.
 
 Grouped work: [parent plans, likely homes, fold/unfold and the initiative budget](docs/grouping-work.md).
 
+Work leases, deadlines and approval apply-by: [spec](docs/work-leases.md).
+
 Watch: [collections, personal dashboard tabs, scoped activity and panel roles](docs/watch-dashboards.md).

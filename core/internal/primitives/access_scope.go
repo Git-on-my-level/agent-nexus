@@ -173,6 +173,8 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("work_evidence_records", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.id"))
 	add("work_evidence_index", denied("card", "_row.card_id")+" AND "+denied("work_evidence_alias", "_row.id")+" AND "+denied("work_evidence_record", "_row.evidence_id"))
 	add("work_evidence_entries", denied("card", "_row.card_id"))
+	// Work leases inherit the card: a hidden card has no visible lease.
+	add("card_leases", denied("card", "_row.card_id"))
 	add("work_evidence_keys", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.evidence_id"))
 	add("work_participants", denied("card", "_row.card_id")+" AND "+denied("participant", "_row.id"))
 	add("card_plans", denied("plan", "_row.card_id"))

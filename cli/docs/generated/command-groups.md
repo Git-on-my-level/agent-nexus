@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `42`
+- Groups: `43`
 
 ## `topics`
 
@@ -307,6 +307,15 @@ Generated from `contracts/anx-openapi.yaml`.
   - `integrations.map` (`integrations map`)
   - `integrations.run` (`integrations run`)
   - `integrations.status` (`integrations status`)
+
+## `lease`
+
+- Commands: `4`
+- Command IDs:
+  - `lease.acquire` (`lease acquire`)
+  - `lease.release` (`lease release`)
+  - `lease.renew` (`lease renew`)
+  - `lease.show` (`lease show`)
 
 ## `meta`
 

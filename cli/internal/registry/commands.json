@@ -7577,6 +7577,10 @@
               "board_updated",
               "card_archived",
               "card_created",
+              "card_lease_acquired",
+              "card_lease_expired",
+              "card_lease_released",
+              "card_lease_renewed",
               "card_moved",
               "card_resolved",
               "card_trashed",
@@ -9783,6 +9787,312 @@
       ],
       "go_method": "",
       "ts_method": ""
+    },
+    {
+      "command_id": "lease.acquire",
+      "cli_path": "lease acquire",
+      "group": "lease",
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/acquire",
+      "operation_id": "acquireCardLease",
+      "summary": "Acquire the card's work lease",
+      "why": "Claim a card before starting work so a second session or lane cannot start the same work.",
+      "input_mode": "flags",
+      "http_input_mode": "json-body",
+      "cli_input": {
+        "mode": "flags",
+        "flags": [
+          {
+            "name": "owner",
+            "required": true,
+            "description": "Stable owner id for this claim"
+          },
+          {
+            "name": "ttl",
+            "required": true,
+            "description": "Lease length as a duration (60s to 7d)"
+          },
+          {
+            "name": "reason",
+            "description": "Short audit text recorded on the card timeline."
+          },
+          {
+            "name": "if-epoch",
+            "description": "Acquire only if the lease epoch still equals this value (0 when never leased)."
+          }
+        ]
+      },
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ lease, changed }`.",
+      "error_codes": [
+        "auth_required",
+        "invalid_request",
+        "invalid_token",
+        "not_found",
+        "conflict",
+        "lease_held",
+        "outcome_unknown",
+        "busy"
+      ],
+      "concepts": [
+        "cards",
+        "concurrency",
+        "write"
+      ],
+      "stability": "beta",
+      "surface": "canonical",
+      "agent_notes": "Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock.",
+      "examples": [
+        {
+          "title": "Claim a card for two hours",
+          "command": "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "owner",
+            "type": "string"
+          },
+          {
+            "name": "ttl_seconds",
+            "type": "integer"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "if_epoch",
+            "type": "integer"
+          },
+          {
+            "name": "reason",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "card_id"
+      ],
+      "adjacent_commands": [
+        "lease.release",
+        "lease.renew",
+        "lease.show"
+      ],
+      "go_method": "LeaseAcquire",
+      "ts_method": "leaseAcquire"
+    },
+    {
+      "command_id": "lease.release",
+      "cli_path": "lease release",
+      "group": "lease",
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/release",
+      "operation_id": "releaseCardLease",
+      "summary": "Release the card's work lease",
+      "why": "Give up a work lease when the work stops so another owner can take it at once.",
+      "input_mode": "flags",
+      "http_input_mode": "json-body",
+      "cli_input": {
+        "mode": "flags",
+        "flags": [
+          {
+            "name": "owner",
+            "required": true,
+            "description": "Owner id that holds the lease."
+          },
+          {
+            "name": "reason",
+            "description": "Short audit text recorded on the card timeline."
+          }
+        ]
+      },
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ lease, changed }`; changed is false when the lease was already free.",
+      "error_codes": [
+        "auth_required",
+        "invalid_request",
+        "invalid_token",
+        "not_found",
+        "lease_held",
+        "outcome_unknown",
+        "busy"
+      ],
+      "concepts": [
+        "cards",
+        "concurrency",
+        "write"
+      ],
+      "stability": "beta",
+      "surface": "canonical",
+      "agent_notes": "Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held.",
+      "examples": [
+        {
+          "title": "Release a lease",
+          "command": "anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "owner",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "reason",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "card_id"
+      ],
+      "adjacent_commands": [
+        "lease.acquire",
+        "lease.renew",
+        "lease.show"
+      ],
+      "go_method": "LeaseRelease",
+      "ts_method": "leaseRelease"
+    },
+    {
+      "command_id": "lease.renew",
+      "cli_path": "lease renew",
+      "group": "lease",
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/renew",
+      "operation_id": "renewCardLease",
+      "summary": "Renew the card's work lease",
+      "why": "Extend a work lease you hold while the work is still alive.",
+      "input_mode": "flags",
+      "http_input_mode": "json-body",
+      "cli_input": {
+        "mode": "flags",
+        "flags": [
+          {
+            "name": "owner",
+            "required": true,
+            "description": "Owner id that holds the lease."
+          },
+          {
+            "name": "ttl",
+            "description": "New lease length from now (60s to 7d); defaults to the lease's current TTL."
+          }
+        ]
+      },
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ lease, changed }`.",
+      "error_codes": [
+        "auth_required",
+        "invalid_request",
+        "invalid_token",
+        "not_found",
+        "lease_held",
+        "lease_expired",
+        "lease_not_held",
+        "outcome_unknown",
+        "busy"
+      ],
+      "concepts": [
+        "cards",
+        "concurrency",
+        "write"
+      ],
+      "stability": "beta",
+      "surface": "canonical",
+      "agent_notes": "Renew never resurrects an expired lease (409 lease_expired, CLI exit 12): re-acquire, which takes a new epoch, so a stalled holder always sees that it lost the claim.",
+      "examples": [
+        {
+          "title": "Renew a lease",
+          "command": "anx lease renew card:ramp-batch --owner exec-7f3a"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "owner",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "ttl_seconds",
+            "type": "integer"
+          }
+        ]
+      },
+      "path_params": [
+        "card_id"
+      ],
+      "adjacent_commands": [
+        "lease.acquire",
+        "lease.release",
+        "lease.show"
+      ],
+      "go_method": "LeaseRenew",
+      "ts_method": "leaseRenew"
+    },
+    {
+      "command_id": "lease.show",
+      "cli_path": "lease show",
+      "group": "lease",
+      "method": "GET",
+      "path": "/cards/{card_id}/lease",
+      "operation_id": "getCardLease",
+      "summary": "Read the card's work lease",
+      "why": "See who holds the work lease on a card, its epoch and when it expires, before starting work on it.",
+      "input_mode": "none",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ lease }`; `lease.state` is none, held, expired or released, computed from the server clock.",
+      "error_codes": [
+        "auth_required",
+        "invalid_token",
+        "not_found"
+      ],
+      "concepts": [
+        "cards",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "surface": "canonical",
+      "agent_notes": "A work lease is optimistic concurrency on the server for work claims, not a partition-safe lock. state=expired means any owner may acquire it.",
+      "examples": [
+        {
+          "title": "Check a card's lease",
+          "command": "anx lease show card:ramp-batch"
+        }
+      ],
+      "path_params": [
+        "card_id"
+      ],
+      "adjacent_commands": [
+        "lease.acquire",
+        "lease.release",
+        "lease.renew"
+      ],
+      "go_method": "LeaseShow",
+      "ts_method": "leaseShow"
     },
     {
       "command_id": "meta.commands.get",

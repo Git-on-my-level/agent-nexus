@@ -5528,6 +5528,180 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /cards/{card_id}/lease:
+    get:
+      operationId: getCardLease
+      summary: Read the card's work lease
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: lease.show
+      x-anx-cli-path: lease show
+      x-anx-why: See who holds the work lease on a card, its epoch and when it expires, before starting work on it.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ lease }`; `lease.state` is none, held, expired or released, computed from the server clock."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [cards, concurrency]
+      x-anx-stability: beta
+      x-anx-agent-notes: A work lease is optimistic concurrency on the server for work claims, not a partition-safe lock. state=expired means any owner may acquire it.
+      x-anx-examples:
+      - {title: Check a card's lease, command: "anx lease show card:ramp-batch"}
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      responses:
+        '200':
+          description: Current lease, or state none when the card has never been leased
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CardLeaseResponse'}
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /cards/{card_id}/lease/acquire:
+    post:
+      operationId: acquireCardLease
+      summary: Acquire the card's work lease
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: lease.acquire
+      x-anx-cli-path: lease acquire
+      x-anx-why: Claim a card before starting work so a second session or lane cannot start the same work.
+      x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: flags
+        flags:
+        - {name: owner, required: true, description: Stable owner id for this claim, such as an execution or session id.}
+        - {name: ttl, required: true, description: Lease length as a duration (60s to 7d), for example 2h.}
+        - {name: reason, description: Short audit text recorded on the card timeline.}
+        - {name: if-epoch, description: Acquire only if the lease epoch still equals this value (0 when never leased).}
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ lease, changed }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, lease_held, outcome_unknown, busy]
+      x-anx-concepts: [cards, concurrency, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock."
+      x-anx-examples:
+      - {title: Claim a card for two hours, command: "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'"}
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AcquireCardLeaseRequest'}
+      responses:
+        '200':
+          description: Lease held by the caller's owner id
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CardLeaseMutationResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          description: lease_held when another owner holds an unexpired lease (error.details carries owner, epoch, expires_at); conflict when if_epoch no longer matches.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /cards/{card_id}/lease/renew:
+    post:
+      operationId: renewCardLease
+      summary: Renew the card's work lease
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: lease.renew
+      x-anx-cli-path: lease renew
+      x-anx-why: Extend a work lease you hold while the work is still alive.
+      x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: flags
+        flags:
+        - {name: owner, required: true, description: Owner id that holds the lease.}
+        - {name: ttl, description: New lease length from now (60s to 7d); defaults to the lease's current TTL.}
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ lease, changed }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, lease_held, lease_expired, lease_not_held, outcome_unknown, busy]
+      x-anx-concepts: [cards, concurrency, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Renew never resurrects an expired lease (409 lease_expired, CLI exit 12): re-acquire, which takes a new epoch, so a stalled holder always sees that it lost the claim."
+      x-anx-examples:
+      - {title: Renew a lease, command: "anx lease renew card:ramp-batch --owner exec-7f3a"}
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RenewCardLeaseRequest'}
+      responses:
+        '200':
+          description: Lease renewed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CardLeaseMutationResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          description: lease_held (another owner holds it), lease_expired (the caller's lease expired; re-acquire) or lease_not_held (nobody holds it).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /cards/{card_id}/lease/release:
+    post:
+      operationId: releaseCardLease
+      summary: Release the card's work lease
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: lease.release
+      x-anx-cli-path: lease release
+      x-anx-why: Give up a work lease when the work stops so another owner can take it at once.
+      x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: flags
+        flags:
+        - {name: owner, required: true, description: Owner id that holds the lease.}
+        - {name: reason, description: Short audit text recorded on the card timeline.}
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ lease, changed }`; changed is false when the lease was already free."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, lease_held, outcome_unknown, busy]
+      x-anx-concepts: [cards, concurrency, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held.
+      x-anx-examples:
+      - {title: Release a lease, command: "anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'"}
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReleaseCardLeaseRequest'}
+      responses:
+        '200':
+          description: Lease released, or already free
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CardLeaseMutationResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          description: lease_held when another owner holds an unexpired lease.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   /cards/{card_id}/restore:
     post:
       operationId: restoreArchivedCard
@@ -13661,6 +13835,70 @@ components:
           type: string
           format: date-time
       required: [patch, if_updated_at]
+
+    CardLease:
+      type: object
+      additionalProperties: false
+      description: >
+        A card's work lease. state is computed from the server clock: none (never leased),
+        held (owner set, expires_at in the future), expired (owner set, expires_at passed,
+        not released) or released. epoch increments each time a different owner takes the
+        lease and is the fencing token for downstream writes. Optimistic concurrency on the
+        server; not a partition-safe authority lock.
+      required: [card_ref, state, epoch, server_time]
+      properties:
+        card_ref: {type: string}
+        state: {type: string, enum: [none, held, expired, released]}
+        owner: {type: string, description: Owner id of the current or last holder; absent for state none.}
+        epoch: {type: integer, minimum: 0, description: Zero when never leased.}
+        holder_actor_id: {type: string, description: Principal that acquired or last renewed the lease.}
+        ttl_seconds: {type: integer, minimum: 0}
+        acquired_at: {type: string, format: date-time}
+        renewed_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        released_at: {type: string, format: date-time}
+        remaining_seconds: {type: integer, minimum: 0, description: Seconds until expires_at; present only for state held.}
+        server_time: {type: string, format: date-time}
+    CardLeaseResponse:
+      type: object
+      additionalProperties: false
+      required: [lease]
+      properties:
+        lease: {$ref: '#/components/schemas/CardLease'}
+    CardLeaseMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [lease, changed]
+      properties:
+        lease: {$ref: '#/components/schemas/CardLease'}
+        changed: {type: boolean, description: False when the request was a no-op, such as releasing a free lease.}
+        event_id: {type: string, description: Card timeline event recorded by this change.}
+    AcquireCardLeaseRequest:
+      type: object
+      additionalProperties: false
+      required: [owner, ttl_seconds]
+      properties:
+        owner: {type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$"}
+        ttl_seconds: {type: integer, minimum: 60, maximum: 604800}
+        reason: {type: string, maxLength: 200}
+        if_epoch: {type: integer, minimum: 0, description: Acquire only when the current epoch equals this value.}
+        actor_id: {type: string}
+    RenewCardLeaseRequest:
+      type: object
+      additionalProperties: false
+      required: [owner]
+      properties:
+        owner: {type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$"}
+        ttl_seconds: {type: integer, minimum: 60, maximum: 604800, description: Defaults to the lease's current TTL.}
+        actor_id: {type: string}
+    ReleaseCardLeaseRequest:
+      type: object
+      additionalProperties: false
+      required: [owner]
+      properties:
+        owner: {type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$"}
+        reason: {type: string, maxLength: 200}
+        actor_id: {type: string}
 
     MoveCardRequest:
       description: >

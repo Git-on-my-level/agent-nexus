@@ -90,6 +90,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		p, err := parseDeliveriesCommand(args[1:])
 		return "deliveries " + p.verb, err
 	}
+	if args[0] == "lease" {
+		p, err := parseLeaseCommand(args[1:])
+		return strings.TrimSpace("lease " + p.verb), err
+	}
 	if len(args) >= 2 && args[0] == "notifications" && args[1] == "settings" {
 		p, err := parseNotificationSettingsCommand(args[2:])
 		return "notifications settings " + p.verb, err

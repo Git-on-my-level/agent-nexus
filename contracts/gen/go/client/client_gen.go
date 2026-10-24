@@ -2242,6 +2242,78 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID:  "lease.acquire",
+		CLIPath:    "lease acquire",
+		Group:      "lease",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/lease/acquire",
+		PathParams: []string{"card_id"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "concurrency", "write"},
+		Adjacent:   []string{"lease.release", "lease.renew", "lease.show"},
+		Examples: []Example{
+			{
+				Title:   "Claim a card for two hours",
+				Command: "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'",
+			},
+		},
+	},
+	{
+		CommandID:  "lease.release",
+		CLIPath:    "lease release",
+		Group:      "lease",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/lease/release",
+		PathParams: []string{"card_id"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "concurrency", "write"},
+		Adjacent:   []string{"lease.acquire", "lease.renew", "lease.show"},
+		Examples: []Example{
+			{
+				Title:   "Release a lease",
+				Command: "anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'",
+			},
+		},
+	},
+	{
+		CommandID:  "lease.renew",
+		CLIPath:    "lease renew",
+		Group:      "lease",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/lease/renew",
+		PathParams: []string{"card_id"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "concurrency", "write"},
+		Adjacent:   []string{"lease.acquire", "lease.release", "lease.show"},
+		Examples: []Example{
+			{
+				Title:   "Renew a lease",
+				Command: "anx lease renew card:ramp-batch --owner exec-7f3a",
+			},
+		},
+	},
+	{
+		CommandID:  "lease.show",
+		CLIPath:    "lease show",
+		Group:      "lease",
+		Method:     "GET",
+		Path:       "/cards/{card_id}/lease",
+		PathParams: []string{"card_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "concurrency"},
+		Adjacent:   []string{"lease.acquire", "lease.release", "lease.renew"},
+		Examples: []Example{
+			{
+				Title:   "Check a card's lease",
+				Command: "anx lease show card:ramp-batch",
+			},
+		},
+	},
+	{
 		CommandID:  "meta.commands.get",
 		CLIPath:    "meta commands get",
 		Group:      "meta",
@@ -4178,6 +4250,22 @@ func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Re
 
 func (c *Client) InboxSummary(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.summary", nil, opts)
+}
+
+func (c *Client) LeaseAcquire(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "lease.acquire", pathParams, opts)
+}
+
+func (c *Client) LeaseRelease(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "lease.release", pathParams, opts)
+}
+
+func (c *Client) LeaseRenew(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "lease.renew", pathParams, opts)
+}
+
+func (c *Client) LeaseShow(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "lease.show", pathParams, opts)
 }
 
 func (c *Client) MetaCommandsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

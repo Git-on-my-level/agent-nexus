@@ -33,6 +33,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | host | 16 |
 | inbox | 5 |
 | integrations | 7 |
+| lease | 4 |
 | meta | 9 |
 | notifications | 2 |
 | ops | 3 |
@@ -254,6 +255,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | integrations.map | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | integrations.run | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | integrations.status | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
+| lease.acquire | lease | POST | /cards/{card_id}/lease/acquire | exposed_write | Ordinary work claim on a card the caller can write; refuses with lease_held when another owner holds it. |
+| lease.release | lease | POST | /cards/{card_id}/lease/release | exposed_write | Gives up a work lease the caller's owner id holds. |
+| lease.renew | lease | POST | /cards/{card_id}/lease/renew | exposed_write | Extends a work lease the caller's owner id still holds. |
+| lease.show | lease | GET | /cards/{card_id}/lease | exposed_read | Point read of one card's work lease state, owner, epoch and expiry. |
 | meta.commands.get | meta | GET | /meta/commands/{command_id} | exposed_read | command metadata read |
 | meta.commands.list | meta | GET | /meta/commands | exposed_read | command metadata inventory read |
 | meta.concepts.get | meta | GET | /meta/concepts/{concept_name} | exposed_read | concept metadata read |

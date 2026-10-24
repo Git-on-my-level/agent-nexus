@@ -31,6 +31,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `series` (group): Push and query declared live series with source provenance
 - `adapters` (group): Declare and administer scoped host-local live data sources
 - `deliveries` (group): List, claim and receipt durable notification and wake deliveries
+- `lease` (group): Claim a card with a TTL work lease before starting work on it
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Inspect the enrolled host and derived-agent identity
@@ -199,6 +200,10 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `deliveries list` (local-helper): List your own deliveries with receipts.
 - `deliveries claim` (local-helper): Claim due deliveries for a channel your adapter delivers.
 - `deliveries receipt` (local-helper): Record delivered, failed or skipped for a claimed delivery.
+- `lease show` (local-helper): Show a card's work lease: state, owner, epoch and expiry.
+- `lease acquire` (local-helper): Claim a card before starting work; exits 13 lease_held naming the holder when another owner holds it.
+- `lease renew` (local-helper): Extend a lease you still hold; an expired lease must be re-acquired (exit 12).
+- `lease release` (local-helper): Give up your lease so another owner can take the card at once.
 - `notifications settings get` (local-helper): Read your notification channels and the channels adapters deliver.
 - `notifications settings set` (local-helper): Replace your notification channels, addresses and push or digest opt-ins.
 - `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
@@ -1143,6 +1148,27 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx deliveries ... ; anx --json deliveries ... ; anx deliveries ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `lease`
+
+Claim a card with a TTL work lease before starting work on it
+
+```text
+Generated Help: lease
+
+Commands:
+  lease acquire            Acquire the card's work lease
+  lease release            Release the card's work lease
+  lease renew              Renew the card's work lease
+  lease show               Read the card's work lease
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx lease ... ; anx --json lease ... ; anx lease ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -3405,7 +3431,7 @@ Inputs:
   - body `event.provenance.notes` (string)
   - body `event.ref` (typed_ref)
   - body `event.thread_ref` (string)
-  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_lease_acquired, card_lease_expired, card_lease_released, card_lease_renewed, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -6848,6 +6874,221 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx deliveries receipt ... ; anx --json deliveries receipt ... ; anx deliveries receipt ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `lease show`
+
+Show a card's work lease: state, owner, epoch and expiry.
+
+```text
+Generated Help: lease show
+
+- Command ID: `lease.show`
+- CLI path: `lease show`
+- HTTP: `GET /cards/{card_id}/lease`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: See who holds the work lease on a card, its epoch and when it expires, before starting work on it.
+- Output: Returns `{ lease }`; `lease.state` is none, held, expired or released, computed from the server clock.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `cards`, `concurrency`
+- Agent notes: A work lease is optimistic concurrency on the server for work claims, not a partition-safe lock. state=expired means any owner may acquire it.
+- Adjacent commands: `lease acquire`, `lease release`, `lease renew`
+- Examples:
+  - Check a card's lease: `anx lease show card:ramp-batch`
+
+Inputs:
+  Required:
+  - path `card_id`
+
+Local Help: lease show
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Show a card's work lease: state, owner, epoch and expiry.
+- Quick start: anx lease show <card>
+- Examples:
+  - `anx lease show card:ramp-batch`
+
+Flags:
+  <card>                       Accepted by lease show.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx lease show ... ; anx --json lease show ... ; anx lease show ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `lease acquire`
+
+Claim a card before starting work; exits 13 lease_held naming the holder when another owner holds it.
+
+```text
+Generated Help: lease acquire
+
+- Command ID: `lease.acquire`
+- CLI path: `lease acquire`
+- HTTP: `POST /cards/{card_id}/lease/acquire`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `flags`
+- Why: Claim a card before starting work so a second session or lane cannot start the same work.
+- Output: Returns `{ lease, changed }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `lease_held`, `outcome_unknown`, `busy`
+- Concepts: `cards`, `concurrency`, `write`
+- Agent notes: Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock.
+- Adjacent commands: `lease release`, `lease renew`, `lease show`
+- Examples:
+  - Claim a card for two hours: `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'`
+
+Inputs:
+  Required:
+  - path `card_id`
+  - body `owner` (string)
+  - body `ttl_seconds` (integer)
+  Optional:
+  - body `actor_id` (string)
+  - body `if_epoch` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
+
+CLI input:
+  Flags:
+  - `--owner` required: Stable owner id for this claim
+  - `--ttl` required: Lease length as a duration (60s to 7d)
+  - `--reason`: Short audit text recorded on the card timeline.
+  - `--if-epoch`: Acquire only if the lease epoch still equals this value (0 when never leased).
+
+Local Help: lease acquire
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Claim a card before starting work; exits 13 lease_held naming the holder when another owner holds it.
+- Quick start: anx lease acquire <card> --owner <id> --ttl <dur>
+- Examples:
+  - `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'ramp step 3'`
+
+Flags:
+  <card>                       Accepted by lease acquire.
+  --owner <id>                 Accepted by lease acquire.
+  --ttl <dur>                  Accepted by lease acquire (60s to 7d).
+  --reason <text>              Accepted by lease acquire.
+  --if-epoch <n>               Accepted by lease acquire.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx lease acquire ... ; anx --json lease acquire ... ; anx lease acquire ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `lease renew`
+
+Extend a lease you still hold; an expired lease must be re-acquired (exit 12).
+
+```text
+Generated Help: lease renew
+
+- Command ID: `lease.renew`
+- CLI path: `lease renew`
+- HTTP: `POST /cards/{card_id}/lease/renew`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `flags`
+- Why: Extend a work lease you hold while the work is still alive.
+- Output: Returns `{ lease, changed }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `lease_expired`, `lease_not_held`, `outcome_unknown`, `busy`
+- Concepts: `cards`, `concurrency`, `write`
+- Agent notes: Renew never resurrects an expired lease (409 lease_expired, CLI exit 12): re-acquire, which takes a new epoch, so a stalled holder always sees that it lost the claim.
+- Adjacent commands: `lease acquire`, `lease release`, `lease show`
+- Examples:
+  - Renew a lease: `anx lease renew card:ramp-batch --owner exec-7f3a`
+
+Inputs:
+  Required:
+  - path `card_id`
+  - body `owner` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `ttl_seconds` (integer)
+
+CLI input:
+  Flags:
+  - `--owner` required: Owner id that holds the lease.
+  - `--ttl`: New lease length from now (60s to 7d); defaults to the lease's current TTL.
+
+Local Help: lease renew
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Extend a lease you still hold; an expired lease must be re-acquired (exit 12).
+- Quick start: anx lease renew <card> --owner <id>
+- Examples:
+  - `anx lease renew card:ramp-batch --owner exec-7f3a --ttl 2h`
+
+Flags:
+  <card>                       Accepted by lease renew.
+  --owner <id>                 Accepted by lease renew.
+  --ttl <dur>                  Accepted by lease renew.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx lease renew ... ; anx --json lease renew ... ; anx lease renew ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `lease release`
+
+Give up your lease so another owner can take the card at once.
+
+```text
+Generated Help: lease release
+
+- Command ID: `lease.release`
+- CLI path: `lease release`
+- HTTP: `POST /cards/{card_id}/lease/release`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `flags`
+- Why: Give up a work lease when the work stops so another owner can take it at once.
+- Output: Returns `{ lease, changed }`; changed is false when the lease was already free.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `outcome_unknown`, `busy`
+- Concepts: `cards`, `concurrency`, `write`
+- Agent notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held.
+- Adjacent commands: `lease acquire`, `lease renew`, `lease show`
+- Examples:
+  - Release a lease: `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
+
+Inputs:
+  Required:
+  - path `card_id`
+  - body `owner` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `reason` (string)
+
+CLI input:
+  Flags:
+  - `--owner` required: Owner id that holds the lease.
+  - `--reason`: Short audit text recorded on the card timeline.
+
+Local Help: lease release
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Give up your lease so another owner can take the card at once.
+- Quick start: anx lease release <card> --owner <id>
+- Examples:
+  - `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
+
+Flags:
+  <card>                       Accepted by lease release.
+  --owner <id>                 Accepted by lease release.
+  --reason <text>              Accepted by lease release.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx lease release ... ; anx --json lease release ... ; anx lease release ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
