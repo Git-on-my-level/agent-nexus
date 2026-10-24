@@ -151,7 +151,7 @@ export function validateLiveQuery(type, data) {
   if (type === "live-activity") {
     if (
       data.collection !== undefined &&
-      !["loops", "initiatives"].includes(data.collection)
+      !["", "loops", "initiatives"].includes(data.collection)
     )
       errors.push("invalid activity collection");
     if (
@@ -162,7 +162,7 @@ export function validateLiveQuery(type, data) {
         data.subject_refs.some(
           (ref) =>
             typeof ref !== "string" ||
-            ref.length > 2048 ||
+            utf8Length(ref) > 2048 ||
             !ref.includes(":") ||
             goTrimSpace(ref) !== ref,
         ))

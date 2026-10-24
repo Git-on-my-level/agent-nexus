@@ -230,4 +230,11 @@ describe("live-collection query validation (mirrors core)", () => {
     bad("live-activity", { subject_refs: ["card:a", "card:a"] });
     bad("live-activity", { subject_refs: ["no-colon"] });
   });
+  it("matches core on an empty collection and byte-long subject refs", () => {
+    // Core's zero value: an empty collection means "no collection scope".
+    ok("live-activity", { collection: "" });
+    // 1,500 two-byte characters are 3,000 bytes, which core counts.
+    bad("live-activity", { subject_refs: [`card:${"é".repeat(1500)}`] });
+    ok("live-activity", { subject_refs: [`card:${"a".repeat(2043)}`] });
+  });
 });
