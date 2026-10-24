@@ -91,6 +91,35 @@ describe("collectionFromLoops", () => {
     expect(refs).toContain("card:battery-measurement");
     expect(refs).not.toContain("card:observability");
   });
+  it("names the measure with the goal's label, else its metric key", () => {
+    const base = brief.initiatives.find(
+      (r) => r.ref === "card:battery-measurement",
+    );
+    const withGoal = (label) => ({
+      ...base,
+      loop: {
+        ...base.loop,
+        goal: {
+          metric: "render_ms",
+          direction: "down",
+          unit: "ms",
+          ...(label ? { label } : {}),
+          points: [
+            { t: "2026-10-01T00:00:00Z", value: 300 },
+            { t: "2026-10-02T00:00:00Z", value: 120 },
+          ],
+        },
+      },
+    });
+    const progressOf = (row) =>
+      rows(collectionFromLoops([row], { now: NOW })).find(
+        (r) => r.ref === base.ref,
+      ).progress;
+    expect(progressOf(withGoal("Cold render time")).metric).toBe(
+      "Cold render time",
+    );
+    expect(progressOf(withGoal("")).metric).toBe("render_ms");
+  });
 });
 
 describe("normalizeCollection", () => {

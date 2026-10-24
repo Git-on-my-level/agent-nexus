@@ -193,7 +193,8 @@ function loopProgress(row) {
       kind: "spark",
       values: goal.points.map((p) => p.value),
       label: withUnit(formatMetricValue(latest), goal.unit),
-      metric: goal.metric,
+      // The author's words for what is measured, else the metric key.
+      metric: goal.label || goal.metric,
       direction: goal.direction,
     };
   }

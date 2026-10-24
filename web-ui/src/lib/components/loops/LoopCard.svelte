@@ -132,7 +132,7 @@
     >
       <div class="min-w-0">
         <p class="truncate text-micro text-fg-muted" title={goal.metric}>
-          {goal.metric}
+          {goal.label || goal.metric}
           <span class="text-fg-subtle"
             >{goal.direction === "down" ? "↓" : "↑"}</span
           >

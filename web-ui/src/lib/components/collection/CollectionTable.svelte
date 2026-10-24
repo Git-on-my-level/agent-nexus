@@ -136,7 +136,10 @@
           /></svg
         >
       {/if}
-      <span class="truncate text-micro font-medium tabular-nums text-fg"
+      <span
+        class="truncate text-micro font-medium tabular-nums text-fg"
+        title={p.metric ? `${p.metric}: ${p.label}` : undefined}
+        aria-label={p.metric ? `${p.metric}: ${p.label}` : undefined}
         >{p.label}</span
       >
     </span>
