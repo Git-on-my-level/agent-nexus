@@ -1,13 +1,9 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { afterEach, beforeAll, expect, it, vi } from "vitest";
-
-let rendererWarmupPlugin;
-// Loading the real Vite/SvelteKit graph is fixture setup. The cases below time
-// the mocked readiness barrier, independently of cold toolchain module loading.
-beforeAll(async () => {
-  ({ rendererWarmupPlugin } = await import("../../vite.config.js"));
-});
+import { afterEach, expect, it, vi } from "vitest";
+// Load the Vite/SvelteKit graph before timed cases; their mocked readiness
+// barrier should not include cold toolchain module loading.
+import configure, { rendererWarmupPlugin } from "../../vite.config.js";
 
 function warmupServer(bundle) {
   let request;
@@ -43,7 +39,6 @@ function warmupServer(bundle) {
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  vi.resetModules();
 });
 
 it("holds report SSR until optimized dependencies finish loading", async () => {
@@ -90,12 +85,10 @@ it("closes the renderer on optimization failure without admitting report SSR", a
 
 it("keeps renderer generated modules and dependencies outside the suite's directories", async () => {
   vi.stubEnv("ANX_REPORT_PREVIEW_WORK_DIR", "");
-  const { default: configure } = await import("../../vite.config.js");
   const suite = configure();
   const directory = path.resolve("test-results", "renderer-instance");
   vi.stubEnv("ANX_REPORT_PREVIEW_WORK_DIR", directory);
   const renderer = configure();
-  vi.resetModules();
   const { default: kit } = await import("../../svelte.config.js");
   expect(renderer.cacheDir).toBe(path.join(directory, "vite"));
   expect(renderer.cacheDir).not.toBe(suite.cacheDir);
@@ -108,7 +101,6 @@ it("pre-optimizes lazy chart and markdown dependencies without mid-page discover
     "ANX_REPORT_PREVIEW_WORK_DIR",
     path.resolve("test-results", "renderer-instance"),
   );
-  const { default: configure } = await import("../../vite.config.js");
   const { optimizeDeps } = configure();
   expect(optimizeDeps.noDiscovery).toBe(true);
   const sources = await Promise.all([
