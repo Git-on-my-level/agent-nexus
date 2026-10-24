@@ -157,6 +157,14 @@ original `request_key`. Undo of a fold is `unfold`; undo of a group removes the
 step the group added with a keyed plan write, and refuses when another step now
 depends on it.
 
+![Lanes on a desktop, with the Ungrouped tray above](../web-ui/tests/fixtures/qa-visual-baseline/workspace-initiatives-lanes.png)
+
+![Over the budget: fold suggestions](../web-ui/docs/images/swimlane-board-fold.png)
+
+| Phone lanes                                                                 | Ungrouped sheet                                                             |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| ![Lanes stacked on a phone](../web-ui/docs/images/swimlane-board-phone.png) | ![The tray as a sheet](../web-ui/docs/images/swimlane-board-phone-tray.png) |
+
 ## Routes and cost
 
 Added routes: `GET /work/ungrouped`, `POST /work/{card_ref}/group`,
