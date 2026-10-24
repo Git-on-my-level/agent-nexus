@@ -352,6 +352,64 @@ test("two tabs pinning different dashboards both keep their pins", async ({
       await expect(pinned(tabPage, id)).toHaveCount(1);
 });
 
+test("a tab that saw an older pin pending keeps the newer receipt", async ({
+  page,
+  context,
+}) => {
+  let releaseBeta;
+  const betaHeld = new Promise((resolve) => {
+    releaseBeta = resolve;
+  });
+  const core = await prepare(context, {
+    pins: [doc("alpha")],
+    // Hold beta's send so the watching tab sees it pending first.
+    write: (body) =>
+      body.document_refs.includes(doc("beta")) &&
+      !body.document_refs.includes(doc("gamma"))
+        ? betaHeld
+        : undefined,
+  });
+  await page.goto(`${WATCH}?tab=dashboard`);
+  await expect(pinned(page, "alpha")).toHaveCount(1, FIRST_RENDER);
+  const watcher = await context.newPage();
+  await watcher.goto(`${WATCH}?tab=dashboard`);
+  await expect(pinned(watcher, "alpha")).toHaveCount(1, FIRST_RENDER);
+  // Offline, the watcher follows the outbox but never queues for the send
+  // lock, which a paused tab would otherwise be granted and keep.
+  await offline(watcher);
+
+  await pin(page, "beta");
+  await expect.poll(() => core.writes.length).toBe(1);
+  // The watcher holds beta's pending entry.
+  await expect(pinned(watcher, "beta")).toHaveCount(1);
+
+  // While the watcher is paused, beta lands and then gamma does.
+  const debug = await context.newCDPSession(watcher);
+  await debug.send("Debugger.enable");
+  await debug.send("Debugger.pause");
+  releaseBeta();
+  await expect.poll(() => core.pins).toEqual([doc("alpha"), doc("beta")]);
+  await pin(page, "gamma");
+  await expect
+    .poll(() => core.pins)
+    .toEqual([doc("alpha"), doc("beta"), doc("gamma")]);
+  await expect.poll(() => savedPins(page)).toEqual([]);
+
+  // On resume it finds both receipts. Beta's is older than gamma's, even
+  // though the watcher only learns of beta's confirmation now.
+  await debug.send("Debugger.resume");
+  await debug.send("Debugger.disable");
+  await online(watcher);
+  for (const id of ["alpha", "beta", "gamma"])
+    await expect(pinned(watcher, id)).toHaveCount(1);
+  // A later recovery pass keeps it there.
+  await watcher.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await watcher.evaluate(
+    () => new Promise((resolve) => setTimeout(resolve, 500)),
+  );
+  await expect(pinned(watcher, "gamma")).toHaveCount(1);
+});
+
 test("a pin made while the pins cannot be read keeps core's other pins", async ({
   page,
   context,

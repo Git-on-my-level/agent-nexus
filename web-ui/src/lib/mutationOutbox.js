@@ -449,7 +449,11 @@ async function send(entry, lease = null) {
   throw Object.assign(new Error("Unknown saved operation"), { status: 400 });
 }
 
-function confirm(entry, result = null) {
+/**
+ * `confirmedAt` is when core's receipt landed, as persisted with it, so a
+ * receipt recovered later keeps its own time instead of looking new.
+ */
+function confirm(entry, result = null, confirmedAt = null) {
   const decision = result?.decision || entry.receipt?.decision;
   if (entry.operation === "pm.decision.answer" && decision)
     commitInboxView(entry.scope, { decision });
@@ -457,20 +461,27 @@ function confirm(entry, result = null) {
     rows.filter((row) => row.key !== entry.key || row.scope !== entry.scope),
   );
   if (active(entry))
-    mutationConfirmations.update((rows) => ({
-      ...rows,
-      [entry.target]: {
-        ...entry,
-        state: "sent",
-        result,
-        // Watch orders a pins receipt against reads by when it landed. Other
-        // confirmations stay unstamped so recovery still swaps in the
-        // persisted receipt they render from.
-        ...(entry.operation === PINS_OPERATION
-          ? { confirmedAt: Date.now() }
-          : {}),
-      },
-    }));
+    mutationConfirmations.update((rows) => {
+      const pins = entry.operation === PINS_OPERATION;
+      // Pins receipts are whole sets: an older one never replaces a newer.
+      if (
+        pins &&
+        (rows[entry.target]?.confirmedAt ?? 0) > (confirmedAt ?? Date.now())
+      )
+        return rows;
+      return {
+        ...rows,
+        [entry.target]: {
+          ...entry,
+          state: "sent",
+          result,
+          // Watch orders a pins receipt against reads by when it landed.
+          // Other confirmations stay unstamped so recovery still swaps in
+          // the persisted receipt they render from.
+          ...(pins ? { confirmedAt: confirmedAt ?? Date.now() } : {}),
+        },
+      };
+    });
   window.dispatchEvent(
     new CustomEvent("anx:mutation-confirmed", { detail: { ...entry, result } }),
   );
@@ -925,7 +936,11 @@ async function attempt(entry) {
       if (latest?.deleted && latest.deletionReason === "confirmed") {
         confirmedInTab.set(tabKey, latest.confirmation ?? null);
         volatile.delete(entry.key);
-        confirm(entry, latest.confirmation ?? null);
+        confirm(
+          entry,
+          latest.confirmation ?? null,
+          latest.submission?.confirmedAt,
+        );
         return;
       }
       volatile.delete(entry.key);
@@ -952,7 +967,11 @@ async function attempt(entry) {
       if (latest.deletionReason === "confirmed") {
         confirmedInTab.set(tabKey, latest.confirmation ?? null);
         volatile.delete(entry.key);
-        confirm(entry, latest.confirmation ?? null);
+        confirm(
+          entry,
+          latest.confirmation ?? null,
+          latest.submission?.confirmedAt,
+        );
       } else {
         volatile.delete(entry.key);
       }
@@ -1023,6 +1042,11 @@ async function attempt(entry) {
     try {
       if (!active(entry)) return;
       const result = adopted ? adopted.confirmation : await send(entry, lease);
+      // An adopted pins receipt is as old as the send that produced it.
+      const confirmedAt =
+        (entry.operation === PINS_OPERATION &&
+          adopted?.submission?.confirmedAt) ||
+        Date.now();
       confirmedInTab.set(tabKey, result);
       if (entry.epoch !== localWorkEpoch(entry.scope)) return;
       try {
@@ -1035,7 +1059,7 @@ async function attempt(entry) {
             target: entry.target,
             operation: entry.operation,
             fingerprint,
-            confirmedAt: Date.now(),
+            confirmedAt,
           },
         });
       } catch (confirmSaveErr) {
@@ -1072,7 +1096,7 @@ async function attempt(entry) {
           entry.epoch,
         );
       }
-      confirm(entry, result);
+      confirm(entry, result, confirmedAt);
     } finally {
       inFlightInTab.delete(tabKey);
     }
@@ -1087,7 +1111,11 @@ async function attempt(entry) {
     if (latest?.deleted && latest.deletionReason === "confirmed") {
       confirmedInTab.set(tabKey, latest.confirmation ?? null);
       volatile.delete(entry.key);
-      confirm(entry, latest.confirmation ?? null);
+      confirm(
+        entry,
+        latest.confirmation ?? null,
+        latest.submission?.confirmedAt,
+      );
       return;
     }
     // Superseded while this send was in flight: the replacement owns the
@@ -1243,7 +1271,7 @@ export async function recoverMutations() {
         if (!active(entry) || rows.has(entry.key)) continue;
         const latest = await loadLocalWorkRecord(scope, "mutation", entry.key);
         if (latest?.deleted && latest.deletionReason === "confirmed")
-          confirm(entry, latest.confirmation);
+          confirm(entry, latest.confirmation, latest.submission?.confirmedAt);
       }
       let entries = [...rows.values()]
         .filter((entry) => active(entry) && visible(entry))
