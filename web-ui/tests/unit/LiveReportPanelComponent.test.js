@@ -162,7 +162,10 @@ describe("loop silence banner", () => {
 });
 
 describe("live collection truncation", () => {
-  const panel = (hasMore) => ({
+  const panel = (
+    hasMore,
+    rows = [{ ref: "agent:a", title: "a", state: "working" }],
+  ) => ({
     type: "live-collection",
     title: "Agents",
     live: {
@@ -172,7 +175,7 @@ describe("live collection truncation", () => {
         groups: [
           {
             key: "all",
-            rows: [{ ref: "agent:a", title: "a", state: "working" }],
+            rows,
           },
         ],
         has_more: hasMore,
@@ -187,6 +190,16 @@ describe("live collection truncation", () => {
     expect(
       container.querySelector("[data-live-collection-more]")?.textContent,
     ).toMatch(/Showing 1; there are more\./);
+  });
+  it("says so even when none of the rows core read matched", () => {
+    const { container } = render(LiveReportPanel, {
+      panel: panel(true, []),
+      now: NOW,
+    });
+    expect(
+      container.querySelector("[data-live-collection-more]")?.textContent,
+    ).toMatch(/Showing 0; there are more\./);
+    expect(container.textContent).not.toContain("Nothing in this view yet.");
   });
   it("stays quiet when the collection is complete", () => {
     const { container } = render(LiveReportPanel, {

@@ -351,16 +351,16 @@
           folded={["done"]}
           label={panel.title || "items"}
         />
-        {#if liveCollection.hasMore}
-          <!-- Core stopped at the panel's limit; say so rather than imply
-               this is everything. -->
-          <p class="muted mt-2" data-live-collection-more>
-            Showing {collectionRows}; there are more.
-          </p>
-        {/if}
       </div>
-    {:else}
+    {:else if !liveCollection?.hasMore}
       <p class="muted">Nothing in this view yet.</p>
+    {/if}
+    {#if liveCollection?.hasMore}
+      <!-- Core stopped at its bound; say so rather than imply this is
+           everything, even when no row in that bound matched. -->
+      <p class="muted mt-2" data-live-collection-more>
+        Showing {collectionRows}; there are more.
+      </p>
     {/if}
   {:else if panel.type === "live-loops"}
     {#if loopStats}
