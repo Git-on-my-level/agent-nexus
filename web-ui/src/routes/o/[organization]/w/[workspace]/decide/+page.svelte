@@ -12,6 +12,7 @@
     formatSpan,
     freshnessLabel,
     sortDecisions,
+    findBriefRow,
   } from "$lib/brief.js";
   import {
     inboxResponseOverlay,
@@ -142,10 +143,7 @@
 
   let freshness = $derived(freshnessLabel($brief.data?.asOf, now));
   let filterTitle = $derived(
-    initiative
-      ? ($brief.data?.initiatives ?? []).find((row) => row.ref === initiative)
-          ?.title || ""
-      : "",
+    initiative ? findBriefRow($brief.data, initiative)?.title || "" : "",
   );
   let proposalCount = $derived(Math.min(5, selected?.proposals?.length ?? 0));
 

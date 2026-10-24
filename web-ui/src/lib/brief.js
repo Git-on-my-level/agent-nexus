@@ -325,6 +325,7 @@ export function normalizeBrief(raw) {
     truncated: {
       decisions: Boolean(brief?.truncated?.decisions),
       initiatives: Boolean(brief?.truncated?.initiatives),
+      loops: Boolean(brief?.truncated?.loops),
     },
     decisions: (Array.isArray(brief?.decisions) ? brief.decisions : [])
       .map(normalizeDecision)
@@ -332,6 +333,12 @@ export function normalizeBrief(raw) {
     initiatives: (Array.isArray(brief?.initiatives) ? brief.initiatives : [])
       .map(normalizeInitiative)
       .filter(Boolean),
+    // Core sends loop-bound cards here, never in `initiatives`. `section`
+    // keeps a loop a loop even before its first receipt sets `loop`.
+    loops: (Array.isArray(brief?.loops) ? brief.loops : [])
+      .map(normalizeInitiative)
+      .filter(Boolean)
+      .map((row) => ({ ...row, section: "loops" })),
     yourAsks: (Array.isArray(brief?.your_asks) ? brief.your_asks : [])
       .map(normalizeDecision)
       .filter(Boolean),
@@ -401,8 +408,9 @@ export function groupWatch(initiatives) {
 }
 
 /**
- * Loops: initiatives with a cadence, a goal or run receipts (core computes
- * `initiatives.loop`), or that link a `series:` ref. Watch's Loops view
+ * Loops: the brief's `loops` (cards with a cadence, a goal or recent run
+ * receipts; core computes `loops.loop`), plus initiatives that link a
+ * `series:` ref. Watch's Loops view
  * groups them by what they need, first match wins: a decision waiting on the
  * reader; a loop whose last runs failed; silence (an overdue cadence, past
  * its promise, or no evidence for `LOOP_SILENT_SECONDS`); no progress (no
@@ -429,7 +437,31 @@ export const LOOP_GROUP_LABELS = {
 
 export function isLoop(row) {
   return (
-    Boolean(row?.loop) || (Array.isArray(row?.series) && row.series.length > 0)
+    row?.section === "loops" ||
+    Boolean(row?.loop) ||
+    (Array.isArray(row?.series) && row.series.length > 0)
+  );
+}
+
+/**
+ * Every row Watch's Loops view lists: `loops` first, then measured
+ * initiatives. `initiatives` may be a screen's own copy of the brief's rows.
+ */
+export function briefLoops(brief, initiatives = brief?.initiatives) {
+  const loops = brief?.loops ?? [];
+  const seen = new Set(loops.map((row) => row.ref));
+  return [
+    ...loops,
+    ...(initiatives ?? []).filter((row) => isLoop(row) && !seen.has(row.ref)),
+  ];
+}
+
+/** The brief's row for a card, whichever section core put it in. */
+export function findBriefRow(brief, ref) {
+  return (
+    (brief?.initiatives ?? []).find((row) => row.ref === ref) ??
+    (brief?.loops ?? []).find((row) => row.ref === ref) ??
+    null
   );
 }
 

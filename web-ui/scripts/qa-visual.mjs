@@ -1325,6 +1325,7 @@ function qaBrief(scenario) {
     ...body,
     decisions: [],
     initiatives: [],
+    loops: [],
     your_asks: [],
     answered_for_you: [],
   };

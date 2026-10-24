@@ -206,31 +206,7 @@
         "for_seconds": 345600,
         "window_seconds": 604800
       },
-      "loop": {
-        "health": "healthy",
-        "health_reason": "effect within progress budget",
-        "every_seconds": 86400,
-        "progress_budget_seconds": 604800,
-        "stop_rule": null,
-        "last_run_at": "2026-10-15T08:00:00Z",
-        "last_effect_at": "2026-10-15T08:00:00Z",
-        "next_run_due_at": "2026-10-16T08:00:00Z",
-        "recent_runs": [
-          {
-            "at": "2026-10-15T08:00:00Z",
-            "outcome": "measured",
-            "decision": "kept"
-          }
-        ],
-        "runs_7d": {
-          "acted": 0,
-          "measured": 1,
-          "no_op": 0,
-          "infra_error": 0
-        },
-        "effects_7d": 1,
-        "goal": null
-      },
+      "loop": null,
       "owner": null,
       "parent_ref": null,
       "rollup": {
@@ -443,7 +419,75 @@
     "answered_for_you": false,
     "loops": false
   },
-  "loops": [],
+  "loops": [
+    {
+      "ref": "card:signup-loop",
+      "title": "Signup conversion loop",
+      "state": "moving",
+      "placement": "in_progress",
+      "promise": null,
+      "promise_moves": 0,
+      "last_evidence_at": "2026-10-04T12:00:00Z",
+      "progress": {
+        "done": 6,
+        "total": 9
+      },
+      "blocked_count": 0,
+      "waiting_on_you_count": 0,
+      "note": null,
+      "possibly_moot": {
+        "flagged": false
+      },
+      "series": [
+        {
+          "ref": "series:conversion?loop=signup",
+          "name": "conversion",
+          "labels": {
+            "loop": "signup"
+          },
+          "last_value": 0.12,
+          "last_at": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "metric_flat": null,
+      "loop": {
+        "health": "healthy",
+        "health_reason": "effect within progress budget",
+        "every_seconds": 86400,
+        "progress_budget_seconds": 604800,
+        "stop_rule": null,
+        "last_run_at": "2026-10-15T08:00:00Z",
+        "last_effect_at": "2026-10-15T08:00:00Z",
+        "next_run_due_at": "2026-10-16T08:00:00Z",
+        "recent_runs": [
+          {
+            "at": "2026-10-15T08:00:00Z",
+            "outcome": "measured",
+            "decision": "kept"
+          }
+        ],
+        "runs_7d": {
+          "acted": 0,
+          "measured": 1,
+          "no_op": 0,
+          "infra_error": 0
+        },
+        "effects_7d": 1,
+        "goal": null
+      },
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
+    }
+  ],
   "initiative_budget": {
     "count": 6,
     "target": 15,
