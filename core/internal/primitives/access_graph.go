@@ -10,32 +10,49 @@ import (
 // materialized union of every workspace record: unrelated public history must
 // not increase authorization cost. Fence shared authorization sets within each
 // statement so SQLite does not repeatedly flatten their recursive consumers.
-// Compile only the four fixed recursive SQL bodies. Roots still contain the
-// caller's current principal/epoch bindings; no authority or query data is cached.
-var ownershipTemplates = sync.OnceValue(func() map[string][2]string {
-	templates := make(map[string][2]string, 4)
+// Compile only the four fixed recursive SQL bodies, once per exact-edge ledger
+// selection. Roots still contain the caller's current principal/epoch
+// bindings; no authority or query data is cached.
+type ownershipTemplateKey struct {
+	name   string
+	ledger resourceaccess.Ledger
+}
+
+var ownershipTemplates = sync.OnceValue(func() map[ownershipTemplateKey][2]string {
+	templates := make(map[ownershipTemplateKey][2]string, 12)
 	for _, name := range []string{"_anx_denied", "_anx_fresh_denied", "_anx_desc", "_anx_private"} {
-		templates[name] = buildOwnershipTemplate(name, name == "_anx_private")
+		for _, ledger := range []resourceaccess.Ledger{resourceaccess.SelectedLedger, resourceaccess.LegacyLedger, resourceaccess.CompactLedger} {
+			templates[ownershipTemplateKey{name, ledger}] = buildOwnershipTemplate(name, name == "_anx_private", ledger)
+		}
 	}
 	return templates
 })
 
+// ownershipClosure selects the exact-edge ledger inside the statement.
 func ownershipClosure(name, roots string, owner bool) string {
+	return ownershipLedgerClosure(name, roots, owner, resourceaccess.SelectedLedger)
+}
+
+// ownershipLedgerClosure probes only one ledger unless ledger is
+// SelectedLedger. The same statement must confirm that selection.
+func ownershipLedgerClosure(name, roots string, owner bool, ledger resourceaccess.Ledger) string {
 	var template [2]string
 	if owner == (name == "_anx_private") {
-		template = ownershipTemplates()[name]
+		template = ownershipTemplates()[ownershipTemplateKey{name, ledger}]
 	}
 	if template[0] == "" {
-		template = buildOwnershipTemplate(name, owner)
+		template = buildOwnershipTemplate(name, owner, ledger)
 	}
 	return template[0] + roots + template[1]
 }
 
-func buildOwnershipTemplate(name string, owner bool) [2]string {
-	columns, carry := "kind,id", ""
+func buildOwnershipTemplate(name string, owner bool, ledger resourceaccess.Ledger) [2]string {
+	// Every vertex carries the ledger selection its root read once in this
+	// statement, so recursive exact-edge probes skip the inactive ledger.
+	columns, carry, reader := "kind,id,compact_reader", ",d.compact_reader", "d.compact_reader"
+	rootReader := map[resourceaccess.Ledger]string{resourceaccess.SelectedLedger: resourceaccess.CompactReaderSQL, resourceaccess.LegacyLedger: "0", resourceaccess.CompactLedger: "1"}[ledger]
 	if owner {
-		columns += ",owner"
-		carry = ",d.owner"
+		columns, carry = "kind,id,owner,compact_reader", ",d.owner,d.compact_reader"
 	}
 	terms := []string{}
 	children := map[string][]string{}
@@ -111,7 +128,7 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 	// Publishing the same key is not a reference to another publisher: it must
 	// not let hidden evidence suppress visible resolution candidates. Other
 	// inventory fields (including plan and work refs) inherit the key's owner.
-	terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d", carry, "d.kind='external_key' AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')", []string{resourceaccess.AtomKeySQL("d.id")})...)
+	terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d", carry, reader, "d.kind='external_key' AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')", []string{resourceaccess.AtomKeySQL("d.id")})...)
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_external_edges e ON d.kind='external_key' AND e.target_key="+resourceaccess.AtomKeySQL("d.id")+"")
 	// Document full-text materialization includes comment text. A private
 	// contributor must constrain the document before MATCH/rank/limit are applied.
@@ -124,7 +141,7 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 			// term avoids visiting and deduplicating the same children twice.
 			keys = []string{resourceaccess.AtomKeySQL("(d.kind||':'||d.id)"), "CASE WHEN d.kind<>'plan' THEN " + resourceaccess.AtomKeySQL("d.id") + " END"}
 		}
-		terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d "+join, carry, "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')", keys)...)
+		terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d "+join, carry, reader, "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')", keys)...)
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
@@ -135,8 +152,8 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 		{"resource_access_external_edges", ""},
 	} {
 		if e.table == "resource_access_exact_edges" {
-			terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id", carry, "m.authority<>'nexus'"+e.where, []string{resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")})...)
-			terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", carry, "(r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where, []string{resourceaccess.AtomKeySQL("r.ref")})...)
+			terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id", carry, reader, "m.authority<>'nexus'"+e.where, []string{resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")})...)
+			terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", carry, reader, "(r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where, []string{resourceaccess.AtomKeySQL("r.ref")})...)
 			continue
 		}
 		// Keep the recursive vertex outside the metadata lookup. Reordering this
@@ -162,16 +179,16 @@ func buildOwnershipTemplate(name string, owner bool) [2]string {
 	// SQLite otherwise evaluates the legacy spelling probes before discovering
 	// that no empty edge exists. Gate them with a cheap covering-index lookup.
 	emptyNavigation := "EXISTS(SELECT 1 FROM main.ref_edges empty WHERE empty.target_type=d.kind AND empty.target_id='' COLLATE NOCASE AND empty.edge_type='ref')"
-	emptyExact := resourceaccess.ExactEdgeExists(resourceaccess.AtomKeySQL("(d.kind||':')"))
+	emptyExact := resourceaccess.ExactEdgeExists(ledger, reader, resourceaccess.AtomKeySQL("(d.kind||':')"))
 	terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id='' COLLATE NOCASE AND e.edge_type='ref' WHERE "+validKind+" AND CASE WHEN "+emptyNavigation+" THEN "+emptyRef+" ELSE 0 END")
-	terms = append(terms, resourceaccess.ExactEdgeTerms(name+" d", carry, validKind+" AND CASE WHEN "+emptyExact+" THEN "+emptyRef+" ELSE 0 END", []string{resourceaccess.AtomKeySQL("(d.kind||':')")})...)
+	terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d", carry, reader, validKind+" AND CASE WHEN "+emptyExact+" THEN "+emptyRef+" ELSE 0 END", []string{resourceaccess.AtomKeySQL("(d.kind||':')")})...)
 	// Prose ownership is resolved atomically at writes, including new/renamed
 	// identities matching older text. Reads never inspect stored mention text.
 	terms = append(terms, "SELECT m.source_kind,m.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id JOIN main.resource_access_mentions m ON m.identity_id=i.identity_id")
 	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||d.id) COLLATE NOCASE")
 	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities r ON r.kind=d.kind AND r.resource_id=d.id JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||r.ref) COLLATE NOCASE")
 	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"='topic:' COLLATE NOCASE WHERE "+emptyRef)
-	return [2]string{name + "(" + columns + ") AS MATERIALIZED (", " UNION " + strings.Join(terms, " UNION ") + ")"}
+	return [2]string{name + "(" + columns + ") AS MATERIALIZED (SELECT *," + rootReader + " FROM (", ") UNION " + strings.Join(terms, " UNION ") + ")"}
 }
 
 // Resolve only the denied identities, including virtual revision handles and

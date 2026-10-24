@@ -680,3 +680,29 @@ func TestPointPlanHashNormalizesOnlyCompilerEpoch(t *testing.T) {
 		}
 	}
 }
+
+func TestCompilerPlanHashNormalizesOnlySnapshotPrefixEpochs(t *testing.T) {
+	point := "WITH RECURSIVE _anx_point_snapshot(token) AS MATERIALIZED (SELECT ? WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=123), cards AS (SELECT * FROM main.cards) SELECT * FROM cards WHERE version=123 AND title='epoch=123'"
+	pinned := "WITH RECURSIVE _anx_denied(kind,id) AS MATERIALIZED (SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?) WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=123), cards AS (SELECT * FROM main.cards) SELECT * FROM cards WHERE version=123"
+	for _, q := range []string{point, pinned} {
+		if CompilerPlanSQLHash(q) != CompilerPlanSQLHash(strings.Replace(q, "-1)=123", "-1)=456", 1)) {
+			t.Fatalf("snapshot epoch changed shape: %.60s", q)
+		}
+		for _, changed := range []string{strings.Replace(q, "version=123", "version=456", 1), q + " AND id=?", q + " -- 456"} {
+			if CompilerPlanSQLHash(q) == CompilerPlanSQLHash(changed) {
+				t.Fatalf("business change normalized: %.60s", changed)
+			}
+		}
+	}
+	receipt := strings.Replace(pinned, "main.resource_access_epoch", "main.receipt_access_epoch", 1)
+	if CompilerPlanSQLHash(receipt) != CompilerPlanSQLHash(strings.Replace(receipt, "-1)=123", "-1)=456", 1)) || CompilerPlanSQLHash(receipt) == CompilerPlanSQLHash(pinned) {
+		t.Fatal("receipt snapshot must normalize without erasing its epoch table")
+	}
+	// Anything else, including the two-gate fresh closure, keeps PlanSQLHash.
+	fresh := "WITH RECURSIVE _anx_fresh_denied(kind,id) AS (SELECT 1 WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)<>7) , cached AS (SELECT 1 WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=7) SELECT 1"
+	for _, q := range []string{fresh, "SELECT 1 WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=123", strings.Replace(pinned, "json_each(?)", "json_each('x')", 1)} {
+		if CompilerPlanSQLHash(q) != PlanSQLHash(q) {
+			t.Fatalf("non-prefix statement normalized: %.60s", q)
+		}
+	}
+}

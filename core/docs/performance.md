@@ -183,8 +183,12 @@ go test -short ./internal/server ./internal/storage ./internal/testutil/perfguar
 ```
 
 The independent scale tier is advisory. `.github/workflows/performance.yml`
-runs four `core-performance-routes` shards, `core-performance-legacy`, and their
-executed-artifact coverage check on pushes to main or manual dispatch. It has
+runs four `core-performance-routes` shards, four `core-performance-legacy`
+shards, and their executed-artifact coverage check on pushes to main or manual
+dispatch. Legacy shards discover their tests with `go test -list` and balance
+whole tests by the measured seconds in `scripts/performance-legacy-weights.json`
+(`scripts/performance-legacy-shard.py`), so a new test runs exactly once and no
+shard approaches its ten-minute package timeout. It has
 no pull-request trigger and no dependency from `ci-ok`, so it does not delay
 ordinary PRs or releases. Failed deterministic checks remain visible in that
 separate workflow. Run the same tier locally with:
@@ -388,8 +392,11 @@ owns execution and its actual plan, and this lexer is not a general SQL parser.
 recursively referenced view definitions) and
 specific EXPLAIN findings and the full ordered plan fingerprint (including
 duplicate nodes), with a justification and link to the existing P1 issue.
-The fingerprint preserves all SQL except the two numeric snapshot epochs emitted
-by the authorization compiler: those are data, and change with fixture writes.
+The fingerprint preserves all SQL except the numeric snapshot epochs emitted
+by the authorization compiler: the two gates of a fresh closure and the single
+gate that opens a point-snapshot or pinned-denial statement. Those are data and
+change with fixture writes; each route shard reaches different epochs, so an
+exact epoch made the same shape unreviewable across shards.
 Quoted business literals and comments are preserved. Changing a view's bounds
 expires its fingerprint even when submitted SQL and EXPLAIN stay identical;
 unrelated view definitions do not affect it. Actual SQL is always used
@@ -401,11 +408,10 @@ Receipt snapshots use `receipt_access_epoch`; ordinary snapshots use
 `resource_access_epoch`. The table name stays in the fingerprint. Mixed tables
 or additional gates retain their exact literals.
 
-The scoped Overview baseline SELECT opts into the existing `PointPlanSQLHash`
-rule for its single admitted point-snapshot epoch. This applies only to the
-`overview_visits` read fixing `scope_ref='builtin:overview'`; other route pins
-retain their existing rules. Business SQL and scope literals, referenced views,
-findings and the full ordered plan remain exact.
+The scoped Overview baseline SELECT is one such admitted point-snapshot read:
+its single epoch gate is normalized by the same rule. Its business SQL and
+scope literals, referenced views, findings and the full ordered plan remain
+exact.
 
 Receipt-stream cases retain the private-thread 200/404 case and add a public
 thread for both principals. Initial and fresh payloads must have valid receipt
@@ -456,7 +462,16 @@ Go, module dependencies, local replacement modules, fixture/performance-harness
 code, inventories and relevant text assets. Release-version metadata, unrelated
 tests and the self-referential budget manifest are excluded. A changed or added
 input expires the allowance in the advisory scale tier before corpus construction;
-remeasure the linked P1 instead of copying the hash automatically. The cheap
+remeasure the linked P1 instead of copying the hash automatically. To remeasure,
+dispatch the workflow at the current source, download every
+`core-performance-routes-N` artifact, and run
+`scripts/refresh-performance-allowances.py <dir> --write --summary <file>`. It
+re-pins only entries whose measurement fits their reviewed ceiling, tightens each
+to the measurement plus the headroom below (never above the old ceiling), retires
+entries the ordinary budget covers, and leaves the rest expired for review. The
+coverage checker recomputes the same pin in Python;
+`TestPerformanceRuntimeSourcePinMatchesShardChecker` keeps the two walkers
+identical. The cheap
 inventory check always requires valid source hashes and finite exact entries,
 but freshness does not gate ordinary CI. All other
 routes retain their ordinary count ceilings. Remove entries as those repairs land.
@@ -528,6 +543,16 @@ followed by the existing exact/external target-key indexes. It no longer scans
 unrelated cards, wakeups or source-owned metadata per vertex. The existing
 denied closure still scales with denied roots and reachable identities; this
 does not retire all SCA-663 authorization or collection exceptions.
+
+The compact-ledger cutover (#381) doubled every exact-edge recursive arm, one
+per ledger, each gated by a control-row subquery that SQLite tests only after
+the arm's probe. On this fixture's legacy ledger the cold denied closure grew
+from about 1.24M to 1,785,428 VM instructions and failed the 1.5M overhead
+bound. The closure now carries the root's ledger selection on each vertex
+(1,517,582 with both arms), and request captures compile only the ledger their
+pool (or, for a new pool, the process) last observed, verified inside the
+capturing statement: 1,330,391, with the same denied set and no extra query.
+The residual over the pre-cutover closure is fixture growth, not ledger work.
 
 These fresh-pool samples keep the OS file cache warm and do not establish a
 physical cold-disk or hosted-network bound. They do not reproduce the reported

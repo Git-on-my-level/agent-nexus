@@ -56,7 +56,13 @@ supported after this format transition; reader rollback uses the current binary.
 The compact target index stores 32-byte digest BLOBs. Each authorization probe
 uses that index followed by the raw integer primary key. Legacy and compact SQL
 arms are separately indexed and gated by the persisted mode inside the same
-statement. Cached denial snapshots retain their existing epoch check/fallback.
+statement: a recursive closure reads the mode once at its root and carries it
+on every vertex, so the inactive arm is skipped before its probe. Request
+denial captures go further and compile only the ledger last observed (per
+pool, else the process's latest); the capturing statement returns the live mode
+from its own snapshot, and a capture built for the other ledger is discarded
+and recomputed with both gated arms before it is used or cached.
+Cached denial snapshots retain their existing epoch check/fallback.
 Receipt ancestry reads use the same selected ledger. Overview's public storage
 interface and policy remain unchanged.
 

@@ -681,7 +681,7 @@ func TestPerformanceRoutes(t *testing.T) {
 						}
 						analysisSQL := perfguard.AnalysisSQL(s.SQL, views)
 						findings := perfguard.Findings(analysisSQL, plan, large, functions, aggregates)
-						hash := performancePlanSQLHash(analysisSQL)
+						hash := perfguard.CompilerPlanSQLHash(analysisSQL) // shard-independent snapshot epochs
 						planHash := perfguard.PlanHash(plan)
 						reportKey := hash + "/" + planHash
 						if len(findings) > 0 {

@@ -80,17 +80,18 @@ func (s *Store) promiseNotesBatch(ctx context.Context, ids []string) (map[string
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT page.value,n.event_id,n.author,n.ts,COALESCE(n.next_at,''),n.next_what,n.evidence,COALESCE(latest.payload_json,'')
-		FROM json_each(?) page
-		JOIN brief_notes n ON n.event_id IN (SELECT event_id FROM brief_notes WHERE card_id=page.value ORDER BY ts DESC LIMIT ?)
-		LEFT JOIN (
-			SELECT x.card_id, e.payload_json
-			FROM json_each(?) ids
-			JOIN brief_notes x ON x.event_id=(
+	// Resolve the newest live note once per card, in the materialized page that
+	// drives the join. As a LEFT JOINed subquery it was re-evaluated for every
+	// returned note row (behind an automatic index), walking each card's hidden
+	// notes again behind the visibility filter.
+	rows, err := s.db.QueryContext(ctx, `WITH page(card_id,payload_json) AS MATERIALIZED (
+			SELECT ids.value,(SELECT e.payload_json FROM events e WHERE e.id=(
 				SELECT y.event_id FROM brief_notes y JOIN events ev ON ev.id=y.event_id
-				WHERE y.card_id=ids.value AND COALESCE(ev.trashed_at,'')='' ORDER BY y.ts DESC LIMIT 1)
-			JOIN events e ON e.id=x.event_id
-		) latest ON latest.card_id=page.value`, string(encoded), plans.MaxPromiseNotes, string(encoded))
+				WHERE y.card_id=ids.value AND COALESCE(ev.trashed_at,'')='' ORDER BY y.ts DESC LIMIT 1))
+			FROM json_each(?) ids)
+		SELECT page.card_id,n.event_id,n.author,n.ts,COALESCE(n.next_at,''),n.next_what,n.evidence,COALESCE(page.payload_json,'')
+		FROM page
+		JOIN brief_notes n ON n.event_id IN (SELECT event_id FROM brief_notes WHERE card_id=page.card_id ORDER BY ts DESC LIMIT ?)`, string(encoded), plans.MaxPromiseNotes)
 	if err != nil {
 		return nil, nil, err
 	}
