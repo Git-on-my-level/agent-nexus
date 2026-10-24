@@ -88,6 +88,7 @@ type TopicListFilter struct {
 }
 
 type EventListFilter struct {
+	ReportEventIDs []string
 	// ReportSubjects filters payload subjects and related refs before report budgets.
 	ReportSubjects bool
 	Types          []string
@@ -2313,6 +2314,11 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		query += ` AND ` + reportEventLifecycleSQL(ctx)
 	}
 	args := make([]any, 0)
+	if filter.ReportEventIDs != nil {
+		encoded, _ := json.Marshal(filter.ReportEventIDs)
+		query += ` AND id IN (SELECT value FROM json_each(?))`
+		args = append(args, string(encoded))
+	}
 	filterTypes := filter.Types
 	explicitTypeFilter := len(dedupeStrings(filter.Types)) > 0
 	if strings.EqualFold(strings.TrimSpace(filter.Preset), "home_feed") {

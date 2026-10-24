@@ -641,6 +641,7 @@ func (s *Store) ListAllWork(ctx context.Context) ([]map[string]any, error) {
 // ReportWorkFilter selects a bounded candidate set before projection. BoardIDs
 // are resolved IDs, not authored SQL or handles. Each scope needs only one read.
 type ReportWorkFilter struct {
+	Collection              string
 	BoardIDs                []string
 	CardID                  string
 	ProjectRef              string
@@ -691,6 +692,16 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 		from = `work_metadata m INDEXED BY idx_work_metadata_project CROSS JOIN cards c ON c.id=m.card_id LEFT JOIN boards b ON b.id=c.board_id`
 		where += ` AND json_extract(m.metadata_json,'$.project_ref')=?`
 		args = append(args, filter.ProjectRef)
+	}
+	if filter.Collection == "initiatives" {
+		where += ` AND COALESCE(m.authority,'nexus')='nexus' AND c.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')='')`
+	}
+	if filter.Collection == "loops" {
+		if filter.ProjectRef == "" {
+			from = `brief_initiatives bi CROSS JOIN cards c ON c.id=bi.card_id LEFT JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id`
+			where += ` AND bi.loop_annotated=1`
+		}
+		where += ` AND json_type(m.metadata_json,'$.cadence')='object'`
 	}
 	if len(filter.BoardIDs) > 0 {
 		where += ` AND c.board_id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(filter.BoardIDs)), ",") + `)`

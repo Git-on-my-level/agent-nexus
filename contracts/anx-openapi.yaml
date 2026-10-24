@@ -3697,6 +3697,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/DocumentID'
         - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Opt in to computed work_summary and summary aliases on native card panels.}
+        - {name: panels, in: query, schema: {type: string, maxLength: 2591}, description: Comma-separated unique panel IDs (at most 32). Unknown IDs are invalid. Omit to render every panel.}
       responses:
         '200':
           description: Live report panels
@@ -5705,6 +5706,65 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OverviewChanges' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /workspace/dashboard/pins:
+    get:
+      x-anx-agent-notes: Pins belong to the authenticated principal. No for or actor override is accepted.
+      operationId: listDashboardPins
+      summary: Read your ordered dashboard pins, falling back to the workspace default.
+      tags: [workspace]
+      x-anx-surface: projection
+      x-anx-command-id: workspace.dashboard.pins.list
+      x-anx-cli-path: workspace dashboard pins list
+      x-anx-why: Read the requesting principal's dashboard tabs.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns document_refs and source (personal or workspace_default).
+      x-anx-error-codes: [auth_required, forbidden, unavailable]
+      x-anx-concepts: [workspace, docs]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Visible pinned dashboards in order; inaccessible or inactive documents are omitted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardPins'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+    put:
+      x-anx-agent-notes: Replace all pins atomically in order. Pass an empty array to return to the workspace default.
+      operationId: setDashboardPins
+      summary: Replace your ordered pins; an empty list returns to the workspace default.
+      tags: [workspace]
+      x-anx-surface: canonical
+      x-anx-command-id: workspace.dashboard.pins.set
+      x-anx-cli-path: workspace dashboard pins set
+      x-anx-why: Choose up to twelve dashboards for the requesting principal.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns the effective visible dashboard pins.
+      x-anx-error-codes: [auth_required, forbidden, invalid_request, not_found, unavailable]
+      x-anx-concepts: [workspace, docs]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [document_refs]
+              properties:
+                request_key: {type: string, maxLength: 256, description: Persist and reuse this key until the mutation result is confirmed; keyed writes atomically replay the original result.}
+                document_refs: {type: array, maxItems: 12, uniqueItems: true, items: {type: string, maxLength: 256}}
+      responses:
+        '200':
+          description: Effective pins
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardPins'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
 
   /workspace/dashboard/reports:
     get:
@@ -9345,14 +9405,15 @@ components:
             $ref: '#/components/schemas/LiveReportPanel'
     LiveReportPanel:
       type: object
-      required: [id, type, status, observed_at, truncated, data, provenance_class]
+      required: [id, type, role, status, observed_at, truncated, data, provenance_class]
       properties:
         id: {type: string}
-        type: {type: string, enum: [live-loops, live-loop, live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline, explanation, milestone-timeline, dependency-diagram, artifact-preview, callout, comparison, chart, metric, metric-strip, table, metric-chart, evidence-table]}
+        type: {type: string, enum: [live-collection, live-loops, live-loop, live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline, explanation, milestone-timeline, dependency-diagram, artifact-preview, callout, comparison, chart, metric, metric-strip, table, metric-chart, evidence-table]}
         status: {type: string, enum: [ok, stale, unavailable]}
         observed_at: {type: string, format: date-time, nullable: true}
         truncated: {type: boolean}
         message: {type: string}
+        role: {type: string, enum: [primary, secondary, context], description: Resolved panel role; defaults by type.}
         provenance_class: {type: string, enum: [live, authored], description: Computed from the panel type and source binding, never claimed by the report author.}
         author: {type: string, description: Authored panel author from the report definition.}
         authored_at: {type: string, format: date-time}
@@ -9386,10 +9447,101 @@ components:
             Activity returns items (ref,type,summary,actor_id,ts,count,actor_label,subject,verb,detail,impact).
             subject is null or an access-filtered current item (ref,title,kind), where kind is initiative, card, ask, doc, board or topic.
             impact is high, normal or low. detail is short plain text (at most 140 characters). Series bindings return the panel type's static data shape, live provenance and freshness deadlines.
+    DashboardPins:
+      type: object
+      required: [document_refs, source]
+      properties:
+        document_refs: {type: array, maxItems: 12, uniqueItems: true, items: {type: string}}
+        source: {type: string, enum: [personal, workspace_default]}
+    LiveCollectionData:
+      type: object
+      required: [collection, states, groups, counts, has_more]
+      properties:
+        collection: {type: string, enum: [initiatives, loops, agents]}
+        states:
+          type: array
+          items:
+            type: object
+            required: [key, label, tone]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              tone: {type: string, enum: [attention, warning, quiet, neutral, good]}
+        groups:
+          type: array
+          items:
+            type: object
+            required: [key, label, rows]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              rows: {type: array, maxItems: 48, items: {$ref: '#/components/schemas/LiveCollectionRow'}}
+        counts: {type: object, additionalProperties: {type: integer, minimum: 0}, description: Counts over the admitted reader-visible cohort before status and display limits.}
+        has_more: {type: boolean}
+    LiveCollectionRow:
+      type: object
+      required: [ref, title, subtitle, owner, state, progress, time, activity, next_actor, updated_at]
+      properties:
+        ref: {type: string}
+        title: {type: string}
+        subtitle: {type: string, nullable: true}
+        owner: {nullable: true, allOf: [{$ref: '#/components/schemas/CollectionPrincipal'}]}
+        state: {type: string}
+        progress:
+          type: object
+          required: [kind, label]
+          properties:
+            kind: {type: string, enum: [segments, spark, label]}
+            label: {type: string}
+            direction: {type: string, nullable: true, enum: [up, down]}
+            segments:
+              type: array
+              maxItems: 200
+              items:
+                type: object
+                required: [label, status]
+                properties:
+                  label: {type: string}
+                  status: {type: string, enum: [done, current, blocked, todo]}
+            points:
+              type: array
+              maxItems: 60
+              items:
+                type: object
+                required: [t, v]
+                properties:
+                  t: {type: string, format: date-time}
+                  v: {type: number}
+        time:
+          type: object
+          nullable: true
+          required: [label, at, tone]
+          properties:
+            label: {type: string}
+            at: {type: string, format: date-time, nullable: true}
+            tone: {type: string, enum: [warning, neutral]}
+        activity: {type: array, minItems: 14, maxItems: 14, items: {type: integer, minimum: 0}}
+        next_actor:
+          type: object
+          nullable: true
+          required: [kind, ref, label, is_viewer]
+          properties:
+            kind: {type: string, enum: [human, agent]}
+            ref: {type: string, nullable: true}
+            label: {type: string}
+            is_viewer: {type: boolean}
+        updated_at: {type: string, format: date-time}
+    CollectionPrincipal:
+      type: object
+      required: [ref, label]
+      properties:
+        ref: {type: string}
+        label: {type: string}
     LiveReportQuery:
       type: object
       additionalProperties: false
       description: >
+        live-collection accepts collection (initiatives, loops, agents), project_ref, status (state key array), group_by (project or none), limit (1..48, default 24); it returns LiveCollectionData. Live-activity also accepts subject_refs and collection (initiatives or loops), intersected when both are supplied.
         live-loops accepts board (default initiatives board), health (comma list), limit (1..48, default 24). live-loop requires card.
         Data-only query stored in a version 1 live panel's data field. Initiatives
         allow board_refs, project_ref, card_ref, limit, sort; work mix allows
@@ -9416,10 +9568,16 @@ components:
         answered_only: {type: boolean, default: false}
         answered_within_hours: {type: integer, minimum: 1, maximum: 720, default: 168}
         sort: {type: string, enum: [priority, updated, title], default: priority}
-        group_by: {type: string, enum: [phase, board], default: phase}
+        collection: {type: string, enum: [initiatives, loops, agents], description: Required on live-collection; live-activity accepts initiatives or loops.}
+        subject_refs: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, maxLength: 2048}, description: Scope live-activity to these subjects.}
+        group_by: {type: string, enum: [phase, board, project, none], description: live-collection defaults to project; work mix defaults to phase.}
         label: {type: string, maxLength: 128, description: Exact match in work labels.}
         role: {type: string, maxLength: 128, description: Exact match in work roles.}
-        status: {type: string, maxLength: 128, description: Exact card phase.}
+        status:
+          description: Exact card phase for live-cards; array of state keys for live-collection.
+          oneOf:
+            - {type: string, maxLength: 128}
+            - {type: array, maxItems: 8, uniqueItems: true, items: {type: string, maxLength: 32}}
     HumanInviteCreateRequest:
       type: object
       additionalProperties: false
@@ -11201,6 +11359,7 @@ components:
       additionalProperties: false
       required: [metric, direction]
       properties:
+        label: {type: string, maxLength: 200}
         metric: {type: string, maxLength: 120, pattern: '^[a-z][a-z0-9_.-]{0,119}$'}
         direction: {type: string, enum: [up, down]}
         target: {type: number}
@@ -14178,6 +14337,7 @@ components:
       type: object
       required: [metric, direction, target, unit, latest, best, baseline, points]
       properties:
+        label: {type: string, nullable: true, maxLength: 200}
         metric: {type: string}
         direction: {type: string, enum: [up, down]}
         target: {type: number, nullable: true}

@@ -217,7 +217,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 	// Allocate once on the payload itself, before normalization or transport retries.
 	// An explicitly supplied key always wins; identical intentional creates get new keys.
 	switch commandID {
-	case "cards.create", "boards.create", "topics.create", "docs.create", "boards.cards.add", "boards.cards.batch_add":
+	case "workspace.dashboard.pins.set", "cards.create", "boards.create", "topics.create", "docs.create", "boards.cards.add", "boards.cards.batch_add":
 		if payload, ok := body.(map[string]any); ok && strings.TrimSpace(anyString(payload["request_key"])) == "" {
 			key := make([]byte, 16)
 			if _, err := rand.Read(key); err != nil {
