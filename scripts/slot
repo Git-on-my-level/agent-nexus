@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Run a command while holding one of N per-user host slots.
+
+    slot run <class> -- <command> [args...]
+
+A slot is an flock(2) held on an open descriptor for a file under
+${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp/anx-<uid>}}/anx-slots/<class>, so a holder
+that dies for any reason -- kill -9 included -- releases its slot when the
+kernel closes the descriptor. Capacity for a class comes from
+ANX_SLOTS_<CLASS>, then ~/.config/hostslots.json ({"<class>": n}), then
+max(1, cpus/6). While every slot is busy the wrapper polls and prints a
+single wait line. The command runs as a child of the wrapper in its own
+session, so a terminal interrupt reaches it once, through the wrapper; its
+exit status becomes the wrapper's, and SIGINT/SIGTERM/SIGHUP are forwarded so
+a stopped wrapper takes its child down instead of leaking it. An interrupt
+while still waiting for a slot exits 128+signal (130 for Ctrl-C) with no
+traceback. After acquiring, the wrapper re-checks the lock path still resolves
+to the locked inode, so an unlinked lock file cannot admit a second holder.
+"""
+
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+
+
+POLL_SECONDS = 0.2
+FORWARDED_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+def env_name(class_name):
+    return "ANX_SLOTS_" + re.sub(r"[^A-Za-z0-9]", "_", class_name).upper()
+
+
+def parsed_capacity(value):
+    """A strictly positive integer capacity, or None when value says nothing."""
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    return count if count >= 1 else None
+
+
+def capacity(class_name):
+    """ANX_SLOTS_<CLASS>, then ~/.config/hostslots.json, then max(1, cpus/6)."""
+    from_env = parsed_capacity(os.environ.get(env_name(class_name)))
+    if from_env is not None:
+        return from_env
+    try:
+        config = json.loads((Path.home() / ".config" / "hostslots.json").read_text())
+        from_file = parsed_capacity(config.get(class_name)) if isinstance(config, dict) else None
+        if from_file is not None:
+            return from_file
+    except (OSError, ValueError):
+        pass
+    return max(1, (os.cpu_count() or 1) // 6)
+
+
+def slot_dir(class_name):
+    """Per-user lock directory; /tmp alone is shared, so key it by uid there."""
+    base = (os.environ.get("XDG_RUNTIME_DIR") or os.environ.get("TMPDIR")
+            or f"/tmp/anx-{os.getuid()}")
+    return Path(base) / "anx-slots" / class_name
+
+
+def acquire(directory, count):
+    """Take a free slot: (fd, index), or None when all count are held.
+
+    The flock pins an inode, not a path: if something unlinks the lock file
+    mid-acquire (tmpwatch-style cleanup), the descriptor would hold a file
+    nothing else can see while a fresh inode at the same path admits a second
+    holder. Re-check that the path still resolves to the locked inode and
+    retry onto the recreated file when it does not.
+    """
+    for index in range(count):
+        path = directory / f"{index}.lock"
+        for _retry in range(2):  # once more when the lock file is replaced mid-acquire
+            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held = os.fstat(fd)
+                current = os.stat(path)
+            except OSError:  # busy, or unlinked before we could re-check
+                os.close(fd)
+                break
+            if (current.st_dev, current.st_ino) == (held.st_dev, held.st_ino):
+                return fd, index
+            os.close(fd)  # the path was recreated under us; lock the file now at it
+    return None
+
+
+def run(class_name, argv):
+    count = capacity(class_name)
+    directory = slot_dir(class_name)
+    directory.mkdir(parents=True, exist_ok=True)
+    waited = False
+    child = None
+    pending = []
+    waiting = True
+
+    def forward(number, _frame):
+        # With no child yet there is nothing to relay: an interrupt while
+        # waiting for a slot stops the wrapper the way a shell would,
+        # 128+signal and no traceback. A signal can also land mid-spawn,
+        # while the forked command is already running but Popen has not yet
+        # assigned `child`; those are queued and replayed at the child.
+        if child is None:
+            if waiting:
+                raise SystemExit(128 + number)
+            pending.append(number)
+        else:
+            child.send_signal(number)
+
+    for number in FORWARDED_SIGNALS:
+        signal.signal(number, forward)
+    while True:
+        taken = acquire(directory, count)
+        if taken is not None:
+            break
+        if not waited:
+            print(f"slot: all {count} '{class_name}' slots busy; waiting for one to free",
+                  flush=True)
+            waited = True
+        time.sleep(POLL_SECONDS)
+    fd, _index = taken
+    waiting = False
+    try:
+        # Own session: sharing the wrapper's process group would deliver a
+        # terminal interrupt to the child directly *and* through the forward
+        # above, so the child must receive signals through the wrapper only.
+        child = subprocess.Popen(argv, start_new_session=True)
+        while pending:
+            child.send_signal(pending.pop(0))
+        code = child.wait()
+    finally:
+        os.close(fd)
+    return code if code >= 0 else 128 - code
+
+
+def main(argv):
+    if len(argv) >= 4 and argv[0] == "run" and argv[2] == "--" and argv[1] and argv[3]:
+        return run(argv[1], argv[3:])
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

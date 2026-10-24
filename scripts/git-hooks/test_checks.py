@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -119,6 +120,86 @@ class RepoTest(unittest.TestCase):
     def test_docs_only_do_not_run_suites(self):
         self.assertEqual(checks.selected_modules({"AGENTS.md", "docs/architecture/example.md"}), set())
 
+    def write_local_module_fixture(self):
+        """Local modules linked the way the real repo links them: `core`
+        requires and replaces ../tests/channels (a test-only import), and a
+        stand-alone tools module nothing depends on."""
+        self.git("rm", "-q", "core/a.go")
+        self.write("core/go.mod",
+                   "module fake\n\ngo 1.21\n\nrequire local/test-channels v0.0.0\n\n"
+                   "replace local/test-channels => ../tests/channels\n")
+        self.write("core/internal/pm/pm.go", "package pm\n\nvar PM int\n")
+        self.write("core/internal/pm/channels_e2e_test.go",
+                   "package pm\n\nimport (\n\t\"testing\"\n\n\tchannels \"local/test-channels\"\n)\n\n"
+                   "func TestChannels(t *testing.T) { channels.Telegram() }\n")
+        self.write("core/internal/server/server.go",
+                   "package server\n\nimport \"fake/internal/pm\"\n\nvar _ = pm.PM\n")
+        self.write("tests/channels/go.mod", "module local/test-channels\n\ngo 1.21\n")
+        self.write("tests/channels/telegram.go", "package channels\n\nfunc Telegram() {}\n")
+        self.write("tests/channels/fake_test.go",
+                   "package channels\n\nimport \"testing\"\n\nfunc TestFake(t *testing.T) {}\n")
+        self.write("tools/recorder/go.mod", "module local/recorder\n\ngo 1.21\n")
+        self.write("tools/recorder/rec.go", "package recorder\n\nfunc Record() {}\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "local modules")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def test_a_changed_local_module_selects_itself_and_its_dependents(self):
+        self.write_local_module_fixture()
+        # The module's own suite, the dependent module, and nothing else.
+        self.assertEqual(checks.selected_modules({"tests/channels/telegram.go"}),
+                         {"tests/channels", "core"})
+        self.assertEqual(checks.selected_modules({"tools/recorder/rec.go"}),
+                         {"tools/recorder"})
+        # Fan-out covers every discovered module, not only the product four.
+        self.assertEqual(checks.selected_modules({"Makefile"}),
+                         set(checks.MODULES) | {"tests/channels", "tools/recorder"})
+
+    def test_a_local_module_change_runs_its_importers_within_the_dependent(self):
+        self.write_local_module_fixture()
+        # Inside core, the replaced module behaves like a changed package: the
+        # packages that import it (test imports included) run, then their
+        # dependents -- never the whole dependent module, never nothing.
+        self.assertEqual(checks.go_affected("core", {"tests/channels/telegram.go"}),
+                         (["./internal/pm"], ["./internal/server"]))
+        # The changed module's own suite runs in its own directory.
+        self.assertEqual(checks.go_affected("tests/channels", {"tests/channels/telegram.go"}),
+                         (["./."], []))
+
+    def test_a_local_module_change_runs_both_module_suites_at_push(self):
+        self.write_local_module_fixture()
+        started, start = self.fake_dependents(0)
+        with patch.object(checks, "run") as run, patch.object(checks, "start", start):
+            checks.fast_tests({"tests/channels/telegram.go"}, "abc123")
+        runs = [(call.args, call.kwargs.get("cwd")) for call in run.call_args_list]
+        self.assertIn((("go", "test", "-short", "./internal/pm"), self.root / "core"), runs)
+        self.assertIn((("go", "test", "-short", "./."), self.root / "tests" / "channels"), runs)
+        self.assertEqual(started.argv, ("go", "test", "-short", "./internal/server"))
+
+    def test_commit_time_vet_covers_local_modules_and_their_dependents(self):
+        self.write_local_module_fixture()
+        self.write("tests/channels/telegram.go",
+                   "package channels\n\nfunc Telegram() { _ = 1 }\n")
+        self.git("add", ".")
+        with patch.object(checks, "run") as run, patch.object(checks, "contract_drift"), \
+                patch.object(checks, "route_notice"):
+            checks.static_checks(checks.changed_paths("static"))
+        vetted = {call.kwargs.get("cwd") for call in run.call_args_list
+                  if call.args == ("go", "vet", "./...")}
+        self.assertIn(self.root / "tests/channels", vetted)
+        self.assertIn(self.root / "core", vetted)
+
+    def test_untracked_files_in_a_local_module_cannot_mask_staged_errors(self):
+        self.write_local_module_fixture()
+        self.write("tests/channels/telegram.go",
+                   "package channels\n\nfunc Telegram() { _ = 1 }\n")
+        self.git("add", ".")
+        self.write("tests/channels/helper.go", "package channels\n\nfunc Helper() {}\n")
+        with patch.object(checks, "run"), patch.object(checks, "contract_drift"), \
+                patch.object(checks, "route_notice"):
+            with self.assertRaisesRegex(RuntimeError, "tests/channels/helper.go"):
+                checks.static_checks(checks.changed_paths("static"))
+
     def root_package_graph(self, module):
         """Single package at the module root, matching this fixture's layout."""
         path = module + "/root"
@@ -165,6 +246,91 @@ class RepoTest(unittest.TestCase):
         self.assertIn(whole, self.fast_commands({"web-ui/vitest.config.js"}, "abc123"))
         self.assertIn(whole, self.fast_commands({"web-ui/tests/mocks/app-stores.js"}, "abc123"))
         self.assertIn(whole, self.fast_commands({"pnpm-lock.yaml"}, "abc123"))
+
+    def test_untracked_web_ui_work_widens_to_the_whole_unit_suite(self):
+        # `vitest --changed` reads git's diff, which never lists untracked
+        # paths, and --passWithNoTests would hide the empty selection.
+        related = ("pnpm", "-C", "web-ui", "exec", "vitest", "run", "--changed", "abc123",
+                   "--passWithNoTests")
+        whole = ("pnpm", "-C", "web-ui", "run", "test:unit")
+        self.write("web-ui/src/lib/new.js", "export {}\n")
+        with patch.object(checks, "ui_source_scanning_tests", lambda: []):
+            commands = self.fast_commands({"web-ui/src/lib/a.js"}, "abc123")
+        self.assertIn(whole, commands)
+        self.assertNotIn(related, commands)
+
+    def test_the_fast_tier_bases_selection_on_the_merge_base(self):
+        self.write_go_module()
+        self.git("checkout", "-qb", "topic")
+        self.write("web-ui/src/lib/a.js", "export {}\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "ui work")
+        self.git("checkout", "-q", "main")
+        self.write("mcp/a.go", "package mcp\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "main advances")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.git("checkout", "-q", "topic")
+        # Neither the branch tip nor main's tip: only their merge base.
+        base = checks.merge_base()
+        self.assertNotEqual(base, self.git("rev-parse", "HEAD").decode().strip())
+        self.assertNotEqual(base, self.git("rev-parse", "origin/main").decode().strip())
+        with patch.object(checks, "fast_tests") as fast_tests:
+            with patch.object(sys, "argv", ["checks.py", "fast"]):
+                checks.main()
+        self.assertEqual(fast_tests.call_args.args[1], base)
+
+    def test_env_flag_asks_for_every_package(self):
+        self.write_go_module()
+        self.write("core/internal/leaf/leaf.go", "package leaf\n\nfunc Leaf() int { return 2 }\n")
+        with patch.object(checks, "run") as run, \
+                patch.object(checks, "go_package_graph", self.root_package_graph), \
+                patch.object(sys, "argv", ["checks.py", "fast"]):
+            checks.main()
+            self.assertIn(("go", "test", "-short", "./."),
+                          [call.args for call in run.call_args_list])
+            self.assertNotIn(("go", "test", "-short", "./..."),
+                             [call.args for call in run.call_args_list])
+            run.reset_mock()
+            with patch.dict(os.environ, {"ANX_PREPUSH_FULL": "1"}):
+                checks.main()
+        self.assertIn(("go", "test", "-short", "./..."),
+                      [call.args for call in run.call_args_list])
+
+    def test_heavy_phases_run_under_a_host_slot(self):
+        self.write_go_module()
+        started, factory = self.fake_dependents(0)
+        with patch.object(checks, "run") as run, \
+                patch.object(checks, "start", side_effect=factory) as start, \
+                patch.object(checks, "ui_source_scanning_tests", lambda: ["tests/unit/guard.test.js"]):
+            checks.fast_tests({"core/internal/leaf/leaf.go", "web-ui/src/lib/a.js",
+                               "scripts/e2e-smoke"}, "abc123")
+        slotted, unslotted = [], []
+        for call in run.call_args_list:
+            (slotted if call.kwargs.get("slot") == "tests" else unslotted).append(call.args)
+        # Go tests, Vitest phases and the e2e lifecycle take a slot...
+        self.assertIn(("go", "test", "-short", "./internal/leaf"), slotted)
+        self.assertTrue(any(argv[:3] == ("pnpm", "-C", "web-ui") and "vitest" in argv
+                            for argv in slotted))
+        self.assertIn(("bash", "scripts/tests/test_e2e_smoke_lifecycle.sh"), slotted)
+        self.assertEqual(start.call_args.kwargs.get("slot"), "tests")
+        # ...while unit-test discovery never does.
+        self.assertTrue(any(argv[:3] == ("python3", "-B", "-m") for argv in unslotted))
+
+    def test_run_wraps_slotted_commands_with_the_slot_wrapper(self):
+        stub = self.root / "scripts" / "slot"
+        stub.parent.mkdir(parents=True, exist_ok=True)
+        record = self.root / "recorded.json"
+        stub.write_text("#!/usr/bin/env python3\n"
+                        "import json, os, pathlib, sys\n"
+                        "pathlib.Path(os.environ['RECORD']).write_text(json.dumps(sys.argv[1:]))\n")
+        stub.chmod(0o755)
+        with patch("sys.stdout", new_callable=io.StringIO):
+            checks.run("true", extra_env={"RECORD": str(record)}, slot="tests")
+        self.assertEqual(json.loads(record.read_text()), ["run", "tests", "--", "true"])
+        stub.unlink()
+        with self.assertRaisesRegex(RuntimeError, "scripts/slot"):
+            checks.run("true", slot="tests")
 
     def write_go_module(self):
         # Like the real modules, the module root holds no package of its own.

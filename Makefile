@@ -56,7 +56,7 @@ web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile +
 check-static: ## Offline static checks of staged changes and generated-contract drift (STATIC_ARGS=--all for all files)
 	$(PYTHON) -B scripts/git-hooks/checks.py static $(STATIC_ARGS)
 
-test-fast: ## Changed-package Go -short and related Vitest units; TEST_FAST_ARGS=--all checks all modules
+test-fast: ## Changed-package Go -short and related Vitest units; TEST_FAST_ARGS=--all (or ANX_PREPUSH_FULL=1) checks all modules
 	$(PYTHON) -B scripts/git-hooks/checks.py fast $(TEST_FAST_ARGS)
 
 # Quiet recipe: the commit hook surfaces this target's output verbatim.
