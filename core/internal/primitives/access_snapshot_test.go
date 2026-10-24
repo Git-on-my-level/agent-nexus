@@ -271,3 +271,54 @@ func TestResourceAccessReadCacheReleasesObsoleteEpochs(t *testing.T) {
 		t.Fatalf("retained %d epochs for one reader, want 1", count)
 	}
 }
+
+// A capture built for one exact-edge ledger rereads the selection in its own
+// snapshot. A stale per-pool guess must be recomputed, not cached: the inactive
+// ledger can be missing edges, which would hide a denial.
+func TestResourceAccessRequestSnapshotRejectsStaleLedger(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	private, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "private"}, "private", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PatchThread(ctx, "owner", private["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	referrer, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "referrer"}, "referrer", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the legacy exact ledger holds this edge; the compact ledger is empty
+	// until the migration worker certifies the workspace.
+	if _, err := ws.DB().ExecContext(ctx, `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('document',?,?)`, referrer["id"], "document:"+private["id"].(string)); err != nil {
+		t.Fatal(err)
+	}
+	var legacy, compact int
+	if err := ws.DB().QueryRowContext(ctx, `SELECT (SELECT count(*) FROM resource_access_exact_edges),(SELECT count(*) FROM resource_access_compact_edges),`+resourceaccess.CompactReaderSQL).Scan(&legacy, &compact, new(int)); err != nil || legacy == 0 || compact != 0 {
+		t.Fatalf("fixture needs a legacy-only edge: legacy=%d compact=%d err=%v", legacy, compact, err)
+	}
+	denied := func() bool {
+		t.Helper()
+		if _, err := ws.DB().ExecContext(ctx, `UPDATE resource_access_epoch SET version=version+1`); err != nil {
+			t.Fatal(err)
+		}
+		return !s.CanAccessResource(WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"}), "document", referrer["id"].(string))
+	}
+	if !denied() || predictedAccessLedger(ws.DB()) != resourceaccess.LegacyLedger {
+		t.Fatal("legacy capture missed its exact-edge denial or did not record its ledger")
+	}
+	rememberAccessLedger(ws.DB(), resourceaccess.CompactLedger)
+	if !denied() {
+		t.Fatal("stale compact ledger guess hid a legacy exact-edge denial")
+	}
+	if got := predictedAccessLedger(ws.DB()); got != resourceaccess.LegacyLedger {
+		t.Fatalf("stale guess was not replaced by the observed ledger: %v", got)
+	}
+}

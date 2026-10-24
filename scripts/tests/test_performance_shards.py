@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 
@@ -8,6 +9,16 @@ spec = importlib.util.spec_from_file_location(
 )
 coverage = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coverage)
+legacy_spec = importlib.util.spec_from_file_location(
+    "legacy", Path(__file__).parents[1] / "performance-legacy-shard.py"
+)
+legacy = importlib.util.module_from_spec(legacy_spec)
+legacy_spec.loader.exec_module(legacy)
+refresh_spec = importlib.util.spec_from_file_location(
+    "refresh", Path(__file__).parents[1] / "refresh-performance-allowances.py"
+)
+refresh = importlib.util.module_from_spec(refresh_spec)
+refresh_spec.loader.exec_module(refresh)
 
 
 class ExecutedCoverageTests(unittest.TestCase):
@@ -339,6 +350,106 @@ class ExecutedCoverageTests(unittest.TestCase):
         merged = coverage.merge_workers(self.routes, self.weights, fragments, self.hash)
         with self.assertRaises(AssertionError):
             self.validate([merged, *self.reports[1:]])
+
+
+class LegacyShardTests(unittest.TestCase):
+    def test_every_test_runs_exactly_once_within_balanced_shards(self):
+        tests = [("./internal/server", f"TestPerformance{i}") for i in range(30)]
+        tests += [("./internal/storage", "TestPerformanceUnweighted")]
+        weights = {name: (i % 7) * 20 for i, (_, name) in enumerate(tests)}
+        weights.pop("TestPerformanceUnweighted")
+        assigned, loads = legacy.partition(tests, weights, 4)
+        flat = [test for shard in assigned for test in shard]
+        self.assertEqual(sorted(flat), sorted(tests))
+        self.assertLessEqual(max(loads) - min(loads), 120)
+        reordered = legacy.partition(list(reversed(tests)), weights, 4)[0]
+        self.assertEqual(assigned, reordered)
+
+    def test_measured_weights_cover_known_heavy_tests(self):
+        weights = json.loads(
+            (Path(__file__).parents[1] / "performance-legacy-weights.json").read_text()
+        )
+        self.assertTrue(all(type(v) is int and v >= 0 for v in weights.values()))
+        self.assertIn("TestResourceAccessCommonReadPerformance", weights)
+
+
+class AllowanceRefreshTests(unittest.TestCase):
+    route = dict(
+        method="GET",
+        path="/series/{name}",
+        latency_ms=500,
+        max_queries=100,
+        max_rows=4608,
+        max_vm_steps=50000,
+    )
+
+    def entry(self, **overrides):
+        entry = dict(
+            method="GET",
+            path="/series/{name}",
+            principal="unauthorized",
+            latency_ms=109350,
+            max_queries=100,
+            max_rows=4608,
+            max_vm_steps=492282762,
+            issue="SCA-663",
+            issue_url="https://example.invalid/SCA-663",
+            reason="existing hazard",
+            core_source_sha256="0" * 64,
+        )
+        entry.update(overrides)
+        return entry
+
+    def samples(self, vm, elapsed, phase="warm"):
+        indexes = range(1, 6) if phase == "warm" else [0]
+        return [
+            dict(
+                method="GET",
+                path="/series/{name}",
+                principal="unauthorized",
+                cache_phase=phase,
+                sample=i,
+                queries=7,
+                rows=8,
+                vm_steps=vm,
+                elapsed_ms=elapsed,
+            )
+            for i in indexes
+        ]
+
+    def run_refresh(self, entry, samples):
+        report = dict(samples=samples)
+        return refresh.refresh([self.route], [entry], [report], "f" * 64)
+
+    def test_refresh_tightens_to_measurement_plus_documented_headroom(self):
+        kept, rows = self.run_refresh(self.entry(), self.samples(9395880, 1777))
+        self.assertEqual(rows[0][1], "refreshed")
+        self.assertEqual(kept[0]["core_source_sha256"], "f" * 64)
+        self.assertEqual(kept[0]["max_vm_steps"], 9395880 + 187918)
+        self.assertEqual(kept[0]["latency_ms"], 2150)  # 1777ms * 1.2, up to 50ms
+        self.assertEqual(kept[0]["max_rows"], 4608)  # below ordinary: ordinary
+
+    def test_refresh_never_widens_a_reviewed_ceiling(self):
+        entry = self.entry(max_vm_steps=9400000, latency_ms=2000)
+        kept, rows = self.run_refresh(entry, self.samples(9395880, 1777))
+        self.assertEqual(kept[0]["max_vm_steps"], 9400000)
+        self.assertEqual(kept[0]["latency_ms"], 2000)
+
+    def test_measurement_over_reviewed_ceiling_stays_expired(self):
+        entry = self.entry(max_vm_steps=1000000)
+        kept, rows = self.run_refresh(entry, self.samples(9395880, 1777))
+        self.assertTrue(rows[0][1].startswith("over reviewed ceiling"))
+        self.assertEqual(kept, [entry])
+
+    def test_ordinary_budget_retires_the_allowance(self):
+        kept, rows = self.run_refresh(self.entry(), self.samples(40000, 120))
+        self.assertEqual(kept, [])
+        self.assertTrue(rows[0][1].startswith("retired"))
+
+    def test_single_sample_phase_uses_secondary_maximum_only(self):
+        entry = self.entry(cache_phase="first_read", latency_ms=155250)
+        kept, _ = self.run_refresh(entry, self.samples(9395880, 1792, "first_read"))
+        self.assertEqual(kept[0]["latency_ms"], 500)
 
 
 if __name__ == "__main__":

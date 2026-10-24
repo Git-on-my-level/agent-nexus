@@ -185,18 +185,24 @@ def merge_workers(routes, weights, reports, expected_hash):
 
 
 def source_hash(root):
+    """Mirror core's performanceRuntimeSourceHash exactly; a Go test compares them."""
     paths = []
-    helpers = {
-        "auth_integration_test.go",
-        "stream_privacy_integration_test.go",
-        "notifications_integration_test.go",
+    # Fixture helpers are pinned by path; these two are pinned by name anywhere.
+    helper_paths = {
+        "core/internal/server/workspace_template_test.go",
+        "core/internal/server/auth_integration_test.go",
+        "core/internal/server/stream_privacy_integration_test.go",
+        "core/internal/server/notifications_integration_test.go",
+    }
+    helper_names = {
         "resource_access_performance_test.go",
         "resource_access_prepare_test.go",
     }
     for directory in ("core", "tests/channels", "contracts"):
         for path in (root / directory).rglob("*"):
             relative = path.relative_to(root)
-            if not path.is_file() or any(p.startswith(".") for p in relative.parts):
+            # Go skips dot directories, not dot files.
+            if not path.is_file() or any(p.startswith(".") for p in relative.parts[:-1]):
                 continue
             if relative.as_posix() in {
                 "core/internal/buildinfo/version_generated.go",
@@ -205,11 +211,13 @@ def source_hash(root):
                 continue
             if (
                 path.name.endswith("_test.go")
-                and path.name not in helpers
+                and relative.as_posix() not in helper_paths
+                and path.name not in helper_names
                 and not path.name.startswith("performance_")
             ):
                 continue
-            if path.suffix in {
+            dot = path.name.rfind(".")  # filepath.Ext semantics
+            if dot >= 0 and path.name[dot:] in {
                 ".go",
                 ".mod",
                 ".sum",
@@ -421,10 +429,16 @@ def validate(routes, weights, allowances, reports, expected_hash):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("reports", type=Path)
+    parser.add_argument("reports", type=Path, nargs="?")
     parser.add_argument("--merge-workers", type=Path)
+    parser.add_argument("--print-source-hash", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
+    if args.print_source_hash:
+        print(source_hash(root))
+        raise SystemExit(0)
+    if args.reports is None:
+        parser.error("reports is required")
     data = root / "core/internal/server/testdata"
     read = lambda name: json.loads((data / name).read_text())
     if args.merge_workers:

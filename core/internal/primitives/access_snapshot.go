@@ -162,6 +162,47 @@ var readDenials = struct {
 	bytes int
 }{rows: make(map[denialCacheKey]*denialSnapshot)}
 
+// The exact-edge ledger each pool's last denial capture observed, falling back
+// to the process's latest observation for a new pool (pools of one workspace
+// share its selection). A capture built for one ledger confirms it in the same
+// statement, so a stale entry costs one recomputation, never a closure from
+// the inactive ledger.
+var accessLedgers = struct {
+	sync.Mutex
+	keys    []*sql.DB
+	ledgers map[*sql.DB]resourceaccess.Ledger
+	latest  resourceaccess.Ledger
+}{ledgers: make(map[*sql.DB]resourceaccess.Ledger)}
+
+func predictedAccessLedger(db *sql.DB) resourceaccess.Ledger {
+	if db == nil {
+		return resourceaccess.SelectedLedger
+	}
+	accessLedgers.Lock()
+	defer accessLedgers.Unlock()
+	if ledger, ok := accessLedgers.ledgers[db]; ok {
+		return ledger
+	}
+	return accessLedgers.latest
+}
+
+func rememberAccessLedger(db *sql.DB, ledger resourceaccess.Ledger) {
+	if db == nil {
+		return
+	}
+	accessLedgers.Lock()
+	defer accessLedgers.Unlock()
+	if _, ok := accessLedgers.ledgers[db]; !ok {
+		if len(accessLedgers.keys) >= 32 {
+			delete(accessLedgers.ledgers, accessLedgers.keys[0])
+			accessLedgers.keys = slices.Delete(accessLedgers.keys, 0, 1)
+		}
+		accessLedgers.keys = append(accessLedgers.keys, db)
+	}
+	accessLedgers.ledgers[db] = ledger
+	accessLedgers.latest = ledger
+}
+
 func cachedReadDenial(db *sql.DB, scope AccessScope) *denialSnapshot {
 	return cachedReadDenialForEpoch(db, scope, "resource_access_epoch")
 }
@@ -259,35 +300,52 @@ func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable s
 			if raw != nil {
 				cached = cachedReadDenialForEpoch(raw, scope, epochTable)
 			}
-			candidate := &denialSnapshot{epochTable: epochTable}
-			var rows, refs sql.NullString
-			sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
-			var captureArgs []any
-			if cached != nil {
-				current := `(SELECT version FROM _anx_snapshot_epoch)`
-				roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
-				sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
-				captureArgs = []any{cached.epoch, cached.epoch}
-			}
-			sql = strings.ReplaceAll(sql, "main.resource_access_epoch", "main."+epochTable)
-			dest := []any{&candidate.epoch, &rows}
-			if epochTable == "receipt_access_epoch" {
-				refSQL := `COALESCE((SELECT json_group_array(json_array(kind,ref)) FROM (WITH ` + ownershipRefs("_anx_receipt_refs", "_anx_denied") + ` SELECT kind,ref FROM _anx_receipt_refs WHERE ref<>id)),'[]')`
+			// Probe only the exact-edge ledger last observed. The capture rereads
+			// the live selection in its own snapshot; a stale guess is discarded
+			// and recomputed with the in-statement selection.
+			ledger := predictedAccessLedger(raw)
+			for {
+				candidate := &denialSnapshot{epochTable: epochTable}
+				var rows, refs sql.NullString
+				var reader sql.NullInt64
+				sql := `WITH RECURSIVE ` + ownershipLedgerClosure("_anx_denied", deniedRootSQL(scope), false, ledger) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
+				var captureArgs []any
 				if cached != nil {
-					refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN NULL ELSE ` + refSQL + ` END`
-					captureArgs = append(captureArgs, cached.epoch)
+					current := `(SELECT version FROM _anx_snapshot_epoch)`
+					roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
+					sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipLedgerClosure("_anx_denied", roots, false, ledger) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN NULL ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
+					captureArgs = []any{cached.epoch, cached.epoch}
 				}
-				sql += "," + refSQL
-				dest = append(dest, &refs)
-			}
-			if err := db.QueryRowContext(c, sql, captureArgs...).Scan(dest...); err == nil {
+				sql = strings.ReplaceAll(sql, "main.resource_access_epoch", "main."+epochTable)
+				dest := []any{&candidate.epoch, &rows}
+				if epochTable == "receipt_access_epoch" {
+					refSQL := `COALESCE((SELECT json_group_array(json_array(kind,ref)) FROM (WITH ` + ownershipRefs("_anx_receipt_refs", "_anx_denied") + ` SELECT kind,ref FROM _anx_receipt_refs WHERE ref<>id)),'[]')`
+					if cached != nil {
+						refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN NULL ELSE ` + refSQL + ` END`
+						captureArgs = append(captureArgs, cached.epoch)
+					}
+					sql += "," + refSQL
+					dest = append(dest, &refs)
+				}
+				sql += "," + resourceaccess.CompactReaderSQL
+				dest = append(dest, &reader)
+				if err := db.QueryRowContext(c, sql, captureArgs...).Scan(dest...); err != nil {
+					break
+				}
+				observed := resourceaccess.ReaderLedger(reader.Valid, reader.Int64)
+				rememberAccessLedger(raw, observed)
 				if cached != nil && candidate.epoch == cached.epoch {
+					// The cached closure was validated; this one was not built.
 					state.snapshot = cached
+				} else if ledger != resourceaccess.SelectedLedger && ledger != observed {
+					ledger = resourceaccess.SelectedLedger
+					continue
 				} else if rows.Valid && (epochTable != "receipt_access_epoch" || refs.Valid) {
 					candidate.rows, candidate.refs = rows.String, refs.String
 					state.snapshot = candidate
 					rememberReadDenial(raw, scope, candidate)
 				}
+				break
 			}
 		}
 		state.Unlock()

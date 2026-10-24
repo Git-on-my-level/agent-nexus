@@ -22,7 +22,7 @@ func TestCompactAccessDenseFanoutBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	q := strings.Join(resourceaccess.ExactEdgeTerms("(SELECT 1) d", "", "1", []string{resourceaccess.AtomKeySQL("'document:dense'")}), " UNION ALL ")
+	q := strings.Join(resourceaccess.ExactEdgeTerms(resourceaccess.SelectedLedger, "(SELECT 1) d", "", resourceaccess.CompactReaderSQL, "1", []string{resourceaccess.AtomKeySQL("'document:dense'")}), " UNION ALL ")
 	var baseline uint64
 	for _, unrelated := range []int{0, 8192} {
 		if unrelated > 0 {

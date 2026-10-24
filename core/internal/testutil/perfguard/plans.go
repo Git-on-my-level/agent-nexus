@@ -45,6 +45,26 @@ func PointPlanSQLHash(q string) string {
 	return PlanSQLHash(q)
 }
 
+// The compiler opens point-snapshot and pinned-denial statements with exactly
+// one epoch literal. Route shards reach different epochs through different
+// write histories, so that literal is data, not shape.
+var compilerEpochPrefixes = []*regexp.Regexp{
+	regexp.MustCompile(`^\s*WITH RECURSIVE _anx_point_snapshot\(token\) AS MATERIALIZED \(SELECT \? WHERE COALESCE\(\(SELECT version FROM main\.resource_access_epoch WHERE singleton=1\),-1\)=([0-9]+)\),`),
+	regexp.MustCompile(`^\s*WITH RECURSIVE _anx_denied\(kind,id\) AS MATERIALIZED \(SELECT json_extract\(value,'\$\[0\]'\),json_extract\(value,'\$\[1\]'\) FROM json_each\(\?\) WHERE COALESCE\(\(SELECT version FROM main\.(?:resource|receipt)_access_epoch WHERE singleton=1\),-1\)=([0-9]+)\)`),
+}
+
+// CompilerPlanSQLHash normalizes the epoch literal of a point-snapshot or
+// pinned-denial prefix, then applies PlanSQLHash (which handles the two-gate
+// fresh closure). Business SQL, quoted values and comments stay exact.
+func CompilerPlanSQLHash(q string) string {
+	for _, re := range compilerEpochPrefixes {
+		if m := re.FindStringSubmatchIndex(q); m != nil && string(unquotedSQL(q)[m[2]:m[3]]) == q[m[2]:m[3]] {
+			return SQLHash(q[:m[2]] + "?" + q[m[3]:])
+		}
+	}
+	return PlanSQLHash(q)
+}
+
 // PlanSQLHash preserves the submitted SQL exactly except for the two epoch
 // values emitted by the authorization compiler. Those values are snapshot data,
 // not query structure, and change with fixture writes. Business literals and

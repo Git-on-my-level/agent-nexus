@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	urlpkg "net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -195,6 +196,26 @@ func TestPerformanceRuntimeSourcePin(t *testing.T) {
 		if hash() == before {
 			t.Fatalf("%s did not expire runtime pin", path)
 		}
+	}
+}
+
+// The coverage job recomputes the pin in Python. Any drift between the two
+// walkers marks every current-source report stale, so compare them directly.
+func TestPerformanceRuntimeSourcePinMatchesShardChecker(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is required to compare the shard checker")
+	}
+	out, err := exec.Command(python, "../../../scripts/check-performance-shards.py", "--print-source-hash").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := performanceRuntimeSourceHash("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(out)); got != want {
+		t.Fatalf("shard checker source hash %s, core %s", got, want)
 	}
 }
 

@@ -83,6 +83,10 @@ jobs:
   core-performance-legacy:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -93,7 +97,17 @@ jobs:
           go-version-file: core/go.mod
           cache-dependency-path: core/go.sum
 
+      # Each shard runs whole tests, discovered by name and balanced by measured
+      # seconds, so every legacy test runs exactly once inside its own timeout.
       - name: Legacy regressions, cache controls and startup budgets
+        working-directory: core
+        env:
+          GOMAXPROCS: "2"
+          ANX_PERFORMANCE_TEST: "1"
+        run: python3 ../scripts/performance-legacy-shard.py --shard ${{ matrix.shard }} --shards 4 --log-dir ../.tmp/performance
+
+      - name: Perfguard controls
+        if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: core
         env:
           GOMAXPROCS: "2"
@@ -101,14 +115,13 @@ jobs:
         run: |
           mkdir -p ../.tmp/performance
           set -o pipefail
-          go test -p=1 -parallel=1 -timeout=10m -count=1 -v ./internal/server ./internal/storage -run '^TestPerformance|^TestResourceAccess(CommonReadPerformance|LargeDenialPrepareAndPMRoutes)$' -skip '^TestPerformanceRoutes$' | tee ../.tmp/performance/legacy.log
           go test -p=1 -count=1 -v ./internal/testutil/perfguard | tee ../.tmp/performance/perfguard.log
 
       - name: Upload legacy and startup measurements
         if: always()
         uses: actions/upload-artifact@v7.0.0
         with:
-          name: core-performance-legacy
+          name: core-performance-legacy-${{ matrix.shard }}
           path: .tmp/performance/*.log
           include-hidden-files: true
           if-no-files-found: error
