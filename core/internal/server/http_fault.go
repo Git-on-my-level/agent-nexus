@@ -94,15 +94,22 @@ func emitServerFault(w http.ResponseWriter, r *http.Request, status int, err err
 		status, serverFaultMethod(r), routeTemplate(r), requestID, serverFaultActorKind(r), sanitizeFaultText(publicMessage, 240), cause)
 }
 
-// A cancellation is the caller giving up, not a server fault: either the
-// request context died (client disconnected) or context.Canceled sits anywhere
-// in the error chain. Core-side deadlines (context.DeadlineExceeded) are real
-// faults and stay on the server-error path.
+// A cancellation is the caller giving up, not a server fault. It classifies
+// as a client cancel only when the request context died AND the failure is the
+// cancellation itself: context.Canceled in the error chain, or no error at all
+// (writeError sites that never carried a cause). A genuine failure that merely
+// lands after the caller disconnected — a driver IOERR mid-scan, a rolled-back
+// statement — stays a server error and keeps its diagnostics, because
+// disconnects and real failures correlate exactly under overload. A
+// context.Canceled while the request context is still live is an internal
+// cancel bug and also stays on the server-error path, matching the 5xx the
+// connected client receives. Core-side deadlines (context.DeadlineExceeded)
+// are real faults and stay there too.
 func requestCanceledByClient(r *http.Request, err error) bool {
-	if err != nil && errors.Is(err, context.Canceled) {
-		return true
+	if r == nil || r.Context().Err() != context.Canceled {
+		return false
 	}
-	return r != nil && r.Context().Err() == context.Canceled
+	return err == nil || errors.Is(err, context.Canceled)
 }
 
 // The client-canceled record keeps cancellation visible without counting it as

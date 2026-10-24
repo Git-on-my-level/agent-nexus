@@ -58,7 +58,7 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 
 	webAuthn, err := buildWebAuthnForRequest(r, opts)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", err.Error())
+		writePasskeyAuthUnavailable(w, r)
 		return
 	}
 
@@ -138,7 +138,7 @@ func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts ha
 
 	webAuthn, err := buildWebAuthnForRequest(r, opts)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", err.Error())
+		writePasskeyAuthUnavailable(w, r)
 		return
 	}
 
@@ -203,7 +203,7 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 	if username == "" {
 		webAuthn, err := buildWebAuthnForRequest(r, opts)
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "auth_unavailable", err.Error())
+			writePasskeyAuthUnavailable(w, r)
 			return
 		}
 
@@ -231,7 +231,7 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 		user := newPasskeyUser(identity)
 		webAuthn, err := buildWebAuthnForRequest(r, opts)
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "auth_unavailable", err.Error())
+			writePasskeyAuthUnavailable(w, r)
 			return
 		}
 
@@ -281,7 +281,7 @@ func handlePasskeyLoginVerify(w http.ResponseWriter, r *http.Request, opts handl
 
 	webAuthn, err := buildWebAuthnForRequest(r, opts)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", err.Error())
+		writePasskeyAuthUnavailable(w, r)
 		return
 	}
 
@@ -361,6 +361,14 @@ func requirePasskeyAuthDeps(w http.ResponseWriter, opts handlerOptions) bool {
 		return false
 	}
 	return true
+}
+
+// The configuration failure can quote browser-supplied Origin and Host header
+// values, so the fault record carries only the class and the client message is
+// fixed; the cause never reaches the log or the response.
+func writePasskeyAuthUnavailable(w http.ResponseWriter, r *http.Request) {
+	emitServerFault(w, r, http.StatusServiceUnavailable, errors.New("passkey_configuration_invalid"), "passkey auth is not available for this request")
+	writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "passkey auth is not available for this request")
 }
 
 func buildWebAuthnForRequest(r *http.Request, opts handlerOptions) (*webauthn.WebAuthn, error) {

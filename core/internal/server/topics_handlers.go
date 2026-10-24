@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -60,7 +59,6 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 		Cursor: strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
-		log.Printf("anx-core: list topics failed: %v", err)
 		if errors.Is(err, primitives.ErrInvalidCursor) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
 			return
@@ -69,7 +67,7 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 			writeError(w, http.StatusInternalServerError, "internal_error", fmt.Sprintf("failed to list topics: %v", err))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list topics")
+		writeReadInternalError(w, r, err, "failed to list topics")
 		return
 	}
 

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,8 +46,7 @@ func handleGetHomeUnread(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	if err != nil {
-		log.Printf("anx-core: home unread failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load home unread activity")
+		writeReadInternalError(w, r, err, "failed to load home unread activity")
 		return
 	}
 	payloadGroups := make([]map[string]any, 0, len(groups))

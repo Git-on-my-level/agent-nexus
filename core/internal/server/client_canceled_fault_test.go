@@ -18,10 +18,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// A caller that gave up (request context canceled, or context.Canceled in the
-// error chain) is not a server fault. It must be recorded as a distinct 499
-// client cancellation, never as a 5xx server error, so cancellation noise from
-// short-deadline pollers cannot hide real 500s. Core-side deadlines
+// A caller that gave up is not a server fault. A disconnect records as a
+// distinct 499 client cancellation only when the request context died AND the
+// failure is the cancellation itself: context.Canceled in the error chain, or
+// no error at all. A genuine failure that lands after the caller disconnected
+// stays a 5xx and keeps its diagnostics, and an internal cancel wrapped as
+// context.Canceled while the request context is still live is a core bug that
+// logs as the 5xx the connected client receives. Core-side deadlines
 // (context.DeadlineExceeded) stay real faults.
 
 func canceledFaultLine(t *testing.T, logged string) string {
@@ -70,9 +73,10 @@ func requireCanceledOutcome(t *testing.T, logged, wantStage string) {
 	}
 }
 
-// The fake-store seams mirror inbox_read_fault_test.go: cancellation is
-// injected at each read stage with the request context still alive, so the
-// classification must rely on context.Canceled in the error chain.
+// The fake-store seams mirror inbox_read_fault_test.go: a disconnect is
+// injected at each read stage by canceling the request context and failing the
+// seam with context.Canceled in the chain — the shape a real caller
+// disconnect produces.
 func TestClientCanceledReadsAreNotServerErrors(t *testing.T) {
 	// Serial: this file mutates process-wide logging.
 	var output bytes.Buffer
@@ -101,7 +105,9 @@ func TestClientCanceledReadsAreNotServerErrors(t *testing.T) {
 			if tc.stage == "authorization" {
 				check = func(context.Context, any) error { return cause }
 			}
-			req = req.WithContext(context.WithValue(req.Context(), resourceAccessCheckKey{}, check))
+			disconnected, disconnect := context.WithCancel(context.Background())
+			disconnect()
+			req = req.WithContext(context.WithValue(disconnected, resourceAccessCheckKey{}, check))
 			rec := httptest.NewRecorder()
 			w := &faultResponseWriter{ResponseWriter: rec, r: req}
 			switch tc.seam {
@@ -231,6 +237,9 @@ func TestCanceledWorkOperationIsNotAServerError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/work", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "writer", PrincipalKind: "agent"})
+	disconnected, disconnect := context.WithCancel(req.Context())
+	disconnect()
+	req = req.WithContext(disconnected)
 	rec := httptest.NewRecorder()
 	w := &faultResponseWriter{ResponseWriter: rec, r: req}
 	workStoreError(w, req, fmt.Errorf("create work: %w", context.Canceled))
@@ -247,5 +256,158 @@ func TestCanceledWorkOperationIsNotAServerError(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Errorf("client canceled line missing %q: %s", want, line)
 		}
+	}
+}
+
+// The work fault funnel keeps a genuine store failure (rolled-back statement,
+// driver IOERR) on the failed-work record with its fingerprint even when the
+// caller had already disconnected; only the disconnect itself is not enough to
+// reclassify it.
+func TestGenuineWorkErrorAfterDisconnectKeepsDiagnostics(t *testing.T) {
+	// Serial: this file mutates process-wide logging.
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	req := httptest.NewRequest(http.MethodPost, "/work", nil)
+	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "writer", PrincipalKind: "agent"})
+	disconnected, disconnect := context.WithCancel(req.Context())
+	disconnect()
+	req = req.WithContext(disconnected)
+	rec := httptest.NewRecorder()
+	w := &faultResponseWriter{ResponseWriter: rec, r: req}
+	workStoreError(w, req, fmt.Errorf("create work: %w", &inboxReadProbeError{}))
+
+	logged := output.String()
+	if strings.Contains(logged, "anx-core: client canceled") || strings.Contains(logged, "anx-core: server error") {
+		t.Fatalf("disconnect reclassified a genuine work failure: %s", logged)
+	}
+	if strings.Count(logged, "anx-core: work operation failed") != 1 {
+		t.Fatalf("expected one work fault line: %s", logged)
+	}
+	for _, want := range []string{"diagnostic=unmapped_store_error", "*server.inboxReadProbeError", "store_code=1", "error_fingerprint="} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("work fault line missing %q: %s", want, logged)
+		}
+	}
+	if strings.Contains(logged, "private database value") {
+		t.Fatalf("work fault line leaked cause text: %s", logged)
+	}
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Classification needs both signals: a dead request context and a failure that
+// is itself the cancellation. Everything else — including a canceled chain
+// under a still-live request context and a deadline — stays a server fault.
+func TestRequestCanceledByClientRequiresBothSignals(t *testing.T) {
+	genuine := fmt.Errorf("scan failed: %w", &inboxReadProbeError{})
+	canceledChain := fmt.Errorf("wrapper: %w", context.Canceled)
+	deadlineChain := fmt.Errorf("wrapper: %w", context.DeadlineExceeded)
+
+	live := httptest.NewRequest(http.MethodGet, "/", nil)
+	canceled := httptest.NewRequest(http.MethodGet, "/", nil)
+	done, disconnect := context.WithCancel(context.Background())
+	disconnect()
+	canceled = canceled.WithContext(done)
+
+	for _, tc := range []struct {
+		name string
+		r    *http.Request
+		err  error
+		want bool
+	}{
+		{name: "live request and canceled chain is internal", r: live, err: canceledChain, want: false},
+		{name: "live request and genuine failure", r: live, err: genuine, want: false},
+		{name: "live request without a cause", r: live, err: nil, want: false},
+		{name: "disconnected request without a cause", r: canceled, err: nil, want: true},
+		{name: "disconnected request and canceled chain", r: canceled, err: canceledChain, want: true},
+		{name: "disconnected request and genuine failure", r: canceled, err: genuine, want: false},
+		{name: "disconnected request and deadline", r: canceled, err: deadlineChain, want: false},
+		{name: "missing request", r: nil, err: canceledChain, want: false},
+	} {
+		if got := requestCanceledByClient(tc.r, tc.err); got != tc.want {
+			t.Errorf("%s: requestCanceledByClient=%v want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A genuine read failure that lands after the caller disconnected — a driver
+// IOERR mid-scan — keeps its 500 record and class diagnostics; the disconnect
+// alone must not reclassify it as a client cancellation.
+func TestGenuineReadErrorAfterDisconnectStaysServerError(t *testing.T) {
+	// Serial: this file mutates process-wide logging.
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	cause := fmt.Errorf("private wrapper value: %w", &inboxReadProbeError{})
+	opts := handlerOptions{primitiveStore: inboxReadFaultStore{stage: "status", cause: cause}}
+	req := httptest.NewRequest(http.MethodGet, "/inbox/private-id", nil)
+	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "reader", PrincipalKind: "human"})
+	req = req.WithContext(context.WithValue(req.Context(), resourceAccessCheckKey{}, func(context.Context, any) error { return nil }))
+	disconnected, disconnect := context.WithCancel(req.Context())
+	disconnect()
+	req = req.WithContext(disconnected)
+	rec := httptest.NewRecorder()
+	w := &faultResponseWriter{ResponseWriter: rec, r: req}
+	handleGetInboxItem(w, req, opts, "private-id")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	logged := output.String()
+	if strings.Contains(logged, "anx-core: client canceled") {
+		t.Fatalf("disconnect reclassified a genuine failure: %s", logged)
+	}
+	if strings.Count(logged, "anx-core: server error") != 1 {
+		t.Fatalf("expected one server error line: %s", logged)
+	}
+	for _, want := range []string{"status=500", "class=store_error", "*server.inboxReadProbeError", "store_code=1"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("server error line missing %q: %s", want, logged)
+		}
+	}
+	for _, secret := range []string{"private database value", "private wrapper value"} {
+		if strings.Contains(logged, secret) {
+			t.Fatalf("leaked %q: %s", secret, logged)
+		}
+	}
+}
+
+// An internal cancel wrapped as context.Canceled while the request context is
+// still live is a core bug: the connected client receives a 500, and the log
+// must record that same 500 with the cancel class instead of a 499.
+func TestInternalCancelWithLiveRequestContextIsServerError(t *testing.T) {
+	// Serial: this file mutates process-wide logging.
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	cause := fmt.Errorf("private wrapper value: %w", context.Canceled)
+	opts := handlerOptions{primitiveStore: inboxReadFaultStore{stage: "status", cause: cause}}
+	req := httptest.NewRequest(http.MethodGet, "/inbox/private-id", nil)
+	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "reader", PrincipalKind: "human"})
+	req = req.WithContext(context.WithValue(req.Context(), resourceAccessCheckKey{}, func(context.Context, any) error { return nil }))
+	rec := httptest.NewRecorder()
+	w := &faultResponseWriter{ResponseWriter: rec, r: req}
+	handleGetInboxItem(w, req, opts, "private-id")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	logged := output.String()
+	if strings.Contains(logged, "anx-core: client canceled") {
+		t.Fatalf("internal cancel classified as client canceled: %s", logged)
+	}
+	if strings.Count(logged, "anx-core: server error") != 1 || !strings.Contains(logged, "status=500") || !strings.Contains(logged, "class=request_canceled") {
+		t.Fatalf("internal cancel must log the 500 the client receives: %s", logged)
+	}
+	if strings.Contains(logged, "private wrapper value") {
+		t.Fatalf("leaked cause text: %s", logged)
 	}
 }
