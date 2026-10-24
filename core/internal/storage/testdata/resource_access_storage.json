@@ -3282,7 +3282,7 @@
     "../server/request_controls.go:writeRateLimitedError": "dc3972841d3cf6b797343975b1846917a6ce42636069e691744ca39fa05e51e6",
     "../server/request_controls.go:writeRequestTooLargeError": "30996ad7ea14e051e38ab91d7a945baa8c6b7728f33bf93b0136f676938e4a9e",
     "../server/resource_access.go:attachResourceAccessScope": "236d7ac76ec24cab75a2e3996ef11bdd134863d3d72194cfe56b5f1fa2fcbd8a",
-    "../server/resource_access.go:authorizeResourceSelectors": "65def2533ef85a2c1d96c77ab2fbc12b49ce164842bfca28577fe5015ad8068a",
+    "../server/resource_access.go:authorizeResourceSelectors": "9f87a6390f94d2057ab5a3eff438d200e6df6a6382852bac78f3067a06dcc816",
     "../server/resource_access.go:authorizeResourceValues": "bd06abbaed85df4fd9fca929af8e07adbdb1756260a34bd2425450db24376726",
     "../server/resource_access.go:validateResourceText": "04e107167fa38d2125a1bd162d14a988c838c1713324283c81d2a0d7eafc491e",
     "../server/resource_refs.go:resolveHTTPResourceID": "da41f60f420bc8437c228e59db71cc6d18bf2db9a64187e8704cb5c3bc9d48df",
