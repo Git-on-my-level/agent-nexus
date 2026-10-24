@@ -139,19 +139,36 @@ def check_env(extra_env=None):
     return env
 
 
-def run(*argv, cwd=ROOT, extra_env=None):
-    print("+ " + " ".join(str(arg) for arg in argv), flush=True)
-    subprocess.run([str(arg) for arg in argv], cwd=cwd, env=check_env(extra_env), check=True)
+def slot_argv(slot, argv):
+    """Prefix argv with scripts/slot when the phase must hold a host slot.
+
+    Heavy test phases (Go, Vitest, e2e) take a slot so concurrent pushes on one
+    machine cannot multiply into false failures; lint and generation stay
+    unslotted. Resolve ROOT at call time so tests can point it at a fixture.
+    """
+    if slot is None:
+        return [str(arg) for arg in argv]
+    wrapper = ROOT / "scripts" / "slot"
+    if not wrapper.is_file():
+        raise RuntimeError(f"Missing {wrapper}; cannot take a '{slot}' slot for: "
+                           + " ".join(str(arg) for arg in argv))
+    return [str(wrapper), "run", slot, "--", *(str(arg) for arg in argv)]
 
 
-def start(argv, cwd=ROOT):
+def run(*argv, cwd=ROOT, extra_env=None, slot=None):
+    wrapped = slot_argv(slot, argv)
+    print("+ " + " ".join(wrapped), flush=True)
+    subprocess.run(wrapped, cwd=cwd, env=check_env(extra_env), check=True)
+
+
+def start(argv, cwd=ROOT, slot=None):
     """Start a command in its own group, with output held in a file.
 
     A file rather than a pipe: a pipe's buffer fills at a few tens of kilobytes
     and would stall the command until someone reads it.
     """
     sink = tempfile.TemporaryFile()
-    process = subprocess.Popen([str(arg) for arg in argv], cwd=cwd, env=check_env(),
+    process = subprocess.Popen(slot_argv(slot, argv), cwd=cwd, env=check_env(),
                                stdout=sink, stderr=subprocess.STDOUT, start_new_session=True)
     process.output = sink
     return process
@@ -401,7 +418,7 @@ def go_fast_tests(module, changed, whole_module):
     affected = None if whole_module else go_affected(module, changed)
     if affected is None:
         print(f"{module}: every package (shared root or unattributable change).", flush=True)
-        run("go", "test", "-short", "./...", cwd=ROOT / module)
+        run("go", "test", "-short", "./...", cwd=ROOT / module, slot="tests")
         return
     selected, dependents = affected
     if not selected and not dependents:
@@ -410,23 +427,23 @@ def go_fast_tests(module, changed, whole_module):
     print(f"{module}: {len(selected)} changed package(s) plus {len(dependents)} dependent(s).",
           flush=True)
     if not selected:
-        run("go", "test", "-short", *dependents, cwd=ROOT / module)
+        run("go", "test", "-short", *dependents, cwd=ROOT / module, slot="tests")
         return
     if not dependents:
-        run("go", "test", "-short", *selected, cwd=ROOT / module)
+        run("go", "test", "-short", *selected, cwd=ROOT / module, slot="tests")
         return
     pinned = pinned_package_parallelism()
     if pinned is not None:
         print(f"{module}: GOFLAGS pins -p={pinned}; running the dependents after the changed "
               "packages rather than beside them.", flush=True)
-        run("go", "test", "-short", *selected, cwd=ROOT / module)
-        run("go", "test", "-short", *dependents, cwd=ROOT / module)
+        run("go", "test", "-short", *selected, cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", *dependents, cwd=ROOT / module, slot="tests")
         return
     argv = ("go", "test", "-short", *dependents)
     print("+ " + " ".join(argv) + "  (dependents, reported after the changed packages)", flush=True)
-    later = start(argv, cwd=ROOT / module)
+    later = start(argv, cwd=ROOT / module, slot="tests")
     try:
-        run("go", "test", "-short", *selected, cwd=ROOT / module)
+        run("go", "test", "-short", *selected, cwd=ROOT / module, slot="tests")
         output = finish(later)
     except BaseException:
         end(later)
@@ -459,17 +476,18 @@ def ui_fast_tests(changed, whole_module, base):
     if (whole_module or base is None or not owned
             or any(p in UI_WIDE or p.startswith(UI_WIDE_PREFIXES) for p in owned)):
         print("web-ui: every unit test (shared root or unattributable change).", flush=True)
-        run("pnpm", "-C", "web-ui", "run", "test:unit", extra_env=env)
+        run("pnpm", "-C", "web-ui", "run", "test:unit", extra_env=env, slot="tests")
         return
     # Vitest resolves the module graph itself, and reads the same committed,
     # staged, unstaged and untracked changes this selector does.
     print("web-ui: unit tests related to the changed files, plus the source-scanning guards.",
           flush=True)
     run("pnpm", "-C", "web-ui", "exec", "vitest", "run", "--changed", base,
-        "--passWithNoTests", extra_env=env)
+        "--passWithNoTests", extra_env=env, slot="tests")
     scanning = ui_source_scanning_tests()
     if scanning:
-        run("pnpm", "-C", "web-ui", "exec", "vitest", "run", *scanning, extra_env=env)
+        run("pnpm", "-C", "web-ui", "exec", "vitest", "run", *scanning, extra_env=env,
+            slot="tests")
 
 
 def fast_tests(changed, base=None):
@@ -492,14 +510,17 @@ def fast_tests(changed, base=None):
                  "scripts/tests/test_e2e_smoke_lifecycle.sh"} or p.startswith("scripts/git-hooks/")
            for p in changed):
         run("python3", "-B", "-m", "unittest", "scripts/tests/test_owned_process.py")
-        run("bash", "scripts/tests/test_e2e_smoke_lifecycle.sh")
+        run("bash", "scripts/tests/test_e2e_smoke_lifecycle.sh", slot="tests")
+    if any(p in {"scripts/slot", "scripts/tests/test_slot.py",
+                 "scripts/git-hooks/checks.py"} for p in changed):
+        run("python3", "-B", "-m", "unittest", "scripts/tests/test_slot.py")
     if any(p.startswith(("contracts/", "scripts/contract-", "core/cmd/contract-gen/",
                          "core/cmd/route-inventory/")) or p == "scripts/check-enum-conformance.mjs"
            for p in changed):
         contract_drift()
-        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/gen/go")
-        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/visualreport")
-        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/markdownhygiene")
+        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/gen/go", slot="tests")
+        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/visualreport", slot="tests")
+        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/markdownhygiene", slot="tests")
         run("node", "scripts/check-visual-report-conformance.mjs")
         run("node", "scripts/check-enum-conformance.mjs")
 
@@ -560,6 +581,10 @@ def main():
     if args.tier == "routes":
         route_notice(args.base)
         return
+    # ANX_PREPUSH_FULL=1 asks for every module's suite, like --all but from the
+    # environment, for pushes that want the wide run regardless of selection.
+    if args.tier == "fast" and os.environ.get("ANX_PREPUSH_FULL") == "1":
+        args.all = True
     changed = changed_paths(args.tier, args.all, args.base)
     if args.tier == "static":
         static_checks(changed, args.all)
