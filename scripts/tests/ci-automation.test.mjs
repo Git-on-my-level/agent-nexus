@@ -235,9 +235,17 @@ test("performance runs separately on main and never gates ordinary CI", () => {
     /needs: core-performance-routes/,
   );
   assert.match(job("core-performance-coverage"), /check-performance-shards.py/);
+  // Legacy shards discover tests by name; the route matrix stays excluded.
+  const legacy = job("core-performance-legacy");
+  assert.match(legacy, /shard: \[1, 2, 3, 4\]/);
+  assert.match(legacy, /fail-fast: false/);
   assert.match(
-    job("core-performance-legacy"),
-    /-skip '\^TestPerformanceRoutes\$'/,
+    legacy,
+    /performance-legacy-shard\.py --shard \$\{\{ matrix\.shard \}\} --shards 4/,
+  );
+  assert.match(
+    readFileSync(join(root, "scripts/performance-legacy-shard.py"), "utf8"),
+    /EXCLUDE = \{"\.\/internal\/server": \{"TestPerformanceRoutes"\}\}/,
   );
   for (const name of [
     "core-performance-routes",
