@@ -3582,7 +3582,7 @@
     "../testsql/counter.go:*countedStmt:QueryContext": "7074fd7cc6d9ce1009e88c7ebd48eadb6152a536660b05b3dacfb62d1a48e42d",
     "../testsql/counter.go:Open": "04023fddcaa1bc8d0978d9f06af8896d7c2a0916777fb5bbed49b2a85a7ab939",
     "../testutil/perfguard/driver.go:*Capture:record": "6e4109b1868f59da90c667a35da55f26028ce79485f60edfe78306883e82a3b5",
-    "../testutil/perfguard/driver.go:*captureConn:BeginTx": "3432270baf19f3141f46a669b93b49bc5fd6fa8fe85b80f568ff06c9ec4315c4",
+    "../testutil/perfguard/driver.go:*captureConn:BeginTx": "da165a9732ac37af2b8e156a720cd50b2742281e5ac47595fadd54172ae59a89",
     "../testutil/perfguard/driver.go:*captureConn:Close": "90a0c5eba79cfda00ec591cbe1c1d245ce50ae6bd96ecdca62a1d03817ef5ab7",
     "../testutil/perfguard/driver.go:*captureConn:ExecContext": "09e96353b922dfe8db510bfef244f32cc544bdef3b7b14703e72608286a17a94",
     "../testutil/perfguard/driver.go:*captureConn:Prepare": "6539f4cf1c440ea0cf2dc2d4f88fc35eed5dcaa5ceb6b18b4b00c5225639094c",

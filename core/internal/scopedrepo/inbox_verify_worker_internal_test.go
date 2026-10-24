@@ -122,6 +122,26 @@ func TestInboxVerificationReopensAbandonedLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
+	reopened.SetMaxOpenConns(1)
+	reopened.SetMaxIdleConns(1)
+	// Load the reopened schema outside the acquisition's production one-second
+	// budget. This test checks durable ownership and fencing, not cold-open I/O.
+	warmCtx := context.Background()
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		warmCtx, cancel = context.WithDeadline(warmCtx, deadline)
+		defer cancel()
+	}
+	var persistedOwner string
+	var persistedToken int64
+	if err = reopened.QueryRowContext(warmCtx, `SELECT lease_owner,lease_token FROM scope_inbox_verification_jobs WHERE id=?`, id).Scan(&persistedOwner, &persistedToken); err != nil || persistedOwner != r.owner || persistedToken != lease.token {
+		t.Fatalf("reopen lost abandoned lease: owner=%q token=%d err=%v", persistedOwner, persistedToken, err)
+	}
+	// Exercise unexpired/expired states directly, independently of how long
+	// reopening the database took while the developer host was busy.
+	if _, err = reopened.ExecContext(warmCtx, `UPDATE scope_inbox_verification_jobs SET lease_until=9223372036854775807 WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
 	next := workerRunner(t, New(reopened), id, 0)
 	if _, err = next.acquireLease(context.Background()); !errors.Is(err, ErrInboxVerificationLease) {
 		t.Fatal("abandoned unexpired lease taken", err)

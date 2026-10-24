@@ -114,7 +114,7 @@ func TestMetadataPageByteCursorAndSink(t *testing.T) {
 	}
 	r.SealedScope = "no-grants"
 	store := &scopemigrate.Store{Runner: r}
-	result, err := store.Step(ctx, scopes.StepRequest{JobID: r.Job, ExpectedEpoch: before.SourceEpoch, LeaseToken: token, MaxRecords: 64, MaxBytes: 110, MaxDuration: 50 * time.Millisecond})
+	result, err := store.Step(ctx, scopes.StepRequest{JobID: r.Job, ExpectedEpoch: before.SourceEpoch, LeaseToken: token, MaxRecords: 64, MaxBytes: 110, MaxDuration: fixtureChunkBudget})
 	must(t, err)
 	if result.Visited != 1 || result.Complete || result.PermanentPrivateExceptions != 1 {
 		t.Fatal("byte page claimed completeness", result)

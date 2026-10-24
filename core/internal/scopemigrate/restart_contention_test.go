@@ -2,13 +2,16 @@ package scopemigrate_test
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
+	"net/url"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/scopemigrate"
 	"agent-nexus-core/internal/scopes"
 	"agent-nexus-core/internal/storage"
+	"agent-nexus-core/internal/testutil/perfguard"
 	"modernc.org/sqlite"
 )
 
@@ -64,10 +67,20 @@ func TestWriterContentionBoundsWorkerTransactions(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			w, r := fixture(t, 100)
 			ctx := context.Background()
-			// Exactly one competing writer connection and one worker connection.
-			// Verify the latter is returned with its normal serving timeout.
-			w.DB().SetMaxOpenConns(2)
-			w.DB().SetMaxIdleConns(2)
+			// A separate one-connection worker pool lets us observe its admission
+			// PRAGMA and inspect that same connection after cleanup.
+			dsn := &url.URL{Scheme: "file", Path: w.Layout().DatabasePath}
+			query := dsn.Query()
+			query.Add("_pragma", "busy_timeout(20000)")
+			query.Add("_pragma", "journal_mode(WAL)")
+			query.Set("_txlock", "immediate")
+			dsn.RawQuery = query.Encode()
+			pool, capture, err := perfguard.Open(dsn.String())
+			must(t, err)
+			defer pool.Close()
+			pool.SetMaxOpenConns(1)
+			pool.SetMaxIdleConns(1)
+			r.DB = pool
 			token := begin(t, r)
 			// The production budget is what must bound the writer-lock wait.
 			r.ChunkBudget = scopemigrate.DefaultChunkBudget
@@ -76,19 +89,43 @@ func TestWriterContentionBoundsWorkerTransactions(t *testing.T) {
 			writer, err := w.DB().BeginTx(ctx, nil)
 			must(t, err)
 			defer writer.Rollback()
-			// Open the second connection before the timing window. Physical
-			// driver initialization (especially under -race) is separate from
-			// the SQLite write-lock wait this regression measures.
-			warm, err := w.DB().Conn(ctx)
+			// Warm the worker connection before exercising admission. Physical
+			// driver initialization is outside this lock-wait regression.
+			warm, err := pool.Conn(ctx)
 			must(t, err)
 			must(t, warm.Close())
-			released := make(chan struct{})
-			go func() {
-				time.Sleep(500 * time.Millisecond)
-				writer.Rollback()
-				close(released)
-			}()
-			start := time.Now()
+			// Keep the writer held until the operation returns. At every actual
+			// BEGIN, the worker must already have disabled the serving busy wait.
+			// This verifies the mechanism without measuring host scheduling time.
+			admitted, invalidAdmission := false, false
+			var admissionErr error
+			capture.BeforeBeginConn(func(ctx context.Context, native driver.Conn, _ driver.TxOptions) {
+				rows, err := native.(driver.QueryerContext).QueryContext(ctx, "PRAGMA busy_timeout", nil)
+				if err != nil {
+					admissionErr = err
+					if ctx.Err() != nil {
+						admissionErr = ctx.Err()
+					}
+					return
+				}
+				var value [1]driver.Value
+				err = rows.Next(value[:])
+				closeErr := rows.Close()
+				if err == nil {
+					err = closeErr
+				}
+				if err != nil {
+					admissionErr = err
+					if ctx.Err() != nil {
+						admissionErr = ctx.Err()
+					}
+					return
+				}
+				admitted = true
+				if timeout, ok := value[0].(int64); !ok || timeout != 0 {
+					invalidAdmission = true
+				}
+			})
 			var workerErr error
 			switch operation {
 			case "acquire":
@@ -115,10 +152,15 @@ func TestWriterContentionBoundsWorkerTransactions(t *testing.T) {
 				}
 				workerErr = worker.Close()
 			}
-			elapsed := time.Since(start)
-			t.Logf("contended %s returned in %s", operation, elapsed)
-			if elapsed > 150*time.Millisecond {
-				t.Errorf("50ms worker operation waited for SQLite writer: %s", elapsed)
+			capture.BeforeBeginConn(nil)
+			if admissionErr != nil && !errors.Is(admissionErr, context.Canceled) && !errors.Is(admissionErr, context.DeadlineExceeded) {
+				t.Error("could not inspect worker admission", admissionErr)
+			}
+			if invalidAdmission {
+				t.Error("worker began before disabling the serving busy timeout")
+			}
+			if !admitted && !errors.Is(workerErr, context.Canceled) && !errors.Is(workerErr, context.DeadlineExceeded) {
+				t.Error("worker did not reach admission or exhaust its context", workerErr)
 			}
 			if operation == "shutdown" {
 				if !errors.Is(workerErr, context.Canceled) && !errors.Is(workerErr, context.DeadlineExceeded) {
@@ -131,16 +173,22 @@ func TestWriterContentionBoundsWorkerTransactions(t *testing.T) {
 				}
 			}
 			var timeout int
-			must(t, w.DB().QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&timeout))
+			must(t, pool.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&timeout))
 			if timeout != 20000 {
 				t.Errorf("worker leaked connection timeout into serving pool: %d", timeout)
 			}
-			<-released
+			must(t, writer.Rollback())
 			after, err := r.Report(ctx)
 			must(t, err)
 			if after != before {
 				t.Errorf("contention advanced lease/watermark: before=%+v after=%+v", before, after)
 			}
+			// The post-contention data assertion uses the fixture's work budget,
+			// not the 50ms production budget being tested above. Renew the lease
+			// as a real worker does before resuming after a long scheduling gap.
+			r.ChunkBudget = fixtureChunkBudget
+			token, err = r.Acquire(ctx)
+			must(t, err)
 			resumed, err := r.Step(ctx, token, 32)
 			must(t, err)
 			if resumed.Processed != 32 || resumed.Generation != before.Generation {

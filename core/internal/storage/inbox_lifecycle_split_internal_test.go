@@ -271,7 +271,12 @@ func TestInboxLifecycleRefIndexingIsLinear(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	insert := func(id string, size int, field string) time.Duration {
+	pool, capture, err := perfguard.Open(sqliteDSN(w.Layout().DatabasePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	insert := func(id string, size int, field string) perfguard.WorkStats {
 		t.Helper()
 		refs := make([]string, size)
 		for i := range refs {
@@ -281,24 +286,28 @@ func TestInboxLifecycleRefIndexingIsLinear(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		start := time.Now()
-		if _, err = w.DB().ExecContext(ctx, `INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES(?,'thread-x','agent_wake','now','now',?)`, id, string(data)); err != nil {
-			t.Fatal(err)
+		capture.Start()
+		_, err = pool.ExecContext(ctx, `INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES(?,'thread-x','agent_wake','now','now',?)`, id, string(data))
+		_, statements, rows := capture.Stop()
+		work := capture.Work()
+		if err != nil || capture.WorkError() != nil || statements != 1 || rows != 0 || work.VMSteps == 0 {
+			t.Fatalf("%s insert: work=%+v statements=%d rows=%d err=%v work_err=%v", field, work, statements, rows, err, capture.WorkError())
 		}
-		elapsed := time.Since(start)
 		var n int
 		if err = w.DB().QueryRowContext(ctx, `SELECT count(*) FROM inbox_lifecycle_refs WHERE inbox_id=?`, id).Scan(&n); err != nil || n < size {
 			t.Fatalf("%s indexed %d of %d refs: %v", id, n, size, err)
 		}
-		return elapsed
+		return work
 	}
 	for _, field := range []string{"related_refs", "refs"} {
 		small := insert(field+"-small", 2000, field)
 		big := insert(field+"-big", 20000, field)
-		t.Logf("%s: 2k refs %s, 20k refs %s", field, small, big)
-		// Linear is about 10x; the quadratic form was about 100x.
-		if big > 30*small+200*time.Millisecond {
-			t.Fatalf("%s indexing is superlinear: 2k %s, 20k %s", field, small, big)
+		t.Logf("%s: 2k refs %+v, 20k refs %+v", field, small, big)
+		// Ten times the refs should take roughly ten times the VM work. The
+		// old correlated per-element json_each check took quadratic work;
+		// leave 2x headroom for B-tree growth, tighter than the old 30x clock ratio.
+		if big.VMSteps > 20*small.VMSteps || big.FullScanSteps > 20*small.FullScanSteps || big.AutoIndexRows > 20*small.AutoIndexRows {
+			t.Fatalf("%s indexing is superlinear: 2k %+v, 20k %+v", field, small, big)
 		}
 	}
 }
