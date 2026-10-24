@@ -21,16 +21,35 @@ go test -C core ./internal/storage -run '^TestGroupingUpgrade' -count=1
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
 ```
 
-Full HTTP scale acceptance is currently **blocked**. After main's performance
-harness repair, `GET /work/ungrouped` reaches the measured samples but uses
-273,020 VM instructions warm and 1,603,957 after invalidation for the denied
-reader, against the unchanged 50,000 budget. Canonical authorization admission
-still acquires/materializes the workspace denial closure before these bounded
-queries; its plans also remain unreviewed for this new route. The native
-admitted-read figures above do not certify the complete HTTP request. This is a
-merge-blocking P1: keep the grouping PR draft until canonical authorization
-admission satisfies the ordinary budget. No new baseline, plan allowance or
-budget increase is supplied here.
+Full HTTP scale acceptance is currently **blocked**. `/work/ungrouped` is an
+exact collection operation, with no card selector named `ungrouped`. Treating
+that segment as a card reference caused an unnecessary authorization read and
+could make the collection depend on a private card with that handle. The
+selector regression now passes.
+
+`TestPerformanceGroupingFeedBudget` measures authentication, canonical admission
+and the feed on the shared 4,096-row synthetic corpus, using fresh pools for
+both principals and a real authorization-epoch invalidation. Authorized VM
+counts are 31,323 first, 31,275 warm and 31,399 invalidated. Denied-reader counts
+are 1,269,342 first, 29,901 warm and 1,269,482 invalidated, against the unchanged
+50,000 ceiling. These are focused-corpus measurements; they omit the general
+matrix's unrelated PM runtime and stream setup, so they are not a direct
+before/after comparison with its earlier 273,020 / 1,603,957 figures.
+
+Replaying canonical denial capture on the synthetic database uses 1,239,696
+VM steps, leaving 29,786 of the complete invalidated request outside that
+capture. The canonical capture SQL is independent of the page point token.
+Canonical admission still expands denied roots and their
+reachable identities across the workspace. Reducing the feed candidate window
+or adding a candidate index cannot remove that admission work. The complete
+route matrix also retains its query-plan acceptance requirement. The native
+admitted-read figures above do not certify the complete HTTP request. Keep the
+grouping PR draft until cold canonical admission meets the ordinary budget.
+No new baseline, plan allowance or budget increase is supplied here.
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceGroupingFeedBudget$' -count=1 -v -timeout=20m
+```
 
 ## PM proposal admission
 
