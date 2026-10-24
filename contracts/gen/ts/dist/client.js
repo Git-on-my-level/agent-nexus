@@ -2760,7 +2760,7 @@ export const commandRegistry = [
         "path": "/auth/token",
         "operation_id": "issueAuthToken",
         "summary": "Exchange host assertion or refresh auth tokens",
-        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address (each attempt reserves a request before signature work; grants that verify and are unused return it) and per principal and grant type for grants that verify (issuer and subject for humans; issuer, workspace, organization and slot for managed agents); replays never spend the principal budget. Both return 429 with Retry-After.",
+        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address (each attempt reserves a request before signature work; grants that verify and are unused return it) and per principal and grant type for grants that verify (issuer and subject for humans; issuer, workspace, organization and slot for managed agents); replays never spend the principal budget. Both return 429 with Retry-After. SQLite writer contention returns a recoverable 503 busy error with Retry-After; retry signed requests with a fresh proof.",
         "why": "Assertion or refresh-token exchange for bearer access.",
         "input_mode": "json-body",
         "streaming": {
@@ -2776,7 +2776,8 @@ export const commandRegistry = [
             "agent_handle_taken",
             "agent_revoked",
             "rate_limited",
-            "auth_unavailable"
+            "auth_unavailable",
+            "busy"
         ],
         "concepts": [
             "auth"
@@ -7840,7 +7841,8 @@ export const commandRegistry = [
             "invalid_request",
             "key_mismatch",
             "host_revoked",
-            "not_found"
+            "not_found",
+            "busy"
         ],
         "concepts": [
             "hosts",
@@ -8512,7 +8514,8 @@ export const commandRegistry = [
             "invalid_request",
             "key_mismatch",
             "host_revoked",
-            "not_found"
+            "not_found",
+            "busy"
         ],
         "concepts": [
             "hosts",

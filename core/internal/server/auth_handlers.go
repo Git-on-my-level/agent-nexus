@@ -76,7 +76,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 	case "host_assertion":
 		agent, issued, issueErr := opts.authStore.IssueHostAgentToken(r.Context(), req.HostID, req.KeyID, req.AgentName, req.SignedAt, req.Signature, req.ExistingActorID)
 		if issueErr != nil {
-			hostError(w, issueErr)
+			hostCeremonyError(w, r, issueErr)
 			return
 		}
 		opts.agentChanges.publish()
@@ -138,6 +138,9 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	if err != nil {
+		if writeAuthContentionError(w, r, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, auth.ErrInvalidToken):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "token is invalid, expired, or revoked")
@@ -233,6 +236,9 @@ func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handler
 	options := auth.GrantExchangeOptions{AccessOnly: issueRefreshToken != nil && !*issueRefreshToken}
 	agent, issuedTokens, exchangeErr := grant.exchange(r.Context(), options)
 	if exchangeErr != nil {
+		if writeAuthContentionError(w, r, exchangeErr) {
+			return
+		}
 		switch {
 		case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
 			// A concurrent exchange consumed the jti after the check above.
