@@ -384,6 +384,8 @@ class AllowanceRefreshTests(unittest.TestCase):
     route = dict(
         method="GET",
         path="/series/{name}",
+        authorized_status=200,
+        unauthorized_status=200,
         latency_ms=500,
         max_queries=100,
         max_rows=4608,
@@ -407,26 +409,54 @@ class AllowanceRefreshTests(unittest.TestCase):
         entry.update(overrides)
         return entry
 
-    def samples(self, vm, elapsed, phase="warm"):
-        indexes = range(1, 6) if phase == "warm" else [0]
-        return [
-            dict(
+    def samples(self, vm, elapsed, phase="warm", **overrides):
+        if phase == "warm":
+            plan = [("warm", i, 2) for i in range(1, 6)]
+        elif phase == "first_read":
+            plan = [("first_read", 0, 2), ("post_preparation", 0, 3)]
+        else:
+            plan = [("post_invalidation", 6, 3)]
+        out = []
+        for cache_phase, index, worker in plan:
+            sample = dict(
                 method="GET",
                 path="/series/{name}",
                 principal="unauthorized",
-                cache_phase=phase,
-                sample=i,
+                cache_phase=cache_phase,
+                sample=index,
+                worker=worker,
+                measured=True,
+                status=200,
+                deadline_exceeded=False,
+                stream_polls=0,
+                invalidation_epoch_before=10 if cache_phase == "post_invalidation" else 0,
+                invalidation_epoch_after=11 if cache_phase == "post_invalidation" else 0,
+                receipt_invalidation_epoch_before=0,
+                receipt_invalidation_epoch_after=0,
                 queries=7,
                 rows=8,
                 vm_steps=vm,
                 elapsed_ms=elapsed,
             )
-            for i in indexes
-        ]
+            sample.update(overrides)
+            out.append(sample)
+        return out
 
-    def run_refresh(self, entry, samples):
-        report = dict(samples=samples)
-        return refresh.refresh([self.route], [entry], [report], "f" * 64)
+    def run_refresh(self, entry, samples, route=None, completed=None):
+        if completed is None:
+            completed = {
+                refresh.completion_label(sample) for sample in samples
+            }
+        report = dict(samples=samples, completed=sorted(completed))
+        return refresh.refresh([route or self.route], [entry], [report], "f" * 64)
+
+    def assert_refused(self, entry, samples, reason, **kwargs):
+        """Invalid evidence neither renews nor retires; it names the reason."""
+        kept, rows = self.run_refresh(entry, samples, **kwargs)
+        self.assertEqual(kept, [entry])
+        self.assertTrue(rows[0][1].startswith("invalid evidence"), rows[0][1])
+        self.assertIn(reason, rows[0][1])
+        self.assertIsNone(rows[0][3])
 
     def test_refresh_tightens_to_measurement_plus_documented_headroom(self):
         kept, rows = self.run_refresh(self.entry(), self.samples(9395880, 1777))
@@ -457,6 +487,70 @@ class AllowanceRefreshTests(unittest.TestCase):
         entry = self.entry(cache_phase="first_read", latency_ms=155250)
         kept, _ = self.run_refresh(entry, self.samples(9395880, 1792, "first_read"))
         self.assertEqual(kept[0]["latency_ms"], 500)
+
+    def test_refuses_single_warm_sample(self):
+        self.assert_refused(
+            self.entry(),
+            self.samples(9395880, 1777)[:1],
+            "missing warm sample(s) [2, 3, 4, 5]",
+        )
+
+    def test_refuses_unexpected_response_status(self):
+        # A fast 500 must not retire an entry the ordinary budget would cover.
+        self.assert_refused(
+            self.entry(),
+            self.samples(40000, 120, status=500),
+            "status 500 (route expects 200)",
+        )
+
+    def test_refuses_missing_preparation_phase(self):
+        entry = self.entry(cache_phase="first_read", latency_ms=155250)
+        samples = [
+            s
+            for s in self.samples(9395880, 1792, "first_read")
+            if s["cache_phase"] != "post_preparation"
+        ]
+        self.assert_refused(entry, samples, "missing post_preparation sample(s) [0]")
+
+    def test_refuses_missing_fresh_data_control(self):
+        route = dict(
+            self.route,
+            path="/stream/inbox",
+            case="inbox-idle",
+            max_rows=1024,
+        )
+        entry = self.entry(path="/stream/inbox", case="inbox-idle")
+        self.assert_refused(
+            entry,
+            self.samples(40000, 120, path="/stream/inbox", case="inbox-idle", stream_polls=1),
+            "missing fresh-data control (1 of 2 measured polls)",
+            route=route,
+        )
+
+    def test_refuses_deadline_overrun(self):
+        self.assert_refused(
+            self.entry(),
+            self.samples(9395880, 1777, deadline_exceeded=True),
+            "request exceeded its deadline",
+        )
+
+    def test_refuses_failed_fixture_assertions(self):
+        # Samples exist with clean counters, but the case never completed its
+        # fixture/stream assertions (run 40069817105 inbox-idle shape).
+        self.assert_refused(
+            self.entry(),
+            self.samples(40000, 120),
+            "case failed its fixture/stream assertions",
+            completed=[],
+        )
+
+    def test_refuses_invalidation_that_did_not_advance(self):
+        entry = self.entry(cache_phase="post_invalidation", latency_ms=155250)
+        self.assert_refused(
+            entry,
+            self.samples(9395880, 1792, "post_invalidation", invalidation_epoch_after=10),
+            "invalidation epoch did not advance",
+        )
 
 
 if __name__ == "__main__":

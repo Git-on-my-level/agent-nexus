@@ -6,6 +6,14 @@ replaces. An entry whose measurement exceeds its reviewed ceiling stays
 expired and is reported; an entry the route's ordinary budget already covers
 is retired. New allowances are never added.
 
+An entry is renewed or retired only from complete, valid measurements: every
+sample of every phase that phase's ceiling rests on, the response status the
+route contract expects, no exceeded request deadline, the case's fixture and
+stream assertions completed (the harness records a sample before asserting on
+it, so a failed case keeps its samples without its completion marker), the
+fresh-data stream controls measured, and a real invalidation for the
+post-invalidation phase. Anything less refuses that entry with the reason.
+
 Usage, from the repository root, after downloading every route shard artifact
 of one run at the current source:
   python3 scripts/refresh-performance-allowances.py .tmp/performance/shards \
@@ -42,14 +50,78 @@ def latency_ceiling(needed_ms):
     return int(math.ceil(needed_ms * 1.2 / 50) * 50)
 
 
-def measurements(reports):
-    out = {}
-    for report in reports:
-        for sample in report["samples"]:
-            phase = coverage.limit_phase(sample["cache_phase"])
-            key = (coverage.case_key(sample), sample["principal"], phase)
-            out.setdefault(key, []).append(sample)
-    return out
+# The executed samples an entry's ceiling rests on, per limit phase: the warm
+# median needs all five warm samples, first-read limits cover both independent
+# first_read and post_preparation captures, and post-invalidation needs its
+# single invalidated read.
+REQUIRED_PHASES = {
+    "warm": {"warm": frozenset(range(1, 6))},
+    "first_read": {"first_read": frozenset({0}), "post_preparation": frozenset({0})},
+    "post_invalidation": {"post_invalidation": frozenset({6})},
+}
+
+
+def completion_label(sample):
+    stage = (
+        " post-invalidation"
+        if sample["worker"] == 3
+        else " first-and-warm"
+        if sample["worker"] != 0
+        else ""
+    )
+    return coverage.case_key(sample) + " " + sample["principal"] + stage
+
+
+def sample_problem(route, sample, completed):
+    """Why this sample cannot support a ceiling; None when it is valid."""
+    phase = sample["cache_phase"]
+    expected = route[sample["principal"] + "_status"]
+    if not sample.get("measured"):
+        return "unmeasured sample"
+    if sample.get("deadline_exceeded"):
+        return "request exceeded its deadline"
+    if sample["status"] != expected:
+        return f"status {sample['status']} (route expects {expected})"
+    if completion_label(sample) not in completed:
+        return "case failed its fixture/stream assertions"
+    if route["path"].startswith("/stream/") and expected == 200:
+        if sample.get("stream_polls") != 2:
+            return (
+                "missing fresh-data control "
+                f"({sample.get('stream_polls')} of 2 measured polls)"
+            )
+    before = sample["invalidation_epoch_before"]
+    after = sample["invalidation_epoch_after"]
+    if phase == "post_invalidation":
+        if not after > before > 0:
+            return "invalidation epoch did not advance"
+        if route["path"] == "/stream/agent-notification-receipts" and not (
+            sample["receipt_invalidation_epoch_after"]
+            > sample["receipt_invalidation_epoch_before"]
+            > 0
+        ):
+            return "receipt invalidation epoch did not advance"
+    elif (before, after) != (0, 0):
+        return "unexpected invalidation"
+    return None
+
+
+def evidence_problems(route, phase, samples, completed):
+    """Join every reason these samples cannot renew or retire the entry."""
+    problems = []
+    by_phase = {}
+    for sample in samples:
+        by_phase.setdefault(sample["cache_phase"], []).append(sample)
+    for raw_phase, indexes in REQUIRED_PHASES[phase].items():
+        have = by_phase.get(raw_phase, [])
+        missing = indexes - {s["sample"] for s in have}
+        if missing:
+            problems.append(f"missing {raw_phase} sample(s) {sorted(missing)}")
+        for sample in have:
+            problem = sample_problem(route, sample, completed)
+            if problem:
+                problems.append(f"{raw_phase}#{sample['sample']}: {problem}")
+    return "; ".join(dict.fromkeys(problems))
 
 
 def needed_latency(phase, samples):
@@ -64,17 +136,33 @@ def needed_latency(phase, samples):
 
 def refresh(routes, allowances, reports, source_hash):
     by_key = {coverage.case_key(route): route for route in routes}
-    measured = measurements(reports)
+    measured, completed = {}, set()
+    for report in reports:
+        completed.update(report.get("completed") or [])
+        for sample in report["samples"]:
+            key = (coverage.case_key(sample), sample["principal"])
+            measured.setdefault(key, []).append(sample)
     kept, rows = [], []
     for entry in allowances:
         phase = entry.get("cache_phase", "warm")
-        key = (coverage.case_key(entry), entry["principal"], phase)
-        samples = measured.get(key)
+        key = (coverage.case_key(entry), entry["principal"])
+        samples = [
+            s
+            for s in measured.get(key, [])
+            if coverage.limit_phase(s["cache_phase"]) == phase
+        ]
         route = by_key[coverage.case_key(entry)]
-        label = " ".join(key)
+        label = " ".join((*key, phase))
         if not samples:
             kept.append(entry)
             rows.append((label, "not measured", entry, None, None))
+            continue
+        problems = evidence_problems(route, phase, samples, completed)
+        if problems:
+            # Incomplete or failed evidence must neither renew nor retire;
+            # the entry stays expired at its last reviewed ceiling.
+            kept.append(entry)
+            rows.append((label, "invalid evidence: " + problems, entry, None, None))
             continue
         updated = dict(entry, core_source_sha256=source_hash)
         over, ordinary = [], True
