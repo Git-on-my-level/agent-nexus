@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	contractenums "agent-nexus-contracts-go-client/enums"
+
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/registry"
@@ -3532,7 +3534,7 @@ func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, er
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id")
 	fs.Var(&responseTextFlag, "response-text", "Freeform response text")
-	fs.Var(&outcomeFlag, "outcome", "Response outcome: answered, approved, rejected, acknowledged")
+	fs.Var(&outcomeFlag, "outcome", "Response outcome: "+strings.Join(contractenums.HumanAttentionResponseOutcomeValues, ", "))
 	fs.Var(&notifyModeFlag, "notify-mode", "Notification mode: original, target, none")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
@@ -3585,10 +3587,8 @@ func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, er
 	if strings.TrimSpace(anyString(body["response_text"])) == "" {
 		return nil, errnorm.Usage("invalid_request", "response_text is required")
 	}
-	switch anyString(body["outcome"]) {
-	case "answered", "approved", "rejected", "acknowledged":
-	default:
-		return nil, errnorm.Usage("invalid_request", "outcome must be answered, approved, rejected, or acknowledged")
+	if !contractenums.IsHumanAttentionResponseOutcome(anyString(body["outcome"])) {
+		return nil, errnorm.Usage("invalid_request", askOutcomeUsage)
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {

@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode"
 
+	"agent-nexus-markdownhygiene"
+
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 )
@@ -414,8 +416,11 @@ func docsTitleFromMarkdown(content, rel string) string {
 	return rel
 }
 
+// ingestContentEqual compares a file with what core stored. Core applies
+// markdown hygiene on write, so the file gets the same rules first; otherwise
+// a file core rewrote (say "#Title") would be revised again on every ingest.
 func ingestContentEqual(stored, file string) bool {
-	return normalizeIngestContent(stored) == normalizeIngestContent(file)
+	return normalizeIngestContent(stored) == normalizeIngestContent(markdownhygiene.Normalize(file).Text)
 }
 
 func normalizeIngestContent(raw string) string {

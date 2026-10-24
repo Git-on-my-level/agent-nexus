@@ -223,8 +223,14 @@ core-%: ## Pass-through target to core Makefile
 web-ui-%: ## Pass-through target to web-ui Makefile
 	$(MAKE) -C $(WEB_UI_DIR) $*
 
+.PHONY: enum-conformance
+enum-conformance: ## Verify core, CLI and web-ui use the schema enums (no hand-written copies)
+	node scripts/check-enum-conformance.mjs
+
 .PHONY: visualreport-check
 visualreport-check: ## Verify the shared Go report contract and browser conformance
 	@test -z "$$(gofmt -l contracts/visualreport)"
 	cd contracts/visualreport && go vet ./... && go test ./...
+	@test -z "$$(gofmt -l contracts/markdownhygiene)"
+	cd contracts/markdownhygiene && go vet ./... && go test ./...
 	node scripts/check-visual-report-conformance.mjs

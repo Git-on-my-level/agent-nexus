@@ -295,3 +295,26 @@ func TestLocalCommandMetadataHasNoHTTPRoute(t *testing.T) {
 		t.Fatal("local command exposed as TS HTTP helper")
 	}
 }
+
+func TestCollectContractEnumsKeepsOrderAndChecksAliases(t *testing.T) {
+	doc := anxSchemaDocument{Enums: map[string]anxEnumDef{
+		"board_column_key": {EnumPolicy: "strict", Values: []string{"backlog", "ready", "done"}},
+		"priority":         {EnumPolicy: "strict", Values: []string{"p0", "p1"}, Aliases: map[string]string{"critical": "p0"}},
+	}}
+	enums, err := collectContractEnums(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(enums[0].Values, ","); enums[0].Name != "board_column_key" || got != "backlog,ready,done" {
+		t.Fatalf("contract order lost: %s %s", enums[0].Name, got)
+	}
+	for name, def := range map[string]anxEnumDef{
+		"unknown target": {Values: []string{"p0"}, Aliases: map[string]string{"critical": "p9"}},
+		"shadowed value": {Values: []string{"p0", "p1"}, Aliases: map[string]string{"p1": "p0"}},
+		"duplicate":      {Values: []string{"p0", "p0"}},
+	} {
+		if _, err := collectContractEnums(anxSchemaDocument{Enums: map[string]anxEnumDef{"priority": def}}); err == nil {
+			t.Fatalf("%s: expected an error", name)
+		}
+	}
+}

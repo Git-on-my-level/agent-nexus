@@ -41,6 +41,18 @@ func TestAskByBlocksPriorityPayload(t *testing.T) {
 	}
 }
 
+// Word spellings stay accepted on input for older scripts, and are sent as the
+// canonical p0..p3 value so every reader ranks them the same way.
+func TestAskPriorityAliasesFoldToCanonical(t *testing.T) {
+	for in, want := range map[string]string{"critical": "p0", "urgent": "p0", "High": "p1", "medium": "p2", "normal": "p2", "low": "p3", "P2": "p2"} {
+		doc := askDryRun(t, "--priority", in)
+		payload := asMap(asMap(asMap(asMap(doc["result"])["body"])["event"])["payload"])
+		if payload["priority"] != want {
+			t.Fatalf("--priority %s sent %#v, want %q", in, payload["priority"], want)
+		}
+	}
+}
+
 func TestAskMalformedByAndBlocksAreUsageErrors(t *testing.T) {
 	for _, tc := range []struct {
 		flags []string
@@ -48,7 +60,7 @@ func TestAskMalformedByAndBlocksAreUsageErrors(t *testing.T) {
 	}{
 		{[]string{"--by", "friday"}, "invalid_by"},
 		{[]string{"--blocks", "not a ref"}, "invalid_request"},
-		{[]string{"--priority", "urgent"}, "invalid_request"},
+		{[]string{"--priority", "asap"}, "invalid_request"},
 	} {
 		args := append([]string{"--json", "ask", "Accept?", "--body", "Context", "--recommend", "Accept", "--subject-ref", "card:launch", "--thread-id", "thr1", "--dry-run"}, tc.flags...)
 		payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), nil, nil, args))

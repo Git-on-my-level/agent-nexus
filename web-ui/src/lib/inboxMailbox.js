@@ -1,3 +1,7 @@
+import {
+  PRIORITY_VALUES,
+  normalizePriority,
+} from "../../../contracts/gen/ts/dist/enums.js";
 import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
 import { formatElapsed } from "$lib/time/format.js";
 import { NEEDS_CONTEXT_OUTCOME } from "./askDelivery.js";
@@ -299,8 +303,16 @@ export function inboxRowBadge(row, now = Date.now()) {
   return null;
 }
 
-const SEVERITY_RANK = { critical: 3, high: 2, medium: 1, normal: 1, low: 0 };
-const PRIORITY_RANK = { p0: 3, p1: 2, p2: 1, p3: 0 };
+/**
+ * Higher is more urgent. Priority and severity share the contract scale:
+ * p0..p3, or a word spelling (critical/urgent, high, medium/normal, low).
+ */
+function priorityRank(value) {
+  const canonical = normalizePriority(value);
+  return canonical
+    ? PRIORITY_VALUES.length - 1 - PRIORITY_VALUES.indexOf(canonical)
+    : undefined;
+}
 
 /**
  * A short, readable stand-in for an identifier that resolved to no name:
@@ -415,14 +427,9 @@ export function inboxItemSubject(
 }
 
 function severityRank(row) {
-  const priority = String(
-    row?.priority || row?.item?.priority || "",
-  ).toLowerCase();
   return (
-    PRIORITY_RANK[priority] ??
-    SEVERITY_RANK[
-      String(row?.severity ?? row?.item?.severity ?? "").toLowerCase()
-    ] ??
+    priorityRank(row?.priority || row?.item?.priority) ??
+    priorityRank(row?.severity ?? row?.item?.severity) ??
     0
   );
 }

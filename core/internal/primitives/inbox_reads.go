@@ -67,7 +67,7 @@ func (s *Store) readInboxLegacy(ctx context.Context, options InboxReadOptions, d
 	}
 	query := `SELECT i.id,i.thread_id,i.category,i.trigger_at,i.due_at,i.has_due_at,i.source_event_id,i.source_card_id,i.generated_at,i.data_json,i.source_hash,i.lifecycle_ready FROM ` + source + ` WHERE ` + where
 	if options.AsksOnly {
-		query += ` ORDER BY CASE lower(trim(COALESCE(NULLIF(trim(json_extract(i.data_json,'$.priority')),''),json_extract(i.data_json,'$.severity'),''))) WHEN 'urgent' THEN 0 WHEN 'p0' THEN 0 WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'normal' THEN 2 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END,i.trigger_at ASC,i.id ASC`
+		query += ` ORDER BY ` + inboxAskPrioritySQL + `,i.trigger_at ASC,i.id ASC`
 	} else {
 		query += ` ORDER BY CASE i.category WHEN 'escalate' THEN 0 WHEN 'ask' THEN 1 WHEN 'review' THEN 2 ELSE 99 END,i.trigger_at DESC,i.id ASC`
 	}
@@ -89,6 +89,11 @@ func (s *Store) readInboxLegacy(ctx context.Context, options InboxReadOptions, d
 	}
 	return items, count, rows.Err()
 }
+
+// inboxAskPrioritySQL ranks an ask by payload priority, falling back to its
+// severity, in contract priority order. TestPrioritySQLMatchesContract pins it
+// to the generated enum.
+const inboxAskPrioritySQL = `CASE lower(trim(COALESCE(NULLIF(trim(json_extract(i.data_json,'$.priority')),''),json_extract(i.data_json,'$.severity'),''))) WHEN 'urgent' THEN 0 WHEN 'p0' THEN 0 WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'normal' THEN 2 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END`
 
 // Inbox freshness is principal-scoped without changing generic thread reads.
 // Filter backing card/board access before loading any projection metadata.

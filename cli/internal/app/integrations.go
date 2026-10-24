@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	contractenums "agent-nexus-contracts-go-client/enums"
+
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/integrations"
@@ -90,9 +92,7 @@ func parseIntegrationOptions(args []string) (integrationOptions, error) {
 		}
 	}
 	if o.column != "" {
-		switch o.column {
-		case "backlog", "ready", "in_progress", "blocked", "review", "done":
-		default:
+		if !contractenums.IsBoardColumnKey(o.column) {
 			return o, errnorm.Usage("invalid_flags", "unknown column key")
 		}
 	}

@@ -23,3 +23,7 @@ require (
 )
 
 replace agent-nexus-visualreport => ../contracts/visualreport
+
+require agent-nexus-markdownhygiene v0.0.0
+
+replace agent-nexus-markdownhygiene => ../contracts/markdownhygiene

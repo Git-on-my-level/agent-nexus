@@ -580,6 +580,32 @@ describe("Needs you triage order", () => {
     ]);
   });
 
+  it("ranks word priorities the agent may send like their p0..p3 values", () => {
+    const now = Date.parse("2026-09-27T12:00:30Z");
+    const ask = (id, priority, minutes) => ({
+      id,
+      kind: "ask",
+      title: id,
+      priority,
+      source_event_time: minutesAgo(now, minutes),
+    });
+    const rows = buildInboxRows({
+      inboxItems: [
+        ask("old-p3", "p3", 300),
+        ask("old-p2", "p2", 240),
+        ask("fresh-high", "high", 5),
+        ask("fresh-critical", "critical", 4),
+      ],
+      now,
+    });
+    expect(filterMailbox(rows, "needs-you").map((row) => row.item.id)).toEqual([
+      "fresh-critical",
+      "fresh-high",
+      "old-p2",
+      "old-p3",
+    ]);
+  });
+
   it("formats waits the way an operator reads them", () => {
     expect(formatWait(20_000)).toBe("<1m");
     expect(formatWait(41 * 60_000)).toBe("41m");

@@ -117,6 +117,7 @@ type anxEnumDef struct {
 	Groups            map[string][]string `yaml:"groups"`
 	BackingEventTypes []string            `yaml:"backing_event_types"`
 	BackingKinds      []string            `yaml:"backing_kinds"`
+	Aliases           map[string]string   `yaml:"aliases"`
 }
 
 type anxFieldContainer struct {
@@ -358,6 +359,7 @@ func main() {
 		tsPackage         = flag.String("ts-package", "agent-nexus-contracts-ts-client", "package name for generated TS client")
 		emitEventRefRules = flag.Bool("emit-event-ref-rules", true, "whether to emit event reference rules metadata from the schema contract")
 		xAnxBaselinePath  = flag.String("x-anx-baseline", "", "path to x-anx validation baseline yaml (defaults to openapi sibling)")
+		printEnums        = flag.Bool("print-enums", false, "print the schema enums in contract order as JSON and exit (used by scripts/check-enum-conformance.mjs)")
 	)
 	flag.Parse()
 
@@ -394,6 +396,16 @@ func main() {
 	var schemaDoc anxSchemaDocument
 	if err := yaml.Unmarshal(schemaRaw, &schemaDoc); err != nil {
 		exitf("decode schema yaml: %v", err)
+	}
+	if *printEnums {
+		enums, err := collectContractEnums(schemaDoc)
+		if err != nil {
+			exitf("collect schema enums: %v", err)
+		}
+		if err := writeContractEnumsJSON(enums); err != nil {
+			exitf("print schema enums: %v", err)
+		}
+		return
 	}
 
 	commands := collectCommands(doc, schemaDoc)
@@ -1359,6 +1371,16 @@ func generateAll(outDir string, doc openAPIDocument, commands []command, schemaD
 	if err := writeTSClient(filepath.Join(outDir, "ts"), commands, config.TSPackage); err != nil {
 		return err
 	}
+	enums, err := collectContractEnums(schemaDoc)
+	if err != nil {
+		return err
+	}
+	if err := writeGoEnums(filepath.Join(outDir, "go"), enums); err != nil {
+		return err
+	}
+	if err := writeTSEnums(filepath.Join(outDir, "ts"), enums); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -2157,7 +2179,7 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
 		return err
 	}
 
-	index := "export * from \"./client\";\n"
+	index := "export * from \"./client\";\nexport * from \"./enums\";\n"
 	if err := os.WriteFile(filepath.Join(tsOutDir, "index.ts"), []byte(index), 0o644); err != nil {
 		return err
 	}
@@ -2173,7 +2195,7 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
     "declaration": true,
     "outDir": "./dist"
   },
-  "include": ["client.ts", "index.ts"]
+  "include": ["client.ts", "enums.ts", "index.ts"]
 }
 `
 	if err := os.WriteFile(filepath.Join(tsOutDir, "tsconfig.json"), []byte(tsconfig), 0o644); err != nil {

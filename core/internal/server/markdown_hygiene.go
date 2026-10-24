@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"agent-nexus-core/internal/markdownhygiene"
+	"agent-nexus-markdownhygiene"
 )
 
 type markdownHygieneCollector struct {

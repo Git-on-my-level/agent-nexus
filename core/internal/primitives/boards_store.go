@@ -18,6 +18,8 @@ import (
 
 	"github.com/google/uuid"
 
+	contractenums "agent-nexus-contracts-go-client/enums"
+
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/schema"
@@ -835,7 +837,7 @@ type boardCardRow struct {
 	TrashReason          sql.NullString
 }
 
-var canonicalBoardColumnOrder = []string{"backlog", "ready", "in_progress", "blocked", "review", "done"}
+var canonicalBoardColumnOrder = contractenums.BoardColumnKeyValues
 
 var canonicalBoardColumnTitles = map[string]string{
 	"backlog":     "Backlog",

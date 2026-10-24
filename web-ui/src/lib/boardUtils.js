@@ -1,3 +1,4 @@
+import { BOARD_COLUMN_KEY_VALUES } from "../../../contracts/gen/ts/dist/enums.js";
 import { isInternalUuid, resourceRouteSegment } from "./resourceIdentity.js";
 
 /** Lifecycle `state` on boards/topics/threads (API v0.4+). */
@@ -27,14 +28,14 @@ export function boardDisplayTitle(title) {
   return trimmed || text;
 }
 
-export const CANONICAL_BOARD_COLUMNS = [
-  { key: "backlog", title: "Backlog" },
-  { key: "ready", title: "Ready" },
-  { key: "in_progress", title: "In Progress" },
-  { key: "blocked", title: "Blocked" },
-  { key: "review", title: "Review" },
-  { key: "done", title: "Done" },
-];
+/**
+ * Board columns in contract order, titled from the key ("in_progress" reads
+ * "In Progress"), so a column added to the schema renders without a second list.
+ */
+export const CANONICAL_BOARD_COLUMNS = BOARD_COLUMN_KEY_VALUES.map((key) => ({
+  key,
+  title: key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+}));
 
 export const CANONICAL_BOARD_COLUMN_KEYS = CANONICAL_BOARD_COLUMNS.map(
   (column) => column.key,

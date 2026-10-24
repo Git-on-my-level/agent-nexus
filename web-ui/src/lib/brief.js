@@ -11,6 +11,10 @@
  */
 
 import { formatAgo } from "$lib/time/format.js";
+import {
+  PRIORITY_VALUES,
+  normalizePriority,
+} from "../../../contracts/gen/ts/dist/enums.js";
 import { normalizeLoop } from "$lib/loops.js";
 
 /** The four computed initiative states, in attention order. */
@@ -67,16 +71,11 @@ export const BRIEF_COMPUTED_FIELDS = new Set([
   "generated_at",
 ]);
 
-const PRIORITY_RANK = {
-  critical: 0,
-  p0: 0,
-  high: 1,
-  p1: 1,
-  medium: 2,
-  p2: 2,
-  low: 3,
-  p3: 3,
-};
+/** p0 (or critical/urgent) sorts first; an unknown priority sorts last. */
+function priorityRank(value) {
+  const canonical = normalizePriority(value);
+  return canonical ? PRIORITY_VALUES.indexOf(canonical) : 9;
+}
 
 function text(value) {
   return String(value ?? "").trim();
@@ -340,8 +339,8 @@ export function compareDecisions(a, b) {
     return aBy - bBy;
   }
   if (a.blocksCount !== b.blocksCount) return b.blocksCount - a.blocksCount;
-  const aP = PRIORITY_RANK[a.priority] ?? 9;
-  const bP = PRIORITY_RANK[b.priority] ?? 9;
+  const aP = priorityRank(a.priority);
+  const bP = priorityRank(b.priority);
   if (aP !== bP) return aP - bP;
   const aAt = time(a.createdAt) ?? Infinity;
   const bAt = time(b.createdAt) ?? Infinity;

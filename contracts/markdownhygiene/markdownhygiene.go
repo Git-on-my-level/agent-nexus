@@ -1,3 +1,6 @@
+// Package markdownhygiene is the markdown normalization core applies to text
+// fields on write. It is shared so clients that compare local files with stored
+// content (anx docs ingest) apply exactly the same rules.
 package markdownhygiene
 
 import (

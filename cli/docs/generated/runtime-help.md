@@ -3442,7 +3442,7 @@ Inputs:
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `debug inbox list`).
   --response-text <text>  Freeform response text.
-  --outcome <value>       answered, approved, rejected, or acknowledged (required).
+  --outcome <value>       answered, approved, rejected, acknowledged, needs_context, or resolved (required).
   --notify-mode <mode>    original, target, or none.
   --actor-id <id>         Actor id (`me` uses the resolved agent's actor when configured).
   --from-file <path>      JSON body file (API request shape).

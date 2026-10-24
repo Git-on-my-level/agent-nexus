@@ -8,6 +8,7 @@
     workFreshness,
   } from "$lib/pm/presentation.js";
   import { workSummaryModel } from "$lib/workSummary.js";
+  import { normalizePriority } from "../../../../../contracts/gen/ts/dist/enums.js";
 
   /**
    * One board card: a title, the shared summary, and the two signals that are
@@ -58,13 +59,7 @@
   // A read that is failing is worth a badge: the reader cannot tell from the
   // column that this card's evidence is going stale.
   let readError = $derived(workFreshness(work, now));
-  let critical = $derived(
-    ["critical", "urgent", "p0"].includes(
-      String(work?.priority ?? "")
-        .trim()
-        .toLowerCase(),
-    ),
-  );
+  let critical = $derived(normalizePriority(work?.priority) === "p0");
   let showSignals = $derived(
     critical || readError.key === "error" || requested,
   );

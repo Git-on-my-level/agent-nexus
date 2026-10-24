@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	contractenums "agent-nexus-contracts-go-client/enums"
 	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/schema"
@@ -169,7 +170,7 @@ func validateWorkLocal(m map[string]any) error {
 			}
 		}
 	}
-	if p := workString(m["priority"]); p != "" && p != "p0" && p != "p1" && p != "p2" && p != "p3" {
+	if p := workString(m["priority"]); p != "" && !contractenums.IsPriority(p) {
 		return workLocalInvalid("priority", "invalid priority")
 	}
 	if risk := workString(m["risk"]); risk != "" && risk != "low" && risk != "medium" && risk != "high" && risk != "critical" {

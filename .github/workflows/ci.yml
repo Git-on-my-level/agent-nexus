@@ -31,6 +31,18 @@ jobs:
           OSS_BOUNDARY_EXTRA_PATTERNS: ${{ (github.event_name == 'push' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.OSS_BOUNDARY_DENYLIST || '' }}
         run: make oss-boundary-check
 
+  enum-copies-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: changes
+    if: needs.changes.outputs.release_only != 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Reject hand-written copies of shared schema enums
+        run: node scripts/check-enum-conformance.mjs --copies-only
+
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -98,6 +110,7 @@ jobs:
               - 'Makefile'
               - 'scripts/contract-*'
               - 'scripts/check-visual-report-conformance.mjs'
+              - 'scripts/check-enum-conformance.mjs'
               - 'core/cmd/contract-gen/**'
             core:
               - 'core/**'
@@ -535,6 +548,7 @@ jobs:
     timeout-minutes: 2
     needs:
       - oss-boundary-check
+      - enum-copies-check
       - changes
       - workflow-checks
       - contracts-check

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	contractenums "agent-nexus-contracts-go-client/enums"
+
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
@@ -2362,10 +2364,8 @@ func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, colu
 		}
 	}
 	if strings.TrimSpace(columnKey) != "" {
-		switch strings.TrimSpace(columnKey) {
-		case "backlog", "ready", "in_progress", "blocked", "review", "done":
-		default:
-			return errors.New("column_key must be one of: backlog, ready, in_progress, blocked, review, done")
+		if !contractenums.IsBoardColumnKey(strings.TrimSpace(columnKey)) {
+			return errors.New("column_key must be one of: " + strings.Join(contractenums.BoardColumnKeyValues, ", "))
 		}
 	}
 	if strings.TrimSpace(beforeCardID) != "" && strings.TrimSpace(afterCardID) != "" {
@@ -2636,10 +2636,8 @@ func validateBoardPatchRequest(contract *schema.Contract, patch map[string]any) 
 
 func validateBoardPlacementRequest(columnKey, beforeThreadID, afterThreadID string, pinnedDocumentID *string) error {
 	if strings.TrimSpace(columnKey) != "" {
-		switch strings.TrimSpace(columnKey) {
-		case "backlog", "ready", "in_progress", "blocked", "review", "done":
-		default:
-			return errors.New("column_key must be one of: backlog, ready, in_progress, blocked, review, done")
+		if !contractenums.IsBoardColumnKey(strings.TrimSpace(columnKey)) {
+			return errors.New("column_key must be one of: " + strings.Join(contractenums.BoardColumnKeyValues, ", "))
 		}
 	}
 	if strings.TrimSpace(beforeThreadID) != "" && strings.TrimSpace(afterThreadID) != "" {
