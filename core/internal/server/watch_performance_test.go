@@ -46,7 +46,7 @@ func TestWatchTwentyTwoLoopPanelsPerformance(t *testing.T) {
 	defer pool.Close()
 	measured := primitives.NewTestStore(pool, h.workspace.Layout().ArtifactContentDir)
 	req := httptest.NewRequest("GET", "/docs/loops/report", nil).WithContext(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "owner"}))
-	opts := handlerOptions{primitiveStore: measured, reportPanels: &reportPanelCache{}}
+	opts := handlerOptions{primitiveStore: measured, reportPanels: &reportPanelCache{ttl: time.Hour}}
 	// The original implementation materialized all panels serially without a
 	// result cache; preserve that comparator rather than fabricating a sleep.
 	capture.Start()

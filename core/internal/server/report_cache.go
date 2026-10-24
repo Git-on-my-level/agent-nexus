@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,9 @@ const reportCacheCapacity = 64
 type reportPanelCache struct {
 	mu      sync.Mutex
 	entries map[string]cachedReportPanel
+	// ttl overrides reportCacheTTL; tests that time cold and warm passes set
+	// it so a slow runner cannot expire entries between the two.
+	ttl time.Duration
 }
 type cachedReportPanel struct {
 	data    []byte
@@ -70,7 +75,11 @@ func (c *reportPanelCache) put(key string, value map[string]any, now time.Time) 
 			break
 		}
 	}
-	c.entries[key] = cachedReportPanel{raw, now.Add(reportCacheTTL)}
+	ttl := c.ttl
+	if ttl <= 0 {
+		ttl = reportCacheTTL
+	}
+	c.entries[key] = cachedReportPanel{raw, now.Add(ttl)}
 }
 
 func selectReportPanels(r *http.Request, panels []reports.Panel) ([]reports.Panel, error) {
@@ -169,8 +178,9 @@ func materializeReportPanels(r *http.Request, opts handlerOptions, panels []repo
 						result = map[string]any{"status": "unavailable", "data": map[string]any{}, "message": "Report data is unavailable.", "truncated": false, "observed_at": now.Format(time.RFC3339Nano), "provenance_class": "live"}
 					} else {
 						reader := reportReader{r: req, opts: opts, now: now, visibility: map[string]bool{}, decisionLimit: min(maxReportCandidates, j.panel.Query.Limit+1)}
-						result = reader.renderPanel(j.panel)
-						if jobToken != "" {
+						var panicked bool
+						result, panicked = reader.renderPanelRecovered(j.panel)
+						if jobToken != "" && !panicked {
 							opts.reportPanels.put(key, result, now)
 						}
 					}
@@ -192,6 +202,20 @@ func materializeReportPanels(r *http.Request, opts handlerOptions, panels []repo
 	close(queue)
 	workers.Wait()
 	return now.Format(time.RFC3339Nano), results
+}
+
+// renderPanelRecovered keeps a panic in one panel from crashing the process:
+// workers run outside net/http's per-request recovery. The panel renders as
+// unavailable and the failure is not cached.
+func (reader *reportReader) renderPanelRecovered(panel reports.Panel) (result map[string]any, panicked bool) {
+	defer func() {
+		if v := recover(); v != nil {
+			log.Printf("report panel render panic type=%s id=%s: %v\n%s", panel.Type, panel.ID, v, debug.Stack())
+			result = map[string]any{"status": "unavailable", "data": map[string]any{}, "message": "Report data is unavailable.", "truncated": false, "observed_at": reader.now.Format(time.RFC3339Nano), "provenance_class": "live"}
+			panicked = true
+		}
+	}()
+	return reader.renderPanel(panel), false
 }
 
 func (reader *reportReader) renderPanel(panel reports.Panel) map[string]any {
