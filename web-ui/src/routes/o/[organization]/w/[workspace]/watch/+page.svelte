@@ -36,6 +36,8 @@
     mutationConfirmations,
     supersedeLocalMutation,
     enqueueDashboardPins,
+    pendingDashboardPins,
+    DASHBOARD_PINS_TARGET,
   } from "$lib/mutationOutbox.js";
   import {
     enqueueTaskMove,
@@ -258,22 +260,53 @@
 
   // Dashboards: each of the reader's pins is a tab; any other opens as a tab
   // from the "More dashboards" menu. Pins are per person; with none, core
-  // answers with the workspace default.
+  // answers with the workspace default (`source: "workspace_default"`), which
+  // shows as a tab but is not the reader's pin to unpin or count.
   let dashboards = $state(null);
   let loadingMore = $state(false);
   let pinError = $state("");
   let serverPins = $state(null);
-  // The reader's newest pin edit, shown until a reload reads it back. The
-  // outbox owns delivery, so a closed tab or a dropped request loses nothing.
-  let localPins = $state(null);
+  // The reader's newest saved pin edit, shown until core confirms it. The
+  // outbox owns delivery, so a reload, a closed tab or a dropped request
+  // loses nothing, and an edit from another tab shows here too.
+  let localPins = $derived(pendingDashboardPins($mutationOutbox));
+  let pinAttention = $derived(
+    $mutationOutbox.some(
+      (row) =>
+        row.operation === "workspace.dashboard.pins.set" &&
+        row.state === "attention",
+    ),
+  );
+  // Core's receipt is the effective set; take it once the edit lands.
+  let pinReceipt = $derived($mutationConfirmations[DASHBOARD_PINS_TARGET]);
+  const seenPins = { receipt: undefined };
+  $effect(() => {
+    const receipt = pinReceipt;
+    if (seenPins.receipt !== undefined && receipt !== seenPins.receipt)
+      if (Array.isArray(receipt?.result?.document_refs))
+        serverPins = receipt.result;
+    seenPins.receipt = receipt ?? null;
+  });
   let reports = $derived(dashboards?.reports ?? []);
+  /** The reader's own pins: what Pin/Unpin edit and MAX_PINS counts. */
   let pinnedRefs = $derived(
     localPins ??
-      serverPins?.document_refs ??
-      (dashboards?.pinned_ref ? [dashboards.pinned_ref] : []),
+      (serverPins && serverPins.source !== "workspace_default"
+        ? serverPins.document_refs
+        : []),
   );
+  let defaultRefs = $derived(
+    serverPins
+      ? serverPins.source === "workspace_default"
+        ? serverPins.document_refs
+        : []
+      : dashboards?.pinned_ref
+        ? [dashboards.pinned_ref]
+        : [],
+  );
+  let tabRefs = $derived(pinnedRefs.length ? pinnedRefs : defaultRefs);
   let pinnedReports = $derived(
-    pinnedRefs
+    tabRefs
       .map((ref) => reports.find((entry) => entry.ref === ref))
       .filter(Boolean),
   );
@@ -324,15 +357,12 @@
   const MAX_PINS = 12;
   async function savePins(next) {
     pinError = "";
-    const previous = localPins;
-    localPins = next;
     try {
       await enqueueDashboardPins({
         document_refs: next,
         href: workspaceHref("/watch?tab=dashboard"),
       });
     } catch {
-      localPins = previous;
       pinError = "Couldn't save your pins. Try again.";
     }
   }
@@ -371,7 +401,7 @@
         key: `dashboard:${report.id}`,
         label: report.title || "Dashboard",
         badge: 0,
-        pinned: true,
+        pinned: pinnedRefs.includes(report.ref),
         active: tab === "dashboard" && selectedReport === report,
         select: () => selectTab("dashboard", report.id),
       })),
@@ -558,8 +588,13 @@
   {#if moveError}
     <InlineAlert>{moveError}</InlineAlert>
   {/if}
-  {#if pinError}<p class="text-meta text-danger-text" role="alert">
-      {pinError}
+  {#if pinError || pinAttention}<p
+      class="text-meta text-danger-text"
+      role="alert"
+      data-watch-pin-error
+    >
+      {pinError ||
+        "Couldn't save your pin change. It's kept in your unsent work."}
     </p>{/if}
 
   {#if tab === "dashboard"}

@@ -758,6 +758,24 @@ export function enqueuePmDecisionAnswer({
  * so the newest intent wins: once it is persisted, older pending pin edits
  * are superseded rather than replayed over it.
  */
+export const DASHBOARD_PINS_TARGET = "workspace:dashboard-pins";
+
+/**
+ * The newest saved pin set still on its way to core, or null. Only rows that
+ * may yet be sent count: a definitive failure falls back to core's set.
+ */
+export function pendingDashboardPins(rows) {
+  let newest = null;
+  for (const row of rows ?? [])
+    if (
+      row.operation === "workspace.dashboard.pins.set" &&
+      !["superseded", "attention"].includes(row.state) &&
+      (!newest || row.createdAt >= newest.createdAt)
+    )
+      newest = row;
+  return newest ? newest.request.body.document_refs : null;
+}
+
 export async function enqueueDashboardPins({ document_refs, ...options }) {
   const key = randomUUID();
   const older = get(mutationOutbox)
@@ -770,6 +788,7 @@ export async function enqueueDashboardPins({ document_refs, ...options }) {
     preview: document_refs.join("\n") || "No pinned dashboards",
     ...options,
     key,
+    target: DASHBOARD_PINS_TARGET,
     operation: "workspace.dashboard.pins.set",
     request: { body: { request_key: key, document_refs } },
   });
@@ -1045,6 +1064,13 @@ async function attempt(entry) {
       confirmedInTab.set(tabKey, latest.confirmation ?? null);
       volatile.delete(entry.key);
       confirm(entry, latest.confirmation ?? null);
+      return;
+    }
+    // Superseded while this send was in flight: the replacement owns the
+    // intent now. Re-persisting the failure would resurrect the old request
+    // and let it replay over the newer one.
+    if (latest?.value?.state === "superseded") {
+      volatile.delete(entry.key);
       return;
     }
     if (
