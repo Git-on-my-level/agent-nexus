@@ -6,6 +6,8 @@ WORKDIR /src
 COPY core/go.mod core/go.sum ./core/
 COPY tests/channels/go.mod ./tests/channels/go.mod
 COPY contracts/visualreport/go.mod ./contracts/visualreport/go.mod
+COPY contracts/gen/go/go.mod ./contracts/gen/go/go.mod
+COPY contracts/markdownhygiene/go.mod ./contracts/markdownhygiene/go.mod
 RUN cd core && go mod download
 COPY contracts ./contracts
 COPY core ./core

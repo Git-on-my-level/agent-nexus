@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	contractenums "agent-nexus-contracts-go-client/enums"
 )
 
 func formatTypedCommandText(commandID string, statusCode int, headers map[string][]string, body any, verbose bool, includeHeaders bool) string {
@@ -1501,7 +1503,7 @@ func indentBlock(text string) []string {
 	return lines
 }
 
-var canonicalColumnOrder = []string{"backlog", "ready", "in_progress", "blocked", "review", "done"}
+var canonicalColumnOrder = contractenums.BoardColumnKeyValues
 
 func formatBoardsList(body any) string {
 	root := asMap(body)

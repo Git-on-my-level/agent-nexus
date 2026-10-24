@@ -66,3 +66,11 @@ replace agent-nexus-test-channels => ../tests/channels
 require agent-nexus-visualreport v0.0.0
 
 replace agent-nexus-visualreport => ../contracts/visualreport
+
+require agent-nexus-contracts-go-client v0.0.0
+
+replace agent-nexus-contracts-go-client => ../contracts/gen/go
+
+require agent-nexus-markdownhygiene v0.0.0
+
+replace agent-nexus-markdownhygiene => ../contracts/markdownhygiene

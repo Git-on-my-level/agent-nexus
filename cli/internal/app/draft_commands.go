@@ -13,6 +13,7 @@ import (
 	"time"
 
 	contractsclient "agent-nexus-contracts-go-client/client"
+	contractenums "agent-nexus-contracts-go-client/enums"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
@@ -832,6 +833,9 @@ func validateDraftArtifactCreate(body map[string]any) []string {
 	return out
 }
 
+// askOutcomeUsage names every outcome the contract accepts for an ask response.
+var askOutcomeUsage = "outcome must be one of: " + strings.Join(contractenums.HumanAttentionResponseOutcomeValues, ", ")
+
 func validateDraftInboxRespond(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
@@ -839,10 +843,8 @@ func validateDraftInboxRespond(body map[string]any) []string {
 	requiredStringField(body, "response_text", "response_text", true, &out)
 	requiredStringField(body, "outcome", "outcome", true, &out)
 	if outcome := anyString(body["outcome"]); outcome != "" {
-		switch outcome {
-		case "answered", "approved", "rejected", "acknowledged":
-		default:
-			out = append(out, "outcome must be answered, approved, rejected, or acknowledged")
+		if !contractenums.IsHumanAttentionResponseOutcome(outcome) {
+			out = append(out, askOutcomeUsage)
 		}
 	}
 	return out

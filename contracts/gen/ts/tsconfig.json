@@ -9,5 +9,5 @@
     "declaration": true,
     "outDir": "./dist"
   },
-  "include": ["client.ts", "index.ts"]
+  "include": ["client.ts", "enums.ts", "index.ts"]
 }

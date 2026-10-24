@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	contractenums "agent-nexus-contracts-go-client/enums"
+
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
@@ -830,13 +832,12 @@ func parseAskDecisionFlags(by trackedString, blocks []string, priority trackedSt
 	}
 	out.blocks = uniqueStringsInOrder(out.blocks)
 	if priority.set {
-		p := strings.ToLower(strings.TrimSpace(priority.value))
-		switch p {
-		case "p0", "p1", "p2", "p3", "critical", "high", "medium", "low":
-			out.priority = p
-		default:
+		// Word spellings stay accepted for older scripts; they are sent as p0..p3.
+		p, ok := contractenums.NormalizePriority(priority.value)
+		if !ok {
 			return out, errnorm.Usage("invalid_request", "--priority must be p0..p3 or critical/high/medium/low")
 		}
+		out.priority = p
 	}
 	return out, nil
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	contractenums "agent-nexus-contracts-go-client/enums"
+
 	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
@@ -196,14 +198,15 @@ question. The folded name is also what the reader is shown: "critical priority"
 reads, where "p0 priority" is a code they have to translate.
 */
 func briefPriorityName(priority string) string {
-	switch strings.ToLower(strings.TrimSpace(priority)) {
-	case "p0", "critical", "urgent":
+	canonical, _ := contractenums.NormalizePriority(priority)
+	switch canonical {
+	case contractenums.PriorityP0:
 		return "critical"
-	case "p1", "high":
+	case contractenums.PriorityP1:
 		return "high"
-	case "p2", "medium", "normal":
+	case contractenums.PriorityP2:
 		return "medium"
-	case "p3", "low":
+	case contractenums.PriorityP3:
 		return "low"
 	}
 	return ""

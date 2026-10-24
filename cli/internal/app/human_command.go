@@ -115,7 +115,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
 	fs.Var(&byFlag, "by", "When the human should decide: YYYY-MM-DD, RFC3339, or a duration like 2d")
 	fs.Var(&blocksFlags, "blocks", "Typed ref this decision blocks (repeatable, at most 20)")
-	fs.Var(&priorityFlag, "priority", "Optional badge: p0..p3 or critical/high/medium/low")
+	fs.Var(&priorityFlag, "priority", "Optional badge: p0..p3 (critical/high/medium/low are accepted and sent as p0..p3)")
 	fs.Var(&subjectRefFlag, "subject-ref", "Initiative card ref (card:<slug>); omit only when the current card should own the ask")
 	fs.Var(&bodyFlag, "body", "Detailed body text")
 	fs.Var(&bodyFileFlag, "body-file", "Read detailed body from file")

@@ -3,6 +3,7 @@ package app
 import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	contractenums "agent-nexus-contracts-go-client/enums"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -61,7 +62,7 @@ func (a *App) resolvePMTurnLeaseIdentity(args []string, cfg config.Resolved) (co
 
 func parsePMProposal(args []string) (pmProposalOptions, error) {
 	o := pmProposalOptions{}
-	repair := "usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]"
+	repair := "usage: anx pm propose <card-ref> (--status <" + strings.Join(contractenums.BoardColumnKeyValues, "|") + "> | --note <text>) --why <reason> [--evidence <ref> ...]"
 	if len(args) == 0 || !strings.HasPrefix(args[0], "card:") || !pmActivityRef.MatchString(args[0]) {
 		return o, errnorm.Usage("invalid_request", repair)
 	}
@@ -77,7 +78,7 @@ func parsePMProposal(args []string) (pmProposalOptions, error) {
 	if len(fs.Args()) > 0 || (o.status == "") == (strings.TrimSpace(o.note) == "") || strings.TrimSpace(o.why) == "" {
 		return o, errnorm.Usage("invalid_request", repair)
 	}
-	if o.status != "" && !strings.Contains("|backlog|ready|in_progress|blocked|review|done|", "|"+o.status+"|") {
+	if o.status != "" && !contractenums.IsBoardColumnKey(o.status) {
 		return o, errnorm.Usage("invalid_request", repair)
 	}
 	for _, ref := range o.evidence.values {

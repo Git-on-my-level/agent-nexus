@@ -56,6 +56,18 @@ func TestIngestContentEqualIgnoresTrailingWhitespace(t *testing.T) {
 	}
 }
 
+// Core rewrites markdown on write (heading spacing, arrow spacing, table
+// padding). A re-ingest must compare against what core stored, or every such
+// file is revised again on every run.
+func TestIngestContentEqualMatchesCoreMarkdownHygiene(t *testing.T) {
+	t.Parallel()
+	file := "#Plan\nstep a→b\n\n|a|b|\n|---|---|\n|1|2|\n"
+	stored := "# Plan\n\nstep a → b\n\n| a | b |\n| --- | --- |\n| 1 | 2 |"
+	if !ingestContentEqual(stored, file) {
+		t.Fatal("content core stored after hygiene must count as unchanged")
+	}
+}
+
 func TestListMarkdownFilesSkipsGitAndNonMarkdown(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

@@ -364,6 +364,8 @@ def static_checks(changed, all_files=False):
     if (ROOT / "scripts/check-oss-boundary.sh").is_file():
         run("bash", "scripts/check-oss-boundary.sh")
     run("node", "scripts/check-commercial-boundary.mjs", cwd=ROOT / "web-ui")
+    if modules & {"core", "cli", "web-ui"}:
+        run("node", "scripts/check-enum-conformance.mjs", "--copies-only")
     if any(p.startswith(".github/workflows/") for p in changed):
         if not (ROOT / ".bin/actionlint").is_file():
             raise RuntimeError("Missing .bin/actionlint; run make setup before committing workflows.")
@@ -492,11 +494,14 @@ def fast_tests(changed, base=None):
         run("python3", "-B", "-m", "unittest", "scripts/tests/test_owned_process.py")
         run("bash", "scripts/tests/test_e2e_smoke_lifecycle.sh")
     if any(p.startswith(("contracts/", "scripts/contract-", "core/cmd/contract-gen/",
-                         "core/cmd/route-inventory/")) for p in changed):
+                         "core/cmd/route-inventory/")) or p == "scripts/check-enum-conformance.mjs"
+           for p in changed):
         contract_drift()
         run("go", "test", "-short", "./...", cwd=ROOT / "contracts/gen/go")
         run("go", "test", "-short", "./...", cwd=ROOT / "contracts/visualreport")
+        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/markdownhygiene")
         run("node", "scripts/check-visual-report-conformance.mjs")
+        run("node", "scripts/check-enum-conformance.mjs")
 
 
 def route_classes(document):

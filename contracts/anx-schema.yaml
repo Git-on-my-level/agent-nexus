@@ -14,7 +14,20 @@ enums:
 
   priority:
     enum_policy: strict
+    description: >
+      Canonical work and ask priority. Writers emit p0..p3. Input edges that
+      have historically taken word spellings (ask --priority, ask payloads,
+      inbox severity) still accept the aliases below and fold them to the
+      canonical value, so older clients and stored asks keep their rank.
+      Work-item priority writes stay strict p0..p3.
     values: [p0, p1, p2, p3]
+    aliases:
+      critical: p0
+      urgent: p0
+      high: p1
+      medium: p2
+      normal: p2
+      low: p3
 
   lifecycle_state:
     enum_policy: strict
@@ -803,7 +816,7 @@ reference_conventions:
             Typed refs (at most 20) this decision blocks. A blocks ref that reaches a
             terminal state stops counting automatically; readers only see refs they can read.
         priority:
-          description: Optional agent-set badge (p0..p3 or critical/high/medium/low). A sort key after decide_by and blocks, never a deadline.
+          description: Optional agent-set badge, p0..p3. Writers send the canonical value; readers still fold the enums.priority aliases (critical/urgent, high, medium/normal, low) found in older asks. A sort key after decide_by and blocks, never a deadline.
       authoring: >
         Reuse payload.title for a one-line decision (recommended maximum 100 Unicode
         characters; hard maximum 160 on new writes) and payload.body for Markdown
