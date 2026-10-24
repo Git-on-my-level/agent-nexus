@@ -113,8 +113,11 @@
   let loopSilence = $derived.by(() => {
     const dominant = dominantQuietState(loopCollection);
     if (!dominant) return null;
+    // Only the silent loops date the silence; a healthy one ran since.
     const latest = Math.max(
-      ...loopRows.map((row) => Date.parse(row.loop.lastRunAt || "") || 0),
+      ...dominant.rows.map(
+        (row) => Date.parse(row.source?.initiative?.loop?.lastRunAt || "") || 0,
+      ),
     );
     return {
       ...dominant,
@@ -348,6 +351,13 @@
           folded={["done"]}
           label={panel.title || "items"}
         />
+        {#if liveCollection.hasMore}
+          <!-- Core stopped at the panel's limit; say so rather than imply
+               this is everything. -->
+          <p class="muted mt-2" data-live-collection-more>
+            Showing {collectionRows}; there are more.
+          </p>
+        {/if}
       </div>
     {:else}
       <p class="muted">Nothing in this view yet.</p>

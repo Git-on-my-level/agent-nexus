@@ -421,7 +421,8 @@ export function untagged(collection) {
 
 /**
  * When most rows share one quiet state (every loop stopped reporting), say
- * it once instead of on every row: `{ state, count, total }` or null.
+ * it once instead of on every row: `{ state, count, total, rows }` or null,
+ * where `rows` are the quiet ones.
  */
 export function dominantQuietState(collection, share = 0.8) {
   const quiet = new Set(
@@ -431,9 +432,14 @@ export function dominantQuietState(collection, share = 0.8) {
   if (rows.length < 3) return null;
   for (const key of quiet) {
     if (key === "done") continue;
-    const count = rows.filter((r) => r.state === key).length;
-    if (count / rows.length >= share)
-      return { state: key, count, total: rows.length };
+    const matching = rows.filter((r) => r.state === key);
+    if (matching.length / rows.length >= share)
+      return {
+        state: key,
+        count: matching.length,
+        total: rows.length,
+        rows: matching,
+      };
   }
   return null;
 }

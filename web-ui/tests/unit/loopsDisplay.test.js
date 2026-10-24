@@ -94,15 +94,20 @@ describe("loop panel rows", () => {
       ["a", "b", "c", "d", "e"].map((id, i) => ({
         ref: `card:${id}`,
         title: id,
-        loop: loop(i === 4 ? "healthy" : "overdue", "2026-10-16T15:45:00Z"),
+        loop:
+          i === 4
+            ? loop("healthy", "2026-10-23T08:00:00Z")
+            : loop("overdue", "2026-10-16T15:45:00Z"),
       })),
     );
     const collection = untagged(collectionFromLoops(rows, { now: NOW }));
-    expect(dominantQuietState(collection)).toEqual({
-      state: "silent",
-      count: 4,
-      total: 5,
-    });
+    const quiet = dominantQuietState(collection);
+    expect(quiet).toMatchObject({ state: "silent", count: 4, total: 5 });
+    // The banner dates the silence from these rows only, so the loop that
+    // ran today cannot move "stopped reporting around" forward.
+    expect(quiet.rows.map((r) => r.source.initiative.loop.lastRunAt)).toEqual(
+      Array(4).fill("2026-10-16T15:45:00Z"),
+    );
     const tagged = collection.groups[0].rows.flatMap((r) =>
       [r.stateField, r.time?.field].filter(Boolean),
     );
