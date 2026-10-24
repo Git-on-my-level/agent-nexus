@@ -37,6 +37,7 @@ type App struct {
 	startSkillsRefresh             func(executable, configDir, home string) error
 	skillLookPath                  func(string) (string, error)
 	runScheduledMaintenanceInTests bool
+	hookBudget                     time.Duration // zero means defaultHookBudget
 	stdinConsumed                  bool
 	outputStarted                  bool
 	writes                         writeTracker

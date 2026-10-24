@@ -12,6 +12,8 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -41,17 +43,77 @@ func TestRegisteredAnswerUsesDataNotShell(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "injected")); !os.IsNotExist(err) {
 		t.Fatal("server injected command")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
-	defer cancel()
-	e.Command = `(sleep 0.2; touch survived) & wait`
-	if err := runRegisteredAnswer(ctx, e, nil, out); err == nil {
-		t.Fatal("expected timeout")
+	// Wait for the child to be running before cancelling. Its socket closes
+	// only when the process group dies, so neither startup nor the assertion
+	// depends on how much CPU this test receives in a fixed sleep interval.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
 	}
-	time.Sleep(250 * time.Millisecond)
-	if _, err := os.Stat(filepath.Join(dir, "survived")); !os.IsNotExist(err) {
-		t.Fatal("child survived timeout")
+	defer listener.Close()
+	deadline := time.Now().Add(10 * time.Second)
+	if d, ok := t.Deadline(); ok {
+		deadline = d
+	}
+	if err := listener.(*net.TCPListener).SetDeadline(deadline); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Command = shellSingleQuote(executable) + " -test.run=^TestRegisteredAnswerChildHandshake$ -- " + shellSingleQuote(listener.Addr().String()) + " & wait"
+	finished := make(chan error, 1)
+	go func() { finished <- runRegisteredAnswer(ctx, e, nil, out) }()
+	defer func() {
+		cancel()
+		if err := <-finished; err == nil {
+			t.Error("expected cancellation")
+		}
+	}()
+	conn, err := listener.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(deadline); err != nil {
+		t.Fatal(err)
+	}
+	ready := make([]byte, 1)
+	if _, err := io.ReadFull(conn, ready); err != nil || ready[0] != 'R' {
+		t.Fatal("child did not start", err)
+	}
+	cancel()
+	// EOF proves the child died; a surviving child keeps the socket open.
+	if _, err := conn.Read(ready); err != io.EOF {
+		t.Fatal("child survived cancellation", err)
+	}
+
+}
+
+// The registered shell starts this helper as a child, retaining its process
+// group. Normal test discovery has no address and returns immediately.
+func TestRegisteredAnswerChildHandshake(t *testing.T) {
+	for i, arg := range os.Args {
+		if arg != "--" || i+1 == len(os.Args) {
+			continue
+		}
+		conn, err := net.Dial("tcp", os.Args[i+1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		if _, err := conn.Write([]byte("R")); err != nil {
+			t.Fatal(err)
+		}
+		var release [1]byte
+		_, _ = conn.Read(release[:])
+		return
 	}
 }
+
 func TestAskResumeRegistrationModesAndAgentctl(t *testing.T) {
 	a := newTestApp(t)
 	a.Getenv = func(k string) string {

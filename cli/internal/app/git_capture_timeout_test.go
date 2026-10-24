@@ -31,6 +31,7 @@ func TestGitCaptureRequestTimeouts(t *testing.T) {
 				f.cardDelay.Store(int64(5500 * time.Millisecond))
 				f.run(t, "--timeout", "8s", "git", "sync")
 			case "hook":
+				f.a.hookBudget = defaultHookBudget
 				start := time.Now()
 				// Even an explicit long timeout cannot slow the post-commit hook.
 				if code := f.a.Run([]string{"--timeout", "4s", "hook", "git.commit", "--harness", "git"}); code != 0 {
