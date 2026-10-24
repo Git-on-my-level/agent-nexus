@@ -713,7 +713,7 @@
                       >
                       {#each open ? rows : rows.slice(0, CELL_PREVIEW) as child (child.ref)}
                         <a
-                          class="flex min-h-9 items-center gap-2 rounded-md border bg-bg-soft px-2 py-1.5 text-meta text-fg hover:bg-panel-hover {child.needsViewer
+                          class="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border bg-bg-soft px-2 py-1.5 text-meta text-fg hover:bg-panel-hover {child.needsViewer
                             ? 'border-danger'
                             : 'border-line'}"
                           href={href(child.ref)}
@@ -725,19 +725,25 @@
                               : DOT[column.key]}"
                             aria-hidden="true"
                           ></span>
-                          <span class="min-w-0 flex-1 [overflow-wrap:anywhere]"
+                          <!-- In a narrow column the label wraps under the
+                               title rather than spilling out of the card. -->
+                          <span
+                            class="min-w-0 flex-[1_1_6rem] [overflow-wrap:anywhere]"
                             >{child.title}</span
                           >
                           {#if child.needsViewer}
-                            <span class="shrink-0 text-micro text-danger-text"
+                            <span
+                              class="ml-auto shrink-0 whitespace-nowrap text-micro text-danger-text"
                               >you</span
                             >
                           {:else if child.pastPromise}
-                            <span class="shrink-0 text-micro text-warn-text"
+                            <span
+                              class="ml-auto shrink-0 whitespace-nowrap text-micro text-warn-text"
                               >past promise</span
                             >
                           {:else if lane.rollup.workstreams.some((w) => w.ref === child.ref)}
-                            <span class="shrink-0 text-micro text-fg-muted"
+                            <span
+                              class="ml-auto shrink-0 whitespace-nowrap text-micro text-fg-muted"
                               >workstream</span
                             >
                           {/if}

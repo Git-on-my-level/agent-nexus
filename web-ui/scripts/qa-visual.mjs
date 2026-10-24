@@ -190,7 +190,11 @@ export const QA_SCENES = [
       await page.waitForSelector(
         "[data-lane-ref='card:fleet-onboarding'] [data-work-ref='card:runbook-review']",
       );
-      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']");
+      // Below `md` the tray is a closed sheet: its rows are in the DOM, not
+      // on screen.
+      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']", {
+        state: "attached",
+      });
     },
   },
   {
