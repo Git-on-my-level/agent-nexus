@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 260
+- Command count: 262
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -51,14 +51,14 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | topics | 10 |
 | usage | 1 |
 | work | 12 |
-| workspace | 2 |
+| workspace | 4 |
 
 ## Counts by Classification
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 86 |
-| exposed_write | 68 |
+| exposed_read | 87 |
+| exposed_write | 69 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
@@ -71,7 +71,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 154 | exposed_read + exposed_write + adapted |
+| standalone default | 156 | exposed_read + exposed_write + adapted |
 | hosted default | 67 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -340,4 +340,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.refresh.get | work | GET | /work/{card_ref}/refresh | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.refresh.request | work | POST | /work/{card_ref}/refresh | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | workspace.dashboard.list | workspace | GET | /workspace/dashboard/reports | exposed_read | Validated dashboard report selector candidates. |
+| workspace.dashboard.pins.list | workspace | GET | /workspace/dashboard/pins | exposed_read | Read only the requesting principal's ordered dashboard pins. |
+| workspace.dashboard.pins.set | workspace | PUT | /workspace/dashboard/pins | exposed_write | Reversibly replace only the requesting principal's dashboard pins. |
 | workspace.dashboard.set | workspace | PUT | /workspace/dashboard | exposed_write | Reversible workspace dashboard document pin. |

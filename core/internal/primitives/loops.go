@@ -232,7 +232,7 @@ func computeLoop(c loopCard, f loopFacts, now time.Time) map[string]any {
 	return out
 }
 func loopGoal(goal map[string]any, points []map[string]any) map[string]any {
-	g := map[string]any{"metric": goal["metric"], "direction": goal["direction"], "target": goal["target"], "unit": goal["unit"], "baseline": goal["baseline"], "latest": nil, "best": nil, "points": points}
+	g := map[string]any{"label": goal["label"], "metric": goal["metric"], "direction": goal["direction"], "target": goal["target"], "unit": goal["unit"], "baseline": goal["baseline"], "latest": nil, "best": nil, "points": points}
 	for _, p := range points {
 		v, ok := loopNumber(p["value"])
 		if !ok || p["decision"] != nil && p["decision"] != "kept" {

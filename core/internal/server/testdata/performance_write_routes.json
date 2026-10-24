@@ -648,5 +648,13 @@
     "method": "POST",
     "path": "/curation/ungroup",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "PUT",
+    "path": "/workspace/dashboard/pins",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review.",
+    "body": {
+      "document_refs": ["{document_ref}"]
+    }
   }
 ]

@@ -191,3 +191,5 @@ workspace-owned router remains embedded in `anx-core`.
 Live dashboard data and declared push adapters: [guide](docs/live-series.md).
 
 Recurring work: [cadence, goals, receipts and loop reports](docs/recurring-work.md).
+
+Watch: [collections, personal dashboard tabs, scoped activity and panel roles](docs/watch-dashboards.md).

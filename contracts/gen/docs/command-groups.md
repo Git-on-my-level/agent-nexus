@@ -463,8 +463,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `workspace`
 
-- Commands: `2`
+- Commands: `4`
 - Command IDs:
   - `workspace.dashboard.list` (`workspace dashboard list`)
+  - `workspace.dashboard.pins.list` (`workspace dashboard pins list`)
+  - `workspace.dashboard.pins.set` (`workspace dashboard pins set`)
   - `workspace.dashboard.set` (`workspace dashboard set`)
 

@@ -1140,7 +1140,13 @@ visual_report_layout:
 # Additive presentation format carried in existing document revisions.
 visual_report_live_panels:
   schema_version: 1
-  types: [live-loops, live-loop, live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline]
+  types: [live-collection, live-loops, live-loop, live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline]
+  panel_roles: [primary, secondary, context]
+  role_defaults: {live-activity: secondary, authored_text: context, collections_loops_charts: primary}
+  collections: [initiatives, loops, agents]
+  collection_limit: {default: 24, maximum: 48}
+  pins: {maximum: 12, identity: requesting_principal, fallback: workspace_default}
+  goal_label: {type: string, max_length: 200}
   query_schema: anx-openapi.yaml#/components/schemas/LiveReportQuery
   materialized_schema: anx-openapi.yaml#/components/schemas/LiveReportResponse
   rules:

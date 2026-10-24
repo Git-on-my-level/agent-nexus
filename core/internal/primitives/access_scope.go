@@ -190,6 +190,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	}
 	add("document_search_resources", resourceAuthority("_row"))
 	add("document_search_postings", `EXISTS(SELECT 1 FROM main.document_search_resources _resource WHERE _resource.n=_row.res_n AND `+resourceAuthority("_resource")+`)`)
+	add("dashboard_pins", "_row.principal_id="+("'"+strings.ReplaceAll(scope.ActorID, "'", "''")+"'"))
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for _, source := range resourceaccess.FilterOwnershipSources() {

@@ -431,6 +431,23 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 	}
 	sub := strings.TrimSpace(args[0])
 	if sub == "dashboard" {
+		if len(args) >= 2 && args[1] == "pins" {
+			if err := validateDashboardPinsArgs(args[2:]); err != nil {
+				return nil, "workspace dashboard pins", err
+			}
+			name := "workspace dashboard pins " + args[2]
+			var body map[string]any
+			if args[2] == "set" {
+				refs := append([]string{}, args[3:]...)
+				if len(refs) == 1 && refs[0] == "none" {
+					refs = []string{}
+				}
+				body = map[string]any{"document_refs": refs}
+			}
+			result, err := a.invokeTypedJSON(ctx, cfg, name, strings.ReplaceAll(name, " ", "."), nil, nil, body)
+			return result, name, err
+		}
+
 		if len(args) == 2 && args[1] == "list" {
 			result, err := a.invokeTypedJSON(ctx, cfg, "workspace dashboard list", "workspace.dashboard.list", nil, nil, nil)
 			return result, "workspace dashboard list", err

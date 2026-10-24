@@ -151,7 +151,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm turns heartbeat` (command): Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
 - `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
 - `pm turns release` (command): Lease owner returns a claimed turn to the queue.
-- `report render` (command): Materialize a visual report’s live panels from current, authorized workspace data.
+- `report render` (command): Materialize authorized report panels; --panels id,id selects individual panels.
 - `sessions get` (command): Read your own registered provider session and bounded activity; does not expose conversation history.
 - `sessions register` (command): Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
@@ -317,7 +317,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm propose` (command): Propose a card status or note for human approval in Inbox.
 - `work cadence` (command): Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
-- `work goal` (command): Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear.
+- `work goal` (command): Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear.
 - `work receipt` (command): Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay.
 
 
@@ -1312,6 +1312,8 @@ Use this group for first-run workspace orientation before drilling into topics, 
 
 Core commands:
   workspace summary    Summarize active boards plus card/doc/inbox counts.
+  workspace dashboard pins list        Read your dashboard tabs.
+  workspace dashboard pins set <doc>... Set ordered tabs (up to 12); none clears.
   workspace dashboard list             Read validated report choices.
   workspace dashboard set <doc|none>    Pin a dashboard or return to newest report.
 
@@ -4958,7 +4960,7 @@ Use --json for one machine-readable envelope.
 
 ## `report render`
 
-Materialize a visual report’s live panels from current, authorized workspace data.
+Materialize authorized report panels; --panels id,id selects individual panels.
 
 ```text
 Generated Help: report render
@@ -4982,9 +4984,10 @@ Inputs:
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
-Materialize a visual report’s live panels from current, authorized workspace data.
+Materialize authorized report panels; --panels id,id selects individual panels.
 
 Usage: anx report render <ref> (or --document-id <ref>)
+  --panels <value>
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -10927,7 +10930,7 @@ Use --json for one machine-readable envelope.
 
 ## `work goal`
 
-Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear.
+Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear.
 
 ```text
 Local Help: work goal
@@ -10936,7 +10939,7 @@ Side effect class: remote_coordination_write
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
-Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--unit unit] [--series series:ref], or --clear.
+Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear.
 
 Usage: anx work goal
 

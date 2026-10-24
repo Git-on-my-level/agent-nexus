@@ -460,6 +460,10 @@
     "milliseconds": 4929
   },
   {
+    "key": "GET /workspace/dashboard/pins",
+    "milliseconds": 500
+  },
+  {
     "key": "GET /workspace/dashboard/reports",
     "milliseconds": 3962
   },

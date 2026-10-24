@@ -8,6 +8,7 @@ import (
 	"time"
 
 	cc "agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/storage"
 )
 
@@ -340,6 +341,41 @@ func TestOverviewRosterCountsEveryAskWithoutStarvingAnotherAgent(t *testing.T) {
 		}
 		if a.OpenAsksCount != want || a.State != "waiting_on_human" || a.WaitingAsk == nil {
 			t.Errorf("agent %s count/state: %+v", a.ID, a)
+		}
+	}
+}
+
+func TestCollectionRosterDoesNotExposePrivateAsks(t *testing.T) {
+	s := fixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, id := range []string{"a", "b"} {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES(?,?,?,'now','now','{"principal_kind":"agent"}')`, id, id, "actor-"+id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, v := range []struct{ id, owner string }{{"private", "owner"}, {"public", ""}} {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES(?,'now','owner',?)`, v.id, fmt.Sprintf(`{"pm_actor_id":%q}`, v.owner)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, v := range []struct{ id, agent, thread string }{{"private-ask", "a", "private"}, {"public-ask", "b", "public"}} {
+		payload := fmt.Sprintf(`{"payload":{"kind":"ask","title":"Approve","requester_agent_id":%q,"requester_actor_id":%q}}`, v.agent, "actor-"+v.agent)
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,'human_attention_requested',?,'writer',?,'[]',?)`, v.id, now.Format(time.RFC3339Nano), v.thread, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, actor := range []string{"owner", "stranger", "actor-b"} {
+		rows, partial, err := s.CollectionRoster(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor}), now)
+		if err != nil || partial || len(rows) != 2 {
+			t.Fatal(rows, partial, err)
+		}
+		want := "stale"
+		if actor == "owner" {
+			want = "waiting_on_human"
+		}
+		if rows[0].State != want || rows[1].State != "waiting_on_human" {
+			t.Fatal(actor, rows)
 		}
 	}
 }

@@ -26,7 +26,7 @@ func TestReportSchemaAndValidateAreLocalCommands(t *testing.T) {
 		t.Fatalf("unexpected schema kind %q", got)
 	}
 	panelTypes, panelTypesOK := asStringList(result["panel_types"])
-	if !panelTypesOK || len(panelTypes) != 21 || asMap(result["example"]) == nil {
+	if !panelTypesOK || len(panelTypes) != 22 || asMap(result["example"]) == nil {
 		t.Fatalf("schema omitted panel types or minimal example: %#v", result)
 	}
 	for _, liveType := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "metric", "table"} {

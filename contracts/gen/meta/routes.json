@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 242,
+  "route_count": 244,
   "routes": [
     {
       "method": "GET",
@@ -1205,6 +1205,16 @@
     {
       "method": "PUT",
       "path": "/workspace/dashboard",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/workspace/dashboard/pins",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/workspace/dashboard/pins",
       "access_class": "workspace_business_surface"
     },
     {

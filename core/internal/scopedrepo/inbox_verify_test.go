@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
@@ -93,13 +94,28 @@ func inboxVerificationInsert(t *testing.T, db *sql.DB, thread, id string, visibl
 
 func finishInboxVerification(t *testing.T, s *scopedrepo.Store, id string) (scopedrepo.InboxVerificationProgress, error) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 	var result scopedrepo.InboxVerificationProgress
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 1000; {
 		var err error
-		result, err = s.RunInboxVerificationSlice(context.Background(), id)
+		result, err = s.RunInboxVerificationSlice(ctx, id)
+		if errors.Is(err, scopedrepo.ErrInboxVerificationLease) {
+			// Each one-shot call has a new owner. Its preceding release is
+			// deliberately best effort (50 ms), so a contended release can
+			// leave an unexpired lease. Pause as the supervisor does; do not
+			// mistake that recoverable fence for a comparison failure.
+			select {
+			case <-ctx.Done():
+				return result, ctx.Err()
+			case <-time.After(10 * time.Millisecond):
+			}
+			continue
+		}
 		if err != nil {
 			return result, err
 		}
+		i++
 		if result.Examined > 64 {
 			t.Fatalf("slice exceeded bound: %d", result.Examined)
 		}

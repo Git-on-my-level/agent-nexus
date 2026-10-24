@@ -1119,3 +1119,59 @@ revision through `UNIQUE(parent, revision_number)`, then one presentation-only
 parent projection batch for visibility and title. A batch with no revision refs
 runs nothing extra. `TestResolveRevisionQueriesAreIndexed` rejects a table scan
 or temporary structure in either plan.
+
+## Watch collection and per-panel rendering
+
+Report materialization uses four workers, each with its own admitted resource
+snapshot. Equal panel queries share one job. Native result-cache keys include
+report revision, query, summary mode, actor/PM scope and the canonical data and
+authorization epoch; a two-second TTL bounds clock-dependent promise changes.
+A permission or native-record write invalidates reuse immediately. Source-bound
+series, fleet and agent roster panels do not use this cache. Browser caching is
+disabled. The cache holds at most 64 results of at most 128 KiB each.
+
+Collection candidate admission precedes projection: initiatives seek designated
+boards through `idx_boards_role` and cards through the board index; loops seek
+annotated candidates through the partial `idx_brief_loop_annotated_recent` index;
+project filters use `idx_work_metadata_project`. Admission caps are 200/50/100
+for initiatives/loops/agents; displayed rows cap at 48. Plan and loop enrichment
+reuse the existing bounded batches. Agent project filtering occurs inside the
+100-agent cohort and preserves its truncation marker. Principal-kind admission
+seeks `idx_agents_collection_roster` before username ordering and the cohort
+limit; unrelated human principals do not add scan work. Agent stuck state uses
+per-admitted-actor `idx_brief_asks_requester` existence probes, avoiding the
+Overview roster's workspace-wide ask window. Actor labels are hydrated in batches.
+
+Fourteen-day activity counts seek `(thread_id,ts)` or
+`(actor_id,anx_timestamp_key(ts))` ranges for the admitted rows. Their work grows
+with visible events in those fourteen-day subject ranges, not unrelated workspace
+history. Their grouping has at most fourteen buckets per admitted row. Scoped
+activity admits at most 201 events per explicit backing thread or subject key,
+then sorts the bounded union before the existing 200-event budget. The subject
+expression index `idx_events_report_subject_ts` covers asks posted outside the
+subject's backing thread. Migration 113 installs those indexes and the pin table.
+
+Pin reads seek `(principal_id,position)` for at most twelve IDs, then batch the
+scoped document/revision/artifact heads by primary key. At most twelve report
+blobs are checked; there are no per-document SQL hydration calls. Replacement
+validates at most twelve targets in one transaction and reuses normal scoped
+reference checks. Pins are principal-private preferences; their document refs
+are additionally filtered through current document authority on read.
+
+The 22-loop-panel comparator measured serial 1.35 s / 111 queries, bounded cold
+306 ms / 122 queries and cached 128 ms / 12 queries (832 VM steps) on the task
+host. Timings are indicative under shared host load; fixed query/VM assertions
+are the acceptance gate. A separate collection fixture includes 4,096 unrelated
+cards and tests both principals. No existing performance budget or plan exception
+is widened.
+
+Agent admission also tests 22 agents after 4,096 unrelated human principals.
+The username scan used 62,535 VM steps; `idx_agents_collection_roster` reduces
+the same collection read to 5,124 steps and an indexed principal-kind SEARCH.
+That regression keeps the standard 50,000-step ceiling.
+
+```sh
+go test -C core ./internal/server -run '^TestWatch' -count=1 -v
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 -parallel=1 ./internal/server -run '^TestPerformanceWatch(CollectionBudget|AgentCollectionAdmission)$' -count=1 -v
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 ./internal/storage -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```

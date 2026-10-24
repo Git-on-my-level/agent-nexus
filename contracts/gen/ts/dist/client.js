@@ -14996,10 +14996,96 @@ export const commandRegistry = [
         "surface": "projection",
         "agent_notes": "Overview returns its selected dashboard only. Use this read for other pin candidates.",
         "adjacent_commands": [
+            "workspace.dashboard.pins.list",
+            "workspace.dashboard.pins.set",
             "workspace.dashboard.set"
         ],
         "go_method": "WorkspaceDashboardList",
         "ts_method": "workspaceDashboardList"
+    },
+    {
+        "command_id": "workspace.dashboard.pins.list",
+        "cli_path": "workspace dashboard pins list",
+        "group": "workspace",
+        "method": "GET",
+        "path": "/workspace/dashboard/pins",
+        "operation_id": "listDashboardPins",
+        "summary": "Read your ordered dashboard pins, falling back to the workspace default.",
+        "why": "Read the requesting principal's dashboard tabs.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns document_refs and source (personal or workspace_default).",
+        "error_codes": [
+            "auth_required",
+            "forbidden",
+            "unavailable"
+        ],
+        "concepts": [
+            "workspace",
+            "docs"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Pins belong to the authenticated principal. No for or actor override is accepted.",
+        "adjacent_commands": [
+            "workspace.dashboard.list",
+            "workspace.dashboard.pins.set",
+            "workspace.dashboard.set"
+        ],
+        "go_method": "WorkspaceDashboardPinsList",
+        "ts_method": "workspaceDashboardPinsList"
+    },
+    {
+        "command_id": "workspace.dashboard.pins.set",
+        "cli_path": "workspace dashboard pins set",
+        "group": "workspace",
+        "method": "PUT",
+        "path": "/workspace/dashboard/pins",
+        "operation_id": "setDashboardPins",
+        "summary": "Replace your ordered pins; an empty list returns to the workspace default.",
+        "why": "Choose up to twelve dashboards for the requesting principal.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the effective visible dashboard pins.",
+        "error_codes": [
+            "auth_required",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "unavailable"
+        ],
+        "concepts": [
+            "workspace",
+            "docs"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Replace all pins atomically in order. Pass an empty array to return to the workspace default.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "document_refs",
+                    "type": "list\u003cstring\u003e"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "request_key",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "workspace.dashboard.list",
+            "workspace.dashboard.pins.list",
+            "workspace.dashboard.set"
+        ],
+        "go_method": "WorkspaceDashboardPinsSet",
+        "ts_method": "workspaceDashboardPinsSet"
     },
     {
         "command_id": "workspace.dashboard.set",
@@ -15045,7 +15131,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "workspace.dashboard.list"
+            "workspace.dashboard.list",
+            "workspace.dashboard.pins.list",
+            "workspace.dashboard.pins.set"
         ],
         "go_method": "WorkspaceDashboardSet",
         "ts_method": "workspaceDashboardSet"
@@ -15819,6 +15907,12 @@ export class AnxClient {
     }
     workspaceDashboardList(options = {}) {
         return this.invoke("workspace.dashboard.list", {}, options);
+    }
+    workspaceDashboardPinsList(options = {}) {
+        return this.invoke("workspace.dashboard.pins.list", {}, options);
+    }
+    workspaceDashboardPinsSet(options = {}) {
+        return this.invoke("workspace.dashboard.pins.set", {}, options);
     }
     workspaceDashboardSet(options = {}) {
         return this.invoke("workspace.dashboard.set", {}, options);

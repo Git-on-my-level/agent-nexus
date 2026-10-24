@@ -214,7 +214,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `21`
+- Commands: `23`
 - Command IDs:
   - `docs.archive`
   - `docs.comments.create`
@@ -237,6 +237,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.unarchive`
   - `report.preview`
   - `report.render`
+  - `workspace.dashboard.pins.list`
+  - `workspace.dashboard.pins.set`
 
 ## `documents`
 
@@ -569,11 +571,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `workspace`
 
-- Commands: `3`
+- Commands: `5`
 - Command IDs:
   - `boards.workspace`
   - `threads.workspace`
   - `topics.workspace`
+  - `workspace.dashboard.pins.list`
+  - `workspace.dashboard.pins.set`
 
 ## `write`
 
