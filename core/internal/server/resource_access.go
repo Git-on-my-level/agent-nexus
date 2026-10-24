@@ -38,7 +38,7 @@ func authorizeResourceValues(w http.ResponseWriter, r *http.Request, values any)
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, 404, "not_found", "resource not found")
 		} else {
-			writeError(w, 500, "internal_error", "resource authorization failed")
+			writeReadInternalError(w, r, err, "resource authorization failed")
 		}
 		return false
 	}

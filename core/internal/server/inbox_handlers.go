@@ -293,7 +293,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		return
 	}
 	if err != nil {
-		writeError(w, 500, "internal_error", "failed to load inbox projections")
+		writeReadInternalError(w, r, err, "failed to load inbox projections")
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -580,15 +580,23 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
+	// Keep the generic projection loader available to mutation admission;
+	// canonical HTTP reads also reject already-resolved source requests.
+	get := opts.primitiveStore.GetDerivedInboxItem
+	if reader, ok := opts.primitiveStore.(interface {
+		GetOpenDerivedInboxItem(context.Context, string) (primitives.DerivedInboxItem, error)
+	}); ok {
+		get = reader.GetOpenDerivedInboxItem
+	}
 	var item primitives.DerivedInboxItem
 	var err error
 	for _, candidate := range inboxItemIDVariants(inboxItemID) {
-		item, err = opts.primitiveStore.GetDerivedInboxItem(r.Context(), candidate)
+		item, err = get(r.Context(), candidate)
 		if err == nil {
 			break
 		}
 		if !errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projections")
+			writeReadInternalError(w, r, err, "failed to load inbox projections")
 			return
 		}
 	}
@@ -604,7 +612,7 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	states, err := loadTopicProjectionStates(r.Context(), opts, []string{item.ThreadID})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
+		writeReadInternalError(w, r, err, "failed to load inbox projection status")
 		return
 	}
 
@@ -1133,7 +1141,7 @@ func handleGetInboxSummary(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	projected, count, err := opts.primitiveStore.ReadInbox(r.Context(), primitives.InboxReadOptions{AsksOnly: true, Limit: &limit})
 	if err != nil {
-		writeError(w, 500, "internal_error", "failed to load inbox projections")
+		writeReadInternalError(w, r, err, "failed to load inbox projections")
 		return
 	}
 	asks := make([]map[string]any, 0, len(projected))

@@ -1281,3 +1281,27 @@ in-memory snapshots, never workspace history. Loop goal values use the existing
 bounded loop facts/series readers. Visit writes compare timestamps atomically;
 legacy markers are migrated by migration 114 to `builtin:overview`. New read budgets are in
 `performance_routes.json`; no existing budget or plan allowance is widened.
+
+## Inbox item resolution reads
+
+`GET /inbox/{id}` checks the canonical ask resolution before returning an old
+projection row. It seeks the inbox primary key and probes
+`human_attention_request_resolutions(request_event_id)` through its unique
+primary-key index in the same statement. The predicate adds no SQL round trip,
+materialization, migration or workspace scan. It returns at most one inbox row;
+existing bounded ref/summary enrichment and authorization remain unchanged.
+Withdrawn and superseded asks return 404 immediately, including between lifecycle
+maintenance and projection refresh. Their canonical `/asks/{id}` outcome remains
+readable under the same ownership policy. Archiving alone retains readable asks
+until canonical lifecycle maintenance withdraws them.
+
+`TestPerformanceInboxItemResolutionRead` compares open and resolved point reads
+with zero and 4,096 unrelated resolution rows. It enforces one query, one returned
+row, 2,048 VM steps, zero full-scan steps and an indexed resolution plan, using
+`primitives/testdata/inbox_item_read_budget.json`. The existing HTTP route budget
+is unchanged. Run it with the established ask poll/read gate:
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/primitives \
+  -run '^TestPerformance(InboxItemResolutionRead|AskDeliveryReadBudgets)$' -count=1 -v
+```

@@ -273,15 +273,36 @@ func (s *Store) listDerivedInboxItemsLegacy(ctx context.Context, filter DerivedI
 	return items, nil
 }
 
+// GetDerivedInboxItem also serves mutation admission: batch responses need the
+// stored member list to report which member was withdrawn since it was loaded.
 func (s *Store) GetDerivedInboxItem(ctx context.Context, id string) (DerivedInboxItem, error) {
+	return s.getDerivedInboxItem(ctx, id, false)
+}
+
+// GetOpenDerivedInboxItem is the point-read view of an open projection. A cached
+// ID must stop returning an open request as soon as its source is resolved.
+func (s *Store) GetOpenDerivedInboxItem(ctx context.Context, id string) (DerivedInboxItem, error) {
+	return s.getDerivedInboxItem(ctx, id, true)
+}
+
+func (s *Store) getDerivedInboxItem(ctx context.Context, id string, openOnly bool) (DerivedInboxItem, error) {
 	if s == nil || s.db == nil {
 		return DerivedInboxItem{}, fmt.Errorf("primitives store database is not initialized")
 	}
 
+	// Keep canonical resolution admission in the same statement as the scoped
+	// projection lookup. No second read or unscoped payload lookup is needed.
+	resolutionFilter := ""
+	if openOnly {
+		resolutionFilter = ` AND NOT EXISTS (
+   SELECT 1 FROM human_attention_request_resolutions r
+   WHERE r.request_event_id=derived_inbox_items.source_event_id
+  )`
+	}
 	row := s.db.QueryRowContext(
 		ctx,
 		`SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash, lifecycle_ready
-		 FROM derived_inbox_items WHERE id = ? AND `+currentReportReviewSQL,
+		 FROM derived_inbox_items WHERE id = ? AND `+currentReportReviewSQL+resolutionFilter,
 		strings.TrimSpace(id),
 	)
 	item, err := scanDerivedInboxItem(row)

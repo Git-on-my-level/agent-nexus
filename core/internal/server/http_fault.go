@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -64,6 +66,59 @@ func writeInternalError(w http.ResponseWriter, r *http.Request, err error, publi
 }
 
 func emitServerFault(w http.ResponseWriter, r *http.Request, status int, err error, publicMessage string) {
+	emitServerFaultDetail(w, r, status, err, publicMessage, false)
+}
+
+// Read failures may wrap canonical text, resource identities or driver values.
+// Log only diagnostic classes and numeric database codes, never Error() text.
+func writeReadInternalError(w http.ResponseWriter, r *http.Request, err error, publicMessage string) {
+	emitServerFaultDetail(w, r, http.StatusInternalServerError, err, publicMessage, true)
+	writeJSON(w, http.StatusInternalServerError, map[string]any{
+		"error": errorPayload("internal_error", publicMessage),
+	})
+}
+
+func serverFaultClass(err error) string {
+	types := []string{}
+	code := 0
+	class := "store_error"
+	// Bound the complete walk as well as its depth, including joined errors.
+	remaining := 32
+	var visit func(error, int)
+	visit = func(cause error, depth int) {
+		if cause == nil || depth >= 12 || remaining == 0 {
+			return
+		}
+		remaining--
+		types = append(types, fmt.Sprintf("%T", cause))
+		if coded, ok := cause.(interface{ Code() int }); ok {
+			code = coded.Code()
+		}
+		switch cause {
+		case context.Canceled:
+			class = "request_canceled"
+		case context.DeadlineExceeded:
+			class = "deadline_exceeded"
+		case sql.ErrNoRows:
+			class = "no_rows"
+		}
+		switch unwrapped := cause.(type) {
+		case interface{ Unwrap() []error }:
+			for _, next := range unwrapped.Unwrap() {
+				if remaining == 0 {
+					break
+				}
+				visit(next, depth+1)
+			}
+		case interface{ Unwrap() error }:
+			visit(unwrapped.Unwrap(), depth+1)
+		}
+	}
+	visit(err, 0)
+	return fmt.Sprintf("class=%s error_types=%s store_code=%d", class, strings.Join(types, ","), code)
+}
+
+func emitServerFaultDetail(w http.ResponseWriter, r *http.Request, status int, err error, publicMessage string, classOnly bool) {
 	if fault := faultFrom(w); fault != nil {
 		if fault.logged {
 			return
@@ -76,7 +131,11 @@ func emitServerFault(w http.ResponseWriter, r *http.Request, status int, err err
 	requestID := serverFaultRequestID(w, r)
 	cause := "-"
 	if err != nil {
-		cause = serverFaultCause(err)
+		if classOnly {
+			cause = serverFaultClass(err)
+		} else {
+			cause = serverFaultCause(err)
+		}
 	}
 	log.Printf("anx-core: server error status=%d method=%s route=%s request_id=%s actor_kind=%s message=%s error=%s",
 		status, serverFaultMethod(r), routeTemplate(r), requestID, serverFaultActorKind(r), sanitizeFaultText(publicMessage, 240), cause)
@@ -215,7 +274,7 @@ func sanitizeFaultText(value string, max int) string {
 // Static path words only. Anything else, including ids and secrets, becomes {id}.
 var staticRouteSegments = map[string]struct{}{
 	"access": {}, "access-requests": {}, "actors": {}, "admins": {}, "agents": {},
-	"archive": {}, "artifacts": {}, "attachments": {}, "audit": {}, "auth": {},
+	"archive": {}, "artifacts": {}, "asks": {}, "attachments": {}, "audit": {}, "auth": {},
 	"batch": {}, "blob-usage": {}, "boards": {}, "bootstrap": {}, "brief": {},
 	"cards": {}, "changes": {}, "columns": {}, "commands": {}, "comments": {},
 	"concepts": {}, "curation": {}, "dashboard": {}, "dev": {}, "discord": {}, "docs": {},

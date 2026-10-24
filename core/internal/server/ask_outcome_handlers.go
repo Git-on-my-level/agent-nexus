@@ -31,7 +31,7 @@ func resolveAwaitableAsk(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, 404, "not_found", "ask not found")
 		} else {
-			writeError(w, 500, "internal_error", "cannot read ask")
+			writeReadInternalError(w, r, err, "cannot read ask")
 		}
 		return "", "", false
 	}
@@ -76,7 +76,7 @@ func handleAskOutcome(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, 404, "not_found", "ask not found")
 		} else {
-			writeError(w, 500, "internal_error", "cannot read ask")
+			writeReadInternalError(w, r, err, "cannot read ask")
 		}
 		return
 	}
