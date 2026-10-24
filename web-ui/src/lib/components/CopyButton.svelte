@@ -35,9 +35,7 @@
   }
 
   let btnSize = $derived(size === "md" ? "default" : "compact");
-  let iconBtnClass = $derived(
-    iconOnly ? "!h-6 !min-h-0 !w-6 !min-w-0 !px-0" : "",
-  );
+  let iconBtnClass = $derived(iconOnly ? "!h-6 !w-6 !px-0" : "");
 </script>
 
 <Button

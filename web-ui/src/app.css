@@ -198,6 +198,32 @@
     .actor-gate-input-row button {
       min-height: 2.5rem;
     }
+
+    /*
+     * The same 40px floor for every native control a finger has to hit.
+     * Mouse layouts keep their dense 24-36px sizing; `min-*` wins over the
+     * `h-*`/`w-*` utilities without touching them. Inline text links are
+     * left at line height, which WCAG 2.5.8 exempts.
+     */
+    button,
+    [role="button"]:not(a),
+    select,
+    textarea,
+    input:not([type="hidden"], [type="checkbox"], [type="radio"]) {
+      min-height: 2.5rem;
+    }
+
+    button,
+    [role="button"]:not(a) {
+      min-width: 2.5rem;
+    }
+
+    /* A checkbox is hit through its label, a disclosure through its summary. */
+    summary,
+    label:has(> input[type="checkbox"], > input[type="radio"]) {
+      min-height: 2.5rem;
+      align-content: center;
+    }
   }
 }
 
@@ -2001,6 +2027,14 @@
     font-size: 0.75rem;
     font-weight: 500;
     cursor: pointer;
+  }
+
+  /* The touch floor from the base layer, which this layer would undercut. */
+  @media (pointer: coarse) {
+    .ui-btn-secondary,
+    .ui-btn-primary {
+      min-height: 2.5rem;
+    }
   }
 
   .ui-btn-secondary:hover {

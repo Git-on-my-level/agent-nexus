@@ -1,7 +1,8 @@
 <script>
   /**
    * Hover/focus-revealed action cluster for cards and list rows.
-   * On touch devices (no hover) the bar stays visible.
+   * On touch devices (no hover) the bar stays visible and floats in flow at
+   * the top right, so the row's text wraps around it instead of under it.
    */
 
   /** @type {{
@@ -32,6 +33,9 @@
   @media (hover: none) {
     :global(.row-action-bar) {
       opacity: 1;
+      position: static;
+      float: right;
+      margin: 0 0 0.25rem 0.5rem;
     }
   }
 </style>

@@ -26,7 +26,7 @@
     variant="secondary"
     size="compact"
     class={isResolveKind
-      ? "!h-7 !min-w-0 !border-0 !bg-transparent !px-1.5 hover:!bg-bg-soft"
+      ? "!h-7 !border-0 !bg-transparent !px-1.5 hover:!bg-bg-soft"
       : ""}
     disabled={busy}
     onclick={onunarchive}
@@ -56,7 +56,7 @@
   <Button
     variant="ghost"
     size="compact"
-    class="!h-7 !min-w-0 !px-1.5"
+    class="!h-7 !px-1.5"
     disabled={busy}
     onclick={onarchive}
     title="Resolve"
