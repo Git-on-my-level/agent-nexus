@@ -267,6 +267,11 @@
   let loadingMore = $state(false);
   let pinError = $state("");
   let serverPins = $state(null);
+  // Pin edits replace the whole set, so one built on an unread set would
+  // drop the pins it never saw. Until a read or a receipt lands, or this
+  // device has a saved edit, the reader's pins are unknown and Pin/Unpin
+  // wait: "loading" | "ok" | "failed".
+  let pinsRead = $state("loading");
   // The reader's newest saved pin edit, shown until core confirms it. The
   // outbox owns delivery, so a reload, a closed tab or a dropped request
   // loses nothing, and an edit from another tab shows here too.
@@ -284,10 +289,13 @@
   $effect(() => {
     const receipt = pinReceipt;
     if (seenPins.receipt !== undefined && receipt !== seenPins.receipt)
-      if (Array.isArray(receipt?.result?.document_refs))
+      if (Array.isArray(receipt?.result?.document_refs)) {
         serverPins = receipt.result;
+        pinsRead = "ok";
+      }
     seenPins.receipt = receipt ?? null;
   });
+  let pinsKnown = $derived(localPins !== null || pinsRead === "ok");
   let reports = $derived(dashboards?.reports ?? []);
   /** The reader's own pins: what Pin/Unpin edit and MAX_PINS counts. */
   let pinnedRefs = $derived(
@@ -352,10 +360,13 @@
     loadingMore = false;
   }
   async function loadPins() {
+    pinsRead = "loading";
     try {
       serverPins = await coreClient.getDashboardPins();
+      pinsRead = "ok";
     } catch {
-      // Older cores have no personal pins; the workspace default stands in.
+      // The workspace default still shows as a tab; pinning waits for a read.
+      pinsRead = "failed";
     }
   }
   const MAX_PINS = 12;
@@ -371,7 +382,7 @@
     }
   }
   function pinDashboard(ref) {
-    if (!ref || pinnedRefs.includes(ref)) return;
+    if (!pinsKnown || !ref || pinnedRefs.includes(ref)) return;
     if (pinnedRefs.length >= MAX_PINS) {
       pinError = `You can pin up to ${MAX_PINS} dashboards. Unpin one first.`;
       return;
@@ -379,7 +390,7 @@
     void savePins([...pinnedRefs, ref]);
   }
   function unpinDashboard(ref) {
-    if (!ref || !pinnedRefs.includes(ref)) return;
+    if (!pinsKnown || !ref || !pinnedRefs.includes(ref)) return;
     void savePins(pinnedRefs.filter((entry) => entry !== ref));
   }
 
@@ -560,6 +571,7 @@
             loading={loadingMore}
             onload={() => void loadMoreReports()}
             onselect={(id) => selectTab("dashboard", id || reports[0]?.id)}
+            canPin={pinsKnown}
             onpin={(ref) =>
               ref ? pinDashboard(ref) : unpinDashboard(selectedReport?.ref)}
           />
@@ -600,6 +612,17 @@
       {pinError ||
         "Couldn't save your pin change. It's kept in your unsent work."}
     </p>{/if}
+  {#if tab === "dashboard" && !pinsKnown && pinsRead === "failed"}
+    <InlineAlert>
+      Couldn't read your pinned tabs, so pinning is paused to keep them safe.
+      <button
+        type="button"
+        class="text-accent-text underline"
+        onclick={() => void loadPins()}
+        data-watch-pins-retry>Retry reading pins</button
+      >
+    </InlineAlert>
+  {/if}
 
   {#if tab === "dashboard"}
     {#if selectedReport}
@@ -609,15 +632,17 @@
             <Button
               variant="secondary"
               size="compact"
+              disabled={!pinsKnown}
               onclick={() => unpinDashboard(selectedReport.ref)}
-              data-watch-unpin>Unpin tab</Button
+              >Unpin tab</Button
             >
           {:else if selectedReport.ref}
             <Button
               variant="secondary"
               size="compact"
+              disabled={!pinsKnown}
               onclick={() => pinDashboard(selectedReport.ref)}
-              data-watch-pin>Pin as tab</Button
+              >Pin as tab</Button
             >
           {/if}
           <a

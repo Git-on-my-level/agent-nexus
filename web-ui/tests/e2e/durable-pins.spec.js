@@ -26,7 +26,7 @@ const json = (route, value, status = 200) =>
     body: JSON.stringify(value),
   });
 
-/** `pins` is core's GET answer; `send` answers each PUT. */
+/** `pins` is core's GET answer (null: the read fails); `send` answers PUTs. */
 async function prepare(context, { pins, send }) {
   await setup(context, () => {});
   await context.route(
@@ -49,7 +49,9 @@ async function prepare(context, { pins, send }) {
     (route) =>
       route.request().method() === "PUT"
         ? send(route, route.request().postDataJSON())
-        : json(route, pins()),
+        : pins()
+          ? json(route, pins())
+          : json(route, { error: { message: "Private pins detail" } }, 503),
   );
 }
 
@@ -278,4 +280,129 @@ test("an older edit that fails after being superseded is never resent", async ({
   expect(server).toEqual(["document:beta", "document:gamma"]);
   await expect(tab(page, "gamma")).toBeVisible();
   await expect(tab(page, "beta")).toBeVisible();
+});
+
+test("pins wait for a successful read before any whole-set edit", async ({
+  page,
+  context,
+}) => {
+  let readable = false;
+  let healthy = false;
+  const attempts = [];
+  await prepare(context, {
+    pins: () =>
+      readable
+        ? { document_refs: ["document:alpha"], source: "personal" }
+        : null,
+    send: (route, body) => {
+      attempts.push(body);
+      return healthy
+        ? json(route, { document_refs: body.document_refs, source: "personal" })
+        : json(route, { error: { message: "Unavailable" } }, 503);
+    },
+  });
+  // The read fails: alpha is pinned in core, but this page cannot know it.
+  await page.goto(`${WATCH}?tab=dashboard&dashboard=beta`);
+  await expect(dashboard(page)).toBeVisible(FIRST_RENDER);
+  await expect(page.getByText(/pinning is paused/)).toBeVisible();
+  await expect(page.getByText("Private pins detail")).toHaveCount(0);
+  const pinButton = dashboard(page).getByRole("button", { name: "Pin as tab" });
+  await expect(pinButton).toBeDisabled();
+  await pinButton.click({ force: true });
+  await page.locator("[data-overview-report-picker]").click();
+  await expect(page.getByRole("menuitem", { name: "Pin as tab" })).toHaveCount(
+    0,
+  );
+  await page.keyboard.press("Escape");
+  expect(attempts).toHaveLength(0);
+  expect(await savedPins(page)).toEqual([]);
+
+  // Once a read lands, the edit keeps what core already had.
+  readable = true;
+  await page.locator("[data-watch-pins-retry]").click();
+  await expect(tab(page, "alpha").getByLabel("Pinned")).toHaveCount(1);
+  await expect(pinButton).toBeEnabled();
+  await pinButton.click();
+  await expect.poll(() => attempts.length).toBeGreaterThan(0);
+  expect(attempts[0].document_refs).toEqual([
+    "document:alpha",
+    "document:beta",
+  ]);
+
+  // A saved edit still on its way is known local intent, even when the
+  // next read fails.
+  readable = false;
+  await page.reload();
+  await expect(tab(page, "beta").getByLabel("Pinned")).toHaveCount(
+    1,
+    FIRST_RENDER,
+  );
+  await expect(page.getByText(/pinning is paused/)).toHaveCount(0);
+  await expect(
+    dashboard(page).getByRole("button", { name: "Unpin tab" }),
+  ).toBeEnabled();
+  healthy = true;
+});
+
+test("an online pin is on the device before its request goes out", async ({
+  page,
+  context,
+}) => {
+  const atSend = [];
+  await prepare(context, {
+    pins: () => ({ document_refs: [], source: "personal" }),
+    send: async (route, body) => {
+      // Read the device's outbox while core is still answering.
+      atSend.push({ body, saved: await savedPins(page) });
+      return json(route, {
+        document_refs: body.document_refs,
+        source: "personal",
+      });
+    },
+  });
+  await page.goto(`${WATCH}?tab=dashboard`);
+  await expect(dashboard(page)).toBeVisible(FIRST_RENDER);
+  await pin(page, "beta");
+  await expect.poll(() => atSend.length).toBe(1);
+  expect(atSend[0].saved).toEqual([
+    expect.objectContaining({
+      refs: ["document:beta"],
+      key: atSend[0].body.request_key,
+    }),
+  ]);
+  await expect.poll(() => savedPins(page)).toEqual([]);
+});
+
+test("a pin that cannot be saved on the device is never sent", async ({
+  page,
+  context,
+}) => {
+  const attempts = [];
+  await prepare(context, {
+    pins: () => ({ document_refs: [], source: "personal" }),
+    send: (route, body) => {
+      attempts.push(body);
+      return json(route, {
+        document_refs: body.document_refs,
+        source: "personal",
+      });
+    },
+  });
+  await context.addInitScript(() =>
+    Object.defineProperty(window, "indexedDB", { value: undefined }),
+  );
+  await page.goto(`${WATCH}?tab=dashboard`);
+  await expect(dashboard(page)).toBeVisible(FIRST_RENDER);
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error("Storage denied");
+    };
+  });
+  await page.locator("[data-overview-report-picker]").click();
+  await page.locator('[data-overview-report-choice="beta"]').click();
+  await dashboard(page).getByRole("button", { name: "Pin as tab" }).click();
+  await expect(page.locator("[data-watch-pin-error]")).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(tab(page, "beta").getByLabel("Pinned")).toHaveCount(0);
+  expect(attempts).toHaveLength(0);
 });

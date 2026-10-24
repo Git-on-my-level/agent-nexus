@@ -36,6 +36,8 @@
     onselect = null,
     /** Pin `ref`, or unpin with `null`. */
     onpin = null,
+    /** False hides Pin/Unpin, e.g. while the reader's pins are unknown. */
+    canPin = true,
     /** Fixed trigger text (Watch's "More dashboards"); default shows the selection. */
     triggerLabel = "",
     /** Menu text for unpinning the selection; `onpin(null)` is called. */
@@ -346,7 +348,7 @@
           </li>
         {/if}
       </ul>
-      {#if selected}
+      {#if selected && canPin}
         <div class="picker-actions" role="none">
           {#if pinnedSelected}
             <button
