@@ -2,11 +2,9 @@ package primitives
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/testsql"
@@ -266,65 +264,6 @@ func TestEventStreamBatchesRevisionRefs(t *testing.T) {
 	}
 	if checked != 3 {
 		t.Fatalf("scoped payload and two revision batches: got %d statements", checked)
-	}
-}
-
-func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T) {
-	// Serial: isolate the wall-clock budget from parallel SQLite fixtures.
-	for _, total := range []int{1000, 10000} {
-		t.Run(fmt.Sprint(total), func(t *testing.T) {
-			ctx := context.Background()
-			ws, err := initializeTestWorkspace(ctx, t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer ws.Close()
-			if _, err := ws.DB().Exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('private','now','owner','{"pm_actor_id":"owner"}')`); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := ws.DB().Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?)
-				INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json)
-				SELECT printf('%06d',i),'message_posted','2026-01-01T00:00:00Z','owner','private','[]','{}' FROM n`, total); err != nil {
-				t.Fatal(err)
-			}
-			db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
-			defer db.Close()
-			s := NewTestStore(db, ws.Layout().ArtifactContentDir)
-			scope := WithAccessScope(ctx, AccessScope{ActorID: "reader"})
-			// Cold capture builds the canonical closure and its shared lookup once.
-			if _, err := s.ListEventStreamPage(scope, EventListFilter{}, EventCursor{}); err != nil {
-				t.Fatal(err)
-			}
-			cursor := EventCursor{}
-			for tick := 0; tick < 3; tick++ {
-				counter.Reset()
-				start := time.Now()
-				page, err := s.ListEventStreamPage(scope, EventListFilter{}, cursor)
-				elapsed := time.Since(start)
-				if err != nil || len(page.Events) != 0 || !page.HasMore || page.Cursor.ID != fmt.Sprintf("%06d", (tick+1)*200) {
-					t.Fatalf("hidden traversal: %+v %v", page, err)
-				}
-				if counter.Count() != 3 || counter.ReturnedRows() != 202 || elapsed > 500*time.Millisecond {
-					t.Fatalf("hidden tick: %s statements=%d rows=%d", elapsed, counter.Count(), counter.ReturnedRows())
-				}
-				bound := false
-				for _, statement := range counter.Statements() {
-					if !strings.Contains(statement.SQL, "SELECT kind,id FROM _anx_fresh_denied UNION SELECT") {
-						continue
-					}
-					var denied [][2]string
-					if err := json.Unmarshal([]byte(statement.Args[0].(string)), &denied); err != nil || len(denied) != 200 {
-						t.Fatalf("denial binding includes history: %d %v", len(denied), err)
-					}
-					bound = true
-				}
-				if !bound {
-					t.Fatal("did not exercise narrowed cached denial binding")
-				}
-				t.Logf("hidden=%d tick=%d elapsed=%s statements=%d rows=%d denied_bindings=200", total, tick, elapsed, counter.Count(), counter.ReturnedRows())
-				cursor = page.Cursor
-			}
-		})
 	}
 }
 

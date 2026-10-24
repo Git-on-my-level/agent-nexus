@@ -14,7 +14,9 @@ import (
 
 // A slice's write transaction must cost the same for a 50k-ref item as for
 // a small one: the array is expanded in a read snapshot, and the write only
-// inserts the budget-sized slice and updates the one-row job.
+// inserts the budget-sized slice and updates the one-row job. Cost is SQLite
+// VM work (triggers included) and WAL frames written, which machine load
+// cannot inflate.
 func TestInboxLifecycleSliceWriteIsBoundedByBudget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -42,46 +44,46 @@ func TestInboxLifecycleSliceWriteIsBoundedByBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Start both measurements from the same checkpointed state.
-	for _, q := range []string{`DELETE FROM inbox_lifecycle_refs`, `PRAGMA wal_checkpoint(TRUNCATE)`} {
-		if _, err = db.ExecContext(ctx, q); err != nil {
-			t.Fatal(err)
-		}
+	if _, err = db.ExecContext(ctx, `DELETE FROM inbox_lifecycle_refs`); err != nil {
+		t.Fatal(err)
 	}
-	measured, capture, err := perfguard.Open(sqliteDSN(w.Layout().DatabasePath))
+	pool, capture, err := perfguard.Open(sqliteDSN(w.Layout().DatabasePath))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer measured.Close()
-	original := w.db
-	defer original.Close()
-	w.db = measured
-	works := map[string][]uint64{}
-	measure := func(id string) time.Duration {
+	defer pool.Close()
+	measured := &Workspace{db: pool}
+	walFrames := func() int {
+		t.Helper()
+		var busy, frames, checkpointed int
+		if err := db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(PASSIVE)`).Scan(&busy, &frames, &checkpointed); err != nil {
+			t.Fatal(err)
+		}
+		return frames
+	}
+	measure := func(id string) (perfguard.WorkStats, int) {
 		t.Helper()
 		if _, err := db.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET split_id=?,split_offset=0,split_hidden=0`, id); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.ExecContext(ctx, `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=?`, id); err != nil {
+		if _, err := db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
 			t.Fatal(err)
 		}
 		slice, err := w.readInboxLifecycleSlice(ctx, id, 0, inboxLifecycleRefBudget)
 		if err != nil {
 			t.Fatal(err)
 		}
+		before := walFrames()
 		capture.Start()
-		start := time.Now()
-		if err = w.writeInboxLifecycleSlice(ctx, id, 0, inboxLifecycleRefBudget, slice); err != nil {
-			t.Fatal(err)
-		}
-		elapsed := time.Since(start)
+		err = measured.writeInboxLifecycleSlice(ctx, id, 0, inboxLifecycleRefBudget, slice)
 		statements, queries, rows := capture.Stop()
-		work := capture.Work()
-		if err := capture.WorkError(); err != nil {
-			t.Fatal(err)
+		frames := walFrames() - before
+		if err != nil || capture.WorkError() != nil {
+			t.Fatal(err, capture.WorkError())
 		}
-		// This bounds actual SQLite work, independently of GC, fsync and
-		// scheduler pauses. The 2k-ref budget uses about 72k VM steps.
+		work := capture.Work()
+		// Keep the absolute bounds and payload-read guards from main as well
+		// as the relative work and WAL-frame checks below.
 		if queries > 7 || rows > 3 || work.VMSteps > uint64(inboxLifecycleRefBudget*40) {
 			t.Fatalf("unbounded slice: SQL=%d rows=%d work=%+v", queries, rows, work)
 		}
@@ -91,33 +93,23 @@ func TestInboxLifecycleSliceWriteIsBoundedByBudget(t *testing.T) {
 				t.Fatalf("write reloaded or sized the stored payload: %s", statement.SQL)
 			}
 		}
-		works[id] = append(works[id], work.VMSteps)
-		t.Logf("slice %s: SQL=%d rows=%d VM=%d elapsed=%v", id, queries, rows, work.VMSteps, elapsed)
 		var n int
 		if err = db.QueryRowContext(ctx, `SELECT count(*) FROM inbox_lifecycle_refs WHERE inbox_id=?`, id).Scan(&n); err != nil || n != inboxLifecycleRefBudget {
 			t.Fatalf("%s slice indexed %d refs: %v", id, n, err)
 		}
-		return elapsed
+		return capture.Work(), frames
 	}
-	// Interleave the two items so checkpoints and machine load hit both.
-	var smalls, bigs []time.Duration
+	// Interleave repeated slices so both items exercise the same checkpoint
+	// and B-tree states. Scheduling is not part of the acceptance criteria.
 	for i := 0; i < 9; i++ {
-		smalls = append(smalls, measure("small"))
-		bigs = append(bigs, measure("big"))
-	}
-	median := func(runs []time.Duration) time.Duration {
-		sort.Slice(runs, func(i, j int) bool { return runs[i] < runs[j] })
-		return runs[len(runs)/2]
-	}
-	t.Logf("write VM small=%v big=%v", works["small"], works["big"])
-	small, big := median(smalls), median(bigs)
-	t.Logf("slice write: small item %s, 50k-ref item %s", small, big)
-	// Expanding the 50k array inside the write must change work or load the
-	// payload; both are rejected. Wall time is diagnostic, not a size oracle:
-	// identical roughly 72k-step writes ranged from 3ms to 169ms on a busy host.
-	for i := range works["small"] {
-		if works["big"][i] != works["small"][i] {
-			t.Fatalf("slice work grows with item size: small=%v big=%v", works["small"], works["big"])
+		small, smallFrames := measure("small")
+		big, bigFrames := measure("big")
+		t.Logf("slice write: small item %+v frames=%d, 50k-ref item %+v frames=%d", small, smallFrames, big, bigFrames)
+		// Expanding the 50k array inside the write changes VM work; rewriting
+		// its ~1 MB row adds about 250 frames. Retain main's exact VM check
+		// and allow only B-tree split noise in the physical-write bound.
+		if big.VMSteps != small.VMSteps || big.FullScanSteps > small.FullScanSteps+small.FullScanSteps/10 || bigFrames > smallFrames+smallFrames/2 {
+			t.Fatalf("slice write grows with item size: small %+v frames=%d, big %+v frames=%d", small, smallFrames, big, bigFrames)
 		}
 	}
 }

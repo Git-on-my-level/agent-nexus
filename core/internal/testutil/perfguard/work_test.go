@@ -222,7 +222,12 @@ func TestWorkCountsErrorsCancellationAndPoolReset(t *testing.T) {
 		}
 		cancel()
 		c.Stop()
-		if !errors.Is(err, context.Canceled) || c.Work().VMSteps == 0 {
+		// The progress callback and modernc's cancellation goroutine race to
+		// interrupt SQLite. The former can surface SQLITE_INTERRUPT directly;
+		// both outcomes prove cancellation, and unrelated SQL errors must fail.
+		var sqliteErr interface{ Code() int }
+		interrupted := errors.As(err, &sqliteErr) && sqliteErr.Code()&255 == 9
+		if ctx.Err() != context.Canceled || (!errors.Is(err, context.Canceled) && !interrupted) || c.Work().VMSteps == 0 {
 			t.Fatalf("exec=%v canceled work=%+v err=%v", exec, c.Work(), err)
 		}
 		t.Logf("canceled exec=%v work=%+v", exec, c.Work())
