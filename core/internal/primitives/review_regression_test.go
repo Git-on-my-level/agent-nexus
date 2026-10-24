@@ -250,8 +250,9 @@ func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now)
-	// The child plan edit moves the linked step: it is evidence.
-	if err != nil || after[0].PlanHealth.State != "no_promise" || *after[0].PlanHealth.LastEvidenceAt == *before[0].PlanHealth.LastEvidenceAt {
+	// A linked plan edit remains visible as activity, but authoring alone
+	// is not evidence that can meet the parent's promise.
+	if err != nil || after[0].PlanHealth.State != "no_promise" || *after[0].PlanHealth.LastEvidenceAt != *before[0].PlanHealth.LastEvidenceAt || after[0].Summary.LastMovementAt == before[0].Summary.LastMovementAt {
 		t.Fatalf("child plan activity missing=%+v %v", after, err)
 	}
 }

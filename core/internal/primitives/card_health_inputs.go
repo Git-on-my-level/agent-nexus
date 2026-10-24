@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"agent-nexus-core/internal/plans"
@@ -19,9 +20,10 @@ type cardHealthInput struct {
 	// related_refs linked sources.
 	Wake    string
 	Related []string
-	// PlanAt is the last plan edit and Observed the last meaningful source
-	// observation (external authority only); both reset the promise clock.
+	// PlanAt records authoring; Observed is meaningful source evidence.
 	PlanAt, Observed time.Time
+	// Only the visible retained projection may supply historical step progress.
+	StepStatus, StepChangeAt string
 	// Notes are the card's promise notes, loaded once per loadPlans batch
 	// through Store.PromiseNotesFor; nil for lightweight summaries.
 	Notes []plans.PromiseNote
@@ -36,6 +38,11 @@ func (input cardHealthInput) health(ref string, p *plans.Plan, state plans.State
 		ref = "card:" + input.Handle
 	}
 	in := plans.HealthInput{Ref: ref, Plan: p, State: state, Facts: facts, Phase: input.Phase, CardDue: input.Due, Wake: input.Wake, PlanEditedAt: input.PlanAt, Notes: input.Notes}
+	_, clock := planStepProgressClock(state, input.StepStatus, input.StepChangeAt, input.PlanAt, false)
+	in.StepChanges = []time.Time{}
+	if !clock.IsZero() {
+		in.StepChanges = append(in.StepChanges, clock)
+	}
 	if !input.Observed.IsZero() {
 		in.Observations = []time.Time{input.Observed}
 	}
@@ -91,7 +98,7 @@ func (s *Store) promiseNotesBatch(ctx context.Context, ids []string) (map[string
 			FROM json_each(?) ids)
 		SELECT page.card_id,n.event_id,n.author,n.ts,COALESCE(n.next_at,''),n.next_what,n.evidence,COALESCE(page.payload_json,'')
 		FROM page
-		JOIN brief_notes n ON n.event_id IN (SELECT event_id FROM brief_notes WHERE card_id=page.card_id ORDER BY ts DESC LIMIT ?)`, string(encoded), plans.MaxPromiseNotes)
+		JOIN brief_notes n ON n.event_id IN (SELECT event_id FROM brief_notes WHERE card_id=page.card_id AND (next_at IS NOT NULL OR evidence=1) ORDER BY ts DESC LIMIT ?)`, string(encoded), plans.MaxPromiseNotes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -110,4 +117,39 @@ func (s *Store) promiseNotesBatch(ctx context.Context, ids []string) (map[string
 		}
 	}
 	return out, texts, rows.Err()
+}
+
+// planStepProgressClock is shared by read health and the canonical brief fold.
+// Adding/removing steps is authoring. Only an existing step changing effective
+// status advances the retained clock. Maintenance may bootstrap completed work;
+// a read with no visible historical projection must not infer private progress.
+func planStepProgressClock(state plans.State, previousSignature, previousClock string, editedAt time.Time, initialDone bool) (string, time.Time) {
+	previous := map[string]string{}
+	for _, part := range strings.Split(previousSignature, ";") {
+		if id, status, ok := strings.Cut(part, "="); ok && id != "" {
+			if status == "" {
+				status = "not_started"
+			}
+			previous[id] = status
+		}
+	}
+	parts := make([]string, 0, len(state.Steps))
+	changed, done := false, false
+	for _, step := range state.Steps {
+		parts = append(parts, step.ID+"="+step.Status)
+		if old, ok := previous[step.ID]; ok && old != step.Status {
+			changed = true
+		}
+		done = done || step.Status == "done"
+	}
+	clock := latestCardActivity(previousClock)
+	if changed || (initialDone && previousSignature == "" && done) {
+		if editedAt.After(clock) {
+			clock = editedAt
+		}
+		if movement := latestCardActivity(state.LastMovementAt); movement.After(clock) {
+			clock = movement
+		}
+	}
+	return strings.Join(parts, ";"), clock
 }

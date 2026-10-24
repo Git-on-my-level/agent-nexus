@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `73`
+- Commands: `77`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -202,7 +202,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `sessions.register`
   - `work.capabilities`
   - `work.create`
+  - `work.fold`
   - `work.get`
+  - `work.group`
   - `work.list`
   - `work.observations.list`
   - `work.observations.submit`
@@ -211,6 +213,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch`
   - `work.refresh.get`
   - `work.refresh.request`
+  - `work.unfold`
+  - `work.ungrouped`
   - `workspace.dashboard.set`
 
 ## `compatibility`
@@ -295,7 +299,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `evidence`
 
-- Commands: `39`
+- Commands: `42`
 - Command IDs:
   - `pm.actions.acknowledge`
   - `pm.actions.get`
@@ -327,7 +331,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `sessions.register`
   - `work.capabilities`
   - `work.create`
+  - `work.fold`
   - `work.get`
+  - `work.group`
   - `work.list`
   - `work.observations.list`
   - `work.observations.submit`
@@ -336,6 +342,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch`
   - `work.refresh.get`
   - `work.refresh.request`
+  - `work.unfold`
 
 ## `health`
 

@@ -1,0 +1,195 @@
+# Group work by default
+
+Grouping a new card stays optional and non-blocking. Core supplies deterministic
+suggestions; it never runs a model or chooses a parent for the caller. The same
+behavior is available through HTTP, CLI and the generated MCP catalog.
+
+Create a card and its parent plan step in one transaction:
+
+```sh
+anx work create --from-file task.json --under card:initiative --after investigate
+anx cards create --board board:tasks --title "Measure" --body "Compare results" --under card:initiative
+anx work group card:measure --under card:initiative
+```
+
+`after` is an existing **plan step ID**, expressing a dependency. Grouping twice
+does not add another step. Cycles, a terminal parent, and invalid dependencies
+are rejected atomically. A request with `under` must succeed in both creating
+the card and linking the step, or do neither. Creating without `under` never
+requires a grouping decision or an over-budget reason.
+When `board_ref` is omitted with `under`, the new card inherits its parent's
+board, including its visibility. An explicit board still permits cross-board work.
+
+HTTP writes accept `request_key`. Exact retries return the original response;
+reusing a key for another body conflicts. CLI grouping commands allocate a key
+when omitted and include it in an uncertain-outcome error. MCP exposes
+`idempotency_key`, mapped to the same receipt. Keep the original key and body.
+
+## Hierarchy and brief
+
+A card is a child when an ordinary `card:` plan step of a **visible open parent**
+references it. Multiple parents choose the oldest parent card by `created_at`,
+then storage ID. This rule uses existing creation times, not inferred link ages.
+The chosen parent receives the child count; duplicate steps do not double-count.
+Closing, archiving or trashing a parent releases its children to top level.
+The parent board must also be active. `related_refs` alone never creates hierarchy.
+
+Work/card reads and brief items expose `parent_ref` (null for top level) and:
+
+```json
+{
+  "rollup": {
+    "total": 1,
+    "by_state": { "in_progress": 1 },
+    "past_promise": 1,
+    "needing_viewer": 1,
+    "children": [
+      {
+        "ref": "card:measure",
+        "title": "Measure",
+        "step_id": "measure",
+        "state": "in_progress",
+        "past_promise": true,
+        "needs_viewer": true
+      }
+    ],
+    "workstreams": [],
+    "has_more": false
+  }
+}
+```
+
+`by_state` uses canonical work phases. `needing_viewer` counts children with an
+open decision addressed to the viewer, once per child. `workstreams` are child
+plan steps which themselves link card children. Counts and previews are scoped
+before aggregation; hidden children do not affect `has_more`. Valid plans have
+at most 200 steps. Authored plan privacy still applies to the whole plan.
+
+`GET /brief` keeps top-level non-loop work in `initiatives`, puts loop-bound
+cards in `loops`, and adds `initiative_budget: {count, target: 15, truncated}`
+and at most ten suggested fold `next_actions`. `orient` prints `initiatives N/15`
+(or `N+/15` for a lower bound). No write is blocked. The budget samples the most
+recent 200 physical open-card identities across boards, then applies visibility
+and excludes children and loops. It is at least the number of visible live roots
+in the displayed brief. Principal-scoped budgets always mark `truncated`, so
+the marker cannot disclose hidden window occupancy; their count is a lower bound.
+Brief promise/evidence categories admit 200 physical identities before scoped
+hydration and hierarchy filtering, then display at most 50. No selector scans
+past hidden positions to fill its preview. The paged `/work` API remains the full inventory.
+
+## Likely home and the Ungrouped tray
+
+Both `POST /work` and `POST /cards` return `likely_home` on the created item and
+response, plus a runnable `next_actions` grouping command when a match exists.
+`ask` auto-created subjects use `POST /work`, carry `ask.auto_create` attribution,
+and retain these hints in the composed ask result. MCP creates carry `mcp`
+attribution. The registration audit event records `create_surface`; this is
+client attribution, not an authenticated provenance claim.
+
+Candidates are visible open top-level non-loop cards. Reasons and scores are:
+
+| Reason                                     | Score |
+| ------------------------------------------ | ----: |
+| Parent named in `related_refs`             |  1000 |
+| Shared related/source URL or typed ref     |   100 |
+| Same repository URL or explicit repository |    30 |
+| Same `project_ref`                         |    20 |
+| Same title prefix family                   |    10 |
+
+Scores add; ties use oldest creation time, then ID. One implementation recognizes
+`P76`, `A1`, `fs-p3`, and numbered families such as `Cost 2/5`. Matching does not
+fetch URLs. Related-parent candidates are admitted by identity even outside the
+recent cohort. At most three suggestions are returned; an empty list is valid.
+
+`GET /work/ungrouped?limit=20` (`anx work ungrouped`) returns compact
+`{work: [{ref, title, phase, parent_ref, created_at, likely_home, next_actions}], has_more}`.
+The tray includes completed, unarchived cards; suggested homes remain open.
+The maximum page is 50 within the recent cohort; `has_more` describes additional
+visible eligible rows in that cohort. Hidden rows never set it. This endpoint is
+a recent tray, not an exhaustive cursor feed.
+
+Fold suggestions use the same matching function, point toward older candidates,
+and add `stale_top_level` after seven days without a card update. A stale card
+without a match may suggest the oldest visible candidate; the caller must choose.
+
+## Fold and unfold
+
+```sh
+anx work fold card:measure --into card:initiative --request-key fold-measure-1
+anx work unfold card:measure --request-key unfold-measure-1
+anx cards archive card:measure --reason "superseded by the initiative"
+```
+
+Fold records `relations: [{kind: "merged_into", ref: "card:initiative"}]` on the
+child, transfers its authored related refs, resolution evidence refs and
+structured `source_refs` to the parent, and carries its counted promise as the
+parent step's `due`. The child is archived with reason `folded into card:initiative`.
+Discussion, observations and asks remain append-only on the child, reachable
+through the parent's plan step and related child ref. Open asks retain their
+original subject and answer target. Conflicting source identities reject the
+whole fold; no evidence is overwritten.
+The new relation retains the existing 200-entry relation limit; exceeding it
+rejects the entire fold without archiving or plan edits.
+
+Unfold restores the transferred fields, prior plan and child lifecycle from a
+scoped snapshot. It preserves unrelated metadata edits and rejects conflicting
+changes in transferred fields or the parent plan with 409. It never overwrites
+new user work. Fold/unfold audit events and original replay receipts remain.
+
+Ordinary author messages, plan-step additions/removals and next-action edits
+preserve promises. A newer explicit `next` replaces that author's promise;
+actual evidence and step status changes can still meet it. Plan edits cannot fulfill their own milestones. Plain messages do not
+consume the bounded promise-fact window.
+
+The optional agentctl-label default is not enabled: `agentctl help` and
+`agentctl help run` do not document a reliable inherited label environment signal.
+Callers should pass `--under` explicitly.
+
+## Routes and cost
+
+Added routes: `GET /work/ungrouped`, `POST /work/{card_ref}/group`,
+`POST /work/{card_ref}/fold`, `POST /work/{card_ref}/unfold`.
+Changed routes: `POST /work`, `POST /cards`, `POST /boards/{board_id}/cards`,
+`GET /work`, `GET /work/{card_ref}`, `GET /cards`, `GET /cards/{card_id}`,
+`GET /boards/{board_id}/cards`, `GET /boards/{board_id}/cards/{card_id}`,
+`GET /cards/{card_id}/timeline?summary=1`, `GET /agents/{agent_id}?summary=1`,
+`GET /cards/{card_id}/plan`, `PUT /cards/{card_id}/plan` (promise preservation),
+`GET /brief`, and `POST /cards/{card_id}/archive` (audit reason).
+
+Recent candidate admission seeks `idx_cards_grouping_recent(trashed_at,archived_at,created_at DESC,id
+DESC)` with its active-card partial predicate and a 200-row cap. The tray also
+admits at most 200 completed cards through the mutually exclusive
+`idx_cards_grouping_closed` index, sorts at most 400 identities, and retains the
+most recent 200 before hydration. Explicit related
+parents use ID/handle seeks, capped at 200 across a tray page. Candidate scoring
+uses precomputed ref/repository sets, O(page × admitted candidates), with no
+per-row SQL hydration. Internal routing views expose only traversal keys and
+positions; canonical scoped hydration follows the physical bound, so dense
+denial adds no workspace scan. Reverse parent lookup seeks
+`idx_brief_plan_refs_target(ref,card_id)`; rollups batch at most 200 input cards
+and 200 steps each through plan/card primary-key and handle lookups. Cost grows
+with admitted plans/steps and their incoming parent links, not unrelated cards.
+Legacy unpaged card inventories retain their existing cardinality and enrich
+their returned rows in 200-card batches; paged work and summary reads keep their
+existing page bounds.
+Subject asks use `idx_brief_asks_subject`; duplicate asks count one child.
+
+Migration 115 adds three internal routing views, recent-card and relevant-promise-fact indexes, and queues the
+existing brief projections for bounded maintenance. It creates no new resource
+table. Exact-key field-presence probes distinguish absent plans from hidden plans before
+a grouping write; an unreadable existing plan is never replaced with an empty plan. Promise reads use partial indexes over next/evidence facts, avoiding a
+plain-message history scan. Fold writes are bounded by the 200-step plan and
+2,000-source-ref contracts and retain ordinary scoped mutation/replay checks.
+The checked-in grouping budget tests add 10,000 unrelated or denied cards and enforce
+50,000 VM steps for each read. No existing allowance is widened.
+
+Full HTTP scale acceptance is currently **blocked**. After main's performance
+harness repair, `GET /work/ungrouped` reaches the measured samples but uses
+273,020 VM instructions warm and 1,603,957 after invalidation for the denied
+reader, against the unchanged 50,000 budget. Canonical authorization admission
+still acquires/materializes the workspace denial closure before these bounded
+queries; its plans also remain unreviewed for this new route. The native
+admitted-read figures above do not certify the complete HTTP request. This is a
+merge-blocking P1: keep the grouping PR draft until canonical authorization
+admission satisfies the ordinary budget. No new baseline, plan allowance or
+budget increase is supplied here.

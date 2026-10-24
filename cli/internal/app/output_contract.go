@@ -31,6 +31,12 @@ func commandSideEffectClass(command string) string {
 	if command == "pm card" || command == "pm context" || command == "pm status" || command == "pm presence" {
 		return "read_only"
 	}
+	if command == "work group" || command == "work fold" || command == "work unfold" {
+		return "remote_coordination_write"
+	}
+	if command == "work ungrouped" {
+		return "read_only"
+	}
 	if command == "refs resolve" {
 		return "read_only"
 	}
@@ -226,6 +232,22 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		return []output.NextAction{}
 	}
 	var actions []output.NextAction
+	if command == "work create" || command == "cards create" {
+		item := asMap(root["work"])
+		if item == nil {
+			item = asMap(root["card"])
+		}
+		homes := asSlice(root["likely_home"])
+		if len(homes) == 0 {
+			homes = asSlice(item["likely_home"])
+		}
+		if ref := anyString(item["ref"]); strings.HasPrefix(ref, "card:") && len(homes) > 0 {
+			if parent := anyString(asMap(homes[0])["ref"]); strings.HasPrefix(parent, "card:") {
+				actions = append(actions, action("Group under likely home", "anx", "work", "group", ref, "--under", parent))
+			}
+		}
+	}
+
 	if strings.HasPrefix(command, "git ") && asBool(root["enabled"]) && anyString(root["root"]) != "" {
 		if hostInt(root["pending"]) > 0 || anyString(root["snapshot"]) != "" {
 			actions = append(actions, action("Continue Git capture", "anx", "git", "sync", anyString(root["root"])))

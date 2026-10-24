@@ -200,7 +200,7 @@ func promiseNotesFor(ctx context.Context, q briefQueryer, cardIDs []string) (map
 		cardIDs = cardIDs[:briefRefreshBatch]
 	}
 	for _, id := range cardIDs {
-		rows, err := q.QueryContext(ctx, `SELECT event_id,author,ts,COALESCE(next_at,''),next_what,evidence FROM brief_notes WHERE card_id=? ORDER BY ts DESC LIMIT ?`, id, plans.MaxPromiseNotes)
+		rows, err := q.QueryContext(ctx, `SELECT event_id,author,ts,COALESCE(next_at,''),next_what,evidence FROM brief_notes WHERE card_id=? AND (next_at IS NOT NULL OR evidence=1) ORDER BY ts DESC LIMIT ?`, id, plans.MaxPromiseNotes)
 		if err != nil {
 			return nil, err
 		}
@@ -464,34 +464,19 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 		}
 		p := ps[f.id]
 		state := plans.Compute(p, resolved, time.Time{})
-		parts := make([]string, 0, len(state.Steps))
 		for i, step := range state.Steps {
-			parts = append(parts, step.ID+"="+step.Status)
 			if step.Status != "done" {
 				if due := plans.ParseDue(p.Steps[i].Due); !due.IsZero() {
 					in.Steps = append(in.Steps, plans.PromiseStep{ID: step.ID, Title: p.Steps[i].Title, Due: due})
 				}
 			}
 		}
-		sig := strings.Join(parts, ";")
-		// Only an effective status change advances the clock. A linked card's
-		// movement time matters even when the authored plan has not changed.
+		planAt, _ := time.Parse(time.RFC3339Nano, f.planAt)
+		sig, clock := planStepProgressClock(state, f.sig, f.stepChangeAt, planAt, true)
 		stepChangeAt := f.stepChangeAt
-		// Older projections stored an empty authored status for not_started.
-		// Normalizing that representation alone must not invent evidence.
-		previous := strings.Split(f.sig, ";")
-		for i, part := range previous {
-			if strings.HasSuffix(part, "=") {
-				previous[i] += "not_started"
-			}
-		}
-		if sig != strings.Join(previous, ";") && (f.sig != "" || strings.Contains(sig, "=done")) {
-			if at := latestCardActivity(f.planAt, state.LastMovementAt, stepChangeAt); !at.IsZero() {
-				stepChangeAt = at.UTC().Format(time.RFC3339Nano)
-			}
-		}
-		if at, e := time.Parse(time.RFC3339Nano, stepChangeAt); e == nil {
-			in.StepChanges = []time.Time{at}
+		if !clock.IsZero() {
+			stepChangeAt = clock.UTC().Format(time.RFC3339Nano)
+			in.StepChanges = []time.Time{clock}
 		}
 		if at := latestCardActivity(f.progressAt, f.sourceEvidenceAt); !at.IsZero() {
 			in.Observations = []time.Time{at}
@@ -562,7 +547,7 @@ func (s *Store) promiseNotesFromEvents(ctx context.Context, cardIDs []string) (m
 	out := map[string][]plans.PromiseNote{}
 	for _, id := range cardIDs {
 		rows, err := s.db.QueryContext(ctx, `SELECT e.id,COALESCE(e.actor_id,''),e.ts,e.payload_json FROM cards c JOIN events e ON e.thread_id=c.thread_id
-			WHERE c.id=? AND e.type='message_posted' ORDER BY e.ts DESC LIMIT ?`, id, plans.MaxPromiseNotes)
+			WHERE c.id=? AND e.type='message_posted' AND (json_extract(e.payload_json,'$.payload.next.at') IS NOT NULL OR json_array_length(json_extract(e.payload_json,'$.payload.evidence_refs'))>0) ORDER BY e.ts DESC LIMIT ?`, id, plans.MaxPromiseNotes)
 		if err != nil {
 			return nil, err
 		}

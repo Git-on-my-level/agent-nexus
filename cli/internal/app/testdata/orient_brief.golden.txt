@@ -1,4 +1,5 @@
 you: build-agent on host-1 · workspace demo
+initiatives 6/15
 answered for you:  ask/80 "Ship rig firmware 1.4?" → "Hold a week" (not your recommendation)
 waiting on human:  none
 your initiatives:  battery-measurement  PAST PROMISE 9d (Oct 6 Oct 21 checkpoint) · moved 2×

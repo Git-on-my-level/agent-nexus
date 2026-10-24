@@ -213,7 +213,7 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 
 func TestStepMovementIsEvidenceButCardChatterIsNot(t *testing.T) {
 	t.Parallel()
-	for _, subject := range []string{"card", "step"} {
+	for _, subject := range []string{"card", "step", "step_move"} {
 		t.Run(subject, func(t *testing.T) {
 			ctx := context.Background()
 			ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -248,6 +248,9 @@ func TestStepMovementIsEvidenceButCardChatterIsNot(t *testing.T) {
 			if _, err = ws.DB().Exec(`UPDATE work_metadata SET updated_at=?`, old); err != nil {
 				t.Fatal(err)
 			}
+			if _, err = s.RefreshBriefInitiatives(ctx, 200); err != nil {
+				t.Fatal(err)
+			}
 			card, err := s.GetBoardCard(ctx, "", parent["id"].(string))
 			if err != nil {
 				t.Fatal(err)
@@ -259,21 +262,27 @@ func TestStepMovementIsEvidenceButCardChatterIsNot(t *testing.T) {
 			if before.State != plans.PromiseNone || before.LastEvidenceAt == nil {
 				t.Fatal(before)
 			}
-			thread := parent["thread_id"].(string)
-			if subject == "step" {
-				thread = child["thread_id"].(string)
-			}
-			if _, err = s.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": thread, "refs": []string{}, "payload": map[string]any{"text": "Verified progress"}}); err != nil {
-				t.Fatal(err)
+			if subject == "step_move" {
+				if _, err = s.MoveBoardCard(ctx, "actor-1", board["id"].(string), child["id"].(string), primitives.MoveBoardCardInput{ColumnKey: "in_progress"}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				thread := parent["thread_id"].(string)
+				if subject == "step" {
+					thread = child["thread_id"].(string)
+				}
+				if _, err = s.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": thread, "refs": []string{}, "payload": map[string]any{"text": "ordinary chatter"}}); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now()); err != nil {
 				t.Fatal(err)
 			}
-			// A linked step moving is a plan-step change and resets the clock;
-			// a note on the card without evidence is not evidence.
+			// A linked step changing effective status is progress; plain
+			// chatter on either card must not manufacture progress.
 			after := card["plan_health"].(plans.Health)
 			moved := *after.LastEvidenceAt != *before.LastEvidenceAt
-			if after.State != plans.PromiseNone || moved != (subject == "step") {
+			if after.State != plans.PromiseNone || moved != (subject == "step_move") {
 				t.Fatalf("before=%v after=%v", *before.LastEvidenceAt, *after.LastEvidenceAt)
 			}
 		})

@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v30"
+const agentGuideSkillVersion = "anx.participant.v31"
 
 type guideSection struct {
 	Title string
@@ -43,6 +43,7 @@ func agentGuideSections() []guideSection {
 			"- Share only task-scoped facts and references. Do not upload raw transcripts, secrets, unrelated session history, or local paths as globally reachable links. A session reference grants no history access.",
 		}},
 		{Title: "Executive workspace", Lines: []string{
+			"- Group by default: create with `anx work create --under card:P`, or use `anx work group card:C --under card:P` afterwards. Core offers deterministic `likely_home` suggestions and never blocks creation. `anx work fold card:C --into card:P` transfers refs and archives with asks reachable; `anx work unfold` reverses it.",
 			"- A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.",
 			"- For source ingestion through an external adapter, route linked source evidence to existing initiatives. Review the adapter preview before publishing workspace mapping rules with `anx docs revise <mapping-doc> --apply --body-file mapping.json`. Keep unmatched items visible for deliberate triage. Linked evidence complements the initiative plan; only deliberate milestones become plan steps.",
 			"- Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.",

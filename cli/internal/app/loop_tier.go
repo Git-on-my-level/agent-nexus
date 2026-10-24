@@ -145,13 +145,6 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	var warnings []output.Warning
 	if !parsed.nextSet {
 		warnings = append(warnings, noteWarning("note_no_next", "no --next; a card renews by noting its next promise", []string{"anx", "note", cardRef, "--next", "<when>", "<what>"}))
-		if prev, ok := a.previousOwnPromise(ctx, cfg, target.ThreadID); ok {
-			argv := []string{"anx", "note", cardRef, "--next", prev.at.Format(time.RFC3339)}
-			if prev.what != "" {
-				argv = append(argv, prev.what)
-			}
-			warnings = append(warnings, noteWarning("note_clears_promise", fmt.Sprintf("this note clears your promise %q due %s; carry it forward with --next", prev.what, prev.at.Format(time.RFC3339)), argv))
-		}
 	} else {
 		if len(stringList(card["assignee_refs"])) == 0 && anyString(card["assignee"]) == "" && anyString(card["owner"]) == "" {
 			warnings = append(warnings, noteWarning("note_promise_unowned", "promise set on an unowned card; nobody will be prompted to renew it", []string{"anx", "work", "start", cardRef}))
@@ -505,6 +498,24 @@ func renderOrientText(brief map[string]any, identity string) string {
 		identity = firstNonEmpty(anyString(principal["display"]), anyString(principal["id"]))
 	}
 	fmt.Fprintf(&b, "you: %s\n", identity)
+	if budget := asMap(brief["initiative_budget"]); budget != nil {
+		suffix := ""
+		if asBool(budget["truncated"]) {
+			suffix = "+"
+		}
+		fmt.Fprintf(&b, "initiatives %d%s/15\n", intValue(budget["count"]), suffix)
+	}
+	for _, raw := range asSlice(brief["loops"]) {
+		item := asMap(raw)
+		b.WriteString(formatOrientInitiativeLine("loops:", item) + "\n")
+	}
+	for _, raw := range asSlice(brief["next_actions"]) {
+		a := asMap(raw)
+		if argv := stringList(a["argv"]); len(argv) > 0 {
+			fmt.Fprintf(&b, "next %s\n", strings.Join(argv, " "))
+		}
+	}
+
 	answered := asSlice(brief["answered_for_you"])
 	if len(answered) == 0 {
 		b.WriteString("answered for you:  none\n")

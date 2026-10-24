@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agent-nexus-core/internal/testutil/perfguard"
 )
 
 // A slice's write transaction must cost the same for a 50k-ref item as for
@@ -46,6 +48,15 @@ func TestInboxLifecycleSliceWriteIsBoundedByBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	measured, capture, err := perfguard.Open(sqliteDSN(w.Layout().DatabasePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer measured.Close()
+	original := w.db
+	defer original.Close()
+	w.db = measured
+	works := map[string][]uint64{}
 	measure := func(id string) time.Duration {
 		t.Helper()
 		if _, err := db.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET split_id=?,split_offset=0,split_hidden=0`, id); err != nil {
@@ -58,11 +69,30 @@ func TestInboxLifecycleSliceWriteIsBoundedByBudget(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		capture.Start()
 		start := time.Now()
 		if err = w.writeInboxLifecycleSlice(ctx, id, 0, inboxLifecycleRefBudget, slice); err != nil {
 			t.Fatal(err)
 		}
 		elapsed := time.Since(start)
+		statements, queries, rows := capture.Stop()
+		work := capture.Work()
+		if err := capture.WorkError(); err != nil {
+			t.Fatal(err)
+		}
+		// This bounds actual SQLite work, independently of GC, fsync and
+		// scheduler pauses. The 2k-ref budget uses about 72k VM steps.
+		if queries > 7 || rows > 3 || work.VMSteps > uint64(inboxLifecycleRefBudget*40) {
+			t.Fatalf("unbounded slice: SQL=%d rows=%d work=%+v", queries, rows, work)
+		}
+		for _, statement := range statements {
+			sql := strings.ToLower(strings.Join(strings.Fields(statement.SQL), " "))
+			if strings.Contains(sql, "data_json") || strings.Contains(sql, "select *") || strings.Contains(sql, "json_array_length") {
+				t.Fatalf("write reloaded or sized the stored payload: %s", statement.SQL)
+			}
+		}
+		works[id] = append(works[id], work.VMSteps)
+		t.Logf("slice %s: SQL=%d rows=%d VM=%d elapsed=%v", id, queries, rows, work.VMSteps, elapsed)
 		var n int
 		if err = db.QueryRowContext(ctx, `SELECT count(*) FROM inbox_lifecycle_refs WHERE inbox_id=?`, id).Scan(&n); err != nil || n != inboxLifecycleRefBudget {
 			t.Fatalf("%s slice indexed %d refs: %v", id, n, err)
@@ -79,12 +109,16 @@ func TestInboxLifecycleSliceWriteIsBoundedByBudget(t *testing.T) {
 		sort.Slice(runs, func(i, j int) bool { return runs[i] < runs[j] })
 		return runs[len(runs)/2]
 	}
+	t.Logf("write VM small=%v big=%v", works["small"], works["big"])
 	small, big := median(smalls), median(bigs)
 	t.Logf("slice write: small item %s, 50k-ref item %s", small, big)
-	// Expanding the 50k array inside the write would cost far more than the
-	// small item's 3k array; a bounded slice costs about the same.
-	if big > 3*small+10*time.Millisecond {
-		t.Fatalf("slice write grows with item size: small %s, big %s", small, big)
+	// Expanding the 50k array inside the write must change work or load the
+	// payload; both are rejected. Wall time is diagnostic, not a size oracle:
+	// identical roughly 72k-step writes ranged from 3ms to 169ms on a busy host.
+	for i := range works["small"] {
+		if works["big"][i] != works["small"][i] {
+			t.Fatalf("slice work grows with item size: small=%v big=%v", works["small"], works["big"])
+		}
 	}
 }
 

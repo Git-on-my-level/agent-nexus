@@ -459,12 +459,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `work`
 
-- Commands: `12`
+- Commands: `16`
 - Command IDs:
   - `agents.me.presence` (`work presence`)
   - `work.capabilities` (`work capabilities`)
   - `work.create` (`work create`)
+  - `work.fold` (`work fold`)
   - `work.get` (`work get`)
+  - `work.group` (`work group`)
   - `work.list` (`work list`)
   - `work.observations.list` (`work observations list`)
   - `work.observations.submit` (`work observations submit`)
@@ -473,6 +475,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch` (`work patch`)
   - `work.refresh.get` (`work refresh get`)
   - `work.refresh.request` (`work refresh request`)
+  - `work.unfold` (`work unfold`)
+  - `work.ungrouped` (`work ungrouped`)
 
 ## `workspace`
 

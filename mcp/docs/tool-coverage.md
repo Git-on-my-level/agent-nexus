@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 270
+- Command count: 274
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -51,15 +51,15 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | threads | 5 |
 | topics | 10 |
 | usage | 1 |
-| work | 12 |
+| work | 16 |
 | workspace | 4 |
 
 ## Counts by Classification
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 91 |
-| exposed_write | 71 |
+| exposed_read | 92 |
+| exposed_write | 74 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
@@ -72,8 +72,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 162 | exposed_read + exposed_write + adapted |
-| hosted default | 67 | explicit read-only private-app allowlist |
+| standalone default | 166 | exposed_read + exposed_write + adapted |
+| hosted default | 68 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 66 | not represented as direct MCP tools in v1 |
@@ -339,7 +339,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | usage.summary.v1 | usage | GET | /v1/usage/summary | gated_admin | versioned usage summary is quota/billing telemetry |
 | work.capabilities | work | GET | /work/capabilities | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.create | work | POST | /work | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| work.fold | work | POST | /work/{card_ref}/fold | exposed_write | Transfer references and archive with a reversible scoped snapshot. |
 | work.get | work | GET | /work/{card_ref} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| work.group | work | POST | /work/{card_ref}/group | exposed_write | Add an ordinary plan step atomically with replay safety. |
 | work.list | work | GET | /work | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.list | work | GET | /work/{card_ref}/observations | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.submit | work | POST | /work/{card_ref}/observations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
@@ -348,6 +350,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.patch | work | PATCH | /work/{card_ref} | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.refresh.get | work | GET | /work/{card_ref}/refresh | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.refresh.request | work | POST | /work/{card_ref}/refresh | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| work.unfold | work | POST | /work/{card_ref}/unfold | exposed_write | Reverse a fold without overwriting conflicting user edits. |
+| work.ungrouped | work | GET | /work/ungrouped | exposed_read | Bounded visible recent cards with deterministic likely homes. |
 | workspace.dashboard.list | workspace | GET | /workspace/dashboard/reports | exposed_read | Validated dashboard report selector candidates. |
 | workspace.dashboard.pins.list | workspace | GET | /workspace/dashboard/pins | exposed_read | Read only the requesting principal's ordered dashboard pins. |
 | workspace.dashboard.pins.set | workspace | PUT | /workspace/dashboard/pins | exposed_write | Reversibly replace only the requesting principal's dashboard pins. |

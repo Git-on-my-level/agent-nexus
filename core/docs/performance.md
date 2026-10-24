@@ -1,5 +1,39 @@
 # Performance guardrails
 
+## Grouping and promise preservation
+
+The grouping API admits recent physical routing identities before visibility and metadata matching,
+uses indexed reverse plan references for parentage, and batches rollups under
+the 200-step plan limit. The [grouped-work guide](../../docs/grouping-work.md)
+documents the candidate windows, indexes, complexity and lower-bound budget.
+`internal/primitives/testdata/work_grouping_budget.json` enforces 50,000 VM steps
+for tray/home and hierarchy reads against 10,000 unrelated cards. Existing brief
+ceilings remain unchanged. Promise inputs seek relevant next/evidence facts;
+ordinary chatter cannot displace a promise from the bounded window. A dense
+10,000-card denied prefix used 110,457 VM steps before physical admission and
+8,198 afterwards; the admitted brief uses 10,028. Scoped budget markers are
+always conservative, independent of hidden window occupancy. The populated
+50-card/100-series-ref brief remains below its unchanged 50,000 ceiling.
+
+```sh
+go test -C core ./internal/primitives -run '^TestGrouping' -count=1 -v
+go test -C core ./internal/storage -run '^TestGroupingUpgrade' -count=1
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+```
+
+Full HTTP scale acceptance is currently **blocked**. After main's performance
+harness repair, `GET /work/ungrouped` reaches the measured samples but uses
+273,020 VM instructions warm and 1,603,957 after invalidation for the denied
+reader, against the unchanged 50,000 budget. Canonical authorization admission
+still acquires/materializes the workspace denial closure before these bounded
+queries; its plans also remain unreviewed for this new route. The native
+admitted-read figures above do not certify the complete HTTP request. This is a
+merge-blocking P1: keep the grouping PR draft until canonical authorization
+admission satisfies the ordinary budget. No new baseline, plan allowance or
+budget increase is supplied here.
+
+## PM proposal admission
+
 PM proposal admission uses partial expression indexes on workspace, actor, work
 and scope for awaiting decisions, with a separate matching index for pending
 human proposals. Equality fixes every prefix, so SQLite can take the first rowid
@@ -1016,8 +1050,8 @@ relaxed for this fix.
 
 ## Agent brief ownership and hidden history
 
-`agentInitiativeCards` admits at most 50 distinct card IDs. Assignment uses card
-primary-key seeks; participation uses
+Agent brief ownership admits at most 50 distinct card IDs. Assignment reuses the
+already admitted card rows; `participatingInitiativeCards` uses
 `idx_work_participants_actor_card_active(actor_id,card_id,session_id,id)` with
 `activity <> 'left'`, nonempty actor and `session_active=1` before scoped
 participant/session checks. Migration 105 backfills the normalized session flag

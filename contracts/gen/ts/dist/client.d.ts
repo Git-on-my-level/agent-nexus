@@ -288,7 +288,9 @@ export declare class AnxClient {
     usageSummaryV1(options?: RequestOptions): Promise<InvokeResult>;
     workCapabilities(options?: RequestOptions): Promise<InvokeResult>;
     workCreate(options?: RequestOptions): Promise<InvokeResult>;
+    workFold(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workGroup(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workList(options?: RequestOptions): Promise<InvokeResult>;
     workObservationsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workObservationsSubmit(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -297,6 +299,8 @@ export declare class AnxClient {
     workPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshRequest(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workUnfold(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workUngrouped(options?: RequestOptions): Promise<InvokeResult>;
     workspaceDashboardList(options?: RequestOptions): Promise<InvokeResult>;
     workspaceDashboardPinsList(options?: RequestOptions): Promise<InvokeResult>;
     workspaceDashboardPinsSet(options?: RequestOptions): Promise<InvokeResult>;

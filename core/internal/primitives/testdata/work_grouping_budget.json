@@ -1,0 +1,4 @@
+{
+  "homes": { "max_queries": 12, "max_rows": 500, "max_vm_steps": 50000 },
+  "hierarchy": { "max_queries": 12, "max_rows": 500, "max_vm_steps": 50000 }
+}
