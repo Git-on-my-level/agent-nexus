@@ -364,6 +364,37 @@ const adapterCommandTable = [
   // keeps a table of chips off an N+1. The contract caps a batch at 200.
   ["resolveRefs", "refs.resolve", (refs) => ({ options: b({ refs }) })],
   ["getCardPlan", "plan.show", (cardId) => p(pathParams({ card_id: cardId }))],
+  // Only the grouping outbox writes a plan: it removes the one step a group
+  // added. Svelte surfaces must not send plans directly.
+  [
+    "setCardPlan",
+    "plan.set",
+    (cardId, payload) => pb(pathParams({ card_id: cardId }), payload),
+    true,
+  ],
+  [
+    "listUngroupedWork",
+    "work.ungrouped",
+    (filters = {}) => ({ options: q(filters) }),
+  ],
+  [
+    "groupWork",
+    "work.group",
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
+  ],
+  [
+    "foldWork",
+    "work.fold",
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
+  ],
+  [
+    "unfoldWork",
+    "work.unfold",
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
+  ],
   [
     "getWork",
     "work.get",

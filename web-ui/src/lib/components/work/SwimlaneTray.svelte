@@ -1,0 +1,102 @@
+<script>
+  /**
+   * Ungrouped: recent top-level cards and the homes core suggests for them.
+   * Each home is one tap; "Other…" groups under any lane. A mouse can also
+   * drag a row onto a lane (the board owns the drop); touch never drags.
+   */
+  import { formatAgo } from "$lib/time/format.js";
+  import { homeReason } from "$lib/swimlanes.js";
+
+  let {
+    rows = [],
+    hasMore = false,
+    lanes = [],
+    /** Refs with a grouping change waiting in the outbox. */
+    pending = new Set(),
+    now = Date.now(),
+    onGroup,
+    /** `(event, row)`: a pointer went down on a row. */
+    onGrab = null,
+  } = $props();
+
+  function other(row, event) {
+    const select = event.currentTarget;
+    const lane = lanes.find((entry) => entry.ref === select.value);
+    select.value = "";
+    if (lane) onGroup(row, lane);
+  }
+</script>
+
+<ul class="divide-y divide-line-subtle" data-swimlane-tray-rows>
+  {#each rows as row (row.ref)}
+    {@const waiting = pending.has(row.ref)}
+    {@const homes = row.homes}
+    <li
+      class="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 text-meta {onGrab &&
+      !waiting
+        ? 'md:cursor-grab'
+        : ''}"
+      data-tray-ref={row.ref}
+      onpointerdown={onGrab && !waiting
+        ? (event) => onGrab(event, row)
+        : undefined}
+    >
+      <span class="min-w-0 flex-[1_1_14rem]">
+        <span class="font-medium text-fg [overflow-wrap:anywhere]"
+          >{row.title}</span
+        >
+        {#if row.createdAt}
+          <span class="text-fg-muted">
+            · created {formatAgo(row.createdAt, now) || "recently"}</span
+          >
+        {/if}
+        <span
+          class="mt-0.5 block text-micro text-fg-muted"
+          data-source="computed:next_actions"
+        >
+          {#if waiting}
+            Grouping saved. Sending…
+          {:else if homes.length}
+            Likely home: {homes[0].title}{homeReason(homes[0].reasons)
+              ? ` · ${homeReason(homes[0].reasons)}`
+              : ""}
+          {:else}
+            No likely home
+          {/if}
+        </span>
+      </span>
+      <span class="flex flex-wrap items-center gap-2">
+        {#each homes as home (home.ref)}
+          <button
+            type="button"
+            class="ui-btn-secondary min-h-9 px-2.5 py-1 text-micro"
+            disabled={waiting}
+            data-group-under={home.ref}
+            onclick={() => onGroup(row, home)}>Group under {home.title}</button
+          >
+        {/each}
+        {#if lanes.length}
+          <label class="sr-only" for="tray-other-{row.ref}"
+            >Group “{row.title}” under another initiative</label
+          >
+          <select
+            id="tray-other-{row.ref}"
+            class="ui-input min-h-9 w-auto max-w-[12rem] py-1 text-micro"
+            disabled={waiting}
+            onchange={(event) => other(row, event)}
+          >
+            <option value="">{homes.length ? "Other…" : "Group under…"}</option>
+            {#each lanes as lane (lane.ref)}
+              <option value={lane.ref}>{lane.title}</option>
+            {/each}
+          </select>
+        {/if}
+      </span>
+    </li>
+  {/each}
+</ul>
+{#if hasMore}
+  <p class="pt-2 text-micro text-fg-muted">
+    More recent cards are waiting. Group these to see the rest.
+  </p>
+{/if}

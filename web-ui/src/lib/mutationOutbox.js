@@ -41,6 +41,7 @@ import {
   autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
+import { removeGroupedStep, ungroupPlanKey } from "$lib/groupingPlan.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -319,6 +320,39 @@ async function send(entry, lease = null) {
       entry.request.body,
     );
     if (!result.card?.id) throw new Error("Assignment receipt is incomplete.");
+    return result;
+  }
+  if (["work.group", "work.fold", "work.unfold"].includes(entry.operation)) {
+    const { ref, body } = entry.request;
+    const result =
+      entry.operation === "work.group"
+        ? await client.groupWork(ref, body)
+        : entry.operation === "work.fold"
+          ? await client.foldWork(ref, body)
+          : await client.unfoldWork(ref, body);
+    if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
+    return result;
+  }
+  if (entry.operation === "work.ungroup") {
+    // Apply the removal to the plan as it is now. Each read's token keys its
+    // own write (ungroupPlanKey), so a retry after a landed send finds the
+    // step gone, and a retry after a newer edit is a new keyed request.
+    const { parent, ref, body } = entry.request;
+    const read = async () => {
+      const current = await client.getCardPlan(parent);
+      if (!current?.if_updated_at) throw new Error("Plan read is incomplete.");
+      return current;
+    };
+    const current = await read();
+    const next = removeGroupedStep(current.plan, ref);
+    if (!next.changed) return current;
+    const result = await client.setCardPlan(parent, {
+      ...body,
+      request_key: ungroupPlanKey(body.request_key, current.if_updated_at),
+      plan: next.plan,
+      if_updated_at: current.if_updated_at,
+    });
+    if (!result?.if_updated_at) throw new Error("Plan receipt is incomplete.");
     return result;
   }
   if (entry.operation === "work.create") {
@@ -1151,7 +1185,10 @@ async function attempt(entry) {
                     ? "topic edit"
                     : entry.operation === "notifications.settings.set"
                       ? "notification settings"
-                      : "response",
+                      : entry.operation.startsWith("work.") &&
+                          entry.operation !== "work.create"
+                        ? "grouping change"
+                        : "response",
     );
     entry.state = entry.failure.state;
     entry.nextAt =

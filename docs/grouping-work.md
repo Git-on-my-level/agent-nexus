@@ -145,6 +145,18 @@ The optional agentctl-label default is not enabled: `agentctl help` and
 `agentctl help run` do not document a reliable inherited label environment signal.
 Callers should pass `--under` explicitly.
 
+## The swimlane board
+
+The web UI's Initiatives page has a Lanes view (`?view=lanes`): one lane per
+brief initiative, its rollup children in Not started / In progress / Blocked or
+needs you / Done columns, loops in their own section, and the Ungrouped tray
+above. It reads the brief (already shared with the navigation badge) and one
+`GET /work/ungrouped?limit=20` page, re-read only when the brief refreshes; it
+never reads per lane. Group and fold go through the device outbox with their
+original `request_key`. Undo of a fold is `unfold`; undo of a group removes the
+step the group added with a keyed plan write, and refuses when another step now
+depends on it.
+
 ## Routes and cost
 
 Added routes: `GET /work/ungrouped`, `POST /work/{card_ref}/group`,

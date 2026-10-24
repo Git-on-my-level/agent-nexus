@@ -83,6 +83,16 @@ export function mutationFailure(error, subject = "response") {
       422: "Check the title and summary before saving these project edits.",
     });
   }
+  if (subject === "grouping change") {
+    Object.assign(messages, {
+      400: "This initiative can no longer take the card. It may be closed, or grouping would make a loop. The change is saved here.",
+      401: "Sign in again to send this grouping change.",
+      403: "You do not have permission to change this initiative.",
+      404: "This card or initiative is no longer available.",
+      409: "This card or initiative changed. Review the saved grouping change.",
+      422: "This grouping change needs a correction before it can be sent.",
+    });
+  }
   if (subject === "assignment") {
     Object.assign(messages, {
       400: "This assignment needs a correction before it can be sent.",
@@ -107,7 +117,9 @@ export function mutationFailure(error, subject = "response") {
                 ? "The service could not confirm the document request. Its original actions and versions are kept on this device."
                 : subject === "topic edit"
                   ? "The service could not confirm the project edits. Your title and summary are kept on this device."
-                  : "The service could not confirm your response. Your text is kept on this device."
+                  : subject === "grouping change"
+                    ? "The service could not confirm the grouping change. It is kept on this device and will be sent again."
+                    : "The service could not confirm your response. Your text is kept on this device."
       : messages[status] ||
         "This response needs your attention. Your text is kept on this device.",
     // A bounded diagnostic, rendered only behind a disclosure as plain text.

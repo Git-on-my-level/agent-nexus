@@ -122,7 +122,10 @@
                       ? "Edit request"
                       : entry.operation === "topics.patch"
                         ? "Edit project"
-                        : "Edit message"}</button
+                        : entry.operation.startsWith("work.") &&
+                            entry.operation !== "work.create"
+                          ? "Edit grouping"
+                          : "Edit message"}</button
             >
           {/if}
         {/if}
