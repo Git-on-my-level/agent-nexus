@@ -27,6 +27,13 @@ import { isPmNotOnboardedRefusal, PM_STATES } from "$lib/pm/onboardingState.js";
 import { publishPmPresence } from "$lib/pm/presence.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
 import {
+  MAX_DASHBOARD_PINS,
+  PINS_OPERATION,
+  applyPinOp,
+  personalPins,
+  pinEditWaits,
+} from "$lib/dashboardPins.js";
+import {
   replayExpired,
   expiredReplayError,
   intentFingerprint,
@@ -261,8 +268,35 @@ async function send(entry, lease = null) {
       throw new Error("Move receipt is incomplete.");
     return result;
   }
-  if (entry.operation === "workspace.dashboard.pins.set") {
-    const result = await client.setDashboardPins(entry.request.body);
+  if (entry.operation === PINS_OPERATION) {
+    // Apply this one edit to core's current set, never to a set this device
+    // read earlier: whatever another tab or device pinned since survives.
+    const read = async () => {
+      const current = await client.getDashboardPins();
+      if (!Array.isArray(current?.document_refs))
+        throw new Error("Pins read is incomplete.");
+      return current;
+    };
+    const current = await read();
+    const next = applyPinOp(personalPins(current), entry.request);
+    if (next.full)
+      throw Object.assign(new Error("Dashboard pins are full."), {
+        publicMessage: `You already have ${MAX_DASHBOARD_PINS} pinned dashboards. Unpin one, then pin this again.`,
+      });
+    // Already in effect, including a replay whose first send landed.
+    if (!next.changed) return current;
+    let result;
+    try {
+      result = await client.setDashboardPins({
+        request_key: entry.request.request_key,
+        document_refs: next.refs,
+      });
+    } catch (error) {
+      // Core already holds this request_key with a different set: an earlier
+      // send of this edit landed, then the set moved on. The edit is done.
+      if (Number(error?.status) === 409) return read();
+      throw error;
+    }
     if (!Array.isArray(result?.document_refs))
       throw new Error("Pins receipt is incomplete.");
     return result;
@@ -425,7 +459,17 @@ function confirm(entry, result = null) {
   if (active(entry))
     mutationConfirmations.update((rows) => ({
       ...rows,
-      [entry.target]: { ...entry, state: "sent", result },
+      [entry.target]: {
+        ...entry,
+        state: "sent",
+        result,
+        // Watch orders a pins receipt against reads by when it landed. Other
+        // confirmations stay unstamped so recovery still swaps in the
+        // persisted receipt they render from.
+        ...(entry.operation === PINS_OPERATION
+          ? { confirmedAt: Date.now() }
+          : {}),
+      },
     }));
   window.dispatchEvent(
     new CustomEvent("anx:mutation-confirmed", { detail: { ...entry, result } }),
@@ -749,54 +793,34 @@ export function enqueuePmDecisionAnswer({
   });
 }
 
+export const DASHBOARD_PINS_TARGET = "workspace:dashboard-pins";
+
+// Same-tab edits made in one millisecond still keep the order they were made.
+let lastPinOrder = 0;
+
+/**
+ * Pin (`op: "add"`) or unpin (`op: "remove"`) one dashboard for the reader.
+ * The saved edit is the operation, not a set: the sender applies it to a
+ * fresh read (see send), so no edit can drop a pin it never saw.
+ */
+export function enqueueDashboardPin({ op, ref, ...options }) {
+  const key = randomUUID();
+  lastPinOrder = Math.max(Date.now(), lastPinOrder + 1);
+  return enqueueLocalMutation({
+    title: op === "add" ? "Pin dashboard" : "Unpin dashboard",
+    preview: ref,
+    ...options,
+    key,
+    target: DASHBOARD_PINS_TARGET,
+    operation: PINS_OPERATION,
+    request: { op, ref, order: lastPinOrder, request_key: key },
+  });
+}
+
 /**
  * Undo an accepted batch. Ungrouping by key is idempotent in core, so a
  * retry of the saved request is replay-safe.
  */
-/**
- * Replace the reader's pinned dashboards. The set is the whole ordered list,
- * so the newest intent wins: once it is persisted, older pending pin edits
- * are superseded rather than replayed over it.
- */
-export const DASHBOARD_PINS_TARGET = "workspace:dashboard-pins";
-
-/**
- * The newest saved pin set still on its way to core, or null. Only rows that
- * may yet be sent count: a definitive failure falls back to core's set.
- */
-export function pendingDashboardPins(rows) {
-  let newest = null;
-  for (const row of rows ?? [])
-    if (
-      row.operation === "workspace.dashboard.pins.set" &&
-      !["superseded", "attention"].includes(row.state) &&
-      (!newest || row.createdAt >= newest.createdAt)
-    )
-      newest = row;
-  return newest ? newest.request.body.document_refs : null;
-}
-
-export async function enqueueDashboardPins({ document_refs, ...options }) {
-  const key = randomUUID();
-  const older = get(mutationOutbox)
-    .filter(
-      (row) => row.operation === "workspace.dashboard.pins.set" && active(row),
-    )
-    .map((row) => row.key);
-  const result = await enqueueLocalMutation({
-    title: "Pinned dashboards",
-    preview: document_refs.join("\n") || "No pinned dashboards",
-    ...options,
-    key,
-    target: DASHBOARD_PINS_TARGET,
-    operation: "workspace.dashboard.pins.set",
-    request: { body: { request_key: key, document_refs } },
-  });
-  for (const previous of older)
-    await supersedeLocalMutation(previous, { replacementKey: key });
-  return result;
-}
-
 export function enqueueCurationUngroup({ key: batchKey, ...options }) {
   return enqueueLocalMutation({
     ...options,
@@ -1156,17 +1180,34 @@ export async function recoverMutations() {
         for (const record of records) {
           const receipt = record.confirmation;
           const submitted = record.submission;
-          if (
-            !record.deleted ||
-            record.deletionReason !== "confirmed" ||
-            submitted?.operation !== "docs.lifecycle" ||
-            !Array.isArray(receipt?.documents)
-          )
+          if (!record.deleted || record.deletionReason !== "confirmed")
             continue;
-          const current = next[submitted.target];
+          const current = next[submitted?.target];
           if (
             (current?.confirmedAt ?? current?.createdAt ?? 0) >
-            submitted.confirmedAt
+            submitted?.confirmedAt
+          )
+            continue;
+          // Another tab's pin edit landed: its receipt is core's newer set.
+          if (
+            submitted?.operation === PINS_OPERATION &&
+            Array.isArray(receipt?.document_refs)
+          ) {
+            next[submitted.target] = {
+              key: record.target,
+              scope,
+              epoch: record.epoch,
+              target: submitted.target,
+              operation: submitted.operation,
+              state: "sent",
+              confirmedAt: submitted.confirmedAt,
+              result: receipt,
+            };
+            continue;
+          }
+          if (
+            submitted?.operation !== "docs.lifecycle" ||
+            !Array.isArray(receipt?.documents)
           )
             continue;
           next[submitted.target] = {
@@ -1226,7 +1267,10 @@ export async function recoverMutations() {
       mutationOutbox.set(entries.map(snapshot));
       if (navigator.onLine !== false) {
         const due = entries.find(
-          (entry) => entry.state !== "attention" && entry.nextAt <= Date.now(),
+          (entry) =>
+            entry.state !== "attention" &&
+            entry.nextAt <= Date.now() &&
+            !pinEditWaits(entry, entries),
         );
         if (due) {
           await attempt(due);

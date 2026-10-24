@@ -9,7 +9,7 @@
    * Initiatives and Loops share one row layout (`CollectionTable`), so every
    * tab reads the same way.
    */
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { get } from "svelte/store";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
@@ -35,10 +35,15 @@
     mutationOutbox,
     mutationConfirmations,
     supersedeLocalMutation,
-    enqueueDashboardPins,
-    pendingDashboardPins,
+    enqueueDashboardPin,
     DASHBOARD_PINS_TARGET,
   } from "$lib/mutationOutbox.js";
+  import {
+    MAX_DASHBOARD_PINS,
+    PINS_OPERATION,
+    displayedPins,
+    personalPins,
+  } from "$lib/dashboardPins.js";
   import {
     enqueueTaskMove,
     taskMoveError,
@@ -266,43 +271,41 @@
   let dashboardsFailed = $state(false);
   let loadingMore = $state(false);
   let pinError = $state("");
+  // Core's set as of `at`: the start of the read that returned it, or the
+  // moment an edit's receipt confirmed. The newer one wins, so a read that
+  // was in flight when an edit landed cannot roll the edit back.
   let serverPins = $state(null);
-  // Pin edits replace the whole set, so one built on an unread set would
-  // drop the pins it never saw. Until a read or a receipt lands, or this
-  // device has a saved edit, the reader's pins are unknown and Pin/Unpin
-  // wait: "loading" | "ok" | "failed".
-  let pinsRead = $state("loading");
-  // The reader's newest saved pin edit, shown until core confirms it. The
-  // outbox owns delivery, so a reload, a closed tab or a dropped request
-  // loses nothing, and an edit from another tab shows here too.
-  let localPins = $derived(pendingDashboardPins($mutationOutbox));
-  let pinAttention = $derived(
-    $mutationOutbox.some(
-      (row) =>
-        row.operation === "workspace.dashboard.pins.set" &&
-        row.state === "attention",
-    ),
-  );
-  // Core's receipt is the effective set; take it once the edit lands.
+  let pinsReadFailed = $state(false);
+  function offerPins(value, at) {
+    if (!Array.isArray(value?.document_refs)) return;
+    if (serverPins && serverPins.at > at) return;
+    serverPins = {
+      document_refs: value.document_refs,
+      source: value.source,
+      at,
+    };
+    pinsReadFailed = false;
+  }
+  // A receipt from this tab, or recovered from another tab's confirmation.
   let pinReceipt = $derived($mutationConfirmations[DASHBOARD_PINS_TARGET]);
-  const seenPins = { receipt: undefined };
   $effect(() => {
     const receipt = pinReceipt;
-    if (seenPins.receipt !== undefined && receipt !== seenPins.receipt)
-      if (Array.isArray(receipt?.result?.document_refs)) {
-        serverPins = receipt.result;
-        pinsRead = "ok";
-      }
-    seenPins.receipt = receipt ?? null;
+    if (receipt?.result)
+      untrack(() => offerPins(receipt.result, receipt.confirmedAt ?? 0));
   });
-  let pinsKnown = $derived(localPins !== null || pinsRead === "ok");
+  let pinAttention = $derived(
+    $mutationOutbox.find(
+      (row) => row.operation === PINS_OPERATION && row.state === "attention",
+    ),
+  );
   let reports = $derived(dashboards?.reports ?? []);
-  /** The reader's own pins: what Pin/Unpin edit and MAX_PINS counts. */
+  /**
+   * The reader's own pins: core's set with every saved edit still on its way
+   * applied in order, so a reload or another tab's edit shows at once and no
+   * read can hide a pending one.
+   */
   let pinnedRefs = $derived(
-    localPins ??
-      (serverPins && serverPins.source !== "workspace_default"
-        ? serverPins.document_refs
-        : []),
+    displayedPins(personalPins(serverPins), $mutationOutbox),
   );
   let defaultRefs = $derived(
     serverPins
@@ -360,38 +363,39 @@
     loadingMore = false;
   }
   async function loadPins() {
-    pinsRead = "loading";
+    const at = Date.now();
     try {
-      serverPins = await coreClient.getDashboardPins();
-      pinsRead = "ok";
+      offerPins(await coreClient.getDashboardPins(), at);
     } catch {
-      // The workspace default still shows as a tab; pinning waits for a read.
-      pinsRead = "failed";
+      // The workspace default still shows as a tab. Editing stays safe: the
+      // outbox applies each edit to a fresh read when it sends.
+      if (!serverPins) pinsReadFailed = true;
     }
   }
-  const MAX_PINS = 12;
-  async function savePins(next) {
+  async function editPin(op, ref) {
     pinError = "";
     try {
-      await enqueueDashboardPins({
-        document_refs: next,
+      await enqueueDashboardPin({
+        op,
+        ref,
         href: workspaceHref("/watch?tab=dashboard"),
       });
     } catch {
-      pinError = "Couldn't save your pins. Try again.";
+      pinError = "Couldn't save your pin change. Try again.";
     }
   }
   function pinDashboard(ref) {
-    if (!pinsKnown || !ref || pinnedRefs.includes(ref)) return;
-    if (pinnedRefs.length >= MAX_PINS) {
-      pinError = `You can pin up to ${MAX_PINS} dashboards. Unpin one first.`;
+    if (!ref || pinnedRefs.includes(ref)) return;
+    // Known to be full. Unread pins are checked when the edit is sent.
+    if (serverPins && pinnedRefs.length >= MAX_DASHBOARD_PINS) {
+      pinError = `You can pin up to ${MAX_DASHBOARD_PINS} dashboards. Unpin one first.`;
       return;
     }
-    void savePins([...pinnedRefs, ref]);
+    void editPin("add", ref);
   }
   function unpinDashboard(ref) {
-    if (!pinsKnown || !ref || !pinnedRefs.includes(ref)) return;
-    void savePins(pinnedRefs.filter((entry) => entry !== ref));
+    if (!ref || !pinnedRefs.includes(ref)) return;
+    void editPin("remove", ref);
   }
 
   let tabs = $derived(
@@ -571,7 +575,6 @@
             loading={loadingMore}
             onload={() => void loadMoreReports()}
             onselect={(id) => selectTab("dashboard", id || reports[0]?.id)}
-            canPin={pinsKnown}
             onpin={(ref) =>
               ref ? pinDashboard(ref) : unpinDashboard(selectedReport?.ref)}
           />
@@ -610,11 +613,13 @@
       data-watch-pin-error
     >
       {pinError ||
+        pinAttention.failure?.message ||
         "Couldn't save your pin change. It's kept in your unsent work."}
     </p>{/if}
-  {#if tab === "dashboard" && !pinsKnown && pinsRead === "failed"}
-    <InlineAlert>
-      Couldn't read your pinned tabs, so pinning is paused to keep them safe.
+  {#if tab === "dashboard" && pinsReadFailed}
+    <InlineAlert variant="warn">
+      Couldn't read your pinned tabs, so some may be missing here. Pinning still
+      works.
       <button
         type="button"
         class="text-accent-text underline"
@@ -632,7 +637,6 @@
             <Button
               variant="secondary"
               size="compact"
-              disabled={!pinsKnown}
               onclick={() => unpinDashboard(selectedReport.ref)}
               >Unpin tab</Button
             >
@@ -640,7 +644,6 @@
             <Button
               variant="secondary"
               size="compact"
-              disabled={!pinsKnown}
               onclick={() => pinDashboard(selectedReport.ref)}
               >Pin as tab</Button
             >

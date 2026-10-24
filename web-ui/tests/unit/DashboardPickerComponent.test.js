@@ -180,17 +180,6 @@ describe("the dashboard picker", () => {
     expect(screen.getAllByText("Pinned").length).toBeGreaterThan(0);
   });
 
-  it("hides pin actions while the caller cannot safely edit pins", async () => {
-    await open({ pinnedRef: "document:today", canPin: false });
-    expect(screen.queryByRole("menuitem", { name: "Use newest report" })).toBe(
-      null,
-    );
-    expect(screen.queryByRole("menuitem", { name: "Pin as dashboard" })).toBe(
-      null,
-    );
-    expect(screen.getAllByRole("menuitemradio").length).toBe(2);
-  });
-
   it("owns only menu roles, so a menu never claims a list as its child", async () => {
     await open();
     const menu = screen.getByRole("menu");
