@@ -278,7 +278,7 @@
   // the accent — keeps reply trees readable.
   let articleClasses = $derived(
     [
-      "group/msg relative rounded-md border bg-panel px-3 py-1.5 transition-colors",
+      "group/msg relative rounded-md border bg-panel px-3 py-1.5 transition-colors [@media(hover:none)]:flow-root",
       message.archived_at ? "opacity-60" : "",
       isAnchoredComment
         ? "border-line border-l-2 border-l-accent"
@@ -349,7 +349,9 @@
           Floating action toolbar: hover-revealed (or focus-revealed for
           keyboard) so the resting card stays clean. Anchored top-right and
           drawn over the panel background so it reads over message content,
-          including grouped rows that have no header to host actions.
+          including grouped rows that have no header to host actions. On
+          touch it is always shown and floats in flow instead, so the text
+          wraps around its 40px buttons rather than sitting under them.
         -->
         <RowActionBar groupName="msg">
           <CopyButton
@@ -365,7 +367,7 @@
         {#if replyTo}
           <button
             type="button"
-            class="mb-1 flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left text-micro text-fg-subtle transition-colors hover:text-fg [@media(hover:none)]:pr-28"
+            class="mb-1 flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left text-micro text-fg-subtle transition-colors hover:text-fg [@media(hover:none)]:w-auto"
             onclick={scrollToReplyParent}
             title={truncateReplyText(replyTo.text, 500)}
             aria-label={`Jump to message from ${actorName(replyTo.authorActorId)}: ${truncateReplyText(replyTo.text, 80)}`}
@@ -386,7 +388,7 @@
         <!-- Without hover the action bar never hides, so the header keeps
              clear of all of it rather than the part a hover overlay covers. -->
         <div
-          class="mb-1.5 flex min-w-0 w-full items-start gap-2 pr-16 [@media(hover:none)]:pr-28"
+          class="mb-1.5 flex min-w-0 w-full items-start gap-2 pr-16 [@media(hover:none)]:w-auto [@media(hover:none)]:pr-0"
         >
           <ActorAvatar
             label={actorLine}
