@@ -140,18 +140,26 @@ test("two plain-HTTP tabs entering the send path for the same outbox item send t
     };
   });
 
-  const seenKeys = [];
+  const sends = [];
   const byKey = new Map();
-  let releaseBoth;
-  const bothEntered = new Promise((resolve) => {
-    releaseBoth = resolve;
+  let effects = 0;
+  let releaseSends;
+  const released = new Promise((resolve) => {
+    releaseSends = resolve;
+  });
+  let bothTabsSending;
+  const secondTabEntered = new Promise((resolve) => {
+    bothTabsSending = resolve;
   });
 
   await discussionSetup(context, async (route, events) => {
     const body = route.request().postDataJSON();
-    seenKeys.push(body.request_key);
-    if (seenKeys.length >= 2) releaseBoth();
-    await bothEntered;
+    sends.push({ tab: route.request().frame().page(), key: body.request_key });
+    // Hold every send until a second tab has sent too. The first tab's request
+    // is still in flight, so both tabs demonstrably entered the send path for
+    // the same persisted item before either one sees a response.
+    if (new Set(sends.map((send) => send.tab)).size === 2) bothTabsSending();
+    await released;
     if (!byKey.has(body.request_key)) {
       const event = {
         ...body.event,
@@ -159,6 +167,7 @@ test("two plain-HTTP tabs entering the send path for the same outbox item send t
         ts: new Date().toISOString(),
       };
       events.push(event);
+      effects += 1;
       byKey.set(body.request_key, { event });
     }
     return json(route, byKey.get(body.request_key));
@@ -176,7 +185,10 @@ test("two plain-HTTP tabs entering the send path for the same outbox item send t
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(async () => (await saved(page, "mutation")).length).toBe(1);
 
-  await Promise.all([
+  // recoverMutations() returns at once when that tab is already recovering
+  // (for example after another tab's write notification); the background
+  // pass then sends. So wait for the sends themselves, not these calls.
+  const recovering = Promise.all([
     page.evaluate(async () => {
       Object.defineProperty(navigator, "onLine", {
         configurable: true,
@@ -190,11 +202,17 @@ test("two plain-HTTP tabs entering the send path for the same outbox item send t
       await outbox.recoverMutations();
     }),
   ]);
+  await secondTabEntered;
+  releaseSends();
+  await recovering;
 
-  expect(seenKeys.length).toBeGreaterThanOrEqual(2);
-  expect(new Set(seenKeys).size).toBe(1);
-  expect(byKey.size).toBe(1);
+  const tabs = sends.map((send) =>
+    send.tab === page ? "composer" : send.tab === other ? "other" : "unknown",
+  );
+  expect(new Set(tabs)).toEqual(new Set(["composer", "other"]));
+  expect(new Set(sends.map((send) => send.key)).size).toBe(1);
   await expect.poll(async () => (await saved(page, "mutation")).length).toBe(0);
+  expect(effects).toBe(1);
 });
 
 test("distinct persisted bodies for the same composer remain separate intents", async ({
