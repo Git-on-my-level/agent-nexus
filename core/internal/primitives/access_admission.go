@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -17,33 +18,25 @@ func admissionLedgerCTE(scope AccessScope) string {
 		actor := `'` + strings.ReplaceAll(scope.ActorID, `'`, `''`) + `'`
 		active += ` OR EXISTS(SELECT 1 FROM main.resource_access_admission_root_owners WHERE unconditional=0 AND owner<` + actor + ` LIMIT 1) OR EXISTS(SELECT 1 FROM main.resource_access_admission_root_owners WHERE unconditional=0 AND owner>` + actor + ` LIMIT 1)`
 	}
-	return `_anx_admission_ledger(ledger,active) AS MATERIALIZED (SELECT CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN 2 WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END,(` + active + `))`
+	return `_anx_admission_ledger(ledger,active) AS MATERIALIZED (SELECT CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN CASE WHEN EXISTS(SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='resource_access_compact_edges') THEN 2 ELSE -2 END WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END,(` + active + `))`
 }
 
-// Traverse only ancestors of this candidate through the covering child index.
-// UNION terminates cycles without visiting any unrelated denied descendants.
-// Roots are point probes in the consuming statement's own SQLite snapshot.
+// Candidate admission seeks the persisted root set, then current root owners.
+// A guarded request-local proof retains the unchanged warm membership budget.
 func candidateVisibleSQL(scope AccessScope, kind, id string, proofs ...*denialSnapshot) string {
-	root := `EXISTS(SELECT 1 FROM main.resource_access_admission_roots r WHERE r.kind=a.kind AND r.id=a.id AND (` + candidateRootConstraintSQL(scope, "r") + `))`
-	ancestorsSQL := func(expand string) string {
-		return `WITH RECURSIVE _anx_ancestors(kind,id) AS (SELECT ` + kind + `,CAST(` + id + ` AS TEXT) UNION SELECT e.parent_kind,e.parent_id FROM _anx_ancestors a JOIN main.resource_access_admission_graph e ON e.child_kind=a.kind AND e.child_id=a.id WHERE (e.ledger=0 OR e.ledger=(SELECT ledger FROM _anx_admission_ledger)) AND (` + expand + `) UNION SELECT 'document_history',id FROM _anx_ancestors a WHERE kind='document' AND (` + expand + `)) `
+	base := ` FROM main.resource_access_admission_owners r WHERE r.ledger=(SELECT ledger FROM _anx_admission_ledger) AND r.kind=` + kind + ` AND r.id=CAST(` + id + ` AS TEXT)`
+	denied := `EXISTS(SELECT 1` + base + ` AND r.unconditional=1 LIMIT 1)`
+	if scope.ActorID == "" || scope.ActorID != scope.PMActorID {
+		actor := `'` + strings.ReplaceAll(scope.ActorID, `'`, `''`) + `'`
+		denied += ` OR EXISTS(SELECT 1` + base + ` AND r.unconditional=0 AND r.owner<` + actor + ` LIMIT 1) OR EXISTS(SELECT 1` + base + ` AND r.unconditional=0 AND r.owner>` + actor + ` LIMIT 1)`
 	}
-	ancestors := ancestorsSQL("1")
-	canonical := `CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 1 ELSE NOT EXISTS(` + ancestors + `SELECT 1 FROM _anx_ancestors a WHERE ` + root + `) END`
-	if len(proofs) == 0 || proofs[0] == nil || proofs[0].pointToken == 0 || proofs[0].epoch < 0 {
+	canonical := `CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 1 WHEN (SELECT ledger FROM _anx_admission_ledger)=-2 THEN 0 ELSE NOT (` + denied + `) END`
+	if len(proofs) == 0 || proofs[0] == nil || (proofs[0].inventory && (proofs[0].candidateComplete == nil || proofs[0].candidateAllPublic)) || proofs[0].pointToken == 0 || proofs[0].epoch < 0 {
 		return canonical
 	}
 	proof := proofs[0]
 	key := fmt.Sprint(proof.pointToken) + `,CAST(` + kind + ` AS BLOB),CAST(` + id + ` AS BLOB)`
-	// Epoch and connection changes guard borrowed mutable transactions too.
-	// Other connections cannot alter the pinned SQLite read snapshot.
-	guard := candidateProofGuardSQL(proof)
-	known := `anx_candidate_lookup(` + fmt.Sprint(proof.pointToken) + `,CAST(a.kind AS BLOB),CAST(a.id AS BLOB))`
-	// A proven ancestor summarizes its entire upstream closure. Stop at that
-	// boundary; a missing/expired proof expands normally. Only the guarded
-	// branch can reuse either positive or negative proofs.
-	miss := `CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN anx_candidate_remember(` + key + `,1,CAST('[]' AS BLOB)) ELSE (` + ancestorsSQL(known+` IS NULL`) + `SELECT anx_candidate_remember(` + key + `,min(COALESCE(` + known + `,CASE WHEN ` + root + ` THEN 0 ELSE 1 END)),CAST(json_group_array(json_array(a.kind,a.id)) AS BLOB)) FROM _anx_ancestors a) END`
-	return `CASE WHEN ` + guard + ` THEN COALESCE(anx_candidate_lookup(` + key + `),` + miss + `) ELSE ` + canonical + ` END`
+	return `CASE WHEN ` + candidateProofGuardSQL(proof) + ` THEN COALESCE(anx_candidate_lookup(` + key + `),anx_candidate_remember(` + key + `,` + canonical + `,CAST('[]' AS BLOB))) ELSE ` + canonical + ` END`
 }
 
 func candidateProofGuardSQL(proof *denialSnapshot) string {
@@ -51,7 +44,7 @@ func candidateProofGuardSQL(proof *denialSnapshot) string {
 }
 
 func candidateTextProofSQL(scopeSQL, mode, value string, proofs ...*denialSnapshot) string {
-	if len(proofs) == 0 || proofs[0] == nil || proofs[0].pointToken == 0 || proofs[0].epoch < 0 {
+	if len(proofs) == 0 || proofs[0] == nil || (proofs[0].inventory && proofs[0].candidateComplete == nil) || proofs[0].pointToken == 0 || proofs[0].epoch < 0 {
 		return scopeSQL
 	}
 	proof := proofs[0]
@@ -76,6 +69,12 @@ func init() {
 		snapshot.candidateMu.Lock()
 		defer snapshot.candidateMu.Unlock()
 		if snapshot.candidateAllPublic {
+			return int64(1), nil
+		}
+		if snapshot.candidateComplete != nil {
+			if _, denied := snapshot.candidateComplete[target]; denied {
+				return int64(0), nil
+			}
 			return int64(1), nil
 		}
 		if allowed, found := snapshot.candidateIndex[target]; found {
@@ -197,7 +196,7 @@ func candidateProofTarget(args []driver.Value) (*denialSnapshot, denialTarget, b
 
 func candidateCleanAtomSQL(scope AccessScope, atom string, proofs ...*denialSnapshot) string {
 	exact := `EXISTS(SELECT 1 FROM main.resource_access_admission_spellings k WHERE k.atom=unhex(` + resourceaccess.AtomKeySQL(atom) + `) AND NOT (` + candidateVisibleSQL(scope, "k.kind", "k.id", proofs...) + `))`
-	prose := `EXISTS(SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(` + atom + ` AS BLOB))) b CROSS JOIN main.resource_access_admission_spellings k ON k.bucket=` + resourceaccess.MentionRefBucketSQL("b.value") + ` AND k.is_ref=1 WHERE CASE WHEN ` + resourceaccess.TextReferenceMatchSQL(atom, "k.ref") + ` THEN NOT (` + candidateVisibleSQL(scope, "k.kind", "k.id", proofs...) + `) ELSE 0 END)`
+	prose := `EXISTS(WITH RECURSIVE _anx_probes(probe) AS (SELECT value FROM json_each(` + resourceaccess.ProseStartsSQL(atom) + `) UNION ALL SELECT ` + resourceaccess.ProseNextSQL(atom, "p.probe") + ` FROM _anx_probes p CROSS JOIN main.resource_access_admission_prose_prefixes n ON n.atom=unhex(json_extract(p.probe,'$.prefix'))) SELECT 1 FROM _anx_probes p CROSS JOIN json_each(p.probe,'$.keys') b CROSS JOIN main.resource_access_admission_spellings k ON k.prose_atom=unhex(b.value) AND k.is_ref=1 WHERE CASE WHEN ` + resourceaccess.TextReferenceMatchSQL(atom, "k.ref") + ` THEN NOT (` + candidateVisibleSQL(scope, "k.kind", "k.id", proofs...) + `) ELSE 0 END)`
 	return candidateTextProofSQL(`NOT (`+exact+` OR `+prose+`)`, "atom", atom, proofs...)
 }
 
@@ -210,4 +209,12 @@ func candidateCleanRefSQL(scope AccessScope, value string, proofs ...*denialSnap
 
 func candidateValueCheckSQL(scope AccessScope) string {
 	return `WITH RECURSIVE ` + admissionLedgerCTE(scope) + ` SELECT CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 0 ELSE EXISTS(SELECT 1 FROM json_each(?) j WHERE NOT (` + candidateCleanAtomSQL(scope, "j.value") + `)) END`
+}
+
+// Full inventories already seek the root index in bulk. Avoid filling a fresh
+// per-page proof map for every inventory hydration batch.
+type inventoryAdmissionKey struct{}
+
+func WithInventoryAdmission(ctx context.Context) context.Context {
+	return context.WithValue(ctx, inventoryAdmissionKey{}, true)
 }

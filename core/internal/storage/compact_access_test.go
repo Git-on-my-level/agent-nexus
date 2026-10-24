@@ -376,3 +376,30 @@ func TestCompactAccessProcessCrash(t *testing.T) {
 		})
 	}
 }
+
+func TestAdmissionSurvivesCompactTeardown(t *testing.T) {
+	w := compactFixture(t, 1)
+	ctx := context.Background()
+	if err := w.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	compactFinish(t, w)
+	compactExec(t, w, "BEGIN IMMEDIATE;"+strings.Join(compactAccessRollbackSQL, ";")+";COMMIT;")
+	// A new spelling must be indexed even while the optional capability is gone.
+	compactExec(t, w, `INSERT INTO resource_access_tombstones(kind,id,ref,owner) VALUES('document','target','target-000000001','owner')`)
+	compactExec(t, w, `UPDATE resource_access_edges SET source_id='moved' WHERE rowid=1`)
+	var n int
+	if err := w.db.QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND parent_kind='document' AND parent_id='target' AND child_id='moved'`).Scan(&n); err != nil || n == 0 {
+		t.Fatalf("legacy admission after teardown: %d %v", n, err)
+	}
+	if err := w.InitializeCompactAccessShadow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	compactFinish(t, w)
+	if err := w.db.QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='compact' AND parent_kind='document' AND parent_id='target' AND child_id='moved'`).Scan(&n); err != nil || n == 0 {
+		t.Fatalf("compact admission after reinstall: %d %v", n, err)
+	}
+	if err := w.db.QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='compact' AND child_id='source-000000001'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("stale compact source retained: %d %v", n, err)
+	}
+}

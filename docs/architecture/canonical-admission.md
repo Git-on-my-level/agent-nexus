@@ -1,59 +1,81 @@
-# Candidate authorization admission
+# Canonical authorization admission
 
-Status: proposed; full ordinary-route performance acceptance is incomplete.
+Status: proposed in draft PR #469. Budgets and allowances are unchanged.
 
-The request denial cache traverses every private root's reachable descendants on
-an epoch miss, before a page knows which records it will read. Main's shared
-4,096-row corpus pays roughly 1.24M extra SQLite instructions for this admission.
-An endpoint candidate index cannot eliminate a closure captured before it runs.
+## Problem and choice
 
-Persist the canonical graph's direct edges, maintained atomically by the same
-canonical writes, and admit a requested resource by walking its indexed parents.
-Keep origin identifiers for independent contributions: removing an alias, a
-revision, or one mention must preserve a dependency still supplied elsewhere.
-The exact and compact ledgers remain independently selectable. Structural
-inheritance shares one executable inventory with the existing forward policy.
-Prose references continue to resolve through the existing write-time mention
-index, including identities created after the prose.
+Main captures every denied root and reachable identity on a request epoch miss,
+before a page admits candidates. On the shared 4,096-row corpus this adds about
+1.24M SQLite VM steps to a denied reader's cold or invalidated request. It
+predates grouping/rollup #463. Pure reverse ancestry checks remove that rebuild,
+but the grouping cohort still reaches thousands of shared ancestors and exceeds
+50,000 VM. Batching those ancestors also failed the ceiling.
 
-Maintain a small owner-count index with canonical root writes. Three indexed
-existence seeks determine whether the reader has any denied root, including
-unknown artifact provenance. Preserve the original SQLite value type for legacy
-JSON owners. A reader with no denied roots needs no ancestry walk.
+Migration 116 therefore persists principal-independent root reachability and
+reachable-owner counts, maintained in the canonical writer's transaction.
+Candidate reads use at most three indexed owner-range existence seeks. They do
+not walk ancestry or materialize the workspace denial closure. This trades
+storage and access-write maintenance for bounded request admission. A root owner
+transfer changes owner counts without rebuilding its reachability graph.
 
-This chooses read-time candidate ancestry over a persisted transitive closure.
-It avoids per-principal state, a workspace rebuild after revocation, and closure
-deletion/reachability maintenance across cycles. It costs storage proportional
-to direct canonical dependency contributions. Writes pay for changed origins
-and their indexed matching reference fanout; the initial migration backfills
-those direct contributions once. Dense candidate ancestry can still be expensive.
+Direct dependencies retain origin contributions, so deleting one alias,
+revision or mention cannot remove another source's dependency. Structural
+inheritance shares the forward policy's executable inventory. Reachability is
+separate for legacy, compact and common-only (unknown selection) ledgers.
+Insertion visits only newly reached root/vertex pairs. Edge deletion recomputes
+only roots that reached that edge, then deletes only memberships that changed;
+recursive UNION handles cycles. These writes can read the affected root's
+reachable component. They do not rebuild unrelated components. Initial migration
+backfills these derivable indexes once before readiness. Storage grows with
+reachable root/vertex pairs in three ledgers (the worst case is the product
+of roots and vertices), plus direct contributions and spelling prefixes.
 
-Admission remains part of the consuming SQLite statement. Read-only page
-transactions see one consistent graph; the next request sees a committed
-revocation. Business write checks retain the canonical transactional policy.
-No model, provider adapter, external authority, deployment-specific rule, quota,
-or feature flag participates in authorization.
+## Exact authority and projection matching
 
-Exact record shadows and projection spellings use candidate admission. A
-separate spelling index preserves binary endpoint comparisons, NOCASE JSON
-atoms, document aliases, external URLs and legacy prose matching. Prose seeks
-mention buckets before invoking the complete boundary matcher. Dense buckets
-and dense ancestry still require adversarial cost coverage.
+Root owners retain their SQLite value types. Owner indexes preserve the original
+comparison semantics, including numeric legacy JSON owners, anonymous readers,
+designated PM reads and unconditional unknown-artifact denials. Read-only page
+transactions see one consistent authority snapshot; the next request sees a
+committed revocation. Borrowed writers also check their connection's
+`total_changes()`. Business mutations retain canonical transactional validation.
 
-Pinned pages memoize SQL-proven resource and text decisions in separate
-namespaces with a shared 8,192-entry/1-MiB bound. Ancestor expansion stops at a
-known proof. Every use checks the epoch and SQLite connection total_changes(),
-including borrowed mutable transactions; missing proofs evaluate the canonical
-indexed policy. The token expires when the read closes. Counts, filters and
-lookahead operate on scoped relations before limits.
+Projection spellings retain binary endpoint comparisons, NOCASE JSON atoms,
+document aliases, external keys and retained purge provenance. Prose uses
+Unicode-folded digest seeks and a counted prefix index in 16-rune chunks. A read
+continues only through prefixes that exist, then applies the complete legacy
+byte-length and boundary matcher. Its work grows with admitted reference starts
+and matching text prefixes, not with unrelated identities sharing a bucket.
+No prefix or digest alone decides visibility.
 
-Before shipping, the complete ordinary-route matrix must meet the unchanged
-50,000 VM ceiling. Unpaged inventory hydration, lifecycle inventory scans,
-optional compact-ledger rollback, historical-schema replay and large-history
-write amplification remain blockers/validation concerns. The protected visit
-test also still assumes eager complete request snapshots. No protected visit
-implementation or test was changed. This remains a draft until these are
-resolved; selected passing pages do not constitute full acceptance.
+Optional compact tables may be torn down independently. Canonical triggers name
+a required admission-owned compact atom mirror; optional-table triggers maintain
+it while that capability exists and are reinstalled on capability recreation.
+A selected but missing compact capability fails closed. Legacy admission does not
+prepare SQL against the removed optional table.
 
-Measurements, limitations and reproduction commands are in
-[performance guardrails](../../core/docs/performance.md#canonical-admission-main-reproduction-and-candidate-index).
+SQL-proven resource/text decisions share a request-local 8,192-entry/1-MiB limit.
+Every reuse checks epoch and connection changes; expired tokens use indexed
+canonical checks. Closing a pinned read removes its token. Full inventories take
+one indexed denial batch for the entire immutable read and use its membership
+map with the candidate projection policy. Mutable borrowed transactions retain
+fresh owner checks. This does not add an inventory batch to bounded routes.
+
+## Lifecycle pages and write cost
+
+`/work` no longer inventories every card, document, topic and thread for each
+page. Lifecycle refs follow active work through the same opaque continuation.
+The inactive-card routing index has public, required-owner and designated-PM
+ranges, maintained from reachable owners. It skips private prefixes before
+hydration; canonical authorization is still enforced before counts, lookahead
+and output. Following the continuation collects the complete visible lifecycle
+inventory. A private-only inventory returns no hidden count or continuation.
+
+Canonical source updates retain unchanged atoms and their rowids. Identity and
+admission triggers skip unchanged inputs. Evidence descriptions retain stable
+publication keys. Explicit history refresh signals remain active when artifact
+revision membership changes. Write-audit tests reject touches to unchanged
+indexes and unrelated components. A grant/revoke may update all descendants
+whose ownership actually changes; that is the deliberate write-side cost.
+
+No model, external authority, provider-specific adapter, deployment rule or flag
+participates in admission. See [measurements and remaining inventory gaps](../../core/docs/performance.md#canonical-admission-main-reproduction-and-candidate-index).

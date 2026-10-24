@@ -20,8 +20,10 @@ type denialSnapshot struct {
 	candidates         bool
 	candidateChanges   int64
 	candidateAllPublic bool
+	inventory          bool
 	candidateMu        sync.Mutex
 	candidateIndex     map[denialTarget]bool
+	candidateComplete  map[denialTarget]struct{}
 	candidateTextIndex map[candidateTextTarget]bool
 	candidateBytes     int
 	mutation           bool
@@ -289,7 +291,7 @@ func withRequestAccessPolicy(ctx context.Context, scope AccessScope, epochTable 
 	ctx = context.WithValue(ctx, denialRequestKey{}, state)
 	p, _ := resourceaccess.PolicyFrom(ctx)
 	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
-		if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); !candidates && ok && !pin.snapshot.candidates && pin.db == db && pin.scope == scope && epochTable == "resource_access_epoch" && resourceaccess.AnonymousSQLParameters(query) {
+		if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); ok && (!candidates || pin.snapshot.inventory) && !pin.snapshot.candidates && pin.db == db && pin.scope == scope && epochTable == "resource_access_epoch" && resourceaccess.AnonymousSQLParameters(query) {
 			scoped, needsBinding := scopedReadSnapshotQuery(c, query, pin.snapshot, true)
 			if !needsBinding {
 				return scoped, args

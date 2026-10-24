@@ -71,10 +71,10 @@ func TestOverviewAndReportBudgetsIgnoreInaccessibleWork(t *testing.T) {
 	}
 	defer tx.Rollback()
 	newer := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
-	for i := 0; i < 2001; i++ {
-		if _, err = tx.Exec(`INSERT INTO cards(id,board_id,title,created_at,created_by,updated_at,updated_by) VALUES(?,?,'Private candidate',?,'fixture',?,'fixture')`, fmt.Sprintf("private-candidate-%04d", i), private["id"], newer, newer); err != nil {
-			t.Fatal(err)
-		}
+	if _, err = tx.Exec(`WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<2001)
+	 INSERT INTO cards(id,board_id,title,created_at,created_by,updated_at,updated_by)
+	 SELECT printf('private-candidate-%04d',n),?,'Private candidate',?,'fixture',?,'fixture' FROM fixture`, private["id"], newer, newer); err != nil {
+		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -120,11 +120,12 @@ func TestDigestSubjectBudgetTruncatesWithoutFailingOrInferringAnswers(t *testing
 	}
 	defer tx.Rollback()
 	for i := 0; i < 4001; i++ {
-		id := fmt.Sprintf("budget-subject-%04d", i)
-		if _, err = tx.Exec(`INSERT INTO cards(id,board_id,title,created_at,created_by,updated_at,updated_by) VALUES(?,?,'Subject',?,'fixture',?,'fixture')`, id, board["id"], now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
-			t.Fatal(err)
-		}
-		refs = append(refs, "card:"+id)
+		refs = append(refs, fmt.Sprintf("card:budget-subject-%04d", i))
+	}
+	if _, err = tx.Exec(`WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<4001)
+	 INSERT INTO cards(id,board_id,title,created_at,created_by,updated_at,updated_by)
+	 SELECT printf('budget-subject-%04d',n),?,'Subject',?,'fixture',?,'fixture' FROM fixture`, board["id"], now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(refs)
 	if _, err = tx.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json) VALUES('over-budget-answer','human_attention_responded',?,'fixture',?,?)`, now.Format(time.RFC3339Nano), board["thread_id"], string(raw)); err != nil {
@@ -183,11 +184,11 @@ func TestHiddenAnswersDoNotConsumeDigestCandidateBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	for i := 0; i < 201; i++ {
-		// Public event thread but private subject: thread-only filtering is insufficient.
-		if _, err = tx.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json) VALUES(?,'human_attention_responded',?,'fixture',?,?)`, fmt.Sprintf("hidden-answer-%03d", i), now.Add(time.Second).Format(time.RFC3339Nano), public["thread_id"], string(raw)); err != nil {
-			t.Fatal(err)
-		}
+	// Public event thread but private subjects: retain all 201 candidates.
+	if _, err = tx.Exec(`WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<201)
+	 INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json)
+	 SELECT printf('hidden-answer-%03d',n),'human_attention_responded',?,'fixture',?,? FROM fixture`, now.Add(time.Second).Format(time.RFC3339Nano), public["thread_id"], string(raw)); err != nil {
+		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)

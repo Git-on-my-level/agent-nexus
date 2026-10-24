@@ -2,7 +2,6 @@ package primitives_test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -24,16 +23,12 @@ func TestDocumentHandleReservationStaysIndexedAtHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO documents(id, handle, title, head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by) VALUES(?, ?, 'Synthetic', 'head', 1, 'now', 'owner', 'now', 'owner')`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < documents; i++ {
-		if _, err := stmt.ExecContext(ctx, fmt.Sprintf("doc-%d", i), fmt.Sprintf("doc-handle-%d", i)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := stmt.Close(); err != nil {
+	// modernc prepares a native VM on each Go prepared-statement execution.
+	// Seed the same 10,000 rows with one VM, retaining every canonical trigger,
+	// so this read-index test does not benchmark repeated trigger compilation.
+	if _, err := tx.ExecContext(ctx, `WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<?)
+	 INSERT INTO documents(id,handle,title,head_revision_id,head_revision_number,created_at,created_by,updated_at,updated_by)
+	 SELECT 'doc-'||n,'doc-handle-'||n,'Synthetic','head',1,'now','owner','now','owner' FROM fixture`, documents); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {

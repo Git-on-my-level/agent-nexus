@@ -2,7 +2,6 @@ package primitives_test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -24,19 +23,13 @@ func TestTombstoneHandleProbeStaysIndexedAtHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO resource_access_tombstones(kind, id, ref, owner) VALUES('artifact', ?, ?, 'owner')`)
-	if err != nil {
+	// One native VM retains all canonical triggers without recompiling their
+	// program for every row in this read-index fixture.
+	if _, err := tx.ExecContext(ctx, `WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<?)
+	 INSERT INTO resource_access_tombstones(kind,id,ref,owner) SELECT 'artifact','retired-'||n,'retired-ref-'||n,'owner' FROM fixture`, tombstones); err != nil {
 		t.Fatal(err)
-	}
-	for i := 0; i < tombstones; i++ {
-		if _, err := stmt.ExecContext(ctx, fmt.Sprintf("retired-%d", i), fmt.Sprintf("retired-ref-%d", i)); err != nil {
-			t.Fatal(err)
-		}
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO resource_access_tombstones(kind, id, ref, owner) VALUES('artifact', 'reserved', 'Reserved-Handle', 'owner')`); err != nil {
-		t.Fatal(err)
-	}
-	if err := stmt.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {

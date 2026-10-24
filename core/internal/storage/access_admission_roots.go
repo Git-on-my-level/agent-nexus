@@ -45,9 +45,10 @@ func installAccessAdmissionRootCounts(ctx context.Context, tx *sql.Tx) error {
 		}
 		match := `unconditional=` + fmt.Sprint(source.unconditional) + ` AND owner IS ` + replace(source.owner, "OLD.") + ` AND (` + replace(source.condition, "OLD.") + `)`
 		remove := `DELETE FROM resource_access_admission_root_owners WHERE ` + match + ` AND roots=1; UPDATE resource_access_admission_root_owners SET roots=roots-1 WHERE ` + match + ` AND roots>1;`
+		changed := `(` + replace(source.owner, "OLD.") + ` IS NOT ` + replace(source.owner, "NEW.") + `) OR (` + replace(source.condition, "OLD.") + `) IS NOT (` + replace(source.condition, "NEW.") + `)`
 		for _, q := range []string{
 			`CREATE TRIGGER admission_roots_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + add("NEW.", "") + ` END`,
-			`CREATE TRIGGER admission_roots_` + source.table + `_update AFTER UPDATE ON ` + source.table + ` BEGIN ` + remove + add("NEW.", "") + ` END`,
+			`CREATE TRIGGER admission_roots_` + source.table + `_update AFTER UPDATE ON ` + source.table + ` WHEN ` + changed + ` BEGIN ` + remove + add("NEW.", "") + ` END`,
 			`CREATE TRIGGER admission_roots_` + source.table + `_delete AFTER DELETE ON ` + source.table + ` BEGIN ` + remove + ` END`,
 			add("r.", source.table+" r, "),
 		} {

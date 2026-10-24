@@ -1026,6 +1026,10 @@
       "target_id": "scope:edge-endpoints",
       "target_type": "scope:edge-endpoints"
     },
+    "resource_access_admission_compact_atoms": {
+      "edge_id": "internal:authorization",
+      "target_key": "internal:authorization"
+    },
     "resource_access_admission_graph": {
       "child_id": "internal:authorization",
       "child_kind": "internal:authorization",
@@ -1055,6 +1059,30 @@
       "parent_kind": "internal:authorization",
       "via_id": "internal:authorization"
     },
+    "resource_access_admission_owners": {
+      "id": "internal:authorization",
+      "kind": "internal:authorization",
+      "ledger": "internal:authorization",
+      "owner": "internal:authorization",
+      "roots": "internal:authorization",
+      "unconditional": "internal:authorization"
+    },
+    "resource_access_admission_prose_prefixes": {
+      "atom": "internal:authorization",
+      "spellings": "internal:authorization"
+    },
+    "resource_access_admission_reach": {
+      "id": "internal:authorization",
+      "kind": "internal:authorization",
+      "ledger": "internal:authorization",
+      "root_id": "internal:authorization",
+      "root_kind": "internal:authorization"
+    },
+    "resource_access_admission_rebuild": {
+      "id": "internal:authorization",
+      "kind": "internal:authorization",
+      "ledger": "internal:authorization"
+    },
     "resource_access_admission_root_owners": {
       "owner": "internal:authorization",
       "roots": "internal:authorization",
@@ -1069,12 +1097,12 @@
     },
     "resource_access_admission_spellings": {
       "atom": "internal:authorization",
-      "bucket": "internal:authorization",
       "id": "internal:authorization",
       "is_ref": "internal:authorization",
       "kind": "internal:authorization",
       "origin": "internal:authorization",
       "origin_id": "internal:authorization",
+      "prose_atom": "internal:authorization",
       "ref": "internal:authorization"
     },
     "resource_access_compact_control": {
@@ -1391,6 +1419,12 @@
       "id": "internal:reader-cursor",
       "metadata_exists": "internal:reader-cursor",
       "plan_exists": "internal:reader-cursor"
+    },
+    "work_lifecycle_positions": {
+      "availability": "internal:authorization",
+      "id": "internal:authorization",
+      "ledger": "internal:authorization",
+      "owner": "internal:authorization"
     },
     "work_metadata": {
       "authority": "parent:work_metadata",
@@ -2041,7 +2075,7 @@
     "../primitives/access_snapshot.go:rememberAccessLedger": "0c51437c89dbb0a663dfecc9d5570581e430f4fa9641291b66c5b2d9a778adaf",
     "../primitives/access_snapshot.go:rememberReadDenial": "6e28de2eeb8bb0c8af2c1282bc98905ee8e3c1ee2833f37b1c4f5d20fda192d1",
     "../primitives/access_snapshot.go:withRequestAccessEpoch": "16d882b782a1dbd022e23c593332a3e670c24e5b569d8e58bebea463b0404fb6",
-    "../primitives/access_snapshot.go:withRequestAccessPolicy": "d40c8dedf50476cdaf055a1e0d7eb6e7ed81b2f905e38ade699baeb76f5258c6",
+    "../primitives/access_snapshot.go:withRequestAccessPolicy": "a6b98b143339b9e4cb5ce46669fc9bffa699bcae44a0e2c8232a35f809b7960e",
     "../primitives/agent_summary_cards.go:*Store:AgentSummaryCards": "d61aba86e6de8a67c3a0c91ce857a115d381196590ed85a282f079314641454c",
     "../primitives/agent_wakeups.go:*Store:ClaimAgentWakeup": "53669a9695ffaf5bf522bf99c5dae45e6d6a515b3d6b7dc3c7f715048b814a38",
     "../primitives/agent_wakeups.go:*Store:CompleteAgentWakeup": "ef6b26c325d599190cbb8f6035e973f41b75c5274e0be6a559f0a02aed9424dc",
@@ -2420,7 +2454,7 @@
     "../primitives/overview_changes.go:type:OverviewChanges": "bf6af7923a352f51e55106ce40df0a0f0f7d7b4c3f9f7ed75a90388bd63908c8",
     "../primitives/overview_changes.go:type:visitState": "3d09c9a564e91e642f0b2cfa94390950a2cca40740348004dfc3120f9263b790",
     "../primitives/overview_people.go:*Store:overviewPeople": "80b715d09280b5a774e6d6210af12128069b2bd1f4048586738210a51adebf95",
-    "../primitives/overview_read_snapshot.go:*Store:BeginOverviewRead": "ee9c4e398cc64f4df647c52f657bf7a4edfe3fa23fd510b1f9a158b648b5b18e",
+    "../primitives/overview_read_snapshot.go:*Store:BeginOverviewRead": "825ecab07df3cba9acffa21cc4ee83adfb5b5e4a82da0e955e2edd85d8d47542",
     "../primitives/overview_read_snapshot.go:*Store:BeginResourceRead": "76fedb0d8f99a552a93b7d19d897593670ff960a88733a38b81b417fb0d70b4b",
     "../primitives/plans_store.go:*Store:EnrichCardPlans": "5d649ca9d9328b8feadb1feee2b1b87cd2aeff85756dfae05e08183042ef5c3d",
     "../primitives/plans_store.go:*Store:ResolveRefs": "2c148666a3ceae4130bea35bab8f4febc35c1197c06f101eeb08761e5ae01377",
@@ -2632,13 +2666,14 @@
     "../primitives/work_homes.go:recentGroupingCandidates": "29d75576168b69ad17c1a7b8f64d29e715819b569d8ad886ba19d0d7195c80c6",
     "../primitives/work_homes.go:recentHomeCandidates": "aa9df9e398590291c02ae139fe91802888cdc7f3c2f41ae4439bd605fa14ebcd",
     "../primitives/work_homes.go:type:LikelyHome": "2d776d046bef2ed2ad02c4f69ea84e5daee03a91916d3e7e9fe562bef050c9fe",
+    "../primitives/work_lifecycle_page.go:*Store:hiddenWorkPage": "5d445a42fc98c4e37c5b6f3f11b586c33210d58b5eb7c25e661ff1e0d3c3ce8d",
     "../primitives/work_refresh.go:*Store:ClaimWorkRefresh": "2e0a64f8bc3f9ad56f90ec8f24ac394dc170fabf4faa4c1776a1b41076c0d222",
     "../primitives/work_refresh.go:*Store:FinishWorkRefresh": "f61da36b15b5fffcd6bde9904adc5daac26c999a9f8924c829d5642a91627872",
     "../primitives/work_store.go:*Store:CreateWork": "4b1655a87823a8bfc23eebf732bb8ee67473127b4e97813293cbb5c1e3e97a37",
     "../primitives/work_store.go:*Store:GetWork": "5c25bda3bded9bf5e9a0bac334ffeb9fefd9e00809caaf92feaf857ff17e054f",
     "../primitives/work_store.go:*Store:ListAllWork": "20096103de2af9a162eec62d9198b1e0aa5db4afdd8ce11acbd27f9eab384472",
     "../primitives/work_store.go:*Store:ListReportWork": "86d888a30da39b4c2d1fff51f872d30eefdf9459ed4bdb16006d4794543b5002",
-    "../primitives/work_store.go:*Store:ListWork": "ec8a6c30269792e98abc86f0f4597df0397cd04af7019e834fa76e56e7420924",
+    "../primitives/work_store.go:*Store:ListWork": "c9bbcd93d548a1495098b176fec97d899c7ff4554940db7c0d689b90d9eb871e",
     "../primitives/work_store.go:*Store:ListWorkObservations": "02dac703c2f25bb7c2c7e4ca2f68bd5ac92ed7b99deb584ba5b6458096ee4648",
     "../primitives/work_store.go:*Store:LiveWorkSnapshots": "8b5c7a0e6bcac667407d251311184c12853628e92df5c4381906fc3d579abcef",
     "../primitives/work_store.go:*Store:PatchWork": "bd2a6f5f4af1fd844fb07cd9f00021a8b2b839498a1c45ac7d1bed5f576eb018",
@@ -2662,7 +2697,7 @@
     "../primitives/work_store.go:observationCompletionRefs": "6f124514150da575bdb6b4123bffcdbcb9a04b9dd9a52cefaf77f75d2cb2c77a",
     "../primitives/work_store.go:observedWorkColumn": "ff8e48da3d8db4f8fb6ab2354ae3e406f3aef3e30513ad7909c8be32258c3748",
     "../primitives/work_store.go:type:WorkListFilter": "d14b979d2835cf7470d9f7f971621a454b11a4885595c90c2393d99f70b3bd42",
-    "../primitives/work_store.go:type:WorkPage": "3749fa2f2e2c095aabed8b987d980340832109de388ada6bd30d46e3cb0e106e",
+    "../primitives/work_store.go:type:WorkPage": "cc68f7392637db3541aa0bf27b31191b3c7a631a40a60b69bac1ccf718c99582",
     "../primitives/work_store.go:workCreatePlan": "d9dc841ea712a817f7cbb7d2e2c3b2e41e9a676b5bab32e7bc3f87372ffd6c57",
     "../primitives/work_summary.go:BasicWorkSummary": "7e6ad63cf76010ff18d04130c265bc1936c0c31d2fe72a660b6e46beeeef91ab",
     "../primitives/work_summary.go:buildWorkSummary": "6aeb9fc8efde235766de402ee14b603e835e0a512eb245fc5f260c53273090d0",
@@ -2731,6 +2766,14 @@
     "../resourceaccess/database.go:readOnDB": "587aaf349c448a43c1f35314dc751f9f885498dca758e226e1292ad95ac61a91",
     "../resourceaccess/maintenance.go:*DB:BeginMaintenanceChunk": "95c0fa4a91844db3f5b776364694005cb12bac22dd3008333a3f3a779aeb1034",
     "../resourceaccess/pm_index.go:InstallPMAccess": "e5983be65ecf7a23050b7617587562dfd1fbdf4e72009ed6e41cdae4b364cfad",
+    "../resourceaccess/prose_admission.go:init": "86eeb6341ad9cce065799ef9e5210e289ef7766d685ffdf22f6a2ee8deca1991",
+    "../resourceaccess/prose_admission.go:nextProseProbe": "80f2fb83fa569a81cfc181771f0f87809eb3ab9aee4801766d9ad7e6ac7cdde0",
+    "../resourceaccess/prose_admission.go:proseHash": "efb219ea06213045b67c74ab677c1962b1246bef60c41a9931cb7c17cd2f2e03",
+    "../resourceaccess/prose_admission.go:proseKey": "b8a9a1727b111538d041075bc828faa86154bdf44d883b32aecf975397b760e5",
+    "../resourceaccess/prose_admission.go:prosePrefixes": "b499bbbf2f418c9fd2cca650aaaf32f5938f429bb47c84c93729fbce106295cb",
+    "../resourceaccess/prose_admission.go:proseStarts": "557f6fe82cb30c3f3cfc511950f7926f5fa2c9b4edfb559bb29a890ac0ee9bb9",
+    "../resourceaccess/prose_admission.go:proseWrite": "b545cd248902b57bc17708d0934d99b05d596080e8432c4058bac87e80e9610b",
+    "../resourceaccess/prose_admission.go:type:proseProbe": "57c47ea633a5dde309f2a38cd2049dc85ffbbc618fc04f926de47e20db9d0502",
     "../resourceaccess/publications.go:externalKeyReferenceAtomsJSON": "450861a5ace6f8a17c779a98b0086443d8cbcf07569f2423776b49ad4b45fc8b",
     "../resourceaccess/publications.go:init": "6e8e8c3e132d104b4976e157b93362357bcc55e5634eabef7315149c8756c094",
     "../resourceaccess/sql_values.go:StructuredSQLArguments": "15fd80936159abac6e905b50ef115fb5fbbef559d33e10fb9c87aac41f51b30a",
@@ -3121,7 +3164,13 @@
     "../server/escalation_wake.go:NewEscalationPMWaker": "13596f0182b3752fce0cbf6775573c51df4d2365e47fb370a5bd33b5fca98c40",
     "../server/escalation_wake.go:NewEscalationReadCheck": "f7fc88d6cd5248e5e6905c3798036c8d6de76c2cd82a5cb956b2d73c40de6053",
     "../server/event_append_errors.go:writeEventAppendContentionError": "637c6823c8f5de7dd46b998c2bf815b40bf8c99b6fc6f4287cda69d747c68bd4",
+<<<<<<< ours
     "../server/handler.go:NewHandler": "90967928e789d2664a4b22193464fc2632081b8184bd294c27eb143cb868e959",
+||||||| base
+    "../server/handler.go:NewHandler": "9e5ce03a7c8ed56588719b180345f2225b93158500fb69e557e525c829a3ee7b",
+=======
+    "../server/handler.go:NewHandler": "41b7e69b99aa9f0f4cca9260861636c8ed9c52046f6ce328f594fad20596f32e",
+>>>>>>> theirs
     "../server/handler.go:WithWorkspaceGrantRateLimits": "0fc9f889b85869a0d1980f819c794b38ad561572e30405a495e973d03d3fe0f5",
     "../server/handler.go:WithWorkspaceGrantSubjectRateLimits": "cb02407bb79cfba3440f03bb40932baf3f340677f8ccc765ef4b72fe6c5992d5",
     "../server/handler.go:checkReadiness": "0c420a49c4b001573e6b17620e125f010a378f5c21f7ec75f8479cbe07a2eae8",
@@ -3428,8 +3477,14 @@
     "../server/webauthn_config.go:requestOrigin": "689b233e8929b3e34949065c2c87c7ed92384f3c4195526bbb2990809a4098c2",
     "../server/work_grouping.go:groupingWorkResponse": "55c1dc229797fe9ac74f7c5774d98ebdd0ea166ee33d4dd4b700232f22369efe",
     "../server/work_grouping.go:handleWorkGrouping": "670734bc27f9f5ee43e720c276482ca9bcc9b477fcfd0cac8acaa819edbc942f",
+<<<<<<< ours
     "../server/work_handlers.go:handleWork": "51983a2e215081bf6bcdde7a7a6de0813a615db4e75079829d1d128f376bf5a4",
     "../server/work_handlers.go:logUnmappedWorkError": "ea39d38fae4ab1e6db05a64df898b9365f8130607f2501c8440a5ab8e6b9f053",
+||||||| base
+    "../server/work_handlers.go:handleWork": "51983a2e215081bf6bcdde7a7a6de0813a615db4e75079829d1d128f376bf5a4",
+=======
+    "../server/work_handlers.go:handleWork": "3da467f733e5368a7910a5d8f40ac2f4beceab43ee829477532a9ac49f4c1ad6",
+>>>>>>> theirs
     "../server/work_handlers.go:publicWork": "7332551be9c16e220a019a8e66269a1b8777d52f28c5fb5871f6b55aa290d0a2",
     "../server/work_handlers.go:workLimit": "d9fd733a0ae71651e1d66b18750b88fe693d03c3399e9a93259a2ab5482cd899",
     "../server/work_handlers.go:workStoreError": "ce75a37a51855e3804bdaafd1156fc3bd370a0432b1a3a1a4b43822717929b3c",
@@ -3438,11 +3493,18 @@
     "../sidecar/host.go:*Host:Snapshot": "608c2d62a7e43ac5ac617777db0e0d0e2fccf8a01dc703fbc0dc8fb5eb2489d6",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunk": "872d19731c5f191a06d3ccbdbac15da88b81771371b2a974395cd133b4c2162a",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunkWithBusyWait": "91c83638acb8f7c09020805b52f3a5a9594037f9a2c9b1eb820e8ff9ba87abea",
-    "../storage/access_admission.go:installAccessAdmission": "38af20fad546807ec17ff2d78d64234db72e1f1a7e027ac176e582cca4627ced",
+    "../storage/access_admission.go:installAccessAdmission": "c9bd9ba01cc991ad60b1d112746b0aa63b24310ada38175627c82d229c027b5b",
+    "../storage/access_admission.go:installAdmissionCompactSync": "cf8503ef65d42311a21830c9382241ee2dff5e6852f0c1246f34f33b3a1bdf01",
     "../storage/access_admission_graph.go:installAccessAdmissionGraph": "2e5815f19c5e3c18dab3ccb80392e07126f9d8753f5625dd962f5fc01484fb85",
-    "../storage/access_admission_roots.go:installAccessAdmissionRootCounts": "dd0c4c9b665cf2df0e04df9f089cc44e0f3f7030797292b21a09935892b05210",
-    "../storage/access_admission_roots_index.go:installAccessAdmissionRoots": "19e1953f44511f4f8a69552c995360732f94dcc27f19fa33186ba67dfcb69093",
-    "../storage/access_admission_spellings.go:installAccessAdmissionSpellings": "7e26b5e87816a1634a9a06815f8328599c94f19b18d1adad92dfed4527162e02",
+    "../storage/access_admission_owners.go:installAccessAdmissionOwners": "3ed85bda123d478d2e8515e9f6891e3593b5cb63565d69533d37351b746fade0",
+    "../storage/access_admission_reach.go:installAccessAdmissionReach": "b3fd25f6d8196ea4b7a5fea6c84e8458fac7abd714fb4aada53139352373994c",
+    "../storage/access_admission_roots.go:installAccessAdmissionRootCounts": "ccbb8a6b4a9cde53ac10b77a24ee80c35a61a470bb1cc974f223817ccd2e39df",
+    "../storage/access_admission_roots_index.go:installAccessAdmissionRoots": "76fa4df0ddd538cb85cb352e04d1560f7785ba83f29ced7461aad11f524babd3",
+    "../storage/access_admission_spellings.go:installAccessAdmissionSpellings": "73671392e9817d544461d0ddf88dc56557d774f9723899d0d3110f3f22fc8dfb",
+    "../storage/access_admission_updates.go:admissionSourceReplacement": "6de14b22d48f5a7c115930535ac24c742ff1cacf375c8b79164e3b647b18107e",
+    "../storage/access_admission_updates.go:admissionUpdateOf": "a88d127b4a626daa27afb9129444584c332bc7cfcda2e394c6a940a6b9c6c300",
+    "../storage/access_admission_updates.go:restrictAdmissionEvidenceWrites": "ab12fb83fdca0b9f20f72b01ab2e1c052b9afc5815dcbc73f6b01be935d3d939",
+    "../storage/access_admission_updates.go:restrictAdmissionUpdates": "80f4ada0c6290ed024e62721a396f36f68ccc6e19ada983b3db319981e3cb6c7",
     "../storage/access_mentions.go:installResourceAccessEpochTriggers": "53b0d7bb0a166d97a798350b8ba03aefc195661b13da7d35ba216b5305cee768",
     "../storage/access_mentions.go:installResourceAccessMentions": "e47ef6daf4c71afba8045a4ddbb6a5f47bc0304de1ca010fd556cda77d1c8650",
     "../storage/access_mentions.go:installResourceAccessRevisionHandles": "27726e0607b67094a2951130e0294cde68339533fd4baa9cb1b8e300c4b5f4d7",
@@ -3482,13 +3544,13 @@
     "../storage/comment_search.go:installCommentSearch": "3026cd9308ed6a5c5434c6cc3af774eda498111cd9ff0044b1c882fc05be3b48",
     "../storage/comment_search_external.go:upgradeCommentSearchPendingCursor": "b2b89aa0b1b3f00a31508a2155aca3ee4cc68b71e50cb0c79be190da24596943",
     "../storage/comment_search_external.go:upgradeExternalCommentSearch": "a6fb8b98f047ad9535e691b2938b78cbf79e3b71f9f9f977df991d604b667730",
-    "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "0fefe979167f3711e03f3ffd3a1e3f19da9daa83ad9dd62073ae0a336fb02624",
+    "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "ae440ee35f3d205de248cfaf98a7e84a90bea0f8f2342706da63dd7bc59758a5",
     "../storage/compact_access.go:*Workspace:MaintainCompactAccessBatch": "3899faa70168581d6146877248687e99deb04e7be9627998b10caf013e2834ed",
     "../storage/compact_access.go:*Workspace:PrepareCompactAccessMigration": "a9eb3505e21afc2b21ad8b5cee00e03085a94742b1b346e2560cac7c44f699a5",
     "../storage/compact_access.go:*Workspace:RunCompactAccessMigration": "81ea0c6585db2293cd128082a0afcf005e8d6376c347d839c9361785b8fc412c",
     "../storage/compact_access.go:*Workspace:VerifyCompactAccessShadow": "9e9c68f1e05618dfb7451808926292a19243ebf98b003940ea02195c17bc5011",
     "../storage/compact_access.go:*Workspace:compactShadowReady": "07dd2df0b7a36748ceef558736d409983235995aed9cfe7ee177f7728360539c",
-    "../storage/compact_access.go:*Workspace:initializeCompactAccessMetadata": "371955198f4c4cae4708a41447b4185c79b5de0627dc92176afd930dcb7f6111",
+    "../storage/compact_access.go:*Workspace:initializeCompactAccessMetadata": "c6a08d7474830724153eb35e03408fe1ea051063fa0391860ce04f73cf532982",
     "../storage/compact_access.go:*Workspace:maintainCompactAccessChunk": "29ced7e37de07841ae55333bf1d0c741f4761f4427179ad06512247a3ebd707a",
     "../storage/compact_access.go:*Workspace:runCompactAccessMigration": "9d3b978a4398892e26344165d7631c06511ad94548f025eca7b0fadc060eadd2",
     "../storage/compact_access.go:verifyCompactAccess": "faa99a0e712121525bde85dcfcb254c61f5101791079ed669d8cd099eee658b6",
@@ -3626,6 +3688,7 @@
     "../storage/series_rollups.go:seriesLiveDailyTableSQL": "c32b0794d6521bc488af84cd189a7ef8a9bce8dd304368fcb11ea13fc612a84e",
     "../storage/series_rollups.go:seriesLiveDailyUpdateSQL": "af01489a464623be9bb38b7a1642b2bea4ea6b9a7b7dca4ba7c7abf522c32f28",
     "../storage/topic_workspace_page_indexes.go:installTopicWorkspacePageIndexes": "f56cfaf7c97af7f5b413f241307eb9f789bbfe832c76e95d20284a02959a6f16",
+    "../storage/work_lifecycle.go:installWorkLifecycle": "430f5b4936c1424efa8122434aae093e0fdc3ced63c5c8e91b5c4ad077416b04",
     "../storage/work_summary_indexes.go:installWorkSummaryAskIndex": "d455a142c2881d85a6e2cf34edd55edc0575ec30b7aedb2aad5e9d6894be3fa9",
     "../storage/work_summary_indexes.go:installWorkSummaryAttention": "9de4b78fb29bf8c9063300a0f4461e58840158ea9a49bd8caac4ea4fb7af0ba7",
     "../storage/work_summary_indexes.go:maintainWorkSummaryAttention": "39940fe3c14d8538654700187433ab43e4de57640603cc00240900187f371741",

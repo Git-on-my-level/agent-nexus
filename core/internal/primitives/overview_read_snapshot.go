@@ -41,12 +41,30 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 	var pointToken int64
 	next, close, err := s.db.PinReads(ctx, func(ctx context.Context, db resourceaccess.QueryRower) (context.Context, error) {
 		scope, _ := accessScopeFrom(ctx)
+		inventory, _ := ctx.Value(inventoryAdmissionKey{}).(bool)
+		if inventory && !s.db.InWriteTransaction(ctx) {
+			snapshot := &denialSnapshot{inventory: true, epochTable: "resource_access_epoch"}
+			query := `WITH ` + admissionLedgerCTE(scope) + ` SELECT COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1),total_changes(),CASE WHEN active=0 THEN '[]' ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM (SELECT DISTINCT r.kind,r.id FROM main.resource_access_admission_owners r WHERE r.ledger=(SELECT ledger FROM _anx_admission_ledger) AND (` + candidateRootConstraintSQL(scope, "r") + `))),'[]') END FROM _anx_admission_ledger WHERE ledger<>-2`
+			if err := db.QueryRowContext(ctx, query).Scan(&snapshot.epoch, &snapshot.candidateChanges, &snapshot.rows); err != nil {
+				return ctx, err
+			}
+			snapshot.preparePointIndex()
+			snapshot.candidates = true
+			snapshot.candidateIndex = make(map[denialTarget]bool)
+			snapshot.candidateComplete = snapshot.pointIndex
+			snapshot.candidateAllPublic = snapshot.pointIndex != nil && len(snapshot.pointIndex) == 0
+			pointToken = pointSnapshotSequence.Add(1)
+			snapshot.pointToken = pointToken
+			pointSnapshots.Store(pointToken, snapshot)
+			return context.WithValue(ctx, pinnedDenialKey{}, pinnedDenial{db, snapshot, scope}), nil
+		}
 		cached := denialSnapshotFrom(ctx)
 		state, _ := ctx.Value(denialRequestKey{}).(*denialRequestState)
 		if cached == nil || cached.candidates || state != nil && state.candidateMode {
 			// Candidate admission evaluates current indexed ancestry inside this
 			// transaction; no workspace closure needs capturing before the page.
-			snapshot := &denialSnapshot{candidates: true, candidateIndex: make(map[denialTarget]bool)}
+			inventory, _ := ctx.Value(inventoryAdmissionKey{}).(bool)
+			snapshot := &denialSnapshot{inventory: inventory, candidates: true, candidateIndex: make(map[denialTarget]bool)}
 			var active bool
 			if err := db.QueryRowContext(ctx, `WITH `+admissionLedgerCTE(scope)+` SELECT COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1),total_changes(),active FROM _anx_admission_ledger`).Scan(&snapshot.epoch, &snapshot.candidateChanges, &active); err != nil {
 				return ctx, err

@@ -43,9 +43,11 @@ func installAccessAdmissionRoots(ctx context.Context, tx *sql.Tx) error {
 		}
 		match := `kind=` + replace(source.kind, "OLD.") + ` AND id=` + replace(source.id, "OLD.") + ` AND unconditional=` + fmt.Sprint(source.unconditional) + ` AND owner IS ` + replace(source.owner, "OLD.") + ` AND (` + replace(source.condition, "OLD.") + `)`
 		remove := `DELETE FROM resource_access_admission_roots WHERE ` + match + ` AND contributions=1; UPDATE resource_access_admission_roots SET contributions=contributions-1 WHERE ` + match + ` AND contributions>1;`
+		changed := `(` + replace(source.owner, "OLD.") + ` IS NOT ` + replace(source.owner, "NEW.") + `) OR (` + replace(source.condition, "OLD.") + `) IS NOT (` + replace(source.condition, "NEW.") + `)`
+		changed += ` OR ` + replace(source.kind, "OLD.") + ` IS NOT ` + replace(source.kind, "NEW.") + ` OR ` + replace(source.id, "OLD.") + ` IS NOT ` + replace(source.id, "NEW.")
 		for _, q := range []string{
 			`CREATE TRIGGER admission_root_index_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + add("NEW.", "") + ` END`,
-			`CREATE TRIGGER admission_root_index_` + source.table + `_update AFTER UPDATE ON ` + source.table + ` BEGIN ` + remove + add("NEW.", "") + ` END`,
+			`CREATE TRIGGER admission_root_index_` + source.table + `_update AFTER UPDATE ON ` + source.table + ` WHEN ` + changed + ` BEGIN ` + add("NEW.", "") + remove + ` END`,
 			`CREATE TRIGGER admission_root_index_` + source.table + `_delete AFTER DELETE ON ` + source.table + ` BEGIN ` + remove + ` END`,
 			add("r.", source.table+" r, "),
 		} {

@@ -148,6 +148,13 @@ type pinnedRead struct {
 	tx *sql.Tx
 }
 
+// InWriteTransaction identifies a mutable borrowed snapshot for this handle.
+// Read optimizations must not treat it as an immutable page transaction.
+func (d *DB) InWriteTransaction(ctx context.Context) bool {
+	bound, ok := ctx.Value(writeTransactionKey{}).(writeTransaction)
+	return ok && bound.db == d.raw
+}
+
 // PinReads routes reads of this database through one read-only snapshot. The
 // policy owner admits that snapshot before it is exposed. Business mutations
 // continue using ordinary transactions and their current canonical policy.

@@ -12114,7 +12114,7 @@ components:
         archived_refs:
           type: array
           items: { type: string }
-          description: Card refs and aliases hidden by card, parent-board or project-topic lifecycle, for excluding associated Watching decisions. These are excluded from work and its counts.
+          description: Card refs and aliases hidden by card, parent-board or project-topic lifecycle, for excluding associated Watching decisions. These are excluded from work and its counts. Lifecycle refs are paged after active work; follow next_cursor until empty to collect the complete visible inventory.
         next_cursor:
           type: string
       required:

@@ -186,7 +186,7 @@ func TestAdmissionGraphRandomizedParity(t *testing.T) {
 	// Direct compact-ledger writes and operator rollback must select precisely
 	// the same edges as the canonical reader, including an incomplete ledger.
 	exec(`INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`)
-	for _, control := range []string{`UPDATE resource_access_compact_control SET reader=1,force_legacy=0`, `DELETE FROM resource_access_compact_edges WHERE edge_id=(SELECT min(edge_id) FROM resource_access_compact_edges)`, `UPDATE resource_access_compact_control SET force_legacy=1`} {
+	for _, control := range []string{`UPDATE resource_access_compact_control SET reader=1,force_legacy=0`, `DELETE FROM resource_access_compact_edges WHERE edge_id=(SELECT min(edge_id) FROM resource_access_compact_edges)`, `UPDATE resource_access_compact_control SET force_legacy=1`, `DELETE FROM resource_access_compact_control`} {
 		exec(control)
 		for _, scope := range []AccessScope{{ActorID: "owner"}, {ActorID: "stranger"}, {}} {
 			compareAdmissionGraph(t, ctx, tx, scope)
@@ -201,7 +201,7 @@ type admissionQueryer interface {
 func compareAdmissionGraph(t *testing.T, ctx context.Context, db admissionQueryer, scope AccessScope) {
 	t.Helper()
 	old := ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
-	graph := admissionLedgerCTE(scope) + ", " + old + `, _indexed(kind,id) AS (SELECT kind,id FROM main.resource_access_admission_roots r WHERE ` + candidateRootConstraintSQL(scope, "r") + ` UNION SELECT e.child_kind,e.child_id FROM _indexed d JOIN resource_access_admission_graph e ON e.parent_kind=d.kind AND e.parent_id=d.id WHERE e.ledger=0 OR e.ledger=(SELECT ledger FROM _anx_admission_ledger) UNION SELECT 'document',id FROM _indexed WHERE kind='document_history'), _old_only AS (SELECT kind,CAST(id AS TEXT) id FROM _anx_denied EXCEPT SELECT kind,id FROM _indexed), _new_only AS (SELECT kind,id FROM _indexed EXCEPT SELECT kind,CAST(id AS TEXT) FROM _anx_denied) SELECT 'missing',kind,id FROM _old_only UNION ALL SELECT 'extra',kind,id FROM _new_only UNION ALL SELECT 'root-counts','','' WHERE (SELECT active FROM _anx_admission_ledger)<>EXISTS(` + deniedRootSQL(scope) + `) LIMIT 20`
+	graph := admissionLedgerCTE(scope) + ", " + old + `, _indexed(kind,id) AS (SELECT kind,id FROM main.resource_access_admission_roots r WHERE ` + candidateRootConstraintSQL(scope, "r") + `), _reachable(kind,id) AS (SELECT r.kind,r.id FROM main.resource_access_admission_owners r WHERE r.ledger=(SELECT ledger FROM _anx_admission_ledger) AND (` + candidateRootConstraintSQL(scope, "r") + `)), _old_only AS (SELECT kind,CAST(id AS TEXT) id FROM _anx_denied EXCEPT SELECT kind,id FROM _reachable), _new_only AS (SELECT kind,id FROM _reachable EXCEPT SELECT kind,CAST(id AS TEXT) FROM _anx_denied) SELECT 'missing',kind,id FROM _old_only UNION ALL SELECT 'extra',kind,id FROM _new_only UNION ALL SELECT 'root-counts','','' WHERE (SELECT active FROM _anx_admission_ledger)<>EXISTS(` + deniedRootSQL(scope) + `) LIMIT 20`
 	rows, err := db.QueryContext(ctx, `WITH RECURSIVE `+graph)
 	if err != nil {
 		t.Fatal(err)

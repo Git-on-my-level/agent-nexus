@@ -111,13 +111,13 @@ func assertCanonicalAdmissionScaleParity(t *testing.T, db *sql.DB) {
 			return out
 		}
 		want := read(resourceaccess.NewDB(db).QueryContext(primitives.WithAccessScope(ctx, scope), `SELECT kind,CAST(id AS TEXT) FROM _anx_denied`))
-		roots := `SELECT kind,id FROM main.resource_access_admission_roots WHERE unconditional=1`
+		constraint := "r.unconditional=1"
 		var args []any
 		if scope.ActorID == "" || scope.ActorID != scope.PMActorID {
-			roots += ` OR owner<>?`
+			constraint += " OR r.owner<>?"
 			args = []any{scope.ActorID}
 		}
-		got := read(db.QueryContext(ctx, `WITH RECURSIVE _d(kind,id) AS (`+roots+` UNION SELECT e.child_kind,e.child_id FROM _d d JOIN resource_access_admission_graph e ON e.parent_kind=d.kind AND e.parent_id=d.id WHERE e.ledger=0 OR e.ledger=CASE WHEN `+resourceaccess.CompactReaderSQL+` THEN 2 WHEN NOT (`+resourceaccess.CompactReaderSQL+`) THEN 1 ELSE -1 END UNION SELECT 'document',id FROM _d WHERE kind='document_history') SELECT kind,CAST(id AS TEXT) FROM _d`, args...))
+		got := read(db.QueryContext(ctx, `SELECT DISTINCT r.kind,r.id FROM resource_access_admission_owners r WHERE r.ledger=CASE WHEN `+resourceaccess.CompactReaderSQL+` THEN 2 WHEN NOT (`+resourceaccess.CompactReaderSQL+`) THEN 1 ELSE -1 END AND (`+constraint+`)`, args...))
 		if !reflect.DeepEqual(got, want) {
 			for key := range want {
 				if !got[key] {

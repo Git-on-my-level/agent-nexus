@@ -40,7 +40,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	for _, q := range []string{`DROP TABLE IF EXISTS resource_access_admission_keys`, `DROP TABLE IF EXISTS resource_access_admission_links`} {
+	for _, q := range []string{`DROP TABLE IF EXISTS resource_access_admission_compact_atoms`, `DROP TABLE IF EXISTS resource_access_admission_keys`, `DROP TABLE IF EXISTS resource_access_admission_links`} {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
 			return err
 		}
@@ -64,6 +64,8 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 		// Older workspaces install this empty capability after migrations.
 		`CREATE TABLE IF NOT EXISTS resource_access_compact_edges(edge_id INTEGER PRIMARY KEY,target_key BLOB NOT NULL CHECK(typeof(target_key)='blob' AND length(target_key)=32))`,
 		`CREATE INDEX IF NOT EXISTS idx_access_compact_target ON resource_access_compact_edges(target_key)`,
+		`CREATE TABLE resource_access_admission_compact_atoms(edge_id INTEGER PRIMARY KEY,target_key BLOB NOT NULL)`,
+		`CREATE INDEX idx_admission_compact_atom ON resource_access_admission_compact_atoms(target_key)`,
 		`CREATE TABLE resource_access_admission_links(origin TEXT NOT NULL,origin_id TEXT NOT NULL,via_id INTEGER NOT NULL DEFAULT 0,parent_kind TEXT NOT NULL,parent_id TEXT NOT NULL,child_kind TEXT NOT NULL,child_id TEXT NOT NULL,ledger INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger)) WITHOUT ROWID`,
 		`CREATE INDEX idx_access_admission_child ON resource_access_admission_links(child_kind,child_id,ledger,parent_kind,parent_id)`,
 		`CREATE INDEX idx_access_admission_parent ON resource_access_admission_links(parent_kind,parent_id,child_kind,child_id)`,
@@ -94,7 +96,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 		return `CASE WHEN ` + p + `id IS NULL THEN 'tuple:'||json_array(` + p + `source_type,` + p + `source_id,` + p + `target_type,` + p + `target_id,` + p + `edge_type) ELSE 'id:'||` + p + `id END`
 	}
 	keyLinks := links + `SELECT 'exact',e.edge_id,NEW.key_id,NEW.kind,NEW.id,e.source_kind,e.source_id,1 FROM resource_access_exact_edges e WHERE e.target_key=lower(hex(NEW.atom)) AND (NEW.published=0 OR e.source_kind NOT IN ` + publication + `); ` +
-		links + `SELECT 'compact',e.rowid,NEW.key_id,NEW.kind,NEW.id,e.source_kind,e.source_id,2 FROM resource_access_compact_edges c JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE c.target_key=NEW.atom AND (NEW.published=0 OR e.source_kind NOT IN ` + publication + `); ` +
+		links + `SELECT 'compact',e.rowid,NEW.key_id,NEW.kind,NEW.id,e.source_kind,e.source_id,2 FROM resource_access_admission_compact_atoms c JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE c.target_key=NEW.atom AND (NEW.published=0 OR e.source_kind NOT IN ` + publication + `); ` +
 		links + `SELECT 'external',e.rowid,NEW.key_id,NEW.kind,NEW.id,e.source_kind,e.source_id,0 FROM resource_access_external_edges e WHERE NEW.published=1 AND e.target_key=lower(hex(NEW.atom)); ` +
 		links + `SELECT 'ref',` + refOrigin("e.") + `,NEW.key_id,NEW.kind,NEW.id,e.source_type,e.source_id,0 FROM ref_edges e INDEXED BY idx_ref_edges_access_cover WHERE NEW.navigation=1 AND e.target_type=NEW.kind AND e.target_id=NEW.ref COLLATE NOCASE AND e.edge_type='ref'; ` +
 		links + `SELECT 'project',m.card_id,NEW.key_id,NEW.kind,NEW.id,'card',m.card_id,0 FROM work_metadata m WHERE NEW.kind='topic' AND NEW.navigation=1 AND ` + resourceaccess.ReferenceSQL(`json_extract(m.metadata_json,'$.project_ref')`) + `=('topic:'||NEW.ref) COLLATE NOCASE;`
@@ -238,7 +240,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	for _, compact := range []bool{false, true} {
 		name, table, id, source, key, ledger := "exact", "resource_access_exact_edges", "edge_id", "", "unhex("+"$target_key)", "1"
 		if compact {
-			name, table, source, key, ledger = "compact", "resource_access_compact_edges", ` JOIN resource_access_edges e ON e.rowid=$edge_id `, "$target_key", "2"
+			name, table, source, key, ledger = "compact", "resource_access_admission_compact_atoms", ` JOIN resource_access_edges e ON e.rowid=$edge_id `, "$target_key", "2"
 		}
 		insert := func(p, f string) string {
 			replace := func(s string) string { return strings.ReplaceAll(s, "$", p) }
@@ -250,6 +252,22 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			return links + `SELECT '` + name + `',` + p + id + `,k.key_id,k.kind,k.id,` + kind + `,` + resourceID + `,` + ledger + ` FROM ` + f + `(SELECT 1)` + replace(source) + ` JOIN resource_access_admission_keys k ON k.atom=` + replace(key) + ` WHERE k.published=0 OR ` + kind + ` NOT IN ` + publication + `;`
 		}
 		if err := install(name, table, id, insert, ""); err != nil {
+			return err
+		}
+	}
+	// The optional compact capability can be removed independently. Canonical
+	// writes consult only our required atom index, never the optional table.
+	if err := installAdmissionCompactSync(ctx, tx); err != nil {
+		return err
+	}
+	// Raw source moves need not update the independently imported compact key.
+	compactSource := links + `SELECT 'compact',NEW.rowid,k.key_id,k.kind,k.id,NEW.source_kind,NEW.source_id,2 FROM resource_access_admission_compact_atoms c JOIN resource_access_admission_keys k ON k.atom=c.target_key WHERE c.edge_id=NEW.rowid AND (k.published=0 OR NEW.source_kind NOT IN ` + publication + `);`
+	for _, q := range []string{
+		`CREATE TRIGGER admission_compact_source_insert AFTER INSERT ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=NEW.rowid; ` + compactSource + ` END`,
+		`CREATE TRIGGER admission_compact_source_update AFTER UPDATE OF rowid,source_kind,source_id ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=OLD.rowid; ` + compactSource + ` END`,
+		`CREATE TRIGGER admission_compact_source_delete AFTER DELETE ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=OLD.rowid; END`,
+	} {
+		if err := exec(q); err != nil {
 			return err
 		}
 	}
@@ -311,9 +329,34 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAccessAdmissionSpellings} {
+	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
 		if err := install(ctx, tx); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// These hooks belong to the optional table and disappear on operator teardown.
+// Reinstalling the capability refreshes stale atoms once; normal startup does
+// constant schema probes and never recopies the ledger.
+func installAdmissionCompactSync(ctx context.Context, tx *sql.Tx) error {
+	var installed, required bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='resource_access_admission_compact_atoms'),EXISTS(SELECT 1 FROM sqlite_schema WHERE name='admission_compact_sync_insert')`).Scan(&required, &installed); err != nil {
+		return err
+	}
+	if !required || installed {
+		return nil
+	}
+	for _, q := range []string{
+		`DELETE FROM resource_access_admission_compact_atoms`,
+		`INSERT INTO resource_access_admission_compact_atoms SELECT edge_id,target_key FROM resource_access_compact_edges`,
+		`CREATE TRIGGER admission_compact_sync_insert AFTER INSERT ON resource_access_compact_edges BEGIN INSERT INTO resource_access_admission_compact_atoms VALUES(NEW.edge_id,NEW.target_key) ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
+		`CREATE TRIGGER admission_compact_sync_update AFTER UPDATE ON resource_access_compact_edges BEGIN DELETE FROM resource_access_admission_compact_atoms WHERE edge_id=OLD.edge_id; INSERT INTO resource_access_admission_compact_atoms VALUES(NEW.edge_id,NEW.target_key) ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
+		`CREATE TRIGGER admission_compact_sync_delete AFTER DELETE ON resource_access_compact_edges BEGIN DELETE FROM resource_access_admission_compact_atoms WHERE edge_id=OLD.edge_id; END`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("compact admission sync: %w", err)
 		}
 	}
 	return nil

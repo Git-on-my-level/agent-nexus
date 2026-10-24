@@ -19,14 +19,23 @@ func installAccessAdmissionSpellings(ctx context.Context, tx *sql.Tx) error {
 		}
 		return nil
 	}
-	if err := exec(`DROP TABLE IF EXISTS resource_access_admission_spellings`); err != nil {
+	if err := exec(`DROP TABLE IF EXISTS resource_access_admission_spellings; DROP TABLE IF EXISTS resource_access_admission_prose_prefixes`); err != nil {
 		return err
 	}
 	for _, q := range []string{
-		`CREATE TABLE resource_access_admission_spellings(origin TEXT NOT NULL,origin_id TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,is_ref INTEGER NOT NULL,atom BLOB NOT NULL,bucket TEXT NOT NULL,PRIMARY KEY(origin,origin_id,kind,id,ref,is_ref)) WITHOUT ROWID`,
+		`CREATE TABLE resource_access_admission_prose_prefixes(atom BLOB PRIMARY KEY,spellings INTEGER NOT NULL CHECK(spellings>0)) WITHOUT ROWID`,
+		`CREATE TABLE resource_access_admission_spellings(origin TEXT NOT NULL,origin_id TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,is_ref INTEGER NOT NULL,atom BLOB NOT NULL,prose_atom BLOB NOT NULL,PRIMARY KEY(origin,origin_id,kind,id,ref,is_ref)) WITHOUT ROWID`,
 		`CREATE INDEX idx_access_admission_spelling_atom ON resource_access_admission_spellings(atom,kind,id)`,
 		`CREATE INDEX idx_access_admission_spelling_ref ON resource_access_admission_spellings(ref,is_ref,kind,id)`,
-		`CREATE INDEX idx_access_admission_spelling_bucket ON resource_access_admission_spellings(bucket,is_ref,ref,kind,id)`,
+		`CREATE INDEX idx_access_admission_spelling_prose ON resource_access_admission_spellings(prose_atom,is_ref,kind,id,ref)`,
+	} {
+		if err := exec(q); err != nil {
+			return err
+		}
+	}
+	for _, q := range []string{
+		`CREATE TRIGGER admission_prose_prefix_insert AFTER INSERT ON resource_access_admission_spellings WHEN NEW.is_ref=1 BEGIN INSERT INTO resource_access_admission_prose_prefixes SELECT unhex(value),1 FROM json_each(` + resourceaccess.ProsePrefixesSQL("NEW.ref") + `) WHERE true ON CONFLICT(atom) DO UPDATE SET spellings=spellings+1; END`,
+		`CREATE TRIGGER admission_prose_prefix_delete AFTER DELETE ON resource_access_admission_spellings WHEN OLD.is_ref=1 BEGIN DELETE FROM resource_access_admission_prose_prefixes WHERE atom IN (SELECT unhex(value) FROM json_each(` + resourceaccess.ProsePrefixesSQL("OLD.ref") + `)) AND spellings=1; UPDATE resource_access_admission_prose_prefixes SET spellings=spellings-1 WHERE atom IN (SELECT unhex(value) FROM json_each(` + resourceaccess.ProsePrefixesSQL("OLD.ref") + `)) AND spellings>1; END`,
 	} {
 		if err := exec(q); err != nil {
 			return err
@@ -45,7 +54,7 @@ func installAccessAdmissionSpellings(ctx context.Context, tx *sql.Tx) error {
 		if raw {
 			isRef = "0"
 		}
-		return `INSERT INTO resource_access_admission_spellings SELECT '` + origin + `',o,k,i,j.value,` + isRef + `,unhex(` + resourceaccess.AtomKeySQL("j.value") + `),` + resourceaccess.MentionRefBucketSQL("j.value") + ` FROM (SELECT ` + originID + ` o,` + kind + ` k,` + id + ` i,` + value + ` v FROM ` + from + `) CROSS JOIN json_each(` + refs + `) j WHERE ` + valid + ` AND j.value IS NOT NULL AND j.value<>'' ON CONFLICT DO NOTHING;`
+		return `INSERT INTO resource_access_admission_spellings SELECT '` + origin + `',o,k,i,j.value,` + isRef + `,unhex(` + resourceaccess.AtomKeySQL("j.value") + `),` + `unhex(` + resourceaccess.ProseKeySQL("j.value") + `)` + ` FROM (SELECT ` + originID + ` o,` + kind + ` k,` + id + ` i,` + value + ` v FROM ` + from + `) CROSS JOIN json_each(` + refs + `) j WHERE ` + valid + ` AND j.value IS NOT NULL AND j.value<>'' ON CONFLICT DO NOTHING;`
 	}
 	vertex := func(kind, id, from string) string {
 		// document_history -> document is a virtual canonical edge even when
