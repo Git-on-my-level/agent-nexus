@@ -110,7 +110,7 @@ func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID strin
 	if err = tx.QueryRowContext(ctx, `SELECT thread_id,board_id FROM cards WHERE id=?`, cardID).Scan(&threadID, &boardID); err != nil {
 		return err
 	}
-	payload := map[string]any{"changed_fields": []string{"work"}, "source": source}
+	payload := map[string]any{"changed_fields": []string{"work"}, "source": source, "create_surface": m["create_surface"]}
 	if move, ok := m["workspace_move"]; ok {
 		payload["workspace_move"] = move
 	}
@@ -209,7 +209,7 @@ func validateWorkLocal(m map[string]any) error {
 					if k == "relations" {
 						kind := workString(item["kind"])
 						switch kind {
-						case "parent", "child", "depends_on", "related", "artifact":
+						case "parent", "child", "depends_on", "related", "artifact", "merged_into":
 						default:
 							return workLocalInvalid(k, "invalid relation kind")
 						}
@@ -288,6 +288,18 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	}
 	boardID = strings.TrimSpace(boardID)
 	m := workClone(input)
+	for _, key := range []string{"under", "after"} {
+		if value, exists := input[key]; exists {
+			if text, ok := value.(string); !ok || strings.TrimSpace(text) == "" {
+				return nil, workInvalid("%s must be a nonempty string", key)
+			}
+		}
+	}
+	under, after := workString(m["under"]), workString(m["after"])
+	delete(m, "under")
+	delete(m, "after")
+	delete(m, "create_surface")
+	delete(m, foldSnapshotKey)
 	delete(m, "actor_id")
 	delete(m, "request_key")
 	delete(m, "board_ref")
@@ -320,6 +332,9 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		var id string
 		err := s.db.QueryRowContext(ctx, `SELECT card_id FROM work_metadata WHERE authority=? AND connection_id=? AND native_id=?`, authority, workString(source["connection_id"]), workString(source["native_id"])).Scan(&id)
 		if err == nil {
+			if under != "" {
+				return s.GroupWork(ctx, actorID, id, under, after)
+			}
 			return s.GetWork(ctx, id)
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -374,11 +389,24 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	// return an existing card, and a rejected work.create must not leave a
 	// default board behind on a workspace that has none.
 	if boardID == "" {
-		resolved, err := s.ensureDefaultBoard(ctx, actorID)
-		if err != nil {
-			return nil, err
+		if under != "" {
+			parent, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "card", Ref: under})
+			if err != nil {
+				return nil, err
+			}
+			if err = s.db.QueryRowContext(ctx, `SELECT board_id FROM cards WHERE id=?`, parent.ID).Scan(&boardID); err != nil {
+				return nil, err
+			}
+			if boardID == "" {
+				return nil, workInvalid("parent must belong to an active board")
+			}
+		} else {
+			resolved, err := s.ensureDefaultBoard(ctx, actorID)
+			if err != nil {
+				return nil, err
+			}
+			boardID = resolved
 		}
-		boardID = resolved
 	}
 	refs := []string{}
 	if topicRef := workString(m["topic_ref"]); topicRef != "" {
@@ -403,7 +431,9 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	if raw := workString(m["risk"]); raw != "" {
 		risk = &raw
 	}
+	m["create_surface"] = firstNonEmptyString(workString(input["create_surface"]), "work.create")
 	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{
+		Under: under, After: after, CreateSurface: firstNonEmptyString(workString(input["create_surface"]), "work.create"),
 		Handle: workString(m["handle"]), CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
 		DefinitionOfDone: dod, Assignee: assignee, DueAt: dueAt, PinnedDocumentID: pinnedDocumentID,
 		Risk: risk, Refs: uniqueSortedStrings(refs), WorkMetadata: m,
@@ -420,12 +450,21 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		if authority != "nexus" {
 			var existing string
 			if lookupErr := s.db.QueryRowContext(ctx, `SELECT card_id FROM work_metadata WHERE authority=? AND connection_id=? AND native_id=?`, authority, workString(source["connection_id"]), workString(source["native_id"])).Scan(&existing); lookupErr == nil {
+				if under != "" {
+					return s.GroupWork(ctx, actorID, existing, under, after)
+				}
 				return s.GetWork(ctx, existing)
 			}
 		}
 		return nil, err
 	}
-	return s.GetWork(ctx, workString(result.Card["id"]))
+	work, err := s.GetWork(ctx, workString(result.Card["id"]))
+	if err != nil {
+		return nil, err
+	}
+	work["likely_home"] = result.Card["likely_home"]
+	work["parent_ref"] = result.Card["parent_ref"]
+	return work, nil
 }
 
 func (s *Store) workMetadata(ctx context.Context, id string) (map[string]any, int64, string, string, map[string]any, error) {
@@ -1813,7 +1852,7 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 			ref := workString(relation["ref"])
 			kind := workString(relation["kind"])
 			typ := ""
-			if kind == "parent" || kind == "child" || kind == "depends_on" {
+			if kind == "parent" || kind == "child" || kind == "depends_on" || kind == "merged_into" {
 				typ = "card"
 			}
 			resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: typ, Ref: ref})

@@ -1271,6 +1271,11 @@
   },
   {
     "method": "GET",
+    "path": "/work/ungrouped",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
     "path": "/work/{card_ref}",
     "policy": "record"
   },
@@ -1280,6 +1285,16 @@
     "policy": "record"
   },
   {
+    "method": "POST",
+    "path": "/work/{card_ref}/fold",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/group",
+    "policy": "record"
+  },
+  {
     "method": "GET",
     "path": "/work/{card_ref}/observations",
     "policy": "record"
@@ -1307,6 +1322,11 @@
   {
     "method": "POST",
     "path": "/work/{card_ref}/refresh",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/unfold",
     "policy": "record"
   },
   {

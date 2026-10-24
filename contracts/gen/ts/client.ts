@@ -836,7 +836,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -844,7 +846,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.participants.register",
       "work.patch",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "AgentsMePresence",
     "ts_method": "agentsMePresence"
@@ -4561,6 +4565,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "integer"
         },
         {
+          "name": "reason",
+          "type": "string"
+        },
+        {
           "name": "request_key",
           "type": "string"
         }
@@ -4628,6 +4636,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "after",
+          "type": "string"
+        },
+        {
           "name": "board_handle",
           "type": "string"
         },
@@ -4638,6 +4650,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "board_ref",
           "type": "any"
+        },
+        {
+          "name": "card.after",
+          "type": "string"
         },
         {
           "name": "card.after_card_id",
@@ -4665,6 +4681,16 @@ export const commandRegistry: CommandSpec[] = [
             "in_progress",
             "ready",
             "review"
+          ]
+        },
+        {
+          "name": "card.create_surface",
+          "type": "string",
+          "enum_values": [
+            "ask.auto_create",
+            "cards.create",
+            "mcp",
+            "work.create"
           ]
         },
         {
@@ -4733,11 +4759,29 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "card.under",
+          "type": "string"
+        },
+        {
+          "name": "create_surface",
+          "type": "string",
+          "enum_values": [
+            "ask.auto_create",
+            "cards.create",
+            "mcp",
+            "work.create"
+          ]
+        },
+        {
           "name": "if_board_updated_at",
           "type": "datetime"
         },
         {
           "name": "request_key",
+          "type": "string"
+        },
+        {
+          "name": "under",
           "type": "string"
         }
       ]
@@ -14578,7 +14622,9 @@ export const commandRegistry: CommandSpec[] = [
     "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
     "adjacent_commands": [
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -14587,7 +14633,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkCapabilities",
     "ts_method": "workCapabilities"
@@ -14600,7 +14648,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/work",
     "operation_id": "workCreate",
     "summary": "Register a card-backed commitment",
-    "why": "Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.",
+    "why": "Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -14619,7 +14667,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+    "agent_notes": "Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
     "body_schema": {
       "required": [
         {
@@ -14633,6 +14681,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "after",
+          "type": "string"
+        },
+        {
           "name": "blockers",
           "type": "list\u003cstring\u003e"
         },
@@ -14643,6 +14695,16 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "cadence",
           "type": "any"
+        },
+        {
+          "name": "create_surface",
+          "type": "string",
+          "enum_values": [
+            "ask.auto_create",
+            "cards.create",
+            "mcp",
+            "work.create"
+          ]
         },
         {
           "name": "definition_of_done",
@@ -14783,6 +14845,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "under",
+          "type": "string"
+        },
+        {
           "name": "wake_condition",
           "type": "string"
         },
@@ -14794,7 +14860,9 @@ export const commandRegistry: CommandSpec[] = [
     },
     "adjacent_commands": [
       "work.capabilities",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -14803,10 +14871,84 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkCreate",
     "ts_method": "workCreate"
+  },
+  {
+    "command_id": "work.fold",
+    "cli_path": "work fold",
+    "group": "work",
+    "method": "POST",
+    "path": "/work/{card_ref}/fold",
+    "operation_id": "workFold",
+    "summary": "Fold a card into a parent, retaining evidence and asks",
+    "why": "Fold a card into a parent, retaining evidence and asks. Retain request_key and the original body until confirmed.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `WorkResponse`.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "work_unavailable"
+    ],
+    "concepts": [
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Workspace authenticated; reader-scoped deterministic grouping.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "into",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "after",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "card_ref"
+    ],
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.get",
+      "work.group",
+      "work.list",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
+    ],
+    "go_method": "WorkFold",
+    "ts_method": "workFold"
   },
   {
     "command_id": "work.get",
@@ -14841,6 +14983,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -14849,10 +14993,84 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkGet",
     "ts_method": "workGet"
+  },
+  {
+    "command_id": "work.group",
+    "cli_path": "work group",
+    "group": "work",
+    "method": "POST",
+    "path": "/work/{card_ref}/group",
+    "operation_id": "workGroup",
+    "summary": "Add an existing card to a parent plan",
+    "why": "Add an existing card to a parent plan. Retain request_key and the original body until confirmed.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `WorkResponse`.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "work_unavailable"
+    ],
+    "concepts": [
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Workspace authenticated; ordinary plan links; no automatic choice.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "under",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "after",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "card_ref"
+    ],
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.fold",
+      "work.get",
+      "work.list",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
+    ],
+    "go_method": "WorkGroup",
+    "ts_method": "workGroup"
   },
   {
     "command_id": "work.list",
@@ -14885,7 +15103,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -14893,7 +15113,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkList",
     "ts_method": "workList"
@@ -14931,7 +15153,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.submit",
       "work.participants.list",
@@ -14939,7 +15163,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkObservationsList",
     "ts_method": "workObservationsList"
@@ -15081,7 +15307,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.participants.list",
@@ -15089,7 +15317,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkObservationsSubmit",
     "ts_method": "workObservationsSubmit"
@@ -15131,7 +15361,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -15139,7 +15371,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkParticipantsList",
     "ts_method": "workParticipantsList"
@@ -15202,7 +15436,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -15210,7 +15446,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkParticipantsRegister",
     "ts_method": "workParticipantsRegister"
@@ -15333,7 +15571,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -15341,7 +15581,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.participants.register",
       "agents.me.presence",
       "work.refresh.get",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkPatch",
     "ts_method": "workPatch"
@@ -15379,7 +15621,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -15387,7 +15631,9 @@ export const commandRegistry: CommandSpec[] = [
       "work.participants.register",
       "work.patch",
       "agents.me.presence",
-      "work.refresh.request"
+      "work.refresh.request",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkRefreshGet",
     "ts_method": "workRefreshGet"
@@ -15434,7 +15680,9 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "work.capabilities",
       "work.create",
+      "work.fold",
       "work.get",
+      "work.group",
       "work.list",
       "work.observations.list",
       "work.observations.submit",
@@ -15442,10 +15690,118 @@ export const commandRegistry: CommandSpec[] = [
       "work.participants.register",
       "work.patch",
       "agents.me.presence",
-      "work.refresh.get"
+      "work.refresh.get",
+      "work.unfold",
+      "work.ungrouped"
     ],
     "go_method": "WorkRefreshRequest",
     "ts_method": "workRefreshRequest"
+  },
+  {
+    "command_id": "work.unfold",
+    "cli_path": "work unfold",
+    "group": "work",
+    "method": "POST",
+    "path": "/work/{card_ref}/unfold",
+    "operation_id": "workUnfold",
+    "summary": "Reverse a fold without overwriting later edits",
+    "why": "Reverse a fold without overwriting later edits. Retain request_key and the original body until confirmed.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `WorkResponse`.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "work_unavailable"
+    ],
+    "concepts": [
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Workspace authenticated; reader-scoped deterministic grouping.",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "card_ref"
+    ],
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.fold",
+      "work.get",
+      "work.group",
+      "work.list",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.ungrouped"
+    ],
+    "go_method": "WorkUnfold",
+    "ts_method": "workUnfold"
+  },
+  {
+    "command_id": "work.ungrouped",
+    "cli_path": "work ungrouped",
+    "group": "work",
+    "method": "GET",
+    "path": "/work/ungrouped",
+    "operation_id": "workUngrouped",
+    "summary": "Recent top-level non-loop cards and deterministic likely homes",
+    "why": "Discover recent ungrouped cards and choose a home; suggestions never prevent creation.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `WorkUngroupedResponse`.",
+    "error_codes": [
+      "invalid_request",
+      "work_unavailable"
+    ],
+    "concepts": [
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Workspace authenticated; reader-scoped deterministic grouping.",
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.fold",
+      "work.get",
+      "work.group",
+      "work.list",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.unfold"
+    ],
+    "go_method": "WorkUngrouped",
+    "ts_method": "workUngrouped"
   },
   {
     "command_id": "workspace.dashboard.list",
@@ -16621,8 +16977,16 @@ export class AnxClient {
     return this.invoke("work.create", {}, options);
   }
 
+  workFold(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.fold", pathParams, options);
+  }
+
   workGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("work.get", pathParams, options);
+  }
+
+  workGroup(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.group", pathParams, options);
   }
 
   workList(options: RequestOptions = {}): Promise<InvokeResult> {
@@ -16655,6 +17019,14 @@ export class AnxClient {
 
   workRefreshRequest(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("work.refresh.request", pathParams, options);
+  }
+
+  workUnfold(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.unfold", pathParams, options);
+  }
+
+  workUngrouped(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.ungrouped", {}, options);
   }
 
   workspaceDashboardList(options: RequestOptions = {}): Promise<InvokeResult> {

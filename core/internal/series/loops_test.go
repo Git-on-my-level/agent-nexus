@@ -43,7 +43,7 @@ func TestLoopSeriesGoalUsesDailyScopedValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	found := false
-	for _, item := range brief["initiatives"].([]map[string]any) {
+	for _, item := range brief["loops"].([]map[string]any) {
 		if item["ref"] == second["ref"] {
 			found = true
 			g := item["loop"].(map[string]any)["goal"].(map[string]any)

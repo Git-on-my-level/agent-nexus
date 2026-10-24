@@ -54,7 +54,24 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	if err != nil {
 		return nil, err
 	}
+	budget, suggestions, err := b.groupingBudget()
+	if err != nil {
+		return nil, err
+	}
 	initiatives, initiativesTruncated, err := b.initiatives()
+	if err != nil {
+		return nil, err
+	}
+	// The section may admit older roots than the recent budget cohort. Its
+	// visible open rows are also a proven lower bound; never show less than them.
+	visibleOpen := 0
+	for _, item := range initiatives {
+		if item["state"] != "done" {
+			visibleOpen++
+		}
+	}
+	budget["count"] = max(budget["count"].(int), visibleOpen)
+	loops, loopsTruncated, err := b.initiativeSection(true)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +81,7 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	b.fillPrincipals(decisions, "requested_by")
 	b.fillPrincipals(yourAsks, "requested_by")
 	b.fillPrincipals(answered, "answered_by")
-	for _, initiative := range initiatives {
+	for _, initiative := range append(append([]map[string]any{}, initiatives...), loops...) {
 		if p, ok := initiative["promise"].(map[string]any); ok {
 			b.fillPrincipals([]map[string]any{p}, "author")
 		}
@@ -73,14 +90,17 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 		}
 	}
 	return map[string]any{
-		"schema":           "brief.v1",
-		"generated_at":     now.Format(time.RFC3339),
-		"principal":        map[string]any{"id": reader.ActorID, "display": firstNonEmptyString(reader.Display, reader.ActorID), "kind": firstNonEmptyString(reader.Kind, "human")},
-		"decisions":        nonNilMaps(decisions),
-		"initiatives":      nonNilMaps(initiatives),
-		"your_asks":        nonNilMaps(yourAsks),
-		"answered_for_you": nonNilMaps(answered),
-		"truncated":        map[string]bool{"decisions": decisionsTruncated, "initiatives": initiativesTruncated, "your_asks": yourTruncated, "answered_for_you": answeredTruncated},
+		"schema":            "brief.v1",
+		"generated_at":      now.Format(time.RFC3339),
+		"principal":         map[string]any{"id": reader.ActorID, "display": firstNonEmptyString(reader.Display, reader.ActorID), "kind": firstNonEmptyString(reader.Kind, "human")},
+		"decisions":         nonNilMaps(decisions),
+		"initiatives":       nonNilMaps(initiatives),
+		"loops":             nonNilMaps(loops),
+		"initiative_budget": budget,
+		"next_actions":      suggestions,
+		"your_asks":         nonNilMaps(yourAsks),
+		"answered_for_you":  nonNilMaps(answered),
+		"truncated":         map[string]bool{"decisions": decisionsTruncated, "initiatives": initiativesTruncated, "loops": loopsTruncated, "your_asks": yourTruncated, "answered_for_you": answeredTruncated},
 	}, nil
 }
 
@@ -92,12 +112,26 @@ func nonNilMaps(v []map[string]any) []map[string]any {
 }
 
 type briefBuild struct {
-	s       *Store
-	ctx     context.Context
-	reader  BriefReader
-	now     time.Time
-	actors  map[string]bool
-	display map[string]map[string]any
+	s                *Store
+	ctx              context.Context
+	reader           BriefReader
+	now              time.Time
+	actors           map[string]bool
+	display          map[string]map[string]any
+	topLevelIDs      []string
+	allCardsAreRoots bool
+}
+
+// Legacy in-process brief callers use Visible for the PM-private rule. Apply
+// the equivalent canonical scope to the new grouping projections only; retain
+// their existing explicit callback semantics for note/ask evidence reads.
+func (b *briefBuild) groupingContext() context.Context {
+	if b.reader.Visible != nil {
+		if _, scoped := accessScopeFrom(b.ctx); !scoped {
+			return WithAccessScope(b.ctx, AccessScope{ActorID: stripActor(b.reader.ActorID)})
+		}
+	}
+	return b.ctx
 }
 
 type briefAskRow struct {
@@ -784,17 +818,57 @@ type briefCardRow struct {
 	loopLastRunAt                                       string
 }
 
-func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow, error) {
+func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]briefCardRow, error) {
 	ownerExpr := "''"
 	if b.reader.Visible != nil {
 		ownerExpr = `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'')`
 	}
+	boardFilter := "(NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))"
+	groupFilter := "NOT " + workHasParentSQL("c") + " AND bi.loop_annotated=0 AND (bi.loop_last_run_at IS NULL OR bi.loop_last_run_at<'" + loopTS(b.now.Add(-loopWindow)) + "')"
+	prefixArgs := []any{}
+	if !loops && len(b.topLevelIDs) > 0 {
+		encoded, _ := json.Marshal(b.topLevelIDs)
+		groupFilter = "(c.id IN (SELECT value FROM json_each(?)) OR (" + groupFilter + "))"
+		prefixArgs = append(prefixArgs, string(encoded))
+	}
+	if !loops && b.allCardsAreRoots {
+		groupFilter = "1=1"
+		prefixArgs = nil
+	}
+	source := ""
+	if loops {
+		boardFilter = "1=1"
+		groupFilter = "(bi.loop_annotated=1 OR bi.loop_last_run_at>='" + loopTS(b.now.Add(-loopWindow)) + "')"
+	}
+	// Admit through the existing promise/evidence ordering index before the
+	// reader-relative parent filter. A workspace full of grouped children must
+	// not force an unbounded scan to fill a brief section. /work remains paged.
+	admission := strings.TrimSuffix(where, " LIMIT ?")
+	if loops {
+		// Seek loop candidates before applying the promise category; ordinary
+		// initiatives must add no scan work to the separate loop section.
+		cutoff := loopTS(b.now.Add(-loopWindow))
+		source = `(SELECT card_id FROM (SELECT card_id FROM work_grouping_brief_positions WHERE loop_annotated=1 ORDER BY loop_annotated_at DESC,card_id LIMIT 200)
+		 UNION SELECT card_id FROM (SELECT card_id FROM work_grouping_brief_positions WHERE loop_last_run_at>='` + cutoff + `' ORDER BY loop_last_run_at DESC,card_id LIMIT 200)) loop_candidates
+		 CROSS JOIN brief_initiatives bi ON bi.card_id=loop_candidates.card_id`
+	}
+
+	if source == "" {
+		source = `(SELECT card_id FROM work_grouping_brief_positions bi WHERE ` + admission + ` LIMIT 200) admitted
+		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`
+	}
+	loopColumns := "bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')"
+	if b.allCardsAreRoots {
+		loopColumns = "0,''"
+	}
 	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
-	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')
-	FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id
-	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')) AND `
+	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),` + loopColumns + `
+	FROM ` + source + ` CROSS JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id
+	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND ` + boardFilter + ` AND ` + groupFilter + ` AND `
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
-	rows, err := b.s.db.QueryContext(b.ctx, selectSQL+pred+` AND `+where, append(predArgs, args...)...)
+	queryArgs := append(prefixArgs, predArgs...)
+	queryArgs = append(queryArgs, args...)
+	rows, err := b.s.db.QueryContext(b.groupingContext(), selectSQL+pred+` AND `+where, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -815,22 +889,26 @@ func (b *briefBuild) queryInitiatives(where string, args ...any) ([]briefCardRow
 
 // initiatives: promised (past first, then soonest), then no_promise (oldest
 // evidence first), then recently done; at most BriefSectionLimit in all.
-func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
+func (b *briefBuild) initiatives() ([]map[string]any, bool, error) { return b.initiativeSection(false) }
+func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, error) {
+	if loopsOnly && b.allCardsAreRoots {
+		return []map[string]any{}, false, nil
+	}
 	limit := BriefSectionLimit + 1
-	promised, err := b.queryInitiatives(`bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at LIMIT ?`, limit)
+	promised, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at LIMIT ?`, limit)
 	if err != nil {
 		return nil, false, err
 	}
 	rows := promised
 	if len(rows) < limit {
-		none, err := b.queryInitiatives(`bi.open=1 AND bi.promise_at IS NULL ORDER BY bi.last_evidence_at LIMIT ?`, limit-len(rows))
+		none, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NULL ORDER BY bi.last_evidence_at LIMIT ?`, limit-len(rows))
 		if err != nil {
 			return nil, false, err
 		}
 		rows = append(rows, none...)
 	}
 	if len(rows) < limit {
-		done, err := b.queryInitiatives(`bi.open=0 ORDER BY bi.last_evidence_at DESC LIMIT ?`, min(briefDoneLimit, limit-len(rows)))
+		done, err := b.queryInitiatives(loopsOnly, `bi.open=0 ORDER BY bi.last_evidence_at DESC LIMIT ?`, min(briefDoneLimit, limit-len(rows)))
 		if err != nil {
 			return nil, false, err
 		}
@@ -856,9 +934,24 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	agentCards, err := b.agentInitiativeCards(ids)
+	participantIDs := ids
+	assigned := map[string]bool{}
+	if !b.reader.human() && stripActor(b.reader.ActorID) != "" {
+		participantIDs = []string{}
+		for _, r := range rows {
+			if stripActor(r.assignee) == stripActor(b.reader.ActorID) {
+				assigned[r.cardID] = true
+			} else {
+				participantIDs = append(participantIDs, r.cardID)
+			}
+		}
+	}
+	agentCards, err := b.participatingInitiativeCards(participantIDs)
 	if err != nil {
 		return nil, false, err
+	}
+	for id := range assigned {
+		agentCards[id] = true
 	}
 	readerID, _ := b.readerIDs()
 	out := make([]map[string]any, 0, len(rows))
@@ -866,7 +959,7 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 		ref := "card:" + firstNonEmptyString(r.handle, r.cardID)
 		state := r.fold().At(b.now)
 		item := map[string]any{
-			"ref": ref, "title": r.title, "owner": nil, "state": state.State, "placement": briefPlacement(r.phase),
+			"id": r.cardID, "ref": ref, "title": r.title, "owner": nil, "state": state.State, "placement": briefPlacement(r.phase),
 			"promise": nil, "past_promise_for_seconds": nil, "promise_moves": state.Moves, "last_evidence_at": nil,
 			"progress": briefProgress(r.progressDone, r.progressTotal), "blocked_count": counts[r.cardID].blocked, "waiting_on_you_count": counts[r.cardID].waiting,
 			"note": nil, "possibly_moot": possiblyMootJSON(moot[r.cardID]),
@@ -919,12 +1012,35 @@ func (b *briefBuild) initiatives() ([]map[string]any, bool, error) {
 	if err := b.initiativeSeries(ids, out); err != nil {
 		return nil, false, err
 	}
+	hierarchy := []map[string]any{}
+	for i, r := range rows {
+		out[i]["parent_ref"] = nil
+		out[i]["rollup"] = emptyWorkRollup()
+		var p plans.Plan
+		_ = json.Unmarshal([]byte(r.plan), &p)
+		linked := false
+		for _, step := range p.Steps {
+			if strings.HasPrefix(step.Ref, "card:") {
+				linked = true
+				break
+			}
+		}
+		if loopsOnly || linked {
+			hierarchy = append(hierarchy, out[i])
+		}
+	}
+	if err = b.s.EnrichWorkHierarchy(b.groupingContext(), hierarchy, b.reader.ActorID, b.reader.human(), b.now); err != nil {
+		return nil, false, err
+	}
+	for _, item := range out {
+		delete(item, "id")
+	}
 	return out, truncated, nil
 }
 
-// agentInitiativeCards returns the subset of admitted card IDs that an agent
-// reader is assigned to or actively/idly participates in.
-func (b *briefBuild) agentInitiativeCards(ids []string) (map[string]bool, error) {
+// Assignment was already read with the admitted cards. The remaining IDs need
+// only the indexed participant/session probe, never a second card hydration.
+func (b *briefBuild) participatingInitiativeCards(ids []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if b.reader.human() || strings.TrimSpace(b.reader.ActorID) == "" || len(ids) == 0 {
 		return out, nil
@@ -948,12 +1064,9 @@ func (b *briefBuild) agentInitiativeCards(ids []string) (map[string]bool, error)
 	id, prefixed := b.readerIDs()
 	encoded, _ := json.Marshal(candidates)
 	rows, err := b.s.db.QueryContext(b.ctx, `SELECT j.value FROM json_each(?) j
-		CROSS JOIN cards c ON c.id=j.value WHERE c.assignee IN (?,?)
-		UNION
-		SELECT j.value FROM json_each(?) j
 		WHERE EXISTS(SELECT 1 FROM work_participants p WHERE p.actor_id=? AND p.actor_id<>'' AND p.card_id=j.value AND p.activity<>'left' AND p.session_active=1
 			AND EXISTS(SELECT 1 FROM agent_sessions s WHERE s.id=p.session_id AND s.activity<>'closed' AND +s.actor_id IN (?,?)))`,
-		string(encoded), id, prefixed, string(encoded), id, id, prefixed)
+		string(encoded), id, id, prefixed)
 	if err != nil {
 		return nil, err
 	}

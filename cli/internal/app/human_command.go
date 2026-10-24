@@ -264,6 +264,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		loopWarnings = append(loopWarnings, askWarning("ask_no_deadline", "no --by or --blocks; this sorts below every decision with a deadline or blocked work", nil))
 	}
 	autoSubject := false
+	var autoHomes any
+	var autoGroupingActions []output.NextAction
 	if subjectRef == "" {
 		var err error
 		subjectRef, err = a.currentCardRef(ctx, cfg)
@@ -275,7 +277,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			if dryRunFlag.value {
 				return &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body}, Warnings: askAuthoringWarnings(warnings)}, nil
 			}
-			input := map[string]any{"title": title, "summary": body, "phase": "ready", "owner": requesterActorID}
+			input := map[string]any{"create_surface": "ask.auto_create", "title": title, "summary": body, "phase": "ready", "owner": requesterActorID}
 			if board := strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")); board != "" {
 				input["board_ref"] = board
 			}
@@ -283,7 +285,14 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			if e != nil {
 				return nil, e
 			}
-			work := asMap(commandResultBody(created)["work"])
+			autoBody := commandResultBody(created)
+			autoHomes = autoBody["likely_home"]
+			for _, raw := range asSlice(autoBody["next_actions"]) {
+				if argv := stringList(asMap(raw)["argv"]); len(argv) > 0 {
+					autoGroupingActions = append(autoGroupingActions, action("Group the new subject", argv...))
+				}
+			}
+			work := asMap(autoBody["work"])
 			subjectRef = firstNonEmpty(anyString(work["ref"]), anyString(work["card_ref"]))
 			if subjectRef == "" {
 				return nil, errnorm.Local("invalid_response", "created subject has no card ref")
@@ -510,6 +519,12 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 	result.Warnings = append(result.Warnings, loopWarnings...)
 	result.Warnings = append(result.Warnings, askDeliveryWarnings(delivery)...)
+	if autoSubject {
+		if body := commandResultBody(result); body != nil {
+			body["likely_home"] = autoHomes
+		}
+		result.NextActions = append(result.NextActions, autoGroupingActions...)
+	}
 	return result, nil
 }
 

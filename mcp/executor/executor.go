@@ -122,6 +122,13 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 		return protocol.ToolCallResult{}, toolError("invalid_arguments", err.Error(), protocol.ErrInvalidParams)
 	}
 	body := arguments.Body
+	if req.Tool.Metadata.CommandID == "work.create" || req.Tool.Metadata.CommandID == "cards.create" {
+		if object, ok := body.(map[string]any); ok {
+			object = copyMap(object)
+			object["create_surface"] = "mcp"
+			body = object
+		}
+	}
 	headers := e.requestHeaders(arguments.IdempotencyKey)
 	if isUnifiedCommand(req.Tool.Metadata.CommandID) {
 		body, err = withUnifiedIdempotencyKey(req.Tool.Metadata.CommandID, body, arguments.IdempotencyKey)

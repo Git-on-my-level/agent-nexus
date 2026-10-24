@@ -2441,7 +2441,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: work.create
       x-anx-cli-path: work create
-      x-anx-why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
+      x-anx-why: Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.
       x-anx-input-mode: json-body
       x-anx-streaming:
         mode: none
@@ -2457,7 +2457,7 @@ paths:
       - evidence
       x-anx-stability: beta
       x-anx-agent-notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's
-        oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside
+        oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside
         attributed observations; refresh acceptance is not a successful read.
       requestBody:
         required: true
@@ -2474,6 +2474,123 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkResponse'
+  /work/{card_ref}/group:
+    post:
+      operationId: workGroup
+      summary: Add an existing card to a parent plan
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Workspace authenticated; ordinary plan links; no automatic choice.
+      x-anx-command-id: work.group
+      x-anx-cli-path: work group
+      x-anx-why: Add an existing card to a parent plan. Retain request_key and the original body until confirmed.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WorkGroupRequest'}
+      responses:
+        '200':
+          description: Add an existing card to a parent plan
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkResponse'}
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/{card_ref}/fold:
+    post:
+      operationId: workFold
+      summary: Fold a card into a parent, retaining evidence and asks
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Workspace authenticated; reader-scoped deterministic grouping.
+      x-anx-command-id: work.fold
+      x-anx-cli-path: work fold
+      x-anx-why: Fold a card into a parent, retaining evidence and asks. Retain request_key and the original body until confirmed.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WorkFoldRequest'}
+      responses:
+        '200':
+          description: Fold a card into a parent, retaining evidence and asks
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkResponse'}
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/{card_ref}/unfold:
+    post:
+      operationId: workUnfold
+      summary: Reverse a fold without overwriting later edits
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Workspace authenticated; reader-scoped deterministic grouping.
+      x-anx-command-id: work.unfold
+      x-anx-cli-path: work unfold
+      x-anx-why: Reverse a fold without overwriting later edits. Retain request_key and the original body until confirmed.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WorkUnfoldRequest'}
+      responses:
+        '200':
+          description: Reverse a fold without overwriting later edits
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkResponse'}
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/ungrouped:
+    get:
+      operationId: workUngrouped
+      summary: Recent top-level non-loop cards and deterministic likely homes
+      tags: [work]
+      x-anx-surface: projection
+      x-anx-agent-notes: Workspace authenticated; reader-scoped deterministic grouping.
+      x-anx-command-id: work.ungrouped
+      x-anx-cli-path: work ungrouped
+      x-anx-why: Discover recent ungrouped cards and choose a home; suggestions never prevent creation.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `WorkUngroupedResponse`.
+      x-anx-error-codes: [invalid_request, work_unavailable]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      parameters:
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+      responses:
+        '200':
+          description: Visible recent candidates; has_more reflects visible candidates only.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkUngroupedResponse'}
   /work/capabilities:
     get:
       operationId: workCapabilities
@@ -11734,6 +11851,9 @@ components:
       type: object
       additionalProperties: true
       properties:
+        parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
+        rollup: {$ref: '#/components/schemas/WorkRollup'}
+        likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
@@ -11780,6 +11900,7 @@ components:
                 - depends_on
                 - related
                 - artifact
+                - merged_into
               ref:
                 type: string
             required:
@@ -11906,10 +12027,78 @@ components:
       - version
       - freshness
       - refresh
+    LikelyHome:
+      type: object
+      required: [ref, title, reasons]
+      properties:
+        ref: {type: string}
+        title: {type: string}
+        reasons: {type: array, items: {type: string, enum: [related_parent, shared_ref, same_repository, same_project, title_family, stale_top_level]}}
+    WorkRollup:
+      type: object
+      required: [total, by_state, past_promise, needing_viewer, workstreams, children, has_more]
+      properties:
+        total: {type: integer}
+        by_state: {type: object, additionalProperties: {type: integer}, description: Child work phases.}
+        past_promise: {type: integer}
+        needing_viewer: {type: integer}
+        workstreams: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/WorkChild'}}
+        children: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/WorkChild'}}
+        has_more: {type: boolean, description: False for valid plans, which admit at most 200 steps. Hidden children never affect this field.}
+    WorkChild:
+      type: object
+      required: [ref, title, step_id, state, past_promise, needs_viewer]
+      properties:
+        ref: {type: string}
+        title: {type: string}
+        step_id: {type: string}
+        state: {type: string}
+        past_promise: {type: boolean}
+        needs_viewer: {type: boolean}
+    WorkUngroupedResponse:
+      type: object
+      required: [work, has_more]
+      properties:
+        work: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/UngroupedCard'}}
+        has_more: {type: boolean}
+    UngroupedCard:
+      type: object
+      required: [ref, title, parent_ref, created_at, likely_home]
+      properties:
+        phase: {type: string}
+        ref: {type: string}
+        title: {type: string}
+        parent_ref: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
+        next_actions: {type: array, items: {type: object, additionalProperties: true}}
+    WorkGroupRequest:
+      type: object
+      properties:
+        actor_id: {type: string}
+        request_key: {type: string, maxLength: 256}
+        under: {type: string, description: Visible open parent card ref.}
+        after: {type: string, description: Optional preceding plan step id.}
+      required: [under]
+    WorkFoldRequest:
+      type: object
+      properties:
+        actor_id: {type: string}
+        request_key: {type: string, maxLength: 256}
+        into: {type: string, description: Visible open parent card ref.}
+        after: {type: string, description: Optional preceding plan step id.}
+      required: [into]
+    WorkUnfoldRequest:
+      type: object
+      properties:
+        actor_id: {type: string}
+        request_key: {type: string, maxLength: 256}
     WorkResponse:
       type: object
       additionalProperties: true
       properties:
+        likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
+        next_actions: {type: array, items: {type: object, additionalProperties: true}}
         work:
           $ref: '#/components/schemas/Work'
       required:
@@ -11934,6 +12123,9 @@ components:
       type: object
       additionalProperties: true
       properties:
+        under: {type: string, description: Optional visible open parent card. Creates and adds a plan step in one transaction.}
+        after: {type: string, description: Preceding plan step id; requires under.}
+        create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle: {$ref: '#/components/schemas/CardHandle'}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
@@ -11950,7 +12142,7 @@ components:
         board_ref:
           type: string
           description: Optional board to place the card on (`board:<handle-or-id>`). When omitted, the server uses the
-            workspace's oldest active board, creating a default Tasks board if none exists.
+            workspace's oldest active board, creating a default Tasks board if none exists. With under it inherits that parent's board.
         labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
         roles: {type: array, maxItems: 16, nullable: true, items: {type: string, maxLength: 128}}
         title:
@@ -12654,6 +12846,9 @@ components:
     Card:
       type: object
       properties:
+        parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
+        rollup: {$ref: '#/components/schemas/WorkRollup'}
+        likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
         ref: { $ref: '#/components/schemas/ResourceRef' }
         handle: { $ref: '#/components/schemas/ResourceHandle' }
@@ -13017,6 +13212,9 @@ components:
     CardCreateInput:
       type: object
       properties:
+        under: {type: string, description: Optional visible open parent card. Creates and adds a plan step in one transaction.}
+        after: {type: string, description: Preceding plan step id; requires under.}
+        create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle:
           $ref: '#/components/schemas/CardHandle'
         id:
@@ -13326,6 +13524,9 @@ components:
     CreateCardRequest:
       type: object
       properties:
+        under: {type: string, description: Optional visible open parent card. Creates and adds a plan step in one transaction.}
+        after: {type: string, description: Preceding plan step id; requires under.}
+        create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         actor_id: { type: string }
         request_key:
           type: string
@@ -14336,6 +14537,8 @@ components:
     CardResponse:
       type: object
       properties:
+        likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
+        next_actions: {type: array, items: {type: object, additionalProperties: true}}
         card: { $ref: '#/components/schemas/Card' }
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card]
@@ -14506,6 +14709,15 @@ components:
       required: [schema, generated_at, principal, decisions, initiatives, your_asks, answered_for_you, truncated]
       description: brief.v1. See anx-schema.yaml `brief` and `promises` for ordering and derivation rules.
       properties:
+        loops: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/BriefInitiative'}}
+        initiative_budget:
+          type: object
+          required: [count, target, truncated]
+          properties:
+            count: {type: integer, description: Visible top-level non-loop cards in a bounded routing cohort or the displayed live brief section. A lower bound if truncated.}
+            target: {type: integer, enum: [15]}
+            truncated: {type: boolean, description: Always true for principal-scoped counts so hidden candidate-window occupancy cannot be disclosed.}
+        next_actions: {type: array, maxItems: 10, items: {type: object, additionalProperties: true}}
         schema: { type: string, enum: [brief.v1] }
         generated_at: { type: string, format: date-time }
         principal: { $ref: '#/components/schemas/BriefPrincipal' }
@@ -14615,6 +14827,9 @@ components:
       type: object
       required: [ref, title, owner, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot, loop]
       properties:
+        parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
+        rollup: {$ref: '#/components/schemas/WorkRollup'}
+        likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         ref: { type: string, description: "card:<handle-or-id>" }
         title: { type: string }
         owner: { type: string, nullable: true, description: First canonical assignee ref, as in work list; null when unassigned. }
@@ -15250,6 +15465,7 @@ components:
     ArchiveCardRequest:
       type: object
       properties:
+        reason: {type: string, description: Short operator-visible reason recorded on the archive event.}
         if_lifecycle:
           type: object
           required: [archived_at, trashed_at]

@@ -231,7 +231,17 @@
         "effects_7d": 1,
         "goal": null
       },
-      "owner": null
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
     },
     {
       "ref": "card:fleet-onboarding",
@@ -259,7 +269,17 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
     },
     {
       "ref": "card:observability",
@@ -287,7 +307,17 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
     },
     {
       "ref": "card:labels",
@@ -309,7 +339,17 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
     },
     {
       "ref": "card:ble-reliability",
@@ -333,7 +373,17 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
     },
     {
       "ref": "card:docs-refresh",
@@ -357,7 +407,17 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null
+      "owner": null,
+      "parent_ref": null,
+      "rollup": {
+        "total": 0,
+        "by_state": {},
+        "past_promise": 0,
+        "needing_viewer": 0,
+        "workstreams": [],
+        "children": [],
+        "has_more": false
+      }
     }
   ],
   "your_asks": [],
@@ -380,6 +440,14 @@
     "decisions": false,
     "initiatives": false,
     "your_asks": false,
-    "answered_for_you": false
-  }
+    "answered_for_you": false,
+    "loops": false
+  },
+  "loops": [],
+  "initiative_budget": {
+    "count": 6,
+    "target": 15,
+    "truncated": false
+  },
+  "next_actions": []
 }

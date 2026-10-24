@@ -166,7 +166,6 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 		}
 	}
 	messages := map[string]string{
-		"note_clears_promise":         "this note clears your promise",
 		"note_promise_unowned":        "promise set on an unowned card",
 		"note_no_next":                "no --next; a card renews by noting its next promise",
 		"note_beyond_horizon":         "--next 5d is beyond the 2-day horizon; promise a nearer checkpoint",

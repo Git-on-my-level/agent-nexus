@@ -16,7 +16,6 @@ machine-readable source for that check.
 | ask_auto_created_card       | ask         | `No --subject-ref`               | Pass `--subject-ref card:<slug>` so the ask stays on an initiative. The warning lists up to three open initiatives when a cheap work-list page is available. |
 | work_near_duplicate         | work create | `matches an open initiative`     | Add a step to the matching initiative: `anx plan step add <card> --title <title> --ref <url>`.                                                               |
 | work_over_target            | work create | `open initiatives (target 15)`   | Prefer a plan step on an existing initiative over a new one.                                                                                                 |
-| note_clears_promise         | note        | `clears your promise`            | Carry the named promise forward with the supplied `anx note <card> --next <at> "<what>"` command.                                                            |
 | note_promise_unowned        | note        | `promise set on an unowned card` | Claim it with `anx work start <card>` so an assignee is prompted to renew it.                                                                                |
 | note_no_next                | note        | `no --next`                      | Renew the card's promise: `anx note <card> --next <when> "<what>"`.                                                                                          |
 | note_moved_without_evidence | note        | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`.                                                       |
@@ -46,11 +45,6 @@ How each warning is computed, and what it costs:
 - `work_near_duplicate`, `work_over_target`: one `GET /work?limit=200` before
   the write; token Jaccard or normalized Levenshtein >= 0.8 against open
   initiative titles; more than 15 open initiatives.
-- `note_clears_promise`: without `--next`, one best-effort `GET /events`
-  admitting the newest 50 card-thread notes checks the caller's latest note
-  within the same candidate window core folds. Author filtering is local, after
-  the indexed thread/time page, so an inactive author cannot cause a history scan.
-  A newer note without `next` prevents reviving an older promise.
 - `note_promise_unowned`: reuses the card read and checks assignees/owner. No extra request.
 - `note_no_next`: `anx note` without `--next`. No request.
 - `note_moved_without_evidence`: `--next` without `--evidence`, and the

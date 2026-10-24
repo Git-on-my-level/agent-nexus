@@ -53,9 +53,12 @@ type HealthInput struct {
 	CardDue string
 	// Wake is the raw wake_condition annotation; its first date is a promise.
 	Wake string
-	// PlanEditedAt is the last plan-document write. It meets milestone
-	// promises inside the horizon. It does not meet a note promise.
+	// PlanEditedAt is authored activity, not evidence that meets a promise.
 	PlanEditedAt time.Time
+	// StepChanges overrides inferred ref movement when non-nil. Store reads
+	// use the retained status-change clock, so a newly linked ref cannot
+	// manufacture progress from its creation or metadata timestamp.
+	StepChanges []time.Time
 	// Observations are changed source observation times.
 	Observations []time.Time
 	// Notes are the card's message_posted facts; nil when unavailable.
@@ -96,13 +99,13 @@ func PromiseInputFor(in HealthInput) PromiseInput {
 	if in.Phase == "" && in.Plan != nil && len(in.Plan.Steps) > 0 && in.State.Progress.Total > 0 && in.State.Progress.Done == in.State.Progress.Total {
 		done = true
 	}
-	out := PromiseInput{Ref: in.Ref, Done: done, Notes: in.Notes, CardDue: ParseDue(in.CardDue), Wake: WakeTime(in.Wake), Observations: in.Observations}
+	out := PromiseInput{Ref: in.Ref, Done: done, Notes: in.Notes, CardDue: ParseDue(in.CardDue), Wake: WakeTime(in.Wake), Observations: in.Observations, StepChanges: in.StepChanges}
 	if !in.PlanEditedAt.IsZero() {
 		out.PlanEdits = []time.Time{in.PlanEditedAt}
 	}
 	if in.Plan != nil {
 		for i, step := range in.Plan.Steps {
-			if fact, ok := in.Facts[step.Ref]; step.Ref != "" && ok && fact.Known && !fact.MovementAt.IsZero() {
+			if fact, ok := in.Facts[step.Ref]; in.StepChanges == nil && step.Ref != "" && ok && fact.Known && !fact.MovementAt.IsZero() {
 				out.StepChanges = append(out.StepChanges, fact.MovementAt)
 			}
 			status := step.Status
