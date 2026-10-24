@@ -35,6 +35,11 @@ func candidateVisibleSQL(scope AccessScope, kind, id string, proofs ...*denialSn
 		return canonical
 	}
 	proof := proofs[0]
+	if proof.candidateAllPublic {
+		// The epoch/connection guard covers this proof for every identity. Avoid
+		// constructing per-row identity arguments for that same empty-root fact.
+		return `COALESCE((SELECT valid FROM _anx_candidate_public_guard),` + canonical + `)`
+	}
 	key := fmt.Sprint(proof.pointToken) + `,CAST(` + kind + ` AS BLOB),CAST(` + id + ` AS BLOB)`
 	return `CASE WHEN ` + candidateProofGuardSQL(proof) + ` THEN COALESCE(anx_candidate_lookup(` + key + `),anx_candidate_remember(` + key + `,` + canonical + `,CAST('[]' AS BLOB))) ELSE ` + canonical + ` END`
 }
@@ -61,6 +66,21 @@ func candidateRootConstraintSQL(scope AccessScope, alias string) string {
 }
 
 func init() {
+	sqlite.MustRegisterScalarFunction("anx_candidate_lookup_public", 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		token, ok := args[0].(int64)
+		if !ok {
+			return nil, nil
+		}
+		value, found := pointSnapshots.Load(token)
+		if !found {
+			return nil, nil
+		}
+		snapshot := value.(*denialSnapshot)
+		if !snapshot.candidates || !snapshot.candidateAllPublic {
+			return nil, nil
+		}
+		return int64(1), nil
+	})
 	sqlite.MustRegisterScalarFunction("anx_candidate_lookup", 3, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
 		snapshot, target, ok := candidateProofTarget(args)
 		if !ok {

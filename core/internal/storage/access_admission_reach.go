@@ -32,6 +32,8 @@ func installAccessAdmissionReach(ctx context.Context, tx *sql.Tx) error {
 	walk := func(seeds string) string {
 		return `WITH RECURSIVE reach(ledger,kind,id,root_kind,root_id) AS (` + seeds + `
  UNION SELECT r.ledger,e.child_kind,e.child_id,r.root_kind,r.root_id FROM reach r JOIN resource_access_admission_graph e ON e.parent_kind=r.kind AND e.parent_id=r.id AND e.ledger IN (0,r.ledger)
+ UNION SELECT r.ledger,'wakeup',w.wakeup_id,r.root_kind,r.root_id FROM reach r JOIN agent_wakeups w INDEXED BY idx_agent_wakeups_thread_trigger_created ON r.kind='thread' AND w.thread_id=r.id AND COALESCE(w.wakeup_id,'')<>''
+ UNION SELECT r.ledger,'wakeup',w.wakeup_id,r.root_kind,r.root_id FROM reach r JOIN agent_wakeups w INDEXED BY idx_wakeups_access_trigger_event ON r.kind='event' AND w.trigger_event_id=r.id AND COALESCE(w.wakeup_id,'')<>''
  UNION SELECT ledger,'document',id,root_kind,root_id FROM reach WHERE kind='document_history') `
 	}
 	initial := `SELECT l.value,r.kind,r.id,r.kind,r.id FROM resource_access_admission_roots r CROSS JOIN json_each('[-1,1,2]') l`

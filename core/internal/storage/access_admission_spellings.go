@@ -96,9 +96,12 @@ func installAccessAdmissionSpellings(ctx context.Context, tx *sql.Tx) error {
 	} {
 		expr := func(s, p string) string { return strings.ReplaceAll(s, "@", p) }
 		add := func(p, from string) string {
+			if source.table == "resource_access_identities" && p == "r." {
+				from = `(` + admissionNonWakeupIdentities + `) r`
+			}
 			return insert(source.table, p+source.columnID, expr(source.kind, p), expr(source.id, p), expr(source.ref, p), from+` WHERE `+expr(source.condition, p), false)
 		}
-		clear := `DELETE FROM resource_access_admission_spellings WHERE origin='` + source.table + `' AND origin_id=OLD.` + source.columnID + `;`
+		clear := `DELETE FROM resource_access_admission_spellings WHERE origin='` + source.table + `' AND origin_id=CAST(OLD.` + source.columnID + ` AS TEXT);`
 		for _, q := range []string{
 			`CREATE TRIGGER admission_spelling_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + add("NEW.", "(SELECT 1)") + ` END`,
 			`CREATE TRIGGER admission_spelling_` + source.table + `_update AFTER UPDATE ON ` + source.table + ` BEGIN ` + clear + add("NEW.", "(SELECT 1)") + ` END`,

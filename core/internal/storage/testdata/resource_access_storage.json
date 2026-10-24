@@ -3164,13 +3164,7 @@
     "../server/escalation_wake.go:NewEscalationPMWaker": "13596f0182b3752fce0cbf6775573c51df4d2365e47fb370a5bd33b5fca98c40",
     "../server/escalation_wake.go:NewEscalationReadCheck": "f7fc88d6cd5248e5e6905c3798036c8d6de76c2cd82a5cb956b2d73c40de6053",
     "../server/event_append_errors.go:writeEventAppendContentionError": "637c6823c8f5de7dd46b998c2bf815b40bf8c99b6fc6f4287cda69d747c68bd4",
-<<<<<<< ours
-    "../server/handler.go:NewHandler": "90967928e789d2664a4b22193464fc2632081b8184bd294c27eb143cb868e959",
-||||||| base
-    "../server/handler.go:NewHandler": "9e5ce03a7c8ed56588719b180345f2225b93158500fb69e557e525c829a3ee7b",
-=======
-    "../server/handler.go:NewHandler": "41b7e69b99aa9f0f4cca9260861636c8ed9c52046f6ce328f594fad20596f32e",
->>>>>>> theirs
+    "../server/handler.go:NewHandler": "db188e0e4c230c11d84e85569d3b9a26e20c6faf1e9a1d7b6a2de40e02227500",
     "../server/handler.go:WithWorkspaceGrantRateLimits": "0fc9f889b85869a0d1980f819c794b38ad561572e30405a495e973d03d3fe0f5",
     "../server/handler.go:WithWorkspaceGrantSubjectRateLimits": "cb02407bb79cfba3440f03bb40932baf3f340677f8ccc765ef4b72fe6c5992d5",
     "../server/handler.go:checkReadiness": "0c420a49c4b001573e6b17620e125f010a378f5c21f7ec75f8479cbe07a2eae8",
@@ -3477,14 +3471,8 @@
     "../server/webauthn_config.go:requestOrigin": "689b233e8929b3e34949065c2c87c7ed92384f3c4195526bbb2990809a4098c2",
     "../server/work_grouping.go:groupingWorkResponse": "55c1dc229797fe9ac74f7c5774d98ebdd0ea166ee33d4dd4b700232f22369efe",
     "../server/work_grouping.go:handleWorkGrouping": "670734bc27f9f5ee43e720c276482ca9bcc9b477fcfd0cac8acaa819edbc942f",
-<<<<<<< ours
-    "../server/work_handlers.go:handleWork": "51983a2e215081bf6bcdde7a7a6de0813a615db4e75079829d1d128f376bf5a4",
-    "../server/work_handlers.go:logUnmappedWorkError": "ea39d38fae4ab1e6db05a64df898b9365f8130607f2501c8440a5ab8e6b9f053",
-||||||| base
-    "../server/work_handlers.go:handleWork": "51983a2e215081bf6bcdde7a7a6de0813a615db4e75079829d1d128f376bf5a4",
-=======
     "../server/work_handlers.go:handleWork": "3da467f733e5368a7910a5d8f40ac2f4beceab43ee829477532a9ac49f4c1ad6",
->>>>>>> theirs
+    "../server/work_handlers.go:logUnmappedWorkError": "ea39d38fae4ab1e6db05a64df898b9365f8130607f2501c8440a5ab8e6b9f053",
     "../server/work_handlers.go:publicWork": "7332551be9c16e220a019a8e66269a1b8777d52f28c5fb5871f6b55aa290d0a2",
     "../server/work_handlers.go:workLimit": "d9fd733a0ae71651e1d66b18750b88fe693d03c3399e9a93259a2ab5482cd899",
     "../server/work_handlers.go:workStoreError": "ce75a37a51855e3804bdaafd1156fc3bd370a0432b1a3a1a4b43822717929b3c",
@@ -3493,18 +3481,19 @@
     "../sidecar/host.go:*Host:Snapshot": "608c2d62a7e43ac5ac617777db0e0d0e2fccf8a01dc703fbc0dc8fb5eb2489d6",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunk": "872d19731c5f191a06d3ccbdbac15da88b81771371b2a974395cd133b4c2162a",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunkWithBusyWait": "91c83638acb8f7c09020805b52f3a5a9594037f9a2c9b1eb820e8ff9ba87abea",
-    "../storage/access_admission.go:installAccessAdmission": "c9bd9ba01cc991ad60b1d112746b0aa63b24310ada38175627c82d229c027b5b",
+    "../storage/access_admission.go:installAccessAdmission": "d856807ceb97bc3ba135755e87f7644e11f5c0a22df442dc6b518789bcd90ff5",
     "../storage/access_admission.go:installAdmissionCompactSync": "cf8503ef65d42311a21830c9382241ee2dff5e6852f0c1246f34f33b3a1bdf01",
     "../storage/access_admission_graph.go:installAccessAdmissionGraph": "2e5815f19c5e3c18dab3ccb80392e07126f9d8753f5625dd962f5fc01484fb85",
     "../storage/access_admission_owners.go:installAccessAdmissionOwners": "3ed85bda123d478d2e8515e9f6891e3593b5cb63565d69533d37351b746fade0",
-    "../storage/access_admission_reach.go:installAccessAdmissionReach": "b3fd25f6d8196ea4b7a5fea6c84e8458fac7abd714fb4aada53139352373994c",
+    "../storage/access_admission_reach.go:installAccessAdmissionReach": "1d6e7ee6d4cc34d33c430335f95412c0521a13bcdc1c99704da30ab9260b766a",
     "../storage/access_admission_roots.go:installAccessAdmissionRootCounts": "ccbb8a6b4a9cde53ac10b77a24ee80c35a61a470bb1cc974f223817ccd2e39df",
     "../storage/access_admission_roots_index.go:installAccessAdmissionRoots": "76fa4df0ddd538cb85cb352e04d1560f7785ba83f29ced7461aad11f524babd3",
-    "../storage/access_admission_spellings.go:installAccessAdmissionSpellings": "73671392e9817d544461d0ddf88dc56557d774f9723899d0d3110f3f22fc8dfb",
+    "../storage/access_admission_spellings.go:installAccessAdmissionSpellings": "dc4174824d134417e190b0d954bdf3f6bf8bf8113ed23be4cb8b51a83ad160e6",
     "../storage/access_admission_updates.go:admissionSourceReplacement": "6de14b22d48f5a7c115930535ac24c742ff1cacf375c8b79164e3b647b18107e",
     "../storage/access_admission_updates.go:admissionUpdateOf": "a88d127b4a626daa27afb9129444584c332bc7cfcda2e394c6a940a6b9c6c300",
     "../storage/access_admission_updates.go:restrictAdmissionEvidenceWrites": "ab12fb83fdca0b9f20f72b01ab2e1c052b9afc5815dcbc73f6b01be935d3d939",
     "../storage/access_admission_updates.go:restrictAdmissionUpdates": "80f4ada0c6290ed024e62721a396f36f68ccc6e19ada983b3db319981e3cb6c7",
+    "../storage/access_admission_wakeups.go:installHistoricalWakeupAdmission": "0a8a2a88ae6e21fc918321968d5d8d283f48ad4b90dcdedcb460c78e8672f062",
     "../storage/access_mentions.go:installResourceAccessEpochTriggers": "53b0d7bb0a166d97a798350b8ba03aefc195661b13da7d35ba216b5305cee768",
     "../storage/access_mentions.go:installResourceAccessMentions": "e47ef6daf4c71afba8045a4ddbb6a5f47bc0304de1ca010fd556cda77d1c8650",
     "../storage/access_mentions.go:installResourceAccessRevisionHandles": "27726e0607b67094a2951130e0294cde68339533fd4baa9cb1b8e300c4b5f4d7",

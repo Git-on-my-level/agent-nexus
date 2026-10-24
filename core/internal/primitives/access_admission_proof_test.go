@@ -103,4 +103,62 @@ func TestCandidateProofMalformedAndExpiredCacheFallsBack(t *testing.T) {
 			t.Fatalf("expired cache=%v err=%v", got, err)
 		}
 	}
+	public := &denialSnapshot{candidates: true, candidateAllPublic: true}
+	token := pointSnapshotSequence.Add(1)
+	pointSnapshots.Store(token, public)
+	var allowed sql.NullInt64
+	if err := ws.DB().QueryRow(`SELECT anx_candidate_lookup_public(?)`, token).Scan(&allowed); err != nil || !allowed.Valid || allowed.Int64 != 1 {
+		t.Fatalf("public proof=%v err=%v", allowed, err)
+	}
+	pointSnapshots.Delete(token)
+	if err := ws.DB().QueryRow(`SELECT anx_candidate_lookup_public(?)`, token).Scan(&allowed); err != nil || allowed.Valid {
+		t.Fatalf("expired public proof=%v err=%v", allowed, err)
+	}
+}
+
+func TestCandidatePublicProofSeesUnversionedRevocation(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	card, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Public proof control"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.db.WriteTransaction(ctx, func(write context.Context, tx *accessTx) error {
+		pin, finish, err := s.BeginResourceRead(WithRequestAccessScope(write, AccessScope{ActorID: "reader"}))
+		if err != nil {
+			return err
+		}
+		defer finish()
+		proof := pin.Value(pinnedDenialKey{}).(pinnedDenial).snapshot
+		if !proof.candidateAllPublic {
+			t.Fatal("control did not use the empty-root proof")
+		}
+		read := func(want int) {
+			t.Helper()
+			var count int
+			if err := s.db.QueryRowContext(pin, `SELECT count(*) FROM cards WHERE id=?`, card["id"]).Scan(&count); err != nil || count != want {
+				t.Fatalf("visible=%d want=%d err=%v", count, want, err)
+			}
+		}
+		read(1)
+		maintenance := CanonicalMaintenanceContext(write)
+		if _, err := tx.ExecContext(maintenance, `UPDATE threads SET body_json='{"pm_actor_id":"owner"}' WHERE id=?`, card["thread_id"]); err != nil {
+			return err
+		}
+		// Simulate an unversioned access write. The connection-change guard must
+		// invalidate the public proof even though its epoch appears unchanged.
+		if _, err := tx.ExecContext(maintenance, `UPDATE resource_access_epoch SET version=? WHERE singleton=1`, proof.epoch); err != nil {
+			return err
+		}
+		read(0)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

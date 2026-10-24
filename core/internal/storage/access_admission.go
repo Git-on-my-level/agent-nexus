@@ -110,14 +110,19 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	// precisely the same SELECT. All helpers receive only schema-owned SQL.
 	install := func(name, table, id string, insert func(prefix, from string) string, clear string) error {
 		if clear == "" {
-			clear = `DELETE FROM resource_access_admission_links WHERE origin='` + name + `' AND origin_id=OLD.` + id + `;`
+			// Integer edge IDs must use the TEXT affinity of the stored origin
+			// key. Comparing the two columns directly scans the origin range.
+			clear = `DELETE FROM resource_access_admission_links WHERE origin='` + name + `' AND origin_id=CAST(OLD.` + id + ` AS TEXT);`
 		}
-		for _, q := range []string{
+		queries := []string{
 			`CREATE TRIGGER admission_` + name + `_insert AFTER INSERT ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`,
 			`CREATE TRIGGER admission_` + name + `_update AFTER UPDATE ON ` + table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
 			`CREATE TRIGGER admission_` + name + `_delete AFTER DELETE ON ` + table + ` BEGIN ` + clear + ` END`,
-			insert("r.", table+" r, "),
-		} {
+		}
+		if table != "agent_wakeups" {
+			queries = append(queries, insert("r.", table+" r, "))
+		}
+		for _, q := range queries {
 			if err := exec(q); err != nil {
 				return err
 			}
@@ -190,10 +195,13 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	}
 	// Live IDs, handles, historical aliases, virtual revision handles, tombstones.
 	identityKeys := func(p, f string) string {
+		if f != "" {
+			f = `(` + admissionNonWakeupIdentities + `) r, `
+		}
 		return keys + `SELECT 'identity',` + p + `identity_id,` + p + `kind,` + p + `resource_id,` + p + `ref,1,unhex(` + resourceaccess.AtomKeySQL(p+`kind||':'||`+p+`ref`) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + valid(p+"kind") + `; ` +
 			keys + `SELECT 'identity',` + p + `identity_id,` + p + `kind,` + p + `resource_id,'',0,unhex(` + resourceaccess.AtomKeySQL(p+`resource_id`) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + valid(p+"kind") + ` AND ` + p + `kind<>'plan' AND ` + p + `ref=` + p + `resource_id;` + virtualHistoryKeys("identity", p+"identity_id", p+"kind", p+"resource_id", f, p+"ref="+p+"resource_id")
 	}
-	if err := install("identity", "resource_access_identities", "identity_id", identityKeys, `DELETE FROM resource_access_admission_keys WHERE origin='identity' AND origin_id=OLD.identity_id;`); err != nil {
+	if err := install("identity", "resource_access_identities", "identity_id", identityKeys, `DELETE FROM resource_access_admission_keys WHERE origin='identity' AND origin_id=CAST(OLD.identity_id AS TEXT);`); err != nil {
 		return err
 	}
 	// Every graph vertex has raw/typed ID spellings even when it is synthetic
@@ -223,7 +231,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 		insert := func(p, f string) string {
 			return keys + `SELECT 'empty_` + kind + `',` + p + `id,'` + kind + `',` + p + `id,'',1,unhex(` + resourceaccess.AtomKeySQL(`'`+kind+`:'`) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + p + `handle='';`
 		}
-		if err := install("empty_"+kind, kind+"s", "id", insert, `DELETE FROM resource_access_admission_keys WHERE origin='empty_`+kind+`' AND origin_id=OLD.id;`); err != nil {
+		if err := install("empty_"+kind, kind+"s", "id", insert, `DELETE FROM resource_access_admission_keys WHERE origin='empty_`+kind+`' AND origin_id=CAST(OLD.id AS TEXT);`); err != nil {
 			return err
 		}
 	}
@@ -232,7 +240,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	mentionInsert := func(p, f string) string {
 		return links + `SELECT 'mention',` + p + `edge_id,` + p + `identity_id,i.kind,i.resource_id,` + p + `source_kind,` + p + `source_id,0 FROM ` + f + `resource_access_identities i WHERE i.identity_id=` + p + `identity_id;`
 	}
-	if err := install("mention", "resource_access_mentions", "edge_id", mentionInsert, `DELETE FROM resource_access_admission_links WHERE origin='mention' AND origin_id=OLD.edge_id AND via_id=OLD.identity_id;`); err != nil {
+	if err := install("mention", "resource_access_mentions", "edge_id", mentionInsert, `DELETE FROM resource_access_admission_links WHERE origin='mention' AND origin_id=CAST(OLD.edge_id AS TEXT) AND via_id=OLD.identity_id;`); err != nil {
 		return err
 	}
 	// Exact ledgers stay independently selectable. A cutover or force-legacy
@@ -263,9 +271,9 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	// Raw source moves need not update the independently imported compact key.
 	compactSource := links + `SELECT 'compact',NEW.rowid,k.key_id,k.kind,k.id,NEW.source_kind,NEW.source_id,2 FROM resource_access_admission_compact_atoms c JOIN resource_access_admission_keys k ON k.atom=c.target_key WHERE c.edge_id=NEW.rowid AND (k.published=0 OR NEW.source_kind NOT IN ` + publication + `);`
 	for _, q := range []string{
-		`CREATE TRIGGER admission_compact_source_insert AFTER INSERT ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=NEW.rowid; ` + compactSource + ` END`,
-		`CREATE TRIGGER admission_compact_source_update AFTER UPDATE OF rowid,source_kind,source_id ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=OLD.rowid; ` + compactSource + ` END`,
-		`CREATE TRIGGER admission_compact_source_delete AFTER DELETE ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=OLD.rowid; END`,
+		`CREATE TRIGGER admission_compact_source_insert AFTER INSERT ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=CAST(NEW.rowid AS TEXT); ` + compactSource + ` END`,
+		`CREATE TRIGGER admission_compact_source_update AFTER UPDATE OF rowid,source_kind,source_id ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=CAST(OLD.rowid AS TEXT); ` + compactSource + ` END`,
+		`CREATE TRIGGER admission_compact_source_delete AFTER DELETE ON resource_access_edges BEGIN DELETE FROM resource_access_admission_links WHERE origin='compact' AND origin_id=CAST(OLD.rowid AS TEXT); END`,
 	} {
 		if err := exec(q); err != nil {
 			return err
@@ -298,10 +306,10 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			value := resourceaccess.TrimSpaceSQL(p + "lookup_key")
 			return links + `SELECT 'evidence_key',` + p + `id,0,'card',` + p + `card_id,'external_key',` + value + `,0 FROM ` + f + `(SELECT 1) WHERE lower(` + resourceaccess.TrimSpaceSQL(`substr(`+p+`lookup_key,1,instr(`+p+`lookup_key,':')-1)`) + `) NOT IN ('card','doc','document','board','topic'); ` +
 				keys + `SELECT 'evidence_key',` + p + `id,'external_key',` + value + `,'',0,unhex(` + resourceaccess.AtomKeySQL(value) + `),1 FROM ` + f + `(SELECT 1) WHERE lower(` + resourceaccess.TrimSpaceSQL(`substr(`+p+`lookup_key,1,instr(`+p+`lookup_key,':')-1)`) + `) NOT IN ('card','doc','document','board','topic');`
-		}, `DELETE FROM resource_access_admission_links WHERE origin='evidence_key' AND origin_id=OLD.id; DELETE FROM resource_access_admission_keys WHERE origin='evidence_key' AND origin_id=OLD.id;`},
+		}, `DELETE FROM resource_access_admission_links WHERE origin='evidence_key' AND origin_id=CAST(OLD.id AS TEXT); DELETE FROM resource_access_admission_keys WHERE origin='evidence_key' AND origin_id=CAST(OLD.id AS TEXT);`},
 		{"source_url", "work_metadata", "card_id", func(p, f string) string {
 			return keys + `SELECT 'source_url',` + p + `card_id,'card',` + p + `card_id,'',0,unhex(` + resourceaccess.AtomKeySQL(`json_extract(`+p+`metadata_json,'$.source.url')`) + `),1 FROM ` + f + `(SELECT 1) WHERE ` + p + `authority<>'nexus';`
-		}, `DELETE FROM resource_access_admission_keys WHERE origin='source_url' AND origin_id=OLD.card_id;`},
+		}, `DELETE FROM resource_access_admission_keys WHERE origin='source_url' AND origin_id=CAST(OLD.card_id AS TEXT);`},
 		{"project", "work_metadata", "card_id", func(p, f string) string {
 			return links + `SELECT 'project',` + p + `card_id,k.key_id,k.kind,k.id,'card',` + p + `card_id,0 FROM ` + f + `resource_access_admission_keys k WHERE k.kind='topic' AND k.navigation=1 AND ` + resourceaccess.ReferenceSQL(`json_extract(`+p+`metadata_json,'$.project_ref')`) + `=('topic:'||k.ref) COLLATE NOCASE;`
 		}, ""},
@@ -329,7 +337,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
+	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installHistoricalWakeupAdmission, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
 		if err := install(ctx, tx); err != nil {
 			return err
 		}

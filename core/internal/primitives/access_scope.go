@@ -249,6 +249,12 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 		if graph == "" && !needsCanonical {
 			return ""
 		}
+		if snapshot.candidateAllPublic && !snapshot.inventory && snapshot.pointToken > 0 && snapshot.epoch >= 0 {
+			// One statement snapshot validates the empty-root proof for every
+			// admitted identity. Keep both guards, without repeating their work
+			// for each row in a hierarchy or summary join.
+			graph = ", _anx_candidate_public_guard(valid) AS MATERIALIZED (SELECT CASE WHEN " + candidateProofGuardSQL(snapshot) + " THEN anx_candidate_lookup_public(" + fmt.Sprint(snapshot.pointToken) + ") END)" + graph
+		}
 		if !needsCanonical {
 			return admissionLedgerCTE(scope) + graph
 		}

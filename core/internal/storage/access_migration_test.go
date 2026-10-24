@@ -97,6 +97,7 @@ func TestResourceAccessMigrationReconcilesPrivacy54(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	removeFutureAdmissionTriggers(t, ws.DB())
 	for _, statement := range []string{
 		`INSERT INTO resource_access_tombstones VALUES('card','retained-card','card:retained-card','owner')`,
 		`DROP TABLE access_requests`,
@@ -139,6 +140,7 @@ func TestResourceAccessMigrationReconcilesPrivacy55(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	removeFutureAdmissionTriggers(t, ws.DB())
 	// Recreate the earlier PR's already-applied migration 55. It has event and
 	// plan ownership edges, but no metadata edges or permanent wakeup index.
 	for _, statement := range []string{
@@ -193,6 +195,34 @@ func TestResourceAccessMigrationReconcilesPrivacy55(t *testing.T) {
 	}
 	if !s.CanAccessResource(scoped, "card", linked["id"].(string)) {
 		t.Fatal("metadata deletion left stale ownership")
+	}
+}
+
+// A released pre-116 schema cannot contain admission triggers that reference
+// indexes this fixture deliberately removes. Keep canonical legacy triggers;
+// migration 116 must recreate its own derived state after the legacy upgrade.
+func removeFutureAdmissionTriggers(t *testing.T, db *sql.DB) {
+	t.Helper()
+	rows, err := db.Query(`SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'admission_*'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+	for _, name := range names {
+		if _, err := db.Exec(`DROP TRIGGER "` + strings.ReplaceAll(name, `"`, `""`) + `"`); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
