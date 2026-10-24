@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,7 +12,14 @@ import (
 // Read failures may wrap canonical text, resource identities or driver values.
 // Log only diagnostic classes and numeric database codes, never Error() text.
 func writeReadInternalError(w http.ResponseWriter, r *http.Request, err error, publicMessage string) {
-	emitServerFault(w, r, http.StatusInternalServerError, readFaultDiagnostic(serverFaultClass(err)), publicMessage)
+	logErr := error(readFaultDiagnostic(serverFaultClass(err)))
+	if errors.Is(err, context.Canceled) {
+		// The diagnostic deliberately does not unwrap to the cause; hand the
+		// cancellation itself to the shared fault logger so a caller that gave
+		// up classifies as 499 instead of a 500. The cause is never logged.
+		logErr = err
+	}
+	emitServerFault(w, r, http.StatusInternalServerError, logErr, publicMessage)
 	writeJSON(w, http.StatusInternalServerError, map[string]any{
 		"error": errorPayload("internal_error", publicMessage),
 	})

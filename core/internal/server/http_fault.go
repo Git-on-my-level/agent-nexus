@@ -1,22 +1,30 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
 )
 
+// statusClientClosedRequest is nginx's conventional status for a caller that
+// disconnected before core finished; the response itself is never delivered.
+const statusClientClosedRequest = 499
+
 // faultResponseWriter keeps the request next to the response so a 5xx written
 // through writeError can be correlated without logging the URL, query, or body.
 type faultResponseWriter struct {
 	http.ResponseWriter
-	r      *http.Request
-	logged bool
+	r       *http.Request
+	started time.Time
+	logged  bool
 }
 
 func (w *faultResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
@@ -73,6 +81,10 @@ func emitServerFault(w http.ResponseWriter, r *http.Request, status int, err err
 			r = fault.r
 		}
 	}
+	if status >= 500 && requestCanceledByClient(r, err) {
+		emitClientCanceled(w, r, publicMessage)
+		return
+	}
 	requestID := serverFaultRequestID(w, r)
 	cause := "-"
 	if err != nil {
@@ -80,6 +92,30 @@ func emitServerFault(w http.ResponseWriter, r *http.Request, status int, err err
 	}
 	log.Printf("anx-core: server error status=%d method=%s route=%s request_id=%s actor_kind=%s message=%s error=%s",
 		status, serverFaultMethod(r), routeTemplate(r), requestID, serverFaultActorKind(r), sanitizeFaultText(publicMessage, 240), cause)
+}
+
+// A cancellation is the caller giving up, not a server fault: either the
+// request context died (client disconnected) or context.Canceled sits anywhere
+// in the error chain. Core-side deadlines (context.DeadlineExceeded) are real
+// faults and stay on the server-error path.
+func requestCanceledByClient(r *http.Request, err error) bool {
+	if err != nil && errors.Is(err, context.Canceled) {
+		return true
+	}
+	return r != nil && r.Context().Err() == context.Canceled
+}
+
+// The client-canceled record keeps cancellation visible without counting it as
+// a 5xx: route template, request id, the stage the request reached and how long
+// it took, so slow stages stay visible. elapsed_ms is -1 when the entry point
+// did not record a start time (only possible outside the route middleware).
+func emitClientCanceled(w http.ResponseWriter, r *http.Request, stage string) {
+	elapsed := int64(-1)
+	if fault := faultFrom(w); fault != nil && !fault.started.IsZero() {
+		elapsed = time.Since(fault.started).Milliseconds()
+	}
+	log.Printf("anx-core: client canceled status=%d method=%s route=%s request_id=%s actor_kind=%s stage=%s elapsed_ms=%d",
+		statusClientClosedRequest, serverFaultMethod(r), routeTemplate(r), serverFaultRequestID(w, r), serverFaultActorKind(r), sanitizeFaultText(stage, 240), elapsed)
 }
 
 func serverFaultRequestID(w http.ResponseWriter, r *http.Request) string {

@@ -82,6 +82,10 @@ func logUnmappedWorkError(w http.ResponseWriter, r *http.Request, err error) {
 	// This line is the one diagnostic for the failure. Error text stays out
 	// because it can contain submitted values; writeError must not add another.
 	noteServerFaultLogged(w)
+	if requestCanceledByClient(r, err) {
+		emitClientCanceled(w, r, "work operation")
+		return
+	}
 	requestID := uuid.NewString()
 	w.Header().Set("X-Request-ID", requestID)
 	types := []string{}
