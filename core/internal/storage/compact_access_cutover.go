@@ -144,9 +144,13 @@ var ErrCompactAccessChanged = errors.New("access ledgers changed after verificat
 // CutoverCompactAccess requires a fresh verification snapshot. Its write lease
 // checks epoch AND ledger generation before publishing the new format and mode.
 // A successful publication also invalidates all existing authorization caches.
+// The caller's deadline bounds the cutover; without one it gets one second.
 func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAccessVerification) (err error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Second)
+		defer cancel()
+	}
 	defer func() {
 		if err != nil && ctx.Err() != nil {
 			err = errors.Join(ctx.Err(), err)

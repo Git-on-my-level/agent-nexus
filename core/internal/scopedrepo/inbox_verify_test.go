@@ -97,25 +97,13 @@ func finishInboxVerification(t *testing.T, s *scopedrepo.Store, id string) (scop
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	var result scopedrepo.InboxVerificationProgress
-	for i := 0; i < 1000; {
+	// A one-shot slice releases its lease before the next slice acquires it.
+	for i := 0; i < 1000; i++ {
 		var err error
 		result, err = s.RunInboxVerificationSlice(ctx, id)
-		if errors.Is(err, scopedrepo.ErrInboxVerificationLease) {
-			// Each one-shot call has a new owner. Its preceding release is
-			// deliberately best effort (50 ms), so a contended release can
-			// leave an unexpired lease. Pause as the supervisor does; do not
-			// mistake that recoverable fence for a comparison failure.
-			select {
-			case <-ctx.Done():
-				return result, ctx.Err()
-			case <-time.After(10 * time.Millisecond):
-			}
-			continue
-		}
 		if err != nil {
 			return result, err
 		}
-		i++
 		if result.Examined > 64 {
 			t.Fatalf("slice exceeded bound: %d", result.Examined)
 		}

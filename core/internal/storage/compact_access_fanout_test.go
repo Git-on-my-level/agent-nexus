@@ -14,7 +14,7 @@ func TestCompactAccessDenseFanoutBudget(t *testing.T) {
 	ctx := context.Background()
 	compactExec(t, w, `UPDATE resource_access_edges SET target_ref='document:dense'`)
 	proof := compactCertify(t, w)
-	if err := w.CutoverCompactAccess(ctx, proof); err != nil {
+	if err := cutoverForTest(t, w, ctx, proof); err != nil {
 		t.Fatal(err)
 	}
 	db, capture, err := perfguard.Open(sqliteDSN(w.Layout().DatabasePath))

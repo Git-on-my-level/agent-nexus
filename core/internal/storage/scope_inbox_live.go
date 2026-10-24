@@ -9,6 +9,10 @@ import (
 	"agent-nexus-core/internal/sqliteutil"
 )
 
+// scopeInboxChunkBudget bounds one background batch, including the wait for
+// SQLite's write lock, so serving writers never queue behind it.
+const scopeInboxChunkBudget = 100 * time.Millisecond
+
 func installScopeInboxLive(ctx context.Context, tx *sql.Tx) error {
 	exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items")
 	if err != nil || !exists {
@@ -23,9 +27,14 @@ func installScopeInboxLive(ctx context.Context, tx *sql.Tx) error {
 // Concurrent imports/edits/deletes update the index atomically through triggers;
 // therefore inserts behind the cursor cannot be missed. No historical payload
 // is decoded or copied, and the final empty seek publishes readiness atomically.
+// The background loop passes no deadline and gets scopeInboxChunkBudget; a
+// caller with its own deadline (a one-shot rebuild or a test) sizes the chunk.
 func (w *Workspace) MaintainScopeInboxBatch(ctx context.Context) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, scopeInboxChunkBudget)
+		defer cancel()
+	}
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err
@@ -85,7 +94,9 @@ func (w *Workspace) RunScopeInboxMaintenance(ctx context.Context, report func(er
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			done, err := w.MaintainScopeInboxBatch(ctx)
+			chunk, cancel := context.WithTimeout(ctx, scopeInboxChunkBudget)
+			done, err := w.MaintainScopeInboxBatch(chunk)
+			cancel()
 			if err != nil {
 				if ctx.Err() != nil {
 					return

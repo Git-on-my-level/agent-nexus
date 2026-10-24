@@ -39,7 +39,7 @@ func TestFrozenMigrationStepperEpochAndBudgets(t *testing.T) {
 	for _, edit := range []func(*scopes.StepRequest){
 		func(r *scopes.StepRequest) { r.MaxRecords = 65 },
 		func(r *scopes.StepRequest) { r.MaxBytes = (4 << 20) + 1 },
-		func(r *scopes.StepRequest) { r.MaxDuration = time.Second },
+		func(r *scopes.StepRequest) { r.MaxDuration = runner.ChunkBudget + time.Millisecond },
 	} {
 		bad = request
 		edit(&bad)
@@ -113,5 +113,33 @@ func TestFrozenMigrationDurationRollsBack(t *testing.T) {
 	must(t, w.DB().QueryRow(`SELECT count(*) FROM scope_migration_placements WHERE job='duration'`).Scan(&rows))
 	if rows != 0 {
 		t.Fatal("expired chunk committed writes")
+	}
+}
+
+// interruptedSource fails the way SQLite does when the chunk deadline lands
+// between statements: with the statement's own error, not the context's.
+type interruptedSource struct{ artifactSource }
+
+func (s interruptedSource) Page(ctx context.Context, tx *sql.Tx, after string, limit, maxBytes int) ([]scopemigrate.Record, bool, error) {
+	<-ctx.Done()
+	return nil, false, errors.New("interrupted (9)")
+}
+
+func TestExpiredBudgetReportsDeadline(t *testing.T) {
+	_, runner := fixture(t, 1)
+	ctx := context.Background()
+	token := begin(t, runner)
+	before, err := runner.Report(ctx)
+	must(t, err)
+	runner.Source = interruptedSource{}
+	store := &scopemigrate.Store{Runner: runner}
+	_, err = store.Step(ctx, scopes.StepRequest{JobID: runner.Job, ExpectedEpoch: before.SourceEpoch, LeaseToken: token, MaxRecords: 1, MaxBytes: 1024, MaxDuration: 10 * time.Millisecond})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("statement error hid the expired budget:", err)
+	}
+	after, err := runner.Report(ctx)
+	must(t, err)
+	if after != before {
+		t.Fatal("expired chunk advanced checkpoint")
 	}
 }

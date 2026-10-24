@@ -24,7 +24,7 @@ func TestCompactAccessPreServeCertifiesBeforeWriters(t *testing.T) {
 func TestCompactAccessRetiredCleanupResumesWithoutChangingProof(t *testing.T) {
 	w := compactFixture(t, 450)
 	proof := compactCertify(t, w)
-	if err := w.CutoverCompactAccess(context.Background(), proof); err != nil {
+	if err := cutoverForTest(t, w, context.Background(), proof); err != nil {
 		t.Fatal(err)
 	}
 	var n int

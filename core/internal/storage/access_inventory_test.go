@@ -293,7 +293,13 @@ func TestResourceAccessStorageInventory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = ws.CutoverCompactAccess(ctx, proof); err != nil {
+	cutover, cancelCutover := context.WithCancel(ctx)
+	defer cancelCutover()
+	if deadline, ok := t.Deadline(); ok {
+		cutover, cancelCutover = context.WithDeadline(ctx, deadline)
+		defer cancelCutover()
+	}
+	if err = ws.CutoverCompactAccess(cutover, proof); err != nil {
 		t.Fatal(err)
 	}
 	for table, cols := range liveAccessColumns(t, ws.DB()) {

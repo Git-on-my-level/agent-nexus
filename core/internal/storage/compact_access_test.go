@@ -322,7 +322,7 @@ func TestCompactAccessProcessCrash(t *testing.T) {
 				}
 				compactExec(t, w, `CREATE TRIGGER crash_cutover AFTER UPDATE OF reader ON resource_access_compact_control WHEN NEW.reader=1 BEGIN SELECT anx_test_crash_cutover(); END`)
 			}
-			if err = w.CutoverCompactAccess(context.Background(), proof); err != nil {
+			if err = cutoverForTest(t, w, context.Background(), proof); err != nil {
 				t.Fatal(err)
 			}
 		case "committed":

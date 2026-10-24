@@ -69,6 +69,8 @@ func TestWriterContentionBoundsWorkerTransactions(t *testing.T) {
 			w.DB().SetMaxOpenConns(2)
 			w.DB().SetMaxIdleConns(2)
 			token := begin(t, r)
+			// The production budget is what must bound the writer-lock wait.
+			r.ChunkBudget = scopemigrate.DefaultChunkBudget
 			before, err := r.Report(ctx)
 			must(t, err)
 			writer, err := w.DB().BeginTx(ctx, nil)

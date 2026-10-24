@@ -462,3 +462,35 @@ func TestInboxVerificationPruningRejectsOldRunnerAndRetainsLiveLease(t *testing.
 		t.Fatal("retired job re-dated or changed", finished, remaining)
 	}
 }
+
+// A committed slice must not hide a failed lease release and invite a caller to
+// immediately hit the old lease. This used to return a successful progress row.
+func TestInboxVerificationOneShotReportsReleaseFailure(t *testing.T) {
+	db, s, id := verificationWorkerFixture(t, "")
+	if _, err := db.Exec(`CREATE TRIGGER reject_verification_release BEFORE UPDATE OF lease_owner ON scope_inbox_verification_jobs
+ WHEN OLD.lease_owner<>'' AND NEW.lease_owner='' BEGIN SELECT RAISE(ABORT,'release rejected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.RunInboxVerificationSlice(context.Background(), id)
+	if err == nil || !strings.Contains(err.Error(), "release rejected") {
+		t.Fatal("one-shot slice hid release failure", err)
+	}
+}
+
+func TestInboxVerificationReleaseIgnoresCallerCancellation(t *testing.T) {
+	db, s, id := verificationWorkerFixture(t, "")
+	r := workerRunner(t, s, id, time.Second)
+	lease, err := r.acquireLease(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	cancel()
+	if err := r.releaseLeaseWithin(ctx, lease); err != nil {
+		t.Fatal(err)
+	}
+	var owner string
+	if err := db.QueryRow(`SELECT lease_owner FROM scope_inbox_verification_jobs WHERE id=?`, id).Scan(&owner); err != nil || owner != "" {
+		t.Fatalf("cancelled caller stranded lease %q: %v", owner, err)
+	}
+}
