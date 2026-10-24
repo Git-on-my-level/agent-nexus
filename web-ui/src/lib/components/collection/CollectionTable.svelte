@@ -31,7 +31,8 @@
     actions = null,
   } = $props();
 
-  let filter = $state("");
+  /** The state pill the reader picked; see `active` for the one applied. */
+  let picked = $state("");
   let expanded = $state("");
   let showFolded = $state(false);
 
@@ -40,6 +41,13 @@
   let stateByKey = $derived(
     Object.fromEntries(collection.states.map((s) => [s.key, s])),
   );
+  let pills = $derived(
+    collection.states.filter((s) => (collection.counts[s.key] ?? 0) > 0),
+  );
+  // A refresh can empty the picked state (every failing loop recovers). Its
+  // pill is gone then, so applying it would hide every row with no control
+  // left to clear it: drop it instead.
+  let filter = $derived(pills.some((s) => s.key === picked) ? picked : "");
   let groups = $derived(filterRows(collection, filter));
   let visibleGroups = $derived(
     groups.map((g) => ({
@@ -52,9 +60,6 @@
     visibleGroups.reduce((n, g) => n + g.hidden.length, 0),
   );
   let board = $derived(boardColumns(collection));
-  let pills = $derived(
-    collection.states.filter((s) => (collection.counts[s.key] ?? 0) > 0),
-  );
   /* One grid template per width: wide, medium (no owner or activity) and
      narrow (title and progress only). The trailing 2rem is the expander. */
   function templateFor(keep) {
@@ -162,7 +167,7 @@
             class="pill"
             class:pill--on={filter === s.key}
             aria-pressed={filter === s.key}
-            onclick={() => (filter = filter === s.key ? "" : s.key)}
+            onclick={() => (picked = filter === s.key ? "" : s.key)}
             data-collection-filter={s.key}
           >
             <span class="dot dot--{s.tone}" aria-hidden="true"></span>
