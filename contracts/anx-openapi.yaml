@@ -5696,7 +5696,7 @@ paths:
       x-anx-concepts: [attention, cards]
       x-anx-stability: beta
       parameters:
-        - {name: for, in: query, schema: {type: string}, description: "me (default) or actor ref; other recipients require auth-admin"}
+        - {name: for, in: query, schema: {type: string}, description: "me (default) or principal ref. Any human or auth-admin may select another principal; other agents read only their own"}
         - {name: surface, in: query, schema: {type: string}, description: "decide, watch, digest, routine or all"}
         - {name: since, in: query, schema: {type: string}, description: "RFC3339 or positive duration lower bound on changed items"}
         - {name: scope_ref, in: query, schema: {type: string}, description: "Dashboard baseline; default builtin:initiatives"}
@@ -5776,13 +5776,13 @@ paths:
   /attention/feedback:
     get:
       operationId: listAttentionFeedback
-      summary: Read human attention feedback for workspace agents
+      summary: Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
       tags: [attention]
       x-anx-agent-notes: Pure records and deterministic rules. Reads never advance human visits.
       x-anx-surface: projection
       x-anx-command-id: attention.feedback.list
       x-anx-cli-path: attention feedback list
-      x-anx-why: Read human attention feedback for workspace agents
+      x-anx-why: Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns workspace-local attention records.
@@ -5791,7 +5791,7 @@ paths:
       x-anx-stability: beta
       parameters:
         - {name: since, in: query, schema: {type: string}, description: "RFC3339 or positive duration lower bound; continuation preserves the original window"}
-        - {name: for, in: query, schema: {type: string}, description: "Optional recipient actor ref"}
+        - {name: for, in: query, schema: {type: string}, description: "me or recipient principal ref. Defaults to me for humans and to all workspace feedback for agents"}
         - {name: cursor, in: query, schema: {type: string}, description: "Opaque continuation"}
       responses:
         '200':
@@ -9687,7 +9687,19 @@ components:
         type: {type: string, enum: [attention_feedback]}
         ts: {type: string, format: date-time}
         for: {type: string}
-        payload: {$ref: '#/components/schemas/AttentionFeedbackRequest'}
+        payload: {$ref: '#/components/schemas/AttentionFeedbackPayload'}
+    AttentionFeedbackPayload:
+      type: object
+      additionalProperties: false
+      description: Recorded feedback. request_key is retry identity only and is never stored in the payload.
+      required: [subject_ref, signal, surface]
+      properties:
+        subject_ref: {type: string}
+        signal: {$ref: '#/components/schemas/AttentionFeedbackSignal'}
+        note: {type: string, maxLength: 500}
+        surface: {$ref: '#/components/schemas/AttentionSurface'}
+        placed_by: {type: string}
+        seconds_visible: {type: number, minimum: 0}
     AttentionFeedbackPage:
       type: object
       required: [items, next_cursor]

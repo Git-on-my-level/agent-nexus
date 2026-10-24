@@ -1866,8 +1866,8 @@ export const commandRegistry: CommandSpec[] = [
     "method": "GET",
     "path": "/attention/feedback",
     "operation_id": "listAttentionFeedback",
-    "summary": "Read human attention feedback for workspace agents",
-    "why": "Read human attention feedback for workspace agents",
+    "summary": "Read human attention feedback; any human may read it, and workspace agents read all workspace feedback",
+    "why": "Read human attention feedback; any human may read it, and workspace agents read all workspace feedback",
     "input_mode": "none",
     "streaming": {
       "mode": "none"

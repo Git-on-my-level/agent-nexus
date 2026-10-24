@@ -18,6 +18,8 @@ func TestAttentionCLIAndPreflight(t *testing.T) {
 		{[]string{"attention", "agent", "set", "actor:agent"}, "PUT", "/attention/agent"},
 		{[]string{"attention", "agent", "set", "none"}, "PUT", "/attention/agent"},
 		{[]string{"attention", "feedback", "list", "--since", "24h", "--for", "actor:human"}, "GET", "/attention/feedback"},
+		{[]string{"attention", "feedback", "create", "card:launch", "--signal", "needed_sooner", "--surface", "watch", "--note", "Earlier please", "--seconds-visible", "4.5", "--request-key", "fb-1"}, "POST", "/attention/feedback"},
+		{[]string{"attention", "visits", "--scope-ref", "builtin:initiatives"}, "POST", "/attention/visits"},
 		{[]string{"attention", "items", "--surface", "all"}, "GET", "/attention/items"},
 		{[]string{"attention", "changes", "--scope-ref", "builtin:initiatives"}, "GET", "/attention/changes"},
 	}
@@ -34,6 +36,20 @@ func TestAttentionCLIAndPreflight(t *testing.T) {
 						t.Error(body)
 					}
 				}
+				if tc.path == "/attention/feedback" && r.Method == "POST" {
+					var body map[string]any
+					json.NewDecoder(r.Body).Decode(&body)
+					if body["subject_ref"] != "card:launch" || body["signal"] != "needed_sooner" || body["surface"] != "watch" || body["note"] != "Earlier please" || body["seconds_visible"] != 4.5 || body["request_key"] != "fb-1" {
+						t.Error(body)
+					}
+				}
+				if tc.path == "/attention/visits" {
+					var body map[string]any
+					json.NewDecoder(r.Body).Decode(&body)
+					if len(body) != 1 || body["scope_ref"] != "builtin:initiatives" {
+						t.Error(body)
+					}
+				}
 				w.Header().Set("Content-Type", "application/json")
 				w.Write([]byte(`{"items":[],"next_cursor":null}`))
 			}))
@@ -42,12 +58,12 @@ func TestAttentionCLIAndPreflight(t *testing.T) {
 			assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{}, nil, argv))
 		})
 	}
-	for _, args := range [][]string{{"place"}, {"place", "card:x", "--for", "actor:h", "--to", "unknown", "--reason", "x"}, {"place", "card:x", "--for", "actor:h", "--to", "watch", "--reason", strings.Repeat("é", 201)}, {"feedback", "list", "--since", "bad"}, {"items", "--unknown", "x"}, {"agent", "set"}, {"changes"}} {
+	for _, args := range [][]string{{"place"}, {"place", "card:x", "--for", "actor:h", "--to", "unknown", "--reason", "x"}, {"place", "card:x", "--for", "actor:h", "--to", "watch", "--reason", strings.Repeat("é", 201)}, {"feedback", "list", "--since", "bad"}, {"items", "--unknown", "x"}, {"agent", "set"}, {"changes"}, {"feedback", "create"}, {"feedback", "create", "card:x", "--surface", "watch"}, {"feedback", "create", "card:x", "--signal", "snooze", "--surface", "watch", "--seconds-visible", "-1"}, {"visits"}, {"visits", "--scope-ref", "builtin:initiatives", "extra"}} {
 		if _, err := parseAttentionCommand(args); err == nil {
 			t.Fatalf("invalid args accepted: %v", args)
 		}
 	}
-	for _, name := range []string{"attention place", "attention agent set"} {
+	for _, name := range []string{"attention place", "attention agent set", "attention feedback create", "attention visits"} {
 		if commandSideEffectClass(name) != "remote_coordination_write" {
 			t.Fatal(name)
 		}

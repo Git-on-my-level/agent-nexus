@@ -24,7 +24,9 @@ Asks use the event as their subject, preserving separate decisions about the
 same card. Placements on the card remain separate updates.
 
 All records stay inside the deployment's workspace. Readers get their own
-placements; auth-admins may select another principal with `for`. Resource
+placements; any human or auth-admin may select another principal with `for`.
+Any human may read feedback; an omitted `for` means `me` for humans and all
+workspace feedback for agents. Resource
 visibility still applies, including private references inside reasons and
 feedback notes. Workspace agents can read feedback without impersonating its
 human author. Only humans may write feedback or designate the attention agent.

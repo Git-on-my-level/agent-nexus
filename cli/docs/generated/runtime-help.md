@@ -52,10 +52,12 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta` (group): Inspect generated command/concept metadata
 - `attention place` (command): Place a subject on a principal attention surface
 - `attention items` (command): Read effective attention placements and mandatory human asks
+- `attention visits` (command): Record the authenticated principal dashboard visit
 - `attention changes` (command): Read dashboard changes without moving its visit marker
 - `attention agent get` (command): Read the designated workspace attention agent
 - `attention agent set` (command): Set or clear the designated attention agent as a human
-- `attention feedback list` (command): Read human attention feedback for workspace agents
+- `attention feedback list` (command): Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
+- `attention feedback create` (command): Record human feedback against a displayed attention item
 - `runs list` (command): List launcher runs
 - `runs get` (command): Get one run
 - `host list` (command): List workspace hosts
@@ -1307,6 +1309,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1314,7 +1318,8 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `overview`
@@ -1682,6 +1687,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1689,7 +1696,8 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `attention items`
@@ -1706,6 +1714,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1713,7 +1723,35 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
+```
+
+## `attention visits`
+
+Record the authenticated principal dashboard visit
+
+```text
+Generated Help: attention visits
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `attention changes`
@@ -1730,6 +1768,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1737,7 +1777,8 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `attention agent get`
@@ -1754,6 +1795,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1761,7 +1804,8 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `attention agent set`
@@ -1778,6 +1822,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1785,12 +1831,13 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `attention feedback list`
 
-Read human attention feedback for workspace agents
+Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
 
 ```text
 Generated Help: attention feedback list
@@ -1802,6 +1849,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -1809,7 +1858,35 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
+```
+
+## `attention feedback create`
+
+Record human feedback against a displayed attention item
+
+```text
+Generated Help: attention feedback create
+
+Attention records
+
+Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch|digest|routine --reason <text> [--rank N] [--request-key KEY]
+       anx attention items [--for me] [--surface all] [--since 24h] [--scope-ref <doc>] [--cursor <cursor>]
+       anx attention agent get
+       anx attention agent set <principal-ref|none>
+       anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
+       anx attention changes --scope-ref <doc|builtin:initiatives>
+
+Choose a surface and explain why in at most 200 characters. Open human asks
+always reach Decide. The human-designated attention agent wins, otherwise the
+newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
+or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
+models. Reads never move human visit markers. Follow next_cursor to exhaustion,
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 ```
 
 ## `runs list`

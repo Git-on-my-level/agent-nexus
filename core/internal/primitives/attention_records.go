@@ -75,9 +75,11 @@ func (s *Store) AttentionActor(ctx context.Context, ref string) (string, string,
 	}
 	return actor, principalKind, err
 }
+
+// A revoked designation stays stored but stops counting; it reads as unset.
 func (s *Store) AttentionAgent(ctx context.Context) (*string, error) {
 	var agent sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT attention_agent FROM attention_settings WHERE singleton=1`).Scan(&agent)
+	err := s.db.QueryRowContext(ctx, `SELECT a.actor_id FROM attention_settings s JOIN agents a ON a.actor_id=substr(s.attention_agent,7) AND a.revoked_at IS NULL WHERE s.singleton=1 AND s.attention_agent LIKE 'actor:%'`).Scan(&agent)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -87,7 +89,8 @@ func (s *Store) AttentionAgent(ctx context.Context) (*string, error) {
 	if !agent.Valid {
 		return nil, nil
 	}
-	return &agent.String, nil
+	ref := "actor:" + agent.String
+	return &ref, nil
 }
 func (s *Store) SetAttentionAgent(ctx context.Context, actor string, ref *string) error {
 	if ref != nil {

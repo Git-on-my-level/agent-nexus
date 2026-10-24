@@ -1384,7 +1384,7 @@ Core commands:
 Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
 	}
 	switch topic {
-	case "attention", "attention place", "attention items", "attention changes", "attention agent", "attention agent get", "attention agent set", "attention feedback", "attention feedback list":
+	case "attention", "attention place", "attention items", "attention changes", "attention visits", "attention agent", "attention agent get", "attention agent set", "attention feedback", "attention feedback list", "attention feedback create":
 		return "Generated Help: " + topic + "\n\n" + attentionHelp, true
 	}
 	if topic == "overview" {
@@ -2100,9 +2100,9 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
-		{command: "attention", valid: []string{"place", "items", "changes"}},
+		{command: "attention", valid: []string{"place", "items", "visits", "changes"}},
 		{command: "attention agent", valid: []string{"get", "set"}},
-		{command: "attention feedback", valid: []string{"list"}},
+		{command: "attention feedback", valid: []string{"list", "create"}},
 		integrationsSpec,
 		{command: "series", valid: []string{"list", "show", "query", "push"}},
 		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},

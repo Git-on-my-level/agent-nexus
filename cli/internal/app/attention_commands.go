@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ Usage: anx attention place <subject-ref> --for <principal-ref> --to decide|watch
        anx attention agent get
        anx attention agent set <principal-ref|none>
        anx attention feedback list [--since 24h] [--for <principal-ref>] [--cursor <cursor>]
+       anx attention feedback create <subject-ref> --signal <signal> --surface decide|watch|digest|routine [--note <text>] [--placed-by <principal-ref>] [--seconds-visible N] [--request-key KEY]
+       anx attention visits --scope-ref <doc|builtin:initiatives>
        anx attention changes --scope-ref <doc|builtin:initiatives>
 
 Choose a surface and explain why in at most 200 characters. Open human asks
@@ -25,7 +28,8 @@ always reach Decide. The human-designated attention agent wins, otherwise the
 newest placement wins. Principal refs are actor:<actor-id>, human:<principal-id>
 or agent:<principal-id>. Read feedback to improve later placements; ANX runs no
 models. Reads never move human visit markers. Follow next_cursor to exhaustion,
-even on empty pages. Rank orders items within each placement page.
+even on empty pages. Rank orders items within each placement page. Only humans
+may create feedback. Visits mark the caller's own dashboard baseline.
 `
 
 type attentionCommand struct {
@@ -75,12 +79,23 @@ func parseAttentionCommand(args []string) (attentionCommand, error) {
 		p.body = map[string]any{"attention_agent": ref}
 		return p, nil
 	case "feedback":
-		if len(args) < 2 || args[1] != "list" {
-			return usage("usage: anx attention feedback list")
+		if len(args) < 2 || args[1] != "list" && args[1] != "create" {
+			return usage("usage: anx attention feedback list|create")
 		}
-		p.name = "attention feedback list"
-		p.id = "attention.feedback.list"
+		p.name = "attention feedback " + args[1]
+		p.id = "attention.feedback." + args[1]
 		args = args[2:]
+		if p.id == "attention.feedback.create" {
+			if len(args) < 1 || strings.HasPrefix(args[0], "--") {
+				return usage("subject ref required")
+			}
+			positional = args[0]
+			args = args[1:]
+		}
+	case "visits":
+		p.name = "attention visits"
+		p.id = "attention.visits"
+		args = args[1:]
 	case "items":
 		p.name = "attention items"
 		p.id = "attention.items"
@@ -92,7 +107,7 @@ func parseAttentionCommand(args []string) (attentionCommand, error) {
 	default:
 		return p, errnorm.Usage("unknown_subcommand", "unknown attention subcommand "+args[0])
 	}
-	var recipient, surface, reason, rank, since, scope, cursor, key string
+	var recipient, surface, reason, rank, since, scope, cursor, key, signal, note, placedBy, seconds string
 	if p.id == "attention.place" {
 		fs.StringVar(&recipient, "for", "", "Recipient principal ref")
 		fs.StringVar(&surface, "to", "", "Attention surface")
@@ -108,7 +123,15 @@ func parseAttentionCommand(args []string) (attentionCommand, error) {
 	if p.id == "attention.items" {
 		fs.StringVar(&surface, "surface", "all", "Attention surface")
 	}
-	if p.id == "attention.items" || p.id == "attention.changes" {
+	if p.id == "attention.feedback.create" {
+		fs.StringVar(&signal, "signal", "", "Feedback signal")
+		fs.StringVar(&surface, "surface", "", "Surface the item was shown on")
+		fs.StringVar(&note, "note", "", "Optional note")
+		fs.StringVar(&placedBy, "placed-by", "", "Placer principal ref")
+		fs.StringVar(&seconds, "seconds-visible", "", "Seconds the item was visible")
+		fs.StringVar(&key, "request-key", "", "Retry identity")
+	}
+	if p.id == "attention.items" || p.id == "attention.changes" || p.id == "attention.visits" {
 		fs.StringVar(&scope, "scope-ref", "", "Dashboard document ref or builtin:initiatives")
 	}
 	if err := fs.Parse(args); err != nil {
@@ -130,6 +153,32 @@ func parseAttentionCommand(args []string) (attentionCommand, error) {
 		if key != "" {
 			p.body["request_key"] = key
 		}
+		return p, nil
+	}
+	if p.id == "attention.feedback.create" {
+		if signal == "" || !validSurface(surface) || utf8.RuneCountInString(note) > 500 {
+			return usage("--signal, --surface and a note of at most 500 characters required")
+		}
+		p.body = map[string]any{"subject_ref": positional, "signal": signal, "surface": surface}
+		for name, value := range map[string]string{"note": note, "placed_by": placedBy, "request_key": key} {
+			if value != "" {
+				p.body[name] = value
+			}
+		}
+		if seconds != "" {
+			n, err := strconv.ParseFloat(seconds, 64)
+			if err != nil || n < 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+				return usage("seconds-visible must be a non-negative number")
+			}
+			p.body["seconds_visible"] = n
+		}
+		return p, nil
+	}
+	if p.id == "attention.visits" {
+		if scope == "" {
+			return usage("--scope-ref required")
+		}
+		p.body = map[string]any{"scope_ref": scope}
 		return p, nil
 	}
 	if p.id == "attention.items" && surface != "all" && !validSurface(surface) {

@@ -506,7 +506,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Read human attention feedback for workspace agents
+- Why: Read human attention feedback; any human may read it, and workspace agents read all workspace feedback
 - Concepts: `attention`, `cards`
 - Error codes: `auth_required`, `forbidden`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns workspace-local attention records.

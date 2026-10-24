@@ -119,7 +119,7 @@ func handleAttentionItems(w http.ResponseWriter, r *http.Request, opts handlerOp
 	actor, kind := p.ActorID, p.PrincipalKind
 	if ref := r.URL.Query().Get("for"); ref != "" && ref != "me" && ref != "actor:"+actor && ref != p.PrincipalKind+":"+p.AgentID {
 		if !isAuthAdminPrincipal(p) {
-			writeError(w, 403, "forbidden", "only auth-admins may read another principal placements")
+			writeError(w, 403, "forbidden", "agents may read only their own attention items; humans and auth-admins may select another principal")
 			return
 		}
 		var err error
@@ -194,8 +194,14 @@ func handleAttentionFeedback(w http.ResponseWriter, r *http.Request, opts handle
 		writeJSON(w, 201, event)
 		return
 	}
+	// Any human may read feedback, defaulting to their own; workspace agents
+	// read all workspace feedback unless they filter by recipient.
 	recipient := ""
-	if ref := r.URL.Query().Get("for"); ref != "" {
+	ref := r.URL.Query().Get("for")
+	if ref == "" && p.PrincipalKind != "agent" {
+		ref = "me"
+	}
+	if ref != "" {
 		if ref == "me" {
 			recipient = p.ActorID
 		} else {
@@ -208,7 +214,7 @@ func handleAttentionFeedback(w http.ResponseWriter, r *http.Request, opts handle
 		}
 	}
 	if p.PrincipalKind != "agent" && !isAuthAdminPrincipal(p) && recipient != p.ActorID {
-		writeError(w, 403, "forbidden", "feedback requires workspace agent or recipient access")
+		writeError(w, 403, "forbidden", "attention feedback is readable by humans, auth-admins and workspace agents")
 		return
 	}
 	since := r.URL.Query().Get("since")

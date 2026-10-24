@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,6 +17,8 @@ import (
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
+
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 func TestAttentionHTTPPrincipalBoundaries(t *testing.T) {
@@ -26,6 +29,7 @@ func TestAttentionHTTPPrincipalBoundaries(t *testing.T) {
 	human := seedHumanPrincipalForLockoutTest(t, ctx, db, "attention-human", "attention-human-actor", "attention.human", "attention-human-token")
 	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "attention-agent", "attention-agent-actor", "attention.agent", "attention-agent-token")
 	other := seedMachinePrincipalForLockoutTest(t, ctx, db, "attention-other", "attention-other-actor", "attention.other", "attention-other-token")
+	peer := seedHumanPrincipalForLockoutTest(t, ctx, db, "attention-peer", "attention-peer-actor", "attention.peer", "attention-peer-token")
 	store := env.primitiveStore.(*primitives.Store)
 	work, err := store.CreateWork(ctx, agent.ActorID, "", map[string]any{"title": "Attention target"})
 	if err != nil {
@@ -96,12 +100,32 @@ func TestAttentionHTTPPrincipalBoundaries(t *testing.T) {
 	if !reflect.DeepEqual(a, b) {
 		t.Fatal("feedback replay changed event")
 	}
+	api, err := openapi3.NewLoader().LoadFromFile(filepath.Join(repoRootFromServerTest(t), "contracts", "anx-openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, leaked := a["payload"].(map[string]any)["request_key"]; leaked {
+		t.Fatal("feedback payload stored request_key", a)
+	}
+	if err = api.Components.Schemas["AttentionFeedbackEvent"].Value.VisitJSON(a); err != nil {
+		t.Fatalf("feedback response violates AttentionFeedbackEvent: %v", err)
+	}
 	feedback["signal"] = "more_like_this"
 	call(human.AccessToken, http.MethodPost, "/attention/feedback", feedback, 409)
 	feedback["signal"] = "needed_sooner"
 	page := call(agent.AccessToken, http.MethodGet, "/attention/feedback?for=actor:"+human.ActorID, nil, 200)
 	if len(page["items"].([]any)) != 1 {
 		t.Fatal(page)
+	}
+	// A human's read without for means me; any human may still name another recipient.
+	if own := call(human.AccessToken, http.MethodGet, "/attention/feedback", nil, 200); len(own["items"].([]any)) != 1 {
+		t.Fatal(own)
+	}
+	if mine := call(peer.AccessToken, http.MethodGet, "/attention/feedback", nil, 200); len(mine["items"].([]any)) != 0 {
+		t.Fatal("empty for did not default to me", mine)
+	}
+	if named := call(peer.AccessToken, http.MethodGet, "/attention/feedback?for=actor:"+human.ActorID, nil, 200); len(named["items"].([]any)) != 1 {
+		t.Fatal(named)
 	}
 	call(human.AccessToken, http.MethodPost, "/events", map[string]any{"event": map[string]any{"type": "attention_feedback", "summary": "Forged", "refs": []string{}, "provenance": map[string]any{"sources": []string{"inferred"}}, "payload": feedback}}, 403)
 	// Resource privacy applies to both the subject and authored feedback note.

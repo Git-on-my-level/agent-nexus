@@ -1518,7 +1518,7 @@ attention_records:
     - No models run in ANX. Placements and human feedback are workspace-local records.
     - Latest placement per subject, recipient actor and placer wins. A human-designated attention agent takes precedence; absent that agent's placement, newest placement wins.
     - Open asks addressed to the human are always Decide. No placement may demote them.
-    - Readers see only their placements, or another principal via existing auth-admin policy; resource visibility always applies. Agents may read workspace feedback.
+    - Every principal reads its own attention items by default; any human or auth-admin may select another principal. Any human may read feedback, with for defaulting to me; workspace agents read all workspace feedback by default. Resource visibility always applies.
     - Placements are canonical records with indexed reference ownership. attention_feedback is a protected event written by its dedicated endpoint. Reasons and notes preserve inherited resource visibility.
     - Attention visits are keyed by authenticated principal and document identity or builtin:initiatives. No agent may record a human visit. Legacy Overview uses its own builtin:overview key.
     - First visit returns null since and no changes. Reads never advance attention baselines.

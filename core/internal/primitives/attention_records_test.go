@@ -107,6 +107,20 @@ func TestAttentionPrecedenceIsolationAndReplay(t *testing.T) {
 	if len(items) != 1 || items[0].Surface != "digest" || items[0].PlacedBy != "actor:preferred" {
 		t.Fatal(items)
 	}
+	// Revoking the designated agent drops its precedence without a new setting.
+	if _, err = s.db.ExecContext(ctx, `UPDATE agents SET revoked_at=? WHERE actor_id='preferred'`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if agent, err := s.AttentionAgent(ctx); err != nil || agent != nil {
+		t.Fatalf("revoked attention agent=%v err=%v", agent, err)
+	}
+	items = attentionAll(t, s, ctx, "human", "human", "all")
+	if len(items) != 1 || items[0].Surface != "routine" || items[0].PlacedBy != "actor:placer" {
+		t.Fatalf("revoked agent still preferred: %v", items)
+	}
+	if _, err = s.db.ExecContext(ctx, `UPDATE agents SET revoked_at=NULL WHERE actor_id='preferred'`); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.SetAttentionAgent(ctx, "human", nil); err != nil {
 		t.Fatal(err)
 	}
