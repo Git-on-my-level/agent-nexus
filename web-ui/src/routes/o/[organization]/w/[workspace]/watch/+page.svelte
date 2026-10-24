@@ -263,6 +263,7 @@
   // answers with the workspace default (`source: "workspace_default"`), which
   // shows as a tab but is not the reader's pin to unpin or count.
   let dashboards = $state(null);
+  let dashboardsFailed = $state(false);
   let loadingMore = $state(false);
   let pinError = $state("");
   let serverPins = $state(null);
@@ -332,13 +333,16 @@
       : null,
   );
   async function loadDashboards(cursor) {
+    if (!cursor) dashboardsFailed = false;
     try {
       const more = await coreClient.getDashboardReports(
         cursor ? { cursor } : {},
       );
       dashboards = mergeDashboardReports(cursor ? dashboards : {}, more);
     } catch {
-      // Dashboards are optional; initiatives and loops stay usable.
+      // Dashboards are optional; initiatives and loops stay usable. A failed
+      // first read says so on the dashboard tab instead of loading forever.
+      if (!cursor) dashboardsFailed = true;
     }
   }
   async function loadMoreReports() {
@@ -633,6 +637,17 @@
       </section>
     {:else if dashboards}
       <p class="text-meta text-fg-muted">That dashboard isn't available.</p>
+    {:else if dashboardsFailed}
+      <Banner>
+        Couldn't load dashboards. Initiatives and loops are unaffected.
+        {#snippet actions()}
+          <Button
+            variant="secondary"
+            size="compact"
+            onclick={() => loadDashboards()}>Retry</Button
+          >
+        {/snippet}
+      </Banner>
     {:else}
       <SkeletonList rows={4} />
     {/if}

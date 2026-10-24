@@ -471,3 +471,43 @@ test("Loops says how to add one when there are none", async ({
     "anx work receipt",
   );
 });
+
+test("a failed dashboard read offers Retry instead of loading forever", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(120_000);
+  const { visualReportExample } =
+    await import("../../src/lib/fixtures/visualReportExample.js");
+  await setup(context);
+  let healthy = false;
+  await context.route(
+    (url) => url.pathname === "/workspace/dashboard/reports",
+    (route) =>
+      healthy
+        ? json(route, {
+            status: "ok",
+            pinned_ref: "document:alpha",
+            reports: [
+              {
+                id: "alpha",
+                ref: "document:alpha",
+                segment: "alpha",
+                title: "Dashboard alpha",
+                report: visualReportExample,
+              },
+            ],
+            has_more: false,
+          })
+        : json(route, { error: { message: "Private dashboard detail" } }, 500),
+  );
+  await page.goto(`${WATCH}?tab=dashboard`);
+  await expect(page.getByText("Couldn't load dashboards.")).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByText("Private dashboard detail")).toHaveCount(0);
+  healthy = true;
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.locator("[data-watch-dashboard]")).toBeVisible();
+  await expect(page.getByText("Couldn't load dashboards.")).toHaveCount(0);
+});
