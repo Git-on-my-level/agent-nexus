@@ -54,8 +54,8 @@ func TestLoopReceiptReplayBriefAndReport(t *testing.T) {
 		t.Fatal(data)
 	}
 	brief := readBriefV1(t, s)
-	initiatives := brief["initiatives"].([]any)
-	if len(initiatives) != 1 || initiatives[0].(map[string]any)["loop"] == nil {
+	loops := brief["loops"].([]any)
+	if len(brief["initiatives"].([]any)) != 0 || len(loops) != 1 || loops[0].(map[string]any)["loop"] == nil {
 		t.Fatal(brief)
 	}
 	overview, _, err := s.LoopReport(ctx, anyString(b["ref"]), "", "healthy", 24, time.Now().UTC())
@@ -177,7 +177,10 @@ func TestLoopBriefCost10KEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 		durations = append(durations, elapsed)
-		items := result["initiatives"].([]map[string]any)
+		items := result["loops"].([]map[string]any)
+		if len(result["initiatives"].([]map[string]any)) != 0 || len(items) != 1 {
+			t.Fatal(result)
+		}
 		loop := items[0]["loop"].(map[string]any)
 		if loop["runs_7d"].(map[string]any)["measured"] != float64(10000) {
 			t.Fatal(loop)
@@ -452,7 +455,11 @@ func TestLoopDoneArchivedAndNull(t *testing.T) {
 			checkDetail()
 			brief := readBriefV1(t, s)
 			found := false
-			for _, raw := range brief["initiatives"].([]any) {
+			collection := "initiatives"
+			if annotated {
+				collection = "loops"
+			}
+			for _, raw := range brief[collection].([]any) {
 				row := raw.(map[string]any)
 				if row["ref"] == card["ref"] {
 					found = true
@@ -469,9 +476,11 @@ func TestLoopDoneArchivedAndNull(t *testing.T) {
 			}
 			checkDetail()
 			brief = readBriefV1(t, s)
-			for _, raw := range brief["initiatives"].([]any) {
-				if raw.(map[string]any)["ref"] == card["ref"] {
-					t.Fatal("archived card in brief", brief)
+			for _, section := range []string{"initiatives", "loops"} {
+				for _, raw := range brief[section].([]any) {
+					if raw.(map[string]any)["ref"] == card["ref"] {
+						t.Fatal("archived card in brief", brief)
+					}
 				}
 			}
 		})
@@ -545,7 +554,11 @@ func TestLoopEffectsCountActedOrKeptOnce(t *testing.T) {
 			t.Fatal(report)
 		}
 		brief := readBriefV1(t, s)
-		loop := brief["initiatives"].([]any)[0].(map[string]any)["loop"].(map[string]any)
+		loops := brief["loops"].([]any)
+		if len(brief["initiatives"].([]any)) != 0 || len(loops) != 1 {
+			t.Fatal(brief)
+		}
+		loop := loops[0].(map[string]any)["loop"].(map[string]any)
 		if loop["effects_7d"] != float64(3) {
 			t.Fatal(loop)
 		}

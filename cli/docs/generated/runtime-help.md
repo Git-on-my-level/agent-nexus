@@ -165,10 +165,14 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `sessions register` (command): Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
 - `work create` (command): Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
+- `work fold` (command): <card> --into <parent> [--request-key key]: transfer references, carry the promise and archive.
 - `work get` (command): Read one work card, source authority, executions and current evidence.
+- `work group` (command): <card> --under <parent> [--after <step-id>] [--request-key key]: add an ordinary plan step atomically.
 - `work list` (command): List work cards across sources in the authenticated workspace.
 - `work patch` (command): Update work metadata with if_version; external status remains source-owned.
 - `work presence` (command): Set the current derived agent's card and progress note.
+- `work unfold` (command): <card> [--request-key key]: reverse a fold without overwriting conflicting edits.
+- `work ungrouped` (command): Recent ungrouped cards and deterministic likely homes.
 - `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
 - `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
 - `work participants list` (command): List task-scoped participation and bounded activity without private session details or unrelated task links.
@@ -483,6 +487,7 @@ Participation and source authority
 
 Executive workspace
 
+- Group by default: create with `anx work create --under card:P`, or use `anx work group card:C --under card:P` afterwards. Core offers deterministic `likely_home` suggestions and never blocks creation. `anx work fold card:C --into card:P` transfers refs and archives with asks reachable; `anx work unfold` reverses it.
 - A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.
 - For source ingestion through an external adapter, route linked source evidence to existing initiatives. Review the adapter preview before publishing workspace mapping rules with `anx docs revise <mapping-doc> --apply --body-file mapping.json`. Keep unmatched items visible for deliberate triage. Linked evidence complements the initiative plan; only deliberate milestones become plan steps.
 - Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
@@ -3116,6 +3121,7 @@ Inputs:
   - body `if_lifecycle.archived_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `if_lifecycle.trashed_at` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
   - body `request_key` (string)
 
 Global flags:
@@ -5346,7 +5352,7 @@ Generated Help: work capabilities
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5372,21 +5378,23 @@ Generated Help: work create
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
+- Why: Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.
 - Output: Returns `WorkResponse`.
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
   - body `title` (string)
   Optional:
   - body `actor_id` (string)
+  - body `after` (string)
   - body `blockers` (list<string>)
   - body `board_ref` (string)
   - body `cadence` (any)
+  - body `create_surface` (string)
   - body `definition_of_done` (list<string>)
   - body `document_ref` (string)
   - body `due_at` (string)
@@ -5420,15 +5428,58 @@ Inputs:
   - body `start_at` (string)
   - body `summary` (string)
   - body `topic_ref` (string)
+  - body `under` (string)
   - body `wake_condition` (string)
   - body `workspace_move` (object)
-  Enum values: risk: critical, high, low, medium
+  Enum values: create_surface: ask.auto_create, cards.create, mcp, work.create; risk: critical, high, low, medium
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
-Usage: anx work create [--handle <slug>] --from-file <path|->
+Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--request-key <key>] --from-file <path|->
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work fold`
+
+<card> --into <parent> [--request-key key]: transfer references, carry the promise and archive.
+
+```text
+Generated Help: work fold
+
+- Command ID: `work.fold`
+- CLI path: `work fold`
+- HTTP: `POST /work/{card_ref}/fold`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Fold a card into a parent, retaining evidence and asks. Retain request_key and the original body until confirmed.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `into` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `after` (string)
+  - body `request_key` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> --into <parent> [--request-key key]: transfer references, carry the promise and archive.
+
+Usage: anx work fold <ref> (or --work-id <ref>) [--from-file <path|->]
 
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
@@ -5455,7 +5506,7 @@ Generated Help: work get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5466,6 +5517,48 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 Read one work card, source authority, executions and current evidence.
 
 Usage: anx work get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work group`
+
+<card> --under <parent> [--after <step-id>] [--request-key key]: add an ordinary plan step atomically.
+
+```text
+Generated Help: work group
+
+- Command ID: `work.group`
+- CLI path: `work group`
+- HTTP: `POST /work/{card_ref}/group`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Add an existing card to a parent plan. Retain request_key and the original body until confirmed.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated; ordinary plan links; no automatic choice.
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `under` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `after` (string)
+  - body `request_key` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> --under <parent> [--after <step-id>] [--request-key key]: add an ordinary plan step atomically.
+
+Usage: anx work group <ref> (or --work-id <ref>) [--from-file <path|->]
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5490,7 +5583,7 @@ Generated Help: work list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5529,7 +5622,7 @@ Generated Help: work patch
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5586,7 +5679,7 @@ Generated Help: work presence
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
 - Concepts: `agents`, `cards`, `runs`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Optional:
@@ -5600,6 +5693,78 @@ Set the current derived agent's card and progress note.
 Usage: anx work presence --from-file <path|->
 
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work unfold`
+
+<card> [--request-key key]: reverse a fold without overwriting conflicting edits.
+
+```text
+Generated Help: work unfold
+
+- Command ID: `work.unfold`
+- CLI path: `work unfold`
+- HTTP: `POST /work/{card_ref}/unfold`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reverse a fold without overwriting later edits. Retain request_key and the original body until confirmed.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work ungrouped`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> [--request-key key]: reverse a fold without overwriting conflicting edits.
+
+Usage: anx work unfold <ref> (or --work-id <ref>) [--from-file <path|->]
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work ungrouped`
+
+Recent ungrouped cards and deterministic likely homes.
+
+```text
+Generated Help: work ungrouped
+
+- Command ID: `work.ungrouped`
+- CLI path: `work ungrouped`
+- HTTP: `GET /work/ungrouped`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Discover recent ungrouped cards and choose a home; suggestions never prevent creation.
+- Output: Returns `WorkUngroupedResponse`.
+- Error codes: `invalid_request`, `work_unavailable`
+- Concepts: `cards`
+- Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Recent ungrouped cards and deterministic likely homes.
+
+Usage: anx work ungrouped
+  --limit <value>
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5624,7 +5789,7 @@ Generated Help: work observations list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5661,7 +5826,7 @@ Generated Help: work observations submit
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5724,7 +5889,7 @@ Generated Help: work participants list
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5761,7 +5926,7 @@ Generated Help: work participants register
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`, `quota_exceeded`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5802,7 +5967,7 @@ Generated Help: work refresh get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5837,7 +6002,7 @@ Generated Help: work refresh request
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`
+- Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -7936,14 +8101,17 @@ Inputs:
   - body `card.title` (string)
   Optional:
   - body `actor_id` (string)
+  - body `after` (string)
   - body `board_handle` (string)
   - body `board_id` (string)
   - body `board_ref` (any)
+  - body `card.after` (string)
   - body `card.after_card_id` (string)
   - body `card.assignee_refs` (list<any>)
   - body `card.before_card_id` (string)
   - body `card.card_id` (string)
   - body `card.column_key` (string)
+  - body `card.create_surface` (string)
   - body `card.definition_of_done` (list<string>)
   - body `card.document_ref` (string)
   - body `card.due_at` (datetime)
@@ -7958,9 +8126,12 @@ Inputs:
   - body `card.risk` (string)
   - body `card.summary` (string)
   - body `card.topic_ref` (string)
+  - body `card.under` (string)
+  - body `create_surface` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
   - body `request_key` (string)
-  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: done; card.risk: critical, high, low, medium
+  - body `under` (string)
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.create_surface: ask.auto_create, cards.create, mcp, work.create; card.resolution: done; card.risk: critical, high, low, medium; create_surface: ask.auto_create, cards.create, mcp, work.create
 
 Local Help: cards create
 

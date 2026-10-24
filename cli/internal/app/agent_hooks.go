@@ -642,13 +642,13 @@ func truncateHook(s string, n int) string {
 const hookSkillReminder = "Reload the anx-participant skill before continuing; its installed contract may have changed."
 
 func renderHookOrient(brief map[string]any) string {
-	compact := map[string]any{"principal": brief["principal"]}
+	compact := map[string]any{"principal": brief["principal"], "initiative_budget": brief["initiative_budget"]}
 	principal := asMap(brief["principal"])
-	for _, section := range []string{"answered_for_you", "your_asks", "initiatives"} {
+	for _, section := range []string{"answered_for_you", "your_asks", "initiatives", "loops"} {
 		items := []any{}
 		for _, raw := range asSlice(brief[section]) {
 			item := asMap(raw)
-			if section == "initiatives" && !orientInitiativeIsYours(item, principal) {
+			if (section == "initiatives" || section == "loops") && !orientInitiativeIsYours(item, principal) {
 				continue
 			}
 			items = append(items, item)

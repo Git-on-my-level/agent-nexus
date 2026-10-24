@@ -1000,6 +1000,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"propose":     boolFlag,
 		},
 		"cards create": {
+			"under": valueFlag, "after": valueFlag,
 			"handle":              {kind: preflightFlagString, validate: validateCardHandle},
 			"board":               valueFlag,
 			"board-id":            valueFlag,

@@ -1158,6 +1158,18 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_agents_collection_roster ON agents(COALESCE(json_extract(metadata_json,'$.principal_kind'),'agent'),username);`,
 	}},
 	{Version: 114, AfterApply: installAttentionRecords},
+	// Exclude plain chatter from the bounded promise fold and admit recent
+	// grouping candidates through a lifecycle-filtered ordering index.
+	{Version: 115, Statements: []string{
+		`CREATE VIEW IF NOT EXISTS work_grouping_card_positions AS SELECT id,created_at,column_key FROM cards WHERE archived_at IS NULL AND trashed_at IS NULL;`,
+		`CREATE VIEW IF NOT EXISTS work_grouping_brief_positions AS SELECT card_id,open,promise_at,last_evidence_at,loop_annotated,loop_annotated_at,loop_last_run_at FROM brief_initiatives;`,
+		`CREATE VIEW IF NOT EXISTS work_grouping_field_positions AS SELECT c.id,EXISTS(SELECT 1 FROM card_plans p WHERE p.card_id=c.id) AS plan_exists,EXISTS(SELECT 1 FROM work_metadata m WHERE m.card_id=c.id) AS metadata_exists FROM cards c;`,
+		`CREATE INDEX IF NOT EXISTS idx_brief_notes_promise_facts ON brief_notes(card_id,ts DESC) WHERE next_at IS NOT NULL OR evidence=1;`,
+		`CREATE INDEX IF NOT EXISTS idx_cards_grouping_recent ON cards(trashed_at,archived_at,created_at DESC,id DESC) WHERE column_key NOT IN ('done','cancelled');`,
+		`CREATE INDEX IF NOT EXISTS idx_cards_grouping_closed ON cards(trashed_at,archived_at,created_at DESC,id DESC) WHERE column_key IN ('done','cancelled');`,
+		`CREATE INDEX IF NOT EXISTS idx_events_promise_facts ON events(thread_id,ts DESC) WHERE type='message_posted' AND (json_extract(payload_json,'$.payload.next.at') IS NOT NULL OR json_array_length(json_extract(payload_json,'$.payload.evidence_refs'))>0);`,
+		`INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives WHERE true ON CONFLICT DO NOTHING;`,
+	}},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

@@ -198,8 +198,10 @@ func TestPerformanceBriefSeriesBudget(t *testing.T) {
 					t.Fatalf("%s: missing indexed agent ownership seek:\n%s", label, plan)
 				}
 			}
-			if participantQueries != 1 {
-				t.Fatalf("%s: expected 1 agent ownership query, got %d", label, participantQueries)
+			// Assignees are already in the admitted rows. Participation needs
+			// one indexed batch only when some cards remain unassigned to the reader.
+			if participantQueries > 1 {
+				t.Fatalf("%s: expected at most 1 agent ownership query, got %d", label, participantQueries)
 			}
 		}
 		t.Logf("variant=%s actor=%s full 50-card/100-admitted-ref/12000-point brief SQL=%d rows=%d VM=%d metric batches=%d", label, actor, queries, rows, work.VMSteps, metricQueries)

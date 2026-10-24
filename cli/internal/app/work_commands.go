@@ -43,6 +43,10 @@ var workCommands = map[string]workCommandSpec{
 	"work presence":              {path: "/agents/me/presence", method: "PATCH", body: true, summary: "Set the current derived agent's card and progress note."},
 	"work list":                  {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
 	"work get":                   {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
+	"work group":                 {path: "/work/{id}/group", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> --under <parent> [--after <step-id>] [--request-key key]: add an ordinary plan step atomically."},
+	"work fold":                  {path: "/work/{id}/fold", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> --into <parent> [--request-key key]: transfer references, carry the promise and archive."},
+	"work unfold":                {path: "/work/{id}/unfold", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> [--request-key key]: reverse a fold without overwriting conflicting edits."},
+	"work ungrouped":             {path: "/work/ungrouped", method: "GET", summary: "Recent ungrouped cards and deterministic likely homes.", filters: []string{"limit"}},
 	"work create":                {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed."},
 	"work patch":                 {path: "/work/{id}", method: "PATCH", idFlag: "work-id", body: true, summary: "Update work metadata with if_version; external status remains source-owned."},
 	"work context":               {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Compose work, a bounded observation page and refresh status using read-only requests.", filters: []string{"limit", "cursor"}},
@@ -79,12 +83,13 @@ var workCommands = map[string]workCommandSpec{
 }
 
 type parsedWorkCommand struct {
-	spec               workCommandSpec
-	name, id, fromFile string
-	handle             string
-	leaseToken         string
-	runnerID           string
-	query              url.Values
+	spec                           workCommandSpec
+	name, id, fromFile             string
+	under, into, after, requestKey string
+	handle                         string
+	leaseToken                     string
+	runnerID                       string
+	query                          url.Values
 }
 
 func isWorkCommandRoot(root string) bool {
@@ -123,7 +128,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
-	var id, fromFile, leaseToken, runnerID, handle trackedString
+	var id, fromFile, leaseToken, runnerID, handle, under, into, after, requestKey trackedString
 	var limit trackedInt
 
 	values := map[string]*trackedString{}
@@ -132,6 +137,17 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	if spec.body || spec.optionalBody {
 		fs.Var(&fromFile, "from-file", "JSON request from path or - for stdin")
+	}
+	if out.name == "work create" || out.name == "work group" {
+		fs.Var(&under, "under", "Parent card ref; adds a plan step atomically")
+		fs.Var(&after, "after", "Preceding plan step id")
+	}
+	if out.name == "work fold" {
+		fs.Var(&into, "into", "Parent card ref")
+		fs.Var(&after, "after", "Preceding plan step id")
+	}
+	if out.name == "work create" || out.name == "work group" || out.name == "work fold" || out.name == "work unfold" {
+		fs.Var(&requestKey, "request-key", "Retain the original key and body until confirmed")
 	}
 	if out.name == "work create" {
 		fs.Var(&handle, "handle", "Client-chosen lowercase card slug (1-64 characters)")
@@ -191,6 +207,9 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	if limit.set {
 		maxLimit := 200
+		if out.name == "work ungrouped" {
+			maxLimit = 50
+		}
 		if out.name == "pm context" || out.name == "pm turns context" {
 			maxLimit = 50
 		}
@@ -212,6 +231,13 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 			return out, err
 		}
 		out.handle = handle.value
+	}
+	out.under, out.into, out.after, out.requestKey = strings.TrimSpace(under.value), strings.TrimSpace(into.value), strings.TrimSpace(after.value), strings.TrimSpace(requestKey.value)
+	if out.name == "work group" && out.under == "" && fromFile.value == "" {
+		return out, errnorm.Usage("invalid_request", "--under <card> is required")
+	}
+	if out.name == "work fold" && out.into == "" && fromFile.value == "" {
+		return out, errnorm.Usage("invalid_request", "--into <card> is required")
 	}
 	out.fromFile = strings.TrimSpace(fromFile.value)
 	out.leaseToken = strings.TrimSpace(leaseToken.value)
@@ -312,6 +338,14 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		body = map[string]any{}
 	}
 	if object, ok := body.(map[string]any); ok {
+		for key, value := range map[string]string{"under": parsed.under, "into": parsed.into, "after": parsed.after, "request_key": parsed.requestKey} {
+			if value != "" {
+				object[key] = value
+			}
+		}
+		if parsed.name == "work create" {
+			object["create_surface"] = "work.create"
+		}
 		switch parsed.name {
 		case "pm turns claim":
 			applyPMTurnClaimBody(parsed, cfg, object)
@@ -338,6 +372,11 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if parsed.name == "work create" {
 		// Warnings only: one bounded read before the write, never a rejection.
 		createWarnings = a.workCreateWarnings(ctx, cfg, anyString(asMap(body)["title"]))
+	}
+	if object, ok := body.(map[string]any); ok && (parsed.name == "work create" || parsed.name == "work group" || parsed.name == "work fold" || parsed.name == "work unfold") {
+		if err := ensureGroupingRequestKey(object); err != nil {
+			return nil, parsed.name, err
+		}
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
 	if err == nil && result != nil && len(createWarnings) > 0 {
@@ -449,7 +488,7 @@ func workHelpText(topic string) (string, bool) {
 	if exact {
 		fmt.Fprintf(&b, "%s\n\nUsage: anx %s", spec.summary, topic)
 		if topic == "work create" {
-			b.WriteString(" [--handle <slug>]")
+			b.WriteString(" [--handle <slug>] [--under <card> [--after <step-id>]] [--request-key <key>]")
 		}
 		if spec.idFlag != "" {
 			fmt.Fprintf(&b, " <ref> (or --%s <ref>)", spec.idFlag)

@@ -1,6 +1,13 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
+
+let rendererWarmupPlugin;
+// Loading the real Vite/SvelteKit graph is fixture setup. The cases below time
+// the mocked readiness barrier, independently of cold toolchain module loading.
+beforeAll(async () => {
+  ({ rendererWarmupPlugin } = await import("../../vite.config.js"));
+});
 
 function warmupServer(bundle) {
   let request;
@@ -40,7 +47,6 @@ afterEach(() => {
 });
 
 it("holds report SSR until optimized dependencies finish loading", async () => {
-  const { rendererWarmupPlugin } = await import("../../vite.config.js");
   let release;
   let requested;
   const loading = new Promise((resolve) => {
@@ -66,7 +72,6 @@ it("holds report SSR until optimized dependencies finish loading", async () => {
 });
 
 it("closes the renderer on optimization failure without admitting report SSR", async () => {
-  const { rendererWarmupPlugin } = await import("../../vite.config.js");
   const fixture = warmupServer(async () => {
     throw new Error("broken dependency");
   });

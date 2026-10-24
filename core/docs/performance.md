@@ -1,5 +1,58 @@
 # Performance guardrails
 
+## Grouping and promise preservation
+
+The grouping API admits recent physical routing identities before visibility and metadata matching,
+uses indexed reverse plan references for parentage, and batches rollups under
+the 200-step plan limit. The [grouped-work guide](../../docs/grouping-work.md)
+documents the candidate windows, indexes, complexity and lower-bound budget.
+`internal/primitives/testdata/work_grouping_budget.json` enforces 50,000 VM steps
+for tray/home and hierarchy reads against 10,000 unrelated cards. Existing brief
+ceilings remain unchanged. Promise inputs seek relevant next/evidence facts;
+ordinary chatter cannot displace a promise from the bounded window. A dense
+10,000-card denied prefix used 110,457 VM steps before physical admission and
+8,198 afterwards; the admitted brief uses 10,028. Scoped budget markers are
+always conservative, independent of hidden window occupancy. The populated
+50-card/100-series-ref brief remains below its unchanged 50,000 ceiling.
+
+```sh
+go test -C core ./internal/primitives -run '^TestGrouping' -count=1 -v
+go test -C core ./internal/storage -run '^TestGroupingUpgrade' -count=1
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
+```
+
+Full HTTP scale acceptance is currently **blocked**. `/work/ungrouped` is an
+exact collection operation, with no card selector named `ungrouped`. Treating
+that segment as a card reference caused an unnecessary authorization read and
+could make the collection depend on a private card with that handle. The
+selector regression now passes.
+
+`TestPerformanceGroupingFeedBudget` measures authentication, canonical admission
+and the feed on the shared 4,096-row synthetic corpus, using fresh pools for
+both principals and a real authorization-epoch invalidation. Authorized VM
+counts are 31,323 first, 31,275 warm and 31,399 invalidated. Denied-reader counts
+are 1,269,342 first, 29,901 warm and 1,269,482 invalidated, against the unchanged
+50,000 ceiling. These are focused-corpus measurements; they omit the general
+matrix's unrelated PM runtime and stream setup, so they are not a direct
+before/after comparison with its earlier 273,020 / 1,603,957 figures.
+
+Replaying canonical denial capture on the synthetic database uses 1,239,696
+VM steps, leaving 29,786 of the complete invalidated request outside that
+capture. The canonical capture SQL is independent of the page point token.
+Canonical admission still expands denied roots and their
+reachable identities across the workspace. Reducing the feed candidate window
+or adding a candidate index cannot remove that admission work. The complete
+route matrix also retains its query-plan acceptance requirement. The native
+admitted-read figures above do not certify the complete HTTP request. Keep the
+grouping PR draft until cold canonical admission meets the ordinary budget.
+No new baseline, plan allowance or budget increase is supplied here.
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceGroupingFeedBudget$' -count=1 -v -timeout=20m
+```
+
+## PM proposal admission
+
 PM proposal admission uses partial expression indexes on workspace, actor, work
 and scope for awaiting decisions, with a separate matching index for pending
 human proposals. Equality fixes every prefix, so SQLite can take the first rowid
@@ -1016,8 +1069,8 @@ relaxed for this fix.
 
 ## Agent brief ownership and hidden history
 
-`agentInitiativeCards` admits at most 50 distinct card IDs. Assignment uses card
-primary-key seeks; participation uses
+Agent brief ownership admits at most 50 distinct card IDs. Assignment reuses the
+already admitted card rows; `participatingInitiativeCards` uses
 `idx_work_participants_actor_card_active(actor_id,card_id,session_id,id)` with
 `activity <> 'left'`, nonempty actor and `session_active=1` before scoped
 participant/session checks. Migration 105 backfills the normalized session flag

@@ -82,7 +82,11 @@ func TestLoopBriefComparison(t *testing.T) {
 		if err != nil || capture.WorkError() != nil {
 			t.Fatal(err, capture.WorkError())
 		}
-		if len(result["initiatives"].([]map[string]any)) != 1 {
+		items := result["initiatives"].([]map[string]any)
+		if loops, ok := result["loops"].([]map[string]any); ok {
+			items = append(items, loops...)
+		}
+		if len(items) != 1 {
 			t.Fatal(result)
 		}
 		samples = append(samples, elapsed)

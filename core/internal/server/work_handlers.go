@@ -34,14 +34,14 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 	switch {
 	case path == "":
 		valid = r.Method == http.MethodGet || r.Method == http.MethodPost
-	case path == "/capabilities":
+	case path == "/capabilities" || path == "/ungrouped":
 		valid = r.Method == http.MethodGet
 	default:
 		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 		if len(parts) == 1 && parts[0] != "" {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPatch
 		}
-		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants") {
+		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants" || parts[1] == "group" || parts[1] == "fold" || parts[1] == "unfold") {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPost
 		}
 	}
@@ -134,6 +134,8 @@ func workLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return n, true
 }
 func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	viewer, human := workRequestViewer(r)
+	r = r.WithContext(primitives.WithWorkHierarchyViewer(r.Context(), viewer, human))
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/work/"), "/")
 	if len(parts) >= 2 && parts[1] == "participants" {
 		// The participant handler rejects extra/trailing subpaths explicitly.
@@ -146,6 +148,9 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/work")
+	if handleWorkGrouping(w, r, opts, path) {
+		return
+	}
 	if path == "/capabilities" {
 		writeJSON(w, 200, map[string]any{"capabilities": map[string]any{"version": "1", "canonical_entity": "card", "projects": "topics", "observations": true, "remote_reports": "attributed_claims", "external_status_write": false, "refresh": "durable_queue", "refresh_executor_configured": opts.observationRuntime != nil, "phases": []string{"backlog", "ready", "in_progress", "blocked", "review", "done", "cancelled", "unknown"}}})
 		return
@@ -240,7 +245,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"work": publicWork(item)}, nil
+			return groupingWorkResponse(item), nil
 		})
 		if err != nil {
 			workStoreError(w, r, err)

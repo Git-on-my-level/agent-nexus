@@ -89,6 +89,13 @@ func TestFoldPromisePlanEditLeavesTheNote(t *testing.T) {
 	}
 }
 
+func TestFoldPromisePlanEditDoesNotMeetMilestone(t *testing.T) {
+	f := FoldPromise(PromiseInput{Ref: "card:a", Steps: []PromiseStep{{ID: "ship", Title: "Ship", Due: day(3)}}, PlanEdits: []time.Time{day(2)}})
+	if f.Promise == nil || f.Promise.Source != "plan_step" || !f.Promise.At.Equal(day(3)) {
+		t.Fatalf("authoring a plan met its own promise: %+v", f)
+	}
+}
+
 func TestFoldPromiseDone(t *testing.T) {
 	f := FoldPromise(PromiseInput{Done: true, Steps: []PromiseStep{{Due: day(1)}}})
 	if s := f.At(day(9)); s.State != PromiseDone || s.Promise != nil {
@@ -110,19 +117,31 @@ func TestParseWhen(t *testing.T) {
 	}
 }
 
-func TestFoldPromiseLatestNoteClearsOnlyItsAuthor(t *testing.T) {
+func TestFoldPromisePlainNoteKeepsAuthorPromise(t *testing.T) {
 	in := PromiseInput{Notes: []PromiseNote{
-		{At: day(0), Author: "one", NextAt: day(2)},
-		{At: day(0), Author: "two", NextAt: day(3)},
+		{EventID: "e1", At: day(0), Author: "one", NextAt: day(2), NextWhat: "ship"},
 		{At: day(1), Author: "one"},
 	}}
 	f := FoldPromise(in)
-	if f.Promise == nil || f.Promise.Author != "two" || !f.LastEvidenceAt.IsZero() {
-		t.Fatalf("latest per principal or evidence semantics changed: %#v", f)
+	// A note without next is not a promise change: the author's promise stays.
+	if f.Promise == nil || f.Promise.Author != "one" || !f.Promise.At.Equal(day(2)) || f.Promise.SourceRef != "event:e1" {
+		t.Fatalf("plain note cleared the promise: %#v", f)
 	}
+	if !f.LastEvidenceAt.IsZero() {
+		t.Fatalf("plain note is not evidence: %s", f.LastEvidenceAt)
+	}
+	// A new explicit next replaces the author's promise; restating the same
+	// date is not a move.
 	in.Notes = append(in.Notes, PromiseNote{At: day(2), Author: "one", NextAt: day(4)})
+	in.Notes = append(in.Notes, PromiseNote{At: day(3), Author: "one", NextAt: day(4)})
 	f = FoldPromise(in)
-	if f.Moves != 0 {
-		t.Fatalf("cleared promise counted as moved: %#v", f)
+	if f.Promise == nil || !f.Promise.At.Equal(day(4)) || f.Moves != 1 {
+		t.Fatalf("explicit replace = %#v", f)
+	}
+	// Evidence after the promise still meets it.
+	in.Notes = append(in.Notes, PromiseNote{At: day(5), Author: "one", Evidence: true})
+	f = FoldPromise(in)
+	if f.Promise != nil || !f.LastEvidenceAt.Equal(day(5)) {
+		t.Fatalf("evidence must still meet: %#v", f)
 	}
 }

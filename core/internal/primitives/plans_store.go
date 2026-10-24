@@ -287,14 +287,14 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,c.refs_json FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,c.refs_json,COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'') FROM cards c LEFT JOIN brief_initiatives bi ON bi.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw, cardRefsRaw string
-		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw, &cardRefsRaw); err != nil {
+		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw, cardRefsRaw, stepStatus, stepChangeAt string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw, &cardRefsRaw, &stepStatus, &stepChangeAt); err != nil {
 			return nil, nil, nil, err
 		}
 		var entries []any
@@ -309,7 +309,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 			}
 			out[id] = p
 		}
-		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake}
+		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake, StepStatus: stepStatus, StepChangeAt: stepChangeAt}
 		var related []string
 		if strings.TrimSpace(relatedRaw) != "" {
 			if err = json.Unmarshal([]byte(relatedRaw), &related); err != nil {
@@ -644,7 +644,20 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 	if err = s.enrichSummaryAttention(ctx, movement, summaries, now); err != nil {
 		return err
 	}
-	return s.enrichSummaryMetrics(ctx, movement, ps, summaries, now)
+	if err = s.enrichSummaryMetrics(ctx, movement, ps, summaries, now); err != nil {
+		return err
+	}
+	viewer, human := hierarchyViewer(ctx)
+	if _, requested := ctx.Value(workHierarchyViewerKey{}).(workHierarchyViewer); requested {
+		// Legacy unpaged card reads may contain more than one page. Retain
+		// their response shape while each new hierarchy batch stays bounded.
+		for start := 0; start < len(cards); start += 200 {
+			if err = enrichWorkHierarchy(ctx, s.db, cards[start:min(start+200, len(cards))], viewer, human, now); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func summaryFactPlans(ps map[string]plans.Plan, inputs map[string]cardHealthInput) map[string]plans.Plan {

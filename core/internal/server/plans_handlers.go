@@ -57,6 +57,8 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 		return true
 	}
 	ctx := r.Context()
+	viewer, human := workRequestViewer(r)
+	ctx = primitives.WithWorkHierarchyViewer(ctx, viewer, human)
 	if r.URL.Query().Get("summary") != "1" && !strings.HasSuffix(r.URL.Path, "/plan") {
 		ctx = primitives.WithLegacyCardPlans(ctx)
 	}

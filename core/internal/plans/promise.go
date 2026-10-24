@@ -59,9 +59,8 @@ type PromiseInput struct {
 	// a linked step resource moving, and changed source observations).
 	StepChanges  []time.Time
 	Observations []time.Time
-	// PlanEdits are plan-document writes. They meet milestone promises inside
-	// the horizon and count as last evidence. They do not meet a note promise:
-	// plan-step dates are milestones, not the stated next.
+	// PlanEdits are plan-document writes. They count as authored activity, but
+	// never meet a promise: adding a milestone must not fulfill its own due date.
 	PlanEdits []time.Time
 	CardDue   time.Time
 	Wake      time.Time
@@ -97,11 +96,12 @@ type PromiseState struct {
 // evidence time. Rules:
 //   - Resets are a note with resolved evidence, a plan-step state change and a
 //     changed source observation. last_evidence_at is the newest reset.
-//   - A note promise counts for the author's latest note, if it carries next. It is
+//   - A note promise counts for the author's latest note that carries next; a
+//     note without next is not a promise change and never cancels one. It is
 //     met when evidence, a step status change, a linked step moving, or a
 //     changed observation lands after the note. A plan edit does not meet it.
 //   - Step, due_at and wake promises are milestones. A past one is met when a
-//     reset or plan edit landed within the horizon before its at, (at-2d, at].
+//     reset landed within the horizon before its at, (at-2d, at].
 //   - A live note promise is the stated next (the earliest, if several
 //     principals have one). Milestones count only when no live note remains,
 //     and then the earliest unmet at wins.
@@ -109,7 +109,12 @@ type PromiseState struct {
 //     next.at; moves count since the last reset.
 func FoldPromise(in PromiseInput) PromiseFold {
 	out := PromiseFold{Done: in.Done}
-	notes := append([]PromiseNote(nil), in.Notes...)
+	notes := make([]PromiseNote, 0, len(in.Notes))
+	for _, n := range in.Notes {
+		if !n.NextAt.IsZero() || n.Evidence {
+			notes = append(notes, n)
+		}
+	}
 	sort.SliceStable(notes, func(i, j int) bool { return notes[i].At.Before(notes[j].At) })
 	if len(notes) > MaxPromiseNotes {
 		notes = notes[len(notes)-MaxPromiseNotes:]
@@ -143,9 +148,10 @@ func FoldPromise(in PromiseInput) PromiseFold {
 	latest := map[string]PromiseNote{}
 	previous := map[string]time.Time{}
 	for _, n := range notes {
+		// A note without next is not a promise change: it neither states,
+		// replaces nor cancels the author's promise. Only a new next, or a
+		// reset landing after the promise, may change it.
 		if n.NextAt.IsZero() {
-			delete(latest, n.Author)
-			delete(previous, n.Author)
 			continue
 		}
 		prev, ok := previous[n.Author]
@@ -161,7 +167,7 @@ func FoldPromise(in PromiseInput) PromiseFold {
 		}
 		notesLive = append(notesLive, Promise{At: n.NextAt, What: clipWhat(n.NextWhat), Source: "note", SourceRef: eventRef(n.EventID), Author: author})
 	}
-	milestoneReset := append(append([]time.Time{}, resets...), in.PlanEdits...)
+	milestoneReset := resets
 	fixed := func(at time.Time, what, source, ref string) {
 		if at.IsZero() || landed(milestoneReset, at.Add(-PromiseHorizon), at) {
 			return

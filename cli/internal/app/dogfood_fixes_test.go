@@ -12,26 +12,10 @@ import (
 	"agent-nexus-cli/internal/errnorm"
 )
 
-func TestNoteWarnsWhenClearingOwnPromise(t *testing.T) {
-	doc, _ := runNoteForTest(t, "2026-10-20T09:00:00Z", "card:x", "Evidence landed", "--evidence", "https://example.test/proof")
-	message := warningCodes(doc)["note_clears_promise"]
-	if !strings.Contains(message, "2026-10-20T09:00:00Z") {
-		t.Fatalf("missing named promise: %#v", doc)
-	}
-	warnings := asSlice(doc["warnings"])
-	found := false
-	for _, raw := range warnings {
-		w := asMap(raw)
-		if w["code"] == "note_clears_promise" {
-			found = strings.Contains(fmt.Sprint(w), "--next")
-		}
-	}
-	if !found {
-		t.Fatalf("missing carry-forward action: %#v", doc)
-	}
-	doc, _ = runNoteForTest(t, "", "card:x", "Evidence landed", "--evidence", "https://example.test/proof")
+func TestPlainNoteDoesNotWarnThatItClearsPromise(t *testing.T) {
+	doc, _ := runNoteForTest(t, "2026-10-20T09:00:00Z", "card:x", "Plain update")
 	if warningCodes(doc)["note_clears_promise"] != "" {
-		t.Fatal("invented promise", doc)
+		t.Fatal("plain message never clears a promise", doc)
 	}
 }
 
