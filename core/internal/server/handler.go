@@ -746,7 +746,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
-			w = &faultResponseWriter{ResponseWriter: w, r: r}
+			w = &faultResponseWriter{ResponseWriter: w, r: r, started: started}
 			timed := r.Method == http.MethodGet && (r.URL.Path == "/overview" || r.URL.Path == "/inbox" || r.URL.Path == "/inbox/summary")
 			if timed {
 				w = &serverTimingWriter{ResponseWriter: w, started: started}
@@ -820,7 +820,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			opts.routeObserver(stream.Prefix+sub, classify)
 		}
 		stream.Mount(mux, sub, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w = &faultResponseWriter{ResponseWriter: w, r: r}
+			w = &faultResponseWriter{ResponseWriter: w, r: r, started: time.Now()}
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return

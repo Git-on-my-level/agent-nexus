@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,37 @@ func TestPasskeyDevRegisterLogsSanitizedStoreFailure(t *testing.T) {
 	}
 	if !strings.Contains(line, "[redacted]") {
 		t.Fatal(line)
+	}
+}
+
+// The passkey 503 configuration failure quotes browser-supplied Origin/Host
+// header values, so neither the client response nor the fault record may echo
+// it: the client gets the fixed message and the log carries only the class.
+func TestPasskeyAuthUnavailableKeepsFixedMessageAndClassDiagnostic(t *testing.T) {
+	// Serial: capture process-wide logging.
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/passkey/login/options", nil)
+	req.Header.Set("Origin", "https://attacker-origin.example")
+	rec := httptest.NewRecorder()
+	w := &faultResponseWriter{ResponseWriter: rec, r: req}
+	writePasskeyAuthUnavailable(w, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"code":"auth_unavailable"`) || !strings.Contains(body, "passkey auth is not available for this request") || strings.Contains(body, "attacker-origin.example") {
+		t.Fatalf("client response must carry the fixed message only: %s", body)
+	}
+	logged := output.String()
+	if strings.Count(logged, "anx-core: server error") != 1 || !strings.Contains(logged, "status=503") || !strings.Contains(logged, "error=*errors.errorString: passkey_configuration_invalid") {
+		t.Fatalf("fault record must carry the class: %s", logged)
+	}
+	if strings.Contains(logged, "attacker-origin.example") {
+		t.Fatalf("fault record leaked the browser origin: %s", logged)
 	}
 }
 

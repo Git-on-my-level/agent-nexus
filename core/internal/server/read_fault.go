@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,7 +12,17 @@ import (
 // Read failures may wrap canonical text, resource identities or driver values.
 // Log only diagnostic classes and numeric database codes, never Error() text.
 func writeReadInternalError(w http.ResponseWriter, r *http.Request, err error, publicMessage string) {
-	emitServerFault(w, r, http.StatusInternalServerError, readFaultDiagnostic(serverFaultClass(err)), publicMessage)
+	diagnostic := readFaultDiagnostic(serverFaultClass(err))
+	logErr := error(diagnostic)
+	if errors.Is(err, context.Canceled) {
+		// The diagnostic deliberately does not unwrap to the cause. Hand the
+		// shared fault logger the class plus the cancellation sentinel: a
+		// caller that gave up classifies as 499, and an internal cancel while
+		// the request context is still live logs the 500 the connected client
+		// receives. The unwrapped cause is never logged.
+		logErr = readCancelDiagnostic{diagnostic: diagnostic}
+	}
+	emitServerFault(w, r, http.StatusInternalServerError, logErr, publicMessage)
 	writeJSON(w, http.StatusInternalServerError, map[string]any{
 		"error": errorPayload("internal_error", publicMessage),
 	})
@@ -62,3 +73,14 @@ func serverFaultClass(err error) string {
 type readFaultDiagnostic string
 
 func (d readFaultDiagnostic) Error() string { return string(d) }
+
+// readCancelDiagnostic carries a cancellation through the shared fault logger
+// without exposing the wrapped cause: classification sees context.Canceled,
+// while the logged text stays the read fault's class diagnostic.
+type readCancelDiagnostic struct {
+	diagnostic readFaultDiagnostic
+}
+
+func (d readCancelDiagnostic) Error() string { return string(d.diagnostic) }
+
+func (d readCancelDiagnostic) Unwrap() error { return context.Canceled }
