@@ -35,6 +35,7 @@
     mutationOutbox,
     mutationConfirmations,
     supersedeLocalMutation,
+    enqueueDashboardPins,
   } from "$lib/mutationOutbox.js";
   import {
     enqueueTaskMove,
@@ -255,17 +256,28 @@
     return true;
   }
 
-  // Dashboards: the pinned one is a tab; any other opens as a tab from the
-  // "More dashboards" menu.
+  // Dashboards: each of the reader's pins is a tab; any other opens as a tab
+  // from the "More dashboards" menu. Pins are per person; with none, core
+  // answers with the workspace default.
   let dashboards = $state(null);
   let loadingMore = $state(false);
-  let pinning = $state(false);
   let pinError = $state("");
+  let serverPins = $state(null);
+  // The reader's newest pin edit, shown until a reload reads it back. The
+  // outbox owns delivery, so a closed tab or a dropped request loses nothing.
+  let localPins = $state(null);
   let reports = $derived(dashboards?.reports ?? []);
-  let pinnedRef = $derived(dashboards?.pinned_ref ?? "");
-  let pinnedReport = $derived(
-    reports.find((entry) => pinnedRef && entry.ref === pinnedRef) ?? null,
+  let pinnedRefs = $derived(
+    localPins ??
+      serverPins?.document_refs ??
+      (dashboards?.pinned_ref ? [dashboards.pinned_ref] : []),
   );
+  let pinnedReports = $derived(
+    pinnedRefs
+      .map((ref) => reports.find((entry) => entry.ref === ref))
+      .filter(Boolean),
+  );
+  let pinnedReport = $derived(pinnedReports[0] ?? null);
   let wantedDashboard = $derived(params.get("dashboard") || "");
   let selectedReport = $derived(
     reports.find(
@@ -278,9 +290,11 @@
       reports[0] ||
       null,
   );
-  /** A dashboard opened from the menu that is not the pinned one. */
+  /** A dashboard opened from the menu that is not pinned. */
   let extraReport = $derived(
-    tab === "dashboard" && selectedReport && selectedReport !== pinnedReport
+    tab === "dashboard" &&
+      selectedReport &&
+      !pinnedReports.includes(selectedReport)
       ? selectedReport
       : null,
   );
@@ -300,17 +314,39 @@
     await loadDashboards(dashboards.next_cursor);
     loadingMore = false;
   }
-  async function pinDashboard(ref) {
-    pinning = true;
-    pinError = "";
+  async function loadPins() {
     try {
-      await coreClient.setWorkspaceDashboard({ document_ref: ref });
-      await loadDashboards();
+      serverPins = await coreClient.getDashboardPins();
     } catch {
-      pinError = "Couldn't pin that dashboard. Try again.";
-    } finally {
-      pinning = false;
+      // Older cores have no personal pins; the workspace default stands in.
     }
+  }
+  const MAX_PINS = 12;
+  async function savePins(next) {
+    pinError = "";
+    const previous = localPins;
+    localPins = next;
+    try {
+      await enqueueDashboardPins({
+        document_refs: next,
+        href: workspaceHref("/watch?tab=dashboard"),
+      });
+    } catch {
+      localPins = previous;
+      pinError = "Couldn't save your pins. Try again.";
+    }
+  }
+  function pinDashboard(ref) {
+    if (!ref || pinnedRefs.includes(ref)) return;
+    if (pinnedRefs.length >= MAX_PINS) {
+      pinError = `You can pin up to ${MAX_PINS} dashboards. Unpin one first.`;
+      return;
+    }
+    void savePins([...pinnedRefs, ref]);
+  }
+  function unpinDashboard(ref) {
+    if (!ref || !pinnedRefs.includes(ref)) return;
+    void savePins(pinnedRefs.filter((entry) => entry !== ref));
   }
 
   let tabs = $derived(
@@ -331,16 +367,14 @@
             select: () => selectTab("loops"),
           }
         : null,
-      pinnedReport
-        ? {
-            key: `dashboard:${pinnedReport.id}`,
-            label: pinnedReport.title || "Dashboard",
-            badge: 0,
-            pinned: true,
-            active: tab === "dashboard" && selectedReport === pinnedReport,
-            select: () => selectTab("dashboard", pinnedReport.id),
-          }
-        : null,
+      ...pinnedReports.map((report) => ({
+        key: `dashboard:${report.id}`,
+        label: report.title || "Dashboard",
+        badge: 0,
+        pinned: true,
+        active: tab === "dashboard" && selectedReport === report,
+        select: () => selectTab("dashboard", report.id),
+      })),
       extraReport
         ? {
             key: `dashboard:${extraReport.id}`,
@@ -356,6 +390,7 @@
   onMount(() => {
     const stop = mountBrief();
     void loadDashboards();
+    void loadPins();
     const clock = setInterval(() => (now = Date.now()), 30_000);
     return () => {
       clearInterval(clock);
@@ -483,13 +518,16 @@
           <DashboardPicker
             {reports}
             selected={tab === "dashboard" ? selectedReport : null}
-            {pinnedRef}
+            {pinnedRefs}
             triggerLabel="More dashboards"
+            pinLabel="Pin as tab"
+            unpinLabel="Unpin tab"
             hasMore={Boolean(dashboards?.has_more)}
             loading={loadingMore}
             onload={() => void loadMoreReports()}
             onselect={(id) => selectTab("dashboard", id || reports[0]?.id)}
-            onpin={(ref) => void pinDashboard(ref)}
+            onpin={(ref) =>
+              ref ? pinDashboard(ref) : unpinDashboard(selectedReport?.ref)}
           />
         </div>
       {/if}
@@ -520,9 +558,6 @@
   {#if moveError}
     <InlineAlert>{moveError}</InlineAlert>
   {/if}
-  {#if pinning}<p class="text-micro text-fg-muted" role="status">
-      Pinning dashboard…
-    </p>{/if}
   {#if pinError}<p class="text-meta text-danger-text" role="alert">
       {pinError}
     </p>{/if}
@@ -531,12 +566,18 @@
     {#if selectedReport}
       <section class="min-w-0 space-y-2" data-watch-dashboard>
         <div class="flex items-center justify-end gap-3">
-          {#if selectedReport.ref && selectedReport.ref !== pinnedRef}
+          {#if selectedReport.ref && pinnedRefs.includes(selectedReport.ref)}
             <Button
               variant="secondary"
               size="compact"
-              disabled={pinning}
-              onclick={() => void pinDashboard(selectedReport.ref)}
+              onclick={() => unpinDashboard(selectedReport.ref)}
+              data-watch-unpin>Unpin tab</Button
+            >
+          {:else if selectedReport.ref}
+            <Button
+              variant="secondary"
+              size="compact"
+              onclick={() => pinDashboard(selectedReport.ref)}
               data-watch-pin>Pin as tab</Button
             >
           {/if}

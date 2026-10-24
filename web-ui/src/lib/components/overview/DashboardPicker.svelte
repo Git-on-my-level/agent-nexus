@@ -24,6 +24,8 @@
     selected = null,
     /** `document:` ref of the pinned dashboard, or `""` when none is pinned. */
     pinnedRef = "",
+    /** Every pinned `document:` ref (Watch pins several as tabs). */
+    pinnedRefs = [],
     /** Whether core has more choices than `reports` holds. */
     hasMore = false,
     /** A choices page is in flight. */
@@ -36,7 +38,14 @@
     onpin = null,
     /** Fixed trigger text (Watch's "More dashboards"); default shows the selection. */
     triggerLabel = "",
+    /** Menu text for unpinning the selection; `onpin(null)` is called. */
+    unpinLabel = "Use newest report",
+    /** Menu text for pinning the selection. */
+    pinLabel = "Pin as dashboard",
   } = $props();
+
+  const isPinned = (ref) =>
+    Boolean(ref) && (ref === pinnedRef || pinnedRefs.includes(ref));
 
   let open = $state(false);
   let root = $state();
@@ -48,9 +57,7 @@
    */
   let focusOnOpen = $state("");
 
-  let pinnedSelected = $derived(
-    Boolean(selected?.ref) && selected.ref === pinnedRef,
-  );
+  let pinnedSelected = $derived(isPinned(selected?.ref));
 
   function close({ focusTrigger = false } = {}) {
     if (!open) return;
@@ -318,7 +325,7 @@
                 >{entry.id === selected?.id ? "✓" : ""}</span
               >
               <span class="picker-name">{entry.title || entry.id}</span>
-              {#if entry.ref && entry.ref === pinnedRef}
+              {#if isPinned(entry.ref)}
                 <span class="picker-pinned">Pinned</span>
               {/if}
             </button>
@@ -348,7 +355,7 @@
               class="picker-item"
               data-picker-item
               tabindex="-1"
-              onclick={() => pin(null)}>Use newest report</button
+              onclick={() => pin(null)}>{unpinLabel}</button
             >
           {:else}
             <button
@@ -357,7 +364,7 @@
               class="picker-item"
               data-picker-item
               tabindex="-1"
-              onclick={() => pin(selected.ref)}>Pin as dashboard</button
+              onclick={() => pin(selected.ref)}>{pinLabel}</button
             >
           {/if}
         </div>

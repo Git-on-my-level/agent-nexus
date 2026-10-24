@@ -261,6 +261,12 @@ async function send(entry, lease = null) {
       throw new Error("Move receipt is incomplete.");
     return result;
   }
+  if (entry.operation === "workspace.dashboard.pins.set") {
+    const result = await client.setDashboardPins(entry.request.body);
+    if (!Array.isArray(result?.document_refs))
+      throw new Error("Pins receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === "curation.ungroup") {
     const result = await client.ungroupCurationBatch(entry.request.body);
     if (typeof result?.ungrouped !== "boolean")
@@ -747,6 +753,31 @@ export function enqueuePmDecisionAnswer({
  * Undo an accepted batch. Ungrouping by key is idempotent in core, so a
  * retry of the saved request is replay-safe.
  */
+/**
+ * Replace the reader's pinned dashboards. The set is the whole ordered list,
+ * so the newest intent wins: once it is persisted, older pending pin edits
+ * are superseded rather than replayed over it.
+ */
+export async function enqueueDashboardPins({ document_refs, ...options }) {
+  const key = randomUUID();
+  const older = get(mutationOutbox)
+    .filter(
+      (row) => row.operation === "workspace.dashboard.pins.set" && active(row),
+    )
+    .map((row) => row.key);
+  const result = await enqueueLocalMutation({
+    title: "Pinned dashboards",
+    preview: document_refs.join("\n") || "No pinned dashboards",
+    ...options,
+    key,
+    operation: "workspace.dashboard.pins.set",
+    request: { body: { request_key: key, document_refs } },
+  });
+  for (const previous of older)
+    await supersedeLocalMutation(previous, { replacementKey: key });
+  return result;
+}
+
 export function enqueueCurationUngroup({ key: batchKey, ...options }) {
   return enqueueLocalMutation({
     ...options,
