@@ -232,6 +232,38 @@ func performancePlanExceptions(t *testing.T) map[string]bool {
 	return allowed
 }
 
+// The scoped Overview baseline is now read in an admitted point snapshot.
+// Normalize only its compiler epoch with the existing point fingerprint rule;
+// business SQL, scope literals, view definitions and ordered plans stay exact.
+// Other routes retain their existing fingerprints and independently reviewed pins.
+func performancePlanSQLHash(query string) string {
+	if strings.HasSuffix(strings.TrimSpace(query), "FROM overview_visits WHERE principal_id=? AND scope_ref='builtin:overview'") {
+		return perfguard.PointPlanSQLHash(query)
+	}
+	return perfguard.PlanSQLHash(query)
+}
+
+func TestPerformanceOverviewPlanFingerprint(t *testing.T) {
+	query := "WITH RECURSIVE _anx_point_snapshot(token) AS MATERIALIZED (SELECT ? WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=123), events AS (SELECT * FROM main.events) SELECT visited_at,snapshot_json,EXISTS(SELECT 1 FROM events WHERE ts>'2000-01-01' LIMIT 1) FROM overview_visits WHERE principal_id=? AND scope_ref='builtin:overview'"
+	if performancePlanSQLHash(query) != performancePlanSQLHash(strings.Replace(query, "=123)", "=456)", 1)) {
+		t.Fatal("Overview's admitted compiler epoch must not expire the plan pin")
+	}
+	for _, changed := range []string{
+		strings.Replace(query, "2000-01-01", "2001-01-01", 1),
+		strings.Replace(query, "builtin:overview", "builtin:initiatives", 1),
+		strings.Replace(query, "resource_access_epoch", "receipt_access_epoch", 1),
+		query + " /* changed SQL */",
+	} {
+		if performancePlanSQLHash(query) == performancePlanSQLHash(changed) {
+			t.Fatal("business SQL and nonstandard compiler gates must remain exact")
+		}
+	}
+	unrelated := "WITH RECURSIVE _anx_point_snapshot(token) AS MATERIALIZED (SELECT ? WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=123) SELECT id FROM cards"
+	if performancePlanSQLHash(unrelated) != perfguard.PlanSQLHash(unrelated) || performancePlanSQLHash(unrelated) == performancePlanSQLHash(strings.Replace(unrelated, "=123)", "=456)", 1)) {
+		t.Fatal("unrelated plan fingerprints must remain unchanged")
+	}
+}
+
 func TestPerformanceExceptionInventory(t *testing.T) {
 	// Serial: performance samples must not compete with parallel fixtures.
 	performanceBaselineBudgets(t, performanceBudgets(t))

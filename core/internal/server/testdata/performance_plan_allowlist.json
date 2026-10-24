@@ -5282,17 +5282,12 @@
     "reason": "Measured merged main ac77fae8 (schema66), captured by GET /series/{name} (unauthorized). Source: core/internal/primitives/access_graph.go:12; core/internal/primitives/access_scope.go:56. The final business SELECT and every non-policy business CTE match reviewed current-main pair d7be8230b814f13722159768afbf957121f8734679ed87cdbee1b0eaea021296/d97279a1e1da6ef66a629a5a88440c9de2df2f8f3aea0a06c97311ecdab4b5df. They also match old CI pair 18ff9b4460aaa39975dab90fe7a618e38a58f9c9fdec7735e6e632670e121dd3/b96f3cf5a5a78f41e352887e8cd161ab59f65e5bfba30c3cdf3bfe2e140c4221. The final business SELECT and every non-policy business CTE match previously reviewed CI capture af5cbf35ccc9ecbae5cb28e797e0eebf12758d871f94ec279fde534c657e300e/b96f3cf5a5a78f41e352887e8cd161ab59f65e5bfba30c3cdf3bfe2e140c4221. Main275 adds evidence/external-key inheritance, changes denied refs/atoms and prunes unused reference CTEs; the exact compiler and ordered plan fingerprint therefore changed. Existing business scan/automatic-index/custom-WHERE findings remain explicitly included; their main/query projection repair is still required.   The SQL shape is unchanged from the previously reviewed main baseline; schema66 indexes change the full ordered plan with no added finding strings for this SQL. This statement has no snapshot-consumer epoch gate; canonical denial roots and recursion execute when consumed, including fresh transaction/SSE authority. Denied/ref membership and automatic indexes remain active. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout. Completed instrumentation review on main 17655435: the identical SQL and full ordered plan now also flag indexed SEARCH inputs because SQLite reports an aggregate/window function in the submitted query. The conservative nested-query classifier includes canonical denial-closure searches and bounded equality joins; this exact pair only is reviewed. SQLite VM work is now independently capped per route/case/principal, so the plan exception cannot exempt extra execution work."
   },
   {
-    "sql_sha256": "9cbfe7dcd81f2696dc224ab30915abf88e2ee47f7bc30c954c4fb2d95cf2663f",
-    "plan_sha256": "cefdcf983bdc481986e5355f9e6145723412ed5e5efdcb3251f9ae51be34bc96",
-    "findings": [
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
+    "sql_sha256": "ef758b5e553fb860b62f547ef7686094eeab7ed1cfda8d2a541f18cf738dccfe",
+    "plan_sha256": "d7b078e2afc5463f2addf5bc36d6a78fae5ee6cda12591371669694ec08d1a90",
+    "findings": ["custom SQL function in WHERE over a large relation"],
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Measured merged main ac77fae8 (schema66), captured by GET /overview (unauthorized). Source: core/internal/primitives/overview_changes.go:91. overview_visits(principal_id) plus idx_events_overview_answers EXIST/LIMIT1; julianday filters active and rejected answer history may add work. Paired epoch mismatch canonical-root gate/equal-epoch json_each cached-denial branch. Canonical roots/recursive probes inactive only when consuming epoch matches; ownership writes activate fallback. Denied membership/refs/automatic indexes active on cached bound rows. SCAN r can also name denied-reference materialization outside cold branch. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout."
+    "reason": "Remeasured PR #455 after rebase on 82b06eff, schema114, for both GET /overview readers and the first/returning /overview/changes cases. Source: core/internal/primitives/overview_changes.go OverviewChanges. The baseline SELECT fixes principal_id and scope_ref='builtin:overview'; its nine-node ordered plan seeks the composite overview_visits primary key, then idx_events_request_ref(type=?) for the existing correlated EXISTS/LIMIT 1 answer check. The admitted point snapshot replaces the old recursive/cached-denial SQL: the single compiler epoch is normalized with the existing PointPlanSQLHash helper only for this baseline SELECT. Both readers now share the same exact SQL/plan pair, replacing two obsolete actor-specific pins. Only the conservative custom-WHERE finding for the scoped event membership function is permitted; no large-table scan or automatic-index finding is retained. The existing answer-history range/julianday work remains SCA-663. The changed visit INSERT conflict target has no plan finding and receives no exemption. No route latency, SQL, row or VM limit is increased; status, positive controls, privacy and invalidation checks remain mandatory."
   },
   {
     "sql_sha256": "9d18537e35c7d50aadc2a8ce8a8624b9e131ddd0a63e9fa933a32a2779ad7bd0",
@@ -7687,19 +7682,6 @@
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
     "reason": "Measured merged main ac77fae8 (schema66), captured by GET /hosts (authorized). Source: core/internal/primitives/access_graph.go:12; core/internal/primitives/access_scope.go:56. The final business SELECT and every non-policy business CTE match previously reviewed CI capture b51592ac2817fa3f721400b37bed6bfea58afa3d81edad1df234d966db963e07/48acdc327be5ec8a567952b318f265e14244b5ad0805aedd10215e51392942a3. Main275 adds evidence/external-key inheritance, changes denied refs/atoms and prunes unused reference CTEs; the exact compiler and ordered plan fingerprint therefore changed.    The SQL shape is unchanged from the previously reviewed main baseline; schema66 indexes change the full ordered plan with no added finding strings for this SQL. The snapshot epoch guard avoids the canonical denial closure only while the consuming epoch matches; an epoch mismatch activates the canonical fallback; an initial cache miss also computes closure during snapshot acquisition. Cached denied/ref membership and automatic lookup indexes remain active. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout."
-  },
-  {
-    "sql_sha256": "e8c30161b9203b8b5eab89f2343111579993fb80720749f5182fc86466b18078",
-    "plan_sha256": "cefdcf983bdc481986e5355f9e6145723412ed5e5efdcb3251f9ae51be34bc96",
-    "findings": [
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "issue": "SCA-663",
-    "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Measured merged main ac77fae8 (schema66), captured by GET /overview (authorized). Source: core/internal/primitives/overview_changes.go:91. overview_visits(principal_id) plus idx_events_overview_answers EXIST/LIMIT1; julianday filters active and rejected answer history may add work. Paired epoch mismatch canonical-root gate/equal-epoch json_each cached-denial branch. Canonical roots/recursive probes inactive only when consuming epoch matches; ownership writes activate fallback. Denied membership/refs/automatic indexes active on cached bound rows. SCAN r can also name denied-reference materialization outside cold branch. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout."
   },
   {
     "sql_sha256": "e8f4ff137366a5d71d01e479bb68480dbccfe70c236024c805352c99d1c55ce1",

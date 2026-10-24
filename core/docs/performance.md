@@ -401,6 +401,12 @@ Receipt snapshots use `receipt_access_epoch`; ordinary snapshots use
 `resource_access_epoch`. The table name stays in the fingerprint. Mixed tables
 or additional gates retain their exact literals.
 
+The scoped Overview baseline SELECT opts into the existing `PointPlanSQLHash`
+rule for its single admitted point-snapshot epoch. This applies only to the
+`overview_visits` read fixing `scope_ref='builtin:overview'`; other route pins
+retain their existing rules. Business SQL and scope literals, referenced views,
+findings and the full ordered plan remain exact.
+
 Receipt-stream cases retain the private-thread 200/404 case and add a public
 thread for both principals. Initial and fresh payloads must have valid receipt
 IDs and digests; comments and empty flushes cannot complete a receipt sample.
