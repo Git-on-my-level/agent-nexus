@@ -192,4 +192,6 @@ Live dashboard data and declared push adapters: [guide](docs/live-series.md).
 
 Recurring work: [cadence, goals, receipts and loop reports](docs/recurring-work.md).
 
+Grouped work: [parent plans, likely homes, fold/unfold and the initiative budget](docs/grouping-work.md).
+
 Watch: [collections, personal dashboard tabs, scoped activity and panel roles](docs/watch-dashboards.md).

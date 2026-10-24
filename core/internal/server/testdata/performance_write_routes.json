@@ -676,5 +676,20 @@
     "method": "POST",
     "path": "/attention/visits",
     "reason": "Principal-scoped mutation; canonical events and replay commit atomically. Visits always use the authenticated principal."
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/fold",
+    "reason": "Transactional replay-safe grouping mutation; covered by targeted atomicity and privacy tests."
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/group",
+    "reason": "Transactional replay-safe grouping mutation; covered by targeted atomicity and privacy tests."
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/unfold",
+    "reason": "Transactional replay-safe grouping mutation; covered by targeted atomicity and privacy tests."
   }
 ]

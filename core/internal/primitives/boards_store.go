@@ -213,7 +213,8 @@ type CardCreateReplay struct {
 }
 
 type AddBoardCardInput struct {
-	Handle string
+	Handle                      string
+	Under, After, CreateSurface string
 	// CreateReplay is internal request metadata, committed with the card.
 	CreateReplay *CardCreateReplay
 
@@ -264,6 +265,7 @@ type MoveBoardCardInput struct {
 }
 
 type RemoveBoardCardInput struct {
+	Reason                string
 	IfLifecycle           *EventLifecycleBase
 	IfBoardUpdatedAt      *string
 	IfWorkVersion         *int64
@@ -1829,6 +1831,15 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		}
 		return BoardCardMutationResult{}, err
 	}
+	if input.Under != "" {
+		parentRef, err := s.groupWorkTx(ctx, tx, actorID, cardRow, input.Under, input.After, "")
+		if err != nil {
+			return BoardCardMutationResult{}, err
+		}
+		input.Under = parentRef
+	} else if input.After != "" {
+		return BoardCardMutationResult{}, workInvalid("after requires under")
+	}
 	if input.WorkMetadata != nil {
 		if err := insertWorkMetadata(ctx, tx, cardRow.CardID, actorID, input.WorkMetadata); err != nil {
 			_ = tx.Rollback()
@@ -1862,8 +1873,20 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		}
 		return BoardCardMutationResult{}, err
 	}
+	creation := workClone(input.WorkMetadata)
+	creation["under"] = input.Under
+	if err := decorateCreatedCard(ctx, tx, cardMap, creation); err != nil {
+		return BoardCardMutationResult{}, err
+	}
+	cardMap["create_surface"] = input.CreateSurface
+
 	if replay := input.CreateReplay; replay != nil {
 		response := map[string]any{"board": boardMap, "card": cardMap}
+		if homes, ok := cardMap["likely_home"].([]LikelyHome); ok {
+			response["likely_home"] = homes
+			response["next_actions"] = GroupingNextActions(workString(cardMap["ref"]), homes, "group")
+		}
+
 		for key, value := range replay.Extras {
 			if key != "board" && key != "card" {
 				response[key] = value
@@ -2770,6 +2793,16 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
+	if reason := strings.TrimSpace(input.Reason); reason != "" {
+		card, err := cardRow.toMap()
+		if err != nil {
+			return BoardCardMutationResult{}, err
+		}
+		if err = insertWorkEvent(ctx, tx, actorID, card, "card_archived", "Card archived", map[string]any{"reason": reason}); err != nil {
+			return BoardCardMutationResult{}, err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

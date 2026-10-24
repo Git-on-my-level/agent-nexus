@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 252,
+  "route_count": 256,
   "routes": [
     {
       "method": "GET",
@@ -1204,6 +1204,11 @@
     },
     {
       "method": "GET",
+      "path": "/work/ungrouped",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
       "path": "/work/{card_ref}",
       "access_class": "workspace_business_surface"
     },
@@ -1213,6 +1218,16 @@
       "access_class": "workspace_business_surface"
     },
     {
+      "method": "POST",
+      "path": "/work/{card_ref}/fold",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/group",
+      "access_class": "workspace_business_surface"
+    },
+    {
       "method": "GET",
       "path": "/work/{card_ref}/observations",
       "access_class": "workspace_business_surface"
@@ -1240,6 +1255,11 @@
     {
       "method": "POST",
       "path": "/work/{card_ref}/refresh",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/unfold",
       "access_class": "workspace_business_surface"
     },
     {

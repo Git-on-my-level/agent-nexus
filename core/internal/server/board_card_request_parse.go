@@ -14,28 +14,29 @@ import (
 // addBoardCardMerged is the normalized board card create request after merging the
 // contract `card` envelope with the canonical top-level transport fields.
 type addBoardCardMerged struct {
-	Handle           string
-	ActorID          string
-	RequestKey       string
-	CardID           string
-	IfBoardUpdatedAt *string
-	Title            string
-	Body             string
-	ParentThread     string
-	ThreadID         string
-	ColumnKey        string
-	BeforeCardID     string
-	AfterCardID      string
-	BeforeThreadID   string
-	AfterThreadID    string
-	DueAt            *string
-	DefinitionOfDone []string
-	Assignee         *string
-	PinnedDocumentID *string
-	Resolution       *string
-	ResolutionRefs   []string
-	Refs             []string
-	Risk             *string
+	Handle                      string
+	Under, After, CreateSurface string
+	ActorID                     string
+	RequestKey                  string
+	CardID                      string
+	IfBoardUpdatedAt            *string
+	Title                       string
+	Body                        string
+	ParentThread                string
+	ThreadID                    string
+	ColumnKey                   string
+	BeforeCardID                string
+	AfterCardID                 string
+	BeforeThreadID              string
+	AfterThreadID               string
+	DueAt                       *string
+	DefinitionOfDone            []string
+	Assignee                    *string
+	PinnedDocumentID            *string
+	Resolution                  *string
+	ResolutionRefs              []string
+	Refs                        []string
+	Risk                        *string
 }
 
 func mixedBoardCardAliasError(canonicalField string, legacyFields ...string) string {
@@ -91,6 +92,18 @@ func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 	}
 
 	pick := func(key string) any { return firstPresentBoardCardValue(raw, cardObj, key) }
+	for key, dest := range map[string]*string{"under": &m.Under, "after": &m.After, "create_surface": &m.CreateSurface} {
+		if value := pick(key); value != nil {
+			text, ok := value.(string)
+			if !ok {
+				return m, errors.New(key + " must be a string")
+			}
+			*dest = strings.TrimSpace(text)
+		}
+	}
+	if m.After != "" && m.Under == "" {
+		return m, errors.New("after requires under")
+	}
 
 	if hasBoardCardField(raw, cardObj, "assignee") {
 		return m, errors.New("assignee is not supported; use assignee_refs")
@@ -323,6 +336,7 @@ func assigneeStringPtr(v any) *string {
 
 func addBoardCardStoreInput(m addBoardCardMerged) primitives.AddBoardCardInput {
 	return primitives.AddBoardCardInput{
+		Under: m.Under, After: m.After, CreateSurface: m.CreateSurface,
 		Handle:           m.Handle,
 		CardID:           m.CardID,
 		Title:            m.Title,

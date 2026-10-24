@@ -472,11 +472,13 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
 	fs := newSilentFlagSet(commandName)
 	var boardFlag, titleFlag, bodyFlag, contentFileFlag, fromFileFlag, handleFlag trackedString
-	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
+	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, underFlag, afterStepFlag trackedString
 	var columnFlag, topicFlag, documentRefFlag, riskFlag, dueAtFlag trackedString
 	var beforeCardIDFlag, afterCardIDFlag trackedString
 	var assigneeRefFlags, relatedRefFlags, doneFlags trackedStrings
 	var dryRunFlag trackedBool
+	fs.Var(&underFlag, "under", "Parent card ref; adds a plan step atomically")
+	fs.Var(&afterStepFlag, "after", "Preceding plan step id")
 	fs.Var(&boardFlag, "board", "Parent board ref, handle, or id for the new card")
 	fs.Var(&boardFlag, "board-id", "Parent board ref, handle, or id for the new card")
 	fs.Var(&titleFlag, "title", "Card title")
@@ -525,7 +527,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 		if fieldFlagsSet {
 			return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
-		body, dryRun, err := a.parseJSONBodyInputWithOptions(args, commandName, jsonBodyInputOptions{allowDryRun: true})
+		body, dryRun, err := a.parseJSONBodyInputWithOptions(withoutGroupingFlags(args), commandName, jsonBodyInputOptions{allowDryRun: true})
 		if err != nil {
 			return nil, false, err
 		}
@@ -537,6 +539,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
 			return nil, false, err
 		}
+		applyCardGroupingFlags(bodyMap, underFlag.value, afterStepFlag.value)
 		return bodyMap, dryRun, nil
 	}
 	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
@@ -599,9 +602,11 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 		card["after_card_id"] = afterCardID
 	}
 	body := map[string]any{
-		"board_id": boardID,
-		"card":     card,
+		"board_id":       boardID,
+		"create_surface": "cards.create",
+		"card":           card,
 	}
+	applyCardGroupingFlags(body, underFlag.value, afterStepFlag.value)
 	if requestKey := strings.TrimSpace(requestKeyFlag.value); requestKey != "" {
 		body["request_key"] = requestKey
 	}

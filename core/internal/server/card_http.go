@@ -26,6 +26,11 @@ func canonicalCardView(card map[string]any) map[string]any {
 	} else if id := strings.TrimSpace(anyString(card["id"])); id != "" {
 		out["handle"] = id
 	}
+	for _, key := range []string{"parent_ref", "rollup", "likely_home"} {
+		if value, ok := card[key]; ok {
+			out[key] = value
+		}
+	}
 	out["title"] = card["title"]
 	out["summary"] = strings.TrimSpace(anyString(card["summary"]))
 	if card["summary_format"] == true {

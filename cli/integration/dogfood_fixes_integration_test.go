@@ -32,8 +32,8 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 		t.Fatal("missing unowned warning", note.Stdout)
 	}
 	cleared := h.runCLIExpectOK(t, "worker", nil, "note", ref, "Evidence arrived", "--evidence", "https://example.test/proof")
-	if !strings.Contains(cleared.Stdout, "note_clears_promise") || !strings.Contains(cleared.Stdout, "Verify result") {
-		t.Fatal("silent promise clear", cleared.Stdout)
+	if strings.Contains(cleared.Stdout, "note_clears_promise") {
+		t.Fatal("obsolete promise clear warning", cleared.Stdout)
 	}
 	h.runCLIExpectOK(t, "worker", nil, "note", ref, "Follow up", "--next", "1d", "Verify tomorrow")
 	// Brief facts are folded asynchronously. Establish projection readiness
@@ -42,7 +42,7 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 	for {
 		oriented := h.runCLIExpectOK(t, "worker", nil, "orient")
 		ready := false
-		if raw, ok := getPathValue(oriented.Payload, "result.initiatives"); ok {
+		if raw, ok := getPathValue(oriented.Payload, "result.loops"); ok {
 			for _, value := range raw.([]any) {
 				row := value.(map[string]any)
 				promise, _ := row["promise"].(map[string]any)

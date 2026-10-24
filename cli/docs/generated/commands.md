@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `270`
+- Commands: `274`
 
 ## `actors.create`
 
@@ -3319,11 +3319,24 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
+- Why: Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.
 - Concepts: `cards`, `evidence`
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
-- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.fold`
+
+- CLI path: `work fold`
+- HTTP: `POST /work/{card_ref}/fold`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Fold a card into a parent, retaining evidence and asks. Retain request_key and the original body until confirmed.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkResponse`.
+- Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
 
 ## `work.get`
 
@@ -3337,6 +3350,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.group`
+
+- CLI path: `work group`
+- HTTP: `POST /work/{card_ref}/group`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Add an existing card to a parent plan. Retain request_key and the original body until confirmed.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkResponse`.
+- Agent notes: Workspace authenticated; ordinary plan links; no automatic choice.
 
 ## `work.list`
 
@@ -3441,6 +3467,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkRefreshResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.unfold`
+
+- CLI path: `work unfold`
+- HTTP: `POST /work/{card_ref}/unfold`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Reverse a fold without overwriting later edits. Retain request_key and the original body until confirmed.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkResponse`.
+- Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
+
+## `work.ungrouped`
+
+- CLI path: `work ungrouped`
+- HTTP: `GET /work/ungrouped`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Discover recent ungrouped cards and choose a home; suggestions never prevent creation.
+- Concepts: `cards`
+- Error codes: `invalid_request`, `work_unavailable`
+- Output: Returns `WorkUngroupedResponse`.
+- Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
 
 ## `workspace.dashboard.list`
 

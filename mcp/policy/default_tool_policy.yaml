@@ -78,6 +78,7 @@ hosted_default_commands:
   - "work.capabilities"
   - "work.get"
   - "work.list"
+  - "work.ungrouped"
   - "work.observations.list"
   - "work.refresh.get"
 commands:
@@ -893,3 +894,16 @@ commands:
   "series.push":
     classification: unsupported_shell_shaped
     reason: "Use the enrolled host CLI for scoped token exchange and optional source command execution."
+
+  "work.group":
+    classification: exposed_write
+    reason: Add an ordinary plan step atomically with replay safety.
+  "work.fold":
+    classification: exposed_write
+    reason: Transfer references and archive with a reversible scoped snapshot.
+  "work.unfold":
+    classification: exposed_write
+    reason: Reverse a fold without overwriting conflicting user edits.
+  "work.ungrouped":
+    classification: exposed_read
+    reason: Bounded visible recent cards with deterministic likely homes.

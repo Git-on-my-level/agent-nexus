@@ -130,6 +130,9 @@ func askAutoCreatedCardWarning(subjectRef, board string, rows []map[string]any) 
 }
 
 func isOpenInitiative(row map[string]any) bool {
+	if anyString(row["parent_ref"]) != "" || row["cadence"] != nil || row["goal"] != nil || row["loop"] != nil {
+		return false
+	}
 	switch strings.ToLower(firstNonEmpty(anyString(row["phase"]), anyString(row["column_key"]), anyString(row["status"]))) {
 	case "done", "resolved", "closed", "cancelled", "canceled", "archived", "trashed":
 		return false

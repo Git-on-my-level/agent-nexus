@@ -783,7 +783,7 @@ func TestUnifiedObservationIdempotencyUsesCanonicalNestedField(t *testing.T) {
 
 func TestUnifiedPMDoesNotInventRequestKeysForCASActions(t *testing.T) {
 	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
-	for _, id := range []string{"work.create", "work.patch", "work.refresh.request", "pm.actions.reconcile", "pm.turns.complete"} {
+	for _, id := range []string{"work.patch", "work.refresh.request", "pm.actions.reconcile", "pm.turns.complete"} {
 		tool, ok := cat.Lookup(catalog.ToolName(id))
 		if !ok {
 			t.Fatalf("missing %s", id)
@@ -791,5 +791,45 @@ func TestUnifiedPMDoesNotInventRequestKeysForCASActions(t *testing.T) {
 		if _, advertised := tool.InputSchema["properties"].(map[string]any)["idempotency_key"]; advertised {
 			t.Errorf("unsupported replay key advertised for %s", id)
 		}
+	}
+}
+
+func TestGroupingToolsAdvertiseReplayAndCreateSurface(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	for _, id := range []string{"work.create", "work.group", "work.fold", "work.unfold"} {
+		tool, ok := cat.Lookup(catalog.ToolName(id))
+		if !ok {
+			t.Fatalf("missing %s", id)
+		}
+		if _, ok = tool.InputSchema["properties"].(map[string]any)["idempotency_key"]; !ok {
+			t.Fatalf("replay not advertised: %s", id)
+		}
+	}
+}
+
+func TestGroupingMCPCreateCarriesUnderAndSurface(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	tool, ok := cat.Lookup(catalog.ToolName("work.create"))
+	if !ok {
+		t.Fatal("missing work.create")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/work" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if body["under"] != "card:parent" || body["create_surface"] != "mcp" || body["request_key"] != "create-1" {
+			t.Error(body)
+		}
+		writeJSON(t, w, 201, map[string]any{"work": map[string]any{"ref": "card:child", "parent_ref": "card:parent"}})
+	}))
+	defer server.Close()
+	executor := NewWorkspaceExecutor(server.URL, Options{})
+	_, err := executor.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: map[string]any{"body": map[string]any{"title": "Child", "under": "card:parent"}, "idempotency_key": "create-1"}})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

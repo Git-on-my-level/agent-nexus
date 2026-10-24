@@ -707,6 +707,9 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	input := addBoardCardStoreInput(req)
+	if input.CreateSurface == "" {
+		input.CreateSurface = idempotencyOp
+	}
 	if key := strings.TrimSpace(req.RequestKey); key != "" {
 		hash, hashErr := hashJSONPayload(replayRequest)
 		if hashErr != nil {
@@ -767,7 +770,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			}
 		}
 		switch {
-		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
+		case errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidResourceRef), errors.Is(err, resourceaccess.ErrNULText):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board, thread, or document not found")
@@ -788,13 +791,10 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	// Atomic creates already persisted the replay. Do not take the writer lock again.
 	if result.ReplayCommitted {
-		writeJSON(w, http.StatusCreated, normalizeBoardCardMutationReplayPayload(hygiene.attach(map[string]any{"board": result.Board, "card": result.Card})))
+		writeJSON(w, http.StatusCreated, normalizeBoardCardMutationReplayPayload(hygiene.attach(cardCreationResponse(result.Board, result.Card))))
 		return
 	}
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, hygiene.attach(map[string]any{
-		"board": result.Board,
-		"card":  result.Card,
-	}))
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, hygiene.attach(cardCreationResponse(result.Board, result.Card)))
 	if writeIdempotencyError(w, err) {
 		return
 	}
@@ -1338,6 +1338,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	var req struct {
+		Reason                string             `json:"reason"`
 		ActorID               string             `json:"actor_id"`
 		RequestKey            string             `json:"request_key,omitempty"`
 		IfLifecycle           map[string]*string `json:"if_lifecycle,omitempty"`
@@ -1385,6 +1386,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.archive:"+identifier, actorID, req.RequestKey, req, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
 		result, err := opts.primitiveStore.ArchiveBoardCard(ctx, actorID, boardID, identifier, primitives.RemoveBoardCardInput{
+			Reason:                req.Reason,
 			IfLifecycle:           lifecycle,
 			IfBoardUpdatedAt:      req.IfBoardUpdatedAt,
 			IfWorkVersion:         req.IfWorkVersion,
@@ -1393,7 +1395,13 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		if err != nil {
 			return nil, err
 		}
-		emitCardLifecycleEventBestEffort(ctx, opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
+		event := buildCardArchivedEvent(result.Board, result.Card)
+		if payload, ok := event["payload"].(map[string]any); ok {
+			payload["reason"] = strings.TrimSpace(req.Reason)
+		}
+		if strings.TrimSpace(req.Reason) == "" {
+			emitCardLifecycleEventBestEffort(ctx, opts, actorID, event)
+		}
 		return map[string]any{"board": result.Board, "card": publicCardView(result.Card)}, nil
 	})
 
@@ -1914,6 +1922,8 @@ func buildCardCreatedEvent(board, card map[string]any) map[string]any {
 		"resolution_refs":    stringSliceAsAnyList(card["resolution_refs"]),
 		"risk":               publicCardRisk(card),
 	}
+	payload["create_surface"] = card["create_surface"]
+
 	if res := strings.TrimSpace(anyString(card["resolution"])); res != "" {
 		payload["resolution"] = res
 	} else {

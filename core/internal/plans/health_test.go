@@ -14,10 +14,10 @@ func TestHealthForPromiseStates(t *testing.T) {
 	if h.State != PromisePast || h.Promise == nil || h.Promise.SourceRef != "card:x#a" || h.PastPromiseForSeconds == nil || *h.PastPromiseForSeconds != int64(3*24*3600+12*3600) || h.Since == nil || *h.Since != "2026-10-12T00:00:00Z" {
 		t.Fatalf("past step due: %+v", h)
 	}
-	// A plan edit within the horizon before the due meets it; the next open due counts.
+	// A plan edit within the horizon preserves the promised milestone.
 	h = HealthFor(HealthInput{Ref: "card:x", Plan: &p, State: state, Phase: "in_progress", PlanEditedAt: time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)}, now)
-	if h.State != PromiseMoving || h.Promise.Source != "plan_step" || h.Promise.At != "2026-10-20T00:00:00Z" || h.LastEvidenceAt == nil {
-		t.Fatalf("met step due: %+v", h)
+	if h.State != PromisePast || h.Promise.Source != "plan_step" || h.Promise.At != "2026-10-12T00:00:00Z" || h.LastEvidenceAt == nil {
+		t.Fatalf("plan edit erased step due: %+v", h)
 	}
 	// Nothing dated: no_promise, never a threshold state.
 	planless := HealthFor(HealthInput{Ref: "card:y", Phase: "in_progress"}, now)

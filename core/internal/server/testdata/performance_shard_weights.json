@@ -506,5 +506,9 @@
   {
     "key": "GET /attention/items",
     "milliseconds": 10000
+  },
+  {
+    "key": "GET /work/ungrouped",
+    "milliseconds": 500
   }
 ]
