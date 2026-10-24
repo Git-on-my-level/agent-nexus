@@ -9,9 +9,13 @@ that dies for any reason -- kill -9 included -- releases its slot when the
 kernel closes the descriptor. Capacity for a class comes from
 ANX_SLOTS_<CLASS>, then ~/.config/hostslots.json ({"<class>": n}), then
 max(1, cpus/6). While every slot is busy the wrapper polls and prints a
-single wait line. The command runs as a child of the wrapper; its exit
-status becomes the wrapper's, and SIGINT/SIGTERM/SIGHUP are forwarded so a
-stopped wrapper takes its child down instead of leaking it.
+single wait line. The command runs as a child of the wrapper in its own
+session, so a terminal interrupt reaches it once, through the wrapper; its
+exit status becomes the wrapper's, and SIGINT/SIGTERM/SIGHUP are forwarded so
+a stopped wrapper takes its child down instead of leaking it. An interrupt
+while still waiting for a slot exits 128+signal (130 for Ctrl-C) with no
+traceback. After acquiring, the wrapper re-checks the lock path still resolves
+to the locked inode, so an unlinked lock file cannot admit a second holder.
 """
 
 import fcntl
@@ -65,15 +69,28 @@ def slot_dir(class_name):
 
 
 def acquire(directory, count):
-    """Take a free slot: (fd, index), or None when all count are held."""
+    """Take a free slot: (fd, index), or None when all count are held.
+
+    The flock pins an inode, not a path: if something unlinks the lock file
+    mid-acquire (tmpwatch-style cleanup), the descriptor would hold a file
+    nothing else can see while a fresh inode at the same path admits a second
+    holder. Re-check that the path still resolves to the locked inode and
+    retry onto the recreated file when it does not.
+    """
     for index in range(count):
-        fd = os.open(directory / f"{index}.lock", os.O_RDWR | os.O_CREAT, 0o600)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            os.close(fd)
-        else:
-            return fd, index
+        path = directory / f"{index}.lock"
+        for _retry in range(2):  # once more when the lock file is replaced mid-acquire
+            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held = os.fstat(fd)
+                current = os.stat(path)
+            except OSError:  # busy, or unlinked before we could re-check
+                os.close(fd)
+                break
+            if (current.st_dev, current.st_ino) == (held.st_dev, held.st_ino):
+                return fd, index
+            os.close(fd)  # the path was recreated under us; lock the file now at it
     return None
 
 
@@ -82,6 +99,25 @@ def run(class_name, argv):
     directory = slot_dir(class_name)
     directory.mkdir(parents=True, exist_ok=True)
     waited = False
+    child = None
+    pending = []
+    waiting = True
+
+    def forward(number, _frame):
+        # With no child yet there is nothing to relay: an interrupt while
+        # waiting for a slot stops the wrapper the way a shell would,
+        # 128+signal and no traceback. A signal can also land mid-spawn,
+        # while the forked command is already running but Popen has not yet
+        # assigned `child`; those are queued and replayed at the child.
+        if child is None:
+            if waiting:
+                raise SystemExit(128 + number)
+            pending.append(number)
+        else:
+            child.send_signal(number)
+
+    for number in FORWARDED_SIGNALS:
+        signal.signal(number, forward)
     while True:
         taken = acquire(directory, count)
         if taken is not None:
@@ -92,22 +128,12 @@ def run(class_name, argv):
             waited = True
         time.sleep(POLL_SECONDS)
     fd, _index = taken
-    child = None
-    pending = []
-
-    def forward(number, _frame):
-        # A signal can land mid-spawn, while the forked command is already
-        # running but Popen has not returned to assign `child`. Queue those;
-        # they are replayed at the child as soon as it exists.
-        if child is None:
-            pending.append(number)
-        else:
-            child.send_signal(number)
-
+    waiting = False
     try:
-        for number in FORWARDED_SIGNALS:
-            signal.signal(number, forward)
-        child = subprocess.Popen(argv)
+        # Own session: sharing the wrapper's process group would deliver a
+        # terminal interrupt to the child directly *and* through the forward
+        # above, so the child must receive signals through the wrapper only.
+        child = subprocess.Popen(argv, start_new_session=True)
         while pending:
             child.send_signal(pending.pop(0))
         code = child.wait()

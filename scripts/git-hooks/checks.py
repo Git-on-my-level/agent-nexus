@@ -121,10 +121,130 @@ def fans_out(changed):
                       "core/cmd/contract-gen/", "core/cmd/route-inventory/")) for p in changed)
 
 
+def parse_go_mod(text):
+    """(module path, required names, {replaced name: target}) from go.mod text.
+
+    A tolerant line parser rather than a `go` invocation: selection must map
+    modules in test fixtures and offline. Only the directives that can link two
+    local modules matter -- `require` entries and `replace` targets.
+    """
+    module, requires, replaces = None, set(), {}
+
+    def replaced(fields):
+        if "=>" in fields:
+            arrow = fields.index("=>")
+            if arrow >= 1 and len(fields) > arrow + 1:
+                replaces[fields[0]] = fields[arrow + 1]
+
+    directive = None
+    for raw in text.splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if directive:
+            if line.startswith(")"):
+                directive = None
+            elif directive == "require":
+                requires.add(line.split()[0])
+            else:
+                replaced(line.split())
+            continue
+        fields = line.split()
+        head, rest = fields[0], fields[1:]
+        if head == "module" and rest:
+            module = rest[0]
+        elif head == "require":
+            if rest[:1] == ["("]:
+                directive = "require"
+            elif rest:
+                requires.add(rest[0])
+        elif head == "replace":
+            body = line[len("replace"):].strip()
+            if body.startswith("("):
+                directive = "replace"
+            else:
+                replaced(body.split())
+    return module, requires, replaces
+
+
+_GO_MODULES_CACHE = {}
+
+
+def local_go_modules():
+    """Local Go modules and their links, read from the tracked go.mod files.
+
+    Module membership cannot be a hard-coded prefix list: `core` requires and
+    replaces `../tests/channels`, so a change under `tests/` must run that
+    module's own suite and the core packages importing it. Returns
+    (modules, dependents, replaces): modules is module dir -> module path,
+    dependents maps a provider dir to the dirs whose go.mod names it, and
+    replaces maps a dependent dir to {module path: provider dir}. Vendor,
+    testdata and hidden trees are invisible to the go tool and skipped for the
+    same reason.
+    """
+    cached = _GO_MODULES_CACHE.get(str(ROOT))
+    if cached is not None:
+        return cached
+    parsed = {}
+    for tracked in paths(git("ls-files", "-z")):
+        if Path(tracked).name != "go.mod":
+            continue
+        if any(part.startswith((".", "_")) or part in {"vendor", "testdata", "node_modules"}
+               for part in Path(tracked).parts[:-1]):
+            continue
+        module, requires, replaces = parse_go_mod((ROOT / tracked).read_text())
+        if module:
+            parsed[str(Path(tracked).parent)] = (module, requires, replaces)
+    owners = {module: directory for directory, (module, _r, _x) in parsed.items()}
+    dependents = {directory: set() for directory in parsed}
+    replaces_of = {directory: {} for directory in parsed}
+    for directory, (_module, requires, replaces) in parsed.items():
+        for name, target in replaces.items():
+            if target.startswith("."):  # local relative replaces only
+                provider = os.path.normpath(os.path.join(directory, target))
+                if provider in parsed:
+                    dependents[provider].add(directory)
+                    replaces_of[directory][name] = provider
+        for name in requires:  # a local module named even without a replace
+            provider = owners.get(name)
+            if provider is not None and provider != directory:
+                dependents[provider].add(directory)
+    cached = ({directory: info[0] for directory, info in parsed.items()}, dependents, replaces_of)
+    _GO_MODULES_CACHE[str(ROOT)] = cached
+    return cached
+
+
+def go_module_dirs():
+    """Every selectable Go module: the product modules first, local extras after."""
+    discovered = local_go_modules()[0]
+    return [*GO_MODULES, *sorted(d for d in discovered if d not in GO_MODULES)]
+
+
+def dependent_closure(directory, dependents):
+    """Every module that depends on `directory`, transitively."""
+    seen, frontier = set(), {directory}
+    while frontier:
+        frontier = {dep for depdir in frontier for dep in dependents.get(depdir, ())} - seen
+        seen |= frontier
+    return seen
+
+
 def selected_modules(changed):
+    discovered, dependents, _replaces = local_go_modules()
     if fans_out(changed):
-        return set(MODULES)
-    modules = {m for m in MODULES if any(p.startswith(m + "/") for p in changed)}
+        return set(MODULES) | set(discovered)
+    modules = set()
+    innermost = sorted(discovered, key=len, reverse=True)
+    for path in changed:
+        # Discovered modules win over the product prefixes: nested modules
+        # (tests/channels, tools/...) carry their own dependents.
+        for directory in innermost:
+            if path.startswith(directory + "/"):
+                modules.add(directory)
+                modules |= dependent_closure(directory, dependents)
+                break
+        else:
+            modules |= {m for m in MODULES if path.startswith(m + "/")}
     if "VERSION" in changed or any(p.startswith(("scripts/read-version", "scripts/sync-version",
                                                 "scripts/set-version")) for p in changed):
         modules.add("cli")
@@ -235,26 +355,34 @@ def go_affected(module, changed):
     """Changed packages and their dependents as ./dir args, or None to run the module whole.
 
     Dependents follow test imports as well as imports, so a change in a helper
-    package still runs every package whose tests consume it.
+    package still runs every package whose tests consume it. A changed local
+    module this one requires or replaces (a `replace ... => ../dir` link) is
+    treated like a changed package: the importers here run, then their
+    dependents.
     """
     owned = sorted(p[len(module) + 1:] for p in changed if p.startswith(module + "/"))
-    if not owned:
+    replaces = local_go_modules()[2].get(module, {})
+    foreign = sorted({name for name, provider in replaces.items()
+                      if provider != module and any(p == provider or p.startswith(provider + "/")
+                                                    for p in changed)})
+    if not owned and not foreign:
         return None  # Selected for a reason outside the module (e.g. VERSION for cli).
+    if any(rel in GO_MODULE_WIDE or rel.startswith(GO_MODULE_WIDE_PREFIXES) for rel in owned):
+        return None
     directory, imports, buildable = go_package_graph(module)
+    importers = {}
+    for path, deps in imports.items():
+        for dep in deps:
+            importers.setdefault(dep, set()).add(path)
     selected = set()
     for rel in owned:
-        if rel in GO_MODULE_WIDE or rel.startswith(GO_MODULE_WIDE_PREFIXES):
-            return None
         package = owning_package(rel, directory)
         if package is WIDEN:
             # Build-tagged, generated or non-Go trees have no listed package.
             return None
         if package is not None:
             selected.add(package)
-    importers = {}
-    for path, deps in imports.items():
-        for dep in deps:
-            importers.setdefault(dep, set()).add(path)
+    selected |= {importer for name in foreign for importer in importers.get(name, ())}
     dependents, frontier = set(), set(selected)
     while frontier:
         reached = {importer for path in frontier for importer in importers.get(path, ())}
@@ -324,15 +452,20 @@ def static_checks(changed, all_files=False):
         untracked = paths(git("ls-files", "--others", "--exclude-standard", "-z"))
         # Git-ignore rules do not hide Go sources from the compiler. Hidden,
         # underscore, vendor and testdata directories are excluded by go ./....
-        go_untracked = paths(git("ls-files", "--others", "-z", "--", "core", "cli", "mcp", "contracts"))
+        go_untracked = paths(git("ls-files", "--others", "-z", "--",
+                                 "core", "cli", "mcp", "contracts", "tests", "tools"))
         untracked |= {p for p in go_untracked if
                       (Path(p).suffix == ".go" or Path(p).name in {"go.mod", "go.sum"}
                        or p in {"contracts/anx-openapi.yaml", "contracts/anx-schema.yaml",
                                 "contracts/non-openapi-endpoints.yaml"})
                       and not any(part.startswith((".", "_")) or part in {"vendor", "testdata"}
                                   for part in Path(p).parts)}
+        # Local modules discovered from go.mod (tests/channels, tools) mask
+        # staged errors exactly like the product modules do.
+        module_prefixes = tuple(sorted(
+            {d + "/" for d in local_go_modules()[0]} | {m + "/" for m in MODULES}))
         inputs = sorted(p for p in untracked if
-                        (p.startswith((*[m + "/" for m in MODULES], "contracts/", "scripts/git-hooks/"))
+                        (p.startswith(module_prefixes + ("contracts/", "scripts/git-hooks/"))
                          and Path(p).suffix in {".go", ".mod", ".sum", ".js", ".mjs", ".cjs",
                                                ".ts", ".svelte", ".css", ".json", ".yaml", ".yml", ".py"})
                         or p in {"go.work", "go.work.sum", "package.json", "pnpm-lock.yaml",
@@ -360,7 +493,7 @@ def static_checks(changed, all_files=False):
                       {"Makefile", ".pre-commit-config.yaml", ".github/workflows/ci.yml"}
                       and not p.startswith("scripts/git-hooks/")}
     modules = selected_modules(static_changed)
-    for module in MODULES[:-1]:
+    for module in go_module_dirs():
         if module in modules:
             run("go", "vet", "./...", cwd=ROOT / module)
     if "web-ui" in modules:
@@ -473,13 +606,19 @@ def ui_fast_tests(changed, whole_module, base):
     # Reuse the CI unit runner's single-fork configuration on shared hosts.
     env = {"ANX_TEST_FAST": "1", "CI": "1"}
     owned = [p for p in changed if p.startswith("web-ui/")]
-    if (whole_module or base is None or not owned
+    # `vitest --changed` reads git's diff, which never lists untracked paths;
+    # with --passWithNoTests that would silently select nothing, so untracked
+    # web-ui work widens to the full suite.
+    untracked = {p for p in paths(git("ls-files", "--others", "--exclude-standard", "-z"))
+                 if p.startswith("web-ui/")}
+    if (whole_module or base is None or not owned or untracked
             or any(p in UI_WIDE or p.startswith(UI_WIDE_PREFIXES) for p in owned)):
-        print("web-ui: every unit test (shared root or unattributable change).", flush=True)
+        print("web-ui: every unit test (shared root, unattributable change, "
+              "or untracked files vitest cannot diff).", flush=True)
         run("pnpm", "-C", "web-ui", "run", "test:unit", extra_env=env, slot="tests")
         return
-    # Vitest resolves the module graph itself, and reads the same committed,
-    # staged, unstaged and untracked changes this selector does.
+    # Vitest resolves the module graph itself over the diff git reports; the
+    # untracked gap in that diff is closed by the widening above.
     print("web-ui: unit tests related to the changed files, plus the source-scanning guards.",
           flush=True)
     run("pnpm", "-C", "web-ui", "exec", "vitest", "run", "--changed", base,
@@ -496,11 +635,11 @@ def fast_tests(changed, base=None):
         return
     modules = selected_modules(changed)
     whole_module = fans_out(changed)
-    print("Fast modules: " + (", ".join(m for m in MODULES if m in modules) or "none"), flush=True)
+    print("Fast modules: " + (", ".join(sorted(modules)) or "none"), flush=True)
     # Verify our selector and drift failure paths whenever hook/build plumbing changes.
     if changed & SHARED or any(p.startswith("scripts/git-hooks/") for p in changed):
         run("python3", "-B", "-m", "unittest", "discover", "-s", "scripts/git-hooks", "-p", "test_*.py")
-    for module in GO_MODULES:
+    for module in go_module_dirs():
         if module in modules:
             go_fast_tests(module, changed, whole_module)
     if "web-ui" in modules:

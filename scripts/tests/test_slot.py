@@ -1,7 +1,9 @@
-"""Host slot wrapper regressions: capacity resolution, exclusion, release on kill."""
+"""Host slot wrapper regressions: capacity resolution, exclusion, release on
+kill, stale lock files, and interrupt handling."""
 
 from __future__ import annotations
 
+import fcntl
 import importlib.machinery
 import importlib.util
 import json
@@ -145,6 +147,69 @@ class SlotTests(unittest.TestCase):
                         "the waiter must proceed once the holder is killed")
         output, _ = waiter.communicate(timeout=10)
         self.assertIn("waiting", output)
+
+    def test_a_lock_file_unlinked_while_acquiring_is_not_trusted(self):
+        directory = self.root / "anx-slots" / "tests"
+        directory.mkdir(parents=True)
+        lock = directory / "0.lock"
+        lock.write_text("")
+        real_flock = fcntl.flock
+        raced = []
+
+        def unlink_during_the_lock_window(fd, flags):
+            # A cleaner unlinks the lock file mid-acquire and a peer recreates
+            # it, so the path no longer resolves to the inode being locked.
+            if not raced:
+                raced.append(True)
+                lock.unlink()
+                lock.write_text("")
+            return real_flock(fd, flags)
+
+        with patch.object(fcntl, "flock", side_effect=unlink_during_the_lock_window):
+            taken = slot.acquire(directory, 1)
+        self.assertIsNotNone(taken)
+        fd, _index = taken
+        self.addCleanup(os.close, fd)
+        held = os.fstat(fd)
+        current = lock.stat()
+        self.assertEqual((current.st_dev, current.st_ino), (held.st_dev, held.st_ino),
+                         "acquire must retry onto the recreated lock file, not keep the "
+                         "orphaned inode a second holder could run beside")
+
+    def test_interrupting_the_slot_wait_exits_130_without_a_traceback(self):
+        self.env["ANX_SLOTS_TESTS"] = "1"
+        holder = self.gated_holder(self.root / "gate")
+        self.assertTrue(wait_until(lambda: (self.root / "gate.started").exists()))
+        log = self.root / "waiter.log"
+        with open(log, "w") as sink:
+            waiter = subprocess.Popen(
+                [sys.executable, str(SCRIPT), "run", "tests", "--", "sh", "-c",
+                 f'touch "{self.root / "never"}"'],
+                env=self.env, stdout=sink, stderr=subprocess.STDOUT, text=True)
+            self.assertTrue(wait_until(lambda: "waiting" in log.read_text()),
+                            "the waiter must reach the poll loop before we interrupt it")
+            waiter.send_signal(signal.SIGINT)
+            waiter.communicate(timeout=10)
+        output = log.read_text()
+        self.assertEqual(waiter.returncode, 130, output)
+        self.assertNotIn("Traceback", output)
+        self.assertFalse((self.root / "never").exists(),
+                         "an interrupted waiter must not run its command")
+        self.release([holder], [self.root / "gate"])
+
+    def test_the_child_runs_outside_the_wrapper_s_process_group(self):
+        # A terminal interrupt signals the whole foreground group: if the child
+        # shared the wrapper's group it would get the signal directly *and* the
+        # wrapper's forwarded copy.
+        pid_file = self.root / "child.pid"
+        wrapper = self.slot_run("sh", "-c", f'echo $$ > "{pid_file}"\nexec sleep 30')
+        self.assertTrue(wait_until(pid_file.exists))
+        child = int(pid_file.read_text().strip())
+        self.addCleanup(wrapper.kill)
+        self.assertNotEqual(os.getpgid(child), os.getpgid(wrapper.pid),
+                            "the child must receive interrupts through the wrapper only")
+        wrapper.send_signal(signal.SIGTERM)
+        wrapper.communicate(timeout=10)
 
     def test_the_wrapper_forwards_termination_signals_to_its_child(self):
         child_script = (f'trap \'touch "{self.root / "terminated"}"; exit 0\' TERM\n'
