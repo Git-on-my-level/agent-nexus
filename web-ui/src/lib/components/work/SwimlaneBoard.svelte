@@ -36,6 +36,7 @@
     trayRows,
   } from "$lib/swimlanes.js";
   import {
+    enqueueFailureMessage,
     enqueueGrouping,
     groupingDraft,
     groupingTitle,
@@ -99,6 +100,12 @@
       };
     }
   }
+  // A tray that never loaded has no count to show.
+  let trayCount = $derived(
+    tray.error && !tray.rows.length
+      ? ""
+      : ` · ${tray.rows.length}${tray.hasMore ? "+" : ""}`,
+  );
   // The tray follows the brief: the brief's live refresh is already bounded,
   // so the tray is read at most as often, and never per lane.
   const trayRead = { at: "" };
@@ -133,9 +140,8 @@
       // Persisted before it is sent; a storage failure stops the send.
       await enqueueGrouping(draft, { href: boardHref || undefined });
       saved = null;
-    } catch {
-      saveError =
-        "Couldn’t save this on your device, so it was not sent. Try again.";
+    } catch (error) {
+      saveError = enqueueFailureMessage(error);
       return;
     }
     notice = { text: `${groupingTitle(draft)}. Saved, sending…` };
@@ -151,6 +157,16 @@
         { ref: suggestion.into, title: suggestion.intoTitle },
       ),
     );
+
+  /** The plan step a confirmed group added, once the brief shows it. */
+  function addedStep({ verb, work, parent }) {
+    if (verb !== "group") return "";
+    return (
+      lanes
+        .find((lane) => lane.ref === parent?.ref)
+        ?.rollup.children.find((child) => child.ref === work.ref)?.stepId ?? ""
+    );
+  }
 
   /** Undo for a confirmed change; group and fold each have one. */
   const UNDO = { group: "ungroup", fold: "unfold" };
@@ -286,7 +302,12 @@
       notice = {
         text: doneText(draft),
         undo: undo
-          ? () => send(groupingDraft(undo, draft.work, draft.parent))
+          ? () =>
+              send(
+                groupingDraft(undo, draft.work, draft.parent, {
+                  stepId: addedStep(draft),
+                }),
+              )
           : null,
       };
     };
@@ -309,7 +330,7 @@
     LANE_COLUMNS.find((column) => column.key === key).label.toLowerCase();
 </script>
 
-{#snippet trayBody()}
+{#snippet trayBody(idPrefix)}
   {#if tray.error}
     <StateError
       title="Ungrouped cards didn’t load"
@@ -325,6 +346,7 @@
       {now}
       onGroup={(row, lane) => group(row, lane)}
       onGrab={phone ? null : grab}
+      {idPrefix}
     />
   {/if}
 {/snippet}
@@ -507,15 +529,13 @@
         data-swimlane-tray
       >
         <h2 id="swimlane-tray-title" class="text-meta">
-          <span class="font-semibold text-fg"
-            >Ungrouped · {tray.rows.length}{tray.hasMore ? "+" : ""}</span
-          >
+          <span class="font-semibold text-fg">Ungrouped{trayCount}</span>
           <span class="text-fg-muted">
             New cards wait here until they join an initiative. Drag one onto a
             lane, or take a suggested home.</span
           >
         </h2>
-        {@render trayBody()}
+        {@render trayBody("tray")}
       </section>
       <button
         type="button"
@@ -524,9 +544,9 @@
         data-swimlane-tray-open
         onclick={openTray}
         ><span
-          ><span class="font-semibold text-fg"
-            >Ungrouped · {tray.rows.length}{tray.hasMore ? "+" : ""}</span
-          ><span class="text-fg-muted">{" · tap to group"}</span></span
+          ><span class="font-semibold text-fg">Ungrouped{trayCount}</span><span
+            class="text-fg-muted">{" · tap to group"}</span
+          ></span
         ><span aria-hidden="true" class="text-fg-muted">›</span></button
       >
     {/if}
@@ -562,7 +582,7 @@
           {#each lanes as lane (lane.ref)}
             {@const isCollapsed = laneCollapsed(lane)}
             {@const cells = laneCells(lane.rollup)}
-            {@const segments = progressSegments(lane.rollup.byState)}
+            {@const segments = progressSegments(lane.rollup)}
             {@const more = hiddenChildren(lane.rollup)}
             <section
               class="border-line md:grid md:grid-cols-[15rem_repeat(4,minmax(0,1fr))] md:border-b md:last:border-b-0 max-md:rounded-md max-md:border max-md:bg-panel {dropRef ===
@@ -587,7 +607,9 @@
                     type="button"
                     class="ui-icon-btn -mr-1 -mt-1 shrink-0"
                     aria-expanded={!isCollapsed}
-                    aria-controls="lane-cells-{lane.ref}"
+                    aria-controls={isCollapsed
+                      ? undefined
+                      : `lane-cells-${lane.ref}`}
                     aria-label="{isCollapsed
                       ? 'Expand'
                       : 'Collapse'} {lane.title}"
@@ -768,7 +790,7 @@
             type="button"
             class="flex w-full items-center justify-between px-3 py-2.5 text-left text-meta"
             aria-expanded={loopsOpen}
-            aria-controls="swimlane-loops-list"
+            aria-controls={loopsOpen ? "swimlane-loops-list" : undefined}
             onclick={() => (loopsOpen = !loopsOpen)}
             ><span
               ><span class="font-semibold text-fg">Loops · {loops.length}</span
@@ -849,7 +871,7 @@
     >
       <div class="flex items-center justify-between gap-2">
         <h2 id="swimlane-sheet-title" class="text-subtitle text-fg">
-          Ungrouped · {tray.rows.length}{tray.hasMore ? "+" : ""}
+          Ungrouped{trayCount}
         </h2>
         <button
           type="button"
@@ -860,7 +882,7 @@
       <p class="mt-1 text-micro text-fg-muted">
         New cards wait here until they join an initiative.
       </p>
-      {@render trayBody()}
+      {@render trayBody("sheet")}
     </div>
   </div>
 {/if}

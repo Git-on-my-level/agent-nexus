@@ -154,8 +154,11 @@ above. It reads the brief (already shared with the navigation badge) and one
 `GET /work/ungrouped?limit=20` page, re-read only when the brief refreshes; it
 never reads per lane. Group and fold go through the device outbox with their
 original `request_key`. Undo of a fold is `unfold`; undo of a group removes the
-step the group added with a keyed plan write, and refuses when another step now
-depends on it.
+step the group added with a keyed plan write. The first send reads the plan
+once, removes only that step (by its step id when the brief has shown it), and
+persists the exact write before sending; every retry replays that write with
+the original key and `if_updated_at`, so a retry can never remove a step
+someone added back. It refuses when another step now depends on the step.
 
 ![Lanes on a desktop, with the Ungrouped tray above](../web-ui/tests/fixtures/qa-visual-baseline/workspace-initiatives-lanes.png)
 

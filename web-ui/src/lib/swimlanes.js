@@ -1,3 +1,5 @@
+import { isLoop } from "$lib/brief.js";
+
 /**
  * The swimlane board: one lane per top-level initiative, its children in
  * state columns. Presentation only. Core computes the hierarchy, the rollup
@@ -42,12 +44,21 @@ export function laneCells(rollup) {
 
 /**
  * The progress bar: one segment per column with children, sized by core's
- * `by_state` counts, done first so the bar fills from the left.
+ * `by_state` counts with needs-you children counted where their cards sit,
+ * done first so the bar fills from the left.
  */
-export function progressSegments(byState) {
+export function progressSegments(rollup) {
   const totals = Object.fromEntries(LANE_COLUMNS.map(({ key }) => [key, 0]));
-  for (const [phase, count] of Object.entries(byState ?? {}))
+  for (const [phase, count] of Object.entries(rollup?.byState ?? {}))
     totals[phaseColumn(phase)] += Math.max(0, Number(count) || 0);
+  // A child waiting on the reader sits in `stuck` whatever its phase; count
+  // it there too, so the bar agrees with the cells.
+  for (const child of rollup?.children ?? []) {
+    const from = phaseColumn(child.state);
+    if (columnFor(child) === from || totals[from] < 1) continue;
+    totals[from] -= 1;
+    totals.stuck += 1;
+  }
   const total = Object.values(totals).reduce((sum, n) => sum + n, 0);
   return ["done", "moving", "stuck", "not_started"]
     .filter((key) => totals[key] > 0)
@@ -60,12 +71,13 @@ export function progressSegments(byState) {
 
 /**
  * Lanes in reading order: what needs the reader, then what is past its
- * promise, then core's own order, with finished initiatives last. Children and loops never become lanes,
- * even from a core that sent them here.
+ * promise, then core's own order, with finished initiatives last. Children
+ * and loops (by the same test Watch uses) never become lanes, even from a
+ * core that sent them here.
  */
 export function buildLanes(initiatives) {
   return (initiatives ?? [])
-    .filter((row) => !row.parentRef && !row.loop)
+    .filter((row) => !row.parentRef && !isLoop(row))
     .map((row, index) => ({ row, index }))
     .sort(
       (a, b) =>

@@ -10,7 +10,8 @@ import { randomUUID } from "$lib/replayPolicy.js";
  * request_key (see docs/grouping-work.md).
  *
  * Undoing a group has no route of its own: it removes the one plan step the
- * group added, through the keyed plan write. See `groupingPlan.js`.
+ * group added, through the keyed plan write. The write is computed once and
+ * frozen in the entry; see `groupingPlan.js` and the outbox sender.
  */
 
 export const GROUPING_OPERATIONS = [
@@ -51,8 +52,11 @@ export function groupingTitle({ verb, work, parent }) {
   }
 }
 
-/** A complete immutable intent; retries never substitute newer reads. */
-export function groupingDraft(verb, work, parent = null) {
+/**
+ * A complete immutable intent; retries never substitute newer reads.
+ * `stepId` binds an undo-group to the one plan step the group added.
+ */
+export function groupingDraft(verb, work, parent = null, { stepId = "" } = {}) {
   return JSON.parse(
     JSON.stringify({
       verb,
@@ -60,6 +64,7 @@ export function groupingDraft(verb, work, parent = null) {
       parent: parent
         ? { ref: parent.ref, title: parent.title || parent.ref }
         : null,
+      ...(stepId ? { stepId } : {}),
     }),
   );
 }
@@ -74,9 +79,29 @@ export function groupingRequest(draft, actor, key) {
   const body = { actor_id: actor, request_key: key };
   if (draft.verb === "group") body.under = parent;
   if (draft.verb === "fold") body.into = parent;
+  // `write` stays empty until the first send freezes the exact plan write;
+  // every retry then replays that write with this key.
   if (draft.verb === "ungroup")
-    return { operation, request: { ref, parent, body } };
+    return {
+      operation,
+      request: { ref, parent, stepId: draft.stepId || "", body, write: null },
+    };
   return { operation, request: { ref, body } };
+}
+
+/**
+ * Why a grouping change was not saved. Nothing was sent in any of these
+ * cases; the copy says which fix applies.
+ */
+export function enqueueFailureMessage(error) {
+  if (error?.localPersistence)
+    return "Couldn’t save this on your device, so it was not sent. Try again.";
+  const reason = String(error?.message ?? "").trim();
+  if (/sign in/i.test(reason))
+    return "Sign in to this workspace again, then retry. Nothing was sent.";
+  return reason
+    ? `${reason.replace(/\.$/, "")}. Nothing was sent.`
+    : "Couldn’t save this grouping change. Nothing was sent.";
 }
 
 export function enqueueGrouping(draft, options = {}) {

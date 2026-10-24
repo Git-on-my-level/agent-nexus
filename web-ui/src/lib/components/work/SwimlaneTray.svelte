@@ -17,6 +17,8 @@
     onGroup,
     /** `(event, row)`: a pointer went down on a row. */
     onGrab = null,
+    /** Keeps ids unique when the tray is drawn twice (inline and sheet). */
+    idPrefix = "tray",
   } = $props();
 
   function other(row, event) {
@@ -76,11 +78,11 @@
           >
         {/each}
         {#if lanes.length}
-          <label class="sr-only" for="tray-other-{row.ref}"
+          <label class="sr-only" for="{idPrefix}-other-{row.ref}"
             >Group “{row.title}” under another initiative</label
           >
           <select
-            id="tray-other-{row.ref}"
+            id="{idPrefix}-other-{row.ref}"
             class="ui-input min-h-9 w-auto max-w-[12rem] py-1 text-micro"
             disabled={waiting}
             onchange={(event) => other(row, event)}

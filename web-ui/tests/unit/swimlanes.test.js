@@ -17,11 +17,9 @@ import {
   progressSegments,
   trayRows,
 } from "../../src/lib/swimlanes.js";
+import { removeGroupedStep } from "../../src/lib/groupingPlan.js";
 import {
-  removeGroupedStep,
-  ungroupPlanKey,
-} from "../../src/lib/groupingPlan.js";
-import {
+  enqueueFailureMessage,
   groupingDraft,
   groupingRequest,
   groupingTitle,
@@ -219,13 +217,15 @@ describe("lanes", () => {
 
   it("sizes the progress bar from by_state, done first", () => {
     expect(
-      progressSegments({ backlog: 1, ready: 1, in_progress: 1, done: 1 }),
+      progressSegments({
+        byState: { backlog: 1, ready: 1, in_progress: 1, done: 1 },
+      }),
     ).toEqual([
       { key: "done", count: 1, share: 0.25 },
       { key: "moving", count: 1, share: 0.25 },
       { key: "not_started", count: 2, share: 0.5 },
     ]);
-    expect(progressSegments({})).toEqual([]);
+    expect(progressSegments({ byState: {} })).toEqual([]);
   });
 });
 
@@ -330,13 +330,19 @@ describe("grouping writes", () => {
       body: { actor_id: "h", request_key: "k" },
     });
     expect(
-      groupingRequest(groupingDraft("ungroup", work, parent), "h", "k"),
+      groupingRequest(
+        groupingDraft("ungroup", work, parent, { stepId: "card-1" }),
+        "h",
+        "k",
+      ),
     ).toEqual({
       operation: "work.ungroup",
       request: {
         ref: "card:a1-f4",
         parent: "card:a1",
+        stepId: "card-1",
         body: { actor_id: "h", request_key: "k" },
+        write: null,
       },
     });
   });
@@ -357,6 +363,7 @@ describe("grouping writes", () => {
     const next = removeGroupedStep(plan, "card:a1-f4");
     expect(next).toEqual({
       changed: true,
+      stepId: "card-1",
       plan: { steps: [{ id: "design", title: "Design", after: [] }] },
     });
     expect(removeGroupedStep(next.plan, "card:a1-f4").changed).toBe(false);
@@ -377,9 +384,84 @@ describe("grouping writes", () => {
     expect(() => removeGroupedStep(null, "card:x")).toThrow(/incomplete/);
   });
 
-  it("keys each plan write by the plan it was computed from", () => {
-    expect(ungroupPlanKey("k", "2026-10-24T00:00:00Z")).toBe(
-      "k:2026-10-24T00:00:00Z",
+  it("is bound to the step the group added", () => {
+    const plan = {
+      steps: [
+        { id: "authored", ref: "card:a1-f4", after: [] },
+        { id: "card-1", ref: "card:a1-f4", after: [] },
+      ],
+    };
+    // Only the group's own step goes; an authored step for the card stays.
+    expect(
+      removeGroupedStep(plan, "card:a1-f4", "card-1").plan.steps.map(
+        (step) => step.id,
+      ),
+    ).toEqual(["authored"]);
+    // Its id now names another card: not ours to remove.
+    expect(
+      removeGroupedStep(
+        { steps: [{ id: "card-1", ref: "card:other", after: [] }] },
+        "card:a1-f4",
+        "card-1",
+      ).changed,
+    ).toBe(false);
+    // Without the id, two candidates are ambiguous and nothing is removed.
+    expect(() => removeGroupedStep(plan, "card:a1-f4")).toThrow(
+      /More than one/,
     );
+  });
+});
+
+describe("review fixes", () => {
+  it("counts a needs-you child where its card sits, not by phase", () => {
+    const rollup = normalizeBrief({
+      initiatives: [
+        initiative("card:r", {
+          rollup: {
+            ...initiative("x").rollup,
+            total: 3,
+            by_state: { in_progress: 2, done: 1 },
+            needing_viewer: 1,
+            children: [
+              child("card:ask", "in_progress", { needs_viewer: true }),
+              child("card:work", "in_progress"),
+              child("card:shipped", "done"),
+            ],
+          },
+        }),
+      ],
+    }).initiatives[0].rollup;
+    const counts = Object.fromEntries(
+      progressSegments(rollup).map((segment) => [segment.key, segment.count]),
+    );
+    const cells = laneCells(rollup);
+    expect(counts).toEqual({ done: 1, moving: 1, stuck: 1 });
+    for (const [key, count] of Object.entries(counts))
+      expect(cells[key]).toHaveLength(count);
+  });
+
+  it("never makes a series-only loop a lane", () => {
+    const rows = normalizeBrief({
+      initiatives: [
+        initiative("card:root"),
+        initiative("card:series-loop", {
+          series: [{ ref: "series:signup", name: "signup" }],
+        }),
+      ],
+    }).initiatives;
+    expect(buildLanes(rows).map((row) => row.ref)).toEqual(["card:root"]);
+  });
+
+  it("says why a grouping change was not saved", () => {
+    const storage = Object.assign(new Error("QuotaExceededError"), {
+      localPersistence: true,
+    });
+    expect(enqueueFailureMessage(storage)).toMatch(/on your device/);
+    expect(
+      enqueueFailureMessage(new Error("Sign in before saving a message.")),
+    ).toMatch(/Sign in/);
+    expect(
+      enqueueFailureMessage(new Error("Choose an initiative to group under.")),
+    ).toBe("Choose an initiative to group under. Nothing was sent.");
   });
 });

@@ -1,22 +1,35 @@
 /** Pure plan edits for undoing a group. The outbox sender applies them. */
 
 /**
- * The parent plan without the step that grouped `ref`.
+ * The parent plan without the step that grouped `ref`, or `changed: false`
+ * when there is nothing of this group's left to remove.
  *
- * `changed: false` means the step is already gone, which is also how an
- * earlier send that landed looks on retry. A step another step now waits on
- * is not removed: dropping it would rewrite someone else's dependency.
+ * With `stepId` (the step the group added, from the rollup) only that step is
+ * removed, and only while it still points at `ref`. Without it, exactly one
+ * step must point at `ref`; more than one is ambiguous and refused.
+ *
+ * A step another step now waits on is not removed: dropping it would rewrite
+ * someone else's dependency. The caller computes this once per undo and
+ * freezes the result; it is never recomputed from a later read.
  */
-export function removeGroupedStep(plan, ref) {
+export function removeGroupedStep(plan, ref, stepId = "") {
   const steps = Array.isArray(plan?.steps) ? plan.steps : null;
   if (!steps) throw new Error("Plan read is incomplete.");
-  const removed = steps.filter((step) => step?.ref === ref);
-  if (!removed.length) return { changed: false, plan };
-  const ids = new Set(removed.map((step) => step.id));
-  const kept = steps.filter((step) => step?.ref !== ref);
+  const matches = steps.filter(
+    (step) => step?.ref === ref && (!stepId || step.id === stepId),
+  );
+  if (!matches.length) return { changed: false, plan };
+  if (matches.length > 1)
+    throw Object.assign(new Error("More than one step points at this card."), {
+      status: 409,
+      publicMessage:
+        "This initiative lists the card more than once, so it was left in place. Edit the plan to take it out.",
+    });
+  const [step] = matches;
+  const kept = steps.filter((entry) => entry !== step);
   if (
-    kept.some((step) =>
-      (Array.isArray(step?.after) ? step.after : []).some((id) => ids.has(id)),
+    kept.some((entry) =>
+      (Array.isArray(entry?.after) ? entry.after : []).includes(step.id),
     )
   )
     throw Object.assign(new Error("Another step depends on this card."), {
@@ -24,13 +37,5 @@ export function removeGroupedStep(plan, ref) {
       publicMessage:
         "Another step in this initiative now depends on this card, so it was left in place. Edit the plan to take it out.",
     });
-  return { changed: true, plan: { ...plan, steps: kept } };
+  return { changed: true, stepId: step.id, plan: { ...plan, steps: kept } };
 }
-
-/**
- * The key for one plan write. Each send reads the current plan, so the body
- * is a function of that plan's token: the same token gives the same body and
- * replays exactly, and a newer token is a new request rather than a reuse of
- * a key for another body.
- */
-export const ungroupPlanKey = (key, token) => `${key}:${token}`;

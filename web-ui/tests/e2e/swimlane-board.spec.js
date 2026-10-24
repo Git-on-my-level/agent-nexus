@@ -174,6 +174,11 @@ function seed() {
     ],
     hasMore: false,
     plans: {},
+    planTokens: {},
+    planReceipts: {},
+    planWrites: 0,
+    losePlanResponses: 0,
+    dropPlanWrites: 0,
     calls: [],
     posts: [],
     hold: {},
@@ -272,20 +277,41 @@ async function install(context, api) {
       const ref = path.split("/")[2];
       const method = route.request().method();
       api.calls.push(`${method} ${path}`);
+      const token = () => api.planTokens[ref] ?? "2026-10-24T12:00:01Z";
       if (method === "GET")
         return json(route, {
           card_ref: ref,
           plan: api.plans[ref] ?? { steps: [] },
-          if_updated_at: "2026-10-24T12:00:01Z",
+          if_updated_at: token(),
         });
+      // Core's keyed plan write: a known key replays its original response
+      // or refuses another body; a stale token is refused.
       const body = route.request().postDataJSON();
       api.posts.push({ verb: "plan", ref, body });
+      const seen = api.planReceipts[body.request_key];
+      if (seen)
+        return JSON.stringify(seen.body) === JSON.stringify(body)
+          ? json(route, seen.response)
+          : json(route, { error: { message: "key reused" } }, 409);
+      if (api.dropPlanWrites > 0) {
+        api.dropPlanWrites -= 1;
+        return json(route, { error: { message: "gateway timeout" } }, 503);
+      }
+      if (body.if_updated_at !== token())
+        return json(route, { error: { message: "plan changed" } }, 409);
       api.plans[ref] = body.plan;
-      return json(route, {
+      api.planTokens[ref] = `2026-10-24T12:00:0${++api.planWrites + 1}Z`;
+      const response = {
         card_ref: ref,
         plan: body.plan,
-        if_updated_at: "2026-10-24T12:00:02Z",
-      });
+        if_updated_at: api.planTokens[ref],
+      };
+      api.planReceipts[body.request_key] = { body, response };
+      if (api.losePlanResponses > 0) {
+        api.losePlanResponses -= 1;
+        return json(route, { error: { message: "gateway timeout" } }, 503);
+      }
+      return json(route, response);
     },
   );
 }
@@ -300,6 +326,23 @@ async function open(page, context, api = seed(), { fixTime = true } = {}) {
 }
 
 const laneLocator = (page, ref) => page.locator(`[data-lane-ref="${ref}"]`);
+
+/** `aria-controls` values on the board that name no element. */
+const danglingControls = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("[data-swimlane-board] [aria-controls]")]
+      .map((node) => node.getAttribute("aria-controls"))
+      .filter((id) => !document.getElementById(id)),
+  );
+
+/** Element ids used more than once in the document. */
+const duplicateIds = (page) =>
+  page.evaluate(() => {
+    const seen = new Map();
+    for (const node of document.querySelectorAll("[id]"))
+      seen.set(node.id, (seen.get(node.id) ?? 0) + 1);
+    return [...seen].filter(([, n]) => n > 1).map(([id]) => id);
+  });
 
 async function shot(page, name) {
   if (!process.env.BOARD_SHOTS) return;
@@ -394,6 +437,8 @@ test.describe("desktop", () => {
     );
     await capture.locator("[data-lane-toggle]").click();
     await expect(capture).toHaveAttribute("data-lane-collapsed", "true");
+    // Collapsed lanes and the closed Loops list point at nothing missing.
+    expect(await danglingControls(page)).toEqual([]);
     await expect(capture.locator("[data-work-ref]")).toHaveCount(0);
     await capture.locator("[data-lane-toggle]").click();
 
@@ -466,8 +511,85 @@ test.describe("desktop", () => {
       "card:a1-f4",
     );
     expect(plan.body.if_updated_at).toBe("2026-10-24T12:00:01Z");
-    // The plan write is keyed by the plan it was computed from.
-    expect(plan.body.request_key).toMatch(/:2026-10-24T12:00:01Z$/);
+    // The undo's own key, not one derived from a later read.
+    expect(plan.body.request_key).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  test("an undo whose response was lost never removes a step someone re-added", async ({
+    page,
+    context,
+  }) => {
+    // The review's sequence: the undo's plan write commits but its response
+    // is lost; another operator groups the card again; the retry fires.
+    const api = await open(page, context, seed(), { fixTime: false });
+    await page
+      .locator('[data-tray-ref="card:a1-f4"]')
+      .locator('[data-group-under="card:capture"]')
+      .click();
+    const notice = page.locator("[data-grouping-notice]");
+    await expect(notice).toContainText("Grouped “A1 F4");
+    api.losePlanResponses = 1;
+    await notice.getByRole("button", { name: "Undo" }).click();
+    await expect
+      .poll(() => api.posts.filter((post) => post.verb === "plan").length)
+      .toBe(1);
+    await expect(
+      page.locator('[data-mutation-state="retrying"]'),
+    ).toBeVisible();
+    // Another operator puts the step back before the retry.
+    api.plans["card:capture"] = {
+      steps: [
+        ...api.plans["card:capture"].steps,
+        { id: "card-a1-f4", title: "A1 F4", ref: "card:a1-f4", after: [] },
+      ],
+    };
+    api.planTokens["card:capture"] = "2026-10-24T12:30:00Z";
+    await expect
+      .poll(() => api.posts.filter((post) => post.verb === "plan").length, {
+        timeout: 15_000,
+      })
+      .toBe(2);
+    const [first, retry] = api.posts.filter((post) => post.verb === "plan");
+    // The retry replays the first write byte for byte: same key, same body.
+    expect(retry.body).toEqual(first.body);
+    await expect(notice).toContainText("It is back in Ungrouped.");
+    // The other operator's step survives.
+    expect(api.plans["card:capture"].steps.map((step) => step.ref)).toContain(
+      "card:a1-f4",
+    );
+    // Only one plan read: the retry never re-derived its write.
+    expect(
+      api.calls.filter((call) => call === "GET /cards/card:capture/plan"),
+    ).toHaveLength(1);
+  });
+
+  test("an undo that never landed is refused once the plan moves on", async ({
+    page,
+    context,
+  }) => {
+    const api = await open(page, context, seed(), { fixTime: false });
+    await page
+      .locator('[data-tray-ref="card:a1-f4"]')
+      .locator('[data-group-under="card:capture"]')
+      .click();
+    const notice = page.locator("[data-grouping-notice]");
+    await expect(notice).toContainText("Grouped “A1 F4");
+    api.dropPlanWrites = 1;
+    await notice.getByRole("button", { name: "Undo" }).click();
+    await expect(
+      page.locator('[data-mutation-state="retrying"]'),
+    ).toBeVisible();
+    // Someone edits the plan before the retry.
+    api.planTokens["card:capture"] = "2026-10-24T12:30:00Z";
+    await expect(
+      page.locator('[data-mutation-state="attention"]'),
+    ).toContainText("nothing was removed", { timeout: 15_000 });
+    const writes = api.posts.filter((post) => post.verb === "plan");
+    expect(writes).toHaveLength(2);
+    expect(writes[1].body).toEqual(writes[0].body);
+    expect(api.plans["card:capture"].steps.map((step) => step.ref)).toContain(
+      "card:a1-f4",
+    );
   });
 
   test("dragging a tray card onto a lane groups it there", async ({
@@ -633,6 +755,8 @@ test.describe("desktop", () => {
         .getByText("Ungrouped cards didn’t load"),
     ).toBeVisible();
     await expect(page.getByText("Tray failed", { exact: true })).toHaveCount(0);
+    // A tray that never loaded has no count to show.
+    await expect(page.locator("#swimlane-tray-title")).not.toContainText("· 0");
     await shot(page, "lanes-tray-error");
   });
 });
@@ -678,6 +802,8 @@ test.describe("phone", () => {
     await page.locator("[data-swimlane-tray-open]").tap();
     const sheet = page.getByRole("dialog", { name: /Ungrouped/ });
     await expect(sheet).toBeVisible();
+    // The sheet's controls are its own: no id is used twice.
+    expect(await duplicateIds(page)).toEqual([]);
     await shot(page, "lanes-phone-tray");
     await sheet.locator('[data-group-under="card:capture"]').tap();
     await expect

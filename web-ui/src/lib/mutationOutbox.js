@@ -41,7 +41,7 @@ import {
   autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
-import { removeGroupedStep, ungroupPlanKey } from "$lib/groupingPlan.js";
+import { removeGroupedStep } from "$lib/groupingPlan.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -334,24 +334,37 @@ async function send(entry, lease = null) {
     return result;
   }
   if (entry.operation === "work.ungroup") {
-    // Apply the removal to the plan as it is now. Each read's token keys its
-    // own write (ungroupPlanKey), so a retry after a landed send finds the
-    // step gone, and a retry after a newer edit is a new keyed request.
-    const { parent, ref, body } = entry.request;
-    const read = async () => {
+    // One exact plan write per undo, like the op-based pins edit: the first
+    // send reads the plan once, removes only the step this group added, and
+    // persists that write before sending it. Retries replay it byte for byte
+    // with the original key: a landed write replays its receipt, and a plan
+    // that moved on is refused by its if_updated_at fence. A retry never
+    // reads again, so it cannot remove a step someone else put back.
+    const { parent, ref, stepId, body } = entry.request;
+    if (!entry.request.write) {
       const current = await client.getCardPlan(parent);
       if (!current?.if_updated_at) throw new Error("Plan read is incomplete.");
-      return current;
-    };
-    const current = await read();
-    const next = removeGroupedStep(current.plan, ref);
-    if (!next.changed) return current;
-    const result = await client.setCardPlan(parent, {
-      ...body,
-      request_key: ungroupPlanKey(body.request_key, current.if_updated_at),
-      plan: next.plan,
-      if_updated_at: current.if_updated_at,
-    });
+      const next = removeGroupedStep(current.plan, ref, stepId);
+      if (!next.changed) return current;
+      entry.request = {
+        ...entry.request,
+        stepId: next.stepId,
+        write: { plan: next.plan, if_updated_at: current.if_updated_at },
+      };
+      await persist(entry, lease);
+    }
+    let result;
+    try {
+      result = await client.setCardPlan(parent, {
+        ...body,
+        ...entry.request.write,
+      });
+    } catch (error) {
+      if (Number(error?.status) === 409)
+        error.publicMessage =
+          "This initiative’s plan changed after you pressed Undo, so nothing was removed. Edit the plan if you still want the card out.";
+      throw error;
+    }
     if (!result?.if_updated_at) throw new Error("Plan receipt is incomplete.");
     return result;
   }
