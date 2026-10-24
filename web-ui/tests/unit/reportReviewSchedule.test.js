@@ -58,7 +58,6 @@ const LADDER_MS =
  * proves nothing about it.
  */
 const PAST_FIRST_RUNG = LADDER_RUNGS[0] + ARM_SLACK + 4000;
-
 const report = {
   schema_version: 1,
   title: "Dashboard",
@@ -113,6 +112,16 @@ const settled = async () => {
     await tick();
   }
 };
+// Advance virtual time without a real event-loop turn for every clock tick.
+// Flush the component at each one-second arm boundary so async refreshes can
+// install their next deadline before virtual time moves on.
+const advanceClock = async (milliseconds) => {
+  const target = Date.now() + milliseconds;
+  while (Date.now() < target) {
+    vi.advanceTimersByTime(Math.min(1000, target - Date.now()));
+    await settled();
+  }
+};
 const open = () =>
   render(VisualReport, {
     report,
@@ -145,7 +154,7 @@ it("reads itself again when its soonest deadline passes", async () => {
   // this report does mount and past the 30-second refresh it would have
   // mounted had any panel been live, so either would have read again by now —
   // and still short of the deadline, which is the only thing that should.
-  await vi.advanceTimersByTimeAsync(PAST_FIRST_RUNG);
+  await advanceClock(PAST_FIRST_RUNG);
   expect(Date.now()).toBeLessThan(DUE_AT);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
@@ -153,7 +162,7 @@ it("reads itself again when its soonest deadline passes", async () => {
   // Past the deadline, core now says due, and the read that asks it is the
   // read that files the author's reminder.
   coreClientMock.renderReport.mockResolvedValue(rendered(true));
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await advanceClock(DUE_AT - Date.now() + 2000);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(2);
   expect(chip(container)).toBe("due-for-review");
@@ -161,7 +170,7 @@ it("reads itself again when its soonest deadline passes", async () => {
   // And it stops: core has agreed, so there is nothing left to tell it. Past
   // the first two rungs of the retry ladder, which is where a read would land
   // if the deadline were still considered unconfirmed.
-  await vi.advanceTimersByTimeAsync(5 * MINUTE);
+  await advanceClock(5 * MINUTE);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(2);
 });
@@ -172,7 +181,7 @@ it("turns amber on the clock even if the read never lands", async () => {
   const { container } = open();
   await settled();
   coreClientMock.renderReport.mockRejectedValue(new Error("core is down"));
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await advanceClock(DUE_AT - Date.now() + 2000);
   await settled();
   expect(chip(container)).toBe("due-for-review");
 });
@@ -189,12 +198,12 @@ it("asks again when core will not confirm, backing off and then stopping", async
   });
   open();
   await settled();
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await advanceClock(DUE_AT - Date.now() + 2000);
   await settled();
   expect(readAt).toHaveLength(2);
 
   // Past the whole ladder.
-  await vi.advanceTimersByTimeAsync(LADDER_MS + 5 * MINUTE);
+  await advanceClock(LADDER_MS + 5 * MINUTE);
   await settled();
 
   // Bounded: the deadline read, eight tries, then silence.
@@ -210,7 +219,7 @@ it("asks again when core will not confirm, backing off and then stopping", async
   expect(readAt.at(-1) - readAt[1]).toBeGreaterThan(2 * HOUR);
 
   // Longer than the ladder's last rung, so a ninth try would have landed.
-  await vi.advanceTimersByTimeAsync(90 * MINUTE);
+  await advanceClock(90 * MINUTE);
   await settled();
   expect(readAt).toHaveLength(10);
 });
@@ -245,13 +254,13 @@ it("keeps waiting for one deadline while another will never be confirmed", async
 
   // No retry storm before the deadline: this is past the ladder's first rung,
   // where a wrongly pending panel would have read again.
-  await vi.advanceTimersByTimeAsync(PAST_FIRST_RUNG);
+  await advanceClock(PAST_FIRST_RUNG);
   expect(Date.now()).toBeLessThan(DUE_AT);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
 
   // ...and the other panel's deadline is still read when it arrives.
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await advanceClock(DUE_AT - Date.now() + 2000);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(2);
 });
@@ -270,7 +279,7 @@ it("keeps what core resolved when a later read fails", async () => {
   );
 
   coreClientMock.renderReport.mockRejectedValue(new Error("core is down"));
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await advanceClock(DUE_AT - Date.now() + 2000);
   await settled();
   expect(
     container
@@ -289,7 +298,7 @@ it("clears its timer when the report goes away", async () => {
   // accumulates for as long as the tab lives. Zero, because the component
   // owns both the review timeout and the clock interval beside it.
   expect(vi.getTimerCount()).toBe(0);
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 5 * MINUTE);
+  await advanceClock(DUE_AT - Date.now() + 5 * MINUTE);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
 });
@@ -327,9 +336,9 @@ it("spends its tries on one deadline without costing the next its read", async (
   await settled();
 
   // The first deadline, then its retry ladder, which runs out after ~3h.
-  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await advanceClock(DUE_AT - Date.now() + 2000);
   await settled();
-  await vi.advanceTimersByTimeAsync(LADDER_MS + 5 * MINUTE);
+  await advanceClock(LADDER_MS + 5 * MINUTE);
   await settled();
   const spent = readAt.length;
   expect(spent).toBeGreaterThan(5);
@@ -337,7 +346,7 @@ it("spends its tries on one deadline without costing the next its read", async (
   // And the second deadline is still read when it arrives.
   const laterDue = Date.parse(later.panels[1].review_by);
   expect(Date.now()).toBeLessThan(laterDue);
-  await vi.advanceTimersByTimeAsync(laterDue - Date.now() + 2000);
+  await advanceClock(laterDue - Date.now() + 2000);
   await settled();
   expect(readAt.length).toBeGreaterThan(spent);
   expect(readAt.at(-1)).toBeGreaterThanOrEqual(laterDue);

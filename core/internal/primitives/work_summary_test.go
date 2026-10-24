@@ -157,8 +157,12 @@ func TestWorkSummaryAttentionAudienceBoundsAndPrivacy(t *testing.T) {
 	if err = s.ReplaceDerivedInboxItems(ctx, thread, items); err != nil {
 		t.Fatal(err)
 	}
+	// A few 64-row batches; size their deadline to that work rather than the
+	// background loop's 100 ms per-batch budget.
+	build, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	for {
-		done, err := ws.MaintainScopeInboxBatch(ctx)
+		done, err := ws.MaintainScopeInboxBatch(build)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,8 +270,12 @@ func TestWorkSummaryRelatedAskWaitDeduplicatesAndCloses(t *testing.T) {
 	if err = s.ReplaceDerivedInboxItems(ctx, thread, items); err != nil {
 		t.Fatal(err)
 	}
+	// A few 64-row batches; size their deadline to that work rather than the
+	// background loop's 100 ms per-batch budget.
+	build, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	for {
-		done, e := ws.MaintainScopeInboxBatch(ctx)
+		done, e := ws.MaintainScopeInboxBatch(build)
 		if e != nil {
 			t.Fatal(e)
 		}

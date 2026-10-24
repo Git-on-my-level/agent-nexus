@@ -215,9 +215,18 @@ func TestGitCaptureMismatchHookNamesWriterSafely(t *testing.T) {
 	fixtureGit(t, f.root, "init", "-q")
 	fixtureGit(t, f.root, "commit", "--allow-empty", "-m", "seed")
 	f.run(t, "git", "enable", "--writer")
-	_, gd, _ := integrations.Repo(context.Background(), f.root)
+	// A transient git failure here would yield an empty gitdir, the capture
+	// would land under the wrong digest, and the hook would then no-op on the
+	// missing capture: an empty-stderr failure with no diagnosis.
+	_, gd, e := integrations.Repo(context.Background(), f.root)
+	if e != nil {
+		t.Fatal(e)
+	}
 	path := integrations.CapturePath(f.dir, gd)
-	s, _ := integrations.LoadCapture(path)
+	s, e := integrations.LoadCapture(path)
+	if e != nil {
+		t.Fatal(e)
+	}
 	s.Binding.Host = "elected-host\n\x1b[31m"
 	s.Binding.Actor = "elected-actor"
 	if e := integrations.PrivateWrite(path, integrations.CaptureJSON(s)); e != nil {

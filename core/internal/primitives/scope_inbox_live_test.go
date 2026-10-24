@@ -2,7 +2,6 @@ package primitives
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -47,9 +46,12 @@ func TestScopedInboxParityFallbackAndRevocation(t *testing.T) {
 	if d := s.ScopeInboxDiagnostics(); d.NotBuilt != 1 {
 		t.Fatalf("fallback diagnostics %+v", d)
 	}
+	// The build is two 64-row batches; size their deadline to that work.
+	build, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	done := false
 	for !done {
-		done, err = ws.MaintainScopeInboxBatch(ctx)
+		done, err = ws.MaintainScopeInboxBatch(build)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,14 +176,12 @@ func TestScopedInboxBudgetFallsBackWithCompleteCounts(t *testing.T) {
 	if err = s.ReplaceDerivedInboxItems(ctx, tid, items); err != nil {
 		t.Fatal(err)
 	}
-	// Each chunk has a 100ms budget and the server retries a timeout. Under a
-	// parallel package run that budget can expire before the batch commits.
-	for done, timeouts := false, 0; !done; {
-		done, err = ws.MaintainScopeInboxBatch(ctx)
-		if errors.Is(err, context.DeadlineExceeded) && timeouts < 64 {
-			timeouts++
-			continue
-		}
+	// The build is nine 64-row batches; size their deadline to that work rather
+	// than the background loop's 100ms per-batch budget.
+	build, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for done := false; !done; {
+		done, err = ws.MaintainScopeInboxBatch(build)
 		if err != nil {
 			t.Fatal(err)
 		}

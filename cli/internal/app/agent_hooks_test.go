@@ -184,6 +184,9 @@ func newHookFixture(t *testing.T) *hookFixture {
 	}))
 	t.Cleanup(f.server.Close)
 	f.a, f.out = workspaceTestApp(t, f.home, f.root, map[string]string{"ANX_CONFIG_DIR": f.dir})
+	// Hooks run real Git subprocesses; size their budget to that work on a busy
+	// host. Tests of the production budget itself set defaultHookBudget.
+	f.a.hookBudget = 10 * time.Second
 	_, key, e := ed25519.GenerateKey(nil)
 	if e != nil {
 		t.Fatal(e)
@@ -300,6 +303,7 @@ func TestAgentHookDeadlineAndNoAuthDryRun(t *testing.T) {
 	r, w := io.Pipe()
 	defer w.Close()
 	f.a.Stdin = r
+	f.a.hookBudget = defaultHookBudget
 	f.out.Reset()
 	start := time.Now()
 	f.a.Run([]string{"hook", "session.start"})
@@ -629,6 +633,7 @@ func TestAgentHookNoCardBriefDeadline(t *testing.T) {
 	f := newHookFixture(t)
 	f.run(t, "integrations", "enable", "context.inject", "--harness", "generic")
 	f.briefDelay.Store(true)
+	f.a.hookBudget = defaultHookBudget
 	payload := fmt.Sprintf(`{"schema_version":1,"cwd":%q}`, f.root)
 	start := time.Now()
 	brief := f.hook(t, "generic", payload)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/scopemigrate"
+	"agent-nexus-core/internal/scopes"
 	"agent-nexus-core/internal/storage"
 	"modernc.org/sqlite"
 )
@@ -99,9 +100,13 @@ func fixtureAt(t *testing.T, n int, root string) (*storage.Workspace, *scopemigr
 	}
 	must(t, tx.Commit())
 	must(t, w.EnableScopeServingLease(context.Background()))
-	r := &scopemigrate.Runner{DB: w.DB(), Source: artifactSource{}, Job: "placement", Owner: "attempt-1", SealedScope: "no-grants", LeaseDuration: time.Minute, MaxBytes: 4 << 20}
+	// Size each chunk's deadline to its fixture work on a loaded machine. Tests
+	// of the production budget itself set DefaultChunkBudget explicitly.
+	r := &scopemigrate.Runner{DB: w.DB(), Source: artifactSource{}, Job: "placement", Owner: "attempt-1", SealedScope: "no-grants", LeaseDuration: time.Minute, MaxBytes: 4 << 20, ChunkBudget: fixtureChunkBudget}
 	return w, r
 }
+
+const fixtureChunkBudget = 10 * time.Second
 
 func begin(t *testing.T, r *scopemigrate.Runner) int64 {
 	t.Helper()
@@ -366,7 +371,7 @@ func TestMigrationCrashChild(t *testing.T) {
 	w, err := storage.InitializeWorkspace(context.Background(), root)
 	must(t, err)
 	defer w.Close()
-	r := &scopemigrate.Runner{DB: w.DB(), Source: artifactSource{crash: true}, Job: "placement", Owner: "attempt-1", SealedScope: "no-grants", LeaseDuration: time.Minute, MaxBytes: 4 << 20}
+	r := &scopemigrate.Runner{DB: w.DB(), Source: artifactSource{crash: true}, Job: "placement", Owner: "attempt-1", SealedScope: "no-grants", LeaseDuration: time.Minute, MaxBytes: 4 << 20, ChunkBudget: fixtureChunkBudget}
 	_, err = r.Step(context.Background(), 1, 64)
 	must(t, err)
 	t.Fatal("crash was not injected")
@@ -461,9 +466,28 @@ func TestLifecycleRollbackAndSupervision(t *testing.T) {
 	}
 }
 
+func TestChunkBudgetDefaultsAndStaysWithinLease(t *testing.T) {
+	_, r := fixture(t, 1)
+	ctx := context.Background()
+	token := begin(t, r)
+	store := &scopemigrate.Store{Runner: r}
+	request := scopes.StepRequest{JobID: r.Job, LeaseToken: token, MaxRecords: 1, MaxBytes: 1024, MaxDuration: scopemigrate.DefaultChunkBudget + time.Millisecond}
+	r.ChunkBudget = 0
+	if _, err := store.Step(ctx, request); !errors.Is(err, scopemigrate.ErrBudget) {
+		t.Fatal("zero chunk budget did not default to 50ms", err)
+	}
+	for _, budget := range []time.Duration{-time.Millisecond, r.LeaseDuration + time.Millisecond} {
+		r.ChunkBudget = budget
+		if _, err := r.Acquire(ctx); err == nil {
+			t.Fatal("invalid chunk budget accepted", budget)
+		}
+	}
+}
+
 func TestLifecycleDeadlineRollsBackLateSuccess(t *testing.T) {
 	w, r := fixture(t, 1)
 	token := begin(t, r)
+	r.ChunkBudget = scopemigrate.DefaultChunkBudget
 	r.Rebuilder = &lifecycle{delay: 80 * time.Millisecond}
 	done, err := r.LifecycleStep(context.Background(), token)
 	if err == nil || done {

@@ -5,6 +5,12 @@ import {
   recoverStaleChunk,
   warnOverviewRecovery,
 } from "../../src/lib/chunkRecovery.js";
+
+// Keep the real store runtime shared across simulated reloads. resetModules
+// still re-evaluates chunkRecovery's page-local state, while Vitest caches this
+// mock factory so it does not reload Svelte's dependency graph on every page.
+vi.mock("svelte/store", async (importOriginal) => importOriginal());
+
 beforeEach(() => {
   sessionStorage.clear();
   vi.resetModules();

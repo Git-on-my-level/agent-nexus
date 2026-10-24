@@ -115,7 +115,7 @@ type inboxVerificationCursor struct {
 // under identical canonical/shadow epochs and job checkpoint in the write
 // transaction. All fences are checked before resume and receipt publication. No completed cursor
 // supplied by another worker can establish completeness.
-func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (InboxVerificationProgress, error) {
+func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (_ InboxVerificationProgress, err error) {
 	runner, err := newInboxVerificationRunner(s, id, DefaultInboxVerificationWorkerOptions())
 	if err != nil {
 		return InboxVerificationProgress{}, err
@@ -124,7 +124,9 @@ func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (Inbox
 	if err != nil {
 		return InboxVerificationProgress{}, err
 	}
-	defer runner.releaseLease(lease)
+	// Do not report a successful one-shot slice while its lease is stranded.
+	// The supervised worker keeps its separate best-effort shutdown budget.
+	defer func() { err = errors.Join(err, runner.releaseLeaseWithin(ctx, lease)) }()
 	return runner.verifySlice(ctx, lease)
 }
 

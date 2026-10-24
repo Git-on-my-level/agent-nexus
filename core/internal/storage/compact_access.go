@@ -305,6 +305,17 @@ func compactMigrationRetryable(err error) bool {
 		(errors.As(err, &code) && (code.Code()&255 == 5 || code.Code()&255 == 6))
 }
 
+// compactBudgetCause names what consumed an exhausted budget. When the budget
+// ends a bookkeeping read with nothing but the deadline, the earlier failed
+// attempt (such as write contention at shadow_install) is the real cause.
+func compactBudgetCause(stage string, cause error, failedStage string, failedErr error) (string, error) {
+	var code interface{ Code() int }
+	if failedErr != nil && errors.Is(cause, context.DeadlineExceeded) && !errors.As(cause, &code) {
+		return failedStage, failedErr
+	}
+	return stage, cause
+}
+
 func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule compactMigrationSchedule, report func(CompactAccessVerification, error)) {
 	ctx, cancel := context.WithTimeout(parent, schedule.budget)
 	defer cancel()
@@ -312,6 +323,10 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 	var lastErr error
 	succeeded := false
 	stage := "shadow_install"
+	// The last failed attempt, kept for diagnosis if the budget then expires
+	// in the next attempt's first read.
+	var failedStage string
+	var failedErr error
 	// Exactly one final callback, including shutdown, budget exhaustion and an
 	// already certified workspace. Keep the last stage/cause for diagnosis.
 	defer func() {
@@ -323,6 +338,7 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 				if cause == nil {
 					cause = ctx.Err()
 				}
+				stage, cause = compactBudgetCause(stage, cause, failedStage, failedErr)
 				diagnostic := compactMigrationError(stage, cause).(*CompactAccessMigrationError)
 				diagnostic.Reason = "budget_exhausted_" + diagnostic.Reason
 				lastErr = diagnostic
@@ -338,6 +354,9 @@ func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule c
 	installed := false
 	compactFinished := false
 	for compactMigrationWait(ctx, delay) {
+		if lastErr != nil {
+			failedStage, failedErr = stage, lastErr
+		}
 		lastErr = nil
 		// Inspect the durable mode before taking a writer: restarts must neither
 		// reinstall a certified shadow nor undo an operator rollback.

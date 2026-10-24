@@ -297,15 +297,31 @@ func inboxVerificationStoredFailure(category string) error {
 func (r *inboxVerificationRunner) releaseLease(lease inboxVerificationLease) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
+	_ = r.releaseLeaseWithin(ctx, lease)
+}
+
+// A one-shot release uses the caller's deadline, or a two-second cleanup budget
+// when none was supplied. Start that budget here, after the slice has finished.
+// Cancellation must not skip cleanup; an elapsed deadline gets a 50ms grace.
+func (r *inboxVerificationRunner) releaseLeaseWithin(parent context.Context, lease inboxVerificationLease) error {
+	deadline, ok := parent.Deadline()
+	if !ok {
+		deadline = time.Now().Add(2 * time.Second)
+	} else if deadline.Before(time.Now()) {
+		deadline = time.Now().Add(50 * time.Millisecond)
+	}
+	ctx, cancel := context.WithDeadline(context.WithoutCancel(parent), deadline)
+	defer cancel()
 	tx, cleanup, err := beginInboxVerificationChunk(ctx, r.store.db)
 	if err != nil {
-		return
+		return err
 	}
 	defer cleanup()
 	_, err = tx.ExecContext(ctx, `UPDATE scope_inbox_verification_jobs SET lease_owner='',lease_until=0 WHERE id=? AND lease_owner=? AND lease_token=?`, r.job, r.owner, lease.token)
-	if err == nil {
-		_ = tx.Commit()
+	if err != nil {
+		return err
 	}
+	return tx.Commit()
 }
 
 // CancelInboxVerification explicitly retires an unfinished comparison. It

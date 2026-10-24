@@ -4,18 +4,14 @@ import (
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
+	"agent-nexus-core/internal/testutil/perfguard"
 	"context"
 	"encoding/json"
-	"sort"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestResourceAccessPMWriteIndex(t *testing.T) {
-	// This test enforces a 200 ms request deadline. Like the scale guards,
-	// isolate its CPU samples from parallel schema/reference fixtures; their
-	// contention otherwise measures test scheduling rather than point reads.
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -103,29 +99,38 @@ func TestResourceAccessPMWriteIndex(t *testing.T) {
 	if strings.Contains(plan.String(), "SCAN _row") || strings.Contains(strings.ToLower(query), "json_tree") || !strings.Contains(plan.String(), "SEARCH _row USING INDEX sqlite_autoindex_pm_records") {
 		t.Fatalf("PM point authorization scans stored bodies:\n%s", plan.String())
 	}
-	start := time.Now()
-	for i := 0; i < 20; i++ {
-		visible("public-control", 1)
-	}
-	t.Logf("indexed PM point mean=%s", time.Since(start)/20)
 	// Invalidate the already-captured request with unrelated history. This was
-	// the independent review's scaling repro; it must retain a bounded lookup.
-	if _, err = ws.DB().Exec(`WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<999) INSERT INTO pm_records SELECT 'decision','unrelated-'||x,'ws','owner','',1,'{"text":"unrelated public PM"}' FROM n`); err != nil {
+	// the independent review's scaling repro; it must retain a bounded lookup,
+	// measured as SQLite VM work rather than a wall-clock deadline.
+	pool, capture, err := perfguard.Open("file:" + ws.Layout().DatabasePath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	var samples []time.Duration
-	for i := 0; i < 25; i++ {
-		limited, cancel := context.WithTimeout(scope, 200*time.Millisecond)
-		start := time.Now()
+	defer pool.Close()
+	measured := resourceaccess.NewDB(pool)
+	point := func(history int) perfguard.WorkStats {
+		t.Helper()
+		capture.Start()
 		var count int
-		err = db.QueryRowContext(limited, `SELECT COUNT(*) FROM pm_records WHERE kind='decision' AND id='public-control'`).Scan(&count)
-		elapsed := time.Since(start)
-		cancel()
-		if err != nil || count != 1 {
-			t.Fatalf("scaled PM point count=%d err=%v", count, err)
+		err := measured.QueryRowContext(scope, `SELECT COUNT(*) FROM pm_records WHERE kind='decision' AND id='public-control'`).Scan(&count)
+		_, queries, rows := capture.Stop()
+		if err != nil || count != 1 || queries != 1 || rows != 1 || capture.WorkError() != nil {
+			t.Fatalf("PM point after %d unrelated rows: count=%d queries=%d rows=%d err=%v work_err=%v", history, count, queries, rows, err, capture.WorkError())
 		}
-		samples = append(samples, elapsed)
+		return capture.Work()
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-	t.Logf("PM point after 1000 unrelated rows p95=%s", samples[23])
+	base := point(0)
+	for _, history := range []int{1000, 10000} {
+		if _, err = ws.DB().Exec(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?) INSERT INTO pm_records SELECT 'decision','unrelated-'||?||'-'||x,'ws','owner','',1,'{"text":"unrelated public PM"}' FROM n`, history, history); err != nil {
+			t.Fatal(err)
+		}
+		// The first read after invalidation and a repeat must both stay flat.
+		for i := 0; i < 2; i++ {
+			work := point(history)
+			if work.VMSteps > base.VMSteps+base.VMSteps/10 || work.FullScanSteps > base.FullScanSteps || work.AutoIndexRows > base.AutoIndexRows {
+				t.Fatalf("PM point work grew with %d unrelated rows: base=%+v now=%+v", history, base, work)
+			}
+		}
+	}
+	t.Logf("PM point VM steps=%d with up to 11000 unrelated rows", base.VMSteps)
 }

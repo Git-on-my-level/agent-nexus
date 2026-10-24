@@ -46,6 +46,20 @@ type Runner struct {
 	// the database/WAL filesystem. SQLite FULL/ENOSPC is still handled by rollback.
 	CheckDisk func(context.Context) error
 	Rebuilder LifecycleRebuilder
+	// ChunkBudget bounds each Acquire, Step and LifecycleStep transaction,
+	// including the wait for SQLite's write lock. Zero means DefaultChunkBudget.
+	ChunkBudget time.Duration
+}
+
+// DefaultChunkBudget keeps each worker transaction short enough that serving
+// writers never queue behind migration work.
+const DefaultChunkBudget = 50 * time.Millisecond
+
+func (r *Runner) chunkBudget() time.Duration {
+	if r.ChunkBudget > 0 {
+		return r.ChunkBudget
+	}
+	return DefaultChunkBudget
 }
 
 type Progress struct {
@@ -61,7 +75,7 @@ func (r *Runner) validate() error {
 	if r == nil || r.DB == nil || r.Source == nil || r.Job == "" || r.Owner == "" || r.SealedScope == "" {
 		return errors.New("scope migration runner is not configured")
 	}
-	if r.LeaseDuration < time.Second || r.LeaseDuration > time.Minute || r.MaxBytes < 1 || r.MaxBytes > 4<<20 {
+	if r.LeaseDuration < time.Second || r.LeaseDuration > time.Minute || r.MaxBytes < 1 || r.MaxBytes > 4<<20 || r.ChunkBudget < 0 || r.ChunkBudget > r.LeaseDuration {
 		return errors.New("invalid scope migration limits")
 	}
 	return nil
@@ -70,12 +84,13 @@ func (r *Runner) validate() error {
 // Acquire renews a live same-owner lease or takes over an expired lease with a
 // strictly larger database token. Owners must be unique per process attempt.
 // No lease/checkpoint writes happen at server initialization.
-func (r *Runner) Acquire(ctx context.Context) (int64, error) {
+func (r *Runner) Acquire(ctx context.Context) (_ int64, err error) {
 	if err := r.validate(); err != nil {
 		return 0, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ctx, r.chunkBudget())
 	defer cancel()
+	defer func() { err = budgetError(ctx, err) }()
 	tx, cleanup, err := beginChunk(ctx, r.DB)
 	if err != nil {
 		return 0, err
@@ -106,7 +121,7 @@ func (r *Runner) Step(ctx context.Context, token int64, limit int) (Progress, er
 	if err := r.validate(); err != nil {
 		return Progress{}, err
 	}
-	return r.step(ctx, token, limit, r.MaxBytes, 50*time.Millisecond, nil, nil)
+	return r.step(ctx, token, limit, r.MaxBytes, r.chunkBudget(), nil, nil)
 }
 
 // Store implements A's frozen MigrationStepper without exposing checkpoints to
@@ -141,15 +156,16 @@ func (s *Store) Step(ctx context.Context, request scopes.StepRequest) (scopes.St
 	return result, nil
 }
 
-func (r *Runner) step(ctx context.Context, token int64, limit, maxBytes int, duration time.Duration, expectedEpoch *int64, result *scopes.StepResult) (Progress, error) {
+func (r *Runner) step(ctx context.Context, token int64, limit, maxBytes int, duration time.Duration, expectedEpoch *int64, result *scopes.StepResult) (_ Progress, err error) {
 	if err := r.validate(); err != nil {
 		return Progress{}, err
 	}
-	if limit < 1 || limit > MaxChunk || maxBytes < 1 || maxBytes > r.MaxBytes || duration <= 0 || duration > 50*time.Millisecond {
+	if limit < 1 || limit > MaxChunk || maxBytes < 1 || maxBytes > r.MaxBytes || duration <= 0 || duration > r.chunkBudget() {
 		return Progress{}, ErrBudget
 	}
 	ctx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
+	defer func() { err = budgetError(ctx, err) }()
 	if r.CheckDisk != nil {
 		if err := r.CheckDisk(ctx); err != nil {
 			return Progress{}, err
@@ -284,15 +300,16 @@ func (r *Runner) save(ctx context.Context, tx *sql.Tx, p Progress) error {
 }
 
 // LifecycleStep fences B's worker transaction with the SAME migration lease.
-func (r *Runner) LifecycleStep(ctx context.Context, token int64) (bool, error) {
+func (r *Runner) LifecycleStep(ctx context.Context, token int64) (_ bool, err error) {
 	if err := r.validate(); err != nil {
 		return false, err
 	}
 	if r.Rebuilder == nil {
 		return true, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ctx, r.chunkBudget())
 	defer cancel()
+	defer func() { err = budgetError(ctx, err) }()
 	if r.CheckDisk != nil {
 		if err := r.CheckDisk(ctx); err != nil {
 			return false, err

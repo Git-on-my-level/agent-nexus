@@ -11,6 +11,23 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 )
 
+// Functional fixtures test the cutover's fences/data, not the background
+// worker's one-second latency budget. Use the test's own deadline so schema
+// replacement under host contention cannot masquerade as a proof failure.
+func cutoverForTest(t *testing.T, w *Workspace, parent context.Context, proof CompactAccessVerification) error {
+	t.Helper()
+	if _, ok := parent.Deadline(); ok {
+		return w.CutoverCompactAccess(parent, proof)
+	}
+	deadline, ok := t.Deadline()
+	if !ok {
+		deadline = time.Now().Add(30 * time.Second)
+	}
+	ctx, cancel := context.WithDeadline(parent, deadline)
+	defer cancel()
+	return w.CutoverCompactAccess(ctx, proof)
+}
+
 func compactCertify(t *testing.T, w *Workspace) CompactAccessVerification {
 	t.Helper()
 	ctx := context.Background()
@@ -36,7 +53,7 @@ func TestCompactReclamationRequiresStoppedSource(t *testing.T) {
 	w := compactFixture(t, 20)
 	ctx := context.Background()
 	proof := compactCertify(t, w)
-	if err := w.CutoverCompactAccess(ctx, proof); err != nil {
+	if err := cutoverForTest(t, w, ctx, proof); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "reclaimed.sqlite")
@@ -65,15 +82,15 @@ func TestCompactAccessCutoverStableIdentityAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = w.CutoverCompactAccess(ctx, shadowOnly); err == nil {
+	if err = cutoverForTest(t, w, ctx, shadowOnly); err == nil {
 		t.Fatal("accepted partial certification")
 	}
 	compactExec(t, w, `UPDATE resource_access_edges SET target_ref='document:after-proof' WHERE rowid=1`)
-	if err := w.CutoverCompactAccess(ctx, proof); !errors.Is(err, ErrCompactAccessChanged) {
+	if err := cutoverForTest(t, w, ctx, proof); !errors.Is(err, ErrCompactAccessChanged) {
 		t.Fatalf("stale proof accepted: %v", err)
 	}
 	proof = compactCertify(t, w)
-	if err := w.CutoverCompactAccess(ctx, proof); err != nil {
+	if err := cutoverForTest(t, w, ctx, proof); err != nil {
 		t.Fatal(err)
 	}
 	var mode, stable, pk, idx int
@@ -106,7 +123,7 @@ func TestCompactAccessCutoverStableIdentityAndRollback(t *testing.T) {
 	if err := w.db.QueryRow(`SELECT reader FROM resource_access_compact_control`).Scan(&mode); err != nil || mode != 2 {
 		t.Fatal(mode, err)
 	}
-	if err := w.CutoverCompactAccess(ctx, proof); err == nil {
+	if err := cutoverForTest(t, w, ctx, proof); err == nil {
 		t.Fatal("overrode operator rollback")
 	}
 	if _, err := w.VerifyCompactAccessCutover(ctx); err != nil {

@@ -323,13 +323,22 @@ func parseAgentHook(args []string) (agentHookOptions, error) {
 	}
 	return o, nil
 }
+
+// defaultHookBudget keeps a hook from delaying the agent turn or commit that
+// invoked it; Git work left over is deferred to an explicit sync.
+const defaultHookBudget = 1500 * time.Millisecond
+
 func (a *App) runAgentHook(overrides config.Overrides, args []string) int {
 	o, e := parseAgentHook(args)
 	if e != nil {
 		fmt.Fprintln(a.Stderr, "anx hook: invalid invocation")
 		return 0
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	budget := defaultHookBudget
+	if a.hookBudget > 0 {
+		budget = a.hookBudget
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	type done struct {
 		b integrations.HookBrief

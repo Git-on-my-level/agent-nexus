@@ -17,16 +17,17 @@ type Statement struct {
 	Args []any
 }
 type Capture struct {
-	mu            sync.Mutex
-	statements    []Statement
-	queries, rows int
-	enabled       bool
-	seen          map[string]map[string]bool
-	canonicalSQL  map[string]string
-	work          WorkStats
-	workErr       error
-	epoch         uint64
-	beforeBegin   func(driver.TxOptions)
+	mu              sync.Mutex
+	statements      []Statement
+	queries, rows   int
+	enabled         bool
+	seen            map[string]map[string]bool
+	canonicalSQL    map[string]string
+	work            WorkStats
+	workErr         error
+	epoch           uint64
+	beforeBegin     func(driver.TxOptions)
+	beforeBeginConn func(context.Context, driver.Conn, driver.TxOptions)
 }
 
 // BeforeBegin installs a fixture-only admission observer. The callback runs
@@ -35,6 +36,15 @@ func (c *Capture) BeforeBegin(observe func(driver.TxOptions)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.beforeBegin = observe
+}
+
+// BeforeBeginConn observes the native connection immediately before BEGIN.
+// The fixture may read connection-local settings without re-entering the pool.
+// No capture mutex is held while the observer runs.
+func (c *Capture) BeforeBeginConn(observe func(context.Context, driver.Conn, driver.TxOptions)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.beforeBeginConn = observe
 }
 
 func (c *Capture) Start() {
@@ -194,9 +204,13 @@ func (c *captureConn) PrepareContext(ctx context.Context, q string) (driver.Stmt
 func (c *captureConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
 	c.capture.mu.Lock()
 	observe := c.capture.beforeBegin
+	observeConn := c.capture.beforeBeginConn
 	c.capture.mu.Unlock()
 	if observe != nil {
 		observe(o)
+	}
+	if observeConn != nil {
+		observeConn(ctx, c.Conn, o)
 	}
 	c.work.beginCall(ctx)
 	defer c.work.endCall()

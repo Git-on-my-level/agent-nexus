@@ -90,6 +90,22 @@ func TestCompactMigrationBudgetExhaustionReportsOnce(t *testing.T) {
 	}
 }
 
+func TestCompactBudgetCauseKeepsContentionOverLaterDeadline(t *testing.T) {
+	busy := &CompactAccessMigrationError{Stage: "shadow_install", Reason: "write_contention_retry", SQLiteCode: 5}
+	stage, cause := compactBudgetCause("reader_mode", context.DeadlineExceeded, "shadow_install", busy)
+	if stage != "shadow_install" || cause != busy {
+		t.Fatalf("budget expiry in a later read hid contention: %s %v", stage, cause)
+	}
+	// A failure of its own in the final attempt is reported as is.
+	final := errors.New("verification failed")
+	if stage, cause = compactBudgetCause("verification", final, "shadow_install", busy); stage != "verification" || cause != final {
+		t.Fatalf("final failure replaced: %s %v", stage, cause)
+	}
+	if stage, cause = compactBudgetCause("reader_mode", context.DeadlineExceeded, "", nil); stage != "reader_mode" || cause != context.DeadlineExceeded {
+		t.Fatalf("first attempt deadline replaced: %s %v", stage, cause)
+	}
+}
+
 func TestCompactMigrationFinalExistingModeAndCancellation(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -103,7 +119,7 @@ func TestCompactMigrationFinalExistingModeAndCancellation(t *testing.T) {
 			w := compactFixture(t, 1)
 			if tc.mode == 1 {
 				proof := compactCertify(t, w)
-				if err := w.CutoverCompactAccess(context.Background(), proof); err != nil {
+				if err := cutoverForTest(t, w, context.Background(), proof); err != nil {
 					t.Fatal(err)
 				}
 			}

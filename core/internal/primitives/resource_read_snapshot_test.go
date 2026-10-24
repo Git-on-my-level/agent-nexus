@@ -80,7 +80,11 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = ws.CutoverCompactAccess(ctx, proof); err != nil {
+	// The cutover rewrites access tables and triggers; size its deadline to that
+	// work rather than the one-second default.
+	cutover, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err = ws.CutoverCompactAccess(cutover, proof); err != nil {
 		t.Fatal(err)
 	}
 	queries := []string{

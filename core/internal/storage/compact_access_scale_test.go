@@ -88,7 +88,7 @@ func TestPerformanceCompactAccessShadow(t *testing.T) {
 		t.Fatal(err)
 	}
 	cutoverStarted := time.Now()
-	if err = w.CutoverCompactAccess(ctx, proof); err != nil {
+	if err = cutoverForTest(t, w, ctx, proof); err != nil {
 		t.Fatal(err)
 	}
 	cutoverElapsed := time.Since(cutoverStarted)

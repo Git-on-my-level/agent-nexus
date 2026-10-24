@@ -9,8 +9,6 @@ import (
 )
 
 func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
-	// The exact 64-row first-slice assertion needs an uncontended 100 ms lease,
-	// like the contention guard below; unrelated parallel fixtures can expire it.
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := InitializeWorkspace(ctx, root)
@@ -42,7 +40,11 @@ func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
 	if err = ws.DB().QueryRow(`SELECT count(*) FROM scope_inbox_live`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("startup backfilled %d %v", count, err)
 	}
-	done, err := ws.MaintainScopeInboxBatch(ctx)
+	// Three 64-row batches; size their deadline to that work rather than the
+	// background loop's 100 ms per-batch budget.
+	build, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	done, err := ws.MaintainScopeInboxBatch(build)
 	if err != nil || done {
 		t.Fatal(done, err)
 	}
@@ -62,7 +64,7 @@ func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
 		}
 	}
 	for !done {
-		done, err = ws.MaintainScopeInboxBatch(ctx)
+		done, err = ws.MaintainScopeInboxBatch(build)
 		if err != nil {
 			t.Fatal(err)
 		}
