@@ -29,6 +29,7 @@ func TestHistoricalWakeupAdmissionMatchesCanonical(t *testing.T) {
  ('old-empty-parent','requested','unread','agent','target','','','[]','now','now'),
  ('old-event','requested','unread','agent','target','historical-public','historical-event','[]','now','now')`)
 	exec(`INSERT INTO cards(id,handle,title,summary,column_key,thread_id,refs_json,created_at,created_by,updated_at,updated_by) VALUES('historical-dependent','historical-dependent','Public','','ready','historical-public','["wakeup:old-private"]','now','owner','now','owner')`)
+	exec(`INSERT INTO agent_wakeups(wakeup_id,status,notification_status,target_handle,target_actor_id,thread_id,refs_json,created_at,updated_at) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<128) SELECT 'old-chain-'||i,'requested','unread','agent','target','historical-public',CASE WHEN i=1 THEN '["wakeup:old-private","wakeup:old-chain-128"]' ELSE json_array('wakeup:old-chain-'||(i-1)) END,'now','now' FROM n`)
 	db.Close()
 	ws, err := InitializeWorkspace(ctx, root)
 	if err != nil {
@@ -76,6 +77,7 @@ func TestHistoricalWakeupAdmissionMatchesCanonical(t *testing.T) {
 		`UPDATE agent_wakeups SET thread_id='historical-private' WHERE wakeup_id='old-public'`,
 		`UPDATE threads SET body_json='{}' WHERE id='historical-private'`,
 		`UPDATE threads SET body_json='{"pm_actor_id":"second-owner"}' WHERE id='historical-private'`,
+		`UPDATE agent_wakeups SET thread_id='historical-private' WHERE wakeup_id='old-private'`,
 		`UPDATE agent_wakeups SET wakeup_id='renamed-reference' WHERE wakeup_id='old-reference'`,
 		`UPDATE agent_wakeups SET trigger_event_id='' WHERE wakeup_id='old-event'`,
 		`DELETE FROM agent_wakeups WHERE wakeup_id='old-public'`,

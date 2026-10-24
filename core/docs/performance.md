@@ -2,10 +2,10 @@
 
 ## Canonical admission: main reproduction and candidate index
 
-**Draft: bounded-route gates pass; legacy inventory gaps remain.** The 50,000 VM
+**Bounded-route gates pass; legacy inventory gaps remain.** The 50,000 VM
 ceiling, budgets, baselines and query-plan allowances are unchanged. This change
-removes eager workspace denial capture from bounded reads. The draft status does
-not certify repository-wide CI or authorize merging.
+removes eager workspace denial capture from bounded reads. Local scale results
+do not certify repository-wide CI or authorize merging.
 
 Complete native HTTP requests were measured on main `b7c3a77f`, before #463
 merged, using `perfguard.Seed`'s analyzed 4,096-row corpus and 256 private cards.
@@ -77,6 +77,100 @@ refer to an admission-owned compact atom mirror. Capability recreation refreshes
 and reinstalls its optional-table sync hooks. A selected but missing capability
 fails closed, while legacy candidate reads remain usable after teardown.
 
+### Epoch churn with continuous writers
+
+`TestPerformanceCanonicalEpochChurn` interleaves committed writes with complete
+partial-reader `GET /cards/scale-card-1` requests on the analyzed 4,096-row
+corpus. Each mode uses a fresh pool: one cold request, then eight further reads.
+The idle control performs no writes; the other modes write before every later
+read. Writes target public card/thread 4,095, unrelated to the requested card.
+The v0.13.28 runtime at `4abbb1e9fd017840362df41b255a87b7d21fcd75` was replayed
+through a Go source overlay with this same test and a fresh native fixture.
+Both versions were also run with `GOMAXPROCS=1`; this limits Go execution to one
+P, not a container CPU quota. VM counts, not host timings, are the comparison.
+
+| Interleaved write          | Main epoch advances per write | Main misses after writes | #469 epoch advances per write | #469 closure captures after writes |
+| -------------------------- | ----------------------------: | -----------------------: | ----------------------------: | ---------------------------------: |
+| Thread attribution only    |                             3 |                      8/8 |                             1 |                                0/8 |
+| Harmless public title edit |                             5 |                      8/8 |                             3 |                                0/8 |
+| Public event append        |                             4 |                      8/8 |                             4 |                                0/8 |
+
+Main's idle control has one cold miss and eight warm hits. Each write mode has
+nine misses including its cold request: **all 24 interleaved writes invalidate
+the next read**. Each HTTP request may probe twice; only an absent or stale epoch
+binding counts as a capture, since CASE skips rebuilding on a current binding.
+Main's warm point read uses 949,304 VM; after a write it uses 2,188,885 VM, a
+**1,239,581-VM invalidation penalty**. The initial cold sample uses 2,371,174 VM.
+#469 uses 4,699 VM cold/idle and 4,708 after a write on the instrumented pool,
+with no closure probe or capture. The separate native route matrix writes through
+another pool and retains its 4,699-VM result in every phase.
+
+| Canonical SQL write and triggers | Main VM | #469 VM |
+| -------------------------------- | ------: | ------: |
+| Attribution                      |     434 |     189 |
+| Public title                     |     837 |   1,252 |
+| Public event append              |   1,603 |   5,640 |
+
+The write probe exposed an admission teardown defect: TEXT contribution IDs
+compared directly with INTEGER edge IDs scanned the entire `exact` origin range.
+A title edit initially cost 564,443 VM. Matching the stored TEXT affinity restores
+the composite-key seek. The independent 10,000-unrelated-origin regression fails
+at 51,551 VM before that fix and passes at 1,340, preserving all contributions.
+The interleaved test also enforces 50,000 VM for these unrelated write controls.
+Affected ownership/topology changes can still visit their actual descendants;
+write-audit tests continue to reject unrelated index rewrites.
+These write controls exclude HTTP mutation authorization; the measured reads
+include authentication and the full HTTP handler.
+
+This confirms the reported epoch-churn mechanism locally. For a workspace with
+at least one registered canonical write between polls, a reader's old shared
+closure cache can miss on almost every poll, regardless of whether the writer
+changes that reader's target. Multiple principals pay their own rebuilds.
+#469 retains conservative epochs but makes those misses irrelevant to bounded
+admission: it reads transactionally maintained owner indexes and starts fresh
+request proofs. It removes both the repeated workspace closure capture and the
+expensive warm ancestry path. Write maintenance grows with changed contributions
+and affected reachability, not with the number of reader principals.
+
+An epoch-only first PR could suppress attribution-only invalidations, but would
+leave cold admission, warm ancestry and content/event-driven invalidations. New
+content can introduce inherited private references, so excluding it safely needs
+dependency-aware maintenance. With the full repair implemented, retain broad
+epochs rather than adding another revocation-sensitive optimization first.
+
+This synthetic reproduction does not attribute every reported CPU spike or
+three-second cancellation to denial capture. Native VM counts exclude Go work
+and SQLite preparation time; no production deadline guarantee follows from them.
+Authentication-token queries do not themselves capture business-resource denials,
+but may wait behind shared CPU, pool or database contention. Other projection
+work, full inventories, canonical mutation authorization and access-write
+maintenance retain their own costs. Net CPU depends on the read/write mix.
+
+### Required CI regressions repaired without new allowances
+
+Two required checks failed on the previous draft head, independently of the six
+advisory inventory overruns. Both original tests and limits remain unchanged:
+
+- Scoped all-public hierarchy used 56,154 VM. It now avoids proof-cache work
+  when there are no denied roots and uses **47,982 VM**. One statement proof
+  retains epoch, connection-change and token validation for the shared public
+  fact; expired or invalidated proofs use current indexed authority. Borrowed
+  writer coverage includes revocation with an apparently unchanged epoch.
+- The released-schema 100k-wakeup startup fixture performed 1,100,070 writes
+  versus 11,070 at 1k. Migration 116 now leaves untouched historical wakeup
+  parents in their existing thread/event indexes. Reachability follows those
+  indexed relations; reached wakeups receive keys and spellings as needed, and
+  structural edits materialize the old contribution before normal teardown.
+  Both 1k and 100k now perform **67 writes and allocate 352 pages**. Historical
+  parity covers private threads/events, explicit references and referring cards,
+  a 128-wakeup reference cycle, empty legacy parents, moves, revocation/transfer,
+  rename, deletion and compact cutover. New wakeups use the ordinary incremental
+  triggers.
+
+Legacy schema-reconstruction fixtures remove post-116 admission triggers before
+dropping older indexes. Their canonical legacy triggers and all retained-privacy
+assertions remain active; migration 116 must rebuild the new derived state.
+
 ### Final native bounded-route measurements
 
 The checked-in native request matrix independently seeds the shared analyzed
@@ -86,23 +180,26 @@ The table below is from the final run, **without a test overlay**:
 
 | Route / reader                                             | First VM | Warm VM | Invalidated VM |
 | ---------------------------------------------------------- | -------: | ------: | -------------: |
-| `/work?limit=20` / owner                                   |   27,090 |  27,090 |         27,090 |
+| `/work?limit=20` / owner                                   |   21,285 |  21,285 |         21,285 |
 | `/work?limit=20` / partial                                 |   35,864 |  35,864 |         35,864 |
-| `/brief` / owner                                           |   31,844 |  31,844 |         31,844 |
+| `/brief` / owner                                           |   27,913 |  27,913 |         27,913 |
 | `/brief` / partial                                         |   46,277 |  46,277 |         46,277 |
-| `/cards?summary=1&limit=20` / owner                        |   21,205 |  21,205 |         21,205 |
+| `/cards?summary=1&limit=20` / owner                        |   16,920 |  16,920 |         16,920 |
 | `/cards?summary=1&limit=20` / partial                      |   30,086 |  30,086 |         30,086 |
-| `/boards/scale-board-0/cards?summary=1&limit=20` / owner   |   23,897 |  23,897 |         23,897 |
+| `/boards/scale-board-0/cards?summary=1&limit=20` / owner   |   19,240 |  19,240 |         19,240 |
 | `/boards/scale-board-0/cards?summary=1&limit=20` / partial |   37,708 |  37,708 |         37,708 |
-| `/cards/scale-card-1` / owner                              |    2,513 |   2,513 |          2,513 |
+| `/cards/scale-card-1` / owner                              |    2,056 |   2,056 |          2,056 |
 | `/cards/scale-card-1` / partial                            |    4,699 |   4,699 |          4,699 |
 | `/boards/scale-board-1` / owner                            |   15,319 |  15,319 |         15,319 |
 | `/boards/scale-board-1` / partial                          |      405 |     405 |            405 |
 
-The separate complete grouping gate uses **33,764 owner / 48,197 partial VM**
+The separate complete grouping gate uses **30,479 owner / 48,197 partial VM**
 in every phase, under the unchanged 50,000 ceiling. The populated brief is now
 46,277 partial VM; main's original baseline brief was empty, so these are different
-content controls. The final run took 309.60 seconds including fresh fixture seeds.
+content controls. The final combined run took 258.87 seconds including fresh fixture seeds and the interleaved-write gate.
+Repeating the complete route matrix and grouping gate after rebasing onto
+v0.13.29 (`74aba48f`) reproduced all 54 route measurements exactly; that
+confirmation took 284.49 seconds, including its fresh fixtures.
 Every bounded request, the grouping gate and the micro/adversarial gates passed.
 The combined command remains red only for the six legacy inventory reader cases
 below; their hard 50,000 assertions are deliberately retained.
@@ -111,7 +208,9 @@ below; their hard 50,000 assertions are deliberately retained.
 
 `limit=20` does not page the legacy card/board inventories. They still hydrate
 workspace inventories and exceed 50,000 VM on main after warming. This remains
-a separate pagination/hydration repair, with no new budget, baseline or allowance.
+a separate pagination/hydration repair, tracked in
+[issue #472](https://github.com/Git-on-my-level/agent-nexus/issues/472), with no
+new budget, baseline or allowance.
 Full inventories now take one complete indexed denial batch for their immutable
 read transaction, then retain the candidate projection policy and constant-time
 membership map. Empty-root inventories use the cheaper empty-root fast path.
@@ -134,6 +233,19 @@ for owner/partial cards, 2,301,617 / 8,280,791 for boards, and
 3,554,786 / 7,755,859 for board cards. This supplemental code-overlay probe is
 not substituted for the fresh native before/after tables.
 
+All six failures above belong to `TestPerformanceCanonicalAdmission`, whose
+`requirePerformanceTest` guard requires `ANX_PERFORMANCE_TEST=1` and a non-short
+run. Required server CI discovers this test but leaves that variable unset, so
+it skips at runtime; a local run with the same environment confirms the skip.
+Main's required CI also leaves the variable unset, and main predates this new
+diagnostic test. None of these six failures is a required gate on either tree.
+The repository's main ruleset requires `ci-ok`; `.github/workflows/ci.yml` does
+not include the separate `.github/workflows/performance.yml` jobs in `ci-ok`.
+That advisory workflow runs on main pushes or manual dispatch and enables the
+variable. Its discovered legacy shard and broad advisory partition both select
+this test. Those runs retain all six hard failures until #472 fixes hydration;
+no allowance, test selection change or gate weakening is introduced here.
+
 ### Regression and write-cost evidence
 
 - The draft head's partial grouping / populated brief / work costs were
@@ -147,8 +259,9 @@ not substituted for the fresh native before/after tables.
 - A complete `/work?limit=20` over 4,096 private archived cards used 230,045 VM
   before owner routing and now uses **640 VM** per phase, returning no work,
   archived refs or continuation. No hidden-prefix marker is exposed.
-- The isolated point gate uses **261 / 479 / 479 cold VM** for 0 / 1,024 / 4,096
-  unrelated denials. Warm membership is **47 VM** under the unchanged 64-step cap.
+- The isolated point gate uses **269 / 479 / 479 cold VM** for 0 / 1,024 / 4,096
+  unrelated denials. Warm membership is **55 / 47 / 47 VM** under the unchanged
+  64-step cap.
 - Write-audit triggers reproduce unnecessary graph/key/index churn before the
   fix. Unrelated card/metadata edits and identical-owner updates now touch no
   admission indexes. Owner transfer changes root declarations, root-owner counts
@@ -178,7 +291,7 @@ complete-denial enforcement assertions.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
-  -run '^TestPerformance(CanonicalAdmission|GroupingFeedBudget|ResourceReadSnapshotBudget|WorkLifecyclePrivatePrefixBudget)$|^TestCandidateDenseAncestryAndBucketFanout$' \
+  -run '^TestPerformance(CanonicalAdmission|GroupingFeedBudget|ResourceReadSnapshotBudget|WorkLifecyclePrivatePrefixBudget|CanonicalEpochChurn)$|^TestCandidateDenseAncestryAndBucketFanout$' \
   -count=1 -v -timeout=30m
 go test -C core ./internal/primitives \
   -run '^Test(AdmissionGraph|AdmissionWrites|InventoryAdmission|Candidate|WorkLifecycle|OverviewReadSnapshot|ResourceReadSnapshotRandomizedDifferential)' \
@@ -223,7 +336,7 @@ leaving 29,786 elsewhere in the invalidated request.
 
 That workspace closure preceded page admission, so changing the candidate
 window could not remove it. The indexed authorization repair above brings the
-complete grouping request to 33,764 owner / 48,197 partial VM in all phases.
+complete grouping request to 30,479 owner / 48,197 partial VM in all phases.
 These historical figures are evidence of the repaired cause, not a baseline or
 allowance. The separate legacy inventory gap remains documented above. No
 budget or query-plan requirement is weakened.

@@ -1,6 +1,6 @@
 # Canonical authorization admission
 
-Status: proposed in draft PR #469. Budgets and allowances are unchanged.
+Status: proposed in PR #469. Budgets and allowances are unchanged.
 
 ## Problem and choice
 
@@ -18,6 +18,24 @@ not walk ancestry or materialize the workspace denial closure. This trades
 storage and access-write maintenance for bounded request admission. A root owner
 transfer changes owner counts without rebuilding its reachability graph.
 
+Broad epoch invalidation remains conservative. A local v0.13.28 reproduction
+interleaves attribution-only edits, harmless public title edits and public event
+appends with an unrelated partial-reader request: every intervening write
+invalidates the old closure cache. With continuous writers, cold admission can
+therefore become the usual request cost rather than an occasional startup cost.
+This design still sees those epoch changes but never rebuilds a bounded read's
+workspace closure. It also removes the expensive warm canonical ancestry path.
+See the interleaved-write measurements in the performance guide.
+
+Narrowing epoch triggers is a possible separate optimization, but is not the
+chosen first shipment. Attribution-only updates can be excluded; a new event or
+changed text may introduce inherited private references and still needs fresh
+authority. Proving that arbitrary content writes leave denial unchanged requires
+the dependency maintenance this change already supplies. An attribution-only
+patch would leave content-driven invalidation, the first cold read and the warm
+ancestry cost. Retaining broad epochs avoids adding a second revocation-sensitive
+change to this repair. Epoch narrowing can be evaluated independently afterwards.
+
 Direct dependencies retain origin contributions, so deleting one alias,
 revision or mention cannot remove another source's dependency. Structural
 inheritance shares the forward policy's executable inventory. Reachability is
@@ -29,6 +47,13 @@ reachable component. They do not rebuild unrelated components. Initial migration
 backfills these derivable indexes once before readiness. Storage grows with
 reachable root/vertex pairs in three ledgers (the worst case is the product
 of roots and vertices), plus direct contributions and spelling prefixes.
+
+Untouched historical wakeups retain their existing indexed thread/event parents
+instead of being copied at startup. The reachability writer follows those
+canonical indexes directly. Reached wakeups acquire resolution keys and projection
+spellings; a structural edit materializes its old contribution before deleting
+obsolete ancestry. New rows use normal incremental admission. This preserves the
+released receipt-history startup bound without changing visibility semantics.
 
 ## Exact authority and projection matching
 
