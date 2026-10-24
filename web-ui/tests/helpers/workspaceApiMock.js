@@ -268,7 +268,7 @@ export async function installWorkspaceApi(
         command_registry_digest: digest,
         api_version: "v1",
         core_version: "synthetic-ui-test",
-        dev_actor_mode: false,
+        dev_actor_mode: api.devActorMode === true,
         human_auth_mode: "workspace_local",
       });
     }

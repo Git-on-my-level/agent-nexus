@@ -165,6 +165,7 @@
     resumedAt: -Infinity,
     startedAt: 0,
     expire: null,
+    release: null,
   };
   /** Which workspace the dev fixture personas have been read for. */
   const devPersonaLoad = { attempted: "" };
@@ -513,6 +514,7 @@
     const workspaceKey = `${activeOrganizationSlug}/${workspaceSlug}`;
     if (hydratedWorkspaceSlug === workspaceKey) {
       if (hydration.key !== workspaceKey) {
+        releaseActivation();
         hydration.sequence += 1;
         hydration.controller?.abort();
         clearTimeout(hydration.timer);
@@ -564,6 +566,7 @@
     return () => {
       document.removeEventListener("visibilitychange", resumeActivation);
       window.removeEventListener("online", resumeActivation);
+      releaseActivation();
       hydration.sequence += 1;
       hydration.controller?.abort();
       clearTimeout(hydration.timer);
@@ -728,10 +731,20 @@
     }
   }
 
+  /**
+   * A retired activation's own cleanup is ignored by its `isCurrent` guard,
+   * so release the busy states it set, or they stay on until a reload.
+   */
+  function releaseActivation() {
+    hydration.release?.();
+    hydration.release = null;
+  }
+
   async function activateCurrentWorkspace() {
     const key = `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
     if (!activeWorkspaceSlug || (activationPending && hydration.key === key))
       return;
+    releaseActivation();
     const sequence = ++hydration.sequence;
     hydration.controller?.abort();
     clearTimeout(hydration.timer);
@@ -748,10 +761,16 @@
     activationError = "";
     activationPending = true;
     hydration.startedAt = Date.now();
+    const owned = { personaBusy: false, loadingActors: false };
+    hydration.release = () => {
+      if (owned.personaBusy) devPersonaBusy = false;
+      if (owned.loadingActors) loadingActors = false;
+    };
     const expire = () => {
       if (!isCurrent()) return;
       // Retire the ticket before aborting: late failures and results cannot
       // overwrite the timeout or a subsequent successful activation.
+      releaseActivation();
       hydration.sequence += 1;
       controller.abort();
       activationPending = false;
@@ -767,7 +786,7 @@
         (message) => {
           if (isCurrent()) activationError = message;
         },
-        { isCurrent, signal: controller.signal },
+        { isCurrent, signal: controller.signal, owned },
       );
       if (!isCurrent()) return;
       if (result === false) {
@@ -788,7 +807,7 @@
   async function hydrateWorkspace(
     workspaceSlug,
     onActivationRetry = () => {},
-    { isCurrent = () => true, signal } = {},
+    { isCurrent = () => true, signal, owned = {} } = {},
   ) {
     const { client, fetchFn } = createWorkspaceActivationTransport(signal);
     return hydrateWorkspaceBootstrap({
@@ -806,15 +825,15 @@
         if (isCurrent()) actorError = message;
       },
       onLoadingActors: (loading) => {
-        if (isCurrent()) loadingActors = loading;
+        if (isCurrent()) loadingActors = owned.loadingActors = loading;
       },
       onDevPersonaBusy: (busy) => {
-        if (isCurrent()) devPersonaBusy = busy;
+        if (isCurrent()) devPersonaBusy = owned.personaBusy = busy;
       },
       onDevFixturePersonas: (personas) => {
         if (isCurrent()) devFixturePersonas = personas;
       },
-      refreshActors: (slug) => refreshActors(slug, client, isCurrent),
+      refreshActors: (slug) => refreshActors(slug, client, isCurrent, owned),
     });
   }
 
@@ -822,8 +841,9 @@
     workspaceSlug = activeWorkspaceSlug,
     client = coreClient,
     isCurrent = () => true,
+    owned = {},
   ) {
-    loadingActors = true;
+    loadingActors = owned.loadingActors = true;
     actorError = "";
 
     try {
@@ -847,7 +867,7 @@
       setActorDirectoryIncomplete(true, workspaceSlug);
       return [];
     } finally {
-      if (isCurrent()) loadingActors = false;
+      if (isCurrent()) loadingActors = owned.loadingActors = false;
     }
   }
 

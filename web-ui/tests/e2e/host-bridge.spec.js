@@ -134,7 +134,12 @@ test("machine bridge liveness ages, recovers and stays distinct from wake covera
       document.dispatchEvent(new Event("visibilitychange")),
     );
     await expect(badge("live")).toHaveAttribute("data-bridge-state", "revoked");
+    // Badges ask for status only once they are near the viewport. Put the
+    // last card below the fold so the check never depends on font metrics
+    // or banners above it, then read it as a reader would: scrolled to.
+    await page.setViewportSize({ width: 1280, height: 540 });
     await page.goto(`${BASE}/access`);
+    await badge("zero").scrollIntoViewIfNeeded();
     await expect(badge("zero")).toHaveAttribute("data-bridge-state", "live");
     await expect(badge("none")).toContainText("No bridge");
   } finally {
