@@ -215,7 +215,7 @@ func sanitizeFaultText(value string, max int) string {
 // Static path words only. Anything else, including ids and secrets, becomes {id}.
 var staticRouteSegments = map[string]struct{}{
 	"access": {}, "access-requests": {}, "actors": {}, "admins": {}, "agents": {},
-	"archive": {}, "artifacts": {}, "attachments": {}, "audit": {}, "auth": {},
+	"archive": {}, "artifacts": {}, "asks": {}, "attachments": {}, "audit": {}, "auth": {},
 	"batch": {}, "blob-usage": {}, "boards": {}, "bootstrap": {}, "brief": {},
 	"cards": {}, "changes": {}, "columns": {}, "commands": {}, "comments": {},
 	"concepts": {}, "curation": {}, "dashboard": {}, "dev": {}, "discord": {}, "docs": {},
