@@ -1170,6 +1170,7 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_events_promise_facts ON events(thread_id,ts DESC) WHERE type='message_posted' AND (json_extract(payload_json,'$.payload.next.at') IS NOT NULL OR json_array_length(json_extract(payload_json,'$.payload.evidence_refs'))>0);`,
 		`INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives WHERE true ON CONFLICT DO NOTHING;`,
 	}},
+	{Version: 116, AfterApply: installAccessAdmission},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

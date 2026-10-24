@@ -1,5 +1,141 @@
 # Performance guardrails
 
+## Canonical admission: main reproduction and candidate index
+
+**Draft: ordinary-route acceptance is incomplete.** The 50,000 VM ceiling,
+budgets, baselines and query-plan allowances remain unchanged. This proposal
+removes eager canonical denial capture from candidate reads. Passing individual
+pages does not certify the entire route matrix or authorize merging.
+
+Complete native HTTP requests were measured on main `b7c3a77f`, before #463
+merged, using `perfguard.Seed`'s analyzed 4,096-row corpus and 256 private cards.
+Each route/reader opens a fresh instrumented pool; the second request is warm;
+the third follows an authorization epoch advance from a canonical thread write.
+Authentication is included. The fixture omits unrelated PM/stream runtime setup.
+
+| Main route / reader                              |  First VM |   Warm VM | Invalidated VM |
+| ------------------------------------------------ | --------: | --------: | -------------: |
+| `/work?limit=20` / owner                         |   401,329 |   401,281 |        401,405 |
+| `/work?limit=20` / partial                       | 2,112,717 |   873,276 |      2,112,857 |
+| `/brief` / owner                                 |       657 |       616 |            740 |
+| `/brief` / partial                               | 1,240,051 |       610 |      1,240,191 |
+| `/cards?limit=20` / owner                        | 3,339,879 | 3,339,838 |      3,339,962 |
+| `/cards?limit=20` / partial                      | 7,162,750 | 5,923,309 |      7,162,890 |
+| `/boards?limit=20` / owner                       | 2,301,658 | 2,301,617 |      2,301,741 |
+| `/boards?limit=20` / partial                     | 9,520,232 | 8,280,791 |      9,520,372 |
+| `/boards/scale-board-0/cards?limit=20` / owner   | 3,242,079 | 3,242,038 |      3,242,162 |
+| `/boards/scale-board-0/cards?limit=20` / partial | 8,682,552 | 7,443,111 |      8,682,692 |
+| `/cards/scale-card-1` / owner                    |     1,790 |     1,749 |          1,873 |
+| `/cards/scale-card-1` / partial                  | 2,188,574 |   949,133 |      2,188,714 |
+| `/boards/scale-board-1` / owner                  |    20,158 |    20,117 |         20,241 |
+| `/boards/scale-board-1` / denied (404)           | 1,430,712 |   191,271 |      1,430,852 |
+
+The partial reader's cold-minus-warm overhead is consistently 1,239,441 VM.
+This is a complete request delta, not a separately measured capture statement.
+The denial rebuild therefore predates grouping/rollup #463. Brief is **empty**
+in this corpus; its numbers demonstrate admission, not populated brief acceptance.
+`limit=20` does not page the legacy card inventories: they hydrate thousands of
+rows. Board aggregation and work lifecycle inventories also exceed the ceiling
+after the authorization cache is warm.
+
+Migration 116 persists direct canonical dependency contributions, their
+deduplicated graph, root declarations, root-owner counts and projection spellings.
+It does not persist per-principal transitive closures. Structural inheritance
+shares the forward policy's executable inventory. Triggers maintain these
+derived indexes in the canonical writer's transaction, including aliases,
+mentions, retained purge provenance, and independently selected exact/compact
+ledgers. Root-owner columns deliberately retain original SQLite value types.
+
+Candidate visibility walks the graph's covering primary key
+`(child_kind,child_id,ledger,parent_kind,parent_id)` and point-probes roots by
+`(kind,id)`. Complexity is O(admitted candidate ancestors and incoming edges),
+independent of unrelated denied descendants; recursive UNION terminates cycles.
+At most three indexed existence seeks in `(unconditional,owner)` establish
+whether the reader has any denied roots, without enumerating private threads.
+Scoped relations remain inline so point/keyset selectors can reach their indexes.
+
+Projection filtering has a separate spelling dictionary. Endpoints seek binary
+`(ref,is_ref)` spellings; JSON atoms seek a NOCASE digest. Prose seeks indexed
+mention buckets and retains the complete legacy boundary matcher before testing
+candidate visibility. Document aliases, bare IDs, external keys, source URLs,
+legacy punctuation and synthetic document-history vertices retain distinct rules.
+Cost includes the admitted text's atoms and matching spelling/bucket fanout;
+dense legacy buckets and dense candidate ancestry still need adversarial budgets.
+The dictionary avoids constructing the workspace's denied spelling set.
+
+Within a pinned page, SQL proofs stop traversal at already-proven ancestors.
+Resource and text proof namespaces are separate, with a shared 8,192-entry/
+1-MiB key limit and a 1-MiB ancestor JSON limit. Every use verifies both epoch
+and connection `total_changes()` in the consuming statement. This also covers
+borrowed mutable transactions and compact-ledger writes without an epoch bump.
+Missing/expired proofs perform canonical indexed checks. Closing the read drops
+its token. Other requests and stream ticks never reuse these proofs. Business
+writes and receipt-stream closure validation retain their canonical policy.
+
+After rebasing onto main `b6b021d0`, a fresh native seed measured all three
+phases identically (no overlay):
+
+| Page / reader                                              |   First VM |    Warm VM | Invalidated VM |
+| ---------------------------------------------------------- | ---------: | ---------: | -------------: |
+| `/cards?summary=1&limit=20` / owner                        |     21,633 |     21,633 |         21,633 |
+| `/cards?summary=1&limit=20` / partial                      |     42,443 |     42,443 |         42,443 |
+| `/boards/scale-board-0/cards?summary=1&limit=20` / owner   |     24,381 |     24,381 |         24,381 |
+| `/boards/scale-board-0/cards?summary=1&limit=20` / partial |     48,538 |     48,538 |         48,538 |
+| `/cards/scale-card-1` / partial                            |      5,765 |      5,765 |          5,765 |
+| `/boards/scale-board-1` / denied (404)                     |        379 |        379 |            379 |
+| `/brief` / partial                                         |    177,735 |    177,735 |        177,735 |
+| `/work?limit=20` / partial                                 |  3,404,754 |  3,404,754 |      3,404,754 |
+| `/cards?limit=20` / partial                                | 49,229,580 | 49,229,580 |     49,229,580 |
+| `/boards?limit=20` / partial                               | 34,298,520 | 34,298,520 |     34,298,520 |
+| `/boards/scale-board-0/cards?limit=20` / partial           | 55,134,155 | 55,134,155 |     55,134,155 |
+
+Earlier iteration probes reopened a backup of the local synthetic seed using a
+test overlay. The table above comes from the checked-in complete test, including
+legacy inventories with hard failing 50,000-step assertions. No allowance conceals
+them. Main's grouping migration now populates brief from the corpus, so its
+current result is not comparable to the empty baseline brief. The fresh request
+matrix took 469.57 seconds including seed and intentionally failed. A pre-rebase
+`/work?limit=20`
+probe still used 411,562 owner / 3,403,322 partial VM. Its main page query was
+indexed; separate lifecycle inventory reads scanned cards/documents/topics/
+threads (16,438 total full-scan steps for the partial reader). An ordering-index
+experiment did not change that cost and was removed. Unpaged partial inventory
+ancestry can regress warm work and must be resolved before shipping.
+
+The existing complete grouping feed gate also remains red: owner reads use
+33,857 VM and partial reads use 179,091 VM in every phase, against 50,000.
+Removing eager capture has not made first-candidate ancestry cheap enough for
+that feed. The isolated point guard passes at 263 VM without denied roots and
+834 VM with either 1,024 or 4,096 unrelated denials; repeated membership costs
+50 VM under its unchanged 64-step warm ceiling. These microbenchmarks must not
+be substituted for the failing complete grouping request.
+
+Differential tests compare the full old closure to indexed roots/edges on the
+shared corpus (3,344 denied identities for partial/anonymous readers), plus
+48 randomized mutation rounds across five scopes. Additional comparisons cover
+all projection spellings, alias/edge text, case and raw-ID collisions, counts,
+page lookahead, grant/revoke/transfer, exact-ledger rollback, pinned isolation,
+missing epochs and unversioned writes. Existing legacy cache tests explicitly
+exercise the retained closure constructor rather than pretending a lazy request
+contains a complete denial snapshot.
+
+The initial migration backfills direct contributions once before readiness.
+Writes pay for changed origins and indexed matching reference fanout, rather
+than rebuilding transitive closure. Optional compact-ledger teardown, historical
+migration fixture replay and large-history write amplification remain explicit
+validation concerns; a passing read microbenchmark does not certify them.
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server \
+  -run '^TestPerformance(CanonicalAdmission|GroupingFeedBudget|ResourceReadSnapshotBudget)$' \
+  -count=1 -v -timeout=30m
+go test -C core ./internal/primitives \
+  -run '^Test(AdmissionGraph|Candidate|OverviewReadSnapshot|ResourceReadSnapshotRandomizedDifferential)' \
+  -count=1 -v -timeout=15m
+```
+
+See the proposed [architecture decision](../../docs/architecture/canonical-admission.md).
+
 ## Grouping and promise preservation
 
 The grouping API admits recent physical routing identities before visibility and metadata matching,

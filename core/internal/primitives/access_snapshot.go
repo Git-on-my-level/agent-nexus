@@ -14,21 +14,29 @@ import (
 )
 
 type denialTarget struct{ kind, id string }
+type candidateTextTarget struct{ mode, value string }
 
 type denialSnapshot struct {
-	mutation         bool
-	pointOnce        sync.Once
-	pointIndex       map[denialTarget]struct{}
-	pointToken       int64
-	pointSeriesCount int
-	epoch            int64
-	epochTable       string
-	refs             string
-	refOnce          sync.Once
-	refIndex         map[string]struct{}
-	rows             string
-	indexOnce        sync.Once
-	targetIndex      map[denialTarget]struct{}
+	candidates         bool
+	candidateChanges   int64
+	candidateAllPublic bool
+	candidateMu        sync.Mutex
+	candidateIndex     map[denialTarget]bool
+	candidateTextIndex map[candidateTextTarget]bool
+	candidateBytes     int
+	mutation           bool
+	pointOnce          sync.Once
+	pointIndex         map[denialTarget]struct{}
+	pointToken         int64
+	pointSeriesCount   int
+	epoch              int64
+	epochTable         string
+	refs               string
+	refOnce            sync.Once
+	refIndex           map[string]struct{}
+	rows               string
+	indexOnce          sync.Once
+	targetIndex        map[denialTarget]struct{}
 }
 
 // deniesAtom uses the canonical exact-atom and identity indexes. Preparing
@@ -37,6 +45,9 @@ func (s *denialSnapshot) deniesAtom(key string) bool {
 	if s == nil {
 		return false
 	}
+	if s.candidates {
+		return true
+	} // A lazy request marker is not a denial proof.
 	s.refOnce.Do(func() {
 		s.prepareTargetIndex()
 		s.refIndex = map[string]struct{}{}
@@ -140,7 +151,9 @@ func (s *denialSnapshot) deniesWakeup(wakeupID, threadID, triggerEventID string)
 
 type denialRequestState struct {
 	sync.Mutex
-	snapshot *denialSnapshot
+	snapshot          *denialSnapshot
+	candidatePrepared bool
+	candidateMode     bool
 }
 type denialRequestKey struct{}
 
@@ -256,25 +269,27 @@ func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot)
 	readDenials.bytes += len(snapshot.rows) + len(snapshot.refs)
 }
 
-// WithRequestAccessScope caches the denial closure for a regular read request.
-// Every consuming statement validates the authorization epoch IN its own SQL
-// snapshot and falls back to the canonical graph if any ownership write occurred.
-// Business transactions evaluate the canonical graph directly. The visit ledger
-// can reuse the read closure only after checking its epoch in the transaction.
-// An inbox poll may use a fresh request boundary; never share request state
-// across ticks. Shared snapshots are bounded and isolated by DB, scope and epoch.
+// WithRequestAccessScope admits ordinary reads through indexed candidate
+// ancestry in each statement's current SQLite snapshot. It does not capture a
+// workspace denial closure before page admission. Business transactions and
+// arbitrary legacy projections retain their complete canonical policy.
+// Never share the request state across independent stream ticks.
 func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Context {
-	return withRequestAccessEpoch(ctx, scope, "resource_access_epoch")
+	return withRequestAccessPolicy(ctx, scope, "resource_access_epoch", true)
 }
 
 // epochTable is an internal schema identifier, never caller input.
 func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable string) context.Context {
+	return withRequestAccessPolicy(ctx, scope, epochTable, false)
+}
+
+func withRequestAccessPolicy(ctx context.Context, scope AccessScope, epochTable string, candidates bool) context.Context {
 	ctx = WithAccessScope(ctx, scope)
-	state := &denialRequestState{}
+	state := &denialRequestState{candidateMode: candidates}
 	ctx = context.WithValue(ctx, denialRequestKey{}, state)
 	p, _ := resourceaccess.PolicyFrom(ctx)
 	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
-		if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); ok && pin.db == db && pin.scope == scope && epochTable == "resource_access_epoch" && resourceaccess.AnonymousSQLParameters(query) {
+		if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); !candidates && ok && !pin.snapshot.candidates && pin.db == db && pin.scope == scope && epochTable == "resource_access_epoch" && resourceaccess.AnonymousSQLParameters(query) {
 			scoped, needsBinding := scopedReadSnapshotQuery(c, query, pin.snapshot, true)
 			if !needsBinding {
 				return scoped, args
@@ -285,6 +300,33 @@ func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable s
 			}
 			bound := append([]any{value}, args...)
 			return scoped, bound
+		}
+		if candidates && epochTable == "resource_access_epoch" {
+			snapshot := &denialSnapshot{candidates: true}
+			if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); ok && pin.snapshot.candidates && pin.db == db && pin.scope == scope {
+				snapshot = pin.snapshot
+			}
+			scoped, usesScope := scopedReadSnapshotQuery(c, query, snapshot, false)
+			if !usesScope {
+				return scoped, args
+			}
+			state.Lock()
+			if !state.candidatePrepared {
+				var epoch int64
+				var active bool
+				if db.QueryRowContext(c, `WITH `+admissionLedgerCTE(scope)+` SELECT COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1),active FROM _anx_admission_ledger`).Scan(&epoch, &active) == nil && !active && epoch >= 0 {
+					// Root absence proves the complete closure is empty without
+					// building it. Retain this proof for legacy visit validation.
+					state.snapshot = &denialSnapshot{epoch: epoch, epochTable: epochTable, rows: "[]"}
+				}
+				state.candidatePrepared = true
+			}
+			empty := state.snapshot
+			state.Unlock()
+			if visit, _ := c.Value(overviewVisitValidationKey{}).(bool); visit && empty != nil {
+				return scopeReadWithSnapshot(c, query, empty), append([]any{empty.rows}, args...)
+			}
+			return scoped, args
 		}
 		// Identity/service SQL with no resource relation needs no closure.
 		if accessCTEs(scope, query) == "" {
@@ -371,10 +413,10 @@ func denialSnapshotFrom(ctx context.Context) *denialSnapshot {
 	return state.snapshot
 }
 
-// WithReadTickSnapshot starts a new epoch-validated read boundary for one poll.
+// WithReadTickSnapshot starts a new scoped read boundary for one poll.
 // Recreate it each tick; never attach this state to the long-lived stream.
-// Each consuming SQL statement still checks its own epoch and falls back to
-// the canonical graph after revocation. Transactional writes stay canonical.
+// Each consuming SQL statement sees its current canonical ancestry and roots.
+// Transactional writes stay canonical.
 func WithReadTickSnapshot(ctx context.Context) context.Context {
 	if scope, ok := accessScopeFrom(ctx); ok {
 		return WithRequestAccessScope(ctx, scope)

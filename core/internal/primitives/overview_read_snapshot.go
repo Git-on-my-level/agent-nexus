@@ -28,10 +28,9 @@ func (s *Store) BeginResourceRead(ctx context.Context) (context.Context, func(),
 	return s.beginSummaryRead(ctx)
 }
 
-// BeginOverviewRead admits a bounded Overview phase to an immutable SQLite
-// snapshot. Admission recomputes canonical denial on an epoch mismatch. Reads
-// inside that same transaction still validate the epoch, but need not compile
-// the unreachable canonical recursion again for every join and subquery.
+// BeginOverviewRead admits a bounded phase to an immutable SQLite snapshot.
+// Candidate ancestry and roots remain consistent throughout that transaction.
+// Internal callers of the retained closure policy revalidate that proof here.
 func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(), error) {
 	if _, pinned := ctx.Value(pinnedDenialKey{}).(pinnedDenial); pinned {
 		return ctx, func() {}, nil
@@ -43,6 +42,21 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 	next, close, err := s.db.PinReads(ctx, func(ctx context.Context, db resourceaccess.QueryRower) (context.Context, error) {
 		scope, _ := accessScopeFrom(ctx)
 		cached := denialSnapshotFrom(ctx)
+		state, _ := ctx.Value(denialRequestKey{}).(*denialRequestState)
+		if cached == nil || cached.candidates || state != nil && state.candidateMode {
+			// Candidate admission evaluates current indexed ancestry inside this
+			// transaction; no workspace closure needs capturing before the page.
+			snapshot := &denialSnapshot{candidates: true, candidateIndex: make(map[denialTarget]bool)}
+			var active bool
+			if err := db.QueryRowContext(ctx, `WITH `+admissionLedgerCTE(scope)+` SELECT COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1),total_changes(),active FROM _anx_admission_ledger`).Scan(&snapshot.epoch, &snapshot.candidateChanges, &active); err != nil {
+				return ctx, err
+			}
+			snapshot.candidateAllPublic = !active
+			pointToken = pointSnapshotSequence.Add(1)
+			snapshot.pointToken = pointToken
+			pointSnapshots.Store(pointToken, snapshot)
+			return context.WithValue(ctx, pinnedDenialKey{}, pinnedDenial{db, snapshot, scope}), nil
+		}
 		if cached == nil || (cached.epochTable != "" && cached.epochTable != "resource_access_epoch") {
 			return ctx, errOverviewSnapshotUnavailable
 		}

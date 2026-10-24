@@ -23,20 +23,22 @@ func TestResourceAccessSnapshotParameterBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})
-	for _, tc := range []struct {
-		q    string
-		args []any
-	}{
-		{`SELECT id FROM documents WHERE id=? AND title=?`, []any{doc["id"], doc["title"]}},
-		{`WITH ids(v) AS (SELECT ?) SELECT id FROM documents WHERE id=(SELECT v FROM ids) AND '?'='?' /* :not_a_binding */`, []any{doc["id"]}},
-		{`SELECT id FROM documents WHERE id=?1 OR id=?1`, []any{doc["id"]}},
-		{`SELECT id FROM documents WHERE id=:id`, []any{sql.Named("id", doc["id"])}},
-		{`SELECT id FROM documents WHERE id=$1`, []any{doc["id"]}},
-	} {
-		var id string
-		if err = s.db.QueryRowContext(scope, tc.q, tc.args...).Scan(&id); err != nil || id != doc["id"] {
-			t.Fatalf("%s: %q %v", tc.q, id, err)
+	scope := canonicalRequestScope(ctx, AccessScope{ActorID: "reader"})
+	for _, readScope := range []context.Context{scope, WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})} {
+		for _, tc := range []struct {
+			q    string
+			args []any
+		}{
+			{`SELECT id FROM documents WHERE id=? AND title=?`, []any{doc["id"], doc["title"]}},
+			{`WITH ids(v) AS (SELECT ?) SELECT id FROM documents WHERE id=(SELECT v FROM ids) AND '?'='?' /* :not_a_binding */`, []any{doc["id"]}},
+			{`SELECT id FROM documents WHERE id=?1 OR id=?1`, []any{doc["id"]}},
+			{`SELECT id FROM documents WHERE id=:id`, []any{sql.Named("id", doc["id"])}},
+			{`SELECT id FROM documents WHERE id=$1`, []any{doc["id"]}},
+		} {
+			var id string
+			if err = s.db.QueryRowContext(readScope, tc.q, tc.args...).Scan(&id); err != nil || id != doc["id"] {
+				t.Fatalf("%s: %q %v", tc.q, id, err)
+			}
 		}
 	}
 	policy, _ := resourceaccess.PolicyFrom(scope)
@@ -55,7 +57,7 @@ func TestResourceAccessSnapshotParameterBindings(t *testing.T) {
 			if err = s.CheckResourceValues(scope, []string{ref}); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("stale selector snapshot exposed %s: %v", ref, err)
 			}
-			if err = s.CheckResourceValues(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), []string{ref}); !errors.Is(err, ErrNotFound) {
+			if err = s.CheckResourceValues(canonicalRequestScope(ctx, AccessScope{ActorID: "reader"}), []string{ref}); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("fresh selector snapshot exposed %s: %v", ref, err)
 			}
 			var denied bool

@@ -142,24 +142,16 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			old := context.WithValue(pin, summaryPointReadKey{}, false)
-			oldPolicy, _ := resourceaccess.PolicyFrom(old)
-			oldRead := oldPolicy.ReadOnDB
-			oldPolicy.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
-				q, a := oldRead(c, db, query, args)
-				q = strings.ReplaceAll(q, "ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id", "ref=_row.source_type || ':' || _row.source_id OR ref=_row.target_type || ':' || _row.target_id")
-				return q, a
-			}
-			old = resourceaccess.WithPolicy(old, oldPolicy)
+			old := WithAccessScope(pin, scope)
 			policy, _ := resourceaccess.PolicyFrom(pin)
 			proof := pin.Value(pinnedDenialKey{}).(pinnedDenial)
 			pointSQL, _ := policy.ReadOnDB(pin, proof.db, `SELECT id FROM documents WHERE id=?`, []any{"missing"})
-			if !strings.Contains(pointSQL, "anx_point_snapshot_denied") || strings.Contains(pointSQL, "json_each") {
+			if !strings.Contains(pointSQL, "anx_candidate_lookup") || strings.Contains(pointSQL, "json_each") {
 				closeRead()
-				t.Fatal("resource page lost constant-time identity policy")
+				t.Fatal("resource page lost indexed candidate proof policy")
 			}
 			fallbackSQL, _ := policy.ReadOnDB(pin, proof.db, `SELECT source_id FROM ref_edges`, nil)
-			if !strings.Contains(fallbackSQL, "_anx_denied_refs") {
+			if !strings.Contains(fallbackSQL, "resource_access_admission_spellings") || !strings.Contains(fallbackSQL, "anx_resource_text_has_ref") {
 				closeRead()
 				t.Fatal("reference policy was bypassed")
 			}

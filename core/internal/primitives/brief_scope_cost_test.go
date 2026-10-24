@@ -14,7 +14,7 @@ func TestBriefPinnedSQLPreparationAllocationBudget(t *testing.T) {
 	db := new(sql.DB)
 	scope := AccessScope{ActorID: "brief-reader"}
 	snapshot := &denialSnapshot{epoch: 1, rows: "[]"}
-	ctx := WithRequestAccessScope(context.Background(), scope)
+	ctx := canonicalRequestScope(context.Background(), scope)
 	ctx = context.WithValue(ctx, pinnedDenialKey{}, pinnedDenial{db: db, scope: scope, snapshot: snapshot})
 	policy, _ := resourceaccess.PolicyFrom(ctx)
 	query := briefAskSelect + ` WHERE a.state='open' ORDER BY a.created_at LIMIT ?`
@@ -47,7 +47,7 @@ func TestPinnedSQLPreparationRetainsBindingShape(t *testing.T) {
 	db := new(sql.DB)
 	scope := AccessScope{ActorID: "brief-reader"}
 	snapshot := &denialSnapshot{epoch: 1, rows: "[]", pointToken: 7}
-	ctx := WithRequestAccessScope(context.Background(), scope)
+	ctx := canonicalRequestScope(context.Background(), scope)
 	ctx = context.WithValue(ctx, pinnedDenialKey{}, pinnedDenial{db: db, scope: scope, snapshot: snapshot})
 	ctx = context.WithValue(ctx, summaryPointReadKey{}, true)
 	policy, _ := resourceaccess.PolicyFrom(ctx)

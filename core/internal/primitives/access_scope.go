@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -80,6 +81,9 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	pointPredicates := map[string]string{}
 
 	denied := func(kind, id string) string {
+		if snapshot != nil && snapshot.candidates {
+			return candidateVisibleSQL(scope, "'"+kind+"'", id, snapshot)
+		}
 		predicate := "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
 		pointPredicates[predicate] = "anx_point_snapshot_denied((SELECT token FROM _anx_point_snapshot),'" + kind + "',CAST(" + id + " AS BLOB))=0"
 		return predicate
@@ -92,7 +96,18 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 		atoms := resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels")
 		// CASE skips atom extraction when the consuming statement's epoch-checked
 		// denial relation is empty, including a cached empty request snapshot.
-		return "CASE WHEN EXISTS (SELECT 1 FROM _anx_denied) THEN NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")) ELSE 1 END"
+		canonical := "CASE WHEN EXISTS (SELECT 1 FROM _anx_denied) THEN NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")) ELSE 1 END"
+		if snapshot != nil && snapshot.candidates {
+			return "CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 1 ELSE NOT EXISTS(SELECT 1 FROM json_each(" + atoms + ") j WHERE NOT (" + candidateCleanAtomSQL(scope, "j.value", snapshot) + ")) END"
+		}
+		return canonical
+	}
+	cleanRef := func(value string) string {
+		canonical := `NOT EXISTS(SELECT 1 FROM _anx_denied_refs WHERE ref=` + value + `)`
+		if snapshot != nil && snapshot.candidates {
+			return `CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 OR ` + value + ` IS NULL OR ` + value + `='' THEN 1 ELSE ` + candidateCleanRefSQL(scope, value, snapshot) + ` END`
+		}
+		return canonical
 	}
 	addColumns := func(table, columns, where string) {
 		if snapshot != nil && snapshot.mutation {
@@ -105,7 +120,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 			return
 		}
 		materialization := ""
-		if table == "document_search_postings" || table == "series_points" || strings.HasPrefix(table, "brief_") || table == "attention_placements" {
+		if snapshot != nil && snapshot.candidates || table == "document_search_postings" || table == "series_points" || strings.HasPrefix(table, "brief_") || table == "attention_placements" {
 			// Repeated endpoint and projection probes must retain indexed seeks
 			// through the privacy predicate. Materializing these shadows would
 			// copy workspace relations before candidate selection.
@@ -119,10 +134,14 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	}
 	add("document_revisions", denied("document", "_row.document_id")+" AND "+denied("document_revision", "_row.revision_id"))
 	add("card_revisions", denied("card", "_row.card_id")+" AND "+denied("card_revision", "_row.revision_id"))
-	add("resource_handle_aliases", cleanJSON("_row.reason")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.resource_type AND id=_row.resource_id)")
+	aliasVisible := `NOT EXISTS(SELECT 1 FROM _anx_denied WHERE kind=_row.resource_type AND id=_row.resource_id)`
+	if snapshot != nil && snapshot.candidates {
+		aliasVisible = candidateVisibleSQL(scope, "_row.resource_type", "_row.resource_id", snapshot)
+	}
+	add("resource_handle_aliases", cleanJSON("_row.reason")+" AND "+aliasVisible)
 	// Separate equality probes let SQLite index the materialized reference set.
 	// An OR here scans every denied spelling for every candidate placement.
-	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id) AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.target_type || ':' || _row.target_id)")
+	add("ref_edges", cleanJSON("_row.metadata_json")+" AND "+cleanRef("(_row.source_type||':'||_row.source_id)")+" AND "+cleanRef("(_row.target_type||':'||_row.target_id)"))
 	add("resource_access_external_edges", "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind=_row.source_kind AND id=_row.source_id)")
 	// Filter the whole projection by card visibility, including routing hints,
 	// promises and evidence times. A caller need not remember a cards join.
@@ -225,6 +244,19 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	}
 	// An unused ownership graph does not filter any row, but SQLite still has
 	// to parse it. Keep graph-only callers and explicit internal dependencies.
+	if snapshot != nil && snapshot.candidates {
+		needsCanonical := query == "" || strings.Contains(graph, "_anx_denied") || needed["_anx_denied"] || needed["_anx_denied_refs"] || needed["_anx_denied_atoms"] || needed["_anx_denied_prose"] || needed["_anx_resource_refs"]
+		if graph == "" && !needsCanonical {
+			return ""
+		}
+		if !needsCanonical {
+			return admissionLedgerCTE(scope) + graph
+		}
+		// Retain arbitrary text/ref projection checks lazily. Exact resource
+		// shadows above do not depend on this closure, so an unmatched alias
+		// branch cannot capture workspace authority before candidate admission.
+		snapshot = nil
+	}
 	needsGraph := graph != "" || query == ""
 	for name := range needed {
 		needsGraph = needsGraph || strings.HasPrefix(name, "_anx_")
@@ -235,6 +267,9 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	deniedGraph := ""
 	if snapshot == nil {
 		deniedGraph = ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
+		if strings.Contains(graph, "_anx_admission_ledger") {
+			deniedGraph = admissionLedgerCTE(scope) + ", " + deniedGraph
+		}
 	}
 	if snapshot != nil {
 		epoch := fmt.Sprint(snapshot.epoch)
@@ -404,6 +439,18 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	atoms := string(resourceaccess.ContentReferenceAtomsJSON(string(encoded), "structured"))
 	if atoms == "[]" {
 		return nil
+	}
+	if state, requested := ctx.Value(denialRequestKey{}).(*denialRequestState); !mutation && requested && state.candidateMode {
+		var denied sql.NullBool
+		if err := q.QueryRowContext(ctx, candidateValueCheckSQL(scope), atoms).Scan(&denied); err != nil {
+			return err
+		}
+		if denied.Valid && denied.Bool {
+			return ErrNotFound
+		}
+		if denied.Valid {
+			return nil
+		}
 	}
 	// This check uses the mutation's own transaction snapshot. Without denied
 	// roots there can be no denied descendants; skip constructing the expensive

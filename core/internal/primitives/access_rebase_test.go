@@ -30,7 +30,7 @@ func TestEvidenceStructuralWritesInvalidateRequestSnapshot(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			request := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})
+			request := canonicalRequestScope(ctx, AccessScope{ActorID: "reader"})
 			assertResolved := func(want bool) {
 				t.Helper()
 				got, err := s.ResolveRefs(request, []string{"snapshot-key"}, nil, time.Now())

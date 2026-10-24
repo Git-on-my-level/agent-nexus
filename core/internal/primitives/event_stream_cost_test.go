@@ -42,7 +42,7 @@ func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T)
 			defer db.Close()
 			s := primitives.NewTestStore(db, ws.Layout().ArtifactContentDir)
 			scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"})
-			// Cold capture builds the canonical closure and its shared lookup once.
+			// Cold and warm pages both admit only their selected candidates.
 			if _, err := s.ListEventStreamPage(scope, primitives.EventListFilter{}, primitives.EventCursor{}); err != nil {
 				t.Fatal(err)
 			}
@@ -62,19 +62,22 @@ func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T)
 				ticks[total] = append(ticks[total], cost)
 				bound := false
 				for _, statement := range counter.Statements() {
-					if !strings.Contains(statement.SQL, "SELECT kind,id FROM _anx_fresh_denied UNION SELECT") {
+					if !strings.Contains(statement.SQL, "FROM events e WHERE") || !strings.Contains(statement.SQL, "_anx_admission_ledger") {
 						continue
 					}
-					var denied [][2]string
-					if err := json.Unmarshal([]byte(statement.Args[0].(string)), &denied); err != nil || len(denied) != 200 {
-						t.Fatalf("denial binding includes history: %d %v", len(denied), err)
+					var candidates []string
+					if err := json.Unmarshal([]byte(statement.Args[0].(string)), &candidates); err != nil || len(candidates) != 200 {
+						t.Fatalf("candidate binding includes history: %d %v", len(candidates), err)
+					}
+					if strings.Contains(statement.SQL, "json_group_array(json_array(kind,id))") {
+						t.Fatal("whole denial capture returned")
 					}
 					bound = true
 				}
 				if !bound {
-					t.Fatal("did not exercise narrowed cached denial binding")
+					t.Fatal("did not exercise bounded candidate binding")
 				}
-				t.Logf("hidden=%d tick=%d statements=%d rows=%d vm_steps=%d denied_bindings=200", total, tick, counter.Count(), counter.ReturnedRows(), cost.work.VMSteps)
+				t.Logf("hidden=%d tick=%d statements=%d rows=%d vm_steps=%d candidate_bindings=200", total, tick, counter.Count(), counter.ReturnedRows(), cost.work.VMSteps)
 				cursor = page.Cursor
 			}
 		})

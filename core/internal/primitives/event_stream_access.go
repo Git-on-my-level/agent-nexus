@@ -2,10 +2,7 @@ package primitives
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-
-	"agent-nexus-core/internal/resourceaccess"
 )
 
 type eventPageTargetsKey struct{}
@@ -39,45 +36,6 @@ func withEventPageAccessScope(ctx context.Context, ids []string) context.Context
 		return ctx
 	}
 	ctx = WithRequestAccessScope(ctx, scope)
-	p, _ := resourceaccess.PolicyFrom(ctx)
-	original := p.ReadOnDB
-	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
-		state, _ := c.Value(denialRequestKey{}).(*denialRequestState)
-		state.Lock()
-		if state.snapshot == nil {
-			raw, _ := db.(*sql.DB)
-			cached := cachedReadDenial(raw, scope)
-			if cached != nil {
-				var epoch int64
-				// A warm capture reads only the epoch, never copies the complete
-				// cached JSON through SQLite. The consuming SQL validates again.
-				if db.QueryRowContext(c, `SELECT version FROM resource_access_epoch WHERE singleton=1`).Scan(&epoch) == nil && epoch == cached.epoch {
-					state.snapshot = cached
-				}
-			}
-		}
-		state.Unlock()
-		if denialSnapshotFrom(c) == nil {
-			// Retain the canonical capture and bounded shared cache on misses.
-			// This prepares SQL but does not execute the resource read twice.
-			original(c, db, query, args)
-		}
-		snapshot := denialSnapshotFrom(c)
-		targets, selected := c.Value(eventPageTargetsKey{}).(eventPageTargets)
-		if snapshot == nil || !selected || !resourceaccess.AnonymousSQLParameters(query) {
-			return original(c, db, query, args)
-		}
-		rows, ok := snapshot.targetRows(targets.kind, targets.ids)
-		if !ok {
-			return original(c, db, query, args)
-		}
-		pageSnapshot := &denialSnapshot{epoch: snapshot.epoch, rows: rows}
-		bound := make([]any, 0, len(args)+1)
-		bound = append(bound, rows)
-		bound = append(bound, args...)
-		return scopeReadWithSnapshot(c, query, pageSnapshot), bound
-	}
-	ctx = resourceaccess.WithPolicy(ctx, p)
 	return context.WithValue(ctx, eventPageTargetsKey{}, eventPageTargets{kind: "event", ids: ids})
 }
 

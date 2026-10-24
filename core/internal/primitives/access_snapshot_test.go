@@ -21,7 +21,7 @@ func TestResourceAccessReadCachePrefersNewestEpochAfterDelayedFill(t *testing.T)
 		t.Fatal(err)
 	}
 	scope := AccessScope{ActorID: "reader"}
-	olderRequest := WithRequestAccessScope(ctx, scope)
+	olderRequest := canonicalRequestScope(ctx, scope)
 	policy, _ := resourceaccess.PolicyFrom(olderRequest)
 	// Capture through the actual SQL path without publishing to the shared
 	// cache yet, as if this request's fill completed after a newer request.
@@ -37,7 +37,7 @@ func TestResourceAccessReadCachePrefersNewestEpochAfterDelayedFill(t *testing.T)
 	if _, err = s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	newerRequest := WithRequestAccessScope(ctx, scope)
+	newerRequest := canonicalRequestScope(ctx, scope)
 	if s.CanAccessResource(newerRequest, "document", doc["id"].(string)) {
 		t.Fatal("new ownership exposed the private document")
 	}
@@ -47,7 +47,7 @@ func TestResourceAccessReadCachePrefersNewestEpochAfterDelayedFill(t *testing.T)
 	}
 	rememberReadDenial(ws.DB(), scope, older)
 	for i := 0; i < 3; i++ {
-		request := WithRequestAccessScope(ctx, scope)
+		request := canonicalRequestScope(ctx, scope)
 		if s.CanAccessResource(request, "document", doc["id"].(string)) {
 			t.Fatal("delayed old capture exposed the private document")
 		}
@@ -75,7 +75,7 @@ func TestResourceAccessReadCacheSeparatesDatabaseAndPMScope(t *testing.T) {
 		if _, err = s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
 			t.Fatal(err)
 		}
-		request := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})
+		request := canonicalRequestScope(ctx, AccessScope{ActorID: "reader"})
 		if s.CanAccessResource(request, "document", "cache-control") {
 			t.Fatal("private document visible")
 		}
@@ -84,7 +84,7 @@ func TestResourceAccessReadCacheSeparatesDatabaseAndPMScope(t *testing.T) {
 			t.Fatal("database identities shared a closure")
 		}
 		captured = snapshot
-		pmRequest := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader", PMActorID: "reader"})
+		pmRequest := canonicalRequestScope(ctx, AccessScope{ActorID: "reader", PMActorID: "reader"})
 		if !s.CanAccessResource(pmRequest, "document", "cache-control") || denialSnapshotFrom(pmRequest) == snapshot {
 			t.Fatal("PM authority shared another scope's closure")
 		}
@@ -104,7 +104,7 @@ func TestResourceAccessRequestSnapshotInvalidatesInsideStatement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	request := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"})
 	assertVisible := func(want bool) {
 		t.Helper()
 		_, _, err := s.GetDocument(request, "[]")
@@ -117,7 +117,7 @@ func TestResourceAccessRequestSnapshotInvalidatesInsideStatement(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("request did not capture snapshot")
 	}
-	otherRequest := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	otherRequest := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"})
 	if !s.CanAccessResource(otherRequest, "document", "[]") || denialSnapshotFrom(otherRequest) != snapshot {
 		t.Fatal("unchanged database, principal and epoch did not reuse the bounded read closure")
 	}
@@ -126,7 +126,7 @@ func TestResourceAccessRequestSnapshotInvalidatesInsideStatement(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertVisible(owner == "")
-		freshRequest := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+		freshRequest := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"})
 		if s.CanAccessResource(freshRequest, "document", "[]") != (owner == "") || denialSnapshotFrom(freshRequest) == snapshot {
 			t.Fatal("new request reused a closure from an earlier authorization epoch")
 		}
@@ -143,7 +143,7 @@ func TestResourceAccessRequestSnapshotInvalidatesInsideStatement(t *testing.T) {
 			t.Fatalf("nested privileged scope lost access: %+v", scope)
 		}
 	}
-	privileged := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger", PMActorID: "stranger"})
+	privileged := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger", PMActorID: "stranger"})
 	if !s.CanAccessResource(privileged, "document", "[]") {
 		t.Fatal("selected PM lost access")
 	}
@@ -189,7 +189,7 @@ func TestResourceAccessRequestSnapshotMissingEpochFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	request := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"})
 	if !s.CanAccessResource(request, "document", doc["id"].(string)) {
 		t.Fatal("public source missing")
 	}
@@ -202,7 +202,7 @@ func TestResourceAccessRequestSnapshotMissingEpochFallsBack(t *testing.T) {
 	if s.CanAccessResource(request, "document", doc["id"].(string)) {
 		t.Fatal("missing cache sentinel exposed private resource")
 	}
-	freshRequest := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	freshRequest := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"})
 	if s.CanAccessResource(freshRequest, "document", doc["id"].(string)) || denialSnapshotFrom(freshRequest) != nil {
 		t.Fatal("missing epoch allowed a shared cache hit on a new request")
 	}
@@ -228,7 +228,7 @@ func TestResourceAccessRequestSnapshotSeesLateAliasAndProse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	request := canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"})
 	if !s.CanAccessResource(request, "document", copy["id"].(string)) {
 		t.Fatal("unresolved reference should remain visible")
 	}
@@ -309,7 +309,7 @@ func TestResourceAccessRequestSnapshotRejectsStaleLedger(t *testing.T) {
 		if _, err := ws.DB().ExecContext(ctx, `UPDATE resource_access_epoch SET version=version+1`); err != nil {
 			t.Fatal(err)
 		}
-		return !s.CanAccessResource(WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"}), "document", referrer["id"].(string))
+		return !s.CanAccessResource(canonicalRequestScope(ctx, AccessScope{ActorID: "stranger"}), "document", referrer["id"].(string))
 	}
 	if !denied() || predictedAccessLedger(ws.DB()) != resourceaccess.LegacyLedger {
 		t.Fatal("legacy capture missed its exact-edge denial or did not record its ledger")
@@ -321,4 +321,11 @@ func TestResourceAccessRequestSnapshotRejectsStaleLedger(t *testing.T) {
 	if got := predictedAccessLedger(ws.DB()); got != resourceaccess.LegacyLedger {
 		t.Fatalf("stale guess was not replaced by the observed ledger: %v", got)
 	}
+}
+
+// These tests exercise the retained canonical closure cache used by legacy and
+// receipt policies. Ordinary request admission has independent candidate parity
+// and cold/warm/invalidation gates in access_admission_test.go and server tests.
+func canonicalRequestScope(ctx context.Context, scope AccessScope) context.Context {
+	return withRequestAccessEpoch(ctx, scope, "resource_access_epoch")
 }

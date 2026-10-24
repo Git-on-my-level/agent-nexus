@@ -44,6 +44,15 @@ func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
 			}
 		}
 	}
+	// Candidate-root indexes also postdate the v56 blob-manifest column.
+	// Remove their derived triggers before reconstructing that historical schema.
+	for _, family := range []string{"admission_roots_artifacts_", "admission_root_index_artifacts_"} {
+		for _, op := range []string{"insert", "update", "delete"} {
+			if _, err = ws.DB().Exec(`DROP TRIGGER ` + family + op); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	for _, sql := range []string{
 		// Migration 111 postdates this schema; its triggers reference the column.
 		`DROP TRIGGER access_document_history_artifact_update`,
