@@ -172,7 +172,7 @@ def merge_workers(routes, weights, reports, expected_hash):
                 sample["worker"] == report["worker"] == sample_worker(sample, workers)
             ), "wrong worker case"
         out["samples"].extend(report["samples"])
-        out["completed"].extend(report["completed"])
+        out["completed"].extend(report["completed"] or [])  # nil when none completed
         for key, plan in report["plans"].items():
             if key not in out["plans"]:
                 out["plans"][key] = plan

@@ -350,6 +350,13 @@ class ExecutedCoverageTests(unittest.TestCase):
         merged = coverage.merge_workers(self.routes, self.weights, fragments, self.hash)
         with self.assertRaises(AssertionError):
             self.validate([merged, *self.reports[1:]])
+        # A worker with no completed case reports null (a nil Go slice). The
+        # merge keeps its samples so the coverage gate rejects it, not a crash.
+        fragments[0]["completed"] = None
+        merged = coverage.merge_workers(self.routes, self.weights, fragments, self.hash)
+        self.assertEqual(len(merged["samples"]), len(report["samples"]))
+        with self.assertRaises(AssertionError):
+            self.validate([merged, *self.reports[1:]])
 
 
 class LegacyShardTests(unittest.TestCase):
