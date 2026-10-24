@@ -327,10 +327,11 @@ function receiptLoopsBrief() {
     waiting_on_you_count: 0,
     loop,
   });
+  // As core sends them: cards with receipts or a cadence live in `loops`,
+  // never in `initiatives`.
   return {
     ...base,
-    initiatives: [
-      ...base.initiatives,
+    loops: [
       loopRow("avo-cleanup", "Disk cleanup optimizer", {
         health: "healthy",
         health_reason: "Kept a candidate 1d ago",
@@ -450,6 +451,60 @@ test("Loops with run receipts show cards, totals and the climb", async ({
   }
 });
 
+test("loops core sends in brief.loops are on Loops, not Initiatives", async ({
+  page,
+  context,
+}) => {
+  const DAY = 86400;
+  const at = (s) => new Date(Date.now() + s * 1000).toISOString();
+  const loop = {
+    ...brief.initiatives[0],
+    ref: "card:nightly-cleanup",
+    title: "Nightly cleanup loop",
+    state: "moving",
+    waiting_on_you_count: 0,
+    series: [],
+    metric_flat: null,
+    loop: {
+      health: "failing",
+      health_reason: "Last 2 runs hit infrastructure errors",
+      every_seconds: DAY,
+      last_run_at: at(-3600),
+      last_effect_at: at(-6 * DAY),
+      recent_runs: [
+        { at: at(-2 * DAY), outcome: "infra_error", decision: null },
+        { at: at(-DAY), outcome: "infra_error", decision: null },
+      ],
+      runs_7d: { acted: 0, measured: 0, no_op: 0, infra_error: 2 },
+      goal: null,
+    },
+  };
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      generated_at: new Date().toISOString(),
+      // No measured initiatives: the only loop is the one in `loops`.
+      initiatives: brief.initiatives.map((row) => ({
+        ...row,
+        series: [],
+        metric_flat: null,
+        loop: null,
+      })),
+      loops: [loop],
+    }),
+  );
+  await page.goto(WATCH);
+  await expect(page.locator("[data-collection-row]").first()).toBeVisible();
+  await expect(
+    page.locator('[data-collection-row="card:nightly-cleanup"]'),
+  ).toHaveCount(0);
+  await page.locator('[data-watch-tab="loops"]').click();
+  await expect(page.locator("[data-watch-loops-empty]")).toHaveCount(0);
+  await expect(
+    page.locator('[data-collection-row="card:nightly-cleanup"]'),
+  ).toHaveAttribute("data-state", "failing");
+});
+
 test("Loops says how to add one when there are none", async ({
   page,
   context,
@@ -464,6 +519,7 @@ test("Loops says how to add one when there are none", async ({
         metric_flat: null,
         loop: null,
       })),
+      loops: [],
     }),
   );
   await page.goto(`${WATCH}?view=loops`);

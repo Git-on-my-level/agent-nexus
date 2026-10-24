@@ -43,6 +43,7 @@
     decisionsForInitiative,
     initiativeLine,
     WATCH_STATE_LABELS,
+    findBriefRow,
   } from "$lib/brief.js";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
@@ -460,10 +461,7 @@
   }
   const briefState = briefStore();
   let initiativeRef = $derived(`card:${workId}`);
-  let briefRow = $derived(
-    $briefState.data?.initiatives?.find((row) => row.ref === initiativeRef) ??
-      null,
-  );
+  let briefRow = $derived(findBriefRow($briefState.data, initiativeRef));
   let briefParts = $derived(briefRow ? initiativeLine(briefRow, now) : []);
   let decisions = $derived(
     decisionsForInitiative($briefState.data, initiativeRef),

@@ -22,6 +22,7 @@
     countWaitingDecisions,
     freshnessLabel,
     initiativeLine,
+    briefLoops,
   } from "$lib/brief.js";
   import {
     attentionCount,
@@ -135,7 +136,11 @@
     }),
   );
   let loopCollection = $derived(
-    collectionFromLoops(initiatives, { now, href: initiativeHref, decideHref }),
+    collectionFromLoops(briefLoops(brief, initiatives), {
+      now,
+      href: initiativeHref,
+      decideHref,
+    }),
   );
   let loopRows = $derived(
     loopCollection.groups.reduce((n, g) => n + g.rows.length, 0),
