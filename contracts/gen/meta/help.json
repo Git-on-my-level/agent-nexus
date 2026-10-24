@@ -7559,7 +7559,7 @@
       "path": "/events",
       "operation_id": "createEvent",
       "summary": "Create event",
-      "description": "New human_attention_requested payloads reuse title for a one-line decision (recommended maximum 100 Unicode characters, hard maximum 160) and optional body for Markdown detail. Invalid titles return ask_title_invalid or ask_title_too_long; non-string bodies return ask_body_invalid. Historical data is unchanged. Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.",
+      "description": "New human_attention_requested payloads reuse title for a one-line decision (recommended maximum 100 Unicode characters, hard maximum 160) and optional body for Markdown detail. Invalid titles return ask_title_invalid or ask_title_too_long; non-string bodies return ask_body_invalid. Historical data is unchanged. Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work. SQLite writer contention returns HTTP 503 with code busy and Retry-After; retry the original body with the same request_key and event identity to preserve replay safety, including when the event committed before replay persistence was contended.",
       "why": "Append an event that links first-class resources and evidence through typed refs.",
       "input_mode": "json-body",
       "streaming": {
@@ -7573,7 +7573,8 @@
         "quota_exceeded",
         "ask_title_invalid",
         "ask_title_too_long",
-        "ask_body_invalid"
+        "ask_body_invalid",
+        "busy"
       ],
       "concepts": [
         "events",

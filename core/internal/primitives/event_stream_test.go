@@ -270,7 +270,7 @@ func TestEventStreamBatchesRevisionRefs(t *testing.T) {
 }
 
 func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T) {
-	t.Parallel()
+	// Serial: isolate the wall-clock budget from parallel SQLite fixtures.
 	for _, total := range []int{1000, 10000} {
 		t.Run(fmt.Sprint(total), func(t *testing.T) {
 			ctx := context.Background()
