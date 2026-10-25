@@ -211,7 +211,11 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 		if done.Valid {
 			child.DoneAt = &done.String
 		}
-		child.ShortCode = WorkShortCode(ref, child.Title)
+		handle := ref
+		if handle == id {
+			handle = ""
+		} // A canonical ID is not an authored handle.
+		child.ShortCode = WorkShortCode(handle, child.Title)
 		if stream {
 			streamIDs[id] = true
 		}
