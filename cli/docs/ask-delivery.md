@@ -29,9 +29,10 @@ recorded decision.
 
 ## Write for a busy boss
 
-Write a short proposal to a busy boss with no context. Give enough explanation
-for the reader to understand the choice in under a minute; do not squeeze the
-proposal into a tight word quota. Use ordinary words and short sections:
+Write a short proposal to a busy boss with no context. Explain what the work does
+before naming its implementation. Use connected paragraphs to show why the facts
+lead to the decision; do not squeeze the proposal into a tight word quota or
+reduce it to terse labelled fragments. Use ordinary words and short sections:
 
 - **What's happening** (`situation`): explain the baseline, what changed and the
   key numbers. Preserve uncertainty and distinguish observations from guesses.
@@ -44,7 +45,13 @@ proposal into a tight word quota. Use ordinary words and short sections:
 - **If no answer** (`if_no_answer`): state the known default or what stays blocked.
   Set `by` separately for a machine-readable deadline.
 
-Do not invent facts, urgency, costs, approvals or a default. Omit unused optional
+Do not invent facts, urgency, costs, approvals or a default. Preserve the original
+choices and conditions; later progress is dated context, not approval or proof
+that a gate passed. Use only stated facts and clearly conditional consequences;
+do not turn an unexplained technical term into an assumed mechanism. For an
+existing ask, preserve its decision conditions and answer choices without adding
+new choices, deadlines or dependencies. A next-step promise is not an ask
+deadline. Omit unused optional
 fields instead of padding them with “Not specified”. If an unknown affects the
 choice, explain that uncertainty in the relevant paragraph.
 
@@ -55,7 +62,15 @@ Older asks still render `body`.
 
 Start with `anx ask --template decision > ask.md`, edit the YAML frontmatter,
 then run `anx ask --from-file ask.md --preview`. The template contains the fictional
-proposal below. Preview shows the same headings and paragraphs as Decide, plus
+proposal below. When asked for a draft from supplied context, use only that
+context without research or preparation narration. Tools may only write a requested
+draft file or run an explicitly requested local preview. Do not perform the
+underlying work or search for missing facts. State material unknowns. Return only
+the document, with every field between the two `---` delimiters. YAML `evidence` entries are `{label, url}` objects; `Label=URL` is
+inline flag syntax. Every named pull request, even in details, needs its own
+labelled pull-request URL; a checks or commit URL does not qualify. Omit
+unrelated reference history. Preview shows the same headings and paragraphs as
+Decide, plus
 all lint results locally, without creating anything. Publish without `--preview`.
 Inline flags are `--situation`, `--impact`, `--recommend`, `--why`,
 `--alternative 'Action=consequence'`, `--if-no-answer` and `--details`.
