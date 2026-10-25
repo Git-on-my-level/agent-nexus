@@ -7,7 +7,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common.sh"
 
-require_command curl grep awk cp find
+require_command curl grep awk cp find python3
+python3 -B "${REPO_ROOT}/scripts/tests/test_backup_sqlite_tmpdir.py"
 
 assert_file_exists() {
   [[ -f "$1" ]] || die "expected file to exist: $1"

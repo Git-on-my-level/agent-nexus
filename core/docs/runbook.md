@@ -145,11 +145,40 @@ The workspace root contains:
 On startup, `anx-core` automatically:
 
 1. creates workspace directories if missing
-2. opens/creates `state.sqlite`
-3. applies pending schema migrations
+2. prepares a private SQLite spill directory (`tmp/` beside `state.sqlite`, mode
+   `0700`), takes its process lease, and removes stale `etilqs_*` files
+3. configures SQLite's process-wide temp directory before opening any database
+4. opens/creates `state.sqlite` and applies pending schema migrations
 
 Starting the server against an empty workspace root is enough to initialize
 storage.
+
+Set `SQLITE_TMPDIR` to override the spill directory. Use a dedicated writable
+directory with mode `0700`; a missing directory is created. Symlinks, shared
+directories, invalid overrides and an already-leased directory fail startup.
+`TMPDIR` remains the general application temp setting and does not override this
+database-local default. Startup logs `sqlite_temp_directory="..."` so the selected
+volume can be checked. Only SQLite-named spill files are swept; unrelated files
+and subdirectories in `tmp/` are retained. Do not share one override across cores.
+
+Before deploying an upgrade, check free space on the filesystem containing that
+directory, rather than only `/tmp` or the host root. Give it disk-backed capacity;
+a small tmpfs can fail with `SQLITE_FULL` even when the state volume has space.
+For migration 116, initially reserve `max(256 MiB, 2 × state.sqlite size)` for
+spill **in addition to** database/WAL growth and backups; this is a planning
+estimate, not a worst-case guarantee. See the [temp-space estimate and its
+graph-shape limits](performance.md#sqlite-temp-space-and-migration-116).
+Do not switch `temp_store` to `MEMORY` to bypass a full spill volume.
+
+Stop the old core before restarting so it releases its spill-directory lease.
+After startup, confirm the selected volume and successful migration/readiness;
+an initialization error does not prove a migration was committed. To move spills,
+stop the core, change `SQLITE_TMPDIR`, and restart; rollback restores the previous
+setting. `anx-access-reclaim` prepares the same source-adjacent directory before
+opening SQLite. In-process compaction and document-history backfill share core's
+setting. `scripts/hosted/backup-workspace.sh` exports the same default (or preserves
+an explicit override) for its separate `sqlite3` process and never sweeps files
+while a core may be serving. Backup output still occupies its chosen destination.
 
 ## Local development run
 

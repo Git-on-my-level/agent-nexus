@@ -1,5 +1,81 @@
 # Performance guardrails
 
+## SQLite temp space and migration 116
+
+Core uses `modernc.org/sqlite v1.38.2` (SQLite 3.50.3), with disk-backed temporary
+storage enabled by its `TEMP_STORE=1` build. Its translated Unix VFS honors
+`SQLITE_TMPDIR`, then `TMPDIR`, then `/var/tmp`, `/usr/tmp`, `/tmp`, and `.`.
+See [SQLite's temp-file documentation](https://www.sqlite.org/tempfiles.html).
+Modernc libc snapshots the process environment and the VFS caches its environment
+choices during initialization; merely calling Go's `os.Setenv` later is unreliable.
+The two production Go entrypoints therefore select the process-wide
+[`sqlite3_temp_directory`](https://www.sqlite.org/c3ref/temp_directory.html) once,
+before opening any database. The pointer uses SQLite's allocator and remains
+valid until process exit. No connection changes that global during serving, and
+no migration uses `temp_store=MEMORY`. Embedded/library callers must explicitly
+prepare their process spill volume before opening connections; a process serving
+several workspaces cannot assign a different global directory to each connection.
+
+Migration 116's canonical vertex backfill constructs a deduplicating `UNION`
+B-tree of `(kind,id)` across the schema-owned source inventory. Its generated
+typed/raw/history key statements run sequentially, so their UNION trees do not
+all coexist. Let `U` be the distinct source vertex count, `K` and `I` the average
+kind/ID byte lengths, and `D` the pre-upgrade database file size. A useful vertex
+spill estimate is `T_vertex ≈ 1.5–2 × U × (K + I + 16)` bytes, including record,
+page and partially filled B-tree overhead. This grows with distinct vertices,
+not blob bytes or duplicate source rows. If `U ≈ fD/B`, where `f` is the fraction
+of the DB occupied by vertex-bearing rows and `B` is their average stored bytes,
+then `T_vertex/D ≈ (1.5–2)f(K+I+16)/B`. For `K=16`, `I=36`, `f=1`, `B=128–256`,
+the estimate is approximately `0.4–1.1 × D`.
+
+A local modernc disk-backed `WITHOUT ROWID` primary-key B-tree proxy, with
+`kind='document_history'` and 36-byte IDs, measured 671,744 / 6,619,136 /
+66,166,784 bytes for 10k / 100k / 1m distinct vertices (about 66 bytes/vertex).
+This estimates the vertex UNION's record shape; it is **not** a measurement of
+the incident database or peak whole-migration usage. Reproduce the proxy by
+creating `TEMP TABLE vertices(kind TEXT,id TEXT,PRIMARY KEY(kind,id)) WITHOUT ROWID`,
+inserting those distinct pairs with `temp_store=FILE`, and multiplying
+`PRAGMA temp.page_count` by `PRAGMA temp.page_size`.
+
+For an initial deploy budget, reserve `max(256 MiB, 2D)` for temporary spills.
+The reported 1.9 GB database therefore suggests about 3.8 GB of spill headroom,
+on the state volume or a dedicated disk-backed override, not a 64 MiB tmpfs.
+Add separate capacity for durable admission-index growth, WAL and any backup or
+`VACUUM INTO` destination. There is no universal peak bound from `D` alone:
+root-to-vertex reachability can grow with `R × V` in dense graphs, and its
+recursive work tables and statement journals can exceed the vertex estimate.
+Observe large/dense upgrade fixtures and provision more space if needed; this
+change fixes placement, not graph amplification or a full state volume.
+
+`TestSQLiteStartupTempDirectory` runs fresh subprocesses with a nonexistent
+general `TMPDIR`. Before the fix the VFS selected `/var/tmp/etilqs_*`, failing
+the database-local-path assertion. After configuration, a real 16 MiB payload
+fixture and index use a 97,939,456-byte temp pager (over 64 MiB), verified through
+the native VFS file-size method. The test checks the selected VFS filename,
+explicit override and raw-driver environment behavior, cleanup, permissions,
+invalid overrides, symlinks and an active directory lease. Docker was unavailable
+on the local test host; this uses the invalid-default-path fallback rather than
+claiming a capped-tmpfs `SQLITE_FULL` reproduction. The backup subprocess
+environment regression likewise failed before its export was added.
+
+All connections opened by core, including later pooled connections, compaction,
+and the document-history worker, use the same immutable VFS setting. Offline
+reclamation configures it before its separate pool opens. External backup uses
+SQLite's page-copy API and writes its output database to the backup destination;
+the wrapper also exports `SQLITE_TMPDIR` for temp-heavy manifest queries.
+WAL and recovery journals remain beside their database and must never be swept.
+See the [deployment and restart procedure](runbook.md#migrations--initialization).
+No HTTP routes, read queries, budgets or query-plan exceptions change. Startup
+adds one directory inventory proportional to its stale file count, once before
+readiness; serving paths gain no filesystem scan or SQL work.
+
+```sh
+go test -C core ./internal/storage -run '^TestSQLiteStartupTempDirectory$' -count=1 -v
+python3 -m unittest scripts/tests/test_backup_sqlite_tmpdir.py
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 go test -C core -p=1 ./internal/storage \
+  -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```
+
 ## Canonical admission: main reproduction and candidate index
 
 **Bounded-route gates pass; legacy inventory gaps remain.** The 50,000 VM

@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	sqlite3 "modernc.org/sqlite/lib"
+
 	"agent-nexus-core/internal/storage"
 )
 
@@ -20,6 +22,13 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
+	tempLease, err := storage.PrepareSQLiteTempDirectory(*source)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer tempLease.Close()
+	sqlite3.Xsqlite3_temp_directory = tempLease.NativePath
 	if err := storage.ReclaimCompactAccessOffline(ctx, *source, *destination); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
