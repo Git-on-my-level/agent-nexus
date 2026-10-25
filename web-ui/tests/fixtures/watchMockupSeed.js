@@ -108,10 +108,10 @@ export function mockupBrief(now = "2026-10-24T12:00:00Z") {
   ];
   const margin = [
     child("card:storage-levers", "Storage levers", "backlog"),
-    child("card:db-reads", "Database reads → 450M/day", "in_progress"),
+    child("card:db-reads", "Database reads within budget", "in_progress"),
     child("card:gpu-sizing", "GPU & compute sizing", "in_progress"),
     child("card:pricing-ladder", "Pricing ladder & billing", "review"),
-    child("card:pro-price", "Pro price: $49.99 or $29.99?", "blocked", {
+    child("card:pro-price", "Pro price: tier A or tier B?", "blocked", {
       needs_viewer: true,
     }),
     child("card:cache-bucket", "Regional cache bucket + IAM", "blocked", {
@@ -164,9 +164,9 @@ export function mockupBrief(now = "2026-10-24T12:00:00Z") {
       ),
       ask(
         "ask-price",
-        "Pro price: $49.99 (ladder v1) or $29.99?",
+        "Pro price: tier A or tier B?",
         "card:pro-price",
-        "Pro price: $49.99 or $29.99?",
+        "Pro price: tier A or tier B?",
         now,
       ),
       ask(

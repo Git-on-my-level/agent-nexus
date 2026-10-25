@@ -5,7 +5,7 @@ PORT ?= 5173
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install serve check format unit-test test e2e qa qa-capture qa-baseline qa-diff qa-viewports
+.PHONY: help install serve check format unit-test test e2e qa qa-capture qa-baseline qa-baseline-container qa-diff qa-viewports
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -41,6 +41,9 @@ qa-capture: ## Capture QA screenshots of all pages (requires running dev server)
 
 qa-baseline: ## Capture committed QA baseline (set QA_VISUAL_CORE_PORT if :8000 is busy)
 	node scripts/qa-capture.mjs --baseline
+
+qa-baseline-container: ## Capture QA baselines in CI's Playwright image (QA_ARGS="--scene <name>"; needs Docker)
+	scripts/qa-baseline-container.sh --baseline $(QA_ARGS)
 
 qa-diff: ## Diff current UI against tests/fixtures/qa-visual-baseline/
 	@# Runs vite build + preview; mock core binds :8000 by default. If `make serve` uses 8000, run:

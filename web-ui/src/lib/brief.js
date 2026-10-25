@@ -458,16 +458,6 @@ export function compareInitiatives(a, b) {
   return a.title.localeCompare(b.title);
 }
 
-/** `[{ state, label, rows }]` in attention order; empty groups dropped. */
-export function groupWatch(initiatives) {
-  const sorted = [...(initiatives ?? [])].sort(compareInitiatives);
-  return WATCH_STATES.map((state) => ({
-    state,
-    label: WATCH_STATE_LABELS[state],
-    rows: sorted.filter((row) => row.state === state),
-  })).filter((group) => group.rows.length);
-}
-
 /**
  * Loops: the brief's `loops` (cards with a cadence, a goal or recent run
  * receipts; core computes `loops.loop`), plus initiatives that link a

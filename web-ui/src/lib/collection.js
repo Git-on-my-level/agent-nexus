@@ -1,7 +1,8 @@
 /**
  * Collections: one row shape for every set of things that have a state,
- * progress, a time commitment and a next actor — initiatives, loops, and any
- * `live-collection` report panel. `CollectionTable` draws it; adapters here
+ * progress, a time commitment and a next actor: loops and any
+ * `live-collection` report panel. (Watch's initiatives use
+ * `InitiativeRollupList`.) `CollectionTable` draws it; adapters here
  * build it from brief.v1 or from a panel's rendered data.
  *
  * Nothing here decides state. Adapters copy what core computed and say which
@@ -10,16 +11,11 @@
  */
 
 import {
-  formatDay,
   formatMetricValue,
   formatSpan,
   groupLoops,
-  initiativeLine,
   isLoop,
   plainInline,
-  WATCH_STATES,
-  WATCH_STATE_LABELS,
-  compareInitiatives,
 } from "$lib/brief.js";
 import { formatAgo } from "$lib/time/format.js";
 import { withUnit } from "$lib/loops.js";
@@ -68,101 +64,6 @@ export function sparkPoints(values, width = 88, height = 22, pad = 2) {
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
-}
-
-// ---------------------------------------------------------------------------
-// Initiatives (brief.v1)
-
-export const INITIATIVE_STATES = [
-  { key: "waiting_on_you", label: "Waiting on you", tone: "attention" },
-  {
-    key: "past_promise",
-    label: WATCH_STATE_LABELS.past_promise,
-    tone: "warning",
-  },
-  { key: "moving", label: WATCH_STATE_LABELS.moving, tone: "good" },
-  { key: "no_promise", label: WATCH_STATE_LABELS.no_promise, tone: "neutral" },
-  { key: "done", label: WATCH_STATE_LABELS.done, tone: "quiet" },
-];
-
-/** Which row state an initiative shows: a decision for the reader comes first. */
-export function initiativeRowState(row) {
-  if (row.waitingOnYouCount > 0 && row.state !== "done")
-    return "waiting_on_you";
-  return WATCH_STATES.includes(row.state) ? row.state : "no_promise";
-}
-
-/**
- * The same computed line the board card and the initiative page print
- * (`initiativeLine`), so the three surfaces cannot disagree. The overdue
- * span moves to the time column, which keeps it scannable.
- */
-function initiativeSubtitle(row, now) {
-  const parts = initiativeLine(row, now).filter(
-    (part) => part.field !== "initiatives.past_promise_for",
-  );
-  return parts.length ? { parts } : null;
-}
-
-function initiativeTime(row) {
-  if (row.state === "past_promise")
-    return {
-      text: `${formatSpan(row.pastPromiseFor)} past`,
-      title: row.promise?.at ? `promised ${formatDay(row.promise.at)}` : "",
-      tone: "warning",
-      field: "initiatives.past_promise_for",
-    };
-  if (row.promise?.at && row.state !== "done")
-    return {
-      text: `by ${formatDay(row.promise.at)}`,
-      title: "",
-      tone: "neutral",
-      field: "initiatives.promise",
-    };
-  return null;
-}
-
-/**
- * `{ states, groups, counts }` for brief initiatives. Done is its own group
- * at the end so the table can fold it.
- */
-export function collectionFromInitiatives(
-  initiatives,
-  { now = Date.now(), href, decideHref } = {},
-) {
-  const rows = [...(initiatives ?? [])].sort(compareInitiatives).map((row) => {
-    const state = initiativeRowState(row);
-    return {
-      ref: row.ref,
-      title: row.title,
-      href: href ? href(row) : "",
-      computedState: row.state,
-      subtitle: initiativeSubtitle(row, now),
-      owner: null,
-      state,
-      stateField:
-        state === "waiting_on_you"
-          ? "initiatives.waiting_on_you_count"
-          : "initiatives.state",
-      progress: row.progress
-        ? { kind: "plan", progress: row.progress, initiativeState: row.state }
-        : null,
-      time: initiativeTime(row),
-      activity: null,
-      next:
-        row.waitingOnYouCount > 0 && row.state !== "done"
-          ? {
-              label: "You",
-              isViewer: true,
-              href: decideHref ? decideHref(row) : "",
-              field: "initiatives.waiting_on_you_count",
-            }
-          : null,
-      changed: false,
-      source: { kind: "initiative", initiative: row },
-    };
-  });
-  return groupRows(INITIATIVE_STATES, rows);
 }
 
 // ---------------------------------------------------------------------------

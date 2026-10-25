@@ -30,6 +30,7 @@
     nextCell,
     nextLine,
     promisesCell,
+    segmentsLabel,
   } from "$lib/watchRollup.js";
   import InitiativeDetails from "./InitiativeDetails.svelte";
 
@@ -118,7 +119,7 @@
     <span
       class="flex h-1.5 gap-0.5"
       role="img"
-      aria-label={childrenLine(rollup)}
+      aria-label={segmentsLabel(rollup)}
       data-source="computed:initiatives.rollup.by_state"
     >
       {#each segs as seg, i (i)}
@@ -298,28 +299,34 @@
 
 <div class="rollup space-y-3" data-rollup-list>
   <div class="flex flex-wrap items-center gap-2 text-meta">
-    {#if filter}
-      <button
-        type="button"
-        class="tag tag--pill border border-line text-fg-muted"
-        onclick={() => (picked = "")}
-        data-collection-filter-all>All</button
-      >
-    {/if}
-    {#each chips as chip (chip.key)}
-      <button
-        type="button"
-        class="tag tag--pill {CHIP[chip.key]}"
-        class:tag--on={filter === chip.key}
-        aria-pressed={filter === chip.key}
-        onclick={() => (picked = filter === chip.key ? "" : chip.key)}
-        data-collection-filter={chip.key}
-        data-source={chip.key === "needs_you"
-          ? "computed:initiatives.waiting_on_you_count"
-          : "computed:initiatives.state"}
-        >{counts[chip.key]} {chip.label}</button
-      >
-    {/each}
+    <div
+      class="flex flex-wrap items-center gap-2"
+      role="group"
+      aria-label="Filter initiatives by state"
+    >
+      {#if filter}
+        <button
+          type="button"
+          class="tag tag--pill border border-line text-fg-muted"
+          onclick={() => (picked = "")}
+          data-collection-filter-all>All</button
+        >
+      {/if}
+      {#each chips as chip (chip.key)}
+        <button
+          type="button"
+          class="tag tag--pill {CHIP[chip.key]}"
+          class:tag--on={filter === chip.key}
+          aria-pressed={filter === chip.key}
+          onclick={() => (picked = filter === chip.key ? "" : chip.key)}
+          data-collection-filter={chip.key}
+          data-source={chip.key === "needs_you"
+            ? "computed:initiatives.waiting_on_you_count"
+            : "computed:initiatives.state"}
+          >{counts[chip.key]} {chip.label}</button
+        >
+      {/each}
+    </div>
     <span class="flex-1"></span>
     <span class="text-micro text-fg-muted"
       >Sorted by what needs you · children fold into their initiative</span
@@ -335,7 +342,7 @@
       class="grid-row border-b border-line text-micro text-fg-muted"
       aria-hidden="true"
     >
-      <span></span><span>Initiative · next step</span><span
+      <span></span><span data-ui-label>Initiative · next step</span><span
         >Children by state</span
       ><span class="col-wide">Promises</span><span class="col-wide">Next</span>
     </div>

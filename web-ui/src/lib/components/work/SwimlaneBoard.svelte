@@ -48,9 +48,11 @@
   import {
     childSegments,
     childTone,
+    coveredRefs,
     decisionIndex,
     needsYouItems,
     nextLine,
+    segmentsLabel,
   } from "$lib/watchRollup.js";
 
   let {
@@ -380,7 +382,7 @@
     const cells = laneCells(lane.rollup);
     const needs = needsYouItems(lane, decisions);
     const asks = needs.filter((item) => item.kind === "ask");
-    const covered = new Set(asks.map((item) => item.ref));
+    const covered = coveredRefs(asks.map((item) => item.decision));
     const stuck = [
       ...asks,
       ...cells.stuck
@@ -713,7 +715,7 @@
                   class="mt-2 flex h-1.5 gap-0.5"
                   role="img"
                   aria-label={view.segments.length
-                    ? `${lane.rollup.total} ${lane.rollup.total === 1 ? "card" : "cards"}`
+                    ? segmentsLabel(lane.rollup)
                     : "No cards yet"}
                   data-source="computed:initiatives.rollup.by_state"
                   data-lane-progress

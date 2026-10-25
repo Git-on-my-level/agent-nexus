@@ -408,10 +408,10 @@ test.describe("desktop", () => {
     await expect(capture.locator("[data-lane-slipping]")).toHaveText(
       "1 slipping",
     );
-    // One segment per child, coloured by where it sits.
+    // One segment per child, coloured by where it sits, and said in words.
     await expect(capture.locator("[data-lane-progress]")).toHaveAttribute(
       "aria-label",
-      "6 cards",
+      "1 done, 2 in progress, 1 slipping, 1 need you, 1 not started",
     );
     await expect(capture.locator("[data-lane-progress] > span")).toHaveCount(6);
 

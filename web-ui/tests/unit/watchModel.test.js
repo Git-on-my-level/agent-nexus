@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   BRIEF_COMPUTED_FIELDS,
   freshnessLabel,
-  groupWatch,
   initiativeLine,
   normalizeBrief,
   plainInline,
@@ -23,29 +22,6 @@ const brief = normalizeBrief(
   ),
 );
 const byId = (id) => brief.initiatives.find((row) => row.id === id);
-
-describe("groupWatch", () => {
-  it("orders groups by attention and keeps only computed states", () => {
-    const groups = groupWatch(brief.initiatives);
-    expect(groups.map((g) => g.state)).toEqual([
-      "past_promise",
-      "moving",
-      "no_promise",
-      "done",
-    ]);
-    expect(groups.map((g) => g.rows.length)).toEqual([1, 2, 2, 1]);
-  });
-
-  it("puts the earliest promise first among moving rows", () => {
-    const moving = groupWatch(brief.initiatives).find(
-      (g) => g.state === "moving",
-    );
-    expect(moving.rows.map((r) => r.id)).toEqual([
-      "fleet-onboarding",
-      "observability",
-    ]);
-  });
-});
 
 describe("initiativeLine", () => {
   it("renders past promise from promise, past_promise_for and moves", () => {

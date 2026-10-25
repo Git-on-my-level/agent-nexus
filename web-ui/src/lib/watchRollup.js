@@ -121,6 +121,27 @@ export function childSegments(rollup) {
   }));
 }
 
+const TONE_WORDS = {
+  done: "done",
+  moving: "in progress",
+  slipping: "slipping",
+  needs: "need you",
+  not_started: "not started",
+};
+
+/**
+ * What the bar shows, in words for a screen reader: "1 done, 3 in
+ * progress, 2 slipping, 2 need you, 1 not started".
+ */
+export function segmentsLabel(rollup) {
+  const counts = new Map();
+  for (const seg of childSegments(rollup))
+    counts.set(seg.tone, (counts.get(seg.tone) ?? 0) + seg.flex);
+  return TONE_ORDER.filter((tone) => counts.get(tone))
+    .map((tone) => `${counts.get(tone)} ${TONE_WORDS[tone]}`)
+    .join(", ");
+}
+
 /** "22 children in 4 workstreams", "8 children", "1 child", or "". */
 export function childrenLine(rollup) {
   const total = rollup?.total ?? 0;
@@ -267,6 +288,22 @@ export function nextCell(row) {
 // The board's needs-you column
 
 /**
+ * The refs a set of decisions stands in for: the subject of each, what it
+ * blocks, and a grouped ask's members. A child named there shows as the ask.
+ */
+export function coveredRefs(decisions) {
+  return new Set(
+    decisions
+      .flatMap((decision) => [
+        decision.subject?.ref,
+        ...(decision.blocks ?? []).map((block) => block.ref),
+        ...(decision.batch?.members ?? []).map((member) => member.subjectRef),
+      ])
+      .filter(Boolean),
+  );
+}
+
+/**
  * The reader's open decisions by every ref they name (subject, blocks, and
  * a grouped ask's members), built once per brief so a lane looks its refs
  * up instead of scanning every decision per child.
@@ -306,9 +343,7 @@ export function needsYouItems(lane, index) {
   for (const ref of [lane.ref, ...children.map((c) => c.ref)])
     for (const decision of index.get(ref) ?? [])
       if (!asks.has(decision.ref)) asks.set(decision.ref, decision);
-  const covered = new Set(
-    [...asks.values()].map((decision) => decision.subject?.ref),
-  );
+  const covered = coveredRefs([...asks.values()]);
   return [
     ...[...asks.values()].map((decision) => ({
       kind: "ask",

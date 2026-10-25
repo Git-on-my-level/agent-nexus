@@ -15,6 +15,7 @@ import {
   rollupRows,
   rollupSummary,
   SEGMENT_CAP,
+  segmentsLabel,
 } from "../../src/lib/watchRollup.js";
 import { mockupBrief } from "../fixtures/watchMockupSeed.js";
 
@@ -206,5 +207,48 @@ describe("needsYouItems", () => {
     expect(
       needsYouItems(lane, decisionIndex(brief)).map((i) => i.ref),
     ).toContain("card:extra");
+  });
+});
+
+describe("screen-reader text and ask coverage", () => {
+  it("says what the bar shows, tone by tone", () => {
+    expect(segmentsLabel(row("card:capture").rollup)).toBe(
+      "1 done, 2 in progress, 2 slipping, 2 need you, 2 not started",
+    );
+  });
+
+  it("lets an ask that blocks a waiting child stand in for it", () => {
+    const capture = row("card:capture");
+    const lane = {
+      ...capture,
+      rollup: {
+        ...capture.rollup,
+        children: [
+          ...capture.rollup.children,
+          {
+            ref: "card:blocked-kid",
+            title: "Blocked kid",
+            state: "blocked",
+            needsViewer: true,
+            pastPromise: false,
+          },
+        ],
+      },
+    };
+    const withBlocks = {
+      ...brief,
+      decisions: [
+        ...brief.decisions,
+        {
+          ...brief.decisions[0],
+          ref: "inbox:ask-blocks",
+          subject: { ref: "card:capture", title: "" },
+          blocks: [{ ref: "card:blocked-kid", title: "Blocked kid" }],
+        },
+      ],
+    };
+    const items = needsYouItems(lane, decisionIndex(withBlocks));
+    expect(items.map((i) => i.key)).toContain("inbox:ask-blocks");
+    expect(items.map((i) => i.key)).not.toContain("card:blocked-kid");
   });
 });

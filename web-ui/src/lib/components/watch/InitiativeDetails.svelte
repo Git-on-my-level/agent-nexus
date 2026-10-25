@@ -172,7 +172,8 @@
       {/if}
     </span>
     <span class="min-w-0" data-details-steps>
-      Next steps: {@render stepsInline()}
+      <span data-ui-label>Next steps:</span>
+      {@render stepsInline()}
     </span>
     {#if href}
       <a
