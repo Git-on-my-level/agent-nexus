@@ -48,6 +48,7 @@ import DecisionCard from "../../src/lib/components/decide/DecisionCard.svelte";
 import { normalizeBrief, sortDecisions } from "../../src/lib/brief.js";
 import { lintComputed } from "./briefLint.js";
 import fixture from "../../../contracts/fixtures/brief/brief.v1.json";
+import askCopy from "../../../cli/internal/app/testdata/ask-decide-presentation.json";
 
 const brief = normalizeBrief(fixture);
 const NOW = Date.parse("2026-10-15T09:00:00Z");
@@ -313,4 +314,130 @@ describe("DecisionCard", () => {
       container.querySelector('[data-decision-proposal="1"]'),
     ).not.toBeNull();
   });
+});
+
+it("shows a plain proposal and keeps technical evidence collapsed", () => {
+  const authored = {
+    ...fixture.decisions[0],
+    situation: "Deleted users' data can reappear.",
+    impact: "This breaks our deletion promise.",
+    recommendation: {
+      action: "Check before writing.",
+      why: "Reuse the existing guard.",
+    },
+    alternatives: [
+      { action: "Wait.", consequence: "The change stays blocked." },
+    ],
+    if_no_answer: "Blocked until Friday.",
+    details: "external_write_fence implementation",
+    evidence: [{ label: "Change", url: "https://example.org/change" }],
+  };
+  const decision = normalizeBrief({ ...fixture, decisions: [authored] })
+    .decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const copy = container.querySelector("[data-decision-presentation]");
+  expect(copy.textContent).toContain(authored.situation);
+  expect(copy.textContent).toContain(authored.recommendation.why);
+  expect(copy.textContent).toContain(authored.alternatives[0].consequence);
+  expect(copy.textContent).toContain(authored.if_no_answer);
+  const details = copy.querySelector("details");
+  expect(details.open).toBe(false);
+  expect(details.textContent).toContain(authored.details);
+  expect(
+    details.querySelector("a[href='https://example.org/change']"),
+  ).not.toBeNull();
+});
+
+it("pins Decide paragraphs to the CLI preview fixture", () => {
+  const decision = normalizeBrief({
+    decisions: [{ ref: "inbox:copy", ...askCopy }],
+  }).decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const paragraphs = [
+    ...container.querySelectorAll("[data-decision-presentation] > p"),
+  ].map((p) => p.textContent.trim().replace(/\s+/g, " "));
+  expect(paragraphs).toEqual(askCopy.paragraphs);
+});
+
+it("keeps every batch member proposal collapsed and available without context", async () => {
+  const members = [
+    { ref: "inbox:first", ...askCopy, details: "Technical guard details." },
+    {
+      ref: "inbox:second",
+      ...askCopy,
+      title: "Delay the launch?",
+      situation: "The launch needs one more check.",
+      impact: "Customers will wait a day.",
+      recommendation: {
+        action: "Delay until tomorrow.",
+        why: "We can finish the check today.",
+      },
+    },
+  ];
+  const decision = normalizeBrief({
+    decisions: [
+      {
+        ref: "inbox:batch",
+        title: "Decide the launch plan",
+        batch: { key: "filed:plan", members },
+      },
+    ],
+  }).decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const sections = [
+    ...container.querySelectorAll("[data-decision-batch-member]"),
+  ];
+  expect(sections).toHaveLength(2);
+  for (const [index, section] of sections.entries()) {
+    expect(section.open).toBe(false);
+    expect(section.querySelector("summary").textContent).toBe(
+      members[index].title,
+    );
+    await fireEvent.click(section.querySelector("summary"));
+    for (const copy of [
+      members[index].situation,
+      members[index].impact,
+      members[index].recommendation.action,
+      members[index].recommendation.why,
+    ]) {
+      expect(section.textContent).toContain(copy);
+    }
+  }
+  expect(sections[0].querySelector("details").open).toBe(false);
+});
+
+it.each([
+  { impact: "Customers are delayed." },
+  { alternatives: [{ action: "Wait.", consequence: "A day of delay." }] },
+  { if_no_answer: "Blocked until Friday." },
+  { details: "Technical explanation." },
+  { evidence: [{ url: "https://example.org/change" }] },
+])("renders additive API presentation subsets: %j", (copy) => {
+  const decision = normalizeBrief({
+    decisions: [{ ref: "inbox:partial", title: "Approve?", ...copy }],
+  }).decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const presentation = container.querySelector("[data-decision-presentation]");
+  expect(presentation).not.toBeNull();
+  const link = presentation.querySelector("a");
+  if (link) expect(link.textContent).toBe("https://example.org/change");
+});
+
+it("keeps a legacy body visible when only evidence is present", () => {
+  const decision = normalizeBrief({
+    decisions: [
+      {
+        ref: "inbox:legacy",
+        title: "Approve?",
+        body: "Older context stays visible.",
+        evidence: [{ label: "Change", url: "https://example.org/change" }],
+      },
+    ],
+  }).decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const presentation = container.querySelector("[data-decision-presentation]");
+  const details = presentation.querySelector("details");
+  expect(details.open).toBe(false);
+  expect(details.textContent).not.toContain(decision.body);
+  expect(presentation.textContent).toContain(decision.body);
 });

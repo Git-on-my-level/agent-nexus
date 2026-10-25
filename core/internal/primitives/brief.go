@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/askpresentation"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -325,6 +326,7 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			"age_seconds": int64(b.now.Sub(a.CreatedAt) / time.Second), "decide_by": nil, "overdue_for_seconds": nil,
 			"blocks": a.blocksJSON(subjects), "blocks_count": a.BlocksCount, "proposals": briefProposals(payload),
 		}
+		askpresentation.Copy(item, payload)
 		if a.AskID != "" {
 			item["event_ref"] = "event:" + a.AskID
 		}
@@ -573,6 +575,7 @@ func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]brie
 
 func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]any {
 	member := map[string]any{"ref": item["ref"], "inbox_item_id": item["inbox_item_id"], "title": item["title"]}
+	askpresentation.Copy(member, item)
 	if eventRef := strings.TrimSpace(anyStringValue(item["event_ref"])); eventRef != "" {
 		member["event_ref"] = eventRef
 	} else if meta.askID != "" {

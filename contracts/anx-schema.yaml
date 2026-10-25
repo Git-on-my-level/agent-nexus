@@ -847,6 +847,16 @@ reference_conventions:
       refs_must_include: ["thread:<thread_id>"]
       payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id", "response_proposals"]
       optional_payload:
+        situation: {type: string, description: "Plain words: what is happening, one or two sentences; at most 4000 characters."}
+        impact: {type: string, description: "Who or what is affected: users, money, risk or time; at most 4000 characters."}
+        recommendation:
+          type: object
+          description: "{action, why}: recommended plain-language action (at most 240 characters) and reason (at most 4000 characters). Both required when present."
+        alternatives:
+          type: list<object>
+          description: "At most 5 {action, consequence} objects; action at most 240 characters, consequence at most 4000. Both required."
+        if_no_answer: {type: string, description: "Default or blocked work and by when; at most 4000 characters. by remains the machine-readable decision deadline."}
+        details: {type: string, description: "Technical Markdown, collapsed with evidence; at most 32000 characters."}
         by:
           description: >
             The requester's deadline for the human (review_by grammar, resolved from the
@@ -859,10 +869,12 @@ reference_conventions:
         priority:
           description: Optional agent-set badge, p0..p3. Writers send the canonical value; readers still fold the enums.priority aliases (critical/urgent, high, medium/normal, low) found in older asks. A sort key after decide_by and blocks, never a deadline.
       authoring: >
-        Reuse payload.title for a one-line decision (recommended maximum 100 Unicode
-        characters; hard maximum 160 on new writes) and payload.body for Markdown
-        context, options with consequences, recommendation and evidence. Missing
-        body warns in the CLI. Historical titles remain readable without migration.
+        Write for a busy boss with no context. Title is a question or decision, ideally
+        at most 80 Unicode characters (hard maximum 160). The CLI requires situation,
+        impact and recommendation with why on new asks; --force --reason records an
+        explicit override. These additive fields remain optional at the API boundary.
+        Technical detail belongs in details and evidence, collapsed by readers.
+        Legacy asks without structured fields render from body, without migration.
 
     human_attention_responded:
       refs_must_include: ["inbox:<inbox_item_id>"]
@@ -925,6 +937,13 @@ derived:
       source_event_ref: { type: typed_ref, required: false }
       title: { type: string, required: true }
       body: { type: string, required: false }
+      situation: {type: string, required: false}
+      impact: {type: string, required: false}
+      recommendation: {type: object, required: false, description: "{action, why}"}
+      alternatives: {type: "list<object>", required: false, description: "{action, consequence} entries"}
+      if_no_answer: {type: string, required: false}
+      details: {type: string, required: false}
+      evidence: {type: "list<object>", required: false, description: "Labelled URLs; collapsed with details."}
       related_refs: { type: "list<typed_ref>", required: true }
       recipient_actor_id: {type: string, required: false, description: Principal-specific visibility; current subject privacy still applies.}
       panel_id: {type: string, required: false}
@@ -940,7 +959,7 @@ derived:
         description: >
           Present on one ask-batch inbox item derived from 2-10 human_attention_requested events
           filed through POST /asks/batch. Holds `id` (shared batch id) and `asks`: the still-open
-          members with their own request_event_ref, title, body, subject_ref and
+          members with their own request_event_ref, title, body, subject_ref, optional plain-language ask fields and
           response_proposals. One response answers every member atomically; the item disappears
           when the last member is answered or withdrawn. Top-level response_proposals then carry
           the first member's proposals for compatibility; decision UIs use batch.asks entries.

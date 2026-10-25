@@ -83,6 +83,25 @@ ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- \
   go test -C core ./internal/primitives -run '^TestPerformance(WorkTrackingDigestBudget|CadenceTrackingBudget)$' -count=1 -v -timeout=5m
 ```
 
+## Plain-language asks
+
+Ask presentation adds no SQL, query, poll tick or migration. Inbox list/get/SSE,
+completed history and `brief.v1` copy seven optional fields from the canonical
+ask payload already admitted by their existing scoped event/subject indexes.
+Work is O(admitted asks + their text bytes), independent of unrelated workspace
+size. There is no per-row lookup, ownership rebuild or read-time text scan.
+New text bounds are 4,000 Unicode characters each for situation, impact,
+if_no_answer and recommendation.why, 240 for an action, five alternatives
+(consequence: 4,000 each), and 32,000 for details. Existing event/request-size
+and page limits also apply; evidence uses the existing event payload budget.
+No new read or plan allowance is introduced. Authorship references still inherit
+privacy through the canonical event payload's existing ownership indexing.
+
+The unchanged `TestPerformanceAskDeliveryReadBudgets`,
+`TestPerformanceInboxItemResolutionRead` and
+`TestPerformanceInboxStreamTickHiddenVolumeBudget` cover the point reads and
+poll ticks at scale; no ceiling or exception is widened.
+
 ## Cadence tracking on card summaries
 
 Cadence tracking reuses the scoped loop-facts reader for only the cadence cards

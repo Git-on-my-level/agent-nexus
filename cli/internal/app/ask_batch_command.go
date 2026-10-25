@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -22,13 +23,14 @@ import (
 func askBatchUsageText() string {
 	return strings.TrimSpace(`anx ask batch --from-file asks.json
 Files 2-10 related asks as one batch. The human inbox shows ONE item with one decision section per ask and a single submit; every answer records atomically and releases together to each ask's delivery mode.
-asks.json holds {"asks":[...]} where each entry accepts title (required), body, subject_ref, thread_id, refs, recommend (required), alts, request_id, coverage_hint, evidence [{label,url}], supersedes, and a per-ask delivery override. A top-level "delivery" is the default mode. "-" reads the JSON from stdin.
+asks.json holds {"asks":[...]} where each entry accepts title (required), situation, impact, recommendation {action,why} (required by lint), alternatives [{action,consequence}], if_no_answer, details, body, subject_ref, thread_id, refs, recommend (required), alts, request_id, coverage_hint, evidence [{label,url}], supersedes, and a per-ask delivery override. A top-level "delivery" is the default mode. "-" reads the JSON from stdin.
 Every ask passes the same authoring lint as ` + "`anx ask`" + ` (--force --reason overrides it for the whole batch), and all asks must share one backing thread.
 Follow-up: anx inbox list --status answered, or anx await --answers for batch delivery.
 `)
 }
 
 type askBatchEntry struct {
+	askPresentation
 	Title        string            `json:"title"`
 	Body         string            `json:"body"`
 	SubjectRef   string            `json:"subject_ref"`
@@ -223,11 +225,21 @@ func decodeAskBatchEntry(raw any, index int) (askBatchEntry, error) {
 	if !ok {
 		return invalid("each entry must be an object")
 	}
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return invalid(err.Error())
+	}
+	if err := json.Unmarshal(encoded, &entry.askPresentation); err != nil {
+		return invalid("invalid structured ask fields: " + err.Error())
+	}
 	entry.Title = strings.TrimSpace(anyString(object["title"]))
 	entry.Body = strings.TrimSpace(anyString(object["body"]))
 	entry.SubjectRef = strings.TrimSpace(anyString(object["subject_ref"]))
 	entry.ThreadID = strings.TrimSpace(anyString(object["thread_id"]))
 	entry.Recommend = strings.TrimSpace(anyString(object["recommend"]))
+	if entry.Recommendation != nil {
+		entry.Recommend = firstNonEmpty(entry.Recommend, entry.Recommendation.Action)
+	}
 	entry.RequestID = strings.TrimSpace(anyString(object["request_id"]))
 	entry.CoverageHint = strings.TrimSpace(anyString(object["coverage_hint"]))
 	entry.Supersedes = strings.TrimSpace(anyString(object["supersedes"]))
@@ -287,6 +299,9 @@ func (a *App) prepareAskBatchEntry(
 	threadCache map[string]string,
 	forges []workspaceconfig.Forge,
 ) error {
+	if err := entry.askPresentation.validateBounds(); err != nil {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %v", index, err))
+	}
 	if entry.Title == "" {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d].title is required", index))
 	}
@@ -301,9 +316,21 @@ func (a *App) prepareAskBatchEntry(
 			return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %v", index, err))
 		}
 	}
-	warnings, lintErr := lintAskAuthoring(entry.Body, entry.Refs, entry.Evidence, forges)
-	if titleErr := lintAskTitle(entry.Title); titleErr != nil {
-		lintErr = titleErr
+	for _, alt := range entry.Alternatives {
+		entry.Alts = append(entry.Alts, alt.Action)
+	}
+	options := []any{entry.Recommend}
+	for _, alt := range entry.Alts {
+		options = append(options, alt)
+	}
+	warnings, lintErr := lintAskAuthoring(strings.TrimSpace(entry.Body+"\n"+entry.Details), entry.Refs, entry.Evidence, forges)
+	plainWarnings, lintErrors := lintAskPresentation(entry.Title, entry.askPresentation, options)
+	warnings = append(warnings, plainWarnings...)
+	if lintErr != nil {
+		lintErrors = append(lintErrors, lintErr.Error())
+	}
+	if len(lintErrors) > 0 {
+		lintErr = fmt.Errorf("%s", strings.Join(lintErrors, "; "))
 	}
 	if lintErr != nil && !forceFlag.value {
 		return errnorm.Usage("ask_authoring", fmt.Sprintf("asks[%d]: %s; or use --force --reason <explanation>", index, lintErr.Error()))
@@ -395,6 +422,10 @@ func (a *App) buildAskBatchMember(entry *askBatchEntry) map[string]any {
 		"authoring_warnings": entry.lintWarnings,
 		"delivery":           entry.decided.Mode,
 	}
+	if entry.Evidence == nil {
+		payload["evidence"] = []askEvidenceLink{}
+	}
+	entry.askPresentation.apply(payload)
 	if entry.overrideReason != "" {
 		payload["authoring_override_reason"] = entry.overrideReason
 	}

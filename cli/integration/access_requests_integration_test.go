@@ -28,11 +28,11 @@ func TestAccessRequestsAndFileAsksReachHumanInbox(t *testing.T) {
 	cardRef := mustStringPath(t, work.Payload, "result.work.ref")
 	h.runCLIExpectOK(t, "requester", nil, "work", "start", cardRef)
 	askIDs := []string{}
-	inline := h.runCLIExpectOK(t, "requester", nil, "ask", "An inline ask", "--recommend", "Proceed")
+	inline := h.runCLIExpectOK(t, "requester", nil, "ask", "An inline ask", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed")
 	askIDs = append(askIDs, mustStringPath(t, inline.Payload, "result.ask_id"))
 	for i, subject := range []string{"", cardRef} {
 		path := filepath.Join(t.TempDir(), "ask.md")
-		frontmatter := fmt.Sprintf("---\ntitle: File ask %d\nrecommended_response: Proceed\n", i)
+		frontmatter := fmt.Sprintf("---\ntitle: File ask %d\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: Proceed\n", i)
 		if subject != "" {
 			frontmatter += "subject_ref: " + subject + "\n"
 		}
@@ -47,7 +47,7 @@ func TestAccessRequestsAndFileAsksReachHumanInbox(t *testing.T) {
 		if err := os.WriteFile(path, []byte("A plain-file decision is needed.\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		args := []string{"ask", fmt.Sprintf("Plain file ask %d", i), "--body-file", path, "--recommend", "Proceed"}
+		args := []string{"ask", fmt.Sprintf("Plain file ask %d", i), "--body-file", path, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed"}
 		if subject != "" {
 			args = append(args, "--subject-ref", subject)
 		}

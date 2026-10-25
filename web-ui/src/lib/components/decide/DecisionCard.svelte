@@ -1,4 +1,5 @@
 <script>
+  import AskPresentation from "./AskPresentation.svelte";
   import { page } from "$app/stores";
   import { durableDraft } from "$lib/actions/durableDraft.js";
   import { copyText } from "$lib/clipboard.js";
@@ -536,7 +537,13 @@
     {/if}
   </header>
 
-  {#if decision.body}
+  {#if decision.situation || decision.impact || decision.recommendation || decision.alternatives?.length || decision.if_no_answer || decision.details || decision.evidence?.length}
+    <AskPresentation
+      {decision}
+      organizationSlug={organizationSlug || $page.params.organization}
+      workspaceSlug={workspaceSlug || $page.params.workspace}
+    />
+  {:else if decision.body}
     <div
       class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere] {rich
         ? ''
@@ -622,7 +629,15 @@
         <ul class="mt-1 list-disc pl-4" data-decision-batch-members>
           {#each decision.batch.members as member, index (member.ref || index)}
             <li class="[overflow-wrap:anywhere]">
-              {member.title || member.ref}
+              <details data-decision-batch-member>
+                <summary>{member.title || member.ref}</summary>
+                <AskPresentation
+                  decision={member}
+                  organizationSlug={organizationSlug ||
+                    $page.params.organization}
+                  workspaceSlug={workspaceSlug || $page.params.workspace}
+                />
+              </details>
             </li>
           {/each}
         </ul>

@@ -19,14 +19,16 @@ import (
 const humanAttentionRequestedEventType = "human_attention_requested"
 
 func humanUsageText() string {
-	return strings.TrimSpace(`anx ask "Accept merge at 40a2b0f?" --body-file ask.md --recommend "Accept"
-Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
-anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
-ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
-Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
-Pass --subject-ref card:<slug> so the ask stays on an initiative. The subject falls back to the current card. If both are absent, the CLI creates a ready card on the default board and warns (ask_auto_created_card). --from-file <path.md> reads a request with YAML frontmatter.
-Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
-Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
+	return strings.TrimSpace(`Write for a busy boss with no context: what is happening, who is affected, what you recommend and why, alternatives and what happens without an answer.
+anx ask "Approve the deletion guard?" --situation "Deleted users' data can reappear." --impact "This breaks our deletion promise." --recommend "Check whether the user was deleted before writing." --why "Reuse the existing guard; about 3 extra reads per write." --if-no-answer "The cost change stays blocked until Friday."
+Required by CLI lint: --situation, --impact, --recommend and --why. Optional: --alternative "Plain action=consequence" (repeatable), --if-no-answer, --details. Use plain sentences for --recommend and --alt answer buttons. Technical identifiers, code and internal history belong in collapsed --details and --evidence Label=URL.
+Use a one-line question or decision near 80 characters (hard maximum 160); keep situation to one or two sentences, about 60 words.
+anx ask --template decision > ask.md prints a filled neutral before/after example with YAML frontmatter; edit it, then use --from-file ask.md.
+Before: "Approve PR123 existing-fence reuse?" / "Recovered c10041; reuse external_write_fence for monthly_usage_totals."
+After: "Deleted users' usage data can reappear." Explain that background jobs recreate erased totals (privacy risk), recommend the existing user-deleted guard (about 3 extra reads per write), describe the slower alternative and say the cost change stays blocked until Friday without an answer.
+ask|review|escalate share these flags. --preview prints Decide copy plus all lint results, completely locally and without creating anything (JSON includes preview, rendered and lint). --dry-run validates and prints the API request without sending it. --force --reason <explanation> records an authoring override; it cannot bypass hard limits.
+Attach to --subject-ref card:<slug>, or the current card; otherwise create a ready card on the default board. --from-file reads YAML frontmatter: situation, impact, recommendation: {action, why}, alternatives: [{action, consequence}], if_no_answer, details, subject_ref and evidence. Body Markdown remains supported for historical asks.
+Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. --supersedes event:<old-ask> replaces an old request.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
@@ -88,30 +90,40 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 
 	fs := newSilentFlagSet(kind)
 	var (
-		threadIDFlag                                          trackedString
-		subjectRefFlag                                        trackedString
-		bodyFlag                                              trackedString
-		bodyFileFlag                                          trackedString
-		titleFlag                                             trackedString
-		requestIDFlag                                         trackedString
-		requesterActorIDFlag                                  trackedString
-		requesterAgentIDFlag                                  trackedString
-		requesterLabelFlag                                    trackedString
-		coverageHintFlag                                      trackedString
-		severityFlag                                          trackedString
-		actorIDFlag                                           trackedString
-		refFlags                                              trackedStrings
-		fromFileFlag                                          trackedString
-		recommendedResponseFlag                               trackedString
-		proposalFlags                                         trackedStrings
-		dryRunFlag                                            trackedBool
-		forceFlag                                             trackedBool
-		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag trackedString
-		deliveryFlag                                          trackedString
-		evidenceFlags                                         trackedStrings
-		byFlag, priorityFlag                                  trackedString
-		blocksFlags                                           trackedStrings
+		threadIDFlag                                                    trackedString
+		subjectRefFlag                                                  trackedString
+		bodyFlag                                                        trackedString
+		bodyFileFlag                                                    trackedString
+		titleFlag                                                       trackedString
+		requestIDFlag                                                   trackedString
+		requesterActorIDFlag                                            trackedString
+		requesterAgentIDFlag                                            trackedString
+		requesterLabelFlag                                              trackedString
+		coverageHintFlag                                                trackedString
+		severityFlag                                                    trackedString
+		actorIDFlag                                                     trackedString
+		refFlags                                                        trackedStrings
+		fromFileFlag                                                    trackedString
+		recommendedResponseFlag                                         trackedString
+		proposalFlags                                                   trackedStrings
+		previewFlag                                                     trackedBool
+		situationFlag, impactFlag, whyFlag, ifNoAnswerFlag, detailsFlag trackedString
+		alternativeFlags                                                trackedStrings
+		dryRunFlag                                                      trackedBool
+		forceFlag                                                       trackedBool
+		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag           trackedString
+		deliveryFlag                                                    trackedString
+		evidenceFlags                                                   trackedStrings
+		byFlag, priorityFlag                                            trackedString
+		blocksFlags                                                     trackedStrings
 	)
+	fs.Var(&previewFlag, "preview", "Show Decide copy and all lint results without any network calls or writes")
+	fs.Var(&situationFlag, "situation", "What is happening in one or two plain sentences")
+	fs.Var(&impactFlag, "impact", "Who or what is affected: users, money, risk or time")
+	fs.Var(&whyFlag, "why", "Why the recommended action is best, including cost")
+	fs.Var(&ifNoAnswerFlag, "if-no-answer", "Default or blocked work and by when")
+	fs.Var(&detailsFlag, "details", "Technical Markdown, collapsed with evidence")
+	fs.Var(&alternativeFlags, "alternative", "Action=consequence in plain words (repeatable)")
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
 	fs.Var(&byFlag, "by", "When the human should decide: YYYY-MM-DD, RFC3339, or a duration like 2d")
 	fs.Var(&blocksFlags, "blocks", "Typed ref this decision blocks (repeatable, at most 20)")
@@ -143,6 +155,14 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 
+	// Go's flag parser stops at a trailing positional. Never let a misplaced
+	// preview flag become title text and fall through to the mutation path.
+	if hasAskPreview(args) && !previewFlag.value {
+		return nil, errnorm.Usage("invalid_flags", "put the title before flags so --preview is parsed")
+	}
+	if previewFlag.value && (dryRunFlag.set || deliveryFlag.set || onAnswerFlag.set || webhookFlag.set) {
+		return nil, errnorm.Usage("invalid_flags", "--preview cannot be combined with --dry-run, --delivery, --on-answer or --webhook; preview performs no delivery")
+	}
 	trailingPositionals := fs.Args()
 	if err := rejectHumanFromFileFlagConflicts(
 		fromFileFlag,
@@ -166,6 +186,11 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		return nil, err
 	}
 
+	if fromFileFlag.set && (situationFlag.set || impactFlag.set || whyFlag.set || ifNoAnswerFlag.set || detailsFlag.set || len(alternativeFlags.values) > 0) {
+		return nil, errnorm.Usage("invalid_request", "--from-file cannot be combined with structured authoring flags; put them in frontmatter")
+	}
+	var presentation askPresentation
+	var proposalLintErr error
 	var (
 		title             string
 		body              string
@@ -181,17 +206,21 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	)
 
 	if strings.TrimSpace(fromFileFlag.value) != "" {
-		fm, mdBody, proposals, err := a.loadHumanAttentionFromMarkdownFile(strings.TrimSpace(fromFileFlag.value), kind)
+		fm, mdBody, proposals, err := a.loadHumanAttentionFromMarkdownFile(strings.TrimSpace(fromFileFlag.value), kind, previewFlag.value)
 		if err != nil {
 			return nil, err
 		}
 		fmFromFile = fm
+		presentation = fm.askPresentation
 		title = fm.Title
 		body = strings.TrimSpace(mdBody)
 		subjectRef = fm.SubjectRef
 		threadID = fm.ThreadID
 		relatedRefs = normalizeStringFilters(fm.Refs)
 		responseProposals = proposals
+		if previewFlag.value {
+			_, proposalLintErr = buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)
+		}
 		requestID = fm.RequestID
 		requesterActorID = firstNonEmpty(fm.RequesterActorID, strings.TrimSpace(cfg.ActorID))
 		requesterAgentID = firstNonEmpty(fm.RequesterAgentID, strings.TrimSpace(cfg.AgentID), strings.TrimSpace(cfg.Agent))
@@ -224,14 +253,37 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		requesterAgentID = firstNonEmpty(strings.TrimSpace(requesterAgentIDFlag.value), strings.TrimSpace(cfg.AgentID), strings.TrimSpace(cfg.Agent))
 		requesterLabel = firstNonEmpty(strings.TrimSpace(requesterLabelFlag.value), strings.TrimSpace(cfg.Agent), requesterAgentID, requesterActorID)
 		requestID = strings.TrimSpace(requestIDFlag.value)
+		presentation = askPresentation{Situation: strings.TrimSpace(situationFlag.value), Impact: strings.TrimSpace(impactFlag.value), Recommendation: &askRecommendation{Action: strings.TrimSpace(recommendedResponseFlag.value), Why: strings.TrimSpace(whyFlag.value)}, IfNoAnswer: strings.TrimSpace(ifNoAnswerFlag.value), Details: strings.TrimSpace(detailsFlag.value)}
+		for _, raw := range alternativeFlags.values {
+			action, consequence, ok := strings.Cut(raw, "=")
+			if !ok || strings.TrimSpace(action) == "" || strings.TrimSpace(consequence) == "" {
+				return nil, errnorm.Usage("invalid_request", "--alternative requires Action=consequence")
+			}
+			presentation.Alternatives = append(presentation.Alternatives, askAlternative{Action: strings.TrimSpace(action), Consequence: strings.TrimSpace(consequence)})
+			proposalFlags.values = append(proposalFlags.values, strings.TrimSpace(action))
+		}
 		var err error
 		responseProposals, err = buildCLIHumanAttentionResponseProposals(recommendedResponseFlag.value, proposalFlags.values)
-		if err != nil {
+		if err != nil && !previewFlag.value {
 			return nil, err
+		}
+		if previewFlag.value {
+			proposalLintErr = err
+			if err != nil {
+				responseProposals = nil
+				for _, option := range append([]string{recommendedResponseFlag.value}, proposalFlags.values...) {
+					if strings.TrimSpace(option) != "" {
+						responseProposals = append(responseProposals, option)
+					}
+				}
+			}
 		}
 	}
 
-	links := append([]askEvidenceLink(nil), fmFromFile.Evidence...)
+	if err := presentation.validateBounds(); err != nil {
+		return nil, errnorm.Usage("invalid_request", err.Error())
+	}
+	links := append([]askEvidenceLink{}, fmFromFile.Evidence...)
 	for _, raw := range evidenceFlags.values {
 		label, u, ok := strings.Cut(raw, "=")
 		if !ok {
@@ -249,9 +301,36 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if err != nil {
 		return nil, err
 	}
-	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links, a.workspaceForges(cfg))
-	if titleErr := lintAskTitle(title); titleErr != nil {
-		lintErr = titleErr
+	warnings, lintErr := lintAskAuthoring(strings.TrimSpace(body+"\n"+presentation.Details), relatedRefs, links, a.workspaceForges(cfg))
+	plainWarnings, lintErrors := lintAskPresentation(title, presentation, responseProposals)
+	warnings = append(warnings, plainWarnings...)
+	if proposalLintErr != nil {
+		lintErrors = append(lintErrors, proposalLintErr.Error())
+	}
+	if lintErr != nil {
+		lintErrors = append(lintErrors, lintErr.Error())
+	}
+	if len(lintErrors) > 0 {
+		lintErr = fmt.Errorf("%s", strings.Join(lintErrors, "; "))
+	}
+	if previewFlag.value {
+		rendered := renderAskPreview(title, body, presentation, responseProposals, links)
+		if !cfg.JSON {
+			a.writeOutput(a.Stdout, rendered+"\nLint:\n")
+			for _, e := range lintErrors {
+				a.writeOutput(a.Stdout, "error: "+e+"\n")
+			}
+			for _, w := range warnings {
+				a.writeOutput(a.Stdout, "warning: "+w+"\n")
+			}
+			if len(lintErrors) == 0 && len(warnings) == 0 {
+				a.writeOutput(a.Stdout, "No issues.\n")
+			}
+			return &commandResult{RawWritten: true}, nil
+		}
+		preview := map[string]any{"title": title, "body": body, "response_proposals": responseProposals, "evidence": links}
+		presentation.apply(preview)
+		return &commandResult{Data: map[string]any{"preview": preview, "rendered": rendered, "lint": map[string]any{"errors": lintErrors, "warnings": warnings, "valid": len(lintErrors) == 0}}}, nil
 	}
 	if forceFlag.value && strings.TrimSpace(reasonFlag.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "--force requires --reason")
@@ -350,6 +429,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		"requester_label":    requesterLabel,
 		"response_proposals": responseProposals,
 	}
+	presentation.apply(payload)
 	payload["evidence"] = links
 	payload["authoring_warnings"] = warnings
 	if forceFlag.value {
@@ -627,7 +707,7 @@ func hasAskTemplate(args []string) bool {
 		}
 		// String flag values can themselves be "--template". Leave unknown flags
 		// to normal usage validation; the only boolean authoring flags are below.
-		if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") && arg != "--force" && arg != "--dry-run" {
+		if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") && arg != "--force" && arg != "--dry-run" && arg != "--preview" {
 			i++
 		}
 	}

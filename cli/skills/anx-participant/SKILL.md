@@ -5,40 +5,60 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v31.
+Skill contract: anx.participant.v32.
 
 ## Daily loop
 
 Set `--as <name>` / `ANX_AS`; enroll (`anx help enroll`). Select `--workspace <alias>` or directory/default. Never hardcode URLs.
 
-- `anx orient`: read your brief.
-- `anx context <ref>`: read before changing a card.
-- `anx note <card> "<text>" --evidence <ref>`: progress.
-- `anx done <card> --evidence <ref>`: finish.
-- `anx plan`: steps; `anx series push`: measurements.
+`anx orient` reads the brief; `anx context <ref>` precedes edits.
+`anx note <card> "<text>" --evidence <ref>` posts progress;
+`anx done <card> --evidence <ref>` finishes. `anx plan` tracks steps;
+`anx series push` records measurements.
 
-Follow corrective warnings. Promise news with `anx note <card> "<text>" --next <when> "<what>"`; renew within two days. Evidence resets the clock; moving promises alone is visible. Cite blockers as `event:<ask-id>`. Share `anx link` URLs with humans.
+Follow warnings. Promise `--next <when> "<what>"`; renew within two days.
+Evidence resets the clock; moving promises alone remains visible.
+Cite blockers as `event:<ask-id>`; share `anx link` URLs.
 
-Group by default: `anx work create --under card:P` or `anx work group card:C --under card:P`. Deterministic `likely_home` suggestions never block creation. `anx work fold card:C --into card:P` transfers refs, archives and keeps asks reachable; `work unfold` reverses it.
+Group with `anx work create --under card:P` or `anx work group card:C --under card:P`.
+`likely_home` never blocks. `anx work fold` preserves refs/asks; `work unfold` reverses it.
 
-## Ask well
+## Write for a busy boss
 
-Use `anx ask "<decision>?" --subject-ref card:<slug> --body "<context>" --recommend "<option>"`, one or two `--alt` choices, `--by <when>`, and `--blocks <ref>` for waiting cards. Ask for human decisions; withdraw stale asks. `anx await <ask>` waits.
+`anx ask --template decision` gives a before/after example. Assume no context:
+`situation` (1–2 sentences), `impact` (users/money/risk/time),
+`recommendation: {action, why}` (include cost), optional
+`alternatives: [{action, consequence}]`, `if_no_answer` (default/blocker and by when).
+Collapse technical `details` and evidence; legacy asks retain body.
+
+`anx ask --from-file ask.md --preview` checks locally. Missing
+situation/impact/recommendation/why blocks publishing; `--force --reason` records
+exceptions. Use plain answer sentences, short titles and no unexplained identifiers.
+Inline: `--subject-ref card:<slug>`, `--situation`, `--impact`, `--recommend`,
+`--why`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
+Ask human decisions; withdraw stale asks; `anx await <ask>` waits.
 
 ## Attention
 
-Use `anx attention place <subject-ref> --for actor:<actor-id> --to decide|watch|digest|routine --reason "<why>" [--rank N] [--request-key KEY]`. Reasons: ≤200 characters. Decide requests action; Watch shows progress; digest defers; routine retains background. Human-designated attention-agent placements win; otherwise newest wins. Open human asks always reach Decide. ANX runs no models.
-
-Read `anx attention feedback list --since 24h [--for actor:<actor-id>]`; follow `next_cursor` through empty pages. Learn from feedback. Never mark human visits; reads leave markers unchanged.
+`anx attention place <subject-ref> --for actor:<actor-id> --to decide|watch|digest|routine --reason "<why>"` (≤200 characters).
+Human-designated placements win, otherwise newest; open asks always reach Decide.
+ANX runs no models. `anx attention feedback list --since 24h`: follow
+`next_cursor` through empty pages and learn. Never mark human visits.
 
 ## Optional automation
 
-Defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`; bind a card explicitly. Hooks restore bounded context without transcripts/presence writes.
+Defaults off. Preview `anx integrations enable context.inject --harness <harness> --dry-run`;
+bind a card. Hooks restore context without transcripts/presence writes.
 
-Elect one `anx git enable --writer`; share its binding. Git publishes notes/promises, never completion. `anx git status`; then `anx git sync`.
+Elect one `anx git enable --writer`; share binding. `anx git sync` publishes
+notes/promises, never completion.
 
-Preview `anx bridge install --dry-run`; register `anx bridge add --as <name> --workspace <alias>`. Unattended resumes need answers. Never alter services merely for coding.
+Preview `anx bridge install --dry-run`; register `anx bridge add --as <name> --workspace <alias>`.
+Answers need wiring; never alter services merely for coding.
 
-Preview `anx sync enable <directory> --card-id card:<handle> --dry-run`; review allowlists. Mount only `.anx/outbox` writable, without credentials/network. UUID submissions contain notes/promises only. Preserve uncertain originals/keys; inspect `.done`/`.failed` and `anx sync status`. Mount mirrors read-only; check `stale_after`. `anx help sync`.
+Preview `anx sync enable <directory> --card-id card:<handle> --dry-run`.
+Review allowlists. Mount only `.anx/outbox` writable, without credentials/network;
+mirrors read-only. Preserve UUIDs, uncertain originals/keys; inspect receipts and `stale_after`.
 
-Recurring: `anx work cadence`, `anx work receipt` (reuse run IDs), `anx work goal`. Discover: `anx help <job>` / `anx api <operation>`. Never share secrets or raw transcripts.
+Recurring: `anx work cadence|receipt|goal`; reuse run IDs.
+`anx help <job>` / `anx api <operation>`. Never share secrets or raw transcripts.

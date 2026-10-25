@@ -12597,7 +12597,7 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
+          description: For human_attention_requested, see AskPresentation for optional plain-language fields. For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [ref, handle, ts, type, actor_id, refs, summary, provenance]
 
@@ -13169,10 +13169,60 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
       required: [board_ref, board_title, column_key]
 
+    AskRecommendation:
+      type: object
+      required: [action, why]
+      properties:
+        action: {type: string, minLength: 1, maxLength: 240}
+        why: {type: string, minLength: 1, maxLength: 4000}
+    AskAlternative:
+      type: object
+      required: [action, consequence]
+      properties:
+        action: {type: string, minLength: 1, maxLength: 240}
+        consequence: {type: string, minLength: 1, maxLength: 4000}
+    AskPresentation:
+      type: object
+      description: Additive fields on human_attention_requested payloads and their inbox/brief projections. Legacy asks render body. CLI requires situation, impact and recommendation with why; the API accepts older writers. Details and evidence are collapsed.
+      properties:
+        situation: {type: string, maxLength: 4000}
+        impact: {type: string, maxLength: 4000}
+        recommendation: {$ref: '#/components/schemas/AskRecommendation'}
+        alternatives: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/AskAlternative'}}
+        if_no_answer: {type: string, maxLength: 4000, description: Default or blocked work and by when.}
+        details: {type: string, maxLength: 32000}
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [label, url]
+            properties:
+              label: {type: string}
+              url: {type: string, format: uri}
+
     InboxItem:
       description: Open human attention requests remain actionable until response or withdrawal, independently of linked subject lifecycle. Thread privacy still applies.
       type: object
       properties:
+        batch:
+          type: object
+          required: [id, asks]
+          properties:
+            id: {type: string}
+            asks:
+              type: array
+              maxItems: 10
+              items:
+                allOf:
+                  - {$ref: '#/components/schemas/AskPresentation'}
+                  - type: object
+                    required: [request_event_ref, title, subject_ref, response_proposals]
+                    properties:
+                      request_event_ref: {$ref: '#/components/schemas/TypedRef'}
+                      title: {type: string}
+                      body: {type: string}
+                      subject_ref: {$ref: '#/components/schemas/TypedRef'}
+                      response_proposals: {type: array, maxItems: 6, items: {type: string, maxLength: 240}}
         related_cards: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ResolvedRef'}}
         possibly_moot: { $ref: '#/components/schemas/PossiblyMoot' }
         related_cards_truncated: {type: boolean}
@@ -13199,6 +13249,13 @@ components:
         source_event_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         body: { type: string }
+        situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
+        impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
+        recommendation: {$ref: '#/components/schemas/AskRecommendation'}
+        alternatives: {$ref: '#/components/schemas/AskPresentation/properties/alternatives'}
+        if_no_answer: {$ref: '#/components/schemas/AskPresentation/properties/if_no_answer'}
+        details: {$ref: '#/components/schemas/AskPresentation/properties/details'}
+        evidence: {$ref: '#/components/schemas/AskPresentation/properties/evidence'}
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -13528,7 +13585,7 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
+          description: For human_attention_requested, see AskPresentation for optional plain-language fields. For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [type, actor_id, refs, summary, provenance]
 
@@ -15029,6 +15086,13 @@ components:
         kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
         title: { type: string }
         body: { type: string }
+        situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
+        impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
+        recommendation: {$ref: '#/components/schemas/AskRecommendation'}
+        alternatives: {$ref: '#/components/schemas/AskPresentation/properties/alternatives'}
+        if_no_answer: {$ref: '#/components/schemas/AskPresentation/properties/if_no_answer'}
+        details: {$ref: '#/components/schemas/AskPresentation/properties/details'}
+        evidence: {$ref: '#/components/schemas/AskPresentation/properties/evidence'}
         requested_by: { $ref: '#/components/schemas/BriefPrincipal' }
         subject: { $ref: '#/components/schemas/BriefRefTitle' }
         created_at: { type: string, format: date-time }
@@ -15065,6 +15129,13 @@ components:
                   inbox_item_id: { type: string }
                   event_ref: { type: string, description: "Authoritative ask event reference (event:<id>) for this member." }
                   title: { type: string }
+                  situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
+                  impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
+                  recommendation: {$ref: '#/components/schemas/AskRecommendation'}
+                  alternatives: {$ref: '#/components/schemas/AskPresentation/properties/alternatives'}
+                  if_no_answer: {$ref: '#/components/schemas/AskPresentation/properties/if_no_answer'}
+                  details: {$ref: '#/components/schemas/AskPresentation/properties/details'}
+                  evidence: {$ref: '#/components/schemas/AskPresentation/properties/evidence'}
                   subject_ref: { type: string, description: "Subject of this member ask, when it has one." }
                   blocks:
                     type: array
@@ -15627,6 +15698,13 @@ components:
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         body: { type: string }
+        situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
+        impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
+        recommendation: {$ref: '#/components/schemas/AskRecommendation'}
+        alternatives: {$ref: '#/components/schemas/AskPresentation/properties/alternatives'}
+        if_no_answer: {$ref: '#/components/schemas/AskPresentation/properties/if_no_answer'}
+        details: {$ref: '#/components/schemas/AskPresentation/properties/details'}
+        evidence: {$ref: '#/components/schemas/AskPresentation/properties/evidence'}
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }

@@ -55,7 +55,7 @@ func TestDailyLoopAgainstCore(t *testing.T) {
 		t.Fatalf("note result: %s", noted.Stdout)
 	}
 	waitForInitiativeNote(t, h, ref)
-	blocked := h.runCLIExpectOK(t, "worker", nil, "work", "block", "Need operator answer", "--ask", "--recommend", "Proceed")
+	blocked := h.runCLIExpectOK(t, "worker", nil, "work", "block", "Need operator answer", "--ask", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed")
 	askID := mustStringPath(t, blocked.Payload, "result.ask_id")
 	timed := h.runCLI(t, "worker", nil, "await", askID, "--timeout", "150ms")
 	if timed.ExitCode != 8 {
@@ -74,16 +74,16 @@ func TestDailyLoopAgainstCore(t *testing.T) {
 	if !briefHasAnswer(t, afterAnswer.Payload, "Proceed") {
 		t.Fatalf("orient omitted answered ask: %s", afterAnswer.Stdout)
 	}
-	ask := h.runCLIExpectOK(t, "worker", nil, "ask", "Ship now?", "--recommend", "Yes", "--alt", "Wait")
+	ask := h.runCLIExpectOK(t, "worker", nil, "ask", "Ship now?", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--alt", "Wait")
 	if got := mustStringPath(t, ask.Payload, "result.ask_id"); got == "" {
 		t.Fatal("ask id missing")
 	}
 	reviewFile := filepath.Join(t.TempDir(), "review.md")
-	if err := os.WriteFile(reviewFile, []byte(fmt.Sprintf("---\ntitle: Review result\nsubject_ref: %s\nrecommended_response: Approve\n---\nInspect the result.\n", ref)), 0o600); err != nil {
+	if err := os.WriteFile(reviewFile, []byte(fmt.Sprintf("---\ntitle: Review result\nsubject_ref: %s\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: Approve\n---\nInspect the result.\n", ref)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	h.runCLIExpectOK(t, "worker", nil, "review", "--from-file", reviewFile)
-	escalated := h.runCLIExpectOK(t, "worker", nil, "escalate", "Urgent decision", "--subject-ref", ref, "--recommend", "Proceed")
+	escalated := h.runCLIExpectOK(t, "worker", nil, "escalate", "Urgent decision", "--subject-ref", ref, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed")
 	escalateID := mustStringPath(t, escalated.Payload, "result.ask_id")
 	h.runCLIExpectOK(t, "operator", map[string]any{"inbox_item_id": findAskInboxID(t, h, escalateID), "response_text": "No, wait", "outcome": "rejected"}, "debug", "inbox", "respond", "--from-file", "-")
 	rejected := h.runCLI(t, "worker", nil, "await", escalateID, "--timeout", "1s")
