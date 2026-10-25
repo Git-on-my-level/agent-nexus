@@ -203,3 +203,47 @@ func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
 	workPostJSON(t, url+"/unfold", `{"actor_id":"grouper","request_key":"tray-unfold"}`, 200)
 	workPostJSON(t, url+"/unfold", `{"actor_id":"grouper","request_key":"tray-unfold","after":"x"}`, 409)
 }
+
+func TestGroupingBatchCreateAtomicAndReplay(t *testing.T) {
+	if testing.Short() {
+		t.Skip("full HTTP/storage stack")
+	}
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	parent := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Batch parent"}`, 201)["work"].(map[string]any)
+	path := h.baseURL + "/boards/" + asString(parent["board_ref"]) + "/cards/batch"
+	payload := map[string]any{"actor_id": "grouper", "request_key": "grouped-batch", "items": []any{
+		map[string]any{"under": parent["ref"], "card": map[string]any{"handle": "batch-child-a", "title": "Child A"}},
+		map[string]any{"card": map[string]any{"under": parent["ref"], "handle": "batch-child-b", "title": "Child B"}},
+	}}
+	raw, _ := json.Marshal(payload)
+	first := workPostJSON(t, path, string(raw), 201)
+	again := workPostJSON(t, path, string(raw), 201)
+	if len(first["cards"].([]any)) != 2 || first["cards"].([]any)[0].(map[string]any)["ref"] != again["cards"].([]any)[0].(map[string]any)["ref"] {
+		t.Fatal("batch replay duplicated cards")
+	}
+	for _, ref := range []string{"card:batch-child-a", "card:batch-child-b"} {
+		child := workGetJSON(t, h.baseURL+"/work/"+ref, 200)["work"].(map[string]any)
+		if child["parent_ref"] != parent["ref"] {
+			t.Fatal("batch ignored grouping", child)
+		}
+	}
+	planPath := h.baseURL + "/cards/" + asString(parent["ref"]) + "/plan"
+	before := workGetJSON(t, planPath, 200)
+	steps := before["plan"].(map[string]any)["steps"].([]any)
+	if len(steps) != 2 {
+		t.Fatalf("duplicate plan steps: %v", steps)
+	}
+	payload["request_key"] = "rejected-batch"
+	payload["items"] = []any{
+		map[string]any{"under": parent["ref"], "card": map[string]any{"handle": "batch-rollback-a", "title": "Rollback A"}},
+		map[string]any{"under": "card:missing-parent", "card": map[string]any{"handle": "batch-rollback-b", "title": "Rollback B"}},
+	}
+	raw, _ = json.Marshal(payload)
+	postJSONExpectStatus(t, path, string(raw), 404).Body.Close()
+	after := workGetJSON(t, planPath, 200)
+	if len(after["plan"].(map[string]any)["steps"].([]any)) != 2 {
+		t.Fatal("failed batch changed parent plan")
+	}
+	workGetJSON(t, h.baseURL+"/work/card:batch-rollback-a", 404)
+}

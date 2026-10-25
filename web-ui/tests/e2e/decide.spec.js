@@ -543,3 +543,59 @@ test.describe("phone keyboard", () => {
     await expect(page.locator('[data-variant="pane"]')).toHaveCount(0);
   });
 });
+
+test("batch proposals start collapsed and open with enough context to decide", async ({
+  page,
+  context,
+}) => {
+  const members = [
+    {
+      ref: "inbox:member-one",
+      title: "Approve the deletion guard?",
+      situation: "Deleted data can reappear after background jobs run.",
+      impact: "This breaks our promise to users.",
+      recommendation: {
+        action: "Check for deletion before writing.",
+        why: "Reuse the existing guard at a small cost.",
+      },
+      details: "Technical implementation notes.",
+    },
+    {
+      ref: "inbox:member-two",
+      title: "Delay the launch?",
+      situation: "The launch needs one more check.",
+      impact: "Customers will wait a day.",
+      recommendation: {
+        action: "Delay until tomorrow.",
+        why: "We can finish the check today.",
+      },
+    },
+  ];
+  await setup(context, {
+    briefRoute: (route) =>
+      json(route, {
+        ...brief,
+        generated_at: new Date().toISOString(),
+        decisions: [{ ...MERGE, batch: { key: "filed:launch", members } }],
+      }),
+  });
+  await page.goto(LIST);
+  const sections = page.locator("[data-decision-batch-member]");
+  await expect(sections).toHaveCount(2);
+  for (const [index, member] of members.entries()) {
+    const section = sections.nth(index);
+    await expect(
+      section.getByText(member.situation, { exact: true }),
+    ).toBeHidden();
+    await section.locator(":scope > summary").click();
+    for (const text of [
+      member.situation,
+      member.impact,
+      member.recommendation.action,
+      member.recommendation.why,
+    ]) {
+      await expect(section.getByText(text, { exact: false })).toBeVisible();
+    }
+  }
+  await expect(sections.first().getByText(members[0].details)).toBeHidden();
+});

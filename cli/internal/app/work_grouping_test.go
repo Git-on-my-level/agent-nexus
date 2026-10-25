@@ -67,7 +67,7 @@ func TestGroupingCLIGroupSendsOneReplaySafeMutation(t *testing.T) {
 
 func TestGroupingCLICardsCreateFlags(t *testing.T) {
 	a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
-	body, _, err := a.parseCardCreateInput([]string{"--board", "board:tasks", "--title", "Child", "--body", "Details", "--under", "card:parent", "--after", "first"}, config.Resolved{ActorID: "worker"}, "cards create")
+	body, _, _, err := a.parseCardCreateInput([]string{"--board", "board:tasks", "--title", "Child", "--body", "Details", "--under", "card:parent", "--after", "first"}, config.Resolved{ActorID: "worker"}, "cards create")
 	if err != nil || body["under"] != "card:parent" || body["after"] != "first" {
 		t.Fatalf("body=%v err=%v", body, err)
 	}
@@ -110,7 +110,7 @@ func TestGroupingAskAutoSubjectRetainsCoreHome(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	doc := dailyJSON(t, out)

@@ -1,0 +1,24 @@
+{
+  "title": "Approve the guard?",
+  "situation": "Deleted users' data can reappear.",
+  "impact": "This breaks our deletion promise.",
+  "recommendation": {
+    "action": "Check before writing.",
+    "why": "Reuse the existing guard."
+  },
+  "alternatives": [
+    {
+      "action": "Wait.",
+      "consequence": "The change stays blocked."
+    }
+  ],
+  "if_no_answer": "Blocked until Friday.",
+  "paragraphs": [
+    "Deleted users' data can reappear.",
+    "Impact: This breaks our deletion promise.",
+    "I recommend: Check before writing.",
+    "Reuse the existing guard.",
+    "Alternative: Wait. The change stays blocked.",
+    "If no answer: Blocked until Friday."
+  ]
+}

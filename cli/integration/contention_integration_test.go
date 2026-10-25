@@ -22,7 +22,7 @@ func TestConcurrentMovesAndAnsweredAwaitAgainstCore(t *testing.T) {
 				boardRef := mustStringPath(t, board.Payload, "result.board.ref")
 				work := h.runCLIExpectOK(t, name, map[string]any{"board_ref": boardRef, "title": name}, "work", "create", "--from-file", "-")
 				ref := mustStringPath(t, work.Payload, "result.work.ref")
-				ask := h.runCLIExpectOK(t, name, nil, "ask", "Proceed with concurrent writes?", "--subject-ref", ref, "--recommend", "Proceed", "--force", "--reason", "Local contention fixture")
+				ask := h.runCLIExpectOK(t, name, nil, "ask", "Proceed with concurrent writes?", "--subject-ref", ref, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed", "--force", "--reason", "Local contention fixture")
 				askID := mustStringPath(t, ask.Payload, "result.ask_id")
 				inbox := h.runCLIExpectOK(t, name, nil, "debug", "inbox", "list")
 				items, _ := getPathValue(inbox.Payload, "result.items")

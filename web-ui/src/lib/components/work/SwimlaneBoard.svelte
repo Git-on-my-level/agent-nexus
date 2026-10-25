@@ -32,7 +32,6 @@
     LANE_COLUMNS,
     laneCells,
     overBudget,
-    progressSegments,
     trayRows,
   } from "$lib/swimlanes.js";
   import {
@@ -46,8 +45,23 @@
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import SwimlaneTray from "./SwimlaneTray.svelte";
+  import {
+    childSegments,
+    childTone,
+    coveredRefs,
+    decisionIndex,
+    needsYouItems,
+    nextLine,
+    segmentsLabel,
+  } from "$lib/watchRollup.js";
 
-  let { workspaceHref, now = Date.now(), boardHref = "" } = $props();
+  let {
+    workspaceHref,
+    now = Date.now(),
+    boardHref = "",
+    /** Off where the page header already links to Decide. */
+    decideLink = true,
+  } = $props();
 
   const TRAY_LIMIT = 20;
 
@@ -58,15 +72,28 @@
   let lanes = $derived(buildLanes(brief?.initiatives));
   let loops = $derived(brief?.loops ?? []);
   let budget = $derived(brief?.initiativeBudget ?? null);
+  /** Open decisions by the refs they name, once per brief. */
+  let decisions = $derived(decisionIndex(brief));
   let waitingDecisions = $derived(countWaitingDecisions(brief?.decisions));
   let summary = $derived.by(() => {
     const inside = lanes.reduce((sum, lane) => sum + lane.rollup.total, 0);
     const more = brief?.truncated.initiatives ? "+" : "";
+    const count = `${lanes.length}${more} ${lanes.length === 1 ? "initiative" : "initiatives"}`;
+    // A phone has room for what to do next, not the inventory.
+    if (phone)
+      return [
+        count,
+        waitingDecisions
+          ? `${waitingDecisions} ${waitingDecisions === 1 ? "decision" : "decisions"} waiting`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
     return [
-      `${lanes.length}${more} ${lanes.length === 1 ? "initiative" : "initiatives"}`,
+      count,
       `${inside} ${inside === 1 ? "card" : "cards"} inside them`,
       loops.length
-        ? `${loops.length} ${loops.length === 1 ? "loop" : "loops"}`
+        ? `${loops.length} ${loops.length === 1 ? "loop" : "loops"} on their own tab`
         : "",
     ]
       .filter(Boolean)
@@ -74,6 +101,8 @@
   });
   const href = (ref) =>
     workspaceHref(`/initiatives/${encodeURIComponent(ref)}`);
+  const decisionHref = (decision) =>
+    workspaceHref(`/decide/${encodeURIComponent(decision.inboxItemId)}`);
 
   // ---- Tray ---------------------------------------------------------------
   let tray = $state({ rows: [], hasMore: false, loaded: false, error: "" });
@@ -196,10 +225,10 @@
   // ---- Lanes ----------------------------------------------------------------
   let phone = $state(false);
   let collapsed = $state({});
+  // A phone shows each lane as a card of the lines that matter; the full
+  // cells open on a tap. The desktop board folds only finished lanes.
   const laneCollapsed = (lane) =>
-    collapsed[lane.ref] ??
-    (lane.state === "done" ||
-      (phone && !lane.rollup.needingViewer && lane.state !== "past_promise"));
+    collapsed[lane.ref] ?? (phone || lane.state === "done");
   function toggleLane(lane) {
     collapsed = { ...collapsed, [lane.ref]: !laneCollapsed(lane) };
   }
@@ -320,14 +349,70 @@
     };
   });
 
-  const DOT = {
-    not_started: "bg-fg-subtle",
+  /** One colour per child tone; the bar and the chips agree. */
+  const TONE = {
+    needs: "bg-danger",
+    slipping: "bg-warn",
     moving: "bg-accent",
-    stuck: "bg-warn",
     done: "bg-ok",
+    not_started: "bg-fg-subtle",
   };
-  const columnLabel = (key) =>
-    LANE_COLUMNS.find((column) => column.key === key).label.toLowerCase();
+  const SEG = { ...TONE, not_started: "bg-line" };
+
+  /**
+   * One lane, ready to draw: its cells with the reader's open asks at the
+   * top of the needs-you column, the asks that cover a child standing in
+   * for that child's own chip.
+   */
+  /** "+ 6 cards": what the phone card does not list yet. */
+  function phoneMore(lane, view) {
+    // An ask about a child lists that child too.
+    const children = new Set(lane.rollup.children.map((child) => child.ref));
+    const listed = new Set(
+      view.phoneLines
+        .map((item) => item.ref)
+        .filter((ref) => children.has(ref)),
+    );
+    const rest = Math.max(0, lane.rollup.total - listed.size);
+    return rest
+      ? `+ ${rest} ${listed.size ? "more" : rest === 1 ? "card" : "cards"}`
+      : "Show cards";
+  }
+  function laneView(lane) {
+    const cells = laneCells(lane.rollup);
+    const needs = needsYouItems(lane, decisions);
+    const asks = needs.filter((item) => item.kind === "ask");
+    const covered = coveredRefs(asks.map((item) => item.decision));
+    const stuck = [
+      ...asks,
+      ...cells.stuck
+        .filter((child) => !covered.has(child.ref))
+        .map((child) => ({ kind: "card", key: child.ref, child })),
+    ];
+    const moving = cells.moving.filter((child) => !child.needsViewer);
+    return {
+      cells,
+      stuck,
+      needs,
+      slipping:
+        lane.rollup.pastPromise || (lane.state === "past_promise" ? 1 : 0),
+      segments: childSegments(lane.rollup),
+      line: nextLine(lane, now),
+      // Phone: what waits on the reader, and beside it the first thing
+      // moving. A lane with nothing for the reader is its bar alone.
+      phoneLines: [
+        ...needs.map((item) => ({ ...item, label: "you", tone: "needs" })),
+        ...moving.slice(0, needs.length ? 1 : 0).map((child) => ({
+          kind: "card",
+          key: child.ref,
+          ref: child.ref,
+          title: child.title,
+          label: child.pastPromise ? "slipping" : "in progress",
+          tone: child.pastPromise ? "slipping" : "moving",
+        })),
+      ],
+    };
+  }
 </script>
 
 {#snippet trayBody(idPrefix)}
@@ -474,7 +559,7 @@
             : ""}</button
         >
       {/if}
-      {#if waitingDecisions}
+      {#if decideLink && waitingDecisions}
         <a
           class="rounded-md border border-warn px-2.5 py-1 text-micro text-warn-text"
           href={workspaceHref("/decide")}>{waitingDecisions} in Decide →</a
@@ -522,35 +607,6 @@
       </section>
     {/if}
 
-    {#if tray.rows.length || tray.error}
-      <section
-        class="hidden rounded-md border border-dashed border-line-strong bg-bg-soft px-3 py-2 md:block"
-        aria-labelledby="swimlane-tray-title"
-        data-swimlane-tray
-      >
-        <h2 id="swimlane-tray-title" class="text-meta">
-          <span class="font-semibold text-fg">Ungrouped{trayCount}</span>
-          <span class="text-fg-muted">
-            New cards wait here until they join an initiative. Drag one onto a
-            lane, or take a suggested home.</span
-          >
-        </h2>
-        {@render trayBody("tray")}
-      </section>
-      <button
-        type="button"
-        class="flex items-center justify-between rounded-md border border-dashed border-line-strong bg-bg-soft px-3 py-2.5 text-left text-meta md:hidden"
-        aria-haspopup="dialog"
-        data-swimlane-tray-open
-        onclick={openTray}
-        ><span
-          ><span class="font-semibold text-fg">Ungrouped{trayCount}</span><span
-            class="text-fg-muted">{" · tap to group"}</span
-          ></span
-        ><span aria-hidden="true" class="text-fg-muted">›</span></button
-      >
-    {/if}
-
     {#if !lanes.length}
       <section class="py-12 text-center" data-swimlanes-empty>
         <h2 class="text-subtitle font-semibold text-fg">No initiatives yet</h2>
@@ -570,22 +626,22 @@
         aria-label="Initiative lanes"
       >
         <div
-          class="hidden grid-cols-[15rem_repeat(4,minmax(0,1fr))] border-b border-line text-micro font-medium uppercase tracking-wide text-fg-muted md:grid"
+          class="lane-grid hidden border-b border-line text-micro font-medium uppercase tracking-wide text-fg-muted md:grid"
           aria-hidden="true"
         >
-          <span class="px-3 py-2">Initiative</span>
+          <span class="px-3 py-2.5">Initiative</span>
           {#each LANE_COLUMNS as column (column.key)}
-            <span class="px-3 py-2">{column.label}</span>
+            <span class="px-3 py-2.5">{column.label}</span>
           {/each}
         </div>
-        <div class="flex flex-col max-md:gap-2">
+        <div class="flex flex-col max-md:gap-3">
           {#each lanes as lane (lane.ref)}
             {@const isCollapsed = laneCollapsed(lane)}
-            {@const cells = laneCells(lane.rollup)}
-            {@const segments = progressSegments(lane.rollup)}
+            {@const view = laneView(lane)}
+            {@const cells = view.cells}
             {@const more = hiddenChildren(lane.rollup)}
             <section
-              class="border-line md:grid md:grid-cols-[15rem_repeat(4,minmax(0,1fr))] md:border-b md:last:border-b-0 max-md:rounded-md max-md:border max-md:bg-panel {dropRef ===
+              class="lane-grid border-line md:border-b md:last:border-b-0 max-md:block max-md:rounded-lg max-md:border max-md:bg-panel max-md:px-3.5 max-md:py-3 {dropRef ===
               lane.ref
                 ? 'outline outline-2 -outline-offset-2 outline-accent'
                 : ''}"
@@ -593,19 +649,33 @@
               data-lane-ref={lane.ref}
               data-lane-collapsed={isCollapsed ? "true" : "false"}
             >
-              <div class="min-w-0 p-3 md:bg-bg-soft">
+              <div class="min-w-0 md:bg-bg-soft md:p-3">
                 <div class="flex items-start gap-2">
-                  <h3
+                  <h2
                     id="lane-title-{lane.ref}"
-                    class="min-w-0 flex-1 text-meta font-semibold text-fg [overflow-wrap:anywhere]"
+                    class="min-w-0 flex-1 text-meta font-semibold text-fg [overflow-wrap:anywhere] md:text-body"
                   >
                     <a class="hover:underline" href={href(lane.ref)}
                       >{lane.title}</a
                     >
-                  </h3>
+                  </h2>
+                  <!-- Phone: one tag says the most urgent thing. -->
+                  {#if view.needs.length}
+                    <span
+                      class="tag inline-flex bg-danger-soft text-danger-text md:hidden"
+                      data-source="computed:initiatives.rollup.needing_viewer"
+                      >needs you</span
+                    >
+                  {:else if view.slipping}
+                    <span
+                      class="tag inline-flex bg-warn-soft text-warn-text md:hidden"
+                      data-source="computed:initiatives.rollup.past_promise"
+                      >slipping</span
+                    >
+                  {/if}
                   <button
                     type="button"
-                    class="ui-icon-btn -mr-1 -mt-1 shrink-0"
+                    class="ui-icon-btn -mr-1 -mt-1 shrink-0 max-md:hidden"
                     aria-expanded={!isCollapsed}
                     aria-controls={isCollapsed
                       ? undefined
@@ -627,51 +697,118 @@
                     ></button
                   >
                 </div>
+                {#if view.line.length}
+                  <p
+                    class="mt-0.5 text-micro text-fg-muted [overflow-wrap:anywhere]"
+                    data-lane-next
+                  >
+                    {#each view.line as part, i (i)}{#if i > 0}<span
+                          aria-hidden="true"
+                          class="mx-1 text-fg-subtle">·</span
+                        >{/if}<span
+                        class={part.tone === "warn" ? "text-warn-text" : ""}
+                        data-source="computed:{part.field}">{part.text}</span
+                      >{/each}
+                  </p>
+                {/if}
                 <div
-                  class="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-sm bg-panel-hover"
+                  class="mt-2 flex h-1.5 gap-0.5"
                   role="img"
-                  aria-label={segments.length
-                    ? segments
-                        .map((s) => `${s.count} ${columnLabel(s.key)}`)
-                        .join(", ")
+                  aria-label={view.segments.length
+                    ? segmentsLabel(lane.rollup)
                     : "No cards yet"}
                   data-source="computed:initiatives.rollup.by_state"
                   data-lane-progress
                 >
-                  {#each segments as segment (segment.key)}
+                  {#each view.segments as segment, i (i)}
                     <span
-                      class={DOT[segment.key]}
-                      style="flex: {segment.share} 1 0%"
+                      class="rounded-sm {SEG[segment.tone]}"
+                      style="flex: {segment.flex} 1 0%"
                     ></span>
+                  {:else}
+                    <span class="flex-1 rounded-sm bg-line"></span>
                   {/each}
                 </div>
-                <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span class="text-micro text-fg-muted"
-                    >{lane.rollup.total}
-                    {lane.rollup.total === 1 ? "card" : "cards"}</span
-                  >
-                  {#if lane.rollup.needingViewer}
+                <div
+                  class="mt-2 flex flex-wrap items-center gap-1.5 max-md:hidden"
+                >
+                  {#if view.needs.length}
                     <span
-                      class="rounded bg-danger-soft px-1.5 text-micro font-semibold text-danger-text"
+                      class="tag inline-flex bg-danger-soft text-danger-text"
                       data-source="computed:initiatives.rollup.needing_viewer"
-                      >{lane.rollup.needingViewer} need you</span
+                      data-lane-needs>{view.needs.length} need you</span
                     >
                   {/if}
-                  {#if lane.rollup.pastPromise}
+                  {#if view.slipping}
                     <span
-                      class="rounded bg-warn-soft px-1.5 text-micro font-semibold text-warn-text"
-                      data-source="computed:initiatives.rollup.past_promise"
-                      >{lane.rollup.pastPromise} past promise</span
+                      class="tag inline-flex bg-warn-soft text-warn-text"
+                      data-source={lane.rollup.pastPromise
+                        ? "computed:initiatives.rollup.past_promise"
+                        : "computed:initiatives.state"}
+                      data-lane-slipping>{view.slipping} slipping</span
                     >
                   {/if}
-                  {#if lane.state === "past_promise" && !lane.rollup.pastPromise}
+                  {#if !view.needs.length && !view.slipping}
                     <span
-                      class="rounded bg-warn-soft px-1.5 text-micro font-semibold text-warn-text"
-                      data-source="computed:initiatives.state"
-                      >Past its promise</span
+                      class="text-micro text-fg-muted"
+                      data-source="computed:initiatives.rollup.total"
+                      >{lane.rollup.total}
+                      {lane.rollup.total === 1 ? "card" : "cards"}</span
                     >
                   {/if}
                 </div>
+                <!-- Phone: the lines that matter, then the rest on a tap. -->
+                {#if phone}
+                  <ul class="mt-1 md:hidden" data-lane-phone-lines>
+                    {#each view.phoneLines as item (item.key)}
+                      <li class="phone-line">
+                        <a
+                          class="min-w-0 flex-1 text-fg [overflow-wrap:anywhere]"
+                          href={item.kind === "ask"
+                            ? decisionHref(item.decision)
+                            : href(item.ref)}
+                          data-work-ref={item.kind === "card"
+                            ? item.ref
+                            : undefined}
+                          data-ask-ref={item.kind === "ask"
+                            ? item.decision.ref
+                            : undefined}>{item.title}</a
+                        >
+                        <span
+                          class="shrink-0 text-micro {item.tone === 'needs'
+                            ? 'text-danger-text'
+                            : item.tone === 'slipping'
+                              ? 'text-warn-text'
+                              : 'text-fg-muted'}">{item.label}</span
+                        >
+                      </li>
+                    {/each}
+                    {#if lane.rollup.total || view.stuck.length > view.needs.length}
+                      <li>
+                        <button
+                          type="button"
+                          class="phone-line w-full text-left text-fg-muted"
+                          aria-expanded={!isCollapsed}
+                          aria-controls={isCollapsed
+                            ? undefined
+                            : `lane-cells-${lane.ref}`}
+                          data-lane-phone-toggle
+                          onclick={() => toggleLane(lane)}
+                          ><span class="flex-1"
+                            >{isCollapsed
+                              ? phoneMore(lane, view)
+                              : "Fewer"}</span
+                          ><span
+                            aria-hidden="true"
+                            class="transition-transform {isCollapsed
+                              ? ''
+                              : 'rotate-90'}">›</span
+                          ></button
+                        >
+                      </li>
+                    {/if}
+                  </ul>
+                {/if}
               </div>
               {#if isCollapsed}
                 <!-- Collapsed: how many sit in each column, still in place. -->
@@ -680,13 +817,14 @@
                     class="hidden px-3 py-3 text-micro text-fg-muted md:block"
                     data-source="computed:initiatives.rollup.children"
                   >
-                    {cells[column.key].length || "—"}
+                    {(column.key === "stuck" ? view.stuck : cells[column.key])
+                      .length || "—"}
                   </div>
                 {/each}
-              {:else if !lane.rollup.total}
+              {:else if !lane.rollup.total && !view.stuck.length}
                 <p
                   id="lane-cells-{lane.ref}"
-                  class="px-3 pb-3 text-micro text-fg-muted md:col-span-4 md:py-3"
+                  class="pt-2 text-micro text-fg-muted md:col-span-4 md:px-3 md:py-3"
                 >
                   Nothing grouped here yet.{phone
                     ? ""
@@ -699,10 +837,17 @@
                   data-source="computed:initiatives.rollup.children"
                 >
                   {#each LANE_COLUMNS as column (column.key)}
-                    {@const rows = cells[column.key]}
+                    {@const rows =
+                      column.key === "stuck"
+                        ? view.stuck
+                        : cells[column.key].map((child) => ({
+                            kind: "card",
+                            key: child.ref,
+                            child,
+                          }))}
                     {@const open = openCells[cellKey(lane, column.key)]}
                     <div
-                      class="flex min-w-0 flex-col gap-1.5 px-3 pb-3 md:py-3 {rows.length
+                      class="flex min-w-0 flex-col gap-1.5 pt-2 md:px-3 md:py-3 {rows.length
                         ? ''
                         : 'max-md:hidden'}"
                       data-lane-column={column.key}
@@ -711,43 +856,61 @@
                         class="text-micro font-medium text-fg-muted md:hidden"
                         >{column.label} · {rows.length}</span
                       >
-                      {#each open ? rows : rows.slice(0, CELL_PREVIEW) as child (child.ref)}
-                        <a
-                          class="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border bg-bg-soft px-2 py-1.5 text-meta text-fg hover:bg-panel-hover {child.needsViewer
-                            ? 'border-danger'
-                            : 'border-line'}"
-                          href={href(child.ref)}
-                          data-work-ref={child.ref}
-                        >
-                          <span
-                            class="h-2 w-2 shrink-0 rounded-full {child.needsViewer
-                              ? 'bg-danger'
-                              : DOT[column.key]}"
-                            aria-hidden="true"
-                          ></span>
-                          <!-- In a narrow column the label wraps under the
-                               title rather than spilling out of the card. -->
-                          <span
-                            class="min-w-0 flex-[1_1_6rem] [overflow-wrap:anywhere]"
-                            >{child.title}</span
+                      {#each open ? rows : rows.slice(0, CELL_PREVIEW) as item (item.key)}
+                        {#if item.kind === "ask"}
+                          <a
+                            class="chip border-danger"
+                            href={decisionHref(item.decision)}
+                            data-ask-ref={item.decision.ref}
                           >
-                          {#if child.needsViewer}
                             <span
-                              class="ml-auto shrink-0 whitespace-nowrap text-micro text-danger-text"
-                              >you</span
-                            >
-                          {:else if child.pastPromise}
+                              class="h-[7px] w-[7px] shrink-0 rounded-full bg-danger"
+                              aria-hidden="true"
+                            ></span>
                             <span
-                              class="ml-auto shrink-0 whitespace-nowrap text-micro text-warn-text"
-                              >past promise</span
+                              class="min-w-0 flex-[1_1_6rem] [overflow-wrap:anywhere]"
+                              >{item.title}</span
                             >
-                          {:else if lane.rollup.workstreams.some((w) => w.ref === child.ref)}
+                            <span class="chip-n text-danger-text"
+                              >ask · you</span
+                            >
+                          </a>
+                        {:else}
+                          {@const child = item.child}
+                          {@const tone = childTone(child)}
+                          {@const stream = lane.rollup.workstreams.some(
+                            (w) => w.ref === child.ref,
+                          )}
+                          <a
+                            class="chip {child.needsViewer
+                              ? 'border-danger'
+                              : 'border-line'}"
+                            href={href(child.ref)}
+                            data-work-ref={child.ref}
+                          >
                             <span
-                              class="ml-auto shrink-0 whitespace-nowrap text-micro text-fg-muted"
-                              >workstream</span
+                              class="h-[7px] w-[7px] shrink-0 rounded-full {TONE[
+                                tone
+                              ]}"
+                              aria-hidden="true"
+                            ></span>
+                            <!-- In a narrow column the label wraps under the
+                                 title rather than spilling out of the card. -->
+                            <span
+                              class="min-w-0 flex-[1_1_6rem] [overflow-wrap:anywhere]"
+                              >{child.title}</span
                             >
-                          {/if}
-                        </a>
+                            {#if child.needsViewer}
+                              <span class="chip-n text-danger-text">you</span>
+                            {:else if child.pastPromise}
+                              <span class="chip-n text-warn-text"
+                                >past promise</span
+                              >
+                            {:else if stream}
+                              <span class="chip-n">workstream</span>
+                            {/if}
+                          </a>
+                        {/if}
                       {/each}
                       {#if rows.length > CELL_PREVIEW}
                         <button
@@ -768,7 +931,7 @@
                   {/each}
                   {#if more || lane.rollup.hasMore}
                     <a
-                      class="px-3 pb-3 text-micro text-accent-text hover:underline md:col-span-4 md:col-start-2 md:-mt-1"
+                      class="pt-2 text-micro text-accent-text hover:underline md:col-span-4 md:col-start-2 md:-mt-1 md:px-3 md:pb-3 md:pt-0"
                       href={href(lane.ref)}
                       data-source="computed:initiatives.rollup.has_more"
                       data-lane-more
@@ -783,6 +946,43 @@
           {/each}
         </div>
       </section>
+    {/if}
+
+    <!-- Below the lanes, as in the mockups: the board first, then what
+         still needs a home. -->
+    {#if tray.rows.length || tray.error}
+      <section
+        class="hidden rounded-lg border border-dashed border-line-strong bg-bg-soft px-3.5 py-3 md:block"
+        aria-labelledby="swimlane-tray-title"
+        data-swimlane-tray
+      >
+        <h2
+          id="swimlane-tray-title"
+          class="flex flex-wrap items-baseline gap-x-2.5 text-meta"
+        >
+          <span class="text-body font-semibold text-fg"
+            >Ungrouped{trayCount}</span
+          >
+          <span class="text-fg-muted"
+            >New cards land here until they're grouped. Suggestions come from
+            shared links, repository, project and title prefix; anyone can take
+            one, or drag a card onto a lane.</span
+          >
+        </h2>
+        {@render trayBody("tray")}
+      </section>
+      <button
+        type="button"
+        class="flex items-center justify-between rounded-lg border border-dashed border-line-strong px-3.5 py-2.5 text-left text-meta md:hidden"
+        aria-haspopup="dialog"
+        data-swimlane-tray-open
+        onclick={openTray}
+        ><span
+          ><span class="font-semibold text-fg">Ungrouped{trayCount}</span><span
+            class="text-fg-muted">{" · tap to group"}</span
+          ></span
+        ><span aria-hidden="true" class="text-fg-muted">›</span></button
+      >
     {/if}
 
     {#if loops.length}
@@ -892,3 +1092,56 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* 260px for the initiative, then the four state columns. */
+  @media (min-width: 768px) {
+    .lane-grid {
+      display: grid;
+      grid-template-columns: 260px repeat(4, minmax(0, 1fr));
+    }
+  }
+  /* No display here: the phone-only tags rely on Tailwind's md:hidden. */
+  .tag {
+    align-items: center;
+    flex: none;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 7px;
+    min-height: 2.25rem;
+    padding: 6px 8px;
+    border-width: 1px;
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--fg);
+    font-size: 12.5px;
+    line-height: 1.3;
+  }
+  .chip:hover {
+    background: var(--panel-hover);
+  }
+  .chip-n {
+    margin-left: auto;
+    flex: none;
+    font-size: 11px;
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
+  .phone-line {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.25rem;
+    padding: 5px 0;
+    border-top: 1px solid var(--line-subtle);
+    font-size: 13px;
+  }
+</style>

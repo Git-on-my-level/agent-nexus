@@ -120,7 +120,7 @@ func TestAgentErgonomicsAgainstCore(t *testing.T) {
 	session := ok(true, map[string]any{"provider": "generic", "native_session_id": "ergonomics-scenario", "activity": "active", "sequence": 1, "capabilities": map[string]any{"resume": "unknown", "history": "unsupported", "logs": "unknown"}}, "sessions", "register", "--from-file", "-")
 	ok(false, map[string]any{"session_id": mustStringPath(t, session.Payload, "result.session.session_id"), "activity": "active", "sequence": 1}, "work", "participants", "register", ref, "--from-file", "-")
 	ok(false, nil, "cards", "message", ref, "--body", "Implemented the scenario; local evidence follows.")
-	ask := ok(true, nil, "ask", "Proceed with verification?", "--subject-ref", ref, "--recommend", "Proceed", "--force", "--reason", "Scripted local scenario")
+	ask := ok(true, nil, "ask", "Proceed with verification?", "--subject-ref", ref, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed", "--force", "--reason", "Scripted local scenario")
 	askID := mustStringPath(t, ask.Payload, "result.ask_id")
 	// Human fixture answers through the same API used by the operator UI.
 	inbox := h.runCLIExpectOK(t, "worker", nil, "debug", "inbox", "list")

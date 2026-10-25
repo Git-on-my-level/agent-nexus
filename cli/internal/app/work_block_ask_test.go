@@ -16,7 +16,7 @@ func TestWorkBlockAskValidationBeforeMutation(t *testing.T) {
 		name, why, code string
 		flags           []string
 	}{
-		{"long title", strings.Repeat("界", 101), "ask_authoring", nil},
+		{"long title", strings.Repeat("界", 161), "ask_title_too_long", nil},
 		{"hard limit", strings.Repeat("界", 161), "ask_title_too_long", []string{"--force", "--reason", "Exception"}},
 		{"multiline", "Decision\nContext", "ask_title_invalid", nil},
 		{"missing override reason", strings.Repeat("x", 101), "invalid_request", []string{"--force"}},
@@ -41,7 +41,7 @@ func TestWorkBlockAskValidationBeforeMutation(t *testing.T) {
 			}))
 			defer server.Close()
 			a, out := dailyTestApp(t, server.URL)
-			args := []string{"--json", "--as", "worker", "work", "block", tc.why, "card:task", "--ask", "--recommend", "Accept"}
+			args := []string{"--json", "--as", "worker", "work", "block", tc.why, "card:task", "--ask", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Accept"}
 			exit := a.Run(append(args, tc.flags...))
 			wantExit := 2
 			if tc.code == "file_read_failed" {
@@ -133,7 +133,7 @@ func TestWorkBlockAskBodyAndOverride(t *testing.T) {
 			if mode == "stdin" {
 				a.Stdin = strings.NewReader(body)
 			}
-			args := []string{"--json", "--as", "worker", "work", "block", why, "card:task", "--ask", "--recommend", "Accept"}
+			args := []string{"--json", "--as", "worker", "work", "block", why, "card:task", "--ask", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Accept"}
 			if exit := a.Run(append(args, flags...)); exit != 0 {
 				t.Fatalf("exit=%d output=%s", exit, out.String())
 			}

@@ -141,13 +141,46 @@ preserve promises. A newer explicit `next` replaces that author's promise;
 actual evidence and step status changes can still meet it. Plan edits cannot fulfill their own milestones. Plain messages do not
 consume the bounded promise-fact window.
 
-The optional agentctl-label default is not enabled: `agentctl help` and
-`agentctl help run` do not document a reliable inherited label environment signal.
-Callers should pass `--under` explicitly.
+## Inherited run parent
+
+Label agentctl runs `anx.card.<initiative>` and cards land under it. When
+`AGENTCTL_EXECUTION_ID` is set, the CLI reads the execution's labels through
+`agentctl status <id> --output json` (the documented JSON output flag).
+`work create`, `cards create`, `boards cards create-batch`, generic API card creates, and auto-created
+`ask`/`review`/`escalate` subject cards use that parent. An MCP server inheriting
+the run environment applies the same default to work/card creates, including board batches.
+An independently hosted MCP server has no caller run context.
+
+An explicit `--under` or JSON `under` wins. Use `--top-level` on CLI creates or
+an auto-creating ask to ignore the default; MCP exposes `top_level: true` next
+to `body`. CLI `--under` and `--top-level` together are a usage error. JSON
+`under: ""` explicitly suppresses the default. No local option is sent as a
+new HTTP field.
+
+The label lookup, including failures, is cached for the process lifetime and
+has a 250 ms deadline and 64 KiB output cap. The chosen card must be readable
+through the current workspace and principal; that point read has its own
+250 ms deadline. No other workspace or private agentctl state is searched.
+Missing agentctl, execution ID or card label preserves ordinary creation.
+Multiple card labels, lookup timeouts and unreadable/wrong-workspace cards
+leave creation top-level with a warning suggesting an explicit `--under`.
+
+A defaulted response includes `run_parent_default` with the parent, label and
+"Created under card:X (from run label anx.card.X); pass --top-level to opt out".
+Its `next_actions` includes `anx plan step rm <parent> --ref <created-card>` to ungroup the
+created card with the ordinary fresh-read/CAS plan writer. Top-level creation
+keeps core's `likely_home` suggestions and warns when the visible initiative
+count exceeds the budget of 15. Nudge reads are best-effort and bounded to one
+200-item work page; they never walk workspace history or block creation. A batch
+resolves and checks the parent once, preserves each explicit item parent, and
+links every defaulted item in the existing batch transaction (at most 100 cards,
+with the existing 200-step parent-plan limit). A rejected item rolls back both
+card creation and all parent-plan edits.
 
 ## The swimlane board
 
-The web UI's Initiatives page has a Lanes view (`?view=lanes`): one lane per
+The web UI's Watch page has a Lanes view (`/watch?view=lanes`; the old
+`/initiatives?view=lanes` redirects there): one lane per
 brief initiative, its rollup children in Not started / In progress / Blocked or
 needs you / Done columns, loops in their own section, and the Ungrouped tray
 above. It reads the brief (already shared with the navigation badge) and one
@@ -216,6 +249,8 @@ admitted-read figures above do not certify the complete HTTP request. This is a
 merge-blocking P1: keep the grouping PR draft until canonical authorization
 admission satisfies the ordinary budget. No new baseline, plan allowance or
 budget increase is supplied here.
+
+Card-create and auto-subject `--dry-run` previews include the resolved default `under` parent and lookup warnings, without creating a card. Ask `--preview` remains entirely local. The optional agentctl subprocess receives only `PATH`, `HOME` and `AGENTCTL_*` environment variables. MCP accepts `top_level: true` with `body.under: null`.
 
 ## Watch rollup data
 

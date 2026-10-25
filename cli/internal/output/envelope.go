@@ -325,6 +325,11 @@ func projectCardCreate(lines *[]string, result any) {
 		line += " url=" + quote(fmt.Sprint(u))
 	}
 	*lines = append(*lines, line)
+	if hint, ok := root["run_parent_default"].(map[string]any); ok {
+		if message, ok := hint["message"].(string); ok && message != "" {
+			*lines = append(*lines, "grouped message="+quote(message))
+		}
+	}
 }
 
 // withoutWebURL drops the top-level web_url and API-derived url facts that the

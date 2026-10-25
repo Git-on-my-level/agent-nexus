@@ -14,11 +14,13 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/runcontext"
 
 	"golang.org/x/term"
 )
 
 type App struct {
+	runParent                      *runcontext.Resolver
 	Stdin                          io.Reader
 	Stdout                         io.Writer
 	Stderr                         io.Writer
@@ -358,7 +360,7 @@ func needsAgentIdentity(args []string) bool {
 	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
 		return false
 	}
-	if (args[0] == "ask" || args[0] == "review" || args[0] == "escalate") && hasAskTemplate(args[1:]) {
+	if (args[0] == "ask" || args[0] == "review" || args[0] == "escalate") && (hasAskTemplate(args[1:]) || hasAskPreview(args[1:])) {
 		return false
 	}
 	if args[0] == "report" && len(args) > 1 && (args[1] == "schema" || args[1] == "validate" || args[1] == "templates" || args[1] == "init") {

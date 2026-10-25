@@ -25,7 +25,7 @@ func TestAskAutoCreatedCardSuggestsInitiatives(t *testing.T) {
 			fmt.Fprint(w, `{"work":{"ref":"card:new-subject","board_ref":"board:tasks","title":"Ship it?"}}`)
 		case r.URL.Path == "/work" && r.Method == http.MethodGet:
 			workGets++
-			if r.URL.Query().Get("limit") != "50" {
+			if r.URL.Query().Get("limit") != "50" && r.URL.Query().Get("limit") != "200" {
 				t.Errorf("suggestion page limit=%q", r.URL.RawQuery)
 			}
 			if r.URL.Query().Get("phase") != "" {
@@ -52,7 +52,7 @@ func TestAskAutoCreatedCardSuggestsInitiatives(t *testing.T) {
 	defer server.Close()
 
 	a, out := dailyTestApp(t, server.URL)
-	args := []string{"--as", "worker", "ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--by", "1d"}
+	args := []string{"--as", "worker", "ask", "Ship it?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--by", "1d"}
 	if exit := a.Run(append([]string{"--json"}, args...)); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
@@ -80,7 +80,7 @@ func TestAskAutoCreatedCardSuggestsInitiatives(t *testing.T) {
 	if !strings.Contains(stderr, "warning: "+msg) {
 		t.Fatalf("stderr=%q", stderr)
 	}
-	if workGets != 1 {
+	if workGets != 2 {
 		t.Fatalf("suggestion reads=%d", workGets)
 	}
 	result := asMap(doc["result"])
@@ -159,7 +159,7 @@ func TestNamedCreateCommandsPrintRefFirst(t *testing.T) {
 		{"work create", []string{"work", "create", "--from-file", workFile}, "card:foo"},
 		{"cards create", []string{"cards", "create", "--board", "board_launch", "--title", "Implement", "--body", "hello"}, "card:foo"},
 		{"plan step add", []string{"plan", "step", "add", "card:foo", "--step-id", "build", "--title", "Build"}, "card:foo#build"},
-		{"ask", []string{"ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--subject-ref", "card:labels", "--thread-id", "thr1", "--by", "1d"}, ""},
+		{"ask", []string{"ask", "Ship it?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--subject-ref", "card:labels", "--thread-id", "thr1", "--by", "1d"}, ""},
 		{"note", []string{"note", "card:x", "Progress", "--next", "1d", "checkpoint"}, "event:evt-9"},
 		{"docs create", []string{"docs", "create", "--title", "Runbook", "--body", "hello"}, "document:runbook"},
 		{"topics create", []string{"topics", "create", "--title", "Launch", "--summary", "Coordinate"}, "topic:launch"},
@@ -353,7 +353,7 @@ func TestAskSuggestionsPagePastClosedWork(t *testing.T) {
 	defer server.Close()
 
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	msg := warningCodes(dailyJSON(t, out))["ask_auto_created_card"]
@@ -363,7 +363,7 @@ func TestAskSuggestionsPagePastClosedWork(t *testing.T) {
 	if strings.Index(msg, "card:newest") > strings.Index(msg, "card:second") {
 		t.Fatalf("server order lost: %q", msg)
 	}
-	if len(paths) != 2 || !strings.Contains(paths[1], "cursor=page-2") {
+	if len(paths) != 3 || !strings.Contains(paths[2], "cursor=page-2") {
 		t.Fatalf("queries=%v", paths)
 	}
 }
@@ -407,8 +407,8 @@ func TestBatchCreatesPrintOneRefPerLine(t *testing.T) {
 
 	askFile := filepath.Join(t.TempDir(), "asks.json")
 	if err := os.WriteFile(askFile, []byte(`{"asks":[
-		{"title":"Ship?","subject_ref":"card:launch","thread_id":"thr1","recommend":"Yes"},
-		{"title":"Wait?","subject_ref":"card:launch","thread_id":"thr1","recommend":"No"}
+		{"title":"Ship?","subject_ref":"card:launch","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Yes","why":"This is the quickest safe approach."},"recommend":"Yes"},
+		{"title":"Wait?","subject_ref":"card:launch","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"No","why":"This is the quickest safe approach."},"recommend":"No"}
 	]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}

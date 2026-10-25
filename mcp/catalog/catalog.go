@@ -292,6 +292,9 @@ func inputSchema(command Command) map[string]any {
 		}
 	}
 
+	if command.CommandID == "work.create" || command.CommandID == "cards.create" || command.CommandID == "boards.cards.add" || command.CommandID == "boards.cards.batch_add" {
+		properties["top_level"] = map[string]any{"type": "boolean", "description": "Ignore the inherited agentctl run-label parent default; conflicts with body.under."}
+	}
 	if SupportsIdempotencyKey(command.CommandID, command.Method) {
 		properties["idempotency_key"] = map[string]any{
 			"type":        "string",

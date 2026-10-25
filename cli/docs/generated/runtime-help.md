@@ -344,14 +344,16 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 Request a decision with a short title and Markdown body; print a decision template offline.
 
 ```text
-anx ask "Accept merge at 40a2b0f?" --body-file ask.md --recommend "Accept"
-Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
-anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
-ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
-Promise fields: --by <when> (YYYY-MM-DD, RFC3339 or a duration like 2d: when the human should decide), --blocks <ref> (repeatable, at most 20: work this decision blocks), --priority p0..p3. Missing values never fail the ask; they only warn (ask_no_deadline).
-Pass --subject-ref card:<slug> so the ask stays on an initiative. The subject falls back to the current card. If both are absent, the CLI creates a ready card on the default board and warns (ask_auto_created_card). --from-file <path.md> reads a request with YAML frontmatter.
-Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
-Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
+Write for a busy boss with no context: what is happening, who is affected, what you recommend and why, alternatives and what happens without an answer.
+anx ask "Approve the deletion guard?" --situation "Deleted users' data can reappear." --impact "This breaks our deletion promise." --recommend "Check whether the user was deleted before writing." --why "Reuse the existing guard; about 3 extra reads per write." --if-no-answer "The cost change stays blocked until Friday."
+Required by CLI lint: --situation, --impact, --recommend and --why. Optional: --alternative "Plain action=consequence" (repeatable), --if-no-answer, --details. Use plain sentences for --recommend and --alt answer buttons. Technical identifiers, code and internal history belong in collapsed --details and --evidence Label=URL.
+Use a one-line question or decision near 80 characters (hard maximum 160); keep situation to one or two sentences, about 60 words.
+anx ask --template decision > ask.md prints a filled neutral before/after example with YAML frontmatter; edit it, then use --from-file ask.md.
+Before: "Approve PR123 existing-fence reuse?" / "Recovered c10041; reuse external_write_fence for monthly_usage_totals."
+After: "Deleted users' usage data can reappear." Explain that background jobs recreate erased totals (privacy risk), recommend the existing user-deleted guard (about 3 extra reads per write), describe the slower alternative and say the cost change stays blocked until Friday without an answer.
+ask|review|escalate share these flags. --preview prints Decide copy plus all lint results, completely locally and without creating anything (JSON includes preview, rendered and lint). --dry-run validates and prints the API request without sending it. --force --reason <explanation> records an authoring override; it cannot bypass hard limits.
+Attach to --subject-ref card:<slug>, or the current card; otherwise create a ready card on the default board. --from-file reads YAML frontmatter: situation, impact, recommendation: {action, why}, alternatives: [{action, consequence}], if_no_answer, details, subject_ref and evidence. Body Markdown remains supported for historical asks.
+Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. --supersedes event:<old-ask> replaces an old request.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
@@ -504,8 +506,8 @@ Executive workspace
 Asking for decisions
 
 - Every ask, review and escalation belongs to an initiative card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
-- Use anx ask with a one-line decision title and --body-file ask.md for Context (2–5 sentences), Options with consequences, Recommendation and Evidence. Include every named document/card/topic as a typed ref and every named PR/file as a labelled URL. Summarise code and link a PR or commit-pinned file with line anchors instead of pasting source. Use anx ask --template decision to start.
-- Use a one-line title (aim for ≤100 characters; hard limit 160) and Markdown --body-file ask.md by default. Start with anx ask --template decision; include Decision, Context, Options with consequences, Recommendation and Evidence. Pointer-only asks and obvious missing evidence fail before publishing. Incomplete context produces warnings; --force --reason records a deliberate lint override. External evidence is structured as {label,url}; native evidence remains in related_refs.
+- Write for a busy boss with no context. Use situation (one or two plain sentences), impact (users, money, risk or time), recommendation {action, why} including cost, alternatives [{action, consequence}], and if_no_answer (default or blocked work and by when). Title: a question or decision near 80 characters; situation: about 60 words. Use plain sentences for answer buttons.
+- Start with anx ask --template decision > ask.md, edit YAML frontmatter and run anx ask --from-file ask.md --preview. Missing situation, impact or recommendation with why fails CLI lint; --force --reason records an exception. Warnings quote jargon to rewrite. Technical details and labelled evidence {label,url} are collapsed. Native evidence stays in related_refs; older asks render body. ANX runs no rewriting model.
 - Answers atomically record a decision on the card and route next action to its owner/requester/board role. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
 - Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.
 
@@ -521,7 +523,7 @@ Daily loop
 1. Run `anx orient` to see your identity, answers for you, asks waiting on a human, your initiatives against their promises, and the next command.
 2. Read `anx context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
-4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --body-file ask.md --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
+4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask --from-file ask.md`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
 6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
@@ -530,7 +532,7 @@ Daily loop
 Runs and output
 
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
-- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
+- Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
 - If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.
@@ -5464,7 +5466,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
 Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
-Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--request-key <key>] --from-file <path|->
+Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--top-level] [--request-key <key>] --from-file <path|->
 
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
@@ -8398,6 +8400,9 @@ Local Help: cards create
   - `cat card-create.json | anx cards create`
 
 Flags:
+  --under <card-ref>           Explicit parent; overrides the inherited anx.card.<initiative> run label.
+  --top-level                  Ignore the inherited run-label parent default.
+  --after <step-id>            Preceding parent plan step id.
   --handle <slug>              Client-chosen lowercase card slug (1-64 characters); conflicts fail without renaming.
   --board <board-ref-or-handle> Board typed ref or handle for the new work card.
   --title <text>               Card title.
@@ -11168,7 +11173,7 @@ Pass at least one field; an empty --after clears dependencies. Source state take
 Edit a linked initiative step with a card concurrency token.
 
 ```text
-anx plan step rm <card> <step-id>
+anx plan step rm <card> (<step-id> | --ref <card-ref>)
 Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
 Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
 Removing a depended-on step is rejected; update dependencies first.

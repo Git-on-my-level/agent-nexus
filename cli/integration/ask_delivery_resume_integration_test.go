@@ -92,7 +92,7 @@ mv %q %q
 	var ask cliResult
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		ask = h.runCLI(t, "worker", nil, "ask", "Ship the delivery?", "--subject-ref", ref, "--recommend", "Yes", "--delivery", "resume", "--on-answer", scriptPath)
+		ask = h.runCLI(t, "worker", nil, "ask", "Ship the delivery?", "--subject-ref", ref, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--delivery", "resume", "--on-answer", scriptPath)
 		if ask.ExitCode == 0 || time.Now().After(deadline) {
 			break
 		}

@@ -4,11 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   BRIEF_COMPUTED_FIELDS,
   freshnessLabel,
-  groupBoard,
-  groupWatch,
   initiativeLine,
   normalizeBrief,
-  PLACEMENTS,
   plainInline,
 } from "../../src/lib/brief.js";
 
@@ -25,42 +22,6 @@ const brief = normalizeBrief(
   ),
 );
 const byId = (id) => brief.initiatives.find((row) => row.id === id);
-
-describe("groupWatch", () => {
-  it("orders groups by attention and keeps only computed states", () => {
-    const groups = groupWatch(brief.initiatives);
-    expect(groups.map((g) => g.state)).toEqual([
-      "past_promise",
-      "moving",
-      "no_promise",
-      "done",
-    ]);
-    expect(groups.map((g) => g.rows.length)).toEqual([1, 2, 2, 1]);
-  });
-
-  it("puts the earliest promise first among moving rows", () => {
-    const moving = groupWatch(brief.initiatives).find(
-      (g) => g.state === "moving",
-    );
-    expect(moving.rows.map((r) => r.id)).toEqual([
-      "fleet-onboarding",
-      "observability",
-    ]);
-  });
-});
-
-describe("groupBoard", () => {
-  it("returns every placement column in order, empty or not", () => {
-    const columns = groupBoard(brief.initiatives);
-    expect(columns.map((c) => c.placement)).toEqual(PLACEMENTS);
-    expect(
-      columns.find((c) => c.placement === "in_progress").rows,
-    ).toHaveLength(2);
-    expect(
-      columns.find((c) => c.placement === "done").rows.map((r) => r.id),
-    ).toEqual(["docs-refresh"]);
-  });
-});
 
 describe("initiativeLine", () => {
   it("renders past promise from promise, past_promise_for and moves", () => {

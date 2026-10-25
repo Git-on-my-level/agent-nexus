@@ -13,7 +13,7 @@ import (
 
 func askDryRun(t *testing.T, extra ...string) map[string]any {
 	t.Helper()
-	args := append([]string{"--json", "ask", "Accept?", "--body", "Context", "--recommend", "Accept", "--subject-ref", "card:launch", "--thread-id", "thr1", "--dry-run"}, extra...)
+	args := append([]string{"--json", "ask", "Accept?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Accept", "--subject-ref", "card:launch", "--thread-id", "thr1", "--dry-run"}, extra...)
 	return assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, args))
 }
 
@@ -62,7 +62,7 @@ func TestAskMalformedByAndBlocksAreUsageErrors(t *testing.T) {
 		{[]string{"--blocks", "not a ref"}, "invalid_request"},
 		{[]string{"--priority", "asap"}, "invalid_request"},
 	} {
-		args := append([]string{"--json", "ask", "Accept?", "--body", "Context", "--recommend", "Accept", "--subject-ref", "card:launch", "--thread-id", "thr1", "--dry-run"}, tc.flags...)
+		args := append([]string{"--json", "ask", "Accept?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Accept", "--subject-ref", "card:launch", "--thread-id", "thr1", "--dry-run"}, tc.flags...)
 		payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), nil, nil, args))
 		if asMap(payload["error"])["code"] != tc.code {
 			t.Fatalf("%v: %#v", tc.flags, payload)
@@ -98,7 +98,7 @@ func TestAskWarningOvertakenSubject(t *testing.T) {
 	server := askSubjectServer(t, `{"card":{"id":"card-1","ref":"card:labels","thread_id":"thread-1","possibly_moot":{"flagged":true,"reason":"all 2 linked sources are merged"}}}`)
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick label scheme?", "--body", "Context", "--recommend", "Short", "--subject-ref", "card:labels", "--by", "1d"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick label scheme?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Short", "--subject-ref", "card:labels", "--by", "1d"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	doc := dailyJSON(t, out)
@@ -112,7 +112,7 @@ func TestAskWarningAutoSubject(t *testing.T) {
 	server := askSubjectServer(t, `{"card":{"id":"card-2","ref":"card:new-subject","thread_id":"thread-2"}}`)
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	doc := dailyJSON(t, out)
@@ -134,7 +134,7 @@ func askNoDeadlineMessage(t *testing.T, brief ...string) string {
 	server := askSubjectServer(t, `{"card":{"id":"card-1","ref":"card:labels","thread_id":"thread-1"}}`, brief...)
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick label scheme?", "--body", "Context", "--recommend", "Short", "--subject-ref", "card:labels"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick label scheme?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Short", "--subject-ref", "card:labels"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	return warningCodes(dailyJSON(t, out))["ask_no_deadline"]

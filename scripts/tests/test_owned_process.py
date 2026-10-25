@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 
 HERE = Path(__file__).resolve().parent
@@ -115,8 +116,28 @@ class OwnedProcessTests(unittest.TestCase):
         return [sys.executable, "-c", GRANDCHILD, str(self.pidfile), code]
 
     def wait_grandchild(self) -> int:
-        self.assertTrue(wait_until(self.pidfile.is_file, 5), "synthetic grandchild was not recorded")
-        return int(self.pidfile.read_text())
+        pid = None
+
+        def recorded():
+            nonlocal pid
+            try:
+                text = self.pidfile.read_text().strip()
+            except FileNotFoundError:
+                return False
+            # write_text creates the file before its PID bytes are available.
+            if not text:
+                return False
+            pid = int(text)
+            return True
+
+        self.assertTrue(wait_until(recorded, 5), "synthetic grandchild was not recorded")
+        return pid
+
+    def test_wait_grandchild_waits_for_pid_bytes(self):
+        self.pidfile.write_text("")
+        with patch.object(Path, "read_text", side_effect=["", "123"]) as read:
+            self.assertEqual(self.wait_grandchild(), 123)
+            self.assertEqual(read.call_count, 2)
 
     def assert_reaped(self, pid: int):
         self.assertTrue(wait_until(lambda: not alive(pid), 3), f"owned pid {pid} survived")

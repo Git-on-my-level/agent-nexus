@@ -358,13 +358,13 @@ func TestAskCreatesSubjectAndKeepsCommandLocal(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if code := a.Run([]string{"--json", "--as", "worker", "ask", "Proceed?", "--body", askDecisionTemplate, "--recommend", "Proceed", "--on-answer", "private-local-command"}); code != 0 {
+	if code := a.Run([]string{"--json", "--as", "worker", "ask", "Proceed?", "--body", "The team needs a launch decision.", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed", "--on-answer", "private-local-command"}); code != 0 {
 		t.Fatalf("exit%d %s", code, out.String())
 	}
 	if gotWork["phase"] != "ready" || asMap(asMap(gotEvent["event"])["payload"])["subject_ref"] != "card:new-ask" {
 		t.Fatalf("subject %#v %#v", gotWork, gotEvent)
 	}
-	if gotWork["title"] != "Proceed?" || gotWork["summary"] != strings.TrimSpace(askDecisionTemplate) || asMap(asMap(gotEvent["event"])["payload"])["body"] != strings.TrimSpace(askDecisionTemplate) {
+	if gotWork["title"] != "Proceed?" || gotWork["summary"] != "The team needs a launch decision." || asMap(asMap(gotEvent["event"])["payload"])["body"] != "The team needs a launch decision." {
 		t.Fatalf("short card title and Markdown body: %#v %#v", gotWork, gotEvent)
 	}
 	raw, _ := json.Marshal(gotEvent)
@@ -497,7 +497,7 @@ func TestAskForgeEvidenceViaWorkspaceConfig(t *testing.T) {
 	prURL := "https://forge.example.test/acme/widgets/pulls/2"
 	askArgs := func(out *bytes.Buffer) []string {
 		_ = out
-		return []string{"--json", "--as", "worker", "ask", "Ship the widgets gate?", "--body", "PR #2 must merge before launch.\n\n## Decision\nProceed once it merges.\n\n## Context\nThe gate blocks every downstream ask.\n\n## Options with consequences\n- Accept: unblocks the fleet.\n- Wait: downstream work stays blocked.\n\n## Recommendation\nAccept, because the gate is green.\n\n## Evidence\n- widgets: " + prURL, "--recommend", "Proceed", "--evidence", "widgets=" + prURL}
+		return []string{"--json", "--as", "worker", "ask", "Ship the widgets gate?", "--body", "PR #2 must merge before launch.\n\n## Decision\nProceed once it merges.\n\n## Context\nThe gate blocks every downstream ask.\n\n## Options with consequences\n- Accept: unblocks the fleet.\n- Wait: downstream work stays blocked.\n\n## Recommendation\nAccept, because the gate is green.\n\n## Evidence\n- widgets: " + prURL, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed", "--evidence", "widgets=" + prURL}
 	}
 	rejected := &bytes.Buffer{}
 	if code := newApp(rejected).Run(askArgs(rejected)); code == 0 {

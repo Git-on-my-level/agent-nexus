@@ -284,7 +284,7 @@ func TestAskResultCarriesDelivery(t *testing.T) {
 	defer server.Close()
 
 	a, out := deliveryTestApp(t, server.URL, nil)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship now?", "--recommend", "Yes", "--subject-ref", "card:task", "--delivery", "none"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship now?", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--subject-ref", "card:task", "--delivery", "none"}); exit != 0 {
 		t.Fatalf("exit=%d output=%s", exit, out.String())
 	}
 	payload := asMap(asMap(asMap(created["event"])["payload"]))
@@ -303,7 +303,7 @@ func TestAskDefaultDeliveryPrintsBatchFollowUp(t *testing.T) {
 	defer server.Close()
 
 	a, out := deliveryTestApp(t, server.URL, nil)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick a lane?", "--recommend", "Lane 1", "--subject-ref", "card:task"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Pick a lane?", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Lane 1", "--subject-ref", "card:task"}); exit != 0 {
 		t.Fatalf("exit=%d output=%s", exit, out.String())
 	}
 	payload := asMap(asMap(asMap(created["event"])["payload"]))

@@ -516,7 +516,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 		"--subject-ref", "card:launch",
 		"--ref", "artifact:receipt_1",
 		"--coverage-hint", "thin - 0 decisions",
-		"--recommend", "Ship Friday with a rollback plan ready.",
+		"--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Ship Friday with a rollback plan ready.",
 		"--alt", "Delay until Monday for extra QA.",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -653,7 +653,7 @@ func TestHumanAskCommandResolvesThreadIDFromCardSubjectRef(t *testing.T) {
 		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "Should we ship Friday?",
 		"--subject-ref", "card:launch",
-		"--recommend", "Ship Friday with a rollback plan ready.",
+		"--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Ship Friday with a rollback plan ready.",
 	})
 	assertEnvelopeOK(t, raw)
 
@@ -680,7 +680,7 @@ func TestAskWithoutSubjectRequiresCurrentTask(t *testing.T) {
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "ask", "Need a decision", "--recommend", "Proceed",
+		"--json", "ask", "Need a decision", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -4332,7 +4332,7 @@ func TestAgentGuideDocumentsAskAwaitAndRunLabel(t *testing.T) {
 	t.Parallel()
 
 	guide := agentGuideText()
-	if !strings.Contains(guide, "anx await <ask-id>") || !strings.Contains(guide, "anx.card.<card-slug>") {
+	if !strings.Contains(guide, "anx await <ask-id>") || !strings.Contains(guide, "anx.card.<initiative>") {
 		t.Fatalf("expected await and run label guidance output=%s", guide)
 	}
 	for _, term := range []string{"CEO by default", "human-level initiative or outcome", "never mirror a tracker 1:1", "15 or fewer open cards", "do not also block the card", "2–3 alternatives", "event:<response_event_id>", "12 PRs + 4 Multica issues"} {

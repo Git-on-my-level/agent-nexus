@@ -239,8 +239,8 @@ func TestParticipantGuideUsesExplicitTaskTargets(t *testing.T) {
 	}
 	for _, argv := range [][]string{
 		{"cards", "message", "card:example", "--body", "Blocked: reason and next step"},
-		{"ask", "Question", "--subject-ref", "card:example", "--recommend", "Preferred answer"},
-		{"work", "block", "Why", "card:example", "--ask", "--recommend", "Preferred answer"},
+		{"ask", "Question", "--subject-ref", "card:example", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Preferred answer"},
+		{"work", "block", "Why", "card:example", "--ask", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Preferred answer"},
 		{"done", "card:example", "--evidence", "https://example.test/receipt"},
 		{"note", "card:example", "Progress", "--next", "2d", "checkpoint", "--evidence", "https://example.test/pr/1"},
 	} {

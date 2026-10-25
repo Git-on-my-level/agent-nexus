@@ -68,7 +68,15 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 	var askFlag, force trackedBool
 	var body, bodyFile, reason trackedString
 	var recommend trackedString
+	var situation, impact, why, ifNoAnswer, details trackedString
+	var alternatives trackedStrings
 	var alts trackedStrings
+	fs.Var(&situation, "situation", "Plain-language situation for the ask")
+	fs.Var(&impact, "impact", "Who or what is affected")
+	fs.Var(&why, "why", "Why the recommendation is best")
+	fs.Var(&ifNoAnswer, "if-no-answer", "Default or blocked work and by when")
+	fs.Var(&details, "details", "Collapsed technical detail")
+	fs.Var(&alternatives, "alternative", "Action=consequence (repeatable)")
 	fs.Var(&askFlag, "ask", "Open an operator ask when blocking")
 	fs.Var(&recommend, "recommend", "Recommended answer for the optional ask")
 	fs.Var(&alts, "alt", "Alternative answer for the optional ask (repeatable)")
@@ -104,14 +112,14 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			return nil, err
 		}
 	}
-	if verb != "block" && (askFlag.set || recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
+	if verb != "block" && (situation.set || impact.set || why.set || ifNoAnswer.set || details.set || len(alternatives.values) > 0 || askFlag.set || recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
 		return nil, errnorm.Usage("invalid_flags", "ask flags belong to work block")
 	}
 	if verb == "block" && askFlag.value && strings.TrimSpace(recommend.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "work block --ask requires --recommend")
 	}
-	if verb == "block" && !askFlag.value && (recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
-		return nil, errnorm.Usage("invalid_flags", "--recommend, --alt, --body, --body-file, --force and --reason require --ask")
+	if verb == "block" && !askFlag.value && (situation.set || impact.set || why.set || ifNoAnswer.set || details.set || len(alternatives.values) > 0 || recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
+		return nil, errnorm.Usage("invalid_flags", "--situation, --impact, --recommend, --why, --alternative, --if-no-answer, --details, --alt, --body, --body-file, --force and --reason require --ask")
 	}
 	card, err := a.fetchCardBody(ctx, cfg, cardRef)
 	if err != nil {
@@ -132,6 +140,17 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			askBody = string(content)
 		}
 		askArgs = []string{text, "--subject-ref", cardRef, "--recommend", recommend.value, "--body", askBody}
+		for _, f := range []struct {
+			name string
+			flag trackedString
+		}{{"situation", situation}, {"impact", impact}, {"why", why}, {"if-no-answer", ifNoAnswer}, {"details", details}} {
+			if f.flag.set {
+				askArgs = append(askArgs, "--"+f.name, f.flag.value)
+			}
+		}
+		for _, alt := range alternatives.values {
+			askArgs = append(askArgs, "--alternative", alt)
+		}
 		for _, alt := range alts.values {
 			askArgs = append(askArgs, "--alt", alt)
 		}
