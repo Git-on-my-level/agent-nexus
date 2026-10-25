@@ -781,12 +781,38 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 	}, true, nil
 }
 
+// UpsertCardLeaseWakeup queues a lease clock wake only while the card's lease
+// is still the ended tenure at epoch. The lease check and the agent_wakeups
+// insert (which mirrors into the bridge delivery queue) share one write
+// transaction, so a re-acquire or hand-off that commits first suppresses the
+// wake and one that commits later finds the wake already queued while the
+// card was ownerless. It reports whether the wake is queued. The context must
+// carry no access scope (trusted internal operation).
+func (s *Store) UpsertCardLeaseWakeup(ctx context.Context, cardID string, epoch int64, wakeup AgentWakeup) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	cur, err := loadCardLeaseRow(ctx, tx, cardID)
+	if err != nil || cur == nil || cur.epoch != epoch || (cur.releasedAt == "" && cur.expiresAt > cardLeaseStamp(cardLeaseNow())) {
+		return false, err
+	}
+	if err := upsertAgentWakeupTx(ctx, tx, wakeup); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // CardLeaseTenureEnded reports whether a card's lease is still the ended
 // tenure at epoch: released or expired, and not since re-acquired or handed
-// on. The lease clock checks it immediately before each wake, so a tenure
-// taken after the clock claimed the wake (and before it enqueued it) does not
-// leave the lead a stale card_unowned or lease_expired wake. The context must
-// carry no access scope (trusted internal operation).
+// on. The lease clock checks it before resolving wake targets so a stale
+// claim writes nothing; UpsertCardLeaseWakeup repeats the check atomically
+// with the enqueue. The context must carry no access scope (trusted internal
+// operation).
 func (s *Store) CardLeaseTenureEnded(ctx context.Context, cardID string, epoch int64) (bool, error) {
 	cur, err := loadCardLeaseRow(ctx, s.db, cardID)
 	if err != nil || cur == nil || cur.epoch != epoch {

@@ -143,12 +143,12 @@ mirrored into the `deliveries` queue on channel `bridge`. The wake packet
 carries `wake_reason: card_unowned` (or `lease_expired`), `subject_ref` (the
 card) and `trigger_event_id` (the release or expiry event), and its
 `trigger_text` starts with `card_unowned:`. It is sent at most once per epoch
-and only to a principal that can read the card. Immediately before sending,
-the clock re-reads the lease and drops the wake if a new tenure (a re-acquire
-or a hand-off) has started since, so an owner that took the card back does not
-leave the lead a stale wake. The re-check and the enqueue are separate
-statements, so a re-acquire landing in that sub-millisecond gap can still let
-one stale wake through; the lead's `anx lease show` then names the new owner.
+and only to a principal that can read the card. The clock queues the
+`agent_wakeups` row in the same write transaction as a re-check of the lease,
+and drops the wake if a new tenure (a re-acquire or a hand-off) has started
+since the release or expiry, so an owner that took the card back never leaves
+the lead a stale wake. A tenure that starts after the wake is queued finds the
+lead already told the card was ownerless at that moment.
 
 ### Concurrency
 

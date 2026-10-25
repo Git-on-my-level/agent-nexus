@@ -255,8 +255,9 @@ func (c *CardLeaseClock) Step(ctx context.Context) error {
 
 func (c *CardLeaseClock) notify(ctx context.Context, e primitives.ExpiredCardLease) {
 	// A new tenure may have started after the store claimed this wake; its
-	// owner holds the card, so the wake would be stale. A failed check still
-	// wakes: a spurious wake costs a lookup, a lost one leaves work ownerless.
+	// owner holds the card, so the wake would be stale. This early check
+	// avoids writing wake artifacts for it; the enqueue repeats it atomically.
+	// A failed check falls through to that enqueue.
 	if ended, err := c.Store.CardLeaseTenureEnded(ctx, e.CardID, e.Epoch); err != nil {
 		c.logf("card lease clock: tenure check for %s epoch %d: %v", e.CardRef, e.Epoch, err)
 	} else if !ended {
@@ -404,7 +405,9 @@ func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease
 	if err != nil && !errors.Is(err, primitives.ErrConflict) {
 		return false, err
 	}
-	_, err = c.Store.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
+	// The enqueue re-checks the tenure in its own transaction: a re-acquire
+	// since the claim (or since the check in notify) suppresses the wake.
+	return c.Store.UpsertCardLeaseWakeup(ctx, e.CardID, e.Epoch, primitives.AgentWakeup{
 		WakeupID:         wakeupID,
 		Status:           primitives.AgentWakeupStatusRequested,
 		TargetHandle:     handle,
@@ -417,5 +420,4 @@ func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease
 		TriggerText:      text,
 		Refs:             append(refs, "artifact:"+wakeupID),
 	})
-	return err == nil, err
 }

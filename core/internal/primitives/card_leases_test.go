@@ -419,12 +419,29 @@ func TestCardLeaseTenureEndedTracksNewTenure(t *testing.T) {
 	if !ended(1) {
 		t.Fatal("a released lease did not report an ended tenure")
 	}
+	queue := func(id string, epoch int64) bool {
+		t.Helper()
+		ok, err := s.UpsertCardLeaseWakeup(ctx, cardID, epoch, AgentWakeup{WakeupID: id, Status: AgentWakeupStatusRequested, TargetHandle: "lead", TargetActorID: "lead", WorkspaceID: "ws_main", ThreadID: "thread-x", TriggerEventID: "event-x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !queue("wake-ended", 1) {
+		t.Fatal("wake for an ended tenure was not queued")
+	}
 	// A re-acquire after the clock claimed the wake makes it stale.
 	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-b", TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	if ended(1) || ended(2) {
 		t.Fatal("a new tenure left the old or new epoch ended")
+	}
+	if queue("wake-stale", 1) || queue("wake-held", 2) {
+		t.Fatal("wake queued for a card with a live tenure")
+	}
+	if _, err := s.GetAgentWakeup(ctx, "wake-stale"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("stale wake row exists: %v", err)
 	}
 	*now = now.Add(2 * time.Hour)
 	if !ended(2) {
