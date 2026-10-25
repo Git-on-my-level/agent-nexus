@@ -129,9 +129,11 @@ ask outcomes expose `withdrawn_as_stale` and `retirement_event_ref`. It never
 records a human answer, changes work phase, or enters answer counts. Decide
 hides the ask immediately. Cached inbox reads and answer submissions fail
 closed with “no longer open”; external adapters must treat 404/409 as closure.
-A generic durable notification targets the original requester, includes the
-reason and links the audit event. Undo queues a reopening notification as well.
-Notifications inherit the audit's resource visibility rules.
+A durable `message_posted` event on the card thread addresses the original
+requester, includes the reason and links the audit event. Its ref is returned as
+`notification_event_ref`; undo posts a reopening message as well. Messages
+inherit the audit's resource visibility rules. These are conversation events,
+not continuation or runtime wakes.
 
 Undo appends `human_attention_reopened` and releases only the exact current
 retirement claim. It cannot undo a human answer, ordinary withdrawal, later
@@ -154,10 +156,11 @@ shows the requester’s first presentation, including after several rewrites or 
 undo. Undo is labeled “Rewrite undone by”; its audit still retains the preceding
 copy. Clients without the immutable original do not offer a misleading toggle.
 
-Migration 124 keys subscription deliveries, webhook replay keys and bridge wakes
-by the outcome event. It preserves released legacy records without rewriting
-history. Undo cancels pending retirement sends, while completed delivery attempts
-remain available internally. Public ask delivery status and receipts refer to
-the current outcome. A queued webhook cannot send a later answer under an earlier
-retirement’s key. Retire → undo → answer therefore sends the real answer through
-the requester’s existing webhook and registered resume subscriptions.
+Migration 124 only replaces the subscription-enqueue trigger to exclude
+`human_attention_retired`. Subscribing while retired also queues nothing.
+Retirement and undo never enter answer delivery, webhook or agent-wake pipelines,
+so the bridge's local registration stays armed. Undo has no delivery rows or
+wakes to cancel. A later real answer uses the existing delivery identity and
+resumes the original continuation exactly once. Ordinary irreversible withdrawal
+and expiry retain their existing delivery behavior. There is no final-retire
+continuation-release mode in this API.

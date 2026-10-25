@@ -7334,8 +7334,11 @@ paths:
       summary: Retire a stale open ask, or undo its retirement
       description: >
         Same authorization and visibility as ask revise. Retiring atomically closes
-        an open ask as withdrawn_as_stale, records who, why and evidence, and queues
-        a notification to its original requester. It is never a human answer.
+        an open ask as withdrawn_as_stale, records who, why and evidence, and posts
+        a card-thread notification message addressed to its original requester.
+        Retirement and undo never enqueue answer deliveries, bridge/runtime wakes,
+        webhooks or continuation callbacks. Registrations remain armed for a real
+        answer after reopening. It is never a human answer.
         Options, requester, presentation, routing and deadlines remain intact.
         Undo requires if_retirement from the retirement result or ask outcome;
         only that still-current retirement may be reopened. Expired asks and asks
@@ -13369,7 +13372,8 @@ components:
         status: {type: string, enum: [open, withdrawn_as_stale]}
         event: {$ref: '#/components/schemas/Event'}
         retirement_event_ref: {type: string}
-        notified_actor_id: {type: string}
+        notification_event_ref: {type: string, description: Durable card-thread message addressed to the original requester; not a continuation wake.}
+        notified_actor_id: {type: string, description: Original requester addressed by the notification event.}
     AskPresentationRevision:
       type: object
       required: [actor_id, at, event_ref, previous]

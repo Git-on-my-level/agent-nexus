@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,15 @@ import (
 // Acceptance for oss#389: a resume-mode ask answered while the asking session
 // is closed fires the registered executor through a live `anx bridge run`.
 func TestResumeDeliveryFiresExecutorAfterAskingSessionCloses(t *testing.T) {
+	testLiveResumeDelivery(t, false)
+}
+
+func TestResumeDeliveryRetireUndoKeepsContinuationArmed(t *testing.T) {
+	testLiveResumeDelivery(t, true)
+}
+
+func testLiveResumeDelivery(t *testing.T, retireBeforeAnswer bool) {
+	t.Helper()
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
 	h.registerHumanPasskey(t, "operator", "S6 Operator", h.createHumanInviteToken(t))
@@ -32,11 +42,13 @@ func TestResumeDeliveryFiresExecutorAfterAskingSessionCloses(t *testing.T) {
 	// creates the destination immediately, which the poll can observe empty.
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
+printf 'ran\n' >> %q
 env | grep '^ANX_' | sort > %q
 mv %q %q
 cat > %q
 mv %q %q
 `,
+		filepath.Join(execDir, "runs"),
 		filepath.Join(execDir, "answer-env.txt.tmp"),
 		filepath.Join(execDir, "answer-env.txt.tmp"),
 		filepath.Join(execDir, "answer-env.txt"),
@@ -106,6 +118,63 @@ mv %q %q
 		t.Fatalf("ask delivery mode=%q body=%s", got, ask.Stdout)
 	}
 
+	if retireBeforeAnswer {
+		retired := h.runCLIExpectOK(t, "worker", nil, "ask", "retire", askID, "--reason", "The original request is stale", "--evidence", ref)
+		noticeRef := mustStringPath(t, retired.Payload, "result.notification_event_ref")
+		retirementRef := mustStringPath(t, retired.Payload, "result.retirement_event_ref")
+		assertArmed := func() {
+			t.Helper()
+			files, err := filepath.Glob(filepath.Join(h.homeDir, ".config", "anx", "answer-resumes", "*", "*.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, path := range files {
+				raw, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var entry map[string]any
+				if err = json.Unmarshal(raw, &entry); err != nil {
+					t.Fatal(err)
+				}
+				if entry["ask_id"] == askID || entry["ask_ref"] == askID {
+					found = true
+					if entry["acknowledged"] != false || entry["attempts"] != float64(0) || entry["state"] != "pending" {
+						t.Fatalf("retirement consumed continuation: %s", raw)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("resume registration missing")
+			}
+			if raw, err := os.ReadFile(filepath.Join(execDir, "runs")); !os.IsNotExist(err) {
+				t.Fatalf("retirement ran callback: %q err=%v", raw, err)
+			}
+			query := fmt.Sprintf(`SELECT count(*) FROM agent_wakeups WHERE wakeup_id LIKE 'ask-%%' OR trigger_event_id IN ('%s','%s')`, strings.TrimPrefix(retirementRef, "event:"), strings.TrimPrefix(noticeRef, "event:"))
+			out, err := exec.Command("sqlite3", filepath.Join(h.workspace, "state.sqlite"), query).CombinedOutput()
+			if err != nil || strings.TrimSpace(string(out)) != "0" {
+				t.Fatalf("retirement left wake: %s %v", out, err)
+			}
+		}
+		assertArmed()
+		query := fmt.Sprintf(`SELECT payload_json FROM events WHERE id='%s' AND type='message_posted'`, strings.TrimPrefix(noticeRef, "event:"))
+		out, err := exec.Command("sqlite3", filepath.Join(h.workspace, "state.sqlite"), query).CombinedOutput()
+		if err != nil {
+			t.Fatal(err, string(out))
+		}
+		var notice map[string]any
+		if err = json.Unmarshal(out, &notice); err != nil {
+			t.Fatal(err, string(out))
+		}
+		payload := notice["payload"].(map[string]any)
+		if payload["recipient_actor_id"] != h.actorID(t, "worker") || !strings.Contains(fmt.Sprint(payload["text"]), "original request is stale") {
+			t.Fatal(notice)
+		}
+		h.runCLIExpectOK(t, "worker", nil, "ask", "retire", askID, "--undo", "--if-retirement", retirementRef)
+		assertArmed()
+	}
+
 	// The asking session is done; the human answers anyway.
 	h.runCLIExpectOK(t, "operator", map[string]any{
 		"inbox_item_id": findAskInboxID(t, h, askID),
@@ -122,6 +191,23 @@ mv %q %q
 		answerReady := answerErr == nil && strings.Contains(string(answer), "Ship it")
 		envReady := envErr == nil && strings.Contains(string(envText), "ANX_ASK_ID="+askID) && strings.Contains(string(envText), "ANX_OUTCOME=answered")
 		if answerReady && envReady {
+			// Wait for the real bridge's remote completion, rather than recording
+			// a delivery receipt in the test. A duplicate callback appends twice.
+			out, err := exec.Command("sqlite3", filepath.Join(h.workspace, "state.sqlite"), `SELECT count(*) FROM agent_wakeups WHERE wakeup_id LIKE 'ask-delivery-%' AND status='completed'`).CombinedOutput()
+			if err != nil {
+				t.Fatal(err, string(out))
+			}
+			if strings.TrimSpace(string(out)) != "1" {
+				if time.Now().After(deadline) {
+					t.Fatalf("bridge did not complete: %s rows: %s", out, debugDeliveryRows(t, h))
+				}
+				time.Sleep(25 * time.Millisecond)
+				continue
+			}
+			runs, err := os.ReadFile(filepath.Join(execDir, "runs"))
+			if err != nil || string(runs) != "ran\n" {
+				t.Fatalf("continuation not exactly once: %q %v", runs, err)
+			}
 			return
 		}
 		// The executor renames answer.json into place only after the body is

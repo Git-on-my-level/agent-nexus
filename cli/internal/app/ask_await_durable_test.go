@@ -71,3 +71,25 @@ func TestAwaitDurableReadTimeoutAndNotFound(t *testing.T) {
 		})
 	}
 }
+
+func TestAwaitRetirementDoesNotAcknowledgeAnswerDelivery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/asks/ask-1":
+			fmt.Fprint(w, `{"status":"open"}`)
+		case "/asks/ask-1/subscriptions":
+			fmt.Fprint(w, `{"id":"await-sub"}`)
+		case "/stream/asks/ask-1":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "event: outcome\ndata: {\"status\":\"withdrawn_as_stale\"}\n\n")
+		default:
+			t.Errorf("retirement touched answer delivery: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "event:ask-1", "--timeout", "500ms"}); exit != 11 {
+		t.Fatalf("retirement status lost: exit=%d %s", exit, out.String())
+	}
+}

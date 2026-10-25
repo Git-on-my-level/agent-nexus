@@ -137,22 +137,16 @@ func TestAskRetirementAuthorizationAndIntegrity(t *testing.T) {
 	if answers != 0 {
 		t.Fatal("retirement counted as human answer")
 	}
-	wakes, e := store.ListAgentWakeups(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: requester.ActorID}), primitives.AgentWakeupListFilter{TargetActorID: requester.ActorID})
+	notice, e := store.GetEvent(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: requester.ActorID}), strings.TrimPrefix(anyString(first["notification_event_ref"]), "event:"))
 	if e != nil {
 		t.Fatal(e)
 	}
-	found := false
-	event := asMap(first["event"])
-	for _, w := range wakes {
-		if w.TriggerEventID == event["id"] {
-			found = true
-			if !strings.Contains(w.TriggerText, "no longer relevant") || w.TargetActorID != requester.ActorID {
-				t.Fatal(w)
-			}
-		}
+	if notice["type"] != "message_posted" || asMap(notice["payload"])["recipient_actor_id"] != requester.ActorID || !strings.Contains(anyString(asMap(notice["payload"])["text"]), "no longer relevant") {
+		t.Fatal(notice)
 	}
-	if !found {
-		t.Fatal("requester not notified")
+	var retirementWakes int
+	if e = env.workspace.DB().QueryRow(`SELECT count(*) FROM agent_wakeups WHERE trigger_event_id IN (?,?)`, asMap(first["event"])["id"], notice["id"]).Scan(&retirementWakes); e != nil || retirementWakes != 0 {
+		t.Fatal(retirementWakes, e)
 	}
 	// Rebuild while retired, then undo and rebuild: canonical audit replay must
 	// also restore an item that has already been pruned from the projection.

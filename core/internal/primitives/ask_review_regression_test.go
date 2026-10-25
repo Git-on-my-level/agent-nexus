@@ -21,130 +21,93 @@ func seedAskReviewRequester(t *testing.T, ws *storage.Workspace) auth.Principal 
 	return auth.Principal{AgentID: "review-requester", ActorID: "requester", PrincipalKind: "agent"}
 }
 
-func TestAskRetirementUndoDeliversEventualAnswer(t *testing.T) {
-	for _, delivered := range []bool{false, true} {
-		name := "pending"
-		if delivered {
-			name = "delivered"
+func TestAskRetirementNeverEnqueuesContinuations(t *testing.T) {
+	for _, late := range []bool{false, true} {
+		name := "existing-subscriptions"
+		if late {
+			name = "subscribe-while-retired"
 		}
 		t.Run(name, func(t *testing.T) {
 			s, ws, card, ask := askDeliveryFixture(t)
 			ctx := context.Background()
 			principal := seedAskReviewRequester(t, ws)
 			ref := anyStringValue(ask["ref"])
-			subs := []map[string]any{}
-			for _, kind := range []string{"bridge", "await", "webhook", "standing"} {
-				askRef := ref
-				in := AskSubscriptionInput{Kind: kind, Label: kind}
-				if kind == "webhook" || kind == "standing" {
-					in.Kind = "webhook"
-					in.URL = "https://example.com/hook"
-				}
-				if kind == "standing" {
-					askRef = ""
-				}
-				sub, e := s.CreateAskSubscription(ctx, "requester", askRef, in)
-				if e != nil {
-					t.Fatal(e)
-				}
-				subs = append(subs, sub)
-			}
-			packets := []map[string]any{}
-			keys := []string{}
-			client := &http.Client{Transport: askRoundTrip(func(r *http.Request) (*http.Response, error) {
-				var p map[string]any
-				if e := json.NewDecoder(r.Body).Decode(&p); e != nil {
-					t.Fatal(e)
-				}
-				packets = append(packets, p)
-				keys = append(keys, r.Header.Get("Idempotency-Key"))
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{}}, nil
-			})}
-			active := func(context.Context, string) bool { return true }
-			retired, e := s.RetireAsk(ctx, principal, ref, "retire", "retire", "Stale", []string{anyStringValue(card["ref"])}, false, "")
-			if e != nil {
-				t.Fatal(e)
-			}
-			retirement := anyStringValue(retired["event"].(map[string]any)["id"])
-			if delivered {
-				if e = s.deliverAskWebhooks(ctx, active, client); e != nil {
-					t.Fatal(e)
-				}
-				for _, sub := range subs[:2] {
-					if e = s.RecordAskDelivery(ctx, "requester", anyStringValue(sub["id"]), ref, "delivered", "", 1); e != nil {
-						t.Fatal(e)
+			subscribe := func() {
+				for _, kind := range []string{"bridge", "await", "webhook", "standing"} {
+					askRef := ref
+					in := AskSubscriptionInput{Kind: kind, Label: kind}
+					if kind == "webhook" || kind == "standing" {
+						in.Kind = "webhook"
+						in.URL = "https://example.com/hook"
+					}
+					if kind == "standing" {
+						askRef = ""
+					}
+					if _, err := s.CreateAskSubscription(ctx, "requester", askRef, in); err != nil {
+						t.Fatal(err)
 					}
 				}
-				if len(packets) != 2 {
-					t.Fatalf("retirement webhooks=%d", len(packets))
+			}
+			if !late {
+				subscribe()
+			}
+			retired, err := s.RetireAsk(ctx, principal, ref, "retire", "retire", "No longer relevant", []string{anyStringValue(card["ref"])}, false, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if late {
+				subscribe()
+			}
+			assertNoExecution := func() {
+				t.Helper()
+				for _, q := range []string{`SELECT count(*) FROM ask_deliveries`, `SELECT count(*) FROM agent_wakeups`, `SELECT count(*) FROM deliveries WHERE kind IN ('wake','webhook')`} {
+					var n int
+					if err := ws.DB().QueryRow(q).Scan(&n); err != nil || n != 0 {
+						t.Fatalf("unexpected execution: %s count=%d err=%v", q, n, err)
+					}
 				}
 			}
-			if _, e = s.RetireAsk(ctx, principal, ref, "undo", "undo", "", nil, true, anyStringValue(retired["retirement_event_ref"])); e != nil {
-				t.Fatal(e)
+			assertNoExecution()
+			notice, err := s.GetEvent(WithAccessScope(ctx, AccessScope{ActorID: "requester"}), strings.TrimPrefix(anyStringValue(retired["notification_event_ref"]), "event:"))
+			if err != nil {
+				t.Fatal(err)
 			}
-			opened, e := s.AskOutcome(ctx, ref)
-			if e != nil {
-				t.Fatal(e)
+			p := asMapValue(notice["payload"])
+			if notice["type"] != "message_posted" || notice["thread_id"] != card["thread_id"] || p["recipient_actor_id"] != "requester" || !strings.Contains(anyStringValue(p["text"]), "No longer relevant") {
+				t.Fatal(notice)
 			}
-			if len(opened["delivery"].([]map[string]any)) != 0 {
-				t.Fatalf("retirement deliveries leaked into reopened state: %#v", opened)
+			if _, err = s.RetireAsk(ctx, principal, ref, "undo", "undo", "", nil, true, anyStringValue(retired["retirement_event_ref"])); err != nil {
+				t.Fatal(err)
 			}
-			answer, e := answerDeliveryFixture(s, ask, "answered")
-			if e != nil {
-				t.Fatal(e)
+			assertNoExecution()
+			answer, err := answerDeliveryFixture(s, ask, "answered")
+			if err != nil {
+				t.Fatal(err)
 			}
 			answerID := anyStringValue(asMapValue(answer["event"])["id"])
-			// A worker that loaded a retirement before undo must never send the later
-			// answer under the retirement's idempotency key.
-			state, reason, _, _ := s.sendAskWebhook(ctx, askWebhookJob{Ask: anyStringValue(ask["id"]), Actor: "requester", Resolution: retirement}, active, client)
-			if state != "failed" || reason != "outcome_superseded" {
-				t.Fatal(state, reason)
-			}
-			before := len(packets)
-			if e = s.deliverAskWebhooks(ctx, active, client); e != nil {
-				t.Fatal(e)
-			}
-			if len(packets) != before+2 {
-				t.Fatalf("eventual answer was not sent: %#v", packets)
-			}
-			for i := before; i < len(packets); i++ {
-				if packets[i]["status"] != "answered" || packets[i]["response_event_id"] != answerID || packets[i]["response_text"] != "Proceed with the plan" {
-					t.Fatal(packets[i])
-				}
-				for j := 0; j < before; j++ {
-					if keys[i] == keys[j] {
-						t.Fatal("answer reused retirement idempotency key")
-					}
-				}
-			}
 			var count int
-			if e = ws.DB().QueryRow(`SELECT count(*) FROM agent_wakeups WHERE target_actor_id='requester' AND trigger_event_id=? AND wakeup_id LIKE 'ask-delivery-%'`, answerID).Scan(&count); e != nil || count != 1 {
-				t.Fatalf("requester answer wake count=%d err=%v", count, e)
+			if err = ws.DB().QueryRow(`SELECT count(*) FROM agent_wakeups WHERE target_actor_id='requester' AND trigger_event_id=? AND wakeup_id LIKE 'ask-delivery-%'`, answerID).Scan(&count); err != nil || count != 1 {
+				t.Fatal(count, err)
 			}
-			for _, sub := range subs[:2] {
-				if e = s.RecordAskDelivery(ctx, "requester", anyStringValue(sub["id"]), ref, "delivered", "", 1); e != nil {
-					t.Fatal(e)
+			packets := []map[string]any{}
+			client := &http.Client{Transport: askRoundTrip(func(r *http.Request) (*http.Response, error) {
+				var p map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+					t.Fatal(err)
 				}
+				packets = append(packets, p)
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{}}, nil
+			})}
+			if err = s.deliverAskWebhooks(ctx, func(context.Context, string) bool { return true }, client); err != nil {
+				t.Fatal(err)
 			}
-			out, e := s.AskOutcome(ctx, ref)
-			if e != nil {
-				t.Fatal(e)
+			if len(packets) != 2 {
+				t.Fatal(packets)
 			}
-			deliveries := out["delivery"].([]map[string]any)
-			if len(deliveries) != 4 {
-				t.Fatalf("current answer deliveries: %#v", deliveries)
-			}
-			for _, d := range deliveries {
-				if d["state"] != "delivered" {
-					t.Fatal(d)
+			for _, p := range packets {
+				if p["status"] != "answered" || p["response_event_id"] != answerID {
+					t.Fatal(p)
 				}
-			}
-			want := "failed"
-			if delivered {
-				want = "delivered"
-			}
-			if e = ws.DB().QueryRow(`SELECT count(*) FROM ask_deliveries WHERE ask_id=? AND resolution_event_id=? AND state=?`, ask["id"], retirement, want).Scan(&count); e != nil || count != 4 {
-				t.Fatalf("retirement history lost/overwritten: count=%d err=%v", count, e)
 			}
 		})
 	}

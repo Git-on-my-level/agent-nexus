@@ -1594,7 +1594,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/asks/{ask_id}/retire",
     "operation_id": "retireAsk",
     "summary": "Retire a stale open ask, or undo its retirement",
-    "description": "Same authorization and visibility as ask revise. Retiring atomically closes an open ask as withdrawn_as_stale, records who, why and evidence, and queues a notification to its original requester. It is never a human answer. Options, requester, presentation, routing and deadlines remain intact. Undo requires if_retirement from the retirement result or ask outcome; only that still-current retirement may be reopened. Expired asks and asks whose subject is closed cannot be reopened. request_key replays atomically. Retired inbox links and answer buttons fail closed as no longer open.",
+    "description": "Same authorization and visibility as ask revise. Retiring atomically closes an open ask as withdrawn_as_stale, records who, why and evidence, and posts a card-thread notification message addressed to its original requester. Retirement and undo never enqueue answer deliveries, bridge/runtime wakes, webhooks or continuation callbacks. Registrations remain armed for a real answer after reopening. It is never a human answer. Options, requester, presentation, routing and deadlines remain intact. Undo requires if_retirement from the retirement result or ask outcome; only that still-current retirement may be reopened. Expired asks and asks whose subject is closed cannot be reopened. request_key replays atomically. Retired inbox links and answer buttons fail closed as no longer open.",
     "why": "Remove stale asks reversibly without fabricating a human decision.",
     "input_mode": "json-body",
     "streaming": {

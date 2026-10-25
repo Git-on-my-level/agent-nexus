@@ -170,22 +170,26 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 		if !undo {
 			retirementID = anyStringValue(event.Body["id"])
 		}
-		result = map[string]any{"ask_id": "event:" + resolved.ID, "status": status, "event": event.Body, "retirement_event_ref": "event:" + retirementID, "notified_actor_id": requester}
+		// A durable message informs the requester without scheduling execution.
+		// In particular, this must not acknowledge a per-ask resume registration.
+		notification, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": "message_posted", "thread_id": thread, "summary": summary, "refs": append(append([]string{}, refs...), "event:"+anyStringValue(event.Body["id"])), "payload": map[string]any{"text": "For " + requester + ": " + summary, "recipient_actor_id": requester, "request_event_ref": "event:" + resolved.ID, "retirement_event_ref": "event:" + retirementID}})
+		if err != nil {
+			return err
+		}
+		result = map[string]any{"ask_id": "event:" + resolved.ID, "status": status, "event": event.Body, "retirement_event_ref": "event:" + retirementID, "notified_actor_id": requester, "notification_event_ref": "event:" + anyStringValue(notification.Body["id"])}
 		encoded, _ := json.Marshal(result)
-		if err = s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(event.PayloadJSON) + 2*len(event.RefsJSON) + len(encoded) + len(summary) + 8192)}, blobLedgerWritePlan{}); err != nil {
+		if err = s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(event.PayloadJSON) + len(event.RefsJSON) + len(notification.PayloadJSON) + len(notification.RefsJSON) + len(encoded) + 8192)}, blobLedgerWritePlan{}); err != nil {
 			return err
 		}
 		if err = insertPreparedEvent(ctx, tx, event); err != nil {
 			return err
 		}
+		if err = insertPreparedEvent(ctx, tx, notification); err != nil {
+			return err
+		}
 		// Event insertion assigns its public handle; persist exactly what is returned.
 		encoded, _ = json.Marshal(result)
 		if undo {
-			// Keep attempts/audit history, but stop pending sends from the undone
-			// outcome. Two indexed outcome seeks cover new and released legacy rows.
-			if _, err = tx.ExecContext(ctx, `UPDATE ask_deliveries SET state='failed',reason='retirement_undone' WHERE ask_id=? AND resolution_event_id IN (?, '') AND state='pending'`, resolved.ID, current); err != nil {
-				return err
-			}
 			changed, e := tx.ExecContext(ctx, `DELETE FROM human_attention_request_resolutions WHERE request_event_id=? AND resolution_event_id=? AND resolution_type='withdrawn'`, resolved.ID, current)
 			if e != nil {
 				return e
@@ -212,11 +216,6 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 			if _, err = tx.ExecContext(ctx, `INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'withdrawn',?,?)`, resolved.ID, event.Body["id"], principal.ActorID, event.Body["ts"]); err != nil {
 				return askRevisionConflict(err)
 			}
-		}
-		// Use a generic notification, not the human-answer batching/counting path.
-		// Its text includes the reason and the original requester is always pinned.
-		if err = upsertAgentWakeupTx(ctx, tx, AgentWakeup{WakeupID: "ask-retirement-" + anyStringValue(event.Body["id"]), TargetActorID: requester, TargetHandle: requester, ThreadID: thread, TriggerEventID: anyStringValue(event.Body["id"]), TriggerCreatedAt: anyStringValue(event.Body["ts"]), TriggerText: summary, Refs: refs}); err != nil {
-			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES('asks.retire',?,?,?,200,?)`, principal.ActorID, key, hash, string(encoded))
 		return askRevisionConflict(err)
