@@ -267,3 +267,10 @@ The presentation fields are optional: omit unused fields. Explicit JSON `null`
 is rejected for typed fields such as `impact` and `recommendation`; a present
 recommendation requires both `action` and `why`. Each batch member carries its
 own proposal; Decide initially collapses each member under its title.
+
+## Rewriting an existing ask
+
+Use `anx ask revise <ask-ref> --from-file presentation.json` to improve copy while
+preserving the requester, answer options and delivery. See the
+[presentation revision guide](../../docs/ask-presentation-revisions.md) for
+concurrency tokens, permissions, audit history and `--undo`.

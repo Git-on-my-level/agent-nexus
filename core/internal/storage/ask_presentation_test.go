@@ -6,6 +6,9 @@ import (
 )
 
 func TestUpgrade120AskPresentationHeads(t *testing.T) {
+	if testing.Short() {
+		t.Skip("full storage migration and reopen")
+	}
 	ctx := context.Background()
 	root := t.TempDir()
 	db := mainHistoryDatabase(t, root, 120)

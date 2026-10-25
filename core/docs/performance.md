@@ -2,7 +2,7 @@
 
 ## Plain-language asks
 
-Ask presentation adds no SQL, query, poll tick or migration. Inbox list/get/SSE,
+The initial authored presentation fields add no SQL, query, poll tick or migration. Inbox list/get/SSE,
 completed history and `brief.v1` copy seven optional fields from the canonical
 ask payload already admitted by their existing scoped event/subject indexes.
 Work is O(admitted asks + their text bytes), independent of unrelated workspace
