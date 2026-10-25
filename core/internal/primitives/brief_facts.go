@@ -401,20 +401,20 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 	encoded, _ := json.Marshal(ids)
 	rows, err := q.QueryContext(ctx, `SELECT c.id,COALESCE(c.handle,''),c.column_key,COALESCE(c.archived_at,''),COALESCE(c.trashed_at,''),`+effectiveCardDueSQL+`,
 		COALESCE(json_extract(m.metadata_json,'$.wake_condition'),''),COALESCE(p.body_json,''),COALESCE(p.updated_at,''),
-		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(json_extract(m.metadata_json,'$._anx_source_evidence_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,''),COALESCE(bi.plan_provenance_json,'{}')
-		FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id
+		COALESCE(json_extract(o.body_json,'$.meaningful_progress_at'),''),COALESCE(json_extract(m.metadata_json,'$._anx_source_evidence_at'),''),COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,''),COALESCE(bi.plan_provenance_json,'{}'),c.created_at,c.created_by,COALESCE(tr.default_at,'')
+		FROM cards c LEFT JOIN work_tracking tr ON tr.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id
 		LEFT JOIN work_observations o ON o.id=m.latest_observation_id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
 		WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, err
 	}
 	type cardFacts struct {
-		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sourceEvidenceAt, sig, stepChangeAt, provenance string
+		id, handle, phase, archived, trashed, due, wake, planRaw, planAt, progressAt, sourceEvidenceAt, sig, stepChangeAt, provenance, created, creator, defaultAt string
 	}
 	facts := []cardFacts{}
 	for rows.Next() {
 		var f cardFacts
-		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sourceEvidenceAt, &f.sig, &f.stepChangeAt, &f.provenance); err != nil {
+		if err = rows.Scan(&f.id, &f.handle, &f.phase, &f.archived, &f.trashed, &f.due, &f.wake, &f.planRaw, &f.planAt, &f.progressAt, &f.sourceEvidenceAt, &f.sig, &f.stepChangeAt, &f.provenance, &f.created, &f.creator, &f.defaultAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -453,7 +453,7 @@ func briefPromiseInputs(ctx context.Context, q briefQueryer, ids []string, notes
 	out := make([]briefCardInput, 0, len(facts))
 	for _, f := range facts {
 		ref := "card:" + firstNonEmptyString(f.handle, f.id)
-		in := plans.PromiseInput{Ref: ref, Notes: notes[f.id], CardDue: plans.ParseDue(f.due), Wake: plans.WakeTime(f.wake)}
+		in := plans.PromiseInput{Created: plans.ParseDue(f.created), DefaultAt: plans.ParseDue(f.defaultAt), DefaultAuthor: f.creator, Ref: ref, Notes: notes[f.id], CardDue: plans.ParseDue(f.due), Wake: plans.WakeTime(f.wake)}
 		in.Done = plans.Status(f.phase) == "done" || f.phase == "cancelled"
 		open := 1
 		if in.Done {

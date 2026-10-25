@@ -175,6 +175,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("work_evidence_entries", denied("card", "_row.card_id"))
 	// Work leases inherit the card: a hidden card has no visible lease.
 	add("card_leases", denied("card", "_row.card_id"))
+	add("work_tracking", denied("card", "_row.card_id"))
 	add("work_evidence_keys", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.evidence_id"))
 	add("work_participants", denied("card", "_row.card_id")+" AND "+denied("participant", "_row.id"))
 	add("card_plans", denied("plan", "_row.card_id"))
@@ -366,7 +367,7 @@ func scopedReadSnapshotQuery(ctx context.Context, query string, snapshot *denial
 	q := briefIndexHint.ReplaceAllString(strings.TrimSpace(query), "")
 	// Scoped relation shadows have no named physical indexes. The optimizer
 	// still pushes candidate keys into the indexed canonical relations.
-	for _, index := range []string{"idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1"} {
+	for _, index := range []string{"idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1", "idx_work_tracking_owner_digest", "idx_work_tracking_digest", "idx_work_tracking_reminders", "idx_work_tracking_default", "idx_work_tracking_needs_owner"} {
 		q = strings.ReplaceAll(q, " INDEXED BY "+index, "")
 	}
 	upper := strings.ToUpper(q)

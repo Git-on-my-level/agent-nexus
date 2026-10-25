@@ -23,5 +23,6 @@ Delivery is split: the urgent change makes cadence count as tracked in
 enums: `moving` through the overdue boundary, `past_promise` afterward, with
 `promise.source=cadence`. Receipt health remains in `loop` and the plan-health
 reason. Completion still reads `done`. The other defaults, ownership and
-migration behavior belong to the follow-up change; this note records the ruling
-and does not claim that follow-up behavior is already installed.
+migration behavior are implemented in the follow-up change, described in
+[tracking defaults](../tracking-defaults.md). Source and tests do not imply an
+installed runtime or a production migration. Both PRs remain unmerged.

@@ -266,7 +266,7 @@ func TestCardLeaseHandoffTransfersAtomically(t *testing.T) {
 	}
 }
 
-func TestCardLeaseReleaseOfLiveWorkMarksUnownedOnce(t *testing.T) {
+func TestCardLeaseReleaseRoutesFallbackDigestOnce(t *testing.T) {
 	s, ctx, cardID, now := cardLeaseFixture(t)
 	acquire := func(owner string) {
 		t.Helper()
@@ -274,7 +274,7 @@ func TestCardLeaseReleaseOfLiveWorkMarksUnownedOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A backlog card with no open promise is not live work.
+	// An open backlog card also retains fallback responsibility.
 	acquire("exec-a")
 	if _, err := s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-a"}); err != nil {
 		t.Fatal(err)
@@ -293,7 +293,7 @@ func TestCardLeaseReleaseOfLiveWorkMarksUnownedOnce(t *testing.T) {
 		t.Fatalf("release=%+v err=%v", got, err)
 	}
 	pending, err := s.TakeUnownedCardLeases(ctx, 10)
-	if err != nil || len(pending) != 1 || pending[0].Live != CardLeaseLiveOpenPromise || !pending[0].Released || pending[0].Owner != "exec-b" || pending[0].EventID != got.EventID {
+	if err != nil || len(pending) != 0 {
 		t.Fatalf("unowned=%+v err=%v", pending, err)
 	}
 	if again, err := s.TakeUnownedCardLeases(ctx, 10); err != nil || len(again) != 0 {
@@ -323,12 +323,12 @@ func TestCardLeaseReleaseOfLiveWorkMarksUnownedOnce(t *testing.T) {
 		t.Fatalf("pending rows=%d err=%v", stale, err)
 	}
 
-	// Expiry of live work reports the live reason for the clock's lead wake.
+	// Expiry routes the responsibility to the daily digest, with no immediate wake.
 	setCardLeaseColumn(t, s, ctx, cardID, "in_progress")
 	acquire("exec-e")
 	*now = now.Add(2 * time.Hour)
 	expired, err := s.ExpireDueCardLeases(ctx, "system", 10)
-	if err != nil || len(expired) != 1 || expired[0].Live != CardLeaseLiveInProgress || expired[0].Released {
+	if err != nil || len(expired) != 1 || !expired[0].DigestOnly || expired[0].Released {
 		t.Fatalf("expiry=%+v err=%v", expired, err)
 	}
 	// The expired owner closing its lease afterwards does not wake twice.
@@ -340,57 +340,42 @@ func TestCardLeaseReleaseOfLiveWorkMarksUnownedOnce(t *testing.T) {
 	}
 }
 
-func TestCardLeaseUnownedWaitsForBriefFold(t *testing.T) {
+func TestCardLeaseFallbackDoesNotWaitForBriefFold(t *testing.T) {
 	s, ctx, cardID, now := cardLeaseFixture(t)
-	exec := func(q string, args ...any) {
-		t.Helper()
-		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+	s.SetTrackingLead(func() string { return "fallback-lead" })
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM brief_initiatives WHERE card_id=?`, cardID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO brief_dirty(card_id) VALUES(?) ON CONFLICT DO NOTHING`, cardID); err != nil {
+		t.Fatal(err)
+	}
+	for _, how := range []string{"release", "expiry"} {
+		if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-a", TTL: time.Hour}); err != nil {
 			t.Fatal(err)
 		}
-	}
-	// A promise note was posted but not folded yet: the card is queued in
-	// brief_dirty and brief_initiatives shows no promise.
-	exec(`DELETE FROM brief_initiatives WHERE card_id=?`, cardID)
-	exec(`INSERT INTO brief_dirty(card_id) VALUES(?) ON CONFLICT DO NOTHING`, cardID)
-	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-a", TTL: time.Hour}); err != nil {
-		t.Fatal(err)
-	}
-	released, err := s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-a"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pending, err := s.TakeUnownedCardLeases(ctx, 10); err != nil || len(pending) != 0 {
-		t.Fatalf("unfolded card decided early: %+v err=%v", pending, err)
-	}
-	// The fold lands with the open promise: the next tick wakes the lead.
-	exec(`INSERT INTO brief_initiatives(card_id,open,promise_at) VALUES(?,1,'2026-10-25T12:00:00Z')`, cardID)
-	exec(`DELETE FROM brief_dirty WHERE card_id=?`, cardID)
-	pending, err := s.TakeUnownedCardLeases(ctx, 10)
-	if err != nil || len(pending) != 1 || pending[0].Live != CardLeaseLiveOpenPromise || !pending[0].Released || pending[0].EventID != released.EventID {
-		t.Fatalf("folded unowned=%+v err=%v", pending, err)
-	}
-
-	// Same for an expiry: the deferred decision is lead-only.
-	exec(`DELETE FROM brief_initiatives WHERE card_id=?`, cardID)
-	exec(`INSERT INTO brief_dirty(card_id) VALUES(?)`, cardID)
-	if _, err = s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-b", TTL: time.Hour}); err != nil {
-		t.Fatal(err)
-	}
-	*now = now.Add(2 * time.Hour)
-	expired, err := s.ExpireDueCardLeases(ctx, "system", 10)
-	if err != nil || len(expired) != 1 || expired[0].Live != "" {
-		t.Fatalf("expiry=%+v err=%v", expired, err)
-	}
-	// The expired owner cleans up before the fold lands; the wake still
-	// reports the expiry that caused it.
-	if _, err = s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-b"}); err != nil {
-		t.Fatal(err)
-	}
-	exec(`INSERT INTO brief_initiatives(card_id,open,promise_at) VALUES(?,1,'2026-10-25T12:00:00Z')`, cardID)
-	exec(`DELETE FROM brief_dirty WHERE card_id=?`, cardID)
-	pending, err = s.TakeUnownedCardLeases(ctx, 10)
-	if err != nil || len(pending) != 1 || pending[0].Released || !pending[0].LeadOnly || pending[0].EventID != expired[0].EventID {
-		t.Fatalf("deferred expiry unowned=%+v err=%v", pending, err)
+		if how == "release" {
+			if _, err := s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-a"}); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			*now = now.Add(2 * time.Hour)
+			expired, err := s.ExpireDueCardLeases(ctx, "system", 10)
+			if err != nil || len(expired) != 1 || !expired[0].DigestOnly {
+				t.Fatal(expired, err)
+			}
+		}
+		work, err := s.GetWork(ctx, cardID)
+		if err != nil || work["owner"] != "actor:fallback-lead" {
+			t.Fatal(work, err)
+		}
+		pending, err := s.TakeUnownedCardLeases(ctx, 10)
+		if err != nil || len(pending) != 0 {
+			t.Fatal(pending, err)
+		}
+		var owner, due string
+		if err = s.db.QueryRowContext(ctx, `SELECT fallback_owner,next_digest_at FROM work_tracking WHERE card_id=?`, cardID).Scan(&owner, &due); err != nil || owner != "actor:fallback-lead" || due == "" {
+			t.Fatal(owner, due, err)
+		}
 	}
 }
 

@@ -92,8 +92,13 @@ func TestAgentSummaryOptInBoundsParityAndPrivacy(t *testing.T) {
 			t.Fatal("private card leaked")
 		}
 		summary := card["work_summary"].(map[string]any)
-		// Planless in-progress cards with nothing dated promise nothing.
-		if summary["status"].(map[string]any)["state"] != "no_promise" || summary["set_status"] != nil || !reflect.DeepEqual(summary["hints"], []any{"no_plan"}) {
+		// Imported legacy rows promise nothing; the API-created control has
+		// the new creation default. Both keep the same summary contract.
+		wantState := "no_promise"
+		if card["ref"] == w["ref"] {
+			wantState = "moving"
+		}
+		if summary["status"].(map[string]any)["state"] != wantState || summary["set_status"] != nil || !reflect.DeepEqual(summary["hints"], []any{"no_plan"}) {
 			t.Fatal(summary)
 		}
 		if card["ref"] == w["ref"] {

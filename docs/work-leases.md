@@ -97,7 +97,14 @@ lease instead of freeing it, so the card is never ownerless between two lanes.
 - Archived or trashed cards cannot be handed off (or acquired or renewed); the
   holder can still release.
 
-### Ownerless live work wakes the lead
+### Original card_unowned protocol (superseded)
+
+The 2026-10-25 [tracking defaults](tracking-defaults.md) supersede this original
+per-card wake protocol. New agent-created cards acquire a lease automatically;
+release and expiry assign fallback responsibility with a note and route work
+into one daily owner digest. Old pending `card_unowned` marks are consumed into
+the same fallback/digest path. The original protocol below documents historical
+events and upgrade compatibility; it is not the current alert policy.
 
 A lane that exits or idles without handing off can leave live work with no
 owner. anx turns that into a wake.

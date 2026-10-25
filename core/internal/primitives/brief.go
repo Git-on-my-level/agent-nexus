@@ -75,6 +75,10 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	if err != nil {
 		return nil, err
 	}
+	digest, err := s.TrackingDigestPreview(ctx, reader.ActorID)
+	if err != nil {
+		return nil, err
+	}
 	if err = b.resolveActors(); err != nil {
 		return nil, err
 	}
@@ -95,6 +99,7 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 		"principal":         map[string]any{"id": reader.ActorID, "display": firstNonEmptyString(reader.Display, reader.ActorID), "kind": firstNonEmptyString(reader.Kind, "human")},
 		"decisions":         nonNilMaps(decisions),
 		"initiatives":       nonNilMaps(initiatives),
+		"daily_digest":      digest,
 		"loops":             nonNilMaps(loops),
 		"initiative_budget": budget,
 		"next_actions":      suggestions,
@@ -856,6 +861,9 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 	if source == "" {
 		source = `(SELECT card_id FROM work_grouping_brief_positions bi WHERE ` + admission + ` LIMIT 200) admitted
 		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`
+	}
+	if !loops {
+		groupFilter += ` AND (bi.open=0 OR (COALESCE(c.assignee,'')<>'' AND NOT EXISTS(SELECT 1 FROM work_tracking tracking WHERE tracking.card_id=c.id AND (tracking.orphaned_at<>'' OR (bi.promise_source='default' AND tracking.reminder_event_id<>''))) AND NOT EXISTS(SELECT 1 FROM card_leases lease WHERE lease.card_id=c.id AND lease.owner=c.assignee AND (lease.released_at<>'' OR lease.expires_at<='` + cardLeaseStamp(b.now) + `'))))`
 	}
 	loopColumns := "bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')"
 	if b.allCardsAreRoots {

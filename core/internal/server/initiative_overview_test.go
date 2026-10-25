@@ -70,6 +70,16 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		state["last_movement_at"] = "2026-10-04T12:00:00Z"
 		health := item["plan_health"].(map[string]any)
 		// Anchors are real timestamps; the fixture pins them.
+		promise := health["promise"].(map[string]any)
+		if promise["source"] != "default" {
+			t.Fatal("missing creation default", health)
+		}
+		if _, err = time.Parse(time.RFC3339Nano, promise["at"].(string)); err != nil {
+			t.Fatal(err)
+		}
+		promise["at"] = "2026-10-05T00:00:00Z"
+		promise["source_ref"] = "card:initiative"
+		health["reason"] = "Next: report progress by 2026-10-05T00:00:00Z."
 		for _, key := range []string{"since", "last_evidence_at"} {
 			if at, ok := health[key]; ok && at != nil {
 				if _, err = time.Parse(time.RFC3339Nano, at.(string)); err != nil {
@@ -88,6 +98,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 			}
 			summary["created_at"] = "2026-10-04T12:00:00Z"
 			summary["age"] = float64(0)
+			summary["status"].(map[string]any)["reason"] = "Next: report progress by 2026-10-05T00:00:00Z."
 			summary["last_movement_at"] = "2026-10-04T12:00:00Z"
 			if status := summary["status"].(map[string]any); status["since"] != nil {
 				status["since"] = "2026-10-04T12:00:00Z"

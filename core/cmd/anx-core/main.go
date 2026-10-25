@@ -743,8 +743,11 @@ func main() {
 	cardLeaseClock := &server.CardLeaseClock{Store: primitiveStore, AuthStore: authStore, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
 	if pmRuntime != nil {
 		cardLeaseClock.PMActorID = pmRuntime.AgentActorID
+		primitiveStore.SetTrackingLead(pmRuntime.AgentActorID)
 	}
 	go cardLeaseClock.Run(maintenanceCtx)
+	workTrackingClock := &server.WorkTrackingClock{Store: primitiveStore, AuthStore: authStore, Deliveries: delivery.Store{DB: workspace.DB()}, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
+	go workTrackingClock.Run(maintenanceCtx)
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)

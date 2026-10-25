@@ -30,7 +30,7 @@ func TestWorkSummaryPromiseStates(t *testing.T) {
 		{name: "cancelled", phase: "cancelled", want: "done"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			input := cardHealthInput{Phase: tc.phase, Due: tc.due, Wake: tc.wake, Created: now.Add(-200 * time.Hour), Activity: now}
+			input := cardHealthInput{Owner: "actor:owner", Phase: tc.phase, Due: tc.due, Wake: tc.wake, Created: now.Add(-200 * time.Hour), Activity: now}
 			var p *plans.Plan
 			if tc.planned {
 				p = &plans.Plan{Steps: []plans.Step{}}
@@ -123,12 +123,12 @@ func TestWorkSummaryUsesPrimaryPhaseAcrossBoardMemberships(t *testing.T) {
 		if err = s.EnrichCardPlans(ctx, cards, nil, time.Now()); err != nil {
 			t.Fatal(err)
 		}
-		if got := cards[0]["work_summary"].(*WorkSummary); got.Status.State != "no_promise" {
+		if got := cards[0]["work_summary"].(*WorkSummary); got.Status.State != "moving" || got.Owner != "actor:owner" {
 			t.Fatal(got)
 		}
 	}
 	refs, err := s.ResolveRefs(ctx, []string{workString(w["ref"])}, nil, time.Now())
-	if err != nil || len(refs) != 1 || refs[0].Phase != "blocked" || refs[0].Summary.Status.State != "no_promise" {
+	if err != nil || len(refs) != 1 || refs[0].Phase != "blocked" || refs[0].Summary.Status.State != "moving" {
 		t.Fatalf("refs=%+v err=%v", refs, err)
 	}
 }

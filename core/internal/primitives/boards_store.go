@@ -766,6 +766,9 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 	if err != nil {
 		return boardRow, boardCardRow{}, stagedContent, err
 	}
+	if err := registerCardTrackingTx(ctx, tx, actorID, &cardRow); err != nil {
+		return boardRow, boardCardRow{}, stagedContent, err
+	}
 	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
 		return boardRow, boardCardRow{}, stagedContent, err
 	}

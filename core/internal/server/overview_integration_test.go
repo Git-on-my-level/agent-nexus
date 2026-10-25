@@ -331,17 +331,16 @@ func TestOverviewBriefRanksOnlyAuthorizedRowsAndTellsTheTruthAboutPlans(t *testi
 		t.Fatalf("the row two cards wait on did not rank first with its reason: %v", top)
 	}
 
-	// Nothing is promised in this workspace: every initiative reads
-	// no_promise, visible as a gap and never as moving.
+	// New undated initiatives receive the computed 12-hour default.
 	for _, raw := range payload["initiatives"].(map[string]any)["items"].([]any) {
 		item := raw.(map[string]any)
-		if item["health"] != nil || anyString(item["plan_health"].(map[string]any)["state"]) != "no_promise" {
+		if item["health"] != nil || anyString(item["plan_health"].(map[string]any)["state"]) != "moving" {
 			t.Fatalf("initiative health is not the promise state: %v", item)
 		}
 	}
 	byState := brief["initiatives"].(map[string]any)["by_state"].(map[string]any)
-	if byState["no_promise"] == nil || byState["moving"] != nil {
-		t.Fatalf("brief does not count the unpromised initiatives: %v", byState)
+	if byState["moving"] == nil || byState["no_promise"] != nil {
+		t.Fatalf("brief does not count the default promises: %v", byState)
 	}
 	machine := brief["machine"].(map[string]any)
 	if anyString(machine["status"]) != "ok" || machine["finished_24h"] == nil {

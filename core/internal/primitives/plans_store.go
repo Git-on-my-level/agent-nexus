@@ -306,14 +306,14 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,c.refs_json,COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,'') FROM cards c LEFT JOIN brief_initiatives bi ON bi.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,''),`+cardSignalSQL+`,c.refs_json,COALESCE(bi.step_status_sig,''),COALESCE(bi.step_change_at,''),c.created_by,COALESCE(tr.default_at,''),COALESCE(tr.reminder_event_id,''),COALESCE(tr.orphaned_at,''),COALESCE(tr.fallback_owner,''),COALESCE(cl.expires_at,''),COALESCE(cl.released_at,''),COALESCE(cl.owner,'') FROM cards c LEFT JOIN work_tracking tr ON tr.card_id=c.id LEFT JOIN card_leases cl ON cl.card_id=c.id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw, cardRefsRaw, stepStatus, stepChangeAt string
-		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw, &cardRefsRaw, &stepStatus, &stepChangeAt); err != nil {
+		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner, wake, relatedRaw, cardRefsRaw, stepStatus, stepChangeAt, creator, defaultAt, reminder, orphaned, fallback, leaseExpires, leaseReleased, leaseOwner string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner, &wake, &relatedRaw, &cardRefsRaw, &stepStatus, &stepChangeAt, &creator, &defaultAt, &reminder, &orphaned, &fallback, &leaseExpires, &leaseReleased, &leaseOwner); err != nil {
 			return nil, nil, nil, err
 		}
 		var entries []any
@@ -328,7 +328,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 			}
 			out[id] = p
 		}
-		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake, StepStatus: stepStatus, StepChangeAt: stepChangeAt}
+		input := cardHealthInput{DefaultAt: plans.ParseDue(defaultAt), Creator: creator, ReminderEventID: reminder, OrphanedAt: orphaned, FallbackOwner: fallback, LeaseExpires: leaseExpires, LeaseReleased: leaseReleased, LeaseOwner: leaseOwner, Due: due, Handle: handle, Phase: phase, Owner: owner, Wake: wake, StepStatus: stepStatus, StepChangeAt: stepChangeAt}
 		var related []string
 		if strings.TrimSpace(relatedRaw) != "" {
 			if err = json.Unmarshal([]byte(relatedRaw), &related); err != nil {
@@ -370,6 +370,9 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 			}
 		} else if input.Owner != "" && !strings.Contains(input.Owner, ":") {
 			input.Owner = "actor:" + input.Owner
+		}
+		if input.FallbackOwner != "" && input.OrphanedAt != "" {
+			input.Owner = input.FallbackOwner
 		}
 		if input.Owner == "" {
 			for _, execution := range observationEvidenceItems(m["executions"]) {

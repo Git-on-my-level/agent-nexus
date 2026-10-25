@@ -254,6 +254,9 @@ func (c *CardLeaseClock) Step(ctx context.Context) error {
 }
 
 func (c *CardLeaseClock) notify(ctx context.Context, e primitives.ExpiredCardLease) {
+	if e.DigestOnly {
+		return
+	}
 	// A new tenure may have started after the store claimed this wake; its
 	// owner holds the card, so the wake would be stale. This early check
 	// avoids writing wake artifacts for it; the enqueue repeats it atomically.

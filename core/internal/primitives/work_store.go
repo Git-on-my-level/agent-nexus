@@ -102,6 +102,9 @@ func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID strin
 		m["plan"] = p
 	}
 	if m["cadence"] != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE work_tracking SET default_at='' WHERE card_id=?`, cardID); err != nil {
+			return err
+		}
 		m["cadence_set_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,connection_id,native_id,metadata_json,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)`, cardID, workString(source["authority"]), workString(source["connection_id"]), workString(source["native_id"]), workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actorID)

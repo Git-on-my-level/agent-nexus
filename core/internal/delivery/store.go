@@ -148,7 +148,20 @@ func newID(prefix string) string {
 }
 
 // Enqueue inserts a delivery once per idempotency key.
+// QueueWriter permits an owning store to atomically enqueue with its
+// domain CAS through the same scoped transaction.
+type QueueWriter interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 func (s Store) Enqueue(ctx context.Context, req Request) (Delivery, bool, error) {
+	return EnqueueTx(ctx, s.DB, req, s.now())
+}
+
+// EnqueueTx retains ordinary delivery validation and idempotency; the caller
+// owns transaction commit and must pass its scoped writer.
+func EnqueueTx(ctx context.Context, q QueueWriter, req Request, now time.Time) (Delivery, bool, error) {
 	req.IdempotencyKey = strings.TrimSpace(req.IdempotencyKey)
 	req.PrincipalID = strings.TrimSpace(req.PrincipalID)
 	if req.IdempotencyKey == "" || req.PrincipalID == "" || !ValidChannel(req.Channel) || (req.Kind != KindPush && req.Kind != KindDigest) {
@@ -158,19 +171,18 @@ func (s Store) Enqueue(ctx context.Context, req Request) (Delivery, bool, error)
 	if err != nil {
 		return Delivery{}, false, err
 	}
-	now := s.now()
 	notBefore := now
 	if req.NotBefore.After(now) {
 		notBefore = req.NotBefore.UTC()
 	}
-	result, err := s.DB.ExecContext(ctx, `INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, max_attempts, next_attempt_at, created_at, updated_at)
+	result, err := q.ExecContext(ctx, `INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, max_attempts, next_attempt_at, created_at, updated_at)
 		VALUES(?,?,?,?,?,'pending',?,?,?,?,?,?) ON CONFLICT(idempotency_key) DO NOTHING`,
 		newID("dlv_"), req.IdempotencyKey, req.PrincipalID, req.Channel, req.Kind, string(payload), strings.TrimSpace(req.SourceRef), DefaultMaxAttempts, stamp(notBefore), stamp(now), stamp(now))
 	if err != nil {
 		return Delivery{}, false, fmt.Errorf("enqueue delivery: %w", err)
 	}
 	n, _ := result.RowsAffected()
-	d, err := s.getByKey(ctx, req.IdempotencyKey)
+	d, err := scanDelivery(q.QueryRowContext(ctx, `SELECT `+deliveryColumns+` FROM deliveries WHERE idempotency_key=?`, req.IdempotencyKey))
 	return d, n > 0, err
 }
 

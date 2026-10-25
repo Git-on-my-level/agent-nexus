@@ -179,6 +179,7 @@ type EventCursor struct {
 }
 
 type Store struct {
+	trackingLead         func() string
 	askWebhookEncryption *secrets.Encryptor
 	askWebhookAllowHosts []string
 	askNextActorOrder    []string
@@ -2268,6 +2269,9 @@ func insertPreparedEvent(ctx context.Context, exec *accessTx, prepared preparedE
 		return err
 	}
 
+	if err := refreshTrackingAfterEventTx(ctx, exec, prepared); err != nil {
+		return err
+	}
 	return markTopicProjectionsDirtyTx(ctx, exec, threadIDs, time.Now().UTC())
 }
 

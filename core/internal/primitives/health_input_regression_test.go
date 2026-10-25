@@ -56,8 +56,8 @@ func TestHealthInputsAgreeAcrossWorkCardAndRefReads(t *testing.T) {
 	if _, err = s.PatchWork(ctx, "actor-1", id, work["version"].(int64), map[string]any{"due_at": nil}); err != nil {
 		t.Fatal(err)
 	}
-	// Clearing the due leaves nothing promised.
-	assertHealth(id, ref, "no_promise")
+	// Clearing the due reveals the creation default.
+	assertHealth(id, ref, "moving")
 	old := now.Add(-72 * time.Hour).Format(time.RFC3339Nano)
 	source, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Source activity", "source": map[string]any{"authority": "generic-provider", "connection_id": "source", "native_id": "opaque"}})
 	if err != nil {
@@ -73,7 +73,7 @@ func TestHealthInputsAgreeAcrossWorkCardAndRefReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertHealth(id, ref, "no_promise")
+	assertHealth(id, ref, "digest")
 	activity := now.Add(-time.Minute).Format(time.RFC3339Nano)
 	_, err = s.SubmitWorkObservation(ctx, "actor-1", id, map[string]any{"idempotency_key": "poll", "reader_id": "any-adapter", "reader_revision": "1", "observed_at": now.Add(2 * time.Second).Format(time.RFC3339Nano), "status": "reported", "source_activity_at": activity, "facts": map[string]any{"phase": "unknown"}})
 	if err != nil {
@@ -81,5 +81,5 @@ func TestHealthInputsAgreeAcrossWorkCardAndRefReads(t *testing.T) {
 	}
 	// Time alone never changes the state: there is no inactivity threshold.
 	now = now.Add(30 * 24 * time.Hour)
-	assertHealth(id, ref, "no_promise")
+	assertHealth(id, ref, "digest")
 }

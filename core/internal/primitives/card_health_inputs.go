@@ -10,13 +10,15 @@ import (
 )
 
 type cardHealthInput struct {
-	Loop                 map[string]any
-	Activity, Created    time.Time
-	Due                  string
-	Phase, Owner, Handle string
-	Source               map[string]any
-	Children             []string
-	Refs                 []string
+	DefaultAt                                                                                    time.Time
+	Creator, ReminderEventID, OrphanedAt, FallbackOwner, LeaseExpires, LeaseReleased, LeaseOwner string
+	Loop                                                                                         map[string]any
+	Activity, Created                                                                            time.Time
+	Due                                                                                          string
+	Phase, Owner, Handle                                                                         string
+	Source                                                                                       map[string]any
+	Children                                                                                     []string
+	Refs                                                                                         []string
 	// Wake is the raw wake_condition annotation; Related holds the card's
 	// related_refs linked sources.
 	Wake    string
@@ -41,7 +43,7 @@ func (input cardHealthInput) health(ref string, p *plans.Plan, state plans.State
 	if h, ok := cadenceTrackingHealth(input.Loop, input.Phase, ref, now); ok {
 		return h
 	}
-	in := plans.HealthInput{Ref: ref, Plan: p, State: state, Facts: facts, Phase: input.Phase, CardDue: input.Due, Wake: input.Wake, PlanEditedAt: input.PlanAt, Notes: input.Notes}
+	in := plans.HealthInput{Created: input.Created, DefaultAt: input.DefaultAt, DefaultAuthor: input.Creator, Ref: ref, Plan: p, State: state, Facts: facts, Phase: input.Phase, CardDue: input.Due, Wake: input.Wake, PlanEditedAt: input.PlanAt, Notes: input.Notes}
 	_, clock := planStepProgressClock(state, input.StepStatus, input.StepChangeAt, input.PlanAt, false)
 	in.StepChanges = []time.Time{}
 	if !clock.IsZero() {
@@ -50,7 +52,7 @@ func (input cardHealthInput) health(ref string, p *plans.Plan, state plans.State
 	if !input.Observed.IsZero() {
 		in.Observations = []time.Time{input.Observed}
 	}
-	return plans.HealthFor(in, now)
+	return input.trackingDigest(plans.HealthFor(in, now), now)
 }
 
 // Explicit work due annotations, including null/empty clearing, take precedence.

@@ -1,0 +1,8 @@
+{
+  "physical_admission": 200,
+  "preview_limit": 50,
+  "max_queries": 10,
+  "max_rows": 50,
+  "max_vm_steps": 50000,
+  "unrelated_private_cards": 4096
+}
