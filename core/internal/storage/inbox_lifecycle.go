@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"agent-nexus-core/internal/sqliteutil"
 	"context"
 	"database/sql"
@@ -231,6 +232,8 @@ func inboxLifecycleSubjectsView() string {
 // transaction. Startup installs only empty-table DDL and triggers; readiness is
 // independent of this maintenance. Pending rows use canonical lifecycle reads.
 func (w *Workspace) MaintainInboxLifecycleBatch(ctx context.Context, limit int) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "inbox_lifecycle")
+	defer finish()
 	if limit < 1 || limit > 200 {
 		limit = 200
 	}
@@ -277,6 +280,7 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 			return false, nil // the job moved since planning; re-plan next tick
 		}
 		var finished bool
+		loopstats.Rows(ctx, len(candidates))
 		if cursor, finished, err = maintainInboxLifecycleItems(ctx, tx, cursor, candidates, limit, inboxLifecycleRefBudget); err != nil {
 			return false, err
 		}
@@ -305,6 +309,7 @@ func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) 
 	if err != nil {
 		return false, err
 	}
+	loopstats.Rows(ctx, len(ids))
 	if len(ids) > 0 {
 		marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE owner_kind='`+source.kind+`' AND owner_id IN (`+marks+`)`, ids...); err != nil {

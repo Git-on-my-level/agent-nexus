@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -137,6 +138,8 @@ func installDocumentAccessHistory(ctx context.Context, tx *sql.Tx) error {
 // per-revision edges into their document's set in one short transaction.
 // Each committed chunk preserves authorization; the cursor makes it resumable.
 func (w *Workspace) MaintainDocumentAccessHistoryBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "document_history")
+	defer finish()
 	return w.maintainDocumentAccessHistoryChunk(ctx, 1000, documentHistoryChunkBudget)
 }
 
@@ -148,11 +151,21 @@ const documentHistoryChunkBudget = 50 * time.Millisecond
 const documentHistoryEdgeBatch = 25
 
 func (w *Workspace) maintainDocumentAccessHistoryChunk(ctx context.Context, limit int, budget time.Duration) (bool, error) {
+	sqlCtx := context.WithoutCancel(ctx)
+	var exists bool
+	err := w.db.QueryRowContext(sqlCtx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='`+documentHistoryJobTable+`')`).Scan(&exists)
+	if err != nil || !exists {
+		return true, err
+	}
+	var idle bool
+	if err = w.db.QueryRowContext(sqlCtx, `SELECT done FROM `+documentHistoryJobTable+` WHERE singleton=1`).Scan(&idle); err != nil || idle {
+		return idle, err
+	}
+
 	// Cancelling a statement inside this write transaction can leave the
 	// driver connection open outside the pool with the write lock held, which
 	// blocks every later writer until the process exits. Statements therefore
 	// run uncancelled; the time budget and shutdown are checked between them.
-	sqlCtx := context.WithoutCancel(ctx)
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(sqlCtx, w.db, 20*time.Millisecond)
 	if err != nil {
 		return false, err
@@ -207,6 +220,7 @@ func moveDocumentAccessHistoryUntil(ctx context.Context, tx *sql.Tx, limit int, 
 			return false, err
 		}
 		visited++
+		loopstats.Rows(ctx, 1)
 		sources := [][2]string{{"document_revision", revision}}
 		var isShared bool
 		if err = tx.QueryRowContext(ctx, shared, artifact).Scan(&isShared); err != nil {

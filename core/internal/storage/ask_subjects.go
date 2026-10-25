@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"agent-nexus-core/internal/sqliteutil"
 	"agent-nexus-core/internal/workprojection"
 	"context"
@@ -54,10 +55,17 @@ func installAskSubjects(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (w *Workspace) MaintainAskSubjectsBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "ask_subjects")
+	defer finish()
 	return w.askSubjectsBatch.run(ctx, 200, w.maintainAskSubjectsChunk)
 }
 
 func (w *Workspace) maintainAskSubjectsChunk(ctx context.Context, limit int) (bool, error) {
+	var idle bool
+	if err := w.db.QueryRowContext(ctx, `SELECT done FROM ask_subjects_job WHERE singleton=1`).Scan(&idle); err != nil || idle {
+		return idle, err
+	}
+
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err
@@ -86,6 +94,7 @@ func (w *Workspace) maintainAskSubjectsChunk(ctx context.Context, limit int) (bo
 	if err != nil {
 		return false, err
 	}
+	loopstats.Rows(ctx, len(ids))
 	for _, id := range ids {
 		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO ask_subjects(ask_id,card_id,requester,thread_id,open,due_at,close_reason) SELECT e.id,COALESCE(c.id,''),COALESCE(json_extract(e.payload_json,'$.payload.requester_actor_id'),e.actor_id),COALESCE(e.thread_id,''),NOT EXISTS(SELECT 1 FROM human_attention_request_resolutions r WHERE r.request_event_id=e.id),CASE WHEN `+askEffectiveClosedSQL()+` THEN 0 ELSE COALESCE(julianday(json_extract(e.payload_json,'$.payload.expires_at')),1e20) END,CASE WHEN `+askEffectiveClosedSQL()+` THEN 'subject_closed' ELSE 'expired' END FROM events e LEFT JOIN cards c ON substr(json_extract(e.payload_json,'$.payload.subject_ref'),1,5)='card:' AND c.id=COALESCE((SELECT id FROM cards WHERE handle=anx_normalize_handle(substr(json_extract(e.payload_json,'$.payload.subject_ref'),6))),(SELECT resource_id FROM resource_handle_aliases WHERE resource_type='card' AND alias_handle=anx_normalize_handle(substr(json_extract(e.payload_json,'$.payload.subject_ref'),6))),substr(json_extract(e.payload_json,'$.payload.subject_ref'),6))`+askWorkJoins+` WHERE e.id=? AND e.type='human_attention_requested'`, id)
 		if err != nil {
@@ -104,7 +113,8 @@ func (w *Workspace) maintainAskSubjectsChunk(ctx context.Context, limit int) (bo
 	return done, tx.Commit()
 }
 func (w *Workspace) RunAskSubjectsMaintenance(ctx context.Context, report func(error)) {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	delay := 100 * time.Millisecond
+	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
 	for {
 		select {
@@ -113,11 +123,16 @@ func (w *Workspace) RunAskSubjectsMaintenance(ctx context.Context, report func(e
 		case <-ticker.C:
 			done, err := w.MaintainAskSubjectsBatch(ctx)
 			if err != nil {
+				delay = min(delay*2, 5*time.Second)
+				ticker.Reset(delay)
 				if report != nil {
 					report(err)
 				}
 			} else if done {
 				return
+			} else {
+				delay = 100 * time.Millisecond
+				ticker.Reset(delay)
 			}
 		}
 	}

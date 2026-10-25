@@ -221,10 +221,10 @@ func upsertDocumentFTSTx(ctx context.Context, tx documentFTSExecer, documentID, 
 		return err
 	}
 	comments := ""
-	if _, err := tx.ExecContext(ctx, `DELETE FROM document_fts WHERE document_id = ?`, documentID); err != nil {
+	if err := clearDocumentFTSTx(ctx, tx, documentID); err != nil {
 		return fmt.Errorf("clear document fts: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO document_fts(document_id, title, body, summary, source, tags, comments)
+	result, err := tx.ExecContext(ctx, `INSERT INTO document_fts(document_id, title, body, summary, source, tags, comments)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		strings.TrimSpace(title),
@@ -233,8 +233,12 @@ func upsertDocumentFTSTx(ctx context.Context, tx documentFTSExecer, documentID, 
 		strings.TrimSpace(source),
 		documentFTSTagsText(tags),
 		comments,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("insert document fts: %w", err)
+	}
+	if err = recordDocumentFTSPosition(ctx, tx, documentID, result); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM document_search_dirty WHERE document_id=? AND (SELECT done FROM comment_search_job WHERE singleton=1)=1 AND NOT EXISTS(SELECT 1 FROM comment_search_heads WHERE thread_id=? LIMIT 1)`, documentID, threadID); err != nil {
 		return err

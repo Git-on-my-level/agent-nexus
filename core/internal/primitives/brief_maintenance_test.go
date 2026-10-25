@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/testsql"
 )
 
 type codedMaintenanceError struct {
@@ -102,6 +103,11 @@ func TestRunBriefMaintenanceDoesNotReportBusy(t *testing.T) {
 	t.Cleanup(func() { _ = workspace.Close() })
 	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 
+	// Exercise real pending work; idle passes deliberately need no writer.
+	if _, err = workspace.DB().Exec(`INSERT INTO brief_dirty(card_id) VALUES('pending-card')`); err != nil {
+		t.Fatal(err)
+	}
+
 	conn, err := workspace.DB().Conn(ctx)
 	if err != nil {
 		t.Fatalf("conn: %v", err)
@@ -134,5 +140,54 @@ func TestRunBriefMaintenanceDoesNotReportBusy(t *testing.T) {
 	defer mu.Unlock()
 	if len(reported) != 0 {
 		t.Fatalf("maintenance reported %v", reported)
+	}
+}
+
+func TestBriefIdleRefreshDoesNotAcquireWriter(t *testing.T) {
+	ctx := context.Background()
+	w, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	s := NewStore(w.DB(), blob.NewFilesystemBackend(w.Layout().ArtifactContentDir), w.Layout().ArtifactContentDir)
+	holder, err := w.DB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	warm, err := w.DB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warm.Close()
+	tx, err := holder.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	c, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer cancel()
+	if done, err := s.RefreshBriefInitiatives(c, 200); err != nil || !done {
+		t.Fatalf("empty brief fold took writer: done=%v err=%v", done, err)
+	}
+}
+
+func TestBriefIdlePollsBackOff(t *testing.T) {
+	ctx := context.Background()
+	w, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	db, counter := testsql.Open("file:" + w.Layout().DatabasePath)
+	defer db.Close()
+	s := NewStore(db, blob.NewFilesystemBackend(w.Layout().ArtifactContentDir), w.Layout().ArtifactContentDir)
+	counter.Reset()
+	runCtx, cancel := context.WithTimeout(ctx, 1600*time.Millisecond)
+	defer cancel()
+	s.RunBriefMaintenance(runCtx, func(e error) { t.Errorf("maintenance: %v", e) })
+	if n := counter.Count(); n > 3 {
+		t.Fatalf("empty fold issued %d reads without backing off", n)
 	}
 }

@@ -1,11 +1,13 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"time"
 
 	"agent-nexus-core/internal/replaypolicy"
+	"agent-nexus-core/internal/sqliteutil"
 )
 
 // Receipt collection never runs in a request transaction. The indexed subquery
@@ -15,11 +17,35 @@ const replayGCQuery = `DELETE FROM idempotency_replays WHERE rowid IN (
 )`
 
 func CollectReplayReceipts(ctx context.Context, db *sql.DB, now time.Time) (int64, error) {
-	result, err := db.ExecContext(ctx, replayGCQuery, now.UTC().Add(-replaypolicy.Retention()).Format("2006-01-02 15:04:05"), replaypolicy.GCBatchSize())
+	ctx, finish := loopstats.Start(ctx, "replay_gc")
+	defer finish()
+	cutoff := now.UTC().Add(-replaypolicy.Retention()).Format("2006-01-02 15:04:05")
+	var pending bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM idempotency_replays WHERE created_at < ? LIMIT 1)`, cutoff).Scan(&pending); err != nil || !pending {
+		return 0, err
+	}
+	// The existence check holds no writer; re-evaluate the bounded selection in
+	// the transaction. Contention yields immediately, rather than inheriting
+	// the serving connection's 20-second busy handler. Never cancel its SQL.
+	sqlCtx := context.WithoutCancel(ctx)
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(sqlCtx, db)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	defer cleanup()
+	result, err := tx.ExecContext(sqlCtx, replayGCQuery, cutoff, replaypolicy.GCBatchSize())
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	loopstats.Rows(ctx, int(n))
+	return n, nil
 }
 
 // RunReplayReceiptMaintenance stops on server shutdown. A backlog yields for a

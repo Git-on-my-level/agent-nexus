@@ -23,6 +23,13 @@ func TestBoardRoleMigrationPreservesLegacyBoards(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Recreate the released schema, which predates accounting dirty triggers.
+	for _, op := range []string{"insert", "update", "delete"} {
+		if _, err := db.Exec(`DROP TRIGGER IF EXISTS background_usage_boards_` + op); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if _, err = db.ExecContext(ctx, `ALTER TABLE boards DROP COLUMN role`); err != nil {
 		t.Fatal(err)
 	}

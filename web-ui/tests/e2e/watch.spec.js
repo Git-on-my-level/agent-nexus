@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+import { installQaRoutes } from "../../scripts/qa-visual.mjs";
 
 /**
  * Watch renders `brief.v1`: four computed states, a by-stage view, exact
@@ -41,6 +42,23 @@ async function setup(context, briefRoute) {
         json(route, { ...brief, generated_at: new Date().toISOString() })),
   );
 }
+
+test("empty visual QA scene clears the digest as well as initiatives", async ({
+  page,
+  context,
+}) => {
+  await setup(context);
+  await installQaRoutes(page, {
+    name: "workspace-watch-empty",
+    workspaceMode: "workspace-default",
+    briefState: "empty",
+  });
+  await page.goto(WATCH);
+  await expect(page.locator("[data-watch-empty]")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Daily digest" })).toHaveCount(
+    0,
+  );
+});
 
 test("digest-only work stays visible in the Initiatives list", async ({
   page,

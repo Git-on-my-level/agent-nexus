@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/contentusage"
 	"context"
 	"fmt"
 	"strings"
@@ -10,14 +11,7 @@ import (
 // Bill canonical row values, not SQLite allocation, indexes, WAL, FTS,
 // authorization graphs or projections. Add new canonical content tables here;
 // the allowlist prevents accidentally charging for new internal tables.
-var contentUsageTables = []string{
-	"events", "threads", "topics", "ref_edges", "agent_wakeups", "artifacts", "documents", "document_revisions",
-	"boards", "cards", "card_revisions", "card_plans", "work_metadata", "work_observations",
-	"runs", "agent_presence", "agent_progress_notes", "agent_sessions", "work_participants",
-	"actors", "agents", "hosts", "secrets", "workspace_dashboard", "pm_records",
-	"observation_investigation_specs", "series_adapters", "series_definitions",
-	"series_labels", "series_points", "series_daily",
-}
+var contentUsageTables = contentusage.Tables()
 
 const contentUsageCacheTTL = 30 * time.Second
 

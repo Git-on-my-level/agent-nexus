@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -106,6 +107,8 @@ type askWebhookJob struct {
 // DeliverAskWebhooks handles a fixed-size due window. It never scans the event
 // ledger or recomputes Inbox. Lease timestamps also recover interrupted sends.
 func (s *Store) DeliverAskWebhooks(ctx context.Context, active func(context.Context, string) bool) error {
+	ctx, finish := loopstats.Start(ctx, "ask_webhooks")
+	defer finish()
 	client := webhookHTTPClient()
 	defer client.CloseIdleConnections()
 	return s.deliverAskWebhooks(ctx, active, client)
@@ -133,6 +136,7 @@ func (s *Store) deliverAskWebhooks(ctx context.Context, active func(context.Cont
 	if err != nil {
 		return err
 	}
+	loopstats.Rows(ctx, len(jobs))
 	for _, j := range jobs {
 		if j.Attempts >= 5 {
 			if _, err = s.db.ExecContext(ctx, `UPDATE ask_deliveries SET state='failed',reason='dead_letter: retry_limit' WHERE id=? AND state='pending' AND attempts>=5`, j.ID); err != nil {

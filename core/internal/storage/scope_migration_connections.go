@@ -132,7 +132,14 @@ func openScopeDatabase(dsn string, lease *scopeProcessLease) (*sql.DB, error) {
 	if err := registered.Close(); err != nil {
 		return nil, err
 	}
-	return sql.OpenDB(&scopeConnector{registered: d, dsn: dsn, lease: lease}), nil
+	db := sql.OpenDB(&scopeConnector{registered: d, dsn: dsn, lease: lease})
+	// A physical connection reparses the complete trigger schema. Bound the
+	// idle cache across ticks; database/sql's default two idle connections
+	// caused repeated schema churn. Keep serving concurrency unchanged: some
+	// readers hydrate related records while holding their outer result cursor,
+	// so imposing a shared connection cap here could deadlock nested reads.
+	db.SetMaxIdleConns(8)
+	return db, nil
 }
 
 type scopeConnection struct {

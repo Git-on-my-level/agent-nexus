@@ -194,6 +194,8 @@ type Store struct {
 	contentUsageMu       sync.Mutex
 	contentUsageBytes    int64
 	contentUsageAt       time.Time
+	canonicalUsageMu     sync.Mutex
+	canonicalUsageCache  *canonicalUsageSnapshot
 	askLifecycleMu       sync.Mutex
 	askCloseCursor       string
 	askCloseBackoff      map[string]askBackoffState
@@ -3178,6 +3180,12 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 	query += ` ORDER BY julianday(ts) ASC, id ASC LIMIT ?`
 	args = append(args, limit)
 
+	// The background router selects one type. Seek its canonical position
+	// index before loading payloads, so even an empty tail avoids a history scan.
+	_, routerScoped := accessScopeFrom(ctx)
+	if !routerScoped && len(filterTypes) == 1 && filterTypes[0] == "message_posted" && !excludeBacking {
+		query, args = routerEventsAfterSQL(cursor, limit)
+	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query events after cursor: %w", err)

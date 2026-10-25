@@ -342,6 +342,33 @@ func (s *Store) GetWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSum
 	}, nil
 }
 
+// GetMaintenanceWorkspaceUsageSummary reuses unchanged canonical metrics for the background heartbeat.
+func (s *Store) GetMaintenanceWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSummary, error) {
+	if s == nil || s.db == nil {
+		return WorkspaceUsageSummary{}, fmt.Errorf("primitives store database is not initialized")
+	}
+	usage, err := s.workspaceUsageForSummary(ctx)
+	if err != nil {
+		return WorkspaceUsageSummary{}, err
+	}
+	return WorkspaceUsageSummary{
+		Usage: WorkspaceUsage{
+			BlobBytes:         usage.blobBytes,
+			BlobObjects:       usage.blobObjects,
+			DatabaseBytes:     usage.dbBytes,
+			StorageBytes:      usage.storageBytes(),
+			Artifacts:         usage.artifacts,
+			Documents:         usage.documents,
+			Revisions:         usage.revisions,
+			DocumentRevisions: usage.docRevisions,
+			CardRevisions:     usage.cardRevisions,
+			EventCount:        usage.events,
+		},
+		Quota:       s.quota,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}, nil
+}
+
 func (s *Store) GetWorkspaceUsageV1Summary(ctx context.Context) (WorkspaceUsageV1Summary, error) {
 	if s == nil || s.db == nil {
 		return WorkspaceUsageV1Summary{}, fmt.Errorf("primitives store database is not initialized")

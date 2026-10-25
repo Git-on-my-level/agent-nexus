@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"errors"
 	"fmt"
@@ -137,6 +138,8 @@ func (m *ProjectionMaintainer) Notify() {
 }
 
 func (m *ProjectionMaintainer) Step(ctx context.Context, now time.Time) error {
+	ctx, finish := loopstats.Start(ctx, "projection")
+	defer finish()
 	if m == nil {
 		return nil
 	}
@@ -145,6 +148,7 @@ func (m *ProjectionMaintainer) Step(ctx context.Context, now time.Time) error {
 	}
 
 	processed, err := m.processDirtyQueue(ctx, now)
+	loopstats.Rows(ctx, processed)
 	if err != nil {
 		return err
 	}

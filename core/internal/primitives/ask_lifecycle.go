@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"agent-nexus-core/internal/workprojection"
 	"context"
 	"database/sql"
@@ -112,9 +113,12 @@ func (s *Store) setAskCloseCursor(cursor string) {
 // Each maintenance step touches at most 200 indexed candidates. Closed subjects
 // and expiry survive restart; responses and withdrawal compete for one claim.
 func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
+	ctx, finish := loopstats.Start(ctx, "ask_lifecycle")
+	defer finish()
 	type pending struct{ id, actor, reason string }
 	withdrawBatch := func(card string, batch []pending) (bool, error) {
 		hadTransient := false
+		loopstats.Rows(ctx, len(batch))
 		for _, p := range batch {
 			_, err := s.appendHumanAttentionWithdrawal(ctx, p.actor, p.id, map[string]any{"payload": map[string]any{"reason": p.reason}}, p.reason == "subject_closed")
 			if err == nil {

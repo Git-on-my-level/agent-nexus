@@ -2,6 +2,8 @@ package router
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -330,5 +332,36 @@ func TestRouteMentionRefreshesPrincipalCacheWhenRegistrationIsStale(t *testing.T
 	}
 	if wakeupCalls != 1 {
 		t.Fatalf("expected one wake queued, got %d", wakeupCalls)
+	}
+}
+
+// Cold starts can have years of messages behind the local durable cursor.
+// One poll must yield after one page, retaining the last handled cursor.
+func TestRouterPollBoundsBacklogAndResumes(t *testing.T) {
+	state, err := NewStateStore("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	service := NewService(Config{}, Dependencies{ListMessagePostedAfter: func(_ context.Context, c primitives.EventCursor, limit int) ([]map[string]any, error) {
+		reads++
+		after := 0
+		if c.ID != "" {
+			after, _ = strconv.Atoi(c.ID)
+		}
+		var out []map[string]any
+		for n := after + 1; n <= min(after+limit, 3*eventBatchSize); n++ {
+			out = append(out, map[string]any{"id": fmt.Sprint(n), "ts": "2026-01-01T00:00:00Z", "payload": map[string]any{"text": "Synthetic history"}})
+		}
+		return out, nil
+	}}, state)
+	for pass := 1; pass <= 3; pass++ {
+		before := reads
+		if err = service.runOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if reads-before != 1 || state.LastEventID() != fmt.Sprint(pass*eventBatchSize) {
+			t.Fatalf("pass=%d page_reads=%d cursor=%s; expected one page and committed cursor", pass, reads-before, state.LastEventID())
+		}
 	}
 }

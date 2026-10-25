@@ -58,7 +58,7 @@ Step/source evidence cancels the default routes when the canonical brief fold
 records it; explicit note promises/evidence cancel them in the write transaction.
 Notification delivery itself uses the existing durable delivery/retry queue.
 
-Migration 120 installs bookkeeping and indexes without scanning canonical rows
+Migration 121 installs bookkeeping and indexes without scanning canonical rows
 or assigning historical cadences. A bounded maintenance cursor admits at most
 100 old identities per tick; it does not backdate default promises. Unassigned
 legacy cards enter the fallback digest. Existing sourced workflow ownership

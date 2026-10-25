@@ -1,6 +1,7 @@
 package router
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -136,35 +137,34 @@ func (s *Service) Snapshot(context.Context) map[string]any {
 }
 
 func (s *Service) runOnce(ctx context.Context) error {
+	ctx, finish := loopstats.Start(ctx, "router")
+	defer finish()
 	cursor, err := s.resolveCursor(ctx)
 	if err != nil {
 		return err
 	}
 
-	for {
-		events, err := s.deps.ListMessagePostedAfter(ctx, cursor, eventBatchSize)
-		if err != nil {
+	events, err := s.deps.ListMessagePostedAfter(ctx, cursor, eventBatchSize)
+	if err != nil {
+		return err
+	}
+	loopstats.Rows(ctx, len(events))
+	if len(events) == 0 {
+		return nil
+	}
+	for _, event := range events {
+		if err := s.handleEvent(ctx, event); err != nil {
 			return err
 		}
-		if len(events) == 0 {
-			return nil
+		cursor = primitives.EventCursor{
+			TS: anyString(event["ts"]),
+			ID: anyString(event["id"]),
 		}
-		for _, event := range events {
-			if err := s.handleEvent(ctx, event); err != nil {
-				return err
-			}
-			cursor = primitives.EventCursor{
-				TS: anyString(event["ts"]),
-				ID: anyString(event["id"]),
-			}
-			if err := s.state.SetLastEventCursor(cursor.TS, cursor.ID); err != nil {
-				return err
-			}
-		}
-		if len(events) < eventBatchSize {
-			return nil
+		if err := s.state.SetLastEventCursor(cursor.TS, cursor.ID); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 func (s *Service) resolveCursor(ctx context.Context) (primitives.EventCursor, error) {

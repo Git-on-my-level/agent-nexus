@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -26,28 +27,41 @@ const briefRefreshBatch = 200
 // RefreshBriefInitiatives folds at most limit queued cards. It reports whether
 // the queue is drained.
 func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "brief")
+	defer finish()
 	if limit <= 0 || limit > briefRefreshBatch {
 		limit = briefRefreshBatch
 	}
 	ctx = CanonicalMaintenanceContext(ctx)
+	// Dirty and expired positions are indexed. With no work, keep the WAL
+	// writer free; triggers preserve any work that arrives after this read.
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	var pending bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM brief_dirty LIMIT 1) OR EXISTS(SELECT 1 FROM brief_initiatives INDEXED BY idx_brief_loop_expiry WHERE loop_valid_until IS NOT NULL AND loop_valid_until<=? LIMIT 1)`, now).Scan(&pending); err != nil {
+		return false, err
+	}
+	if !pending {
+		return true, nil
+	}
 	tx, cleanup, err := s.db.BeginMaintenanceChunk(ctx)
 	if err != nil {
 		return false, err
 	}
 	defer cleanup()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives INDEXED BY idx_brief_loop_expiry WHERE loop_valid_until IS NOT NULL AND loop_valid_until<=? ORDER BY loop_valid_until,card_id LIMIT ? ON CONFLICT DO NOTHING`, time.Now().UTC().Format(time.RFC3339Nano), limit); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives INDEXED BY idx_brief_loop_expiry WHERE loop_valid_until IS NOT NULL AND loop_valid_until<=? ORDER BY loop_valid_until,card_id LIMIT ? ON CONFLICT DO NOTHING`, now, limit); err != nil {
 		return false, err
 	}
 	ids, err := queryStrings(ctx, tx, `SELECT card_id FROM brief_dirty ORDER BY card_id LIMIT ?`, limit)
 	if err != nil || len(ids) == 0 {
 		return len(ids) == 0, err
 	}
+	loopstats.Rows(ctx, len(ids))
 	inputs, err := briefPromiseInputs(ctx, tx, ids, func(ids []string) (map[string][]plans.PromiseNote, error) { return promiseNotesFor(ctx, tx, ids) })
 	if err != nil {
 		return false, err
 	}
 	encoded, _ := json.Marshal(ids)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now = time.Now().UTC().Format(time.RFC3339Nano)
 	for _, c := range inputs {
 		f := struct{ id string }{c.id}
 		open, sig, stepChangeAt := c.open, c.sig, c.stepChangeAt
@@ -87,7 +101,8 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 // yield and are not reported. Every other error is reported at most once a
 // minute per distinct text.
 func (s *Store) RunBriefMaintenance(ctx context.Context, report func(error)) {
-	ticker := time.NewTicker(250 * time.Millisecond)
+	delay := 250 * time.Millisecond
+	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
 	gate := newBriefMaintenanceGate(time.Minute)
 	for {
@@ -95,9 +110,18 @@ func (s *Store) RunBriefMaintenance(ctx context.Context, report func(error)) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			if _, err := s.RefreshBriefInitiatives(ctx, briefRefreshBatch); err != nil && ctx.Err() == nil {
-				gate.maybe(err, now, report)
+			done, err := s.RefreshBriefInitiatives(ctx, briefRefreshBatch)
+			if err != nil {
+				delay = min(delay*2, 5*time.Second)
+				if ctx.Err() == nil {
+					gate.maybe(err, now, report)
+				}
+			} else if done {
+				delay = min(delay*2, 2*time.Second)
+			} else {
+				delay = 250 * time.Millisecond
 			}
+			ticker.Reset(delay)
 		}
 	}
 }

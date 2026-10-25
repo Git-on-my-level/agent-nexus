@@ -15,7 +15,7 @@ size or admission bound. The cadence/digest scale gates and pinned preparation
 allocation gate pass without new allowances. The client digest normalization is
 one pass over the existing at-most-50-row preview; it adds no API request.
 
-Migration 120 adds card-inherited `work_tracking` bookkeeping and a tiny
+Migration 121 adds card-inherited `work_tracking` bookkeeping and a tiny
 maintenance cursor. It installs schema only, without a canonical-row backfill.
 Maintenance admits 100 historical identities and at most 50 due defaults or
 pending unassignments per tick. A reminder folds one admitted card's bounded
@@ -41,7 +41,15 @@ one query and 21,577 VM behind 4,096 denied cards, with zero full-scan steps.
 No budget, baseline or plan exception is widened. The broader pre-existing
 summary gate described below still blocks complete read-scale acceptance.
 The populated startup/upgrade gate passed in 32.6s against 90s; warm open
-passed in 22ms against 5s, including migrations 119 and 120.
+passed in 22ms against 5s before main's idle-maintenance migration landed.
+The tracking migration now follows that migration at version 121.
+
+After that integration, the opt-in populated startup gate timed out in
+historical migration 116 at the unchanged 90-second upgrade budget (91.26s
+observed on the follow-up). A Go-source baseline restoring all 47 differences
+to current main `746e093ca57b3185226dc8dc0e5cf19d73027c7e` also timed out in
+migration 116 at 90.00s. Tracking migration 121 had not run in either sample.
+This remains a startup acceptance limitation; no budget or allowlist is widened.
 
 Reminder and digest delivery identities are stable per card/default or owner/UTC
 day. Ownership and visibility rechecks share the scoped enqueue transaction.
@@ -2086,3 +2094,11 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/storage \
   -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Idle background maintenance
+
+The [idle-maintenance reproduction and cost inventory](idle-maintenance.md)
+records the synthetic 2.27 GB comparison, loop accounting, opt-in pprof listener,
+indexed router/FTS positions, writer-free idle probes and dirty heartbeat usage
+cache. New read budgets live in `primitives/testdata/idle_maintenance_budget.json`;
+existing budgets and plan allowances are unchanged.

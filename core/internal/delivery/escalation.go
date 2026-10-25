@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"fmt"
@@ -98,6 +99,8 @@ func (e *Escalator) Run(ctx context.Context) {
 }
 
 func (e *Escalator) Step(ctx context.Context, now time.Time) error {
+	ctx, finish := loopstats.Start(ctx, "escalation")
+	defer finish()
 	if err := e.normalize(ctx); err != nil {
 		return err
 	}
@@ -129,6 +132,7 @@ func (e *Escalator) normalize(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	loopstats.Rows(ctx, len(items))
 	for _, p := range items {
 		var decideBy any
 		if askTS, err := time.Parse(time.RFC3339Nano, p.ts); err == nil {
@@ -224,6 +228,7 @@ func (e *Escalator) escalate(ctx context.Context, now time.Time) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	loopstats.Rows(ctx, len(due))
 	if len(due) == 0 {
 		return nil
 	}
