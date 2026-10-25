@@ -283,3 +283,55 @@ func TestSaneFallbackIsAtomicAndHandoffDoesNotOrphan(t *testing.T) {
 		t.Fatal(orphaned, err)
 	}
 }
+
+func TestSaneStepEvidenceCancelsPendingDefaultTracking(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	card, err := s.CreateWork(ctx, "human", "", map[string]any{"title": "Actual progress", "plan": map[string]any{"steps": []any{map[string]any{"id": "verify", "title": "Verify", "after": []any{}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := workString(card["id"])
+	now := time.Now().UTC()
+	if _, err = ws.DB().Exec(`UPDATE cards SET created_at=? WHERE id=?`, cardLeaseStamp(now.Add(-13*time.Hour)), id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ws.DB().Exec(`UPDATE work_tracking SET default_at=? WHERE card_id=?`, cardLeaseStamp(now.Add(-time.Hour)), id); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		done, err = s.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = s.MaintainWorkTracking(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.PendingTrackingReminders(ctx)
+	if err != nil || len(before) != 1 {
+		t.Fatalf("reminder setup=%v %v", before, err)
+	}
+	if err = s.SetCardPlan(ctx, "human", id, workString(card["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "verify", Title: "Verify", Status: "active", After: []string{}}}}); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		done, err = s.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := s.PendingTrackingReminders(ctx)
+	if err != nil || len(after) != 0 {
+		t.Fatalf("real step evidence left a stale reminder: %v %v", after, err)
+	}
+	digests, err := s.PendingTrackingDigests(ctx, nextTrackingDigest(now))
+	if err != nil || len(digests) != 0 {
+		t.Fatalf("real step evidence kept daily reminders: %v %v", digests, err)
+	}
+}

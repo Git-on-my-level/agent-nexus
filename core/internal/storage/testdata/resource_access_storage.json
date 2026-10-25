@@ -3782,7 +3782,7 @@
     "../storage/work_summary_indexes.go:maintainWorkSummaryAttention": "39940fe3c14d8538654700187433ab43e4de57640603cc00240900187f371741",
     "../storage/work_summary_indexes.go:repairPrimaryCardPhases": "49c21d3672445b805d50bb684a01480d7ee4b51af79492ab148af1cc957da19e",
     "../storage/work_summary_indexes.go:upgradeWorkSummaryAskLinks": "d144f210b6fe2e786f5e62ec2e6f09f82a986230e06596d5dab2e2c6e8f1cf27",
-    "../storage/work_tracking.go:installWorkTracking": "75b8fde0850942ef48d2d4abc0ae0dd6b03e47374c67775e0cdf60a4408656f0",
+    "../storage/work_tracking.go:installWorkTracking": "fceb24b6295122394396db59bf1e162329d6ea9cba2c76fccfcf993722aafd6f",
     "../storage/workspace.go:*Workspace:Close": "6b1509132109f1701d126c71e60fdebb81153a932ca4d2be98377f4b08a5c17b",
     "../storage/workspace.go:InitializeWorkspace": "71629dd9f1a06ec16cd090006e2206f90b3eb775244ba86b897c19b6abbcac02",
     "../storage/workspace.go:sqliteDSN": "657b24a5c4048f37634b9530f18e3aef82a44d24bf012430f8df28e7ee364de5",

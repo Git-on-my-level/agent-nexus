@@ -27,6 +27,8 @@ denied prefix. It exposes neither hidden occupancy nor a hidden-row count.
 one query and 21,577 VM behind 4,096 denied cards, with zero full-scan steps.
 No budget, baseline or plan exception is widened. The broader pre-existing
 summary gate described below still blocks complete read-scale acceptance.
+The populated startup/upgrade gate passed in 32.6s against 90s; warm open
+passed in 22ms against 5s, including migrations 119 and 120.
 
 Reminder and digest delivery identities are stable per card/default or owner/UTC
 day. Ownership and visibility rechecks share the scoped enqueue transaction.

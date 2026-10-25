@@ -40,6 +40,8 @@ With no channel configured, the automatic note and the reader's
 `brief.daily_digest` remain available. Reading the brief sends no notification.
 Ownership is checked again in the enqueue transaction; reassignment, a new
 explicit promise, completion or lost visibility can cancel a stale snapshot.
+Step/source evidence cancels the default routes when the canonical brief fold
+records it; explicit note promises/evidence cancel them in the write transaction.
 Notification delivery itself uses the existing durable delivery/retry queue.
 
 Migration 120 installs bookkeeping and indexes without scanning canonical rows

@@ -10,15 +10,21 @@ import (
 )
 
 type cardHealthInput struct {
-	DefaultAt                                                                                    time.Time
-	Creator, ReminderEventID, OrphanedAt, FallbackOwner, LeaseExpires, LeaseReleased, LeaseOwner string
-	Loop                                                                                         map[string]any
-	Activity, Created                                                                            time.Time
-	Due                                                                                          string
-	Phase, Owner, Handle                                                                         string
-	Source                                                                                       map[string]any
-	Children                                                                                     []string
-	Refs                                                                                         []string
+	DefaultAt            time.Time
+	Creator              string
+	ReminderEventID      string
+	OrphanedAt           string
+	FallbackOwner        string
+	LeaseExpires         string
+	LeaseReleased        string
+	LeaseOwner           string
+	Loop                 map[string]any
+	Activity, Created    time.Time
+	Due                  string
+	Phase, Owner, Handle string
+	Source               map[string]any
+	Children             []string
+	Refs                 []string
 	// Wake is the raw wake_condition annotation; Related holds the card's
 	// related_refs linked sources.
 	Wake    string

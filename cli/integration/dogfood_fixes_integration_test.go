@@ -32,8 +32,8 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 	ordinary := h.runCLIExpectOK(t, "worker", map[string]any{"title": "Verification checkpoint", "handle": "verify-checkpoint"}, "work", "create", "--from-file", "-")
 	ref = mustStringPath(t, ordinary.Payload, "result.work.ref")
 	note := h.runCLIExpectOK(t, "worker", nil, "note", ref, "Next checkpoint", "--next", "1d", "Verify result")
-	if !strings.Contains(note.Stdout, "note_promise_unowned") {
-		t.Fatal("missing unowned warning", note.Stdout)
+	if strings.Contains(note.Stdout, "note_promise_unowned") {
+		t.Fatal("creating actor was not assigned by default", note.Stdout)
 	}
 	cleared := h.runCLIExpectOK(t, "worker", nil, "note", ref, "Evidence arrived", "--evidence", "https://example.test/proof")
 	if strings.Contains(cleared.Stdout, "note_clears_promise") {
