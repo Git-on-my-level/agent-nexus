@@ -10,6 +10,7 @@ import (
 )
 
 type cardHealthInput struct {
+	Loop                 map[string]any
 	Activity, Created    time.Time
 	Due                  string
 	Phase, Owner, Handle string
@@ -36,6 +37,9 @@ type cardHealthInput struct {
 func (input cardHealthInput) health(ref string, p *plans.Plan, state plans.State, facts map[string]plans.Fact, now time.Time) plans.Health {
 	if ref == "" && input.Handle != "" {
 		ref = "card:" + input.Handle
+	}
+	if h, ok := cadenceTrackingHealth(input.Loop, input.Phase, ref, now); ok {
+		return h
 	}
 	in := plans.HealthInput{Ref: ref, Plan: p, State: state, Facts: facts, Phase: input.Phase, CardDue: input.Due, Wake: input.Wake, PlanEditedAt: input.PlanAt, Notes: input.Notes}
 	_, clock := planStepProgressClock(state, input.StepStatus, input.StepChangeAt, input.PlanAt, false)

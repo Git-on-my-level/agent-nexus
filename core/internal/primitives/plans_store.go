@@ -253,6 +253,10 @@ func readRefProjection(ctx context.Context, q briefQueryer, refs []string, visib
 }
 
 func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.Plan, map[string]cardHealthInput, map[string]any, error) {
+	return s.loadPlansAt(ctx, ids, time.Now().UTC())
+}
+
+func (s *Store) loadPlansAt(ctx context.Context, ids []string, now time.Time) (map[string]plans.Plan, map[string]cardHealthInput, map[string]any, error) {
 	ids = uniqueSortedStrings(ids)
 	ps, inputs, refs := map[string]plans.Plan{}, map[string]cardHealthInput{}, map[string]any{}
 	for start := 0; start < len(ids); start += summaryBatchSize {
@@ -263,6 +267,21 @@ func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.P
 		batch, movement, sources, err := s.loadPlansBatch(ctx, ids[start:end])
 		if err != nil {
 			return nil, nil, nil, err
+		}
+		cadenceIDs := []string{}
+		for id, input := range movement {
+			if input.Loop != nil {
+				cadenceIDs = append(cadenceIDs, id)
+			}
+		}
+		loops, _, err := s.loadBriefLoopStates(ctx, cadenceIDs, now)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for id, loop := range loops {
+			input := movement[id]
+			input.Loop = loop
+			movement[id] = input
 		}
 		for id, p := range batch {
 			ps[id] = p
@@ -329,6 +348,9 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 		}
 		input.Observed = latestCardActivity(workString(m[sourceEvidenceKey]), workString(o["meaningful_progress_at"]))
 		input.Source = workClone(workMap(m["source"]))
+		if len(workMap(m["cadence"])) > 0 {
+			input.Loop = workMap(m["cadence"])
+		}
 		if authority := workString(input.Source["authority"]); authority != "" && authority != "nexus" {
 			input.Observed = latestCardActivity(workString(m[sourceEvidenceKey]), workString(o["meaningful_progress_at"]), at)
 			input.Phase = workString(m["phase"])
@@ -481,7 +503,7 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			ids = append(ids, row.ID)
 		}
 	}
-	ps, movement, _, err := s.loadPlans(ctx, ids)
+	ps, movement, _, err := s.loadPlansAt(ctx, ids, now)
 	if err != nil {
 		return nil, err
 	}
@@ -579,7 +601,7 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 	for _, card := range cards {
 		ids = append(ids, workString(card["id"]))
 	}
-	ps, movement, sourceRefs, err := s.loadPlans(ctx, ids)
+	ps, movement, sourceRefs, err := s.loadPlansAt(ctx, ids, now)
 	if err != nil {
 		return err
 	}
