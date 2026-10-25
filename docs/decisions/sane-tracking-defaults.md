@@ -25,4 +25,5 @@ enums: `moving` through the overdue boundary, `past_promise` afterward, with
 reason. Completion still reads `done`. The other defaults, ownership and
 migration behavior are implemented in the follow-up change, described in
 [tracking defaults](../tracking-defaults.md). Source and tests do not imply an
-installed runtime or a production migration. Both PRs remain unmerged.
+installed runtime or a production migration. The urgent cadence change is in
+main; the follow-up remains under review.
