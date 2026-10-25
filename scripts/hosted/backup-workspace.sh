@@ -59,6 +59,17 @@ DB_PATH="${WORKSPACE_ROOT}/state.sqlite"
 [[ -d "$WORKSPACE_ROOT" ]] || die "workspace directory not found: $WORKSPACE_ROOT"
 [[ -f "$DB_PATH" ]] || die "workspace database not found: $DB_PATH (start anx-core once before backing up)"
 
+# This is a separate SQLite process: it cannot inherit anx-core's VFS setting.
+# Do not sweep files here; a serving core may be using this directory.
+if [[ -z "${SQLITE_TMPDIR:-}" ]]; then
+  SQLITE_TMPDIR="${WORKSPACE_ROOT}/tmp"
+  [[ ! -L "$SQLITE_TMPDIR" ]] || die "SQLite temp directory must not be a symlink"
+  mkdir -p -m 700 "$SQLITE_TMPDIR"
+  chmod 700 "$SQLITE_TMPDIR"
+fi
+[[ -d "$SQLITE_TMPDIR" && -w "$SQLITE_TMPDIR" && -x "$SQLITE_TMPDIR" ]] || die "SQLITE_TMPDIR must be a writable directory"
+export SQLITE_TMPDIR
+
 ACTIVE_BLOB_BACKEND="$(dotenv_get "$ENV_FILE" ANX_BLOB_BACKEND || true)"
 ACTIVE_BLOB_ROOT="$(dotenv_get "$ENV_FILE" ANX_BLOB_ROOT || true)"
 ACTIVE_BLOB_S3_BUCKET="$(dotenv_get "$ENV_FILE" ANX_BLOB_S3_BUCKET || true)"

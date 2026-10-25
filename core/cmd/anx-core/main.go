@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"time"
 
+	sqlite3 "modernc.org/sqlite/lib"
+
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
@@ -230,6 +232,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	tempLease, err := storage.PrepareSQLiteTempDirectory(storage.NewLayout(workspaceRoot).DatabasePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to configure SQLite temp storage: %v\n", err)
+		os.Exit(1)
+	}
+	defer tempLease.Close()
+	sqlite3.Xsqlite3_temp_directory = tempLease.NativePath
 	workspace, err := storage.InitializeWorkspace(context.Background(), workspaceRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize workspace storage: %v\n", err)

@@ -1497,11 +1497,11 @@
     }
   },
   "writers": {
-    "../../cmd/anx-access-reclaim/main.go:main": "568c3b7d462b7b62611eeea0859465ab930b6e5adc4ffc816d6c5d2fc12b275e",
+    "../../cmd/anx-access-reclaim/main.go:main": "c8c6d231098187163e6b35433f4460b236aae196779d40ade217903c1a5b0805",
     "../../cmd/anx-core/blob_backend.go:blobBackendConfig:Normalize": "3c01540ff7ae0fbacbb936c3a010c8ce771f75a6904d63950b633805daa740bf",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-    "../../cmd/anx-core/main.go:main": "690937b3fd46f47fa42e9e2f2b6f86148a090ae489a0dbde8bf6ef2d8af846ac",
+    "../../cmd/anx-core/main.go:main": "beffa61fd0327e500de179ead3093d9dbadccb5a4dd427363a2e6d2a993c07c3",
     "../../cmd/anx-core/main.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
     "../../cmd/anx-observe/main.go:load": "07b08a12c195d92fa958af2c0f460af0ca25a9acd678f9db3ce624675b73407f",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
@@ -3724,6 +3724,7 @@
     "../storage/series_rollups.go:seriesLiveDailyInsertSQL": "3c9fd56c804aa4274e20bf10e6355bf7998235353b8bb4f99e931999c1c1b6be",
     "../storage/series_rollups.go:seriesLiveDailyTableSQL": "c32b0794d6521bc488af84cd189a7ef8a9bce8dd304368fcb11ea13fc612a84e",
     "../storage/series_rollups.go:seriesLiveDailyUpdateSQL": "af01489a464623be9bb38b7a1642b2bea4ea6b9a7b7dca4ba7c7abf522c32f28",
+    "../storage/sqlite_temp.go:PrepareSQLiteTempDirectory": "f3c9433e98f293dfae13e07969f9b86186541308be81f6d2caf756790b7dc0b2",
     "../storage/topic_workspace_page_indexes.go:installTopicWorkspacePageIndexes": "f56cfaf7c97af7f5b413f241307eb9f789bbfe832c76e95d20284a02959a6f16",
     "../storage/work_lifecycle.go:installWorkLifecycle": "064f1daab232dfde68014702daeab7145414189332fe24e9ddaf9aee74d9ac9e",
     "../storage/work_summary_indexes.go:installWorkSummaryAskIndex": "d455a142c2881d85a6e2cf34edd55edc0575ec30b7aedb2aad5e9d6894be3fa9",
