@@ -3,6 +3,7 @@ package app
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"strconv"
 	"strings"
 
 	"agent-nexus-cli/internal/errnorm"
@@ -32,6 +33,9 @@ func withoutGroupingFlags(args []string) []string {
 	out := []string{}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+		if arg == "--top-level" || strings.HasPrefix(arg, "--top-level=") {
+			continue
+		}
 		if arg == "--under" || arg == "--after" {
 			i++
 			continue
@@ -42,4 +46,21 @@ func withoutGroupingFlags(args []string) []string {
 		out = append(out, arg)
 	}
 	return out
+}
+
+func cardCreateTopLevel(args []string) bool {
+	var value bool
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--top-level":
+			value = true
+		case strings.HasPrefix(arg, "--top-level="):
+			value, _ = strconv.ParseBool(strings.TrimPrefix(arg, "--top-level="))
+		case arg == "--dry-run" || strings.Contains(arg, "=") || !strings.HasPrefix(arg, "-"):
+		default:
+			i++ // Every other cards-create flag consumes its value.
+		}
+	}
+	return value
 }

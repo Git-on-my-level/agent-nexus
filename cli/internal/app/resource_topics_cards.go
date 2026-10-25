@@ -8,6 +8,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/runcontext"
 )
 
 var topicsSubcommandSpec = subcommandSpec{
@@ -256,6 +257,7 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		if dryRun {
 			return dryRunResult("cards create", "cards.create", nil, nil, body), "cards create", nil
 		}
+		ctx = runcontext.WithTopLevel(ctx, cardCreateTopLevel(args[1:]))
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
 		return addResourceURLToResult(cfg, "cards.create", result), "cards create", callErr
 	case "get":
@@ -476,7 +478,8 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	var columnFlag, topicFlag, documentRefFlag, riskFlag, dueAtFlag trackedString
 	var beforeCardIDFlag, afterCardIDFlag trackedString
 	var assigneeRefFlags, relatedRefFlags, doneFlags trackedStrings
-	var dryRunFlag trackedBool
+	var dryRunFlag, topLevelFlag trackedBool
+	fs.Var(&topLevelFlag, "top-level", "Ignore the run-label parent default")
 	fs.Var(&underFlag, "under", "Parent card ref; adds a plan step atomically")
 	fs.Var(&afterStepFlag, "after", "Preceding plan step id")
 	fs.Var(&boardFlag, "board", "Parent board ref, handle, or id for the new card")
@@ -505,6 +508,9 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	}
 	if len(fs.Args()) > 0 {
 		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if topLevelFlag.value && underFlag.set {
+		return nil, false, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
 	}
 	fieldFlagsSet := handleFlag.set || strings.TrimSpace(boardFlag.value) != "" ||
 		strings.TrimSpace(titleFlag.value) != "" ||

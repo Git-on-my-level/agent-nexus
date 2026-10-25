@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-cli/runcontext"
 	contracts "agent-nexus-contracts-go-client/client"
 
 	"github.com/Git-on-my-level/agent-nexus/mcp/catalog"
@@ -46,6 +47,7 @@ type Options struct {
 }
 
 type WorkspaceExecutor struct {
+	runParent                 runcontext.Resolver
 	client                    *contracts.Client
 	auth                      AuthContext
 	defaultListLimit          int
@@ -122,10 +124,48 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 		return protocol.ToolCallResult{}, toolError("invalid_arguments", err.Error(), protocol.ErrInvalidParams)
 	}
 	body := arguments.Body
-	if req.Tool.Metadata.CommandID == "work.create" || req.Tool.Metadata.CommandID == "cards.create" {
+	var parentHint runcontext.Hint
+	if runcontext.IsCreateCommand(req.Tool.Metadata.CommandID) {
 		if object, ok := body.(map[string]any); ok {
 			object = copyMap(object)
 			object["create_surface"] = "mcp"
+			if items, ok := object["items"].([]any); ok {
+				cloned := make([]any, len(items))
+				for i, raw := range items {
+					if item, ok := raw.(map[string]any); ok {
+						entry := copyMap(item)
+						entry["create_surface"] = "mcp"
+						cloned[i] = entry
+					} else {
+						cloned[i] = raw
+					}
+				}
+				object["items"] = cloned
+				delete(object, "create_surface")
+			}
+
+			if topLevel, exists := req.Arguments["top_level"]; exists {
+				value, ok := topLevel.(bool)
+				if !ok {
+					return protocol.ToolCallResult{}, toolError("invalid_arguments", "top_level must be a boolean", protocol.ErrInvalidParams)
+				}
+				if _, under := object["under"]; value && under {
+					return protocol.ToolCallResult{}, toolError("invalid_arguments", "top_level and body.under cannot be combined", protocol.ErrInvalidParams)
+				}
+				ctx = runcontext.WithTopLevel(ctx, value)
+			}
+			apply := e.runParent.Apply
+			if req.Tool.Metadata.CommandID == "boards.cards.batch_add" {
+				apply = e.runParent.ApplyBatch
+			}
+			parentHint = apply(ctx, object, func(ctx context.Context, ref string) bool {
+				result := e.parentRead(ctx, "work.get", map[string]string{"card_ref": ref}, nil)
+				work, _ := result["work"].(map[string]any)
+				return runcontext.ReadableParent(work, ref)
+			})
+			for _, warning := range parentHint.Warnings {
+				warnings = append(warnings, warning.Message)
+			}
 			body = object
 		}
 	}
@@ -164,6 +204,60 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 	parsed, err := decodeResponseBody(responseBody)
 	if err != nil {
 		return protocol.ToolCallResult{}, toolError("workspace_error", "workspace returned invalid JSON", protocol.ErrInternal)
+	}
+
+	if runcontext.IsCreateCommand(req.Tool.Metadata.CommandID) {
+		if response, ok := parsed.(map[string]any); ok {
+			if parentHint.Parent != "" {
+				response["run_parent_default"] = map[string]any{"parent_ref": parentHint.Parent, "label": parentHint.Label, "message": parentHint.Message()}
+				item, _ := response["work"].(map[string]any)
+				if item == nil {
+					item, _ = response["card"].(map[string]any)
+				}
+				if cards, ok := response["cards"].([]any); ok {
+					for _, index := range parentHint.Defaulted {
+						if index < len(cards) {
+							card, _ := cards[index].(map[string]any)
+							ref, _ := card["ref"].(string)
+							if argv := parentHint.UndoArgv(ref); len(argv) > 0 {
+								actions, _ := response["next_actions"].([]any)
+								response["next_actions"] = append(actions, map[string]any{"label": "Ungroup the created card", "argv": argv})
+							}
+						}
+					}
+				}
+				id, _ := item["ref"].(string)
+				if argv := parentHint.UndoArgv(id); len(argv) > 0 {
+					actions, _ := response["next_actions"].([]any)
+					response["next_actions"] = append(actions, map[string]any{"label": "Ungroup the created card", "argv": argv})
+				}
+			}
+			topLevel := false
+			if cards, ok := response["cards"].([]any); ok {
+				for _, raw := range cards {
+					card, _ := raw.(map[string]any)
+					if ref, _ := card["parent_ref"].(string); ref == "" {
+						topLevel = true
+						break
+					}
+				}
+			} else {
+				item, _ := response["work"].(map[string]any)
+				if item == nil {
+					item, _ = response["card"].(map[string]any)
+				}
+				ref, _ := item["parent_ref"].(string)
+				topLevel = item != nil && ref == ""
+			}
+			if topLevel {
+				budgetCtx, cancel := context.WithTimeout(ctx, runcontext.LookupTimeout)
+				rows := e.parentRead(budgetCtx, "work.list", nil, map[string][]string{"limit": {"200"}})
+				cancel()
+				if warning := runcontext.BudgetWarning(rows); warning != "" {
+					warnings = append(warnings, warning)
+				}
+			}
+		}
 	}
 	result := redactToolResult(req.Tool.Metadata.CommandID, parsed)
 	return protocol.ToolCallResult{
@@ -768,4 +862,18 @@ func withUnifiedIdempotencyKey(id string, body any, key string) (any, error) {
 	}
 	target[field] = key
 	return out, nil
+}
+
+// parentRead is a bounded best-effort request under this executor's workspace
+// credentials. It never searches other workspaces or discloses upstream errors.
+func (e *WorkspaceExecutor) parentRead(ctx context.Context, command string, path map[string]string, query map[string][]string) map[string]any {
+	resp, raw, err := e.client.Invoke(ctx, command, path, contracts.RequestOptions{Headers: e.requestHeaders(""), Query: query, MaxResponseBytes: 1 << 20})
+	if err != nil || resp == nil || resp.StatusCode >= 400 {
+		return nil
+	}
+	var body map[string]any
+	if json.Unmarshal(raw, &body) != nil {
+		return nil
+	}
+	return body
 }

@@ -14,6 +14,7 @@ import (
 )
 
 func TestCreateTransportUnknownOutcomePreservesRequestKey(t *testing.T) {
+	t.Setenv("AGENTCTL_EXECUTION_ID", "")
 	var keys []string
 	var mu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

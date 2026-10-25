@@ -32,7 +32,7 @@ func planHelpText(topic string) (string, bool) {
 		"plan set":         "anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})",
 		"plan step add":    "anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]",
 		"plan step update": "anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status done|active|blocked|not_started]",
-		"plan step rm":     "anx plan step rm <card> <step-id>",
+		"plan step rm":     "anx plan step rm <card> (<step-id> | --ref <card-ref>)",
 	}
 	if text, ok := usage[topic]; ok {
 		text += "\nCard accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.\n"
@@ -61,7 +61,7 @@ func planHelpText(topic string) (string, bool) {
 		"anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})\n" +
 		"anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]\n" +
 		"anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]\n" +
-		"anx plan step rm <card> <step-id>\n" +
+		"anx plan step rm <card> (<step-id> | --ref <card-ref>)\n" +
 		planRefHelp +
 		planSetRefHelp +
 		"Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.\n", true
@@ -110,6 +110,9 @@ func parsePlanCommand(args []string) (planCommand, error) {
 			fs.Func(k, desc, func(v string) error { p.fields[k] = v; return nil })
 		}
 	}
+	if p.name == "plan step rm" {
+		fs.Func("ref", "Remove the step for this exact card ref", func(v string) error { p.fields["ref"] = v; return nil })
+	}
 	tail := args[width:]
 	positions := []string{}
 	for len(tail) > 0 && !strings.HasPrefix(tail[0], "-") {
@@ -132,9 +135,12 @@ func parsePlanCommand(args []string) (planCommand, error) {
 			p.step = positions[0]
 			positions = positions[1:]
 		}
-		if p.step == "" {
+		if p.step == "" && (p.name != "plan step rm" || p.fields["ref"] == "") {
 			return p, errnorm.Usage("invalid_request", "step id is required")
 		}
+	}
+	if p.name == "plan step rm" && p.fields["ref"] != "" && (p.step != "" || !strings.HasPrefix(p.fields["ref"], "card:")) {
+		return p, errnorm.Usage("invalid_request", "use a step id or --ref card:<slug>, not both")
 	}
 	if p.card == "" || len(positions) > 0 {
 		return p, errnorm.Usage("invalid_request", "one card ref is required")
@@ -296,7 +302,10 @@ func (a *App) runPlanCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 		index := -1
 		for i, raw := range steps {
-			if step, ok := raw.(map[string]any); ok && step["id"] == p.step {
+			if step, ok := raw.(map[string]any); ok && (step["id"] == p.step || p.name == "plan step rm" && p.fields["ref"] != "" && step["ref"] == p.fields["ref"]) {
+				if index >= 0 {
+					return nil, p.name, errnorm.Usage("ambiguous_step", "more than one plan step matches; choose a step id")
+				}
 				index = i
 			}
 		}

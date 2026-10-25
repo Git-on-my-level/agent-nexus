@@ -50,7 +50,16 @@ func TestGitCaptureRequestTimeouts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			state, err := integrations.LoadCapture(integrations.CapturePath(f.dir, gd))
+			// The deadline returns before the cancelled worker necessarily finishes
+			// persisting its deferred state. Join that writer before inspecting it;
+			// the hook's elapsed-time assertion above still measures only the hook.
+			capturePath := integrations.CapturePath(f.dir, gd)
+			unlock, err := integrations.Lock(context.Background(), capturePath+".lock")
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, err := integrations.LoadCapture(capturePath)
+			unlock()
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -28,6 +28,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/registry"
+	"agent-nexus-cli/runcontext"
 )
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
@@ -1553,6 +1554,7 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards create-batch", err
 		}
+		ctx = runcontext.WithTopLevel(ctx, cardCreateTopLevel(args[1:]))
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create-batch", "boards.cards.batch_add", map[string]string{"board_id": boardID}, nil, body)
 		return result, "boards cards create-batch", callErr
 	case "get":
@@ -3032,7 +3034,10 @@ func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string)
 
 func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {
 	fs := newSilentFlagSet(commandName)
-	var boardIDFlag, fromFileFlag trackedString
+	var boardIDFlag, fromFileFlag, underFlag trackedString
+	var topLevelFlag trackedBool
+	fs.Var(&underFlag, "under", "Parent for every item in the batch")
+	fs.Var(&topLevelFlag, "top-level", "Ignore the run-label parent default")
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
@@ -3041,6 +3046,9 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if topLevelFlag.value && underFlag.set {
+		return "", nil, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
 	}
 	positionals := fs.Args()
 	boardID := strings.TrimSpace(boardIDFlag.value)
@@ -3071,6 +3079,13 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	}
 	if _, has := bodyMap["items"]; !has {
 		return "", nil, errnorm.Usage("invalid_request", "JSON body must include an items array")
+	}
+	if underFlag.set {
+		for _, raw := range asSlice(bodyMap["items"]) {
+			if item := asMap(raw); item != nil {
+				item["under"] = underFlag.value
+			}
+		}
 	}
 	// After JSON decode, non-empty CLI flags override the same keys in the body (explicit CLI wins).
 	if v := strings.TrimSpace(requestKeyFlag.value); v != "" {

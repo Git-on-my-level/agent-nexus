@@ -532,7 +532,7 @@ Daily loop
 Runs and output
 
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
-- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
+- Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
 - If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.
@@ -5465,7 +5465,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
 Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
-Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--request-key <key>] --from-file <path|->
+Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--top-level] [--request-key <key>] --from-file <path|->
 
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
@@ -8398,6 +8398,9 @@ Local Help: cards create
   - `cat card-create.json | anx cards create`
 
 Flags:
+  --under <card-ref>           Explicit parent; overrides the inherited anx.card.<initiative> run label.
+  --top-level                  Ignore the inherited run-label parent default.
+  --after <step-id>            Preceding parent plan step id.
   --handle <slug>              Client-chosen lowercase card slug (1-64 characters); conflicts fail without renaming.
   --board <board-ref-or-handle> Board typed ref or handle for the new work card.
   --title <text>               Card title.
@@ -11168,7 +11171,7 @@ Pass at least one field; an empty --after clears dependencies. Source state take
 Edit a linked initiative step with a card concurrency token.
 
 ```text
-anx plan step rm <card> <step-id>
+anx plan step rm <card> (<step-id> | --ref <card-ref>)
 Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
 Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
 Removing a depended-on step is rejected; update dependencies first.

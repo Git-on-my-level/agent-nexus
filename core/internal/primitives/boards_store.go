@@ -2003,6 +2003,24 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		if stagedContent != nil {
 			stagedWrites = append(stagedWrites, stagedContent)
 		}
+		if inputs[i].Under != "" {
+			parentRef, groupErr := s.groupWorkTx(ctx, tx, actorID, cardRow, inputs[i].Under, inputs[i].After, "")
+			if groupErr != nil {
+				for _, staged := range stagedWrites {
+					_ = staged.Cleanup()
+				}
+				_ = tx.Rollback()
+				return nil, fmt.Errorf("items[%d]: %w", i, groupErr)
+			}
+			inputs[i].Under = parentRef
+		} else if inputs[i].After != "" {
+			for _, staged := range stagedWrites {
+				_ = staged.Cleanup()
+			}
+			_ = tx.Rollback()
+			return nil, workInvalid("after requires under")
+		}
+
 		boardMap, terr := boardRowToAPI(ctx, tx, boardRow)
 		if terr != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
@@ -2023,6 +2041,10 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 			}
 			return nil, terr
 		}
+		if inputs[i].Under != "" {
+			cardMap["parent_ref"] = inputs[i].Under
+		}
+
 		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
 	}
 	// Promote before committing so committed cards always have their content;

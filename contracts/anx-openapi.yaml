@@ -13811,6 +13811,9 @@ components:
         if_board_updated_at, board_id, board_handle, or board_ref on each item — use the batch envelope.
       additionalProperties: true
       properties:
+        under: {type: string, description: Optional visible open parent card; grouping commits with the complete batch.}
+        after: {type: string, description: Preceding parent plan step id; requires under.}
+        create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         card: { $ref: '#/components/schemas/CardCreateInput' }
         card_id:
           type: string

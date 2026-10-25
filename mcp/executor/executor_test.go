@@ -148,6 +148,7 @@ func TestWorkspaceExecutorExecutesPatch(t *testing.T) {
 }
 
 func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
+	t.Setenv("AGENTCTL_EXECUTION_ID", "")
 	tests := []struct {
 		name          string
 		commandID     string
@@ -321,6 +322,10 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.commandID == "cards.create" && r.Method == "GET" && r.URL.Path == "/work" {
+					fmt.Fprint(w, `{"work":[]}`)
+					return
+				}
 				if r.Method != tt.wantMethod || r.URL.Path != tt.wantPath {
 					t.Fatalf("unexpected request %s %s, want %s %s", r.Method, r.URL.String(), tt.wantMethod, tt.wantPath)
 				}

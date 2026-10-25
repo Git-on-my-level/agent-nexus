@@ -26,6 +26,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/runcontext"
 )
 
 func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, commandName string, pathParams map[string]string, outputPath string) (*commandResult, error) {
@@ -160,6 +161,8 @@ func cleanArtifactOutputFilename(filename string) string {
 }
 
 func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandName string, method string, path string, body any, extraHeaders ...map[string]string) (*commandResult, error) {
+	var parentHint runcontext.Hint
+	creating := singleCardCreate(method, path)
 	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -167,6 +170,9 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 	client, err := httpclient.New(authCfg)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	if creating {
+		parentHint = a.prepareRunParent(ctx, authCfg, body, strings.HasSuffix(path, "/cards/batch"))
 	}
 	var requestBody []byte
 	if body != nil {
@@ -210,10 +216,16 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 		"body":        parsedBody,
 	}
 	text := formatTypedCommandText(resolveMachineCommandIdentity(commandName).CommandID, resp.StatusCode, headersSorted, parsedBody, authCfg.Verbose, authCfg.Headers)
-	return &commandResult{Text: text, Data: data}, nil
+	result := &commandResult{Text: text, Data: data}
+	if creating {
+		result = a.finishCardCreate(ctx, cfg, result, parentHint, asMap(body))
+	}
+	return result, nil
 }
 
 func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandName string, commandID string, pathParams map[string]string, query []queryParam, body any) (*commandResult, error) {
+	var parentHint runcontext.Hint
+	creating := runcontext.IsCreateCommand(commandID)
 	// Allocate once on the payload itself, before normalization or transport retries.
 	// An explicitly supplied key always wins; identical intentional creates get new keys.
 	switch commandID {
@@ -242,6 +254,10 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 	client, err := httpclient.New(authCfg)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+
+	if creating {
+		parentHint = a.prepareRunParent(ctx, authCfg, body, commandID == "boards.cards.batch_add")
 	}
 
 	queryValues := queryValuesFromParams(query)
@@ -280,7 +296,11 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 		"body":        parsedBody,
 	}
 	text := formatTypedCommandText(commandID, resp.StatusCode, headersSorted, parsedBody, authCfg.Verbose, authCfg.Headers)
-	return &commandResult{Text: text, Data: data}, nil
+	result := &commandResult{Text: text, Data: data}
+	if creating {
+		result = a.finishCardCreate(ctx, cfg, result, parentHint, asMap(body))
+	}
+	return result, nil
 }
 
 func validationResult(commandName string, commandID string, pathParams map[string]string, query []queryParam, body any) *commandResult {

@@ -14,6 +14,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/runcontext"
 )
 
 const humanAttentionRequestedEventType = "human_attention_requested"
@@ -90,6 +91,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 
 	fs := newSilentFlagSet(kind)
 	var (
+		topLevelFlag                                                    trackedBool
+		underFlag                                                       trackedString
 		threadIDFlag                                                    trackedString
 		subjectRefFlag                                                  trackedString
 		bodyFlag                                                        trackedString
@@ -124,6 +127,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&ifNoAnswerFlag, "if-no-answer", "Default or blocked work and by when")
 	fs.Var(&detailsFlag, "details", "Technical Markdown, collapsed with evidence")
 	fs.Var(&alternativeFlags, "alternative", "Action=consequence in plain words (repeatable)")
+	fs.Var(&topLevelFlag, "top-level", "Ignore the run-label parent default for an auto-created subject")
+	fs.Var(&underFlag, "under", "Parent for an auto-created subject card")
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
 	fs.Var(&byFlag, "by", "When the human should decide: YYYY-MM-DD, RFC3339, or a duration like 2d")
 	fs.Var(&blocksFlags, "blocks", "Typed ref this decision blocks (repeatable, at most 20)")
@@ -163,6 +168,10 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if previewFlag.value && (dryRunFlag.set || deliveryFlag.set || onAnswerFlag.set || webhookFlag.set) {
 		return nil, errnorm.Usage("invalid_flags", "--preview cannot be combined with --dry-run, --delivery, --on-answer or --webhook; preview performs no delivery")
 	}
+	if topLevelFlag.value && underFlag.set {
+		return nil, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
+	}
+	ctx = runcontext.WithTopLevel(ctx, topLevelFlag.value)
 	trailingPositionals := fs.Args()
 	if err := rejectHumanFromFileFlagConflicts(
 		fromFileFlag,
@@ -344,6 +353,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 	autoSubject := false
 	var autoHomes any
+	var autoDefault any
 	var autoGroupingActions []output.NextAction
 	if subjectRef == "" {
 		var err error
@@ -360,12 +370,21 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			if board := strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")); board != "" {
 				input["board_ref"] = board
 			}
+			if underFlag.set {
+				input["under"] = underFlag.value
+			}
+			if e := ensureGroupingRequestKey(input); e != nil {
+				return nil, e
+			}
 			created, e := a.invokeRawJSON(ctx, cfg, "ask subject", "POST", "/work", input)
 			if e != nil {
 				return nil, e
 			}
 			autoBody := commandResultBody(created)
 			autoHomes = autoBody["likely_home"]
+			autoDefault = autoBody["run_parent_default"]
+			loopWarnings = append(loopWarnings, created.Warnings...)
+			autoGroupingActions = append(autoGroupingActions, created.NextActions...)
 			for _, raw := range asSlice(autoBody["next_actions"]) {
 				if argv := stringList(asMap(raw)["argv"]); len(argv) > 0 {
 					autoGroupingActions = append(autoGroupingActions, action("Group the new subject", argv...))
@@ -602,6 +621,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if autoSubject {
 		if body := commandResultBody(result); body != nil {
 			body["likely_home"] = autoHomes
+			if autoDefault != nil {
+				body["run_parent_default"] = autoDefault
+			}
 		}
 		result.NextActions = append(result.NextActions, autoGroupingActions...)
 	}
