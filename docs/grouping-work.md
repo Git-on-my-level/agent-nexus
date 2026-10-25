@@ -216,3 +216,65 @@ admitted-read figures above do not certify the complete HTTP request. This is a
 merge-blocking P1: keep the grouping PR draft until canonical authorization
 admission satisfies the ordinary budget. No new baseline, plan allowance or
 budget increase is supplied here.
+
+## Watch rollup data
+
+Brief and work-list hierarchy rows now share these computed fields. The UI can
+render them directly, without fetching each initiative:
+
+- `rollup.workstreams[].rollup`: the same `WorkRollup` shape as the root,
+  with `total`, `by_state`, `past_promise`, `needing_viewer`,
+  `earliest_promise_at`, `children`, `workstreams` and `has_more`.
+- `rollup.children[].owner` and `rollup.workstreams[].owner`: nullable first
+  canonical assignee ref, matching work ownership.
+- `rollup.children[].done_at`: nullable timestamp of the latest untrashed
+  `card_moved` event entering `done` from another column, only while the card
+  is currently done. A reorder within Done does not reset it. Imported cards
+  without this event, or whose latest terminal event is unreadable, return null. Comments and title edits cannot date completion.
+- `rollup.children[].short_code`: optional recognized handle/title family
+  (lowercase, e.g. `p76`, `fs-p3`, `cost`), using the existing `TitleFamily`
+  grammar, handle first. It is a compact label, not a unique card identity.
+- `rollup.earliest_promise_at`: nullable earliest counted promise of a visible
+  open direct child, including a date that has already passed.
+
+A workstream is a linked child card with visible direct children. Its rollup is
+expanded once; further descendants are not traversed. Each input batch admits
+at most 200 cards and each plan at most 200 steps. At most 200 visible
+workstreams per batch are expanded, ordered by canonical card ID. An omitted
+expansion sets the containing rollup's `has_more`; hidden children cannot set it.
+Child and grandchild payloads, plans, asks and lifecycle events all use the
+request's resource visibility. Duplicate plan refs still count one child.
+
+`brief.initiatives[].outcome` (also loops) uses `goal.label`, then `goal.metric`
+when a goal exists, otherwise the summary's first line, trimmed and bounded to
+280 Unicode code points. `proposed` is true exactly when placement is `backlog`.
+Backlog is the existing proposed/not-yet-started column; this adds no phase,
+column or promise-health state. A proposed initiative can still have a promise.
+The shared brief normalizer and `BRIEF_COMPUTED_FIELDS` expose these computed
+values; no Watch component or layout is changed here.
+
+`GET /work/ungrouped` adds `created_by: {id, display, kind?} | null`. Creator
+profiles hydrate in one scoped batch; missing or inaccessible profiles are null.
+In addition to Choose a home, `next_actions` supplies:
+
+- Make it an initiative: `command_id: work.patch`, executable `argv` ending in
+  `--from-file -`, and `stdin: {if_version, patch: {top_level: true}}`.
+  Applying it persists intentional top-level status and removes the card from
+  the tray. `top_level: false` restores ordinary eligibility. It preserves
+  other annotations and does not rewrite hierarchy or drop an initiative.
+- Move to another workspace: a `command_template` for `anx move card`, with
+  `requires_human: true` and `requires_destination: true`. It has no executable
+  argv. The single-workspace core cannot discover destination aliases or prove
+  access to another deployment; the human supplies an alias and the existing
+  CLI verifies source and destination permissions. This hint grants no new
+  agent authority and adds no move endpoint.
+
+Curation counts are intentionally omitted. Existing events do not distinguish
+kept-as-evidence and archive-candidate transitions, while cross-workspace move
+markers are a client journal rather than a complete classified event stream.
+Counting a recent window would imply evidence the canonical events do not have.
+
+Changed HTTP behavior: `GET /brief`, `GET /work`, `GET /work/{card_ref}`,
+`GET /work/ungrouped`, and existing card/plan/overview/report surfaces that share
+hierarchy enrichment. `POST /work` and `PATCH /work/{card_ref}` accept the
+`top_level` annotation. No routes are added or removed.

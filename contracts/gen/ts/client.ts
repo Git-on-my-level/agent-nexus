@@ -15183,6 +15183,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "top_level",
+          "type": "boolean"
+        },
+        {
           "name": "topic_ref",
           "type": "string"
         },
@@ -15896,6 +15900,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.start_at",
           "type": "string"
+        },
+        {
+          "name": "patch.top_level",
+          "type": "boolean"
         },
         {
           "name": "patch.wake_condition",

@@ -2034,3 +2034,60 @@ records the synthetic 2.27 GB comparison, loop accounting, opt-in pprof listener
 indexed router/FTS positions, writer-free idle probes and dirty heartbeat usage
 cache. New read budgets live in `primitives/testdata/idle_maintenance_budget.json`;
 existing budgets and plan allowances are unchanged.
+
+## Watch workstream rollups
+
+Hierarchy enrichment retains its existing two batch statements and adds at most
+two more for a single additional level, never a statement per initiative. Each
+batch admits 200 cards; each plan admits 200 steps. At most 200 visible child
+workstreams are expanded per root batch; deeper levels are not read. Thus fan-out
+is bounded by 40,000 direct rows plus 40,000 second-level rows per 200-root batch,
+independent of unrelated workspace size. Smaller pages grow with their admitted
+plans and referenced child cards. The existing primary-key/handle seeks,
+`idx_brief_plan_refs_target`, and subject-ask indexes remain authoritative.
+Visibility filters precede aggregation; no hidden contributor affects a count.
+
+Migration 121 adds `idx_events_card_done`, a partial lifecycle index over
+`(payload.card_id, ts DESC, id DESC)` restricted to untrashed `card_moved` events entering
+Done from a different column. The internal `work_done_event_positions` view
+selects one latest candidate by this index; its ID never leaves SQL. Canonical
+scoped event hydration then seeks that one ID, returning null if unreadable.
+The comparison suppresses the outer card column's TEXT affinity with unary `+`
+so SQLite can seek the JSON expression index rather than scanning its entries. `done_at` uses one indexed scalar seek per admitted
+Done child within the batch SQL, with canonical event visibility and a one-row
+limit. No event history is materialized or scanned as text at read time. The
+migration builds one index over existing events once; there is no new canonical
+state or authorization exception.
+
+Brief outcomes add a primary-key metadata join to the already admitted cards;
+SQL admits at most 281 code points and the projection emits 280. The tray reads
+creator IDs/annotation versions with its existing card batch, then at most 50
+actor profiles through primary keys in one scoped statement. Intentional-root
+filtering occurs within the existing 200-card cohort without refilling hidden
+rows. No workspace roster read is added.
+
+`TestWatchWorkstreamRollupBudget` adds a populated ten-workstream/100-grandchild
+fixture with 4,096 unrelated cards and lifecycle events, for both writer and
+stranger. Its new `work_grouping_budget.json` workstreams entry preserves the existing hierarchy ceiling:
+12 queries, 500 returned rows, 50,000 VM steps, and requires a SEARCH on the lifecycle index
+in the native plan. Existing grouping and denied-prefix budgets are unchanged.
+
+```sh
+./scripts/slot run tests -- go test -C core ./internal/primitives -count=1 -v \
+  -run '^Test(WatchWorkstreamRollupBudget|GroupingReadsBoundedWithTenThousandUnrelatedCards|GroupingUngroupedBoundedBehindTenThousandDeniedCards)$' -timeout=5m
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
+  -run '^TestPerformanceGroupingFeedBudget$' -count=1 -v -timeout=5m
+```
+
+Local acceptance on this branch: nested rollups use 6 queries / 123 returned
+rows / 33,211 VM steps / zero full scans for both principals. The existing
+200-child hierarchy gate uses 49,581 VM steps; the denied-prefix brief uses
+47,178. The complete ungrouped HTTP gate also passes (partial-reader samples
+49,730 VM steps). No ceiling or query-plan allowance is increased.
+
+The full startup scale gate remains blocked before migration 121: its fixed
+90-second upgrade deadline expires in existing migration 116. A second run
+with `migrations.go` overlaid verbatim from branch baseline `746e093c` reproduces
+the same failure before the new index/view exists. This is a baseline gate
+failure, not a passing startup certification. The focused released-120 upgrade
+and reopen regression verifies migration 121 over existing lifecycle events.

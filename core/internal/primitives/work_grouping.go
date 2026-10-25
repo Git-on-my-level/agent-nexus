@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,12 +38,16 @@ func workHasParentSQL(child string) string {
 }
 
 type WorkChild struct {
-	Ref         string `json:"ref"`
-	Title       string `json:"title"`
-	StepID      string `json:"step_id"`
-	State       string `json:"state"`
-	PastPromise bool   `json:"past_promise"`
-	NeedsViewer bool   `json:"needs_viewer"`
+	Ref         string      `json:"ref"`
+	Title       string      `json:"title"`
+	StepID      string      `json:"step_id"`
+	State       string      `json:"state"`
+	PastPromise bool        `json:"past_promise"`
+	NeedsViewer bool        `json:"needs_viewer"`
+	Owner       *string     `json:"owner"`
+	DoneAt      *string     `json:"done_at"`
+	ShortCode   string      `json:"short_code,omitempty"`
+	Rollup      *WorkRollup `json:"rollup"`
 }
 
 type workHierarchyViewerKey struct{}
@@ -65,13 +70,14 @@ func hierarchyViewer(ctx context.Context) (string, bool) {
 }
 
 type WorkRollup struct {
-	Total         int            `json:"total"`
-	ByState       map[string]int `json:"by_state"`
-	PastPromise   int            `json:"past_promise"`
-	NeedingViewer int            `json:"needing_viewer"`
-	Workstreams   []WorkChild    `json:"workstreams"`
-	Children      []WorkChild    `json:"children"`
-	HasMore       bool           `json:"has_more"`
+	Total             int            `json:"total"`
+	ByState           map[string]int `json:"by_state"`
+	PastPromise       int            `json:"past_promise"`
+	NeedingViewer     int            `json:"needing_viewer"`
+	Workstreams       []WorkChild    `json:"workstreams"`
+	Children          []WorkChild    `json:"children"`
+	EarliestPromiseAt *string        `json:"earliest_promise_at"`
+	HasMore           bool           `json:"has_more"`
 }
 
 func emptyWorkRollup() *WorkRollup {
@@ -89,6 +95,9 @@ func (s *Store) EnrichWorkHierarchy(ctx context.Context, cards []map[string]any,
 	return enrichWorkHierarchy(ctx, s.db, cards, viewer, human, now)
 }
 func enrichWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]any, viewer string, human bool, now time.Time) error {
+	return loadWorkHierarchy(ctx, q, cards, viewer, human, now, true)
+}
+func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]any, viewer string, human bool, now time.Time, expand bool) error {
 	if len(cards) == 0 {
 		return nil
 	}
@@ -146,25 +155,38 @@ func enrichWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string
 	streams := `EXISTS(SELECT 1 FROM brief_plan_refs grandchildren
 	 CROSS JOIN cards grandchild ON grandchild.id=substr(grandchildren.ref,6) OR (grandchild.handle IS NOT NULL AND trim(grandchild.handle)<>'' AND grandchild.handle=substr(grandchildren.ref,6))
 	 WHERE grandchildren.card_id=c.id AND substr(grandchildren.ref,1,5)='card:' AND grandchild.trashed_at IS NULL AND ` + workParentSQL("grandchild") + `=c.id)`
+	if !expand {
+		streams = "0"
+	}
+	// Only a routing identity is selected before canonical event hydration.
+	// Unary + suppresses the outer TEXT affinity so SQLite seeks the JSON
+	// expression index instead of scanning every completion for every child.
+	doneAt := `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events e
+ WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY position.ts DESC,position.id DESC LIMIT 1)) END`
 	rows, err = q.QueryContext(ctx, `SELECT requested.value,COALESCE(NULLIF(c.handle,''),c.id),c.title,json_extract(step.value,'$.id'),c.column_key,
-	 CASE WHEN bi.open=1 AND bi.promise_at<? THEN 1 ELSE 0 END,`+needs+`,`+streams+`
+	 `+needs+`,`+streams+`,c.id,COALESCE(c.assignee,''),
+ bi.promise_at,`+doneAt+`
 	 FROM json_each(?) requested CROSS JOIN card_plans p ON p.card_id=requested.value
 	 CROSS JOIN json_each(p.body_json,'$.steps') step
 	 CROSS JOIN cards c ON c.id=substr(json_extract(step.value,'$.ref'),6) OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=substr(json_extract(step.value,'$.ref'),6))
 	 LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
 	 WHERE CAST(step.key AS INTEGER)<200 AND substr(json_extract(step.value,'$.ref'),1,5)='card:' AND c.trashed_at IS NULL
 	 AND `+workParentSQL("c")+`=requested.value
-	 ORDER BY requested.value,CAST(step.key AS INTEGER)`, now.UTC().Format(time.RFC3339Nano), stripActor(viewer), "actor:"+stripActor(viewer), human, stripActor(viewer), "actor:"+stripActor(viewer), string(encoded))
+	 ORDER BY requested.value,CAST(step.key AS INTEGER)`, stripActor(viewer), "actor:"+stripActor(viewer), human, stripActor(viewer), "actor:"+stripActor(viewer), string(encoded))
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
+	streamIDs := map[string]bool{}
+	childIDs := map[string]string{}
 	seen := map[string]bool{}
+	earliestPromises := map[string]time.Time{}
 	for rows.Next() {
-		var parent, ref string
+		var parent, ref, id, assignee string
+		var promise, done sql.NullString
 		var child WorkChild
 		var stream bool
-		if err = rows.Scan(&parent, &ref, &child.Title, &child.StepID, &child.State, &child.PastPromise, &child.NeedsViewer, &stream); err != nil {
+		if err = rows.Scan(&parent, &ref, &child.Title, &child.StepID, &child.State, &child.NeedsViewer, &stream, &id, &assignee, &promise, &done); err != nil {
 			return err
 		}
 		if seen[parent+"/"+ref] {
@@ -172,8 +194,32 @@ func enrichWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string
 		}
 		seen[parent+"/"+ref] = true
 		child.Ref = "card:" + ref
+		childIDs[child.Ref] = id
+		var promiseAt time.Time
+		hasPromise := false
+		if promise.Valid && child.State != "done" && child.State != "cancelled" {
+			var parseErr error
+			promiseAt, parseErr = time.Parse(time.RFC3339Nano, promise.String)
+			hasPromise = parseErr == nil
+			child.PastPromise = hasPromise && promiseAt.Before(now)
+		}
+		if refs := boardCardAssigneeRefs(assignee); len(refs) > 0 {
+			child.Owner = &refs[0]
+		}
+		if done.Valid {
+			child.DoneAt = &done.String
+		}
+		child.ShortCode = WorkShortCode(ref, child.Title)
+		if stream {
+			streamIDs[id] = true
+		}
 		r := canonical[parent]["rollup"].(*WorkRollup)
 		r.Total++
+		if previous, exists := earliestPromises[parent]; hasPromise && (!exists || promiseAt.Before(previous)) {
+			earliestPromises[parent] = promiseAt
+			at := promiseAt.UTC().Format(time.RFC3339Nano)
+			r.EarliestPromiseAt = &at
+		}
 		r.ByState[child.State]++
 		if child.PastPromise {
 			r.PastPromise++
@@ -186,7 +232,56 @@ func enrichWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string
 			r.Workstreams = append(r.Workstreams, child)
 		}
 	}
-	return rows.Err()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if !expand || len(streamIDs) == 0 {
+		return nil
+	}
+	// One extra batch, never one query per initiative or recursive graph walk.
+	streamKeys := make([]string, 0, len(streamIDs))
+	for id := range streamIDs {
+		streamKeys = append(streamKeys, id)
+	}
+	sort.Strings(streamKeys)
+	expanded := map[string]map[string]any{}
+	batch := []map[string]any{}
+	for _, id := range streamKeys[:min(200, len(streamKeys))] {
+		c := map[string]any{"id": id}
+		expanded[id] = c
+		batch = append(batch, c)
+	}
+	if err = loadWorkHierarchy(ctx, q, batch, viewer, human, now, false); err != nil {
+		return err
+	}
+	for _, c := range canonical {
+		r := c["rollup"].(*WorkRollup)
+		for _, children := range [][]WorkChild{r.Children, r.Workstreams} {
+			for i := range children {
+				id := childIDs[children[i].Ref]
+				if !streamIDs[id] {
+					continue
+				}
+				if item, ok := expanded[id]; ok {
+					children[i].Rollup = item["rollup"].(*WorkRollup)
+				} else {
+					r.HasMore = true
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// WorkShortCode reuses the grouping grammar. Labels are never identities.
+func WorkShortCode(handle, title string) string {
+	for _, text := range []string{handle, title} {
+		if family := TitleFamily(text); family != "" && len([]rune(family)) <= 64 {
+			return family
+		}
+	}
+	return ""
 }
 
 func loadGroupingPlan(ctx context.Context, tx *accessTx, id string) (plans.Plan, error) {

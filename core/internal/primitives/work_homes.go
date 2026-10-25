@@ -39,6 +39,8 @@ type homeCandidate struct {
 	id, ref, title, created, project, refs, metadata, updated, phase string
 	signals, repositories                                            map[string]bool
 	family                                                           string
+	createdBy                                                        string
+	version                                                          int64
 }
 
 func recentHomeCandidates(ctx context.Context, q briefQueryer, at ...time.Time) ([]homeCandidate, error) {
@@ -61,7 +63,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	// deliberately a physical routing cohort before scoped hydration, never an
 	// all-workspace similarity or denial scan. Routing keys never leave this query.
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,
-	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key
+	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0)
 	 FROM (`+recent+`) recent
 	 CROSS JOIN cards c ON c.id=recent.id CROSS JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE b.archived_at IS NULL AND b.trashed_at IS NULL AND NOT `+workHasParentSQL("c")+`
@@ -75,7 +77,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	out := []homeCandidate{}
 	for rows.Next() {
 		var c homeCandidate
-		if err = rows.Scan(&c.id, &c.ref, &c.title, &c.created, &c.updated, &c.refs, &c.project, &c.metadata, &c.phase); err != nil {
+		if err = rows.Scan(&c.id, &c.ref, &c.title, &c.created, &c.updated, &c.refs, &c.project, &c.metadata, &c.phase, &c.createdBy, &c.version); err != nil {
 			return nil, err
 		}
 		out = append(out, prepareHomeCandidate(c))
@@ -294,8 +296,16 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	if err != nil {
 		return nil, false, err
 	}
-	more := len(base) > limit
-	candidates := base[:min(limit, len(base))]
+	eligible := []homeCandidate{}
+	for _, c := range base {
+		var metadata map[string]any
+		_ = json.Unmarshal([]byte(c.metadata), &metadata)
+		if metadata["top_level"] != true {
+			eligible = append(eligible, c)
+		}
+	}
+	more := len(eligible) > limit
+	candidates := eligible[:min(limit, len(eligible))]
 	inputs := []map[string]any{}
 	related := []string{}
 	for _, c := range candidates {
@@ -320,9 +330,26 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 		return nil, false, err
 	}
 	out := []map[string]any{}
+	actors := &briefBuild{s: s, ctx: ctx, actors: map[string]bool{}}
+	for _, c := range candidates {
+		actors.actors[stripActor(c.createdBy)] = true
+	}
+	if err = actors.resolveActors(); err != nil {
+		return nil, false, err
+	}
 	for i, c := range candidates {
 		homes := likelyHomes(inputs[i], all)
-		out = append(out, map[string]any{"ref": c.ref, "title": c.title, "phase": c.phase, "parent_ref": nil, "created_at": c.created, "likely_home": homes, "next_actions": GroupingNextActions(c.ref, homes, "group")})
+		actions := GroupingNextActions(c.ref, homes, "group")
+		body := map[string]any{"if_version": c.version, "patch": map[string]any{"top_level": true}}
+		actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "work.patch", "argv": []string{"anx", "work", "patch", c.ref, "--from-file", "-"}, "stdin": body, "mutates": true, "side_effect_class": "remote_coordination_write"})
+		// OSS cannot inspect another deployment's permissions. This is a human
+		// command template only, never an executable agent action or permission grant.
+		actions = append(actions, map[string]any{"label": "Move to another workspace", "command_template": "anx move card " + c.ref + " --to <workspace-alias>", "requires_human": true, "requires_destination": true, "mutates": true, "side_effect_class": "remote_coordination_write"})
+		var creator any
+		if p, ok := actors.display[stripActor(c.createdBy)]; ok {
+			creator = p
+		}
+		out = append(out, map[string]any{"ref": c.ref, "title": c.title, "phase": c.phase, "parent_ref": nil, "created_at": c.created, "created_by": creator, "likely_home": homes, "next_actions": actions})
 	}
 
 	return out, more, nil
