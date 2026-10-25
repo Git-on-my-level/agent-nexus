@@ -85,7 +85,7 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 	if brief.Card != nil || !strings.Contains(brief.Context, "Verify tomorrow") || !strings.Contains(brief.Context, "Reload the anx-participant skill") || len(brief.Context) > 6<<10 {
 		t.Fatal("missing no-card brief", hook.Stdout, hook.Stderr)
 	}
-	missing := h.runCLI(t, "worker", nil, "ask", "Approve?", "--subject-ref", "card:missing-in-workspace", "--recommend", "Proceed", "--body", "This is ready for review.")
+	missing := h.runCLI(t, "worker", nil, "ask", "Approve?", "--subject-ref", "card:missing-in-workspace", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed", "--body", "This is ready for review.")
 	if missing.ExitCode != 3 || !strings.Contains(missing.Stdout, "same workspace") || !strings.Contains(missing.Stdout, "--workspace") {
 		t.Fatal("misleading subject error", missing.Stdout, missing.Stderr)
 	}

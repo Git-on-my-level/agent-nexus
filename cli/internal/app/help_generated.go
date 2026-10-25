@@ -1056,7 +1056,7 @@ Loop (stable):
   orient                  Your brief: answers, asks waiting on a human, initiatives vs promises, next (read_only)
   context <card>          Everything about one initiative (read_only)
   note <card> ["<text>"] [--next <when> "<what>"] [--evidence <ref>]  Post progress and renew the promise (remote_coordination_write)
-  ask <title> --recommend <text> [--by <when>] [--blocks <ref>]  Request a human decision (remote_coordination_write)
+  ask <title> --situation <text> --impact <text> --recommend <text> --why <text> [--preview]  Request a human decision (remote_coordination_write)
   await <ask-id|card-ref|access-request:<id>>  Wait for an answer or access decision (read_only)
   done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
   link <ref>...           Browser link to share with a human (read_only)

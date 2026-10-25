@@ -126,6 +126,32 @@ function refTitle(value) {
   return ref ? { ref, title: text(value.title) } : null;
 }
 
+function normalizeAskPresentation(raw) {
+  return {
+    body: String(raw.body ?? ""),
+    situation: text(raw.situation),
+    impact: text(raw.impact),
+    recommendation:
+      raw.recommendation && typeof raw.recommendation === "object"
+        ? {
+            action: text(raw.recommendation.action),
+            why: text(raw.recommendation.why),
+          }
+        : null,
+    alternatives: (Array.isArray(raw.alternatives) ? raw.alternatives : [])
+      .filter((v) => v && typeof v === "object")
+      .map((v) => ({
+        action: text(v.action),
+        consequence: text(v.consequence),
+      })),
+    if_no_answer: text(raw.if_no_answer),
+    details: text(raw.details),
+    evidence: (Array.isArray(raw.evidence) ? raw.evidence : [])
+      .filter((v) => v && typeof v === "object")
+      .map((v) => ({ label: text(v.label), url: text(v.url) })),
+  };
+}
+
 function normalizeDecision(raw) {
   const ref = text(raw?.ref);
   if (!ref) return null;
@@ -142,7 +168,7 @@ function normalizeDecision(raw) {
     ...(eventRef ? { eventRef } : {}),
     workspace: text(raw.workspace),
     title: text(raw.title) || ref,
-    body: String(raw.body ?? ""),
+    ...normalizeAskPresentation(raw),
     requestedBy: actor(raw.requested_by),
     createdAt: text(raw.created_at),
     decideBy: text(raw.decide_by),
@@ -194,6 +220,7 @@ function normalizeBatch(raw) {
         inboxItemId: text(member.inbox_item_id) || text(member.inboxItemId),
         ...(eventRef ? { eventRef } : {}),
         title: text(member.title),
+        ...normalizeAskPresentation(member),
         subjectRef: text(member.subject_ref) || text(member.subjectRef),
         blocks: (Array.isArray(member.blocks) ? member.blocks : [])
           .map(refTitle)

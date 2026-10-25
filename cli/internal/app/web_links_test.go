@@ -216,7 +216,7 @@ func TestWebURLDecoratesSingleObjectResults(t *testing.T) {
 		{"cards create", []string{"cards", "create", "--board", "board:main", "--title", "New card", "--body", "Criteria", "--actor-id", "actor_1"}, "card:new-card"},
 		{"topics create", []string{"topics", "create", "--title", "New topic", "--summary", "Why", "--actor-id", "actor_1"}, "topic:new-topic"},
 		{"boards create", []string{"boards", "create", "--topic", "topic:launch", "--title", "New board", "--actor-id", "actor_1"}, "board:new-board"},
-		{"ask", []string{"ask", "Ship Friday?", "--subject-ref", "card:launch", "--recommend", "Yes", "--by", "1d", "--actor-id", "actor_1"}, "event:event_1"},
+		{"ask", []string{"ask", "Ship Friday?", "--subject-ref", "card:launch", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--by", "1d", "--actor-id", "actor_1"}, "event:event_1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out, stderr, code := runWebLinkCLI(t, append([]string{"--json", "--base-url", core.server.URL}, tc.args...)...)

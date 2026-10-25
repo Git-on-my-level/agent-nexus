@@ -110,7 +110,7 @@ func TestGroupingAskAutoSubjectRetainsCoreHome(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "ask", "Ship it?", "--body", "Context", "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--by", "1d"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	doc := dailyJSON(t, out)

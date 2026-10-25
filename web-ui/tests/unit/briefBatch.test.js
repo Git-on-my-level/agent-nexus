@@ -153,3 +153,31 @@ describe("brief batch decisions", () => {
     ).toBe(1);
   });
 });
+
+it("preserves member copy through batch normalization", () => {
+  const copy = {
+    situation: "Data can reappear.",
+    impact: "Privacy risk.",
+    recommendation: {
+      action: "Add the guard.",
+      why: "It prevents new writes.",
+    },
+    alternatives: [{ action: "Wait.", consequence: "The risk remains." }],
+    if_no_answer: "Blocked until Friday.",
+    details: "Implementation.",
+    evidence: [{ label: "Change", url: "https://example.org/change" }],
+    body: "Legacy context.",
+  };
+  const member = normalizeBrief({
+    decisions: [
+      {
+        ref: "inbox:batch",
+        batch: {
+          key: "filed:test",
+          members: [{ ref: "inbox:member", title: "Approve?", ...copy }],
+        },
+      },
+    ],
+  }).decisions[0].batch.members[0];
+  expect(member).toMatchObject(copy);
+});

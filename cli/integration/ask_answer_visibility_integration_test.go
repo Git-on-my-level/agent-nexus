@@ -23,7 +23,7 @@ func TestInboxListAnsweredIncludesOwnAnsweredAsks(t *testing.T) {
 
 	askIDs := map[string]bool{}
 	for i := 1; i <= 5; i++ {
-		ask := h.runCLIExpectOK(t, "worker", nil, "ask", fmt.Sprintf("Decision %d: ship now?", i), "--recommend", "Yes", "--alt", "Wait")
+		ask := h.runCLIExpectOK(t, "worker", nil, "ask", fmt.Sprintf("Decision %d: ship now?", i), "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Yes", "--alt", "Wait")
 		askID := mustStringPath(t, ask.Payload, "result.ask_id")
 		if askID == "" {
 			t.Fatalf("ask %d id missing: %s", i, ask.Stdout)

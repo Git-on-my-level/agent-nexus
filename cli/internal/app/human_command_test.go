@@ -38,7 +38,7 @@ func TestHumanCommandRejectsTooManyProposals(t *testing.T) {
 		"--json", "ask", "Q",
 		"--subject-ref", "topic:t1",
 		"--thread-id", "thr1",
-		"--recommend", "A",
+		"--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "A",
 	}
 	for i := 0; i < 6; i++ {
 		args = append(args, "--alt", string(rune('B'+i)))
@@ -56,7 +56,7 @@ func TestHumanCommandFromFileRejectsMixedFlags(t *testing.T) {
 
 	home := t.TempDir()
 	path := filepath.Join(t.TempDir(), "h.md")
-	content := "---\ntitle: T\nsubject_ref: topic:x\nthread_id: thr1\nrecommended_response: R\n---\nBody\n"
+	content := "---\ntitle: T\nsubject_ref: topic:x\nthread_id: thr1\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: R\n---\nBody\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestHumanCommandFromFileRejectsPositionalTitle(t *testing.T) {
 
 	home := t.TempDir()
 	path := filepath.Join(t.TempDir(), "h.md")
-	content := "---\ntitle: T\nsubject_ref: topic:x\nthread_id: thr1\nrecommended_response: R\n---\n"
+	content := "---\ntitle: T\nsubject_ref: topic:x\nthread_id: thr1\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: R\n---\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestHumanCommandFromFileKindMismatch(t *testing.T) {
 
 	home := t.TempDir()
 	path := filepath.Join(t.TempDir(), "h.md")
-	content := "---\ntitle: T\nsubject_ref: topic:x\nthread_id: thr1\nrecommended_response: R\nkind: review\n---\n"
+	content := "---\ntitle: T\nsubject_ref: topic:x\nthread_id: thr1\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: R\nkind: review\n---\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestHumanCommandFromFileCreatesEvent(t *testing.T) {
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	path := filepath.Join(t.TempDir(), "req.md")
-	content := "---\ntitle: Confirm launch\ncoverage_hint: thin\nsubject_ref: card:launch\nthread_id: thr1\nrecommended_response: Ship May 15\nproposals:\n  - Wait for legal\n---\n\nMore detail in markdown.\n"
+	content := "---\ntitle: Confirm launch\ncoverage_hint: thin\nsubject_ref: card:launch\nthread_id: thr1\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: Ship May 15\nproposals:\n  - Wait for legal\n---\n\nMore detail in markdown.\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestHumanCommandFromFileRejectsLongProposalBeforeNetworkWrite(t *testing.T)
 	home := t.TempDir()
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	path := filepath.Join(t.TempDir(), "long-proposal.md")
-	content := "---\ntitle: Confirm launch\nsubject_ref: card:launch\nthread_id: thr1\nrecommended_response: \"" + strings.Repeat("x", 241) + "\"\n---\n"
+	content := "---\ntitle: Confirm launch\nsubject_ref: card:launch\nthread_id: thr1\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: \"" + strings.Repeat("x", 241) + "\"\n---\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestHumanCommandFromFileDryRunValidatesWithoutNetworkRequest(t *testing.T) 
 	home := t.TempDir()
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	path := filepath.Join(t.TempDir(), "request.md")
-	content := "---\ntitle: Confirm launch\nsubject_ref: card:launch\nthread_id: thr1\nrecommended_response: Ship it\nproposals:\n  - Wait\n---\nDetails\n"
+	content := "---\ntitle: Confirm launch\nsubject_ref: card:launch\nthread_id: thr1\nsituation: A launch decision is waiting.\nimpact: The team cannot finish until we choose.\nrecommendation: {action: Proceed, why: This is the quickest safe approach.}\nrecommended_response: Ship it\nproposals:\n  - Wait\n---\nDetails\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
 				"--json", "--base-url", server.URL, "--as", "agent-a",
 				"ask", "Which launch date?",
 				"--subject-ref", tc.subjectRef,
-				"--recommend", "Use May 15.",
+				"--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Use May 15.",
 			})
 
 			if !strings.HasPrefix(tc.subjectRef, "card:") {

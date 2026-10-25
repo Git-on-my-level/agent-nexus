@@ -10,6 +10,7 @@ import (
 )
 
 type humanAttentionFileFrontmatter struct {
+	askPresentation     `yaml:",inline"`
 	Evidence            []askEvidenceLink `yaml:"evidence"`
 	Supersedes          string            `yaml:"supersedes"`
 	Title               string            `yaml:"title"`
@@ -50,7 +51,7 @@ func splitHumanAttentionMarkdown(content string) (yamlSource string, body string
 	return strings.Join(yamlLines, "\n"), body, nil
 }
 
-func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind string) (humanAttentionFileFrontmatter, string, []any, error) {
+func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind string, preview bool) (humanAttentionFileFrontmatter, string, []any, error) {
 	var empty humanAttentionFileFrontmatter
 	data, err := a.readInputFile(path)
 	if err != nil {
@@ -71,7 +72,13 @@ func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind strin
 	fm.RequesterActorID = strings.TrimSpace(fm.RequesterActorID)
 	fm.RequesterAgentID = strings.TrimSpace(fm.RequesterAgentID)
 	fm.RequesterLabel = strings.TrimSpace(fm.RequesterLabel)
+	if fm.Recommendation != nil {
+		fm.RecommendedResponse = firstNonEmpty(fm.RecommendedResponse, fm.Recommendation.Action)
+	}
 	fm.RecommendedResponse = strings.TrimSpace(fm.RecommendedResponse)
+	for _, alt := range fm.Alternatives {
+		fm.Proposals = append(fm.Proposals, alt.Action)
+	}
 	fm.CoverageHint = strings.TrimSpace(fm.CoverageHint)
 	fm.Severity = strings.TrimSpace(fm.Severity)
 	fm.Kind = strings.TrimSpace(fm.Kind)
@@ -89,16 +96,24 @@ func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind strin
 	if fm.Title == "" {
 		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter title is required")
 	}
-	if fm.RecommendedResponse == "" {
-		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter recommended_response is required")
+	if fm.RecommendedResponse == "" && !preview {
+		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter recommendation.action (or legacy recommended_response) is required")
 	}
 	if fm.Kind != "" && !strings.EqualFold(fm.Kind, expectedKind) {
 		return empty, "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("frontmatter kind %q does not match anx %s", fm.Kind, expectedKind))
 	}
 
 	responseProposals, err := buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)
-	if err != nil {
+	if err != nil && !preview {
 		return empty, "", nil, err
+	}
+	if preview && err != nil {
+		responseProposals = nil
+		for _, option := range append([]string{fm.RecommendedResponse}, fm.Proposals...) {
+			if strings.TrimSpace(option) != "" {
+				responseProposals = append(responseProposals, option)
+			}
+		}
 	}
 	return fm, body, responseProposals, nil
 }

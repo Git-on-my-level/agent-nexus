@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/askpresentation"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -831,6 +832,7 @@ func deriveHumanAttentionInboxItem(event map[string]any) (derivedInboxItem, bool
 		"requester_label":    strings.TrimSpace(anyString(payload["requester_label"])),
 		"created_at":         strings.TrimSpace(anyString(event["ts"])),
 	}
+	askpresentation.Copy(data, payload)
 	if severity := strings.TrimSpace(anyString(payload["severity"])); severity != "" {
 		data["severity"] = severity
 	}
@@ -912,6 +914,7 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 			"subject_ref":        strings.TrimSpace(anyString(payload["subject_ref"])),
 			"response_proposals": HumanAttentionResponseProposalsToAnySlice(proposals),
 		}
+		askpresentation.Copy(section, payload)
 		if body := strings.TrimSpace(anyString(payload["body"])); body != "" {
 			section["body"] = body
 		}
@@ -998,6 +1001,7 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 			"asks": sections,
 		},
 	}
+	askpresentation.Copy(data, leadPayload)
 	if delivery := strings.TrimSpace(anyString(leadPayload["delivery"])); delivery != "" {
 		data["delivery"] = delivery
 	}
