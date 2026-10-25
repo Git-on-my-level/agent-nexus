@@ -38,8 +38,9 @@ evidence: []
 # Keep the title near 80 characters. Answer buttons must stand alone.
 # Put technical Markdown in frontmatter details; link evidence. Both are collapsed.
 # When asked for a draft from supplied context, use only that context without
-# tool calls or preparation narration. Do not perform the underlying work or
-# search for missing facts. State material unknowns.
+# research or preparation narration. Tools may only write a requested draft file
+# or run an explicitly requested local preview. Do not perform the underlying
+# work or search for missing facts. State material unknowns.
 # Return only the document, with every field between the two --- delimiters.
 # YAML evidence entries are objects: {label: "Source", url: "https://..."}.
 # Label=URL is an inline flag syntax, not the YAML evidence shape.

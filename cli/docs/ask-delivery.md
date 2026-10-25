@@ -63,10 +63,10 @@ Older asks still render `body`.
 Start with `anx ask --template decision > ask.md`, edit the YAML frontmatter,
 then run `anx ask --from-file ask.md --preview`. The template contains the fictional
 proposal below. When asked for a draft from supplied context, use only that
-context without tool calls or preparation narration. Do not perform the underlying
-work or search for missing facts. State material
-unknowns. Return only the document, with every field between the two `---`
-delimiters. YAML `evidence` entries are `{label, url}` objects; `Label=URL` is
+context without research or preparation narration. Tools may only write a requested
+draft file or run an explicitly requested local preview. Do not perform the
+underlying work or search for missing facts. State material unknowns. Return only
+the document, with every field between the two `---` delimiters. YAML `evidence` entries are `{label, url}` objects; `Label=URL` is
 inline flag syntax. Every named pull request, even in details, needs its own
 labelled pull-request URL; a checks or commit URL does not qualify. Omit
 unrelated reference history. Preview shows the same headings and paragraphs as
