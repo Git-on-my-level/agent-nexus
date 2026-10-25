@@ -327,8 +327,15 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 		}
 		replace := func(s, p string) string { return strings.ReplaceAll(s, "$", p) }
 		insert := func(p, f string) string {
-			out := keys + `SELECT '` + table + `',` + replace(originID, p) + `,` + p + kind + `,` + p + id + `,'',1,unhex(` + resourceaccess.AtomKeySQL(p+kind+`||':'`) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + p + ref + `='' AND ` + valid(p+kind) + `;`
+			// Retained spellings need not include the canonical ID, and empty
+			// spellings have no identity row at all. Maintain ID contributions
+			// directly from each retained resource tuple, independently of ref.
+			out := keys + `SELECT '` + table + `',` + replace(originID, p) + `,` + p + kind + `,` + p + id + `,` + p + id + `,1,unhex(` + resourceaccess.AtomKeySQL(p+kind+`||':'||`+p+id) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + valid(p+kind) + `;` +
+				keys + `SELECT '` + table + `',` + replace(originID, p) + `,` + p + kind + `,` + p + id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(p+id) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + valid(p+kind) + ` AND ` + p + kind + `<>'plan';` +
+				virtualHistoryKeys(table, replace(originID, p), p+kind, p+id, f, "1") +
+				keys + `SELECT '` + table + `',` + replace(originID, p) + `,` + p + kind + `,` + p + id + `,'',1,unhex(` + resourceaccess.AtomKeySQL(p+kind+`||':'`) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + p + ref + `='' AND ` + valid(p+kind) + `;`
 			if table == "resource_access_tombstones" {
+				out += keys + `SELECT '` + table + `',` + replace(originID, p) + `,'external_key',` + p + id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(p+id) + `),1 FROM ` + f + `(SELECT 1) WHERE ` + p + kind + `='external_key';`
 				out += keys + `SELECT '` + table + `',` + replace(originID, p) + `,` + p + kind + `,` + p + id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(p+ref) + `),1 FROM ` + f + `(SELECT 1) WHERE ` + p + ref + ` LIKE 'http://%' OR ` + p + ref + ` LIKE 'https://%' OR ` + p + kind + `='external_key';`
 			}
 			return out

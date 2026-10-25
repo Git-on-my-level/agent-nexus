@@ -161,11 +161,59 @@ advisory inventory overruns. Both original tests and limits remain unchanged:
   parents in their existing thread/event indexes. Reachability follows those
   indexed relations; reached wakeups receive keys and spellings as needed, and
   structural edits materialize the old contribution before normal teardown.
-  Both 1k and 100k now perform **67 writes and allocate 352 pages**. Historical
+  Both 1k and 100k now perform **67 writes and allocate 354 pages**. Historical
   parity covers private threads/events, explicit references and referring cards,
   a 128-wakeup reference cycle, empty legacy parents, moves, revocation/transfer,
   rename, deletion and compact cutover. New wakeups use the ordinary incremental
   triggers.
+
+### Security review: late resolution and retained spellings
+
+The Sol review reproduced two authorization leaks in the previous #469 head
+(`987295b7`). Both now have regressions that failed against that head:
+
+- After upgrading a public historical wakeup with no reference atoms, making
+  its parent thread private failed to deny a referring card. The common-only
+  reach insertion created the dependency before the legacy/compact parent
+  memberships existed; later key conflicts skipped the insert-trigger side
+  effect. Each newly reached wakeup now resolves keys and then propagates from
+  that membership's own ledger/root. Recursive INSERT evaluation order cannot
+  decide visibility. Coverage includes legacy, compact, forced legacy and a
+  missing selection, navigational references and ownership transfer.
+- An alias-only document tombstone failed to deny cards referencing its typed
+  or bare canonical ID. Retained alias/tombstone tuples now contribute canonical
+  ID keys independently of retained spelling, through identical migration and
+  runtime SQL. The audit also covered empty tombstone spellings and external-key
+  IDs. An all-resource-kind upgrade test found another omission: skipping all
+  historical wakeup identities also skipped retained wakeup aliases. Backfill
+  now includes those via origin-index seeks while leaving untouched canonical
+  wakeup history uncopied.
+
+`TestAdmissionUpgradeRandomizedScaleParity` seeds 4,096 cards into the released
+schema, with public historical wakeups, alias-only tombstones and retained
+aliases before migration 116. Two fixed seeds each exercise 32 post-migration
+operations: access revocation/transfer, wakeup parent/reference changes, alias
+renames, tombstone spelling/owner changes and ledger cutover. After each operation,
+the old canonical closure and maintained admission must agree for nine principal
+scopes: owners, unrelated human/agent, designated PM, owner PM, auth administrator,
+numeric legacy owner and anonymous. Comparison includes the complete denial and
+projection-spelling sets, actual scoped rows, limited pages, counts and lookahead.
+The second seed reverses admission-trigger installation order before exercising
+the transitions, so independent-trigger order cannot conceal a missing effect.
+The two exact reported reproductions also run separately in the fast tier.
+
+The conflict audit covered admission keys/links, graph contributions, root and
+owner counts, reach membership, spelling prefixes, compact synchronization and
+the insert-before-delete source/evidence diff. Duplicate keys/links suppress only
+identical contributions; graph/root/owner aggregates update counts explicitly;
+removal keeps surviving contributors. Historical lazy key resolution was the
+only path that introduced graph dependencies inside a recursive reach insertion;
+its propagation now runs after resolution per membership. The spelling matrix
+covers every registered source kind plus external keys, virtual document history
+and series streams, with canonical typed/bare IDs, retained aliases, empty
+spellings, duplicate contributors and deletion/owner transitions. Existing live
+handle/revision/Unicode/binary policy tests remain active. No budget, allowance,
+startup guard or test timeout changed.
 
 Legacy schema-reconstruction fixtures remove post-116 admission triggers before
 dropping older indexes. Their canonical legacy triggers and all retained-privacy

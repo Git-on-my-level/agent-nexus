@@ -55,6 +55,22 @@ spellings; a structural edit materializes its old contribution before deleting
 obsolete ancestry. New rows use normal incremental admission. This preserves the
 released receipt-history startup bound without changing visibility semantics.
 
+Lazy historical key resolution must finish before propagation in each ledger.
+Resolving a wakeup while the common-only membership is inserted can create a
+legacy/compact dependency before that ledger's parent membership exists. A later
+conflicting key insert does not repeat its insert trigger. Each new wakeup
+membership therefore resolves its keys, then walks dependencies from its own
+ledger/root. This does not rely on recursive INSERT evaluation or trigger order.
+Retained wakeup aliases and tombstones are backfilled through origin-index seeks;
+only untouched canonical wakeup history is omitted.
+
+Retained aliases and tombstones contribute canonical typed/bare ID keys directly
+from their resource tuple, independently of the retained spelling. This includes
+empty spellings, virtual document-history identities and external-key IDs, with
+the same exclusions as the canonical policy. Removing one retained contribution
+does not remove keys contributed by another. Migration and runtime use the same
+insertion SQL.
+
 ## Exact authority and projection matching
 
 Root owners retain their SQLite value types. Owner indexes preserve the original
