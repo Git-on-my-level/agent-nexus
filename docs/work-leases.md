@@ -20,6 +20,7 @@ same work.
 anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason "ramp step 3"
 anx lease renew   card:ramp-batch --owner exec-7f3a            # keeps the TTL
 anx lease release card:ramp-batch --owner exec-7f3a --reason "step 3 merged"
+anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h
 anx lease show    card:ramp-batch
 ```
 
@@ -69,9 +70,73 @@ Each card has at most one row in `card_leases`, holding:
   - Releasing a free lease is a no-op (`changed:false`).
   - Releasing another owner's unexpired lease fails with `lease_held`.
   - O may release its own expired lease to close it explicitly.
+  - With `--handoff-to P [--ttl D]` the lease moves to P in the same
+    transaction (see [Hand-off](#hand-off)).
 - **Fencing.** Pass `epoch` downstream, for example in a PR trailer or a deploy
   receipt. A writer that checks "my epoch is still current" rejects work from a
   holder that has been superseded.
+
+### Hand-off
+
+`anx lease release <card> --owner O --handoff-to P [--ttl D]` transfers the
+lease instead of freeing it, so the card is never ownerless between two lanes.
+
+- O must hold the lease, or own an expired lease that nobody has taken since.
+  Handing off another owner's live lease fails with `lease_held` (exit 13).
+  Handing off a free lease (`none`, `released`, or someone else's expired
+  lease) fails with `lease_not_held` (exit 4).
+- P takes the lease under **epoch + 1** in the same transaction, with TTL `D`
+  (60s to 7d), or the released lease's TTL when `--ttl` is omitted. P must
+  differ from O. `--ttl` on release is accepted only with `--handoff-to`.
+- The timeline records `card_lease_released` (with `handoff_to` and
+  `next_epoch`) followed by `card_lease_acquired` (with `handoff_from`,
+  `previous_owner`, `previous_epoch` and `previous_state`), both in the same
+  transaction. The response's `lease` is P's lease.
+- A hand-off never sends a `card_unowned` wake.
+- Archived or trashed cards cannot be handed off.
+
+### Ownerless live work wakes the lead
+
+A lane that exits or idles without handing off can leave live work with no
+owner. anx turns that into a wake.
+
+**Live work** is decided on the server, from the card alone:
+
+- the card is not archived, trashed, `done` or `cancelled`; and
+- either it sits in the `in_progress` column (`card_unowned: in_progress`), or
+  it carries an open `--next` promise in the brief fold
+  (`brief_initiatives.open = 1` with a `promise_at`; `card_unowned:
+open_promise`).
+
+The brief fold is the same materialized promise view brief and orient use. A
+promise posted seconds before the release may not be folded yet.
+
+**When it fires:**
+
+- A release **without** hand-off on live work records `card_unowned` in the
+  `card_lease_released` payload and marks the lease row
+  (`unowned_event_id`). The lease clock claims the mark on its next tick (30 s)
+  and sends the wake. If a new tenure starts first (any acquire), the mark is
+  dropped and no wake is sent. If the card stopped being live work in between,
+  the mark is cleared silently.
+- An **expiry** on live work records `card_unowned` in the `card_lease_expired`
+  payload and sends the wake in the same clock step.
+- An owner releasing its own lease after the clock already recorded its expiry
+  does not wake twice.
+
+**Target.** The `card_unowned` wake goes to the workspace lead, which is the
+configured **PM agent** (the core's PM runtime, `PMActorID`). When no PM is
+configured, or the PM cannot read the card, it falls back to the card's agent
+assignee. An expiry on live work also sends the ordinary `lease_expired` wake
+to the agent assignee when that is a different principal. Expiries on work
+that is not live keep the original routing: the agent assignee, else the PM.
+
+**Shape.** Each wake is a durable wake artifact plus an `agent_wakeups` row,
+mirrored into the `deliveries` queue on channel `bridge`. The wake packet
+carries `wake_reason: card_unowned` (or `lease_expired`), `subject_ref` (the
+card) and `trigger_event_id` (the release or expiry event), and its
+`trigger_text` starts with `card_unowned:`. It is sent at most once per epoch
+and only to a principal that can read the card.
 
 ### Concurrency
 
@@ -98,8 +163,10 @@ atomic.
 - These events are appended to the card timeline in the same transaction as the
   change: `card_lease_acquired` (with `previous_owner`, `previous_state` and
   `previous_epoch` on a takeover), `card_lease_renewed` and
-  `card_lease_released`. All of them carry `owner`, `epoch` and `expires_at`, plus
-  `reason` when one was given.
+  `card_lease_released` (with `handoff_to` and `next_epoch` on a hand-off, and
+  `card_unowned` when it left live work ownerless). All of them carry `owner`
+  and `epoch`, plus `reason` when one was given; acquired and renewed carry
+  `expires_at`.
 - Lease event types are core-written only: `POST /events` rejects them with
   `403 protected_event_type`.
 - A core clock (`CardLeaseClock`, every 30 s) seeks
@@ -108,7 +175,13 @@ atomic.
   - wakes the card's agent assignee through the durable wake path, or the
     workspace PM when the card has no agent assignee. The wake is an
     `agent_wakeups` row, mirrored into the `deliveries` queue on channel
-    `bridge`. The target is woken only if it can read the card.
+    `bridge`. The target is woken only if it can read the card;
+  - on live work, also sends `card_unowned` to the lead (see above).
+
+  The same step seeks `idx_card_leases_unowned` for releases that left live
+  work ownerless and sends their `card_unowned` wakes. Both seeks are bounded
+  to 50 rows per tick.
+
 - State never depends on the clock: reads compute expiry from `expires_at`. A
   hosted core that is asleep records the expiry event late, but reports the lease
   as `expired` on time. The heartbeat does not yet publish the next lease expiry
@@ -126,9 +199,10 @@ atomic.
 - `owner` is a label, not an identity. Any principal that can write the card and
   presents the matching `owner` can renew or release. `holder_actor_id` records
   who did.
-- There is no forced takeover. To take a live lease, ask the holder to release
-  it, or wait for `expires_at`. A launcher `--force` belongs in the launcher and
-  should be logged to the card as a note.
+- There is no forced takeover, and `lease acquire` has no `--force` (decided,
+  see section 4). To take a live lease, ask the holder to hand it off or
+  release it, or wait for `expires_at`. A launcher-level force belongs in the
+  launcher and should be logged to the card as a note.
 - A renewal writes one timeline event. Renew at about TTL/3, not every minute.
 
 ### Out of scope for anx
@@ -209,7 +283,7 @@ anx ask "Retain audio 90d?" --subject card:retention --recommend "Yes, 90d" \
   - `rejected`, `needs_context`, `acknowledged`, `resolved`, withdrawn or expired
     asks;
   - an `answered` response that picked an alternative or free text. The ask
-    result warns the owner to record its own `--next` (open question 2).
+    result warns the owner to record its own `--next` (decision 2 below).
 - **On approval**, in the respond transaction, core:
   - appends a note to the subject card authored by `apply_owner`, with
     provenance `{"sources":["event:<answer_id>"],"by":"core:ask_apply"}` and
@@ -231,13 +305,19 @@ anx ask "Retain audio 90d?" --subject card:retention --recommend "Yes, 90d" \
   caller's ask conventions. Encoding dollar thresholds in anx would make it
   workspace-specific.
 
-## 4. Open questions
+## 4. Decisions and open questions
 
-1. Takeover: should `lease acquire --force` exist in anx, always logged and
-   recording the overridden epoch, or stay a launcher concern? Recommended:
-   launcher only, for now.
-2. Should an answer that picks an alternative also create an apply promise,
-   whose `what` names the chosen option? Recommended: no for v1, plus a warning.
+Decided:
+
+1. **No `lease acquire --force` in anx.** Takeover of a live lease stays a
+   launcher concern, logged to the card as a note. The holder can hand off
+   instead (`release --handoff-to`), and expiry frees the lease on its own.
+2. **A non-recommended answer creates no apply promise in v1.** Only explicit
+   approval or following the recommendation creates one. Any other answer
+   returns a warning telling the owner to record its own `--next`.
+
+Open:
+
 3. Should renewals be coalesced on the timeline (for example, record only when
    TTL changes or at most hourly) if lanes renew often?
 4. Should the hosted heartbeat publish the earliest lease expiry and deadline

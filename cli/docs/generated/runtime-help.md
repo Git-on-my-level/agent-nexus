@@ -203,7 +203,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `lease show` (local-helper): Show a card's work lease: state, owner, epoch and expiry.
 - `lease acquire` (local-helper): Claim a card before starting work; exits 13 lease_held naming the holder when another owner holds it.
 - `lease renew` (local-helper): Extend a lease you still hold; an expired lease must be re-acquired (exit 12).
-- `lease release` (local-helper): Give up your lease so another owner can take the card at once.
+- `lease release` (local-helper): Give up your lease, or hand it to the next owner with --handoff-to; releasing live work without a hand-off wakes the PM (card_unowned).
 - `notifications settings get` (local-helper): Read your notification channels and the channels adapters deliver.
 - `notifications settings set` (local-helper): Replace your notification channels, addresses and push or digest opt-ins.
 - `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
@@ -7039,7 +7039,7 @@ Global flags:
 
 ## `lease release`
 
-Give up your lease so another owner can take the card at once.
+Give up your lease, or hand it to the next owner with --handoff-to; releasing live work without a hand-off wakes the PM (card_unowned).
 
 ```text
 Generated Help: lease release
@@ -7050,14 +7050,15 @@ Generated Help: lease release
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `flags`
-- Why: Give up a work lease when the work stops so another owner can take it at once.
-- Output: Returns `{ lease, changed }`; changed is false when the lease was already free.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `outcome_unknown`, `busy`
+- Why: Give up a work lease when the work stops, or hand it to the next owner, so live work never sits ownerless.
+- Output: Returns `{ lease, changed }`; changed is false when the lease was already free. After a hand-off, lease is the new owner's lease.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `lease_not_held`, `outcome_unknown`, `busy`
 - Concepts: `cards`, `concurrency`, `write`
-- Agent notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held.
+- Agent notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held. --handoff-to moves your lease (held, or your own expired lease nobody took) to the next owner with epoch+1 atomically; handing off a free lease fails with lease_not_held. A release without hand-off on live work (in_progress, or an open --next promise) wakes the workspace PM with card_unowned.
 - Adjacent commands: `lease acquire`, `lease renew`, `lease show`
 - Examples:
   - Release a lease: `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
+  - Hand a lease to the next lane: `anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h --reason 'lane rotation'`
 
 Inputs:
   Required:
@@ -7065,26 +7066,33 @@ Inputs:
   - body `owner` (string)
   Optional:
   - body `actor_id` (string)
+  - body `handoff_to` (string)
   - body `reason` (string)
+  - body `ttl_seconds` (integer)
 
 CLI input:
   Flags:
   - `--owner` required: Owner id that holds the lease.
   - `--reason`: Short audit text recorded on the card timeline.
+  - `--handoff-to`: Owner id that takes the lease under a new epoch in the same transaction.
+  - `--ttl`: Hand-off lease length (60s to 7d); only with --handoff-to. Defaults to the released lease's TTL.
 
 Local Help: lease release
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Give up your lease so another owner can take the card at once.
+- Summary: Give up your lease, or hand it to the next owner with --handoff-to; releasing live work without a hand-off wakes the PM (card_unowned).
 - Quick start: anx lease release <card> --owner <id>
 - Examples:
   - `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
+  - `anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h`
 
 Flags:
   <card>                       Accepted by lease release.
   --owner <id>                 Accepted by lease release.
   --reason <text>              Accepted by lease release.
+  --handoff-to <id>            Accepted by lease release; moves the lease to this owner with a new epoch in the same transaction.
+  --ttl <dur>                  Accepted by lease release only with --handoff-to (60s to 7d).
 
 Global flags:
   Global flags can appear before or after the command path.

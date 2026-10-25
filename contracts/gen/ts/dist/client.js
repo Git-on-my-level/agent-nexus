@@ -9889,7 +9889,7 @@ export const commandRegistry = [
         "path": "/cards/{card_id}/lease/release",
         "operation_id": "releaseCardLease",
         "summary": "Release the card's work lease",
-        "why": "Give up a work lease when the work stops so another owner can take it at once.",
+        "why": "Give up a work lease when the work stops, or hand it to the next owner, so live work never sits ownerless.",
         "input_mode": "flags",
         "http_input_mode": "json-body",
         "cli_input": {
@@ -9903,19 +9903,28 @@ export const commandRegistry = [
                 {
                     "name": "reason",
                     "description": "Short audit text recorded on the card timeline."
+                },
+                {
+                    "name": "handoff-to",
+                    "description": "Owner id that takes the lease under a new epoch in the same transaction."
+                },
+                {
+                    "name": "ttl",
+                    "description": "Hand-off lease length (60s to 7d); only with --handoff-to. Defaults to the released lease's TTL."
                 }
             ]
         },
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ lease, changed }`; changed is false when the lease was already free.",
+        "output_envelope": "Returns `{ lease, changed }`; changed is false when the lease was already free. After a hand-off, lease is the new owner's lease.",
         "error_codes": [
             "auth_required",
             "invalid_request",
             "invalid_token",
             "not_found",
             "lease_held",
+            "lease_not_held",
             "outcome_unknown",
             "busy"
         ],
@@ -9926,11 +9935,15 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held.",
+        "agent_notes": "Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held. --handoff-to moves your lease (held, or your own expired lease nobody took) to the next owner with epoch+1 atomically; handing off a free lease fails with lease_not_held. A release without hand-off on live work (in_progress, or an open --next promise) wakes the workspace PM with card_unowned.",
         "examples": [
             {
                 "title": "Release a lease",
                 "command": "anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'"
+            },
+            {
+                "title": "Hand a lease to the next lane",
+                "command": "anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h --reason 'lane rotation'"
             }
         ],
         "body_schema": {
@@ -9946,8 +9959,16 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "handoff_to",
+                    "type": "string"
+                },
+                {
                     "name": "reason",
                     "type": "string"
+                },
+                {
+                    "name": "ttl_seconds",
+                    "type": "integer"
                 }
             ]
         },

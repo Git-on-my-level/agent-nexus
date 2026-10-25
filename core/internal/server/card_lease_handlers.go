@@ -72,6 +72,7 @@ func handleCardLease(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		TTLSeconds *int64 `json:"ttl_seconds"`
 		Reason     string `json:"reason"`
 		IfEpoch    *int64 `json:"if_epoch"`
+		HandoffTo  string `json:"handoff_to"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -80,8 +81,11 @@ func handleCardLease(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	case action != "acquire" && req.IfEpoch != nil:
 		writeError(w, http.StatusBadRequest, "invalid_request", "if_epoch applies only to acquire")
 		return
-	case action == "release" && req.TTLSeconds != nil:
-		writeError(w, http.StatusBadRequest, "invalid_request", "ttl_seconds does not apply to release")
+	case action != "release" && req.HandoffTo != "":
+		writeError(w, http.StatusBadRequest, "invalid_request", "handoff_to applies only to release")
+		return
+	case action == "release" && req.TTLSeconds != nil && strings.TrimSpace(req.HandoffTo) == "":
+		writeError(w, http.StatusBadRequest, "invalid_request", "ttl_seconds applies to release only with handoff_to")
 		return
 	case action == "renew" && req.Reason != "":
 		writeError(w, http.StatusBadRequest, "invalid_request", "reason does not apply to renew")
@@ -115,7 +119,7 @@ func handleCardLease(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	case "renew":
 		result, err = store.RenewCardLease(r.Context(), actorID, cardID, primitives.CardLeaseRenewInput{Owner: req.Owner, TTL: ttl})
 	default:
-		result, err = store.ReleaseCardLease(r.Context(), actorID, cardID, primitives.CardLeaseReleaseInput{Owner: req.Owner, Reason: req.Reason})
+		result, err = store.ReleaseCardLease(r.Context(), actorID, cardID, primitives.CardLeaseReleaseInput{Owner: req.Owner, Reason: req.Reason, HandoffTo: req.HandoffTo, HandoffTTL: ttl})
 	}
 	if err != nil {
 		writeCardLeaseError(w, r, err)
@@ -143,7 +147,7 @@ func writeCardLeaseError(w http.ResponseWriter, r *http.Request, err error) {
 		case primitives.CardLeaseErrExpired:
 			payload["hint"] = "Your lease expired. Acquire it again to take a new epoch; another owner may have started."
 		default:
-			payload["hint"] = "Nobody holds this lease. Acquire it before renewing."
+			payload["hint"] = "Nobody holds this lease. Acquire it before renewing or handing it off."
 		}
 		details := map[string]any{"state": leaseErr.Lease.State, "owner": leaseErr.Lease.Owner, "epoch": leaseErr.Lease.Epoch, "card_ref": leaseErr.Lease.CardRef}
 		if leaseErr.Lease.ExpiresAt != "" {
@@ -169,10 +173,27 @@ func writeCardLeaseError(w http.ResponseWriter, r *http.Request, err error) {
 // DefaultCardLeaseClockInterval is how often core records lease expiries.
 const DefaultCardLeaseClockInterval = 30 * time.Second
 
-// CardLeaseClock records card_lease_expired once per expired epoch and wakes
-// the card's agent assignee (or, when the card has none, the workspace PM)
-// through the durable wake path, which mirrors into the delivery queue. Lease
-// state never depends on this clock: reads compute expiry from expires_at.
+// CardLeaseClock acts on lease ends. Each tick it:
+//
+//   - records card_lease_expired once per expired epoch;
+//   - sends the pending card_unowned wakes that releases without hand-off
+//     left (TakeUnownedCardLeases).
+//
+// Wake routing:
+//
+//   - A lease end on live work (primitives cardLeaseLiveWork: in_progress, or
+//     an open --next promise) sends card_unowned to the workspace lead, which
+//     is the configured PM agent (PMActorID). With no PM configured, or a PM
+//     that cannot read the card, it falls back to the card's agent assignee.
+//     An expiry on live work also sends lease_expired to the agent assignee
+//     when that is a different principal.
+//   - An expiry on other work sends lease_expired to the card's agent
+//     assignee, or the PM when the card has none.
+//
+// Every wake goes through the durable wake path (a wake artifact plus an
+// agent_wakeups row, mirrored into the bridge delivery queue) and only to a
+// principal that can read the card. Lease state never depends on this
+// clock: reads compute expiry from expires_at.
 type CardLeaseClock struct {
 	Store         *primitives.Store
 	AuthStore     *auth.Store
@@ -182,6 +203,14 @@ type CardLeaseClock struct {
 	Interval      time.Duration
 	Logf          func(format string, args ...any)
 }
+
+// Card lease wake reasons, carried as wake_reason in the wake packet and in
+// the wakeup id, so a bridge can tell an ownerless live card from a routine
+// expiry.
+const (
+	CardLeaseWakeExpired = "lease_expired"
+	CardLeaseWakeUnowned = "card_unowned"
+)
 
 func (c *CardLeaseClock) Run(ctx context.Context) {
 	if c == nil || c.Store == nil {
@@ -205,17 +234,58 @@ func (c *CardLeaseClock) Run(ctx context.Context) {
 	}
 }
 
-// Step records one bounded batch of expiries and sends their wakes. A failed
-// wake is logged and not retried: the expiry event is already durable and
-// visible on the card timeline.
+// Step records one bounded batch of expiries, claims one bounded batch of
+// pending card_unowned releases, and sends their wakes. A failed wake is
+// logged and not retried: the lease event is already durable and visible on
+// the card timeline.
 func (c *CardLeaseClock) Step(ctx context.Context) error {
 	expired, err := c.Store.ExpireDueCardLeases(ctx, actors.SystemActorID, 0)
 	for _, e := range expired {
-		if wakeErr := c.wake(ctx, e); wakeErr != nil {
-			c.logf("card lease clock: wake for %s epoch %d: %v", e.CardRef, e.Epoch, wakeErr)
-		}
+		c.notify(ctx, e)
+	}
+	if err != nil {
+		return err
+	}
+	unowned, err := c.Store.TakeUnownedCardLeases(ctx, 0)
+	for _, e := range unowned {
+		c.notify(ctx, e)
 	}
 	return err
+}
+
+func (c *CardLeaseClock) notify(ctx context.Context, e primitives.ExpiredCardLease) {
+	assigneeID, assigneeHandle, err := c.assigneeTarget(ctx, e)
+	if err != nil {
+		c.logf("card lease clock: assignee for %s: %v", e.CardRef, err)
+	}
+	send := func(reason, actorID, handle string) bool {
+		if actorID == "" {
+			return false
+		}
+		sent, err := c.wake(ctx, e, reason, actorID, handle)
+		if err != nil {
+			c.logf("card lease clock: %s wake for %s epoch %d: %v", reason, e.CardRef, e.Epoch, err)
+		}
+		return sent
+	}
+	if e.Live == "" {
+		if !send(CardLeaseWakeExpired, assigneeID, assigneeHandle) {
+			leadID, leadHandle, _ := c.leadTarget(ctx)
+			send(CardLeaseWakeExpired, leadID, leadHandle)
+		}
+		return
+	}
+	leadID, leadHandle, err := c.leadTarget(ctx)
+	if err != nil {
+		c.logf("card lease clock: lead for %s: %v", e.CardRef, err)
+	}
+	leadSent := send(CardLeaseWakeUnowned, leadID, leadHandle)
+	switch {
+	case !leadSent:
+		send(CardLeaseWakeUnowned, assigneeID, assigneeHandle)
+	case !e.Released && assigneeID != leadID:
+		send(CardLeaseWakeExpired, assigneeID, assigneeHandle)
+	}
 }
 
 func (c *CardLeaseClock) logf(format string, args ...any) {
@@ -226,27 +296,32 @@ func (c *CardLeaseClock) logf(format string, args ...any) {
 	log.Printf(format, args...)
 }
 
-func (c *CardLeaseClock) wakeTarget(ctx context.Context, e primitives.ExpiredCardLease) (actorID, handle string, err error) {
+// assigneeTarget resolves the card's first assignee to an agent principal.
+func (c *CardLeaseClock) assigneeTarget(ctx context.Context, e primitives.ExpiredCardLease) (actorID, handle string, err error) {
 	if c.AuthStore == nil {
 		return "", "", nil
 	}
-	if prefix, id, ok := strings.Cut(e.Assignee, ":"); ok {
-		var p auth.AuthPrincipalSummary
-		var found bool
-		switch prefix {
-		case "agent":
-			p, found, err = findAgentPrincipalByAgentID(ctx, c.AuthStore, id)
-		case "actor":
-			p, found, err = findAgentPrincipalByActorID(ctx, c.AuthStore, id)
-		}
-		if err != nil {
-			return "", "", err
-		}
-		if found {
-			return p.ActorID, strings.TrimSpace(p.Username), nil
-		}
+	prefix, id, ok := strings.Cut(e.Assignee, ":")
+	if !ok {
+		return "", "", nil
 	}
-	if c.PMActorID == nil {
+	var p auth.AuthPrincipalSummary
+	var found bool
+	switch prefix {
+	case "agent":
+		p, found, err = findAgentPrincipalByAgentID(ctx, c.AuthStore, id)
+	case "actor":
+		p, found, err = findAgentPrincipalByActorID(ctx, c.AuthStore, id)
+	}
+	if err != nil || !found {
+		return "", "", err
+	}
+	return p.ActorID, strings.TrimSpace(p.Username), nil
+}
+
+// leadTarget resolves the workspace lead: the configured PM agent.
+func (c *CardLeaseClock) leadTarget(ctx context.Context) (actorID, handle string, err error) {
+	if c.AuthStore == nil || c.PMActorID == nil {
 		return "", "", nil
 	}
 	pm := strings.TrimSpace(c.PMActorID())
@@ -260,15 +335,16 @@ func (c *CardLeaseClock) wakeTarget(ctx context.Context, e primitives.ExpiredCar
 	return p.ActorID, strings.TrimSpace(p.Username), nil
 }
 
-func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease) error {
-	actorID, handle, err := c.wakeTarget(ctx, e)
-	if err != nil || actorID == "" || e.ThreadID == "" || e.EventID == "" || e.EventID == "-" {
-		return err
+// wake writes one durable wake and reports whether it was sent. It sends
+// nothing to a principal that cannot read the card.
+func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease, reason, actorID, handle string) (bool, error) {
+	if actorID == "" || e.ThreadID == "" || e.EventID == "" || e.EventID == "-" {
+		return false, nil
 	}
 	// Designation grants no read authority: never tell a principal about a
 	// card it cannot read.
 	if !c.Store.CanAccessResource(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: actorID}), "card", e.CardID) {
-		return nil
+		return false, nil
 	}
 	if handle == "" {
 		handle = "agent"
@@ -277,14 +353,28 @@ func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease
 	if workspaceID == "" {
 		workspaceID = "ws_main"
 	}
-	wakeupID := router.WakeupArtifactID(workspaceID, e.ThreadID, fmt.Sprintf("lease-expired-%s-%d", e.CardID, e.Epoch), actorID)
-	text := fmt.Sprintf("Work lease on %s held by %s (epoch %d) expired at %s without renewal. Check whether the work is still alive; re-acquire with anx lease acquire or reassign the card.", e.CardRef, e.Owner, e.Epoch, e.Expires)
+	var key, text, summary string
+	switch {
+	case reason == CardLeaseWakeUnowned && e.Released:
+		key = fmt.Sprintf("card-unowned-%s-%d", e.CardID, e.Epoch)
+		summary = "Unowned live card for @" + handle
+		text = fmt.Sprintf("card_unowned: %s is live work (%s) but has no owner: %s released its lease (epoch %d) without a hand-off. Assign an owner with anx lease acquire, or close or park the card.", e.CardRef, e.Live, e.Owner, e.Epoch)
+	case reason == CardLeaseWakeUnowned:
+		key = fmt.Sprintf("card-unowned-%s-%d", e.CardID, e.Epoch)
+		summary = "Unowned live card for @" + handle
+		text = fmt.Sprintf("card_unowned: %s is live work (%s) but has no owner: the lease held by %s (epoch %d) expired at %s without renewal. Check whether the work is still alive; assign an owner with anx lease acquire, or close or park the card.", e.CardRef, e.Live, e.Owner, e.Epoch, e.Expires)
+	default:
+		key = fmt.Sprintf("lease-expired-%s-%d", e.CardID, e.Epoch)
+		summary = "Expired work lease for @" + handle
+		text = fmt.Sprintf("Work lease on %s held by %s (epoch %d) expired at %s without renewal. Check whether the work is still alive; re-acquire with anx lease acquire or reassign the card.", e.CardRef, e.Owner, e.Epoch, e.Expires)
+	}
+	wakeupID := router.WakeupArtifactID(workspaceID, e.ThreadID, key, actorID)
 	refs := router.WakeArtifactRefs(e.ThreadID, e.EventID, e.CardRef)
 	ts := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = c.Store.CreateArtifact(ctx, actors.SystemActorID, map[string]any{
+	_, err := c.Store.CreateArtifact(ctx, actors.SystemActorID, map[string]any{
 		"id":              wakeupID,
 		"kind":            router.WakeArtifactKind,
-		"summary":         "Expired work lease for @" + handle,
+		"summary":         summary,
 		"refs":            refs,
 		"target_handle":   handle,
 		"target_actor_id": actorID,
@@ -293,6 +383,7 @@ func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease
 	}, map[string]any{
 		"version":            router.WakePacketVersion,
 		"wakeup_id":          wakeupID,
+		"wake_reason":        reason,
 		"target_handle":      handle,
 		"target_actor_id":    actorID,
 		"workspace_id":       workspaceID,
@@ -303,7 +394,7 @@ func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease
 		"subject_ref":        e.CardRef,
 	}, "structured")
 	if err != nil && !errors.Is(err, primitives.ErrConflict) {
-		return err
+		return false, err
 	}
 	_, err = c.Store.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
 		WakeupID:         wakeupID,
@@ -318,5 +409,5 @@ func (c *CardLeaseClock) wake(ctx context.Context, e primitives.ExpiredCardLease
 		TriggerText:      text,
 		Refs:             append(refs, "artifact:"+wakeupID),
 	})
-	return err
+	return err == nil, err
 }

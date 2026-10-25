@@ -30,6 +30,11 @@ func TestLeaseUsageBeforeHostResolution(t *testing.T) {
 		{"lease", "renew", "card:x"},
 		{"lease", "renew", "card:x", "--owner", "exec-a", "--reason", "x"},
 		{"lease", "release", "card:x", "--owner", "exec-a", "--ttl", "2h"},
+		{"lease", "release", "card:x", "--owner", "exec-a", "--handoff-to", "exec-a"},
+		{"lease", "release", "card:x", "--owner", "exec-a", "--handoff-to", "has space"},
+		{"lease", "release", "card:x", "--owner", "exec-a", "--handoff-to", "exec-b", "--ttl", "30s"},
+		{"lease", "renew", "card:x", "--owner", "exec-a", "--handoff-to", "exec-b"},
+		{"lease", "acquire", "card:x", "--owner", "exec-a", "--ttl", "2h", "--handoff-to", "exec-b"},
 	} {
 		a := newTestApp(t)
 		a.Getenv = func(string) string { return "" }
@@ -114,6 +119,9 @@ func TestLeaseRequests(t *testing.T) {
 	if _, err = run("lease", "show", "card:ramp"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = run("lease", "release", "card:ramp", "--owner", "exec-a", "--handoff-to", "exec-b", "--ttl", "3h", "--reason", "lane rotation"); err != nil {
+		t.Fatal(err)
+	}
 	held = true
 	_, err = run("lease", "acquire", "card:ramp", "--owner", "exec-b", "--ttl", "1h")
 	if errnorm.ExitCode(err) != 13 || !strings.Contains(err.Error(), "exec-a") {
@@ -130,5 +138,8 @@ func TestLeaseRequests(t *testing.T) {
 	}
 	if calls[3].method != "GET" || calls[3].path != "/cards/card:ramp/lease" {
 		t.Fatalf("show: %+v", calls[3])
+	}
+	if c := calls[4]; c.path != "/cards/card:ramp/lease/release" || c.body["owner"] != "exec-a" || c.body["handoff_to"] != "exec-b" || c.body["ttl_seconds"] != float64(10800) || c.body["reason"] != "lane rotation" {
+		t.Fatalf("handoff: %+v", c)
 	}
 }

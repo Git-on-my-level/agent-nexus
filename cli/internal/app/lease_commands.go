@@ -16,6 +16,7 @@ import (
 // One strict parser serves the usage preflight and the runtime.
 type leaseCommand struct {
 	verb, card, owner, reason string
+	handoffTo                 string
 	ttlSeconds                int64
 	ifEpoch                   *int64
 }
@@ -39,7 +40,7 @@ func leaseUsage(verb string) string {
 	case "renew":
 		return "usage: anx lease renew <card> --owner <id> [--ttl <dur>]"
 	case "release":
-		return "usage: anx lease release <card> --owner <id> [--reason <text>]"
+		return "usage: anx lease release <card> --owner <id> [--reason <text>] [--handoff-to <id> [--ttl <dur>]]"
 	}
 	return "usage: anx lease show|acquire|renew|release <card> ..."
 }
@@ -76,7 +77,7 @@ func parseLeaseCommand(args []string) (leaseCommand, error) {
 	case "renew":
 		allowed["owner"], allowed["ttl"] = true, true
 	case "release":
-		allowed["owner"], allowed["reason"] = true, true
+		allowed["owner"], allowed["reason"], allowed["handoff-to"], allowed["ttl"] = true, true, true, true
 	default:
 		return p, errnorm.Usage("unknown_subcommand", "unknown lease subcommand "+p.verb+"; use show, acquire, renew or release")
 	}
@@ -113,6 +114,11 @@ func parseLeaseCommand(args []string) (leaseCommand, error) {
 			if !leaseOwnerPattern.MatchString(p.owner) {
 				return usage("--owner must be 1 to 128 characters of letters, digits and ._:@/+- starting with a letter or digit")
 			}
+		case "handoff-to":
+			p.handoffTo = strings.TrimSpace(value)
+			if !leaseOwnerPattern.MatchString(p.handoffTo) {
+				return usage("--handoff-to must be 1 to 128 characters of letters, digits and ._:@/+- starting with a letter or digit")
+			}
 		case "ttl":
 			seconds, ok := parseLeaseTTL(value)
 			if !ok {
@@ -139,6 +145,12 @@ func parseLeaseCommand(args []string) (leaseCommand, error) {
 	if p.verb != "show" && p.owner == "" {
 		return usage("lease " + p.verb + " requires --owner")
 	}
+	if p.verb == "release" && p.handoffTo == "" && p.ttlSeconds > 0 {
+		return usage("--ttl applies to lease release only with --handoff-to")
+	}
+	if p.handoffTo != "" && p.handoffTo == p.owner {
+		return usage("--handoff-to must differ from --owner")
+	}
 	if p.verb == "acquire" && p.ttlSeconds == 0 {
 		return usage("lease acquire requires --ttl")
 	}
@@ -162,6 +174,9 @@ func (a *App) runLeaseCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		if p.reason != "" {
 			req["reason"] = p.reason
+		}
+		if p.handoffTo != "" {
+			req["handoff_to"] = p.handoffTo
 		}
 		if p.ifEpoch != nil {
 			req["if_epoch"] = *p.ifEpoch

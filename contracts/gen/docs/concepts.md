@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `77`
+- Commands: `81`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`

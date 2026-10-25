@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 274
+- Command count: 278
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -59,8 +59,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 92 |
-| exposed_write | 74 |
+| exposed_read | 93 |
+| exposed_write | 77 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
@@ -73,7 +73,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 166 | exposed_read + exposed_write + adapted |
+| standalone default | 170 | exposed_read + exposed_write + adapted |
 | hosted default | 68 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |

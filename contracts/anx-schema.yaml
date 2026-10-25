@@ -796,7 +796,8 @@ reference_conventions:
       description: >
         Core-written only (generic event append rejects lease types). A work lease was taken.
         previous_owner and previous_state are present when an expired or released lease
-        changed hands. The card_leases row is authoritative; this event is the audit record.
+        changed hands; handoff_from names the releasing owner on a hand-off. The card_leases
+        row is authoritative; this event is the audit record.
 
     card_lease_renewed:
       refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
@@ -806,7 +807,11 @@ reference_conventions:
     card_lease_released:
       refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
       payload_must_include: ["owner", "epoch"]
-      description: Core-written only. The holder gave up its lease.
+      description: >
+        Core-written only. The holder gave up its lease. On a hand-off, handoff_to and
+        next_epoch name the new owner and its epoch, and a card_lease_acquired event follows
+        in the same transaction. card_unowned (in_progress or open_promise) is present when
+        the release left live work ownerless; the lease clock then wakes the workspace PM.
 
     card_lease_expired:
       refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
@@ -814,7 +819,9 @@ reference_conventions:
       description: >
         Core-written only, by the lease clock, at most once per epoch. The lease passed
         expires_at without renewal or release. The clock also wakes the card's agent
-        assignee through the durable wake path (a bridge delivery).
+        assignee through the durable wake path (a bridge delivery). card_unowned
+        (in_progress or open_promise) is present when the card is still live work; the
+        clock then also wakes the workspace PM with a card_unowned wake.
 
     run_recorded:
       refs_must_include: ["card:<card_handle>"]

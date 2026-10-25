@@ -2275,6 +2275,10 @@ var CommandRegistry = []CommandSpec{
 				Title:   "Release a lease",
 				Command: "anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'",
 			},
+			{
+				Title:   "Hand a lease to the next lane",
+				Command: "anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h --reason 'lane rotation'",
+			},
 		},
 	},
 	{

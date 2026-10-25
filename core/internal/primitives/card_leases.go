@@ -122,15 +122,57 @@ type CardLeaseRenewInput struct {
 	TTL   time.Duration // zero keeps the lease's current TTL
 }
 
+// CardLeaseReleaseInput releases Owner's lease. With HandoffTo set the same
+// transaction gives the lease to HandoffTo under a new epoch (HandoffTTL, or
+// the released lease's TTL when zero), so the card is never ownerless.
 type CardLeaseReleaseInput struct {
-	Owner  string
-	Reason string
+	Owner      string
+	Reason     string
+	HandoffTo  string
+	HandoffTTL time.Duration
 }
 
 type cardLeaseRow struct {
 	owner, holder                                         string
 	epoch, ttl                                            int64
 	acquiredAt, renewedAt, expiresAt, releasedAt, expired string
+	// unowned is the release event id while a card_unowned wake is pending
+	// or sent; unownedWokenAt stamps the sent wake. A new tenure clears both.
+	unowned, unownedWokenAt string
+}
+
+// Card lease live-work reasons: why an ownerless card still needs an owner.
+const (
+	CardLeaseLiveInProgress  = "in_progress"
+	CardLeaseLiveOpenPromise = "open_promise"
+)
+
+// cardLeaseLiveWork reports whether a card is live work, which is what makes
+// an ownerless card worth waking the lead for. A card is live when it is not
+// archived, trashed, done or cancelled, and either sits in the in_progress
+// column or carries an open --next promise in the brief fold
+// (brief_initiatives.open=1 with a promise_at). The fold is the materialized
+// promise view the brief already uses; a promise posted moments before the
+// release may not be folded yet.
+func cardLeaseLiveWork(ctx context.Context, q queryRower, card boardCardRow) (string, error) {
+	if card.ArchivedAt.Valid || card.TrashedAt.Valid {
+		return "", nil
+	}
+	switch card.ColumnKey {
+	case "done", "cancelled":
+		return "", nil
+	case "in_progress":
+		return CardLeaseLiveInProgress, nil
+	}
+	var n int
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM brief_initiatives WHERE card_id=? AND open=1 AND promise_at IS NOT NULL`, card.CardID).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return CardLeaseLiveOpenPromise, nil
 }
 
 func validateCardLeaseOwner(owner string) error {
@@ -187,8 +229,8 @@ func cardLeaseView(card boardCardRow, row *cardLeaseRow, now time.Time) CardLeas
 
 func loadCardLeaseRow(ctx context.Context, q queryRower, cardID string) (*cardLeaseRow, error) {
 	var r cardLeaseRow
-	err := q.QueryRowContext(ctx, `SELECT owner, holder_actor_id, epoch, ttl_seconds, acquired_at, renewed_at, expires_at, released_at, expired_event_id FROM card_leases WHERE card_id=?`, cardID).
-		Scan(&r.owner, &r.holder, &r.epoch, &r.ttl, &r.acquiredAt, &r.renewedAt, &r.expiresAt, &r.releasedAt, &r.expired)
+	err := q.QueryRowContext(ctx, `SELECT owner, holder_actor_id, epoch, ttl_seconds, acquired_at, renewed_at, expires_at, released_at, expired_event_id, unowned_event_id, unowned_woken_at FROM card_leases WHERE card_id=?`, cardID).
+		Scan(&r.owner, &r.holder, &r.epoch, &r.ttl, &r.acquiredAt, &r.renewedAt, &r.expiresAt, &r.releasedAt, &r.expired, &r.unowned, &r.unownedWokenAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -211,11 +253,24 @@ func (s *Store) GetCardLease(ctx context.Context, cardID string) (CardLease, err
 	return cardLeaseView(card, row, cardLeaseNow()), nil
 }
 
-type cardLeaseChange struct {
-	next      *cardLeaseRow
+type cardLeaseEvent struct {
 	eventType string
 	summary   string
 	payload   map[string]any
+}
+
+// cardLeaseChange is one lease transition. events are appended in order;
+// the result reports the last one. checkUnowned asks the transaction to test
+// cardLeaseLiveWork and, when the card is live, to record the first event's
+// id as the pending card_unowned wake (and name the reason in its payload).
+type cardLeaseChange struct {
+	next         *cardLeaseRow
+	events       []cardLeaseEvent
+	checkUnowned bool
+}
+
+func oneCardLeaseEvent(next *cardLeaseRow, eventType, summary string, payload map[string]any) *cardLeaseChange {
+	return &cardLeaseChange{next: next, events: []cardLeaseEvent{{eventType, summary, payload}}}
 }
 
 // mutateCardLease loads the card and its lease inside one write transaction,
@@ -257,13 +312,13 @@ func (s *Store) mutateCardLease(ctx context.Context, actor, cardID string, decid
 	stamp := cardLeaseStamp(now)
 	var res sql.Result
 	if cur == nil {
-		res, err = tx.ExecContext(ctx, `INSERT INTO card_leases(card_id, owner, epoch, holder_actor_id, ttl_seconds, acquired_at, renewed_at, expires_at, released_at, expired_event_id, updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(card_id) DO NOTHING`,
-			card.CardID, n.owner, n.epoch, n.holder, n.ttl, n.acquiredAt, n.renewedAt, n.expiresAt, n.releasedAt, n.expired, stamp)
+		res, err = tx.ExecContext(ctx, `INSERT INTO card_leases(card_id, owner, epoch, holder_actor_id, ttl_seconds, acquired_at, renewed_at, expires_at, released_at, expired_event_id, unowned_event_id, unowned_woken_at, updated_at)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(card_id) DO NOTHING`,
+			card.CardID, n.owner, n.epoch, n.holder, n.ttl, n.acquiredAt, n.renewedAt, n.expiresAt, n.releasedAt, n.expired, n.unowned, n.unownedWokenAt, stamp)
 	} else {
-		res, err = tx.ExecContext(ctx, `UPDATE card_leases SET owner=?, epoch=?, holder_actor_id=?, ttl_seconds=?, acquired_at=?, renewed_at=?, expires_at=?, released_at=?, expired_event_id=?, updated_at=?
+		res, err = tx.ExecContext(ctx, `UPDATE card_leases SET owner=?, epoch=?, holder_actor_id=?, ttl_seconds=?, acquired_at=?, renewed_at=?, expires_at=?, released_at=?, expired_event_id=?, unowned_event_id=?, unowned_woken_at=?, updated_at=?
 			WHERE card_id=? AND owner=? AND epoch=? AND expires_at=? AND released_at=?`,
-			n.owner, n.epoch, n.holder, n.ttl, n.acquiredAt, n.renewedAt, n.expiresAt, n.releasedAt, n.expired, stamp,
+			n.owner, n.epoch, n.holder, n.ttl, n.acquiredAt, n.renewedAt, n.expiresAt, n.releasedAt, n.expired, n.unowned, n.unownedWokenAt, stamp,
 			card.CardID, cur.owner, cur.epoch, cur.expiresAt, cur.releasedAt)
 	}
 	if err != nil {
@@ -274,9 +329,32 @@ func (s *Store) mutateCardLease(ctx context.Context, actor, cardID string, decid
 	} else if affected != 1 {
 		return result, ErrConflict
 	}
-	eventID, err := insertCardLeaseEvent(ctx, tx, actor, card, change.eventType, change.summary, change.payload)
-	if err != nil {
-		return result, err
+	markUnowned := false
+	if change.checkUnowned {
+		live, err := cardLeaseLiveWork(ctx, tx, card)
+		if err != nil {
+			return result, err
+		}
+		if live != "" {
+			change.events[0].payload["card_unowned"] = live
+			markUnowned = true
+		}
+	}
+	eventID := ""
+	for i, ev := range change.events {
+		if eventID, err = insertCardLeaseEvent(ctx, tx, actor, card, ev.eventType, ev.summary, ev.payload); err != nil {
+			return result, err
+		}
+		if i == 0 && markUnowned {
+			marker := eventID
+			if marker == "" {
+				marker = "-"
+			}
+			if _, err = tx.ExecContext(ctx, `UPDATE card_leases SET unowned_event_id=?, unowned_woken_at='' WHERE card_id=? AND epoch=?`, marker, card.CardID, n.epoch); err != nil {
+				return result, err
+			}
+			n.unowned = marker
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return result, &MutationOutcomeUnknown{Cause: err}
@@ -347,7 +425,7 @@ func (s *Store) AcquireCardLease(ctx context.Context, actor, cardID string, in C
 			if in.Reason != "" {
 				payload["reason"] = in.Reason
 			}
-			return &cardLeaseChange{next: &next, eventType: "card_lease_renewed", summary: "Lease renewed by " + in.Owner, payload: payload}, nil
+			return oneCardLeaseEvent(&next, "card_lease_renewed", "Lease renewed by "+in.Owner, payload), nil
 		}
 		next := &cardLeaseRow{owner: in.Owner, holder: actor, epoch: view.Epoch + 1, ttl: ttl, acquiredAt: stamp, renewedAt: stamp, expiresAt: expires}
 		payload := cardLeasePayload(next)
@@ -359,7 +437,7 @@ func (s *Store) AcquireCardLease(ctx context.Context, actor, cardID string, in C
 			payload["previous_state"] = view.State
 			payload["previous_epoch"] = cur.epoch
 		}
-		return &cardLeaseChange{next: next, eventType: "card_lease_acquired", summary: "Lease acquired by " + in.Owner, payload: payload}, nil
+		return oneCardLeaseEvent(next, "card_lease_acquired", "Lease acquired by "+in.Owner, payload), nil
 	})
 }
 
@@ -390,25 +468,51 @@ func (s *Store) RenewCardLease(ctx context.Context, actor, cardID string, in Car
 		}
 		next := *cur
 		next.holder, next.ttl, next.renewedAt, next.expiresAt = actor, ttl, cardLeaseStamp(now), cardLeaseStamp(now.Add(time.Duration(ttl)*time.Second))
-		return &cardLeaseChange{next: &next, eventType: "card_lease_renewed", summary: "Lease renewed by " + in.Owner, payload: cardLeasePayload(&next)}, nil
+		return oneCardLeaseEvent(&next, "card_lease_renewed", "Lease renewed by "+in.Owner, cardLeasePayload(&next)), nil
 	})
 }
 
 // ReleaseCardLease gives up the owner's lease. Releasing a free lease is a
 // no-op; releasing another owner's unexpired lease refuses with lease_held.
 // The owner may release its own expired lease to close it explicitly.
+//
+// With HandoffTo the owner's lease (held, or its own expired lease nobody has
+// taken) moves to HandoffTo under epoch+1 in the same transaction, recorded as
+// card_lease_released (handoff_to) then card_lease_acquired (handoff_from). A
+// hand-off needs a lease to hand: a free lease refuses with lease_not_held.
+//
+// A release without hand-off that leaves live work (cardLeaseLiveWork) marks
+// the lease for one card_unowned wake to the workspace lead; the lease clock
+// sends it. A hand-off never does.
 func (s *Store) ReleaseCardLease(ctx context.Context, actor, cardID string, in CardLeaseReleaseInput) (CardLeaseResult, error) {
-	in.Owner, in.Reason = strings.TrimSpace(in.Owner), strings.TrimSpace(in.Reason)
+	in.Owner, in.Reason, in.HandoffTo = strings.TrimSpace(in.Owner), strings.TrimSpace(in.Reason), strings.TrimSpace(in.HandoffTo)
 	if err := validateCardLeaseOwner(in.Owner); err != nil {
 		return CardLeaseResult{}, err
 	}
 	if err := validateCardLeaseReason(in.Reason); err != nil {
 		return CardLeaseResult{}, err
 	}
+	handoff := in.HandoffTo != ""
+	if handoff {
+		if err := validateCardLeaseOwner(in.HandoffTo); err != nil {
+			return CardLeaseResult{}, workInvalid("handoff_to: " + err.Error())
+		}
+		if in.HandoffTo == in.Owner {
+			return CardLeaseResult{}, workInvalid("handoff_to must differ from owner")
+		}
+		if err := validateCardLeaseTTL(in.HandoffTTL, true); err != nil {
+			return CardLeaseResult{}, err
+		}
+	} else if in.HandoffTTL != 0 {
+		return CardLeaseResult{}, workInvalid("ttl applies to release only with handoff_to")
+	}
 	return s.mutateCardLease(ctx, actor, cardID, func(card boardCardRow, cur *cardLeaseRow, now time.Time) (*cardLeaseChange, error) {
 		view := cardLeaseView(card, cur, now)
 		switch view.State {
 		case CardLeaseStateNone, CardLeaseStateReleased:
+			if handoff {
+				return nil, &CardLeaseError{Code: CardLeaseErrNotHeld, Lease: view}
+			}
 			return nil, nil
 		case CardLeaseStateHeld:
 			if cur.owner != in.Owner {
@@ -416,16 +520,47 @@ func (s *Store) ReleaseCardLease(ctx context.Context, actor, cardID string, in C
 			}
 		case CardLeaseStateExpired:
 			if cur.owner != in.Owner {
+				if handoff {
+					return nil, &CardLeaseError{Code: CardLeaseErrNotHeld, Lease: view}
+				}
 				return nil, nil // Nobody holds it; the expired owner is not ours to close.
 			}
 		}
-		next := *cur
-		next.holder, next.releasedAt = actor, cardLeaseStamp(now)
-		payload := map[string]any{"owner": next.owner, "epoch": next.epoch, "state_before": view.State}
+		stamp := cardLeaseStamp(now)
+		released := map[string]any{"owner": cur.owner, "epoch": cur.epoch, "state_before": view.State}
 		if in.Reason != "" {
-			payload["reason"] = in.Reason
+			released["reason"] = in.Reason
 		}
-		return &cardLeaseChange{next: &next, eventType: "card_lease_released", summary: "Lease released by " + in.Owner, payload: payload}, nil
+		if handoff {
+			if card.ArchivedAt.Valid || card.TrashedAt.Valid {
+				return nil, workInvalid("an archived or trashed card cannot be handed off")
+			}
+			ttl := cur.ttl
+			if in.HandoffTTL > 0 {
+				ttl = int64(in.HandoffTTL / time.Second)
+			}
+			next := &cardLeaseRow{owner: in.HandoffTo, holder: actor, epoch: cur.epoch + 1, ttl: ttl, acquiredAt: stamp, renewedAt: stamp, expiresAt: cardLeaseStamp(now.Add(time.Duration(ttl) * time.Second))}
+			released["handoff_to"] = in.HandoffTo
+			released["next_epoch"] = next.epoch
+			acquired := cardLeasePayload(next)
+			acquired["handoff_from"] = cur.owner
+			acquired["previous_owner"] = cur.owner
+			acquired["previous_state"] = view.State
+			acquired["previous_epoch"] = cur.epoch
+			if in.Reason != "" {
+				acquired["reason"] = in.Reason
+			}
+			return &cardLeaseChange{next: next, events: []cardLeaseEvent{
+				{"card_lease_released", "Lease handed off by " + cur.owner + " to " + in.HandoffTo, released},
+				{"card_lease_acquired", "Lease acquired by " + in.HandoffTo + " on hand-off from " + cur.owner, acquired},
+			}}, nil
+		}
+		next := *cur
+		next.holder, next.releasedAt = actor, stamp
+		change := oneCardLeaseEvent(&next, "card_lease_released", "Lease released by "+in.Owner, released)
+		// An expiry already recorded for this epoch sent its own wake.
+		change.checkUnowned = cur.expired == ""
+		return change, nil
 	})
 }
 
@@ -436,8 +571,11 @@ func firstCardLeaseAssignee(raw string) string {
 	return ""
 }
 
-// ExpiredCardLease is one expiry the clock recorded. Assignee is the card's
-// first assignee as a typed ref (actor: or agent:), or empty.
+// ExpiredCardLease is one lease end the clock acts on: an expiry it recorded,
+// or (Released) a release that left live work ownerless. Assignee is the
+// card's first assignee as a typed ref (actor: or agent:), or empty. Live is
+// the cardLeaseLiveWork reason when the card is still live work, which makes
+// the clock send a card_unowned wake to the workspace lead.
 type ExpiredCardLease struct {
 	CardID   string
 	CardRef  string
@@ -447,6 +585,8 @@ type ExpiredCardLease struct {
 	Epoch    int64
 	Expires  string
 	EventID  string
+	Live     string
+	Released bool
 }
 
 // ExpireDueCardLeases records card_lease_expired once per epoch for leases
@@ -511,7 +651,14 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 	if err != nil {
 		return ExpiredCardLease{}, false, err
 	}
+	live, err := cardLeaseLiveWork(ctx, tx, card)
+	if err != nil {
+		return ExpiredCardLease{}, false, err
+	}
 	payload := map[string]any{"owner": cur.owner, "epoch": cur.epoch, "ttl_seconds": cur.ttl, "expires_at": cur.expiresAt, "renewed_at": cur.renewedAt}
+	if live != "" {
+		payload["card_unowned"] = live
+	}
 	eventID, err := insertCardLeaseEvent(ctx, tx, actor, card, "card_lease_expired", "Lease held by "+cur.owner+" expired", payload)
 	if err != nil {
 		return ExpiredCardLease{}, false, err
@@ -531,6 +678,74 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 	}
 	return ExpiredCardLease{
 		CardID: card.CardID, CardRef: cardLeaseRef(card), ThreadID: card.ThreadID.String, Assignee: firstCardLeaseAssignee(card.Assignee.String),
-		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: eventID,
+		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: eventID, Live: live,
+	}, true, nil
+}
+
+// TakeUnownedCardLeases claims up to limit pending card_unowned wakes left by
+// releases without hand-off (unowned_event_id set, unowned_woken_at empty).
+// Each claim stamps unowned_woken_at in its own short transaction before the
+// caller wakes anyone, so a wake is sent at most once. A lease that a new
+// tenure took meanwhile is no longer pending; a card that stopped being live
+// work is stamped without being returned. The context must carry no access
+// scope (trusted internal operation).
+func (s *Store) TakeUnownedCardLeases(ctx context.Context, limit int) ([]ExpiredCardLease, error) {
+	if limit <= 0 || limit > cardLeaseExpireBatch {
+		limit = cardLeaseExpireBatch
+	}
+	ids, err := queryStrings(ctx, s.db, `SELECT card_id FROM card_leases INDEXED BY idx_card_leases_unowned WHERE unowned_event_id<>'' AND unowned_woken_at='' ORDER BY card_id LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := []ExpiredCardLease{}
+	for _, id := range ids {
+		taken, ok, err := s.takeUnownedCardLease(ctx, id)
+		if err != nil {
+			return out, err
+		}
+		if ok {
+			out = append(out, taken)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (ExpiredCardLease, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ExpiredCardLease{}, false, err
+	}
+	defer tx.Rollback()
+	cur, err := loadCardLeaseRow(ctx, tx, cardID)
+	if err != nil || cur == nil || cur.unowned == "" || cur.unownedWokenAt != "" || cur.releasedAt == "" {
+		return ExpiredCardLease{}, false, err
+	}
+	live := ""
+	card, err := s.loadBoardCardByGlobalID(ctx, tx, cardID, true)
+	switch {
+	case errors.Is(err, ErrNotFound):
+	case err != nil:
+		return ExpiredCardLease{}, false, err
+	default:
+		if live, err = cardLeaseLiveWork(ctx, tx, card); err != nil {
+			return ExpiredCardLease{}, false, err
+		}
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE card_leases SET unowned_woken_at=? WHERE card_id=? AND epoch=? AND unowned_event_id=? AND unowned_woken_at=''`, cardLeaseStamp(cardLeaseNow()), cardID, cur.epoch, cur.unowned)
+	if err != nil {
+		return ExpiredCardLease{}, false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return ExpiredCardLease{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ExpiredCardLease{}, false, err
+	}
+	if live == "" {
+		return ExpiredCardLease{}, false, nil
+	}
+	return ExpiredCardLease{
+		CardID: card.CardID, CardRef: cardLeaseRef(card), ThreadID: card.ThreadID.String, Assignee: firstCardLeaseAssignee(card.Assignee.String),
+		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, Released: true,
 	}, true, nil
 }

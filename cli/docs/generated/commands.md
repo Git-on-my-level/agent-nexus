@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `274`
+- Commands: `278`
 
 ## `actors.create`
 
@@ -2263,13 +2263,14 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `flags`
-- Why: Give up a work lease when the work stops so another owner can take it at once.
+- Why: Give up a work lease when the work stops, or hand it to the next owner, so live work never sits ownerless.
 - Concepts: `cards`, `concurrency`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `outcome_unknown`, `busy`
-- Output: Returns `{ lease, changed }`; changed is false when the lease was already free.
-- Agent notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `lease_not_held`, `outcome_unknown`, `busy`
+- Output: Returns `{ lease, changed }`; changed is false when the lease was already free. After a hand-off, lease is the new owner's lease.
+- Agent notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held. --handoff-to moves your lease (held, or your own expired lease nobody took) to the next owner with epoch+1 atomically; handing off a free lease fails with lease_not_held. A release without hand-off on live work (in_progress, or an open --next promise) wakes the workspace PM with card_unowned.
 - Examples:
   - Release a lease: `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
+  - Hand a lease to the next lane: `anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h --reason 'lane rotation'`
 
 ## `lease.renew`
 

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 256,
+  "route_count": 260,
   "routes": [
     {
       "method": "GET",
