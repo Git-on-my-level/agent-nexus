@@ -339,3 +339,69 @@ func TestCardLeaseReleaseOfLiveWorkMarksUnownedOnce(t *testing.T) {
 		t.Fatalf("post-expiry release unowned=%+v err=%v", pending, err)
 	}
 }
+
+func TestCardLeaseUnownedWaitsForBriefFold(t *testing.T) {
+	s, ctx, cardID, now := cardLeaseFixture(t)
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A promise note was posted but not folded yet: the card is queued in
+	// brief_dirty and brief_initiatives shows no promise.
+	exec(`DELETE FROM brief_initiatives WHERE card_id=?`, cardID)
+	exec(`INSERT INTO brief_dirty(card_id) VALUES(?) ON CONFLICT DO NOTHING`, cardID)
+	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-a", TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	released, err := s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending, err := s.TakeUnownedCardLeases(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("unfolded card decided early: %+v err=%v", pending, err)
+	}
+	// The fold lands with the open promise: the next tick wakes the lead.
+	exec(`INSERT INTO brief_initiatives(card_id,open,promise_at) VALUES(?,1,'2026-10-25T12:00:00Z')`, cardID)
+	exec(`DELETE FROM brief_dirty WHERE card_id=?`, cardID)
+	pending, err := s.TakeUnownedCardLeases(ctx, 10)
+	if err != nil || len(pending) != 1 || pending[0].Live != CardLeaseLiveOpenPromise || !pending[0].Released || pending[0].EventID != released.EventID {
+		t.Fatalf("folded unowned=%+v err=%v", pending, err)
+	}
+
+	// Same for an expiry: the deferred decision is lead-only.
+	exec(`DELETE FROM brief_initiatives WHERE card_id=?`, cardID)
+	exec(`INSERT INTO brief_dirty(card_id) VALUES(?)`, cardID)
+	if _, err = s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-b", TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	*now = now.Add(2 * time.Hour)
+	expired, err := s.ExpireDueCardLeases(ctx, "system", 10)
+	if err != nil || len(expired) != 1 || expired[0].Live != "" {
+		t.Fatalf("expiry=%+v err=%v", expired, err)
+	}
+	exec(`INSERT INTO brief_initiatives(card_id,open,promise_at) VALUES(?,1,'2026-10-25T12:00:00Z')`, cardID)
+	exec(`DELETE FROM brief_dirty WHERE card_id=?`, cardID)
+	pending, err = s.TakeUnownedCardLeases(ctx, 10)
+	if err != nil || len(pending) != 1 || pending[0].Released || !pending[0].LeadOnly || pending[0].EventID != expired[0].EventID {
+		t.Fatalf("deferred expiry unowned=%+v err=%v", pending, err)
+	}
+}
+
+func TestCardLeaseRenewRefusesArchivedCard(t *testing.T) {
+	s, ctx, cardID, _ := cardLeaseFixture(t)
+	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-a", TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE cards SET archived_at='2026-10-25T09:00:00Z' WHERE id=?`, cardID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RenewCardLease(ctx, "lead", cardID, CardLeaseRenewInput{Owner: "exec-a"}); !errors.Is(err, ErrInvalidWorkRequest) {
+		t.Fatalf("renew archived err=%v", err)
+	}
+	// Releasing stays possible so the holder can clean up.
+	if got, err := s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-a"}); err != nil || !got.Changed {
+		t.Fatalf("release archived=%+v err=%v", got, err)
+	}
+}

@@ -93,7 +93,8 @@ lease instead of freeing it, so the card is never ownerless between two lanes.
   `previous_owner`, `previous_epoch` and `previous_state`), both in the same
   transaction. The response's `lease` is P's lease.
 - A hand-off never sends a `card_unowned` wake.
-- Archived or trashed cards cannot be handed off.
+- Archived or trashed cards cannot be handed off (or acquired or renewed); the
+  holder can still release.
 
 ### Ownerless live work wakes the lead
 
@@ -108,8 +109,13 @@ owner. anx turns that into a wake.
   (`brief_initiatives.open = 1` with a `promise_at`; `card_unowned:
 open_promise`).
 
-The brief fold is the same materialized promise view brief and orient use. A
-promise posted seconds before the release may not be folded yet.
+The brief fold is the same materialized promise view brief and orient use. It
+is refreshed asynchronously, so a promise posted seconds before a release or
+expiry may not be folded yet. When the card is not live by the fold but is
+still queued for it (`brief_dirty`), the release or expiry records
+`card_unowned: pending_brief_fold` and leaves the decision to the lease clock,
+which re-checks on each tick until the fold is current and then wakes the lead
+only if the card is live.
 
 **When it fires:**
 

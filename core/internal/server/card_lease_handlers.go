@@ -283,7 +283,7 @@ func (c *CardLeaseClock) notify(ctx context.Context, e primitives.ExpiredCardLea
 	switch {
 	case !leadSent:
 		send(CardLeaseWakeUnowned, assigneeID, assigneeHandle)
-	case !e.Released && assigneeID != leadID:
+	case !e.Released && !e.LeadOnly && assigneeID != leadID:
 		send(CardLeaseWakeExpired, assigneeID, assigneeHandle)
 	}
 }

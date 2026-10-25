@@ -151,28 +151,31 @@ const (
 // an ownerless card worth waking the lead for. A card is live when it is not
 // archived, trashed, done or cancelled, and either sits in the in_progress
 // column or carries an open --next promise in the brief fold
-// (brief_initiatives.open=1 with a promise_at). The fold is the materialized
-// promise view the brief already uses; a promise posted moments before the
-// release may not be folded yet.
-func cardLeaseLiveWork(ctx context.Context, q queryRower, card boardCardRow) (string, error) {
+// (brief_initiatives.open=1 with a promise_at).
+//
+// The fold is materialized asynchronously: a note queues its card in
+// brief_dirty until RefreshBriefInitiatives folds it. pending is true when the
+// card is not live by the fold but is still queued, so a promise posted moments
+// before the release may not be visible yet. Callers then defer the decision
+// to the lease clock, which re-checks once the fold is current.
+func cardLeaseLiveWork(ctx context.Context, q queryRower, card boardCardRow) (reason string, pending bool, err error) {
 	if card.ArchivedAt.Valid || card.TrashedAt.Valid {
-		return "", nil
+		return "", false, nil
 	}
 	switch card.ColumnKey {
 	case "done", "cancelled":
-		return "", nil
+		return "", false, nil
 	case "in_progress":
-		return CardLeaseLiveInProgress, nil
+		return CardLeaseLiveInProgress, false, nil
 	}
-	var n int
-	err := q.QueryRowContext(ctx, `SELECT 1 FROM brief_initiatives WHERE card_id=? AND open=1 AND promise_at IS NOT NULL`, card.CardID).Scan(&n)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+	var open, dirty int
+	if err = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM brief_initiatives WHERE card_id=? AND open=1 AND promise_at IS NOT NULL), EXISTS(SELECT 1 FROM brief_dirty WHERE card_id=?)`, card.CardID, card.CardID).Scan(&open, &dirty); err != nil {
+		return "", false, err
 	}
-	if err != nil {
-		return "", err
+	if open == 1 {
+		return CardLeaseLiveOpenPromise, false, nil
 	}
-	return CardLeaseLiveOpenPromise, nil
+	return "", dirty == 1, nil
 }
 
 func validateCardLeaseOwner(owner string) error {
@@ -331,12 +334,17 @@ func (s *Store) mutateCardLease(ctx context.Context, actor, cardID string, decid
 	}
 	markUnowned := false
 	if change.checkUnowned {
-		live, err := cardLeaseLiveWork(ctx, tx, card)
+		live, pending, err := cardLeaseLiveWork(ctx, tx, card)
 		if err != nil {
 			return result, err
 		}
-		if live != "" {
+		switch {
+		case live != "":
 			change.events[0].payload["card_unowned"] = live
+			markUnowned = true
+		case pending:
+			// The brief fold has not caught up; the clock decides later.
+			change.events[0].payload["card_unowned"] = "pending_brief_fold"
 			markUnowned = true
 		}
 	}
@@ -453,6 +461,9 @@ func (s *Store) RenewCardLease(ctx context.Context, actor, cardID string, in Car
 		return CardLeaseResult{}, err
 	}
 	return s.mutateCardLease(ctx, actor, cardID, func(card boardCardRow, cur *cardLeaseRow, now time.Time) (*cardLeaseChange, error) {
+		if card.ArchivedAt.Valid || card.TrashedAt.Valid {
+			return nil, workInvalid("an archived or trashed card cannot be leased")
+		}
 		view := cardLeaseView(card, cur, now)
 		switch {
 		case view.State == CardLeaseStateHeld && cur.owner != in.Owner:
@@ -587,6 +598,9 @@ type ExpiredCardLease struct {
 	EventID  string
 	Live     string
 	Released bool
+	// LeadOnly marks a deferred card_unowned decision: the assignee already
+	// had its lease_expired wake, so only the lead wake remains.
+	LeadOnly bool
 }
 
 // ExpireDueCardLeases records card_lease_expired once per epoch for leases
@@ -651,13 +665,15 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 	if err != nil {
 		return ExpiredCardLease{}, false, err
 	}
-	live, err := cardLeaseLiveWork(ctx, tx, card)
+	live, pending, err := cardLeaseLiveWork(ctx, tx, card)
 	if err != nil {
 		return ExpiredCardLease{}, false, err
 	}
 	payload := map[string]any{"owner": cur.owner, "epoch": cur.epoch, "ttl_seconds": cur.ttl, "expires_at": cur.expiresAt, "renewed_at": cur.renewedAt}
 	if live != "" {
 		payload["card_unowned"] = live
+	} else if pending {
+		payload["card_unowned"] = "pending_brief_fold"
 	}
 	eventID, err := insertCardLeaseEvent(ctx, tx, actor, card, "card_lease_expired", "Lease held by "+cur.owner+" expired", payload)
 	if err != nil {
@@ -666,7 +682,13 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 	if eventID == "" {
 		eventID = "-"
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE card_leases SET expired_event_id=? WHERE card_id=? AND epoch=? AND owner=? AND expires_at=? AND released_at='' AND expired_event_id=''`, eventID, cardID, cur.epoch, cur.owner, cur.expiresAt)
+	// With the fold pending, leave a card_unowned mark for the clock to
+	// re-check once the fold is current (TakeUnownedCardLeases).
+	unowned := ""
+	if pending {
+		unowned = eventID
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE card_leases SET expired_event_id=?, unowned_event_id=?, unowned_woken_at='' WHERE card_id=? AND epoch=? AND owner=? AND expires_at=? AND released_at='' AND expired_event_id=''`, eventID, unowned, cardID, cur.epoch, cur.owner, cur.expiresAt)
 	if err != nil {
 		return ExpiredCardLease{}, false, err
 	}
@@ -683,7 +705,9 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 }
 
 // TakeUnownedCardLeases claims up to limit pending card_unowned wakes left by
-// releases without hand-off (unowned_event_id set, unowned_woken_at empty).
+// releases without hand-off, or by expiries whose live-work check waited on
+// the brief fold (unowned_event_id set, unowned_woken_at empty). A card still
+// queued for the fold stays pending until a later tick.
 // Each claim stamps unowned_woken_at in its own short transaction before the
 // caller wakes anyone, so a wake is sent at most once. A lease that a new
 // tenure took meanwhile is no longer pending; a card that stopped being live
@@ -717,7 +741,7 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 	}
 	defer tx.Rollback()
 	cur, err := loadCardLeaseRow(ctx, tx, cardID)
-	if err != nil || cur == nil || cur.unowned == "" || cur.unownedWokenAt != "" || cur.releasedAt == "" {
+	if err != nil || cur == nil || cur.unowned == "" || cur.unownedWokenAt != "" || (cur.releasedAt == "" && cur.expired == "") {
 		return ExpiredCardLease{}, false, err
 	}
 	live := ""
@@ -727,8 +751,12 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 	case err != nil:
 		return ExpiredCardLease{}, false, err
 	default:
-		if live, err = cardLeaseLiveWork(ctx, tx, card); err != nil {
+		var pending bool
+		if live, pending, err = cardLeaseLiveWork(ctx, tx, card); err != nil {
 			return ExpiredCardLease{}, false, err
+		}
+		if pending {
+			return ExpiredCardLease{}, false, nil // Re-check after the brief fold.
 		}
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE card_leases SET unowned_woken_at=? WHERE card_id=? AND epoch=? AND unowned_event_id=? AND unowned_woken_at=''`, cardLeaseStamp(cardLeaseNow()), cardID, cur.epoch, cur.unowned)
@@ -746,6 +774,6 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 	}
 	return ExpiredCardLease{
 		CardID: card.CardID, CardRef: cardLeaseRef(card), ThreadID: card.ThreadID.String, Assignee: firstCardLeaseAssignee(card.Assignee.String),
-		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, Released: true,
+		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, Released: cur.releasedAt != "", LeadOnly: true,
 	}, true, nil
 }
