@@ -114,10 +114,17 @@ for (const layout of ["list", "lanes"]) {
     }
     const digest = page.getByRole("region", { name: "Daily digest" });
     await expect(digest).toBeVisible();
+    await digest.scrollIntoViewIfNeeded();
+    await expect(digest).toBeInViewport();
     for (const card of brief.daily_digest) {
       await expect(
         digest.locator(`[data-collection-row="${card.ref}"]`),
       ).toContainText(card.title);
+    }
+    if (process.env.WATCH_SHOTS) {
+      await page.screenshot({
+        path: `${process.env.WATCH_SHOTS}/digest-${layout}.png`,
+      });
     }
   });
 }

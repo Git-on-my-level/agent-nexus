@@ -15,7 +15,7 @@ import {
   sortDecisions,
 } from "$lib/brief.js";
 import { formatAgo } from "$lib/time/format.js";
-import { label as phaseLabel } from "$lib/pm/presentation.js";
+import { countWord, label as phaseLabel } from "$lib/pm/presentation.js";
 import { buildLanes } from "$lib/swimlanes.js";
 
 /**
@@ -154,25 +154,153 @@ export function childrenLine(rollup) {
 }
 
 /**
+ * A workstream's children as short codes, in core's order: "T1 T2 P86",
+ * "P76 ×5", "fs-p3". Core sends each child's lowercase `short_code`; a
+ * letters-and-number code reads in capitals as people write it. A label,
+ * not an identity, so repeats fold into one with a count.
+ */
+export const CODE_PREVIEW = 4;
+export function shortCodes(rollup) {
+  const counts = new Map();
+  for (const child of rollup?.children ?? []) {
+    const code = String(child.shortCode ?? "").trim();
+    if (code) counts.set(code, (counts.get(code) ?? 0) + 1);
+  }
+  const codes = [...counts].map(([code, n]) => {
+    const shown = /^[a-z]{1,3}\d+$/.test(code) ? code.toUpperCase() : code;
+    return n > 1 ? `${shown} ×${n}` : shown;
+  });
+  return codes.length > CODE_PREVIEW
+    ? `${codes.slice(0, CODE_PREVIEW).join(" ")} …`
+    : codes.join(" ");
+}
+
+/** The order a kid row counts phases in: what is stuck first. */
+const STATE_ORDER = [
+  "blocked",
+  "in_progress",
+  "review",
+  "ready",
+  "backlog",
+  "done",
+  "cancelled",
+];
+/** Parts a kid row's state summary shows; the rest are in its title. */
+export const STATE_PARTS = 2;
+
+/**
+ * A workstream's children by state, from its own rollup: "1 needs you ·
+ * 3 blocked", "2 ready · 1 review". A child waiting on the reader counts
+ * once, as needing you, not again under its phase.
+ *
+ * @returns {{ text: string, full: string, tone: string }}
+ */
+export function stateSummary(rollup) {
+  const counts = { ...(rollup?.byState ?? {}) };
+  for (const child of rollup?.children ?? [])
+    if (child.needsViewer && counts[child.state] > 0) counts[child.state] -= 1;
+  const parts = [];
+  if (rollup?.needingViewer > 0)
+    parts.push(
+      `${rollup.needingViewer} ${rollup.needingViewer === 1 ? "needs" : "need"} you`,
+    );
+  const known = [
+    ...STATE_ORDER,
+    ...Object.keys(counts).filter((s) => !STATE_ORDER.includes(s)),
+  ];
+  for (const state of known) {
+    const n = Math.max(0, Number(counts[state]) || 0);
+    if (n) parts.push(`${n} ${countWord(state)}`);
+  }
+  return {
+    text: parts.slice(0, STATE_PARTS).join(" · "),
+    full: parts.join(" · "),
+    tone: rollup?.needingViewer > 0 ? "needs" : "muted",
+  };
+}
+
+/**
+ * A kid row's promise: for a workstream, its children's ("3 past", "10h
+ * past", "due Oct 25") from its rollup; for a single card, whether it is past
+ * its promise, or when it finished.
+ */
+export function kidPromise(kid, now = Date.now()) {
+  const rollup = kid.rollup;
+  const field = "initiatives.rollup.workstreams.rollup";
+  if (rollup) {
+    if (rollup.pastPromise > 1)
+      return {
+        text: `${rollup.pastPromise} past`,
+        tone: "warn",
+        field: `${field}.past_promise`,
+      };
+    const at = Date.parse(rollup.earliestPromiseAt ?? "");
+    if (Number.isFinite(at))
+      return at <= now
+        ? {
+            text: `${formatSpan((now - at) / 1000)} past`,
+            tone: "warn",
+            field: `${field}.earliest_promise_at`,
+          }
+        : {
+            text: `due ${formatDay(rollup.earliestPromiseAt)}`,
+            tone: "muted",
+            field: `${field}.earliest_promise_at`,
+          };
+    if (rollup.pastPromise === 1)
+      return { text: "1 past", tone: "warn", field: `${field}.past_promise` };
+  }
+  if (kid.pastPromise)
+    return {
+      text: "past promise",
+      tone: "warn",
+      field: "initiatives.rollup.children",
+    };
+  if (kid.doneAt)
+    return {
+      text: `done ${formatDay(kid.doneAt)}`,
+      tone: "muted",
+      field: "initiatives.rollup.children.done_at",
+    };
+  return { text: "—", tone: "muted", field: "" };
+}
+
+/**
  * The rows under an open initiative: its workstreams when it has any, else
- * its children, in core's order. Each says its own phase, whether it is past
- * its promise, and whether it waits on the reader. A workstream's own child
- * counts, promise date and owner are not in the rollup yet.
+ * its children, in core's order. A workstream core expanded says its card
+ * count, short codes, children by state, nearest promise and owner from its
+ * own rollup; one it did not expand (or a single card) says its own phase
+ * and promise.
  */
 export const KID_PREVIEW = 8;
-export function kidRows(rollup) {
+export function kidRows(rollup, now = Date.now()) {
   const streams = rollup?.workstreams ?? [];
   const source = streams.length ? streams : (rollup?.children ?? []);
-  const shown = source.slice(0, KID_PREVIEW).map((child) => ({
-    ...child,
-    tone: childTone(child),
-    stateText: phaseLabel(child.state),
-    promise: child.pastPromise
-      ? { text: "past promise", tone: "warn" }
-      : { text: "—", tone: "muted" },
-    next: child.needsViewer ? "You" : "—",
-    workstream: streams.length > 0,
-  }));
+  const shown = source.slice(0, KID_PREVIEW).map((child) => {
+    const own = child.rollup;
+    const summary = own?.total ? stateSummary(own) : null;
+    const tone = childTone(child);
+    return {
+      ...child,
+      tone,
+      cards: own?.total ?? 0,
+      codes: own ? shortCodes(own) : "",
+      stateText: summary?.text || phaseLabel(child.state),
+      stateTitle: summary && summary.full !== summary.text ? summary.full : "",
+      stateTone: summary ? summary.tone : tone === "needs" ? "needs" : "muted",
+      stateField: summary
+        ? "initiatives.rollup.workstreams.rollup.by_state"
+        : "initiatives.rollup.children",
+      promise: kidPromise(child, now),
+      next:
+        child.needsViewer || own?.needingViewer > 0
+          ? { kind: "you" }
+          : child.owner
+            ? { kind: "owner", ref: child.owner }
+            : { kind: "none" },
+      workstream: streams.length > 0,
+    };
+  });
   const counted = streams.length ? streams.length : (rollup?.total ?? 0);
   return {
     rows: shown,
@@ -182,6 +310,16 @@ export function kidRows(rollup) {
       ? Math.max(0, (rollup?.total ?? 0) - streams.length)
       : 0,
   };
+}
+
+/**
+ * The initiative's outcome, when it says more than the title: core's
+ * `outcome` (its goal, else its summary's first line).
+ */
+export function outcomeLine(row) {
+  const outcome = plainInline(row.outcome);
+  const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  return outcome && !same(outcome, String(row.title ?? "")) ? outcome : "";
 }
 
 // ---------------------------------------------------------------------------

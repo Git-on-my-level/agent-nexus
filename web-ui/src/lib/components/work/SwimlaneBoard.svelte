@@ -7,9 +7,14 @@
    * with the nav badge) and one bounded `GET /work/ungrouped` page, re-read
    * when the brief refreshes. Nothing is read per lane.
    *
-   * Writes go through the device outbox: group, fold, and their undos. A
-   * mouse can drag a tray row onto a lane; every drag has a button or a
-   * select that does the same, and touch only uses those.
+   * Writes go through the device outbox: group, fold, make it an initiative,
+   * and their undos. A mouse can drag a tray row onto a lane; every drag has
+   * a button or a select that does the same, and touch only uses those.
+   *
+   * A lane's subtitle is the initiative's outcome when core sends one, else
+   * its next step. A proposed initiative (still in Backlog) is drawn dashed
+   * with a "proposed" tag. The done column holds what entered Done in the
+   * last seven days (core's `done_at`); older finishes are a count.
    *
    * Below `md` lanes stack as collapsible sections and the tray opens as a
    * sheet.
@@ -32,6 +37,7 @@
     LANE_COLUMNS,
     laneCells,
     overBudget,
+    splitDone,
     trayRows,
   } from "$lib/swimlanes.js";
   import {
@@ -52,7 +58,9 @@
     decisionIndex,
     needsYouItems,
     nextLine,
+    outcomeLine,
     segmentsLabel,
+    shortCodes,
   } from "$lib/watchRollup.js";
 
   let {
@@ -78,7 +86,10 @@
   let summary = $derived.by(() => {
     const inside = lanes.reduce((sum, lane) => sum + lane.rollup.total, 0);
     const more = brief?.truncated.initiatives ? "+" : "";
-    const count = `${lanes.length}${more} ${lanes.length === 1 ? "initiative" : "initiatives"}`;
+    // "4 initiatives + 1 proposed": a proposed one is not counted twice.
+    const proposed = lanes.filter((lane) => lane.proposed).length;
+    const settled = lanes.length - proposed;
+    const count = `${settled}${more} ${settled === 1 ? "initiative" : "initiatives"}${proposed ? ` + ${proposed} proposed` : ""}`;
     // A phone has room for what to do next, not the inventory.
     if (phone)
       return [
@@ -178,6 +189,10 @@
   }
   const group = (row, lane, options) =>
     send(groupingDraft("group", row, lane), options);
+  const promote = (row) =>
+    send(
+      groupingDraft("promote", row, null, { version: row.promote?.version }),
+    );
   const fold = (suggestion) =>
     send(
       groupingDraft(
@@ -197,8 +212,8 @@
     );
   }
 
-  /** Undo for a confirmed change; group and fold each have one. */
-  const UNDO = { group: "ungroup", fold: "unfold" };
+  /** Undo for a confirmed change; group, fold and promote each have one. */
+  const UNDO = { group: "ungroup", fold: "unfold", promote: "unpromote" };
   function doneText(draft) {
     const { work, parent } = draft;
     switch (draft.verb) {
@@ -210,6 +225,10 @@
         return `Unfolded “${work.title}”. It is its own initiative again.`;
       case "ungroup":
         return `Took “${work.title}” out of “${parent?.title}”. It is back in Ungrouped.`;
+      case "promote":
+        return `“${work.title}” is an initiative now.`;
+      case "unpromote":
+        return `“${work.title}” is back in Ungrouped.`;
       default:
         return groupingTitle(draft);
     }
@@ -263,7 +282,7 @@
     if (event.button != null && event.button !== 0) return;
     if (
       event.target instanceof Element &&
-      event.target.closest("a, button, select, label, input")
+      event.target.closest("a, button, select, label, input, [data-tray-move]")
     )
       return;
     drag = {
@@ -335,6 +354,8 @@
               send(
                 groupingDraft(undo, draft.work, draft.parent, {
                   stepId: addedStep(draft),
+                  // An unpromote is fenced to the version the promote made.
+                  version: entry.result?.work?.version,
                 }),
               )
           : null,
@@ -378,8 +399,16 @@
       ? `+ ${rest} ${listed.size ? "more" : rest === 1 ? "card" : "cards"}`
       : "Show cards";
   }
+  /** A workstream chip's count: "T1 T2 P86 · 9", or the bare count. */
+  function streamCount(child) {
+    if (!child.rollup) return "workstream";
+    const codes = shortCodes(child.rollup);
+    return codes ? `${codes} · ${child.rollup.total}` : `${child.rollup.total}`;
+  }
   function laneView(lane) {
     const cells = laneCells(lane.rollup);
+    const done = splitDone(cells.done, now);
+    cells.done = done.recent;
     const needs = needsYouItems(lane, decisions);
     const asks = needs.filter((item) => item.kind === "ask");
     const covered = coveredRefs(asks.map((item) => item.decision));
@@ -396,8 +425,10 @@
       needs,
       slipping:
         lane.rollup.pastPromise || (lane.state === "past_promise" ? 1 : 0),
+      doneEarlier: done.earlier.length,
       segments: childSegments(lane.rollup),
       line: nextLine(lane, now),
+      outcome: outcomeLine(lane),
       // Phone: what waits on the reader, and beside it the first thing
       // moving. A lane with nothing for the reader is its bar alone.
       phoneLines: [
@@ -407,7 +438,11 @@
           key: child.ref,
           ref: child.ref,
           title: child.title,
-          label: child.pastPromise ? "slipping" : "in progress",
+          label: child.pastPromise
+            ? "slipping"
+            : child.rollup?.total
+              ? `${child.rollup.total} · moving`
+              : "in progress",
           tone: child.pastPromise ? "slipping" : "moving",
         })),
       ],
@@ -430,6 +465,7 @@
       {pending}
       {now}
       onGroup={(row, lane) => group(row, lane)}
+      onPromote={promote}
       onGrab={phone ? null : grab}
       {idPrefix}
     />
@@ -631,7 +667,7 @@
         >
           <span class="px-3 py-2.5">Initiative</span>
           {#each LANE_COLUMNS as column (column.key)}
-            <span class="px-3 py-2.5">{column.label}</span>
+            <span class="px-3 py-2.5">{column.heading ?? column.label}</span>
           {/each}
         </div>
         <div class="flex flex-col max-md:gap-3">
@@ -648,8 +684,12 @@
               aria-labelledby="lane-title-{lane.ref}"
               data-lane-ref={lane.ref}
               data-lane-collapsed={isCollapsed ? "true" : "false"}
+              data-lane-proposed={lane.proposed ? "true" : undefined}
             >
-              <div class="min-w-0 md:bg-bg-soft md:p-3">
+              <div
+                class="min-w-0 md:bg-bg-soft md:p-3"
+                class:lane-proposed={lane.proposed}
+              >
                 <div class="flex items-start gap-2">
                   <h2
                     id="lane-title-{lane.ref}"
@@ -665,6 +705,11 @@
                       class="tag inline-flex bg-danger-soft text-danger-text md:hidden"
                       data-source="computed:initiatives.rollup.needing_viewer"
                       >needs you</span
+                    >
+                  {:else if lane.proposed}
+                    <span
+                      class="tag inline-flex bg-accent-soft text-accent-text md:hidden"
+                      data-source="computed:initiatives.proposed">proposed</span
                     >
                   {:else if view.slipping}
                     <span
@@ -697,7 +742,15 @@
                     ></button
                   >
                 </div>
-                {#if view.line.length}
+                {#if view.outcome}
+                  <p
+                    class="mt-0.5 text-micro text-fg-muted [overflow-wrap:anywhere]"
+                    data-source="computed:initiatives.outcome"
+                    data-lane-outcome
+                  >
+                    {view.outcome}
+                  </p>
+                {:else if view.line.length}
                   <p
                     class="mt-0.5 text-micro text-fg-muted [overflow-wrap:anywhere]"
                     data-lane-next
@@ -732,6 +785,13 @@
                 <div
                   class="mt-2 flex flex-wrap items-center gap-1.5 max-md:hidden"
                 >
+                  {#if lane.proposed}
+                    <span
+                      class="tag inline-flex bg-accent-soft text-accent-text"
+                      data-source="computed:initiatives.proposed"
+                      data-lane-proposed-tag>proposed</span
+                    >
+                  {/if}
                   {#if view.needs.length}
                     <span
                       class="tag inline-flex bg-danger-soft text-danger-text"
@@ -748,7 +808,7 @@
                       data-lane-slipping>{view.slipping} slipping</span
                     >
                   {/if}
-                  {#if !view.needs.length && !view.slipping}
+                  {#if !view.needs.length && !view.slipping && !lane.proposed}
                     <span
                       class="text-micro text-fg-muted"
                       data-source="computed:initiatives.rollup.total"
@@ -854,7 +914,7 @@
                     >
                       <span
                         class="text-micro font-medium text-fg-muted md:hidden"
-                        >{column.label} · {rows.length}</span
+                        >{column.heading ?? column.label} · {rows.length}</span
                       >
                       {#each open ? rows : rows.slice(0, CELL_PREVIEW) as item (item.key)}
                         {#if item.kind === "ask"}
@@ -907,7 +967,11 @@
                                 >past promise</span
                               >
                             {:else if stream}
-                              <span class="chip-n">workstream</span>
+                              <span
+                                class="chip-n chip-n--codes"
+                                data-source="computed:initiatives.rollup.workstreams.rollup"
+                                data-stream-count>{streamCount(child)}</span
+                              >
                             {/if}
                           </a>
                         {/if}
@@ -925,6 +989,19 @@
                           >{open
                             ? "Show fewer"
                             : `+ ${rows.length - CELL_PREVIEW} more`}</button
+                        >
+                      {/if}
+                      {#if column.key === "done" && view.doneEarlier}
+                        <span
+                          class="text-micro text-fg-muted"
+                          data-source="computed:initiatives.rollup.children.done_at"
+                          data-lane-done-earlier
+                          >{view.doneEarlier} done earlier</span
+                        >
+                      {:else if !rows.length}
+                        <span
+                          class="hidden text-micro text-fg-muted md:block"
+                          aria-hidden="true">—</span
                         >
                       {/if}
                     </div>
@@ -1102,6 +1179,13 @@
     }
   }
   /* No display here: the phone-only tags rely on Tailwind's md:hidden. */
+  /* Proposed: a dashed lane, as in the Board mockup. */
+  @media (min-width: 768px) {
+    .lane-proposed {
+      outline: 1px dashed var(--accent-solid);
+      outline-offset: -6px;
+    }
+  }
   .tag {
     align-items: center;
     flex: none;
@@ -1134,6 +1218,16 @@
     font-size: 11px;
     color: var(--fg-muted);
     white-space: nowrap;
+  }
+  /* A workstream's codes can outgrow a narrow column: they shrink and wrap
+     inside the chip, right-aligned, rather than spill past its edge. */
+  .chip-n--codes {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: right;
   }
   .phone-line {
     display: flex;

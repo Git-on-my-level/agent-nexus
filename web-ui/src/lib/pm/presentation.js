@@ -24,6 +24,22 @@ export const PHASE_LABELS = {
 export const label = (value) =>
   PHASE_LABELS[value] || String(value || "Unknown");
 
+/**
+ * A phase as one short lowercase word for a count ("3 blocked · 4 moving"),
+ * as Watch's kid rows read.
+ */
+export const PHASE_COUNT_WORDS = {
+  backlog: "backlog",
+  ready: "ready",
+  in_progress: "moving",
+  blocked: "blocked",
+  review: "review",
+  done: "done",
+  cancelled: "cancelled",
+};
+export const countWord = (phase) =>
+  PHASE_COUNT_WORDS[phase] || label(phase).toLowerCase();
+
 export function safeSourceHref(value) {
   try {
     const url = new URL(value);
