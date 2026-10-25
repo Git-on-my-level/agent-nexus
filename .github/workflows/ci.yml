@@ -85,6 +85,7 @@ jobs:
               - 'scripts/release-patch.sh'
               - 'scripts/*version*.sh'
               - 'scripts/tests/**'
+              - 'scripts/migrate-tracking-cadence.py'
             go_shared:
               - '.github/actions/setup-go/**'
               - '.github/workflows/ci.yml'
@@ -155,6 +156,7 @@ jobs:
           node --test scripts/tests/ci-automation.test.mjs
           python3 -m unittest discover -s scripts/tests -p "test_performance_shards.py"
           python3 -m unittest discover -s scripts/tests -p "test_ci_velocity.py"
+          python3 -m unittest discover -s scripts/tests -p "test_tracking_cadence_migration.py"
           python3 scripts/tests/test_release_preflight.py
 
       - name: Check GitHub automation formatting
