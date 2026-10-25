@@ -85,7 +85,7 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 			return nil, e
 		}
 	}
-	deliveries, err := s.askDeliveries(ctx, id)
+	deliveries, err := s.askDeliveries(ctx, id, resolutionID)
 	if err != nil {
 		return nil, err
 	}

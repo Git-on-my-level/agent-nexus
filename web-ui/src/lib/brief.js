@@ -155,6 +155,18 @@ function normalizeAskPresentation(raw, includeRewrite = true) {
               text(raw.presentation_rewrite.actor?.display) ||
               text(raw.presentation_rewrite.actor_id),
             at: text(raw.presentation_rewrite.at),
+            undo: raw.presentation_rewrite.undo === true,
+            original:
+              raw.presentation_rewrite.original &&
+              typeof raw.presentation_rewrite.original === "object"
+                ? {
+                    ...normalizeAskPresentation(
+                      raw.presentation_rewrite.original,
+                      false,
+                    ),
+                    title: text(raw.presentation_rewrite.original.title),
+                  }
+                : null,
             previous: {
               ...normalizeAskPresentation(
                 raw.presentation_rewrite.previous ?? {},

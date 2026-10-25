@@ -181,6 +181,11 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 		// Event insertion assigns its public handle; persist exactly what is returned.
 		encoded, _ = json.Marshal(result)
 		if undo {
+			// Keep attempts/audit history, but stop pending sends from the undone
+			// outcome. Two indexed outcome seeks cover new and released legacy rows.
+			if _, err = tx.ExecContext(ctx, `UPDATE ask_deliveries SET state='failed',reason='retirement_undone' WHERE ask_id=? AND resolution_event_id IN (?, '') AND state='pending'`, resolved.ID, current); err != nil {
+				return err
+			}
 			changed, e := tx.ExecContext(ctx, `DELETE FROM human_attention_request_resolutions WHERE request_event_id=? AND resolution_event_id=? AND resolution_type='withdrawn'`, resolved.ID, current)
 			if e != nil {
 				return e

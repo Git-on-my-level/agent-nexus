@@ -656,11 +656,15 @@ test("a clarity rewrite can show original copy and keeps the original answer", a
   const ask = rewritten.decisions.find((d) => d.ref === MERGE.ref);
   ask.title = "Plain question?";
   ask.situation = "Clear situation.";
-  ask.presentation_revision = 1;
+  ask.presentation_revision = 2;
   ask.presentation_rewrite = {
     actor_id: "curator",
     at: "2026-10-26T00:00:00Z",
-    previous: { title: "Original question?", situation: "Original situation." },
+    previous: {
+      title: "Intermediate question?",
+      situation: "Intermediate situation.",
+    },
+    original: { title: "Original question?", situation: "Original situation." },
   };
   const bodies = await setup(context, {
     briefRoute: (route) => json(route, rewritten),
@@ -682,7 +686,7 @@ test("a clarity rewrite can show original copy and keeps the original answer", a
   await expect(card.locator("[data-decision-presentation]")).toContainText(
     "Original situation.",
   );
-  await card.getByRole("button", { name: "Show rewrite" }).click();
+  await card.getByRole("button", { name: "Show current" }).click();
   await expect(card.locator("[data-decision-presentation]")).toContainText(
     "Clear situation.",
   );
@@ -711,4 +715,42 @@ test("a retired ask's email permalink fails closed", async ({
   await expect(page.locator("[data-decision-proposal]")).toHaveCount(0);
   await flush(page);
   expect(bodies).toHaveLength(0);
+});
+
+test("undo still shows the requester original and identifies the undo", async ({
+  page,
+  context,
+}) => {
+  const reverted = structuredClone(brief);
+  const ask = reverted.decisions.find((d) => d.ref === MERGE.ref);
+  ask.title = "Requester question?";
+  ask.situation = "Requester situation.";
+  ask.presentation_revision = 2;
+  ask.presentation_rewrite = {
+    actor_id: "curator",
+    undo: true,
+    previous: { title: "Curator question?", situation: "Curator situation." },
+    original: {
+      title: "Requester question?",
+      situation: "Requester situation.",
+    },
+  };
+  await setup(context, { briefRoute: (route) => json(route, reverted) });
+  await page.goto(`${LIST}/ask-91`);
+  const card = page.locator(
+    '[data-variant="full"][data-decision-ref="inbox:ask-91"]',
+  );
+  await expect(card.locator("[data-presentation-rewrite]")).toContainText(
+    "Rewrite undone by curator",
+  );
+  await card.getByRole("button", { name: "Show original" }).click();
+  await expect(card.locator("[data-decision-title]")).toHaveText(
+    "Requester question?",
+  );
+  await expect(card.locator("[data-decision-presentation]")).toContainText(
+    "Requester situation.",
+  );
+  await expect(card.locator("[data-decision-presentation]")).not.toContainText(
+    "Curator situation.",
+  );
 });

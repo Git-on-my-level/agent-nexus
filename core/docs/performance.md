@@ -2194,5 +2194,31 @@ background projection replay recognizes retire/reopen audit pairs during its
 existing thread pass, using linear maps and exact event identities.
 
 The existing ask outcome/delivery and presentation scale gates are unchanged;
-no read budget or query-plan allowance is increased. Retirement needs no new
-schema, migration or backfill.
+no read budget or query-plan allowance is increased. The initial retirement
+implementation needs no new schema or backfill; the delivery correction below
+adds migration 124.
+
+## Original presentation and outcome delivery corrections
+
+Presentation hydration adds the immutable original event to the existing head
+query through its primary key. This is still one query per admitted batch (at
+most 200), one row per ask, and bounded original/presentation text. It never
+scans revision history. The existing presentation read budget is unchanged.
+
+Migration 124 adds an empty-default outcome column to delivery records, replaces
+subscription queue triggers, and builds `(ask_id, resolution_event_id, id)`.
+The one-time index build is O(existing delivery rows); it does not scan event
+payloads or backfill historical content. Old records retain their identities.
+New outcome rows are capped by the existing 16 per-ask plus 16 standing
+subscriptions. Current outcome/status, attempts and undo cancellation seek at
+most the current 32 rows plus up to 32 released legacy rows by this index; public
+results remain capped at 32 deliveries and 160 attempts. Receipts seek the current
+outcome's exact delivery primary key. Webhook ticks keep their existing 20-job
+due-index window and compare the bound outcome with the already-loaded response.
+No existing budget or query-plan allowance is increased.
+
+`TestPerformanceAskOutcomeHistoryBudget` measures the scoped current-outcome
+read with zero and 4,096 earlier outcomes of the same ask. The index-aligned
+ordering keeps measured work at seven queries, five rows and approximately 800
+VM steps for either fixture. A separate constant-growth assertion rejects
+history scans even while they remain below the existing absolute budget.

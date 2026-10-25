@@ -2,10 +2,10 @@
   import AskPresentation from "./AskPresentation.svelte";
   let showOriginal = $state(false);
   const shownDecision = $derived(
-    showOriginal && decision.presentationRewrite
+    showOriginal && decision.presentationRewrite?.original
       ? {
           ...decision,
-          ...decision.presentationRewrite.previous,
+          ...decision.presentationRewrite.original,
           body: decision.body,
           evidence: decision.evidence,
         }
@@ -552,16 +552,18 @@
   {#if decision.presentationRewrite || decision.situation || decision.impact || decision.recommendation || decision.alternatives?.length || decision.if_no_answer || decision.details || decision.evidence?.length}
     {#if decision.presentationRewrite}
       <p class="text-meta text-fg-muted" data-presentation-rewrite>
-        Rewritten for clarity by {decision.presentationRewrite.actorDisplay ||
-          decision.presentationRewrite.actorId} ·
-        <button
-          type="button"
-          class="underline"
-          aria-expanded={showOriginal}
-          onclick={() => (showOriginal = !showOriginal)}
-        >
-          {showOriginal ? "Show rewrite" : "Show original"}
-        </button>
+        {decision.presentationRewrite.undo
+          ? "Rewrite undone"
+          : "Rewritten for clarity"} by {decision.presentationRewrite
+          .actorDisplay || decision.presentationRewrite.actorId} ·
+        {#if decision.presentationRewrite.original}<button
+            type="button"
+            class="underline"
+            aria-expanded={showOriginal}
+            onclick={() => (showOriginal = !showOriginal)}
+          >
+            {showOriginal ? "Show current" : "Show original"}
+          </button>{/if}
       </p>
     {/if}
     <AskPresentation

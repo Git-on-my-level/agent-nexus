@@ -9,10 +9,10 @@
   } = $props();
   let showOriginal = $state(false);
   const shown = $derived(
-    showOriginal && decision.presentationRewrite
+    showOriginal && decision.presentationRewrite?.original
       ? {
           ...decision,
-          ...decision.presentationRewrite.previous,
+          ...decision.presentationRewrite.original,
           body: decision.body,
           evidence: decision.evidence,
         }
@@ -31,15 +31,17 @@
 <div class="text-meta leading-relaxed text-fg" data-decision-presentation>
   {#if allowRevisionToggle && decision.presentationRewrite}
     <p class="text-fg-muted" data-presentation-rewrite>
-      Rewritten for clarity by {decision.presentationRewrite.actorDisplay ||
-        decision.presentationRewrite.actorId} ·
-      <button
-        type="button"
-        class="underline"
-        aria-expanded={showOriginal}
-        onclick={() => (showOriginal = !showOriginal)}
-        >{showOriginal ? "Show rewrite" : "Show original"}</button
-      >
+      {decision.presentationRewrite.undo
+        ? "Rewrite undone"
+        : "Rewritten for clarity"} by {decision.presentationRewrite
+        .actorDisplay || decision.presentationRewrite.actorId} ·
+      {#if decision.presentationRewrite.original}<button
+          type="button"
+          class="underline"
+          aria-expanded={showOriginal}
+          onclick={() => (showOriginal = !showOriginal)}
+          >{showOriginal ? "Show current" : "Show original"}</button
+        >{/if}
     </p>
     {#if showOriginal}<p><strong>{shown.title}</strong></p>{/if}
   {/if}

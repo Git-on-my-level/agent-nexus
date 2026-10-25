@@ -73,7 +73,7 @@ previous presentation, new presentation and its counter. The original ask event
 is immutable. A pointer/counter in `ask_presentation_heads` selects the current
 audit event; no historical scan is needed. The event, pointer and replay receipt
 commit together. Ordinary `POST /events` cannot forge revision events.
-Decide shows the curator and a Show original / Show rewrite toggle, including
+Decide shows the curator and a Show original / Show current toggle, including
 batch members. The toggle only switches copy; it never changes answer buttons.
 Undo restores the preceding presentation as another audit event. Repeating undo
 on a later token restores that event's predecessor; history is never erased.
@@ -145,3 +145,19 @@ retain their separate lifecycle and cannot be retired or reopened here.
 A retirement and an in-flight answer compete for the same unique resolution
 claim in one transaction. Only one can commit. Exact request-key retries replay
 the original result, subject to current curator authority and resource visibility.
+
+## Original copy and outcome delivery
+
+The rewrite metadata separates `original` (the immutable requester presentation)
+from `previous` (the preceding revision used for undo). “Show original” always
+shows the requester’s first presentation, including after several rewrites or an
+undo. Undo is labeled “Rewrite undone by”; its audit still retains the preceding
+copy. Clients without the immutable original do not offer a misleading toggle.
+
+Migration 124 keys subscription deliveries, webhook replay keys and bridge wakes
+by the outcome event. It preserves released legacy records without rewriting
+history. Undo cancels pending retirement sends, while completed delivery attempts
+remain available internally. Public ask delivery status and receipts refer to
+the current outcome. A queued webhook cannot send a later answer under an earlier
+retirement’s key. Retire → undo → answer therefore sends the real answer through
+the requester’s existing webhook and registered resume subscriptions.

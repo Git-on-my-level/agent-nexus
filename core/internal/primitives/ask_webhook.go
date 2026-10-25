@@ -99,9 +99,9 @@ func WithAskWebhookAllowHosts(hosts []string) Option {
 }
 
 type askWebhookJob struct {
-	ID, Subscription, Ask, Actor, URL string
-	Secret, Nonce                     []byte
-	Attempts                          int
+	ID, Subscription, Ask, Actor, URL, Resolution string
+	Secret, Nonce                                 []byte
+	Attempts                                      int
 }
 
 // DeliverAskWebhooks handles a fixed-size due window. It never scans the event
@@ -118,14 +118,14 @@ func (s *Store) deliverAskWebhooks(ctx context.Context, active func(context.Cont
 		return nil
 	}
 	now := time.Now().UTC()
-	rows, err := s.db.QueryContext(ctx, `SELECT d.id,d.subscription_id,d.ask_id,s.actor_id,s.endpoint,s.secret,s.nonce,d.attempts FROM ask_deliveries d JOIN ask_subscriptions s ON s.id=d.subscription_id WHERE d.kind='webhook' AND d.state='pending' AND d.next_at<=? AND s.enabled=1 ORDER BY d.next_at,d.id LIMIT 20`, now.Format(time.RFC3339Nano))
+	rows, err := s.db.QueryContext(ctx, `SELECT d.id,d.subscription_id,d.ask_id,s.actor_id,s.endpoint,s.secret,s.nonce,d.attempts,d.resolution_event_id FROM ask_deliveries d JOIN ask_subscriptions s ON s.id=d.subscription_id WHERE d.kind='webhook' AND d.state='pending' AND d.next_at<=? AND s.enabled=1 ORDER BY d.next_at,d.id LIMIT 20`, now.Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
 	jobs := []askWebhookJob{}
 	for rows.Next() {
 		var j askWebhookJob
-		if err = rows.Scan(&j.ID, &j.Subscription, &j.Ask, &j.Actor, &j.URL, &j.Secret, &j.Nonce, &j.Attempts); err != nil {
+		if err = rows.Scan(&j.ID, &j.Subscription, &j.Ask, &j.Actor, &j.URL, &j.Secret, &j.Nonce, &j.Attempts, &j.Resolution); err != nil {
 			rows.Close()
 			return err
 		}
@@ -162,7 +162,7 @@ func (s *Store) deliverAskWebhooks(ctx context.Context, active func(context.Cont
 			return e
 		}
 		next := time.Now().Add(time.Duration(1<<uint(j.Attempts)) * time.Second).UTC().Format(time.RFC3339Nano)
-		_, e = s.db.ExecContext(ctx, `UPDATE ask_deliveries SET state=?,reason=?,status_code=?,latency_ms=?,last_at=?,next_at=? WHERE id=? AND attempts=?`, state, reason, code, latency, time.Now().UTC().Format(time.RFC3339Nano), next, j.ID, j.Attempts)
+		_, e = s.db.ExecContext(ctx, `UPDATE ask_deliveries SET state=?,reason=?,status_code=?,latency_ms=?,last_at=?,next_at=? WHERE id=? AND attempts=? AND state='pending'`, state, reason, code, latency, time.Now().UTC().Format(time.RFC3339Nano), next, j.ID, j.Attempts)
 		if e != nil {
 			return e
 		}
@@ -179,6 +179,9 @@ func (s *Store) sendAskWebhook(ctx context.Context, j askWebhookJob, active func
 		return "failed", "response_not_accessible", 0, 0
 	}
 	response := asMapValue(out["response"])
+	if j.Resolution != "" && anyStringValue(response["response_event_id"]) != j.Resolution {
+		return "failed", "outcome_superseded", 0, 0
+	}
 	payload := map[string]any{"ask_id": out["ask_id"], "card_ref": out["subject_ref"], "status": out["status"], "outcome": response["outcome"], "response_event_id": response["response_event_id"], "response_text": response["response_text"]}
 	body, err := json.Marshal(payload)
 	if err != nil || len(body) > 64<<10 {

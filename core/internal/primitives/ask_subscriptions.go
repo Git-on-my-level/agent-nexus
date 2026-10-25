@@ -102,7 +102,7 @@ func (s *Store) CreateAskSubscription(ctx context.Context, actor, askRef string,
 		return nil, err
 	}
 	if askID != "" {
-		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO ask_deliveries(id,subscription_id,ask_id,kind,next_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM human_attention_request_resolutions WHERE request_event_id=?)`, id+"."+askID, id, askID, in.Kind, at, askID); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO ask_deliveries(id,subscription_id,ask_id,resolution_event_id,kind,next_at) SELECT ?||'.'||r.request_event_id||'.'||r.resolution_event_id,?,r.request_event_id,r.resolution_event_id,?,? FROM human_attention_request_resolutions r WHERE r.request_event_id=?`, id, id, in.Kind, at, askID); err != nil {
 			return nil, err
 		}
 	}
@@ -115,8 +115,13 @@ func (s *Store) CreateAskSubscription(ctx context.Context, actor, askRef string,
 	}
 	return out, nil
 }
-func (s *Store) askDeliveries(ctx context.Context, id string) ([]map[string]any, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT s.id,s.kind,s.label,d.state,d.attempts,d.last_at,d.reason,d.status_code,d.latency_ms FROM ask_deliveries d JOIN ask_subscriptions s ON s.id=d.subscription_id WHERE d.ask_id=? ORDER BY d.id LIMIT 32`, id)
+func (s *Store) askDeliveries(ctx context.Context, id, resolutionID string) ([]map[string]any, error) {
+	if resolutionID == "" {
+		return []map[string]any{}, nil
+	}
+	// Match the outcome index ordering: ordering by delivery ID alone can
+	// make SQLite scan every earlier outcome through the older ask/id index.
+	rows, err := s.db.QueryContext(ctx, `SELECT s.id,s.kind,s.label,d.state,d.attempts,d.last_at,d.reason,d.status_code,d.latency_ms FROM ask_deliveries d JOIN ask_subscriptions s ON s.id=d.subscription_id WHERE d.ask_id=? AND d.resolution_event_id IN (?, '') AND (d.resolution_event_id<>'' OR NOT EXISTS(SELECT 1 FROM ask_deliveries current WHERE current.id=d.subscription_id||'.'||d.ask_id||'.'||?)) ORDER BY d.resolution_event_id,d.id LIMIT 32`, id, resolutionID, resolutionID)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +139,7 @@ func (s *Store) askDeliveries(ctx context.Context, id string) ([]map[string]any,
 		return nil, err
 	}
 	rows.Close()
-	logs, err := s.db.QueryContext(ctx, `SELECT d.subscription_id,a.at,a.status_code,a.latency_ms,a.attempt FROM ask_deliveries d JOIN ask_delivery_attempts a ON a.delivery_id=d.id WHERE d.ask_id=? ORDER BY d.id,a.attempt LIMIT 160`, id)
+	logs, err := s.db.QueryContext(ctx, `SELECT d.subscription_id,a.at,a.status_code,a.latency_ms,a.attempt FROM ask_deliveries d JOIN ask_delivery_attempts a ON a.delivery_id=d.id WHERE d.ask_id=? AND d.resolution_event_id IN (?, '') AND (d.resolution_event_id<>'' OR NOT EXISTS(SELECT 1 FROM ask_deliveries current WHERE current.id=d.subscription_id||'.'||d.ask_id||'.'||?)) ORDER BY d.resolution_event_id,d.id,a.attempt LIMIT 160`, id, resolutionID, resolutionID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +172,7 @@ func (s *Store) RecordAskDelivery(ctx context.Context, actor, subscription, askR
 	if err != nil {
 		return err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE ask_deliveries SET state=?,reason=?,attempts=?,last_at=? WHERE subscription_id=? AND ask_id=? AND EXISTS(SELECT 1 FROM ask_subscriptions s WHERE s.id=? AND s.actor_id=? AND s.kind IN ('bridge','await'))`, state, reason, attempts, time.Now().UTC().Format(time.RFC3339Nano), subscription, ref.ID, subscription, actor)
+	result, err := s.db.ExecContext(ctx, `UPDATE ask_deliveries SET state=?,reason=?,attempts=?,last_at=? WHERE id=(SELECT COALESCE((SELECT current.id FROM ask_deliveries current WHERE current.id=?||'.'||r.request_event_id||'.'||r.resolution_event_id),?||'.'||r.request_event_id) FROM human_attention_request_resolutions r WHERE r.request_event_id=?) AND EXISTS(SELECT 1 FROM ask_subscriptions s WHERE s.id=? AND s.actor_id=? AND s.kind IN ('bridge','await'))`, state, reason, attempts, time.Now().UTC().Format(time.RFC3339Nano), subscription, subscription, ref.ID, subscription, actor)
 	if err != nil {
 		return err
 	}

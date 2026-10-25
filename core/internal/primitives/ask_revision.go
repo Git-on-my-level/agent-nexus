@@ -108,14 +108,14 @@ func (s *Store) AskPresentationStates(ctx context.Context, asks []map[string]any
 			continue
 		}
 		raw, _ := json.Marshal(ids)
-		rows, err := s.db.QueryContext(ctx, `SELECT h.ask_id,h.revision,e.id,e.actor_id,e.ts,e.payload_json FROM ask_presentation_heads h JOIN events e ON e.id=h.event_id WHERE h.ask_id IN (SELECT value FROM json_each(?))`, string(raw))
+		rows, err := s.db.QueryContext(ctx, `SELECT h.ask_id,h.revision,e.id,e.actor_id,e.ts,e.payload_json,source.payload_json FROM ask_presentation_heads h JOIN events e ON e.id=h.event_id JOIN events source ON source.id=h.ask_id WHERE h.ask_id IN (SELECT value FROM json_each(?))`, string(raw))
 		if err != nil {
 			return nil, err
 		}
 		for rows.Next() {
-			var id, event, actor, at, body string
+			var id, event, actor, at, body, sourceBody string
 			var revision int
-			if err = rows.Scan(&id, &revision, &event, &actor, &at, &body); err != nil {
+			if err = rows.Scan(&id, &revision, &event, &actor, &at, &body, &sourceBody); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -125,7 +125,13 @@ func (s *Store) AskPresentationStates(ctx context.Context, asks []map[string]any
 				return nil, err
 			}
 			p := asMapValue(wrapper["payload"])
-			out[id] = map[string]any{"ask_id": "event:" + id, "presentation_revision": revision, "presentation": p["presentation"], "presentation_rewrite": map[string]any{"actor_id": actor, "at": at, "event_ref": "event:" + event, "previous": p["previous"]}}
+			var source map[string]any
+			if err = json.Unmarshal([]byte(sourceBody), &source); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			original := askPresentation(asMapValue(source["payload"]))
+			out[id] = map[string]any{"ask_id": "event:" + id, "presentation_revision": revision, "presentation": p["presentation"], "presentation_rewrite": map[string]any{"actor_id": actor, "at": at, "event_ref": "event:" + event, "previous": p["previous"], "original": original, "undo": p["undo"] == true}}
 		}
 		err = rows.Err()
 		rows.Close()
@@ -274,11 +280,15 @@ func (s *Store) reviseAskPresentationTx(ctx context.Context, tx *accessTx, princ
 			}
 		}
 	}
-	event, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": AskRevisedEventType, "thread_id": thread, "summary": "Ask rewritten for clarity", "refs": []string{"event:" + resolved.ID, anyStringValue(payload["subject_ref"]), "thread:" + thread}, "payload": map[string]any{"request_event_id": resolved.ID, "presentation_revision": revision + 1, "previous": current, "presentation": next, "undo": undo}, "provenance": map[string]any{"sources": []string{"event:" + resolved.ID}}})
+	summary := "Ask rewritten for clarity"
+	if undo {
+		summary = "Ask clarity rewrite undone"
+	}
+	event, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": AskRevisedEventType, "thread_id": thread, "summary": summary, "refs": []string{"event:" + resolved.ID, anyStringValue(payload["subject_ref"]), "thread:" + thread}, "payload": map[string]any{"request_event_id": resolved.ID, "presentation_revision": revision + 1, "previous": current, "presentation": next, "undo": undo}, "provenance": map[string]any{"sources": []string{"event:" + resolved.ID}}})
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]any{"ask_id": "event:" + resolved.ID, "presentation_revision": revision + 1, "presentation": next, "presentation_rewrite": map[string]any{"actor_id": principal.ActorID, "at": event.Body["ts"], "event_ref": "event:" + anyStringValue(event.Body["id"]), "previous": current}}
+	result := map[string]any{"ask_id": "event:" + resolved.ID, "presentation_revision": revision + 1, "presentation": next, "presentation_rewrite": map[string]any{"actor_id": principal.ActorID, "at": event.Body["ts"], "event_ref": "event:" + anyStringValue(event.Body["id"]), "previous": current, "original": askPresentation(payload), "undo": undo}}
 	encoded, _ := json.Marshal(result)
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(event.PayloadJSON) + len(event.RefsJSON) + len(encoded) + 1024)}, blobLedgerWritePlan{}); err != nil {
 		return nil, err

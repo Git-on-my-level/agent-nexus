@@ -7294,7 +7294,9 @@ paths:
         field. Unknown fields at every level are rejected. All answer options,
         proposals, recommended index, requester, subject, kind, routing, deadlines and
         revision-guarded semantics remain unchanged. Undo appends a revision restoring
-        the previous presentation; it never erases audit history. Closed asks conflict.
+        the previous presentation; it never erases audit history. Original always means the
+        requester's immutable first presentation, supplied separately from previous.
+        Closed asks conflict.
       tags: [inbox]
       x-anx-surface: canonical
       x-anx-command-id: asks.revise
@@ -13377,6 +13379,8 @@ components:
         at: {type: string, format: date-time}
         event_ref: {type: string}
         previous: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        original: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        undo: {type: boolean, default: false, description: True when this audit event undoes the preceding rewrite.}
     AskPresentationState:
       type: object
       required: [ask_id, presentation_revision, presentation]

@@ -208,8 +208,15 @@ func TestAskRetirementAuthorizationAndIntegrity(t *testing.T) {
 		hostStatus(t, status, 400, p)
 	}
 	for _, eventType := range []string{primitives.AskRetiredEventType, primitives.AskReopenedEventType} {
-		status, p = hostHTTP(t, "POST", env.server.URL+"/events", human.AccessToken, map[string]any{"event": map[string]any{"type": eventType, "refs": []string{anyString(card["ref"])}, "payload": map[string]any{"request_event_id": invalidAsk["id"]}}})
+		payload := map[string]any{"request_event_id": invalidAsk["id"], "request_event_ref": "event:" + anyString(invalidAsk["id"]), "requester_actor_id": requester.ActorID, "reason": "forged stale reason", "evidence": []string{anyString(card["ref"])}}
+		if eventType == primitives.AskReopenedEventType {
+			payload = map[string]any{"request_event_id": invalidAsk["id"], "requester_actor_id": requester.ActorID, "retirement_event_ref": first["retirement_event_ref"]}
+		}
+		status, p = hostHTTP(t, "POST", env.server.URL+"/events", human.AccessToken, map[string]any{"event": map[string]any{"type": eventType, "summary": "Forged curation event", "thread_id": card["thread_id"], "refs": []string{"event:" + anyString(invalidAsk["id"]), anyString(card["ref"]), "thread:" + anyString(card["thread_id"]), anyString(first["retirement_event_ref"])}, "provenance": map[string]any{"sources": []string{"event:" + anyString(invalidAsk["id"])}}, "payload": payload}})
 		hostStatus(t, status, 400, p)
+		if asMap(p["error"])["message"] != "ask curation events must use POST /asks/{ask_id}/revise or /retire" {
+			t.Fatalf("forgery did not reach the curation guard: %#v", p)
+		}
 	}
 	// Undo cannot revive a closed subject, even if the retirement was valid.
 	closedAsk := fileAsk()
