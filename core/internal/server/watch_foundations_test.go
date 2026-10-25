@@ -83,7 +83,7 @@ func TestWatchCollectionsScopeAndHealth(t *testing.T) {
 				t.Fatal(row)
 			}
 			if collection == "initiatives" {
-				expected := "stalled"
+				expected := "on_track"
 				if viewer == "viewer" {
 					expected = "waiting_on_you"
 				}
