@@ -23,11 +23,8 @@
     freshnessLabel,
     briefLoops,
   } from "$lib/brief.js";
-  import {
-    attentionCount,
-    collectionFromInitiatives,
-    collectionFromLoops,
-  } from "$lib/collection.js";
+  import { attentionCount, collectionFromLoops } from "$lib/collection.js";
+  import { bucketCounts, rollupRows, rollupSummary } from "$lib/watchRollup.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import {
@@ -52,6 +49,7 @@
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import SwimlaneBoard from "$lib/components/work/SwimlaneBoard.svelte";
   import InitiativeDetails from "$lib/components/watch/InitiativeDetails.svelte";
+  import InitiativeRollupList from "$lib/components/watch/InitiativeRollupList.svelte";
   import LoopCard from "$lib/components/loops/LoopCard.svelte";
   import CollectionTable from "$lib/components/collection/CollectionTable.svelte";
 
@@ -97,11 +95,12 @@
   let staleAge = $derived(formatAgo($store.updatedAt, now) || "earlier");
 
   let initiatives = $derived(brief?.initiatives ?? []);
-  let initiativeCollection = $derived(
-    collectionFromInitiatives(initiatives, {
-      now,
-      href: initiativeHref,
-      decideHref,
+  // Top-level initiatives with their children rolled in; loops and
+  // children are not rows of their own.
+  let rollup = $derived(rollupRows(initiatives));
+  let rollupLine = $derived(
+    rollupSummary(rollup, {
+      truncated: Boolean(brief?.truncated?.initiatives),
     }),
   );
   let loopCollection = $derived(
@@ -114,7 +113,7 @@
   let loopRows = $derived(
     loopCollection.groups.reduce((n, g) => n + g.rows.length, 0),
   );
-  let initiativeAttention = $derived(attentionCount(initiativeCollection));
+  let initiativeAttention = $derived(bucketCounts(rollup).needs_you);
   let loopAttention = $derived(attentionCount(loopCollection));
   let waitingDecisions = $derived(countWaitingDecisions(brief?.decisions));
 
@@ -350,32 +349,44 @@
 <WorkspacePageShell>
   <header class="space-y-3" data-watch-header>
     <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-      <div class="flex min-w-0 items-baseline gap-2">
+      <div class="min-w-0">
         <h1 class="text-title font-semibold text-fg">Watch</h1>
-        {#if brief}
-          <span
-            class="text-micro text-fg-muted"
-            data-source="computed:generated_at"
-            >{freshnessLabel(brief.asOf, now)}</span
+        <p
+          class="mt-1 flex flex-wrap items-center gap-x-1.5 text-meta text-fg-muted"
+          data-watch-summary
+        >
+          <!-- The board prints its own inventory line beside the budget. -->
+          {#if brief && tab === "initiatives" && layout === "list"}
+            <span data-source="computed:initiatives.rollup.total"
+              >{rollupLine}</span
+            ><span aria-hidden="true">·</span>
+          {/if}
+          {#if brief}
+            <span data-source="computed:generated_at"
+              >{freshnessLabel(brief.asOf, now)}</span
+            >
+          {/if}
+          {#if refreshing}
+            <span
+              class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-line border-t-fg-muted align-middle"
+              role="status"
+              aria-label="Updating"
+            ></span>
+          {/if}
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        {#if tab === "initiatives"}{@render initiativeActions()}{/if}
+        {#if waitingDecisions > 0}
+          <a
+            class="decide-link"
+            href={workspaceHref("/decide")}
+            data-watch-decide-link
+            >{waitingDecisions} waiting for you in Decide
+            <span aria-hidden="true">→</span></a
           >
         {/if}
-        {#if refreshing}
-          <span
-            class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-line border-t-fg-muted align-middle"
-            role="status"
-            aria-label="Updating"
-          ></span>
-        {/if}
       </div>
-      {#if waitingDecisions > 0}
-        <a
-          class="decide-link"
-          href={workspaceHref("/decide")}
-          data-watch-decide-link
-          >{waitingDecisions} waiting for you in Decide
-          <span aria-hidden="true">→</span></a
-        >
-      {/if}
     </div>
     <div class="tab-row flex items-end gap-2">
       <div
@@ -521,7 +532,6 @@
   {:else if layout === "lanes"}
     <!-- The board reads the same brief and draws its own loading, error
          and empty states: Ungrouped cards can wait with no initiative yet. -->
-    <div class="flex justify-end">{@render initiativeActions()}</div>
     <SwimlaneBoard
       {workspaceHref}
       {now}
@@ -563,7 +573,7 @@
         actions={loopActions}
       />
     {/if}
-  {:else if !initiatives.length}
+  {:else if !rollup.length}
     <div
       class="rounded-md border border-dashed border-line px-4 py-8 text-center"
       data-watch-empty
@@ -578,12 +588,11 @@
       </p>
     </div>
   {:else}
-    <CollectionTable
-      collection={initiativeCollection}
-      folded={["done", "no_promise"]}
-      label="initiatives"
-      details={initiativeDetails}
-      actions={initiativeActions}
+    <InitiativeRollupList
+      rows={rollup}
+      {now}
+      hrefFor={childInitiativeHref}
+      {decideHref}
     />
   {/if}
 </WorkspacePageShell>

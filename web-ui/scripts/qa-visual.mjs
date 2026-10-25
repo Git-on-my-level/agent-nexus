@@ -33,6 +33,10 @@ import {
   filterByQuery,
 } from "../tests/fixtures/qa-seed.js";
 import briefFixture from "../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+import {
+  mockupBrief,
+  mockupUngrouped,
+} from "../tests/fixtures/watchMockupSeed.js";
 import { auditLayout, formatViolations } from "../tests/helpers/layoutAudit.js";
 import { getExpectedCommandRegistryDigest } from "../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../src/lib/config.js";
@@ -90,9 +94,9 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector(
-        "[data-collection-row][data-watch-state='past_promise']",
+        "[data-collection-row='card:fleet-onboarding'][data-bucket='needs_you']",
       );
-      await page.waitForSelector("text=Battery measurement");
+      await page.waitForSelector("text=Fleet onboarding");
     },
   },
   {
@@ -100,9 +104,35 @@ export const QA_SCENES = [
     path: "/o/local/w/local/watch",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      const row = "[data-collection-row='card:fleet-onboarding']";
+      // Observability starts closed; rows that need the reader start open.
+      const row = "[data-collection-row='card:observability']";
       await page.click(`${row} [data-collection-toggle]`);
       await page.waitForSelector(`${row} [data-details-steps] ol li`);
+    },
+  },
+  {
+    name: "workspace-watch-rollup",
+    path: "/o/local/w/local/watch",
+    workspaceMode: "workspace-default",
+    briefState: "mockup",
+    waitFor: async (page) => {
+      await page.waitForSelector(
+        "[data-collection-row='card:capture'] [data-rollup-kid='card:speaker-id']",
+      );
+    },
+  },
+  {
+    name: "workspace-watch-board-mockup",
+    path: "/o/local/w/local/watch?view=lanes",
+    workspaceMode: "workspace-default",
+    briefState: "mockup",
+    waitFor: async (page) => {
+      await page.waitForSelector("[data-ask-ref='inbox:ask-funding']", {
+        state: "attached",
+      });
+      await page.waitForSelector("[data-tray-ref='card:retry-budget']", {
+        state: "attached",
+      });
     },
   },
   {
@@ -1433,6 +1463,7 @@ function qaBrief(scenario) {
     ...briefFixture,
     generated_at: QA_FIXED_NOW_ISO,
   };
+  if (scenario.briefState === "mockup") return mockupBrief(QA_FIXED_NOW_ISO);
   if (scenario.briefState === "lanes")
     return {
       ...body,
@@ -1701,7 +1732,12 @@ async function handleWorkspaceApiRoute(
   if (pathname === "/work/ungrouped" && request.method() === "GET") {
     await route.fulfill(
       jsonResponse(200, {
-        work: scenario.briefState === "lanes" ? QA_UNGROUPED : [],
+        work:
+          scenario.briefState === "lanes"
+            ? QA_UNGROUPED
+            : scenario.briefState === "mockup"
+              ? mockupUngrouped(QA_FIXED_NOW_ISO)
+              : [],
         has_more: false,
       }),
     );

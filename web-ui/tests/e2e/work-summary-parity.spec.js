@@ -441,7 +441,8 @@ test("one initiative reads the same on the Watch list and its page", async ({
    * the initiative page header have to say the same thing.
    */
   test.setTimeout(120_000);
-  const ref = "card:battery-measurement";
+  // A measured initiative is on Loops; this one is on the Initiatives list.
+  const ref = "card:fleet-onboarding";
   const row = brief.initiatives.find((item) => item.ref === ref);
   await page.setViewportSize({ width: 1440, height: 1100 });
   await installWorkspaceApi(page, {
@@ -450,7 +451,7 @@ test("one initiative reads the same on the Watch list and its page", async ({
     work: [
       {
         ref,
-        handle: "battery-measurement",
+        handle: "fleet-onboarding",
         title: row.title,
         summary: "Measure the battery.",
         phase: "in_progress",
@@ -462,7 +463,7 @@ test("one initiative reads the same on the Watch list and its page", async ({
   });
   const workRow = {
     ref,
-    handle: "battery-measurement",
+    handle: "fleet-onboarding",
     title: row.title,
     summary: "Measure the battery.",
     phase: "in_progress",
@@ -472,7 +473,7 @@ test("one initiative reads the same on the Watch list and its page", async ({
   };
   await page.route(
     (url) =>
-      [`/work/${ref}`, "/work/battery-measurement"].includes(
+      [`/work/${ref}`, "/work/fleet-onboarding"].includes(
         decodeURIComponent(url.pathname),
       ),
     (route) => route.fulfill({ json: { work: workRow } }),
@@ -521,14 +522,16 @@ test("one initiative reads the same on the Watch list and its page", async ({
   const list = await read(page.locator(`[data-collection-row="${ref}"]`));
   // The opened row links to the initiative page, which is the drill-down.
   const listRow = page.locator(`[data-collection-row="${ref}"]`);
-  await listRow.locator("[data-collection-toggle]").click();
+  // A row that needs the reader starts open.
+  if ((await listRow.getAttribute("data-expanded")) !== "true")
+    await listRow.locator("[data-collection-toggle]").click();
   const href = await listRow
     .locator("[data-details-open]")
     .getAttribute("href");
   await page.goto(href);
   const header = await read(page.locator("main").first());
 
-  expect(list.state).toBe("Past promise");
-  expect(list.parts.past_promise_for).toContain("past");
+  expect(list.state).toBe("Moving");
+  expect(list.parts.promise).toContain("next: enroll m6");
   expect(header).toEqual(list);
 });

@@ -57,18 +57,19 @@ test("lists initiatives by computed state with sources tagged", async ({
     "true",
   );
   const rows = page.locator("[data-collection-row]");
-  await expect(rows.first()).toHaveAttribute("data-state", "waiting_on_you");
-  const battery = page.locator(
-    '[data-collection-row="card:battery-measurement"]',
-  );
-  await expect(battery).toContainText("9d past");
+  await expect(rows.first()).toHaveAttribute("data-bucket", "needs_you");
+  // A measured initiative is a loop: it is on Loops, not here.
   await expect(
-    battery.locator('[data-source="computed:initiatives.past_promise_for"]'),
-  ).toHaveText(/9d past/);
+    page.locator('[data-collection-row="card:battery-measurement"]'),
+  ).toHaveCount(0);
+  const fleet = page.locator('[data-collection-row="card:fleet-onboarding"]');
+  await expect(fleet.locator("[data-rollup-next]")).toHaveText(
+    "next: enroll m6 · Oct 16",
+  );
   await expect(
     page.locator('[data-source="computed:generated_at"]'),
   ).toContainText("as of");
-  // Done and no-promise start folded.
+  // Done starts folded.
   await expect(
     page.locator('[data-collection-row="card:docs-refresh"]'),
   ).toHaveCount(0);
@@ -92,15 +93,13 @@ test("lists initiatives by computed state with sources tagged", async ({
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   // "You" in the next column links into Decide for that initiative.
-  await battery
-    .locator('a[data-source="computed:initiatives.waiting_on_you_count"]')
-    .click();
+  await fleet.locator("[data-rollup-owner] a").click();
   await expect(page).toHaveURL(
-    /\/decide\?initiative=card%3Abattery-measurement|\/decide\?initiative=card:battery-measurement/,
+    /\/decide\?initiative=card%3Afleet-onboarding|\/decide\?initiative=card:fleet-onboarding/,
   );
 });
 
-/** The brief, with children and an owner on Fleet onboarding. */
+/** The brief, with children and an owner on Observability. */
 function briefWithRollup() {
   const children = [
     ["card:enroll-m6", "Enroll m6", "in_progress"],
@@ -118,7 +117,7 @@ function briefWithRollup() {
     ...brief,
     generated_at: new Date().toISOString(),
     initiatives: brief.initiatives.map((row) =>
-      row.ref === "card:fleet-onboarding"
+      row.ref === "card:observability"
         ? {
             ...row,
             owner: "actor-luna",
@@ -137,36 +136,33 @@ function briefWithRollup() {
   };
 }
 
-/** One `work.get` for Fleet onboarding; counts how often it is read. */
-async function routeFleetWork(context) {
+/** One `work.get` for Observability; counts how often it is read. */
+async function routeObservabilityWork(context) {
   const reads = { count: 0 };
-  await context.route(
-    /\/work\/card(?:%3A|:)fleet-onboarding(?:\?|$)/,
-    (route) => {
-      reads.count += 1;
-      return json(route, {
-        work: {
-          ref: "card:fleet-onboarding",
-          id: "fleet-onboarding",
-          title: "Fleet onboarding",
-          phase: "review",
-          owner: "actor-luna",
-          plan: {
-            steps: [
-              { id: "image", title: "Bake the m6 image" },
-              {
-                id: "enroll",
-                title: "Enroll m6 in the fleet",
-                after: ["image"],
-              },
-            ],
-          },
-          plan_state: { next_steps: ["image"], critical_path: ["image"] },
-          summary: { status: { state: "moving", label: "Moving", reason: "" } },
+  await context.route(/\/work\/card(?:%3A|:)observability(?:\?|$)/, (route) => {
+    reads.count += 1;
+    return json(route, {
+      work: {
+        ref: "card:observability",
+        id: "observability",
+        title: "Observability",
+        phase: "in_progress",
+        owner: "actor-luna",
+        plan: {
+          steps: [
+            { id: "image", title: "Bake the m6 image" },
+            {
+              id: "enroll",
+              title: "Enroll m6 in the fleet",
+              after: ["image"],
+            },
+          ],
         },
-      });
-    },
-  );
+        plan_state: { next_steps: ["image"], critical_path: ["image"] },
+        summary: { status: { state: "moving", label: "Moving", reason: "" } },
+      },
+    });
+  });
   return reads;
 }
 
@@ -191,8 +187,8 @@ test.describe("lanes", () => {
               created_at: "2026-10-15T08:00:00Z",
               likely_home: [
                 {
-                  ref: "card:fleet-onboarding",
-                  title: "Fleet onboarding",
+                  ref: "card:observability",
+                  title: "Observability",
                   reasons: ["title_family"],
                 },
               ],
@@ -210,7 +206,7 @@ test.describe("lanes", () => {
     const board = page.locator("[data-swimlane-board]");
     await expect(
       board.locator(
-        '[data-lane-ref="card:fleet-onboarding"] [data-work-ref="card:runbook"]',
+        '[data-lane-ref="card:observability"] [data-work-ref="card:runbook"]',
       ),
     ).toBeVisible();
     // The tray and the budget chip come with it; Decide stays in the header.
@@ -230,7 +226,7 @@ test.describe("lanes", () => {
 
     await page.reload();
     await expect(
-      page.locator('[data-lane-ref="card:fleet-onboarding"]'),
+      page.locator('[data-lane-ref="card:observability"]'),
     ).toBeVisible();
     await expect(page.locator('[data-watch-view="lanes"]')).toHaveAttribute(
       "aria-pressed",
@@ -248,30 +244,37 @@ test("a row opens inline on click and closes on the next", async ({
   context,
 }) => {
   await setup(context, (route) => json(route, briefWithRollup()));
-  const reads = await routeFleetWork(context);
+  const reads = await routeObservabilityWork(context);
   await page.goto(WATCH);
-  const row = page.locator('[data-collection-row="card:fleet-onboarding"]');
+  // Rows that need the reader start open, without reading anything.
+  const fleet = page.locator('[data-collection-row="card:fleet-onboarding"]');
+  await expect(fleet).toHaveAttribute("data-expanded", "true");
+  await expect(fleet.locator("[data-details-load]")).toBeVisible();
+
+  const row = page.locator('[data-collection-row="card:observability"]');
   const title = row.locator("[data-collection-toggle]");
   await expect(title).toHaveAttribute("aria-expanded", "false");
   // Nothing is read until a row opens.
   expect(reads.count).toBe(0);
 
   // Anywhere on the row: here, the empty middle of it.
-  await row.locator(".row").click({ position: { x: 600, y: 12 } });
+  await row
+    .locator(".grid-row")
+    .first()
+    .click({ position: { x: 600, y: 12 } });
   const details = row.locator("[data-collection-details]");
   await expect(details).toBeVisible();
   await expect(title).toHaveAttribute("aria-expanded", "true");
-  await expect(details.locator("[data-details-promise]")).toContainText(
-    "enroll m6",
+  // Its children as kid rows, each with its own state.
+  await expect(row.locator("[data-rollup-kid]")).toHaveCount(3);
+  await expect(row.locator('[data-rollup-kid="card:runbook"]')).toContainText(
+    "In review",
+  );
+  await expect(row.locator("[data-rollup-next]")).toContainText(
+    "next: dashboards live",
   );
   await expect(details.locator("[data-details-evidence]")).toContainText(
     "Last evidence",
-  );
-  await expect(details.locator("[data-details-rollup]")).toContainText(
-    "4 cards inside",
-  );
-  await expect(details.locator("[data-details-children]")).toContainText(
-    "Runbook review",
   );
   await expect(details.locator("[data-details-owner]")).toContainText("luna");
   await expect(details.locator("[data-details-steps]")).toContainText(
@@ -279,7 +282,7 @@ test("a row opens inline on click and closes on the next", async ({
   );
   await expect(details.locator("[data-details-open]")).toHaveAttribute(
     "href",
-    /\/initiatives\/fleet-onboarding$/,
+    /\/initiatives\/observability$/,
   );
   if (process.env.WATCH_SHOTS)
     await page.screenshot({
@@ -288,16 +291,14 @@ test("a row opens inline on click and closes on the next", async ({
     });
 
   // Several rows can be open; each closes on its own.
-  const battery = page.locator(
-    '[data-collection-row="card:battery-measurement"]',
-  );
-  await battery.locator("[data-collection-chevron]").click();
-  await expect(battery.locator("[data-collection-details]")).toBeVisible();
-  await expect(details).toBeVisible();
-
-  await row.locator(".row").click({ position: { x: 600, y: 12 } });
+  await expect(fleet).toHaveAttribute("data-expanded", "true");
+  await row
+    .locator(".grid-row")
+    .first()
+    .click({ position: { x: 600, y: 12 } });
   await expect(details).toHaveCount(0);
   await expect(title).toHaveAttribute("aria-expanded", "false");
+  await expect(fleet).toHaveAttribute("data-expanded", "true");
 
   // Opening it again is answered from the cache: one read in all.
   await title.click();
@@ -309,9 +310,9 @@ test("a row opens inline on click and closes on the next", async ({
 
 test("a row opens and closes from the keyboard", async ({ page, context }) => {
   await setup(context, (route) => json(route, briefWithRollup()));
-  await routeFleetWork(context);
+  await routeObservabilityWork(context);
   await page.goto(WATCH);
-  const row = page.locator('[data-collection-row="card:fleet-onboarding"]');
+  const row = page.locator('[data-collection-row="card:observability"]');
   const title = row.locator("[data-collection-toggle]");
   await title.focus();
   await page.keyboard.press("Enter");
@@ -418,10 +419,13 @@ test.describe("phone", () => {
     context,
   }) => {
     await setup(context, (route) => json(route, briefWithRollup()));
-    await routeFleetWork(context);
+    await routeObservabilityWork(context);
     await page.goto(WATCH);
-    const row = page.locator('[data-collection-row="card:fleet-onboarding"]');
-    await row.locator(".row").tap({ position: { x: 200, y: 12 } });
+    const row = page.locator('[data-collection-row="card:observability"]');
+    await row
+      .locator(".grid-row")
+      .first()
+      .tap({ position: { x: 200, y: 12 } });
     const details = row.locator("[data-collection-details]");
     await expect(details).toBeVisible();
     await expect(details.locator("[data-details-steps]")).toContainText(

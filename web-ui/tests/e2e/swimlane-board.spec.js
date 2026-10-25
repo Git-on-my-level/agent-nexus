@@ -404,20 +404,16 @@ test.describe("desktop", () => {
         '[data-lane-column="done"] [data-work-ref="card:fail-loudly"]',
       ),
     ).toBeVisible();
-    await expect(
-      capture.locator(
-        '[data-source="computed:initiatives.rollup.needing_viewer"]',
-      ),
-    ).toHaveText("1 need you");
-    await expect(
-      capture.locator(
-        '[data-source="computed:initiatives.rollup.past_promise"]',
-      ),
-    ).toHaveText("1 past promise");
+    await expect(capture.locator("[data-lane-needs]")).toHaveText("1 need you");
+    await expect(capture.locator("[data-lane-slipping]")).toHaveText(
+      "1 slipping",
+    );
+    // One segment per child, coloured by where it sits.
     await expect(capture.locator("[data-lane-progress]")).toHaveAttribute(
       "aria-label",
-      "1 done, 3 in progress, 1 blocked or needs you, 1 not started",
+      "6 cards",
     );
+    await expect(capture.locator("[data-lane-progress] > span")).toHaveCount(6);
 
     // A large lane: five cards per cell, then the rest on request, and the
     // children core did not preview link to the initiative.
@@ -478,7 +474,7 @@ test.describe("desktop", () => {
     const api = await open(page, context);
     const row = page.locator('[data-tray-ref="card:a1-f4"]');
     await expect(row).toContainText(
-      "Likely home: Every word captured and attributed · same title prefix",
+      "likely: Every word captured and attributed · same title prefix",
     );
     await row.locator('[data-group-under="card:capture"]').click();
     await expect(page.locator("[data-grouping-notice]")).toContainText(
@@ -598,9 +594,11 @@ test.describe("desktop", () => {
   }) => {
     const api = await open(page, context);
     const source = page.locator('[data-tray-ref="card:ramp-telemetry"]');
-    await expect(source).toContainText("No likely home");
+    await expect(source).toContainText("no likely home");
+    // The tray sits under the board: bring it up with the last lanes above.
+    await source.evaluate((el) => el.scrollIntoView({ block: "end" }));
     const from = await source.locator("span").first().boundingBox();
-    const to = await laneLocator(page, "card:margin").boundingBox();
+    const to = await laneLocator(page, "card:p76-coldline").boundingBox();
     await page.mouse.move(from.x + 10, from.y + 8);
     await page.mouse.down();
     await page.mouse.move(from.x + 40, from.y + 40, { steps: 4 });
@@ -608,16 +606,16 @@ test.describe("desktop", () => {
       steps: 8,
     });
     await expect(page.locator("[data-swimlane-drag]")).toContainText(
-      "Group under Unit economics: Margin-50",
+      "Group under P76 coldline storage",
     );
     await page.mouse.up();
     await expect
       .poll(() =>
         api.posts.map((post) => [post.verb, post.ref, post.body.under]),
       )
-      .toEqual([["group", "card:ramp-telemetry", "card:margin"]]);
+      .toEqual([["group", "card:ramp-telemetry", "card:p76-coldline"]]);
     await expect(
-      laneLocator(page, "card:margin").locator(
+      laneLocator(page, "card:p76-coldline").locator(
         '[data-work-ref="card:ramp-telemetry"]',
       ),
     ).toBeVisible();
@@ -805,19 +803,24 @@ test.describe("phone", () => {
   }) => {
     const api = await open(page, context);
     const capture = laneLocator(page, "card:capture");
-    // Lanes that need the reader start open; quiet ones start folded.
-    await expect(capture).toHaveAttribute("data-lane-collapsed", "false");
-    await expect(laneLocator(page, "card:retention")).toHaveAttribute(
-      "data-lane-collapsed",
-      "true",
+    // Each lane is a card: one tag, the bar, and what waits on the reader.
+    await expect(capture).toHaveAttribute("data-lane-collapsed", "true");
+    await expect(capture.locator(".tag").first()).toHaveText("needs you");
+    const line = capture.locator(
+      '[data-lane-phone-lines] [data-work-ref="card:a1-funding"]',
     );
-    await expect(
-      capture.locator('[data-work-ref="card:a1-funding"]'),
-    ).toBeVisible();
-    // Empty columns are not drawn on a phone.
-    await expect(
-      laneLocator(page, "card:margin").locator('[data-lane-column="done"]'),
-    ).toBeHidden();
+    await expect(line).toBeVisible();
+    await expect(line.locator("xpath=..")).toContainText("you");
+    // A quiet lane is its bar alone, with the cards a tap away.
+    const retention = laneLocator(page, "card:retention");
+    await expect(retention).toHaveAttribute("data-lane-collapsed", "true");
+    await expect(retention.locator("[data-lane-phone-lines] a")).toHaveCount(0);
+    // Opened, empty columns are not drawn on a phone.
+    const margin = laneLocator(page, "card:margin");
+    await margin.locator("[data-lane-phone-lines] button").tap();
+    await expect(margin).toHaveAttribute("data-lane-collapsed", "false");
+    await expect(margin.locator('[data-lane-column="moving"]')).toBeVisible();
+    await expect(margin.locator('[data-lane-column="done"]')).toBeHidden();
     await expect(page.locator("[data-swimlane-tray]")).toBeHidden();
     await shot(page, "lanes-phone");
     await expectCleanLayout(page, "swimlane board phone");
@@ -834,6 +837,7 @@ test.describe("phone", () => {
       .toEqual([["group", "card:a1-f4"]]);
     await sheet.getByRole("button", { name: "Done" }).tap();
     await expect(sheet).toHaveCount(0);
+    await capture.locator("[data-lane-phone-lines] button").tap();
     await expect(capture.locator('[data-work-ref="card:a1-f4"]')).toBeVisible();
   });
 });

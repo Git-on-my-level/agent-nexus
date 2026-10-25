@@ -136,19 +136,31 @@ never a retraction. Copy ref is on every row, and `c` copies the focused row's
 ref (`j`/`k` move focus). Reply drafts use the durable key
 `inbox:<item-id>:reply` on every surface. `?initiative=<ref>` narrows the list.
 
-**Watch** (`/watch`) is outcomes per workspace: a list by attention and the
-swimlane board (`?view=lanes`; old `?view=board` and `?layout=board` links
-land there), with the Ungrouped tray and the initiative budget chip.
-`/initiatives?view=lanes` redirects to it, so there is one swimlane board.
-Rows show only the four computed states (past promise, moving, no promise,
-done); blocked and waiting-on-you are exact count badges linking into Decide.
-No-promise rows show "last evidence Nd ago". A click, tap, or Enter/Space on
-the title opens a row inline (several can be open): promise, latest evidence
-and note, owner, the rollup and its first children, and the plan's next
-steps, which are the one thing read on open (once, through `workCache`).
-The header shows the brief's age ("as of 2 min ago"). Placement moves live
-on the Initiatives page's By placement board. The tab row scrolls sideways
-with no scrollbar when tabs do not fit.
+**Watch** (`/watch`) is outcomes per workspace, built from the brief. The
+Initiatives list (`InitiativeRollupList`) has one row per top-level
+initiative, with children and loops folded away. Rows sort by what needs the
+reader (need you, slipping, moving, no promise; done is folded), and the
+header counts initiatives and the cards rolled up into them. Each row shows
+its stated next step, its children by state (one segment per child), its
+promises ("N of M past", "on track") and who is next (You, else the owner).
+A click, tap, or Enter/Space on the title opens a row. Open, it lists its
+workstreams (or its children) as kid rows, each with its phase, promise
+state and whether it waits on the reader. Below that is one strip: latest
+evidence and note, owner, the plan's next steps, and a link to the
+initiative. Rows that need the reader start open. Their plan steps wait for
+a tap, so opening the page reads nothing per row. A row the reader opens
+reads its card once, through `workCache`.
+
+Lanes (`?view=lanes`; old `?view=board` and `?layout=board` links land
+there) is the swimlane board. It has a 260px initiative column, then Not
+started, In progress, Blocked / needs you and Done. The reader's open
+decisions about a lane or its children sit in its needs-you column as
+"ask · you" chips linking to Decide, in place of the child they cover. The
+Ungrouped tray and the budget chip sit beside the board. On a phone each lane
+is a card: one tag, the bar, the lines that wait on the reader, and the rest
+a tap away. `/initiatives?view=lanes` redirects to Lanes, so there is one
+swimlane board. Measured initiatives and loops are on the Loops tab. The tab
+row scrolls sideways with no scrollbar when tabs do not fit.
 
 **Initiative page** (`/initiatives/{id}`) is the drill-down: computed state,
 one plan rendering, open decisions through DecisionCard, evidence newest
