@@ -96,7 +96,7 @@ func TestNoteTextConfirmsSavedPromise(t *testing.T) {
 
 func TestHandleFlags(t *testing.T) {
 	a := newTestApp(t)
-	body, _, err := a.parseCardCreateInput([]string{"--board", "board:tasks", "--title", "Ship", "--body", "Details", "--handle", "ship-fix"}, config.Resolved{}, "cards create")
+	body, _, _, err := a.parseCardCreateInput([]string{"--board", "board:tasks", "--title", "Ship", "--body", "Details", "--handle", "ship-fix"}, config.Resolved{}, "cards create")
 	if err != nil || asMap(body["card"])["handle"] != "ship-fix" {
 		t.Fatalf("%#v %v", body, err)
 	}

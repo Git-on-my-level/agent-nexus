@@ -67,7 +67,7 @@ func TestGroupingCLIGroupSendsOneReplaySafeMutation(t *testing.T) {
 
 func TestGroupingCLICardsCreateFlags(t *testing.T) {
 	a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
-	body, _, err := a.parseCardCreateInput([]string{"--board", "board:tasks", "--title", "Child", "--body", "Details", "--under", "card:parent", "--after", "first"}, config.Resolved{ActorID: "worker"}, "cards create")
+	body, _, _, err := a.parseCardCreateInput([]string{"--board", "board:tasks", "--title", "Child", "--body", "Details", "--under", "card:parent", "--after", "first"}, config.Resolved{ActorID: "worker"}, "cards create")
 	if err != nil || body["under"] != "card:parent" || body["after"] != "first" {
 		t.Fatalf("body=%v err=%v", body, err)
 	}

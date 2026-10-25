@@ -2,6 +2,8 @@ package runcontext
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -144,5 +146,31 @@ func TestRunParentBatchAndNestedOverrides(t *testing.T) {
 	}
 	if _, overridden := items[1].(map[string]any)["under"]; overridden {
 		t.Fatal("nested explicit parent overwritten")
+	}
+}
+
+func TestRunParentStatusEnvironment(t *testing.T) {
+	t.Setenv("ANX_ACCESS_TOKEN", "must-not-escape")
+	t.Setenv("UNRELATED_SECRET", "also-private")
+	t.Setenv("AGENTCTL_TEST_CONTEXT", "kept")
+	t.Setenv("HOME", t.TempDir())
+	script := filepath.Join(t.TempDir(), "agentctl")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexec /usr/bin/env\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := readStatus(context.Background(), script, "exec-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := string(raw)
+	for _, want := range []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "AGENTCTL_TEST_CONTEXT=kept"} {
+		if !strings.Contains(env, want+"\n") {
+			t.Fatalf("missing allowed variable %q", want)
+		}
+	}
+	for _, denied := range []string{"ANX_ACCESS_TOKEN=", "UNRELATED_SECRET="} {
+		if strings.Contains(env, denied) {
+			t.Fatalf("private environment forwarded: %s", denied)
+		}
 	}
 }

@@ -114,6 +114,19 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 		req.Arguments = copyMap(req.Arguments)
 		req.Arguments["body"] = body
 	}
+	// JSON null is an explicit top-level choice here, but the HTTP field is
+	// an optional string. Omit null before schema validation; top_level still
+	// suppresses the run default. Keep the caller's arguments untouched.
+	if req.Arguments["top_level"] == true && runcontext.IsCreateCommand(req.Tool.Metadata.CommandID) {
+		if object, ok := req.Arguments["body"].(map[string]any); ok {
+			if under, exists := object["under"]; exists && under == nil {
+				object = copyMap(object)
+				delete(object, "under")
+				req.Arguments = copyMap(req.Arguments)
+				req.Arguments["body"] = object
+			}
+		}
+	}
 	arguments, err := validateArguments(req.Tool, req.Arguments, e.maxListLimit)
 	if err != nil {
 		return protocol.ToolCallResult{}, toolError("invalid_arguments", err.Error(), protocol.ErrInvalidParams)
@@ -149,7 +162,7 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 				if !ok {
 					return protocol.ToolCallResult{}, toolError("invalid_arguments", "top_level must be a boolean", protocol.ErrInvalidParams)
 				}
-				if _, under := object["under"]; value && under {
+				if under := object["under"]; value && under != nil {
 					return protocol.ToolCallResult{}, toolError("invalid_arguments", "top_level and body.under cannot be combined", protocol.ErrInvalidParams)
 				}
 				ctx = runcontext.WithTopLevel(ctx, value)

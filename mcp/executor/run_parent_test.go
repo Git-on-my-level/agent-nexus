@@ -15,14 +15,15 @@ import (
 
 func TestMCPRunParentDefault(t *testing.T) {
 	for _, tt := range []struct {
-		name, id, labels, want    string
-		top, explicit, unreadable bool
+		name, id, labels, want          string
+		top, explicit, null, unreadable bool
 	}{
 		{name: "batch", id: "boards.cards.batch_add", labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "work", id: "work.create", labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "cards", id: "cards.create", labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "explicit", id: "work.create", labels: `["anx.card.parent"]`, explicit: true, want: "card:chosen"},
 		{name: "top level", id: "work.create", labels: `["anx.card.parent"]`, top: true},
+		{name: "top level null", id: "work.create", labels: `["anx.card.parent"]`, top: true, null: true},
 		{name: "multiple", id: "work.create", labels: `["anx.card.a","anx.card.b"]`},
 		{name: "cross workspace", id: "work.create", labels: `["anx.card.parent"]`, unreadable: true},
 		{name: "timeout", id: "work.create", labels: "timeout"},
@@ -121,6 +122,9 @@ func TestMCPRunParentDefault(t *testing.T) {
 			if tt.explicit {
 				body["under"] = "card:chosen"
 			}
+			if tt.null {
+				body["under"] = nil
+			}
 			args := map[string]any{"body": body, "idempotency_key": "test-create"}
 			if tt.id == "boards.cards.batch_add" {
 				args["path"] = map[string]any{"board_id": "tasks"}
@@ -134,6 +138,11 @@ func TestMCPRunParentDefault(t *testing.T) {
 			}
 			if creates != 1 {
 				t.Fatal(creates)
+			}
+			if tt.null {
+				if under, exists := body["under"]; !exists || under != nil {
+					t.Fatal("normalization mutated caller body")
+				}
 			}
 			data, _ := result.Result.(map[string]any)
 			if tt.want == "card:parent" {
@@ -164,5 +173,20 @@ func TestMCPRunParentDefault(t *testing.T) {
 				t.Fatalf("uncached labels: %d", lookups)
 			}
 		})
+	}
+}
+
+func TestMCPTopLevelExplicitParentConflict(t *testing.T) {
+	cat := generatedTestCatalog(t, map[string]bool{catalog.ClassificationExposedRead: true, catalog.ClassificationExposedWrite: true})
+	tool, ok := cat.Lookup(catalog.ToolName("work.create"))
+	if !ok {
+		t.Fatal("missing tool")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("conflicting create sent a request") }))
+	defer server.Close()
+	e := NewWorkspaceExecutor(server.URL, Options{})
+	_, err := e.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: map[string]any{"body": map[string]any{"title": "Child", "under": "card:chosen"}, "top_level": true, "idempotency_key": "conflict-test"}})
+	if err == nil || !strings.Contains(err.Error(), "top_level and body.under") {
+		t.Fatalf("err=%v", err)
 	}
 }

@@ -248,3 +248,5 @@ admitted-read figures above do not certify the complete HTTP request. This is a
 merge-blocking P1: keep the grouping PR draft until canonical authorization
 admission satisfies the ordinary budget. No new baseline, plan allowance or
 budget increase is supplied here.
+
+Card-create and auto-subject `--dry-run` previews include the resolved default `under` parent and lookup warnings, without creating a card. Ask `--preview` remains entirely local. The optional agentctl subprocess receives only `PATH`, `HOME` and `AGENTCTL_*` environment variables. MCP accepts `top_level: true` with `body.under: null`.

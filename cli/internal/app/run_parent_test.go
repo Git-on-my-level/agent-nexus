@@ -120,6 +120,9 @@ func TestRunParentCreateSurfaces(t *testing.T) {
 			_ = os.WriteFile(cardFile, []byte(`{"board_id":"board:tasks","card":{"title":"Child","summary":"Details"}}`), 0600)
 			batchFile := filepath.Join(t.TempDir(), "batch.json")
 			_ = os.WriteFile(batchFile, []byte(`{"items":[{"card":{"title":"Child","summary":"Details"}}]}`), 0600)
+			if strings.HasPrefix(tt.name, "ask") {
+				tt.args = append(tt.args, "--situation", "A release is ready.", "--impact", "Users are waiting for the fix.", "--why", "The checks passed and shipping resolves the problem.")
+			}
 			args := append([]string{"--json", "--as", "worker"}, tt.args...)
 			for i, arg := range args {
 				if arg == "BATCH_FILE" {
@@ -227,12 +230,76 @@ func TestCardCreateTopLevelFlagValues(t *testing.T) {
 		args []string
 		want bool
 	}{
-		{[]string{"--title", "--top-level", "--body", "Details"}, false},
-		{[]string{"--from-file", "-", "--top-level"}, true},
+		{[]string{"--title", "--top-level"}, false},
+		{[]string{"--dry-run", "--top-level"}, true},
 		{[]string{"--top-level", "--top-level=false"}, false},
 	} {
-		if got := cardCreateTopLevel(tt.args); got != tt.want {
-			t.Fatalf("%v: %v", tt.args, got)
+		a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+		args := append([]string{"--board", "board:tasks", "--title", "Child", "--body", "Details"}, tt.args...)
+		_, _, got, err := a.parseCardCreateInput(args, config.Resolved{}, "cards create")
+		if err != nil || got != tt.want {
+			t.Fatalf("%v: got=%v err=%v", args, got, err)
+		}
+	}
+}
+
+func TestRunParentDryRun(t *testing.T) {
+	for _, surface := range []string{"cards", "ask"} {
+		for _, override := range []string{"", "--top-level", "--under"} {
+			t.Run(surface+override, func(t *testing.T) {
+				reads := 0
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != "GET" {
+						t.Errorf("dry-run mutated: %s %s", r.Method, r.URL)
+						http.Error(w, "mutation", 500)
+						return
+					}
+					switch r.URL.Path {
+					case "/work/card:parent":
+						reads++
+						fmt.Fprint(w, `{"work":{"ref":"card:parent","phase":"ready"}}`)
+					case "/agents/agent-1":
+						fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"},"open_asks":[]}`)
+					default:
+						http.NotFound(w, r)
+					}
+				}))
+				defer server.Close()
+				a, out := dailyTestApp(t, server.URL)
+				calls := 0
+				a.runParent = runParentFixture(`["anx.card.parent"]`, &calls)
+				args := []string{"--json", "--as", "worker"}
+				if surface == "cards" {
+					args = append(args, "cards", "create", "--board", "board:tasks", "--title", "Child", "--body", "Details", "--dry-run")
+				} else {
+					args = append(args, "ask", "Ship the release?", "--situation", "A release is ready.", "--impact", "Users need the fix.", "--recommend", "Ship the release.", "--why", "The checks passed.", "--dry-run")
+				}
+				want := "card:parent"
+				if override != "" {
+					args = append(args, override)
+					want = ""
+				}
+				if override == "--under" {
+					args = append(args, "card:chosen")
+					want = "card:chosen"
+				}
+				if exit := a.Run(args); exit != 0 {
+					t.Fatalf("exit=%d %s", exit, out.String())
+				}
+				data := asMap(dailyJSON(t, out)["result"])
+				if surface == "cards" {
+					data = asMap(data["body"])
+				}
+				if got := anyString(data["under"]); got != want {
+					t.Fatalf("under=%q want=%q output=%s", got, want, out.String())
+				}
+				if override == "" && (reads != 1 || calls != 1) {
+					t.Fatalf("reads=%d lookups=%d", reads, calls)
+				}
+				if override != "" && (reads != 0 || calls != 0) {
+					t.Fatalf("override reads=%d lookups=%d", reads, calls)
+				}
+			})
 		}
 	}
 }

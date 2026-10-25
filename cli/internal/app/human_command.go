@@ -363,15 +363,20 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			if !errors.As(err, &typed) || typed.Code != "no_current_task" {
 				return nil, err
 			}
-			if dryRunFlag.value {
-				return &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body}, Warnings: askAuthoringWarnings(warnings)}, nil
-			}
 			input := map[string]any{"create_surface": "ask.auto_create", "title": title, "summary": body, "phase": "ready", "owner": requesterActorID}
 			if board := strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")); board != "" {
 				input["board_ref"] = board
 			}
 			if underFlag.set {
 				input["under"] = underFlag.value
+			}
+			if dryRunFlag.value {
+				hint := a.prepareRunParent(ctx, cfg, input, false)
+				result := &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body, "under": input["under"]}, Warnings: askAuthoringWarnings(warnings)}
+				for _, warning := range hint.Warnings {
+					result.Warnings = append(result.Warnings, output.Warning{Code: warning.Code, Message: warning.Message})
+				}
+				return result, nil
 			}
 			if e := ensureGroupingRequestKey(input); e != nil {
 				return nil, e

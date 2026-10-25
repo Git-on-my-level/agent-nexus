@@ -192,6 +192,14 @@ func (h Hint) UndoArgv(ref string) []string {
 func readStatus(ctx context.Context, path, id string) ([]byte, error) {
 	// --output json is documented by agentctl help; status does not accept --json.
 	cmd := exec.CommandContext(ctx, path, "status", id, "--output", "json")
+	// agentctl needs its own context only; never forward ANX credentials.
+	cmd.Env = []string{}
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if key == "PATH" || key == "HOME" || strings.HasPrefix(key, "AGENTCTL_") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
 	cmd.WaitDelay = 25 * time.Millisecond
 	var out limitedOutput
 	cmd.Stdout, cmd.Stderr = &out, io.Discard
