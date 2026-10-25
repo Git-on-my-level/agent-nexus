@@ -126,6 +126,24 @@ func TestWatchWorkstreamRollupBudget(t *testing.T) {
 				t.Fatal("completion read did not seek its lifecycle index")
 			}
 			t.Logf("queries=%d rows=%d VM=%d scans=%d", queries, rows, work.VMSteps, work.FullScanSteps)
+			batch := []map[string]any{{"id": root["id"]}}
+			for i := 1; i <= 10; i++ {
+				batch = append(batch, map[string]any{"id": fmt.Sprintf("watch-budget-%d", i)})
+			}
+			capture.Start()
+			err = measured.EnrichWorkHierarchy(readCtx, batch, actor, true, time.Now())
+			_, queries, rows = capture.Stop()
+			work = capture.Work()
+			if err != nil || capture.WorkError() != nil || queries > budget.Queries || rows > budget.Rows || work.VMSteps > budget.VM || work.FullScanSteps > budget.Scans {
+				t.Fatalf("overlapping page: err=%v queries=%d rows=%d work=%+v", err, queries, rows, work)
+			}
+			if batch[0]["rollup"].(*primitives.WorkRollup).Workstreams[0].Rollup.Total != 10 {
+				t.Fatal("reused workstream lost its children")
+			}
+			if _, err = json.Marshal(batch); err != nil {
+				t.Fatalf("reused rollup contains a cycle: %v", err)
+			}
+			t.Logf("overlapping page queries=%d rows=%d VM=%d scans=%d", queries, rows, work.VMSteps, work.FullScanSteps)
 		})
 	}
 }

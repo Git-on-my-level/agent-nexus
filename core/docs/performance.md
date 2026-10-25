@@ -2042,7 +2042,10 @@ two more for a single additional level, never a statement per initiative. Each
 batch admits 200 cards; each plan admits 200 steps. At most 200 visible child
 workstreams are expanded per root batch; deeper levels are not read. Thus fan-out
 is bounded by 40,000 direct rows plus 40,000 second-level rows per 200-root batch,
-independent of unrelated workspace size. Smaller pages grow with their admitted
+independent of unrelated workspace size. Workstreams already admitted as input
+rows reuse a detached direct-child rollup; only missing workstreams enter the
+second SQL batch. Detaching child rollup pointers preserves the one-extra-level
+bound and prevents cycles in legacy graphs. Smaller pages grow with their admitted
 plans and referenced child cards. The existing primary-key/handle seeks,
 `idx_brief_plan_refs_target`, and subject-ask indexes remain authoritative.
 Visibility filters precede aggregation; no hidden contributor affects a count.
@@ -2100,3 +2103,8 @@ plans. The baseline partial-reader sample is 58,310 VM steps. The changed-branch
 run reached the matching authorized samples before its five-minute process
 timeout; the ten-minute baseline run completed and reported the gate failures.
 Neither run is represented as passing.
+
+The overlapping work-list-page regression (root plus its ten workstreams)
+exposed duplicate hydration at 62,729 VM steps. Reusing the already admitted
+rollups reduces it to 3 queries, 122 rows, 33,828 VM steps and zero full scans
+for both principals. The same unchanged workstreams budget gates this case.

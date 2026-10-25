@@ -254,6 +254,19 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	expanded := map[string]map[string]any{}
 	batch := []map[string]any{}
 	for _, id := range streamKeys[:min(200, len(streamKeys))] {
+		// A work list often already contains the workstream itself. Reuse its
+		// admitted direct children instead of hydrating that plan a second time.
+		if item, ok := canonical[id]; ok {
+			direct := *item["rollup"].(*WorkRollup)
+			direct.Children = append([]WorkChild{}, direct.Children...)
+			for i := range direct.Children {
+				direct.Children[i].Rollup = nil
+			}
+			direct.Workstreams = []WorkChild{}
+			direct.HasMore = false
+			expanded[id] = map[string]any{"rollup": &direct}
+			continue
+		}
 		c := map[string]any{"id": id}
 		expanded[id] = c
 		batch = append(batch, c)
