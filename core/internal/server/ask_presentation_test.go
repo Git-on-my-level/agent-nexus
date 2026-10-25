@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"agent-nexus-core/internal/askpresentation"
@@ -63,5 +65,31 @@ func TestAskPresentationInboxRoundTrip(t *testing.T) {
 	legacy, ok := deriveHumanAttentionInboxItem(event)
 	if !ok || legacy.Data["body"] != "Legacy context." {
 		t.Fatalf("legacy: %#v", legacy)
+	}
+}
+
+func TestAskPresentationHTTPBounds(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"agent","display_name":"Agent","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	for _, copy := range []map[string]any{
+		{"situation": strings.Repeat("界", 4001)},
+		{"recommendation": map[string]any{"action": "Check.", "why": strings.Repeat("x", 4001)}},
+	} {
+		payload := map[string]any{"kind": "ask", "title": "Approve?", "subject_ref": "card:launch", "requester_actor_id": "agent", "response_proposals": []string{"Approve."}}
+		for key, value := range copy {
+			payload[key] = value
+		}
+		raw, _ := json.Marshal(map[string]any{"actor_id": "agent", "event": map[string]any{"type": "human_attention_requested", "thread_id": "thread-1", "refs": []string{"thread:thread-1"}, "summary": "Approve?", "provenance": map[string]any{"sources": []string{"inferred"}}, "payload": payload}})
+		resp := postJSONExpectStatus(t, h.baseURL+"/events", string(raw), http.StatusBadRequest)
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		errObj := data["error"].(map[string]any)
+		if errObj["code"] != "invalid_request" || !strings.Contains(errObj["message"].(string), "event.payload:") || !strings.Contains(errObj["message"].(string), "4000") {
+			t.Fatalf("%#v", data)
+		}
 	}
 }

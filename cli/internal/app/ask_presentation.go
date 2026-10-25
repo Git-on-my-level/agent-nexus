@@ -26,12 +26,22 @@ type askPresentation struct {
 	Details        string             `json:"details,omitempty" yaml:"details"`
 }
 
-func (p askPresentation) apply(payload map[string]any) {
-	// Force can preserve a legacy ask without publishing an invalid partial object.
+func (p askPresentation) forPayload() askPresentation {
+	// Preserve forced partial copy in details without publishing an invalid object.
 	if p.Recommendation != nil && (strings.TrimSpace(p.Recommendation.Action) == "" || strings.TrimSpace(p.Recommendation.Why) == "") {
+		if p.Recommendation.Action != "" {
+			p.Details = strings.TrimSpace(p.Details + "\nRecommendation: " + p.Recommendation.Action)
+		}
+		if p.Recommendation.Why != "" {
+			p.Details = strings.TrimSpace(p.Details + "\nWhy: " + p.Recommendation.Why)
+		}
 		p.Recommendation = nil
 	}
-	raw, _ := json.Marshal(p)
+	return p
+}
+
+func (p askPresentation) apply(payload map[string]any) {
+	raw, _ := json.Marshal(p.forPayload())
 	var fields map[string]any
 	_ = json.Unmarshal(raw, &fields)
 	for k, v := range fields {
@@ -103,6 +113,9 @@ func lintAskPresentation(title string, p askPresentation, options []any) (warnin
 	for i, v := range options {
 		fields = append(fields, struct{ name, text string }{fmt.Sprintf("option %d", i+1), anyString(v)})
 	}
+	for i, alt := range p.Alternatives {
+		fields = append(fields, struct{ name, text string }{fmt.Sprintf("alternative %d consequence", i+1), alt.Consequence})
+	}
 	visible := ""
 	counts := map[string]int{}
 	for _, f := range fields {
@@ -127,7 +140,7 @@ func renderAskPreview(title, body string, p askPresentation, options []any, evid
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", title)
 	if p.Situation != "" {
-		fmt.Fprintf(&b, "Situation: %s\n", p.Situation)
+		fmt.Fprintf(&b, "%s\n", p.Situation)
 	} else if body != "" {
 		fmt.Fprintf(&b, "%s\n", body)
 	}
@@ -135,10 +148,10 @@ func renderAskPreview(title, body string, p askPresentation, options []any, evid
 		fmt.Fprintf(&b, "Impact: %s\n", p.Impact)
 	}
 	if p.Recommendation != nil {
-		fmt.Fprintf(&b, "I recommend: %s\nWhy: %s\n", p.Recommendation.Action, p.Recommendation.Why)
+		fmt.Fprintf(&b, "I recommend: %s\n%s\n", p.Recommendation.Action, p.Recommendation.Why)
 	}
 	for _, alt := range p.Alternatives {
-		fmt.Fprintf(&b, "Alternative: %s. %s\n", alt.Action, alt.Consequence)
+		fmt.Fprintf(&b, "Alternative: %s %s\n", alt.Action, alt.Consequence)
 	}
 	if p.IfNoAnswer != "" {
 		fmt.Fprintf(&b, "If no answer: %s\n", p.IfNoAnswer)
@@ -165,7 +178,10 @@ func renderAskPreview(title, body string, p askPresentation, options []any, evid
 func hasAskPreview(args []string) bool {
 	preview := false
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
+		arg := "--" + strings.TrimLeft(args[i], "-")
+		if !strings.HasPrefix(args[i], "-") {
+			continue
+		}
 		if arg == "--preview" {
 			preview = true
 			continue
@@ -187,7 +203,7 @@ func (p askPresentation) validateBounds() error {
 	for _, f := range []struct {
 		name, value string
 		max         int
-	}{{"situation", p.Situation, 4000}, {"impact", p.Impact, 4000}, {"if_no_answer", p.IfNoAnswer, 4000}, {"details", p.Details, 32000}} {
+	}{{"situation", p.Situation, 4000}, {"impact", p.Impact, 4000}, {"if_no_answer", p.IfNoAnswer, 4000}, {"details", p.forPayload().Details, 32000}} {
 		if utf8.RuneCountInString(f.value) > f.max {
 			return fmt.Errorf("%s exceeds %d characters", f.name, f.max)
 		}
@@ -217,9 +233,15 @@ func askJargonTokens(text string) []string {
 		// ordinary prose, not an absolute path starting in the middle of a word.
 		if strings.HasPrefix(token, "/") && span[0] > 0 {
 			prev := text[span[0]-1]
-			if (prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') {
+			if (prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') || (prev >= '0' && prev <= '9') {
 				continue
 			}
+		}
+		// A few ordinary words also match the identifier/acronym/hash patterns.
+		// Keep these exemptions explicit rather than weakening hash detection.
+		switch strings.ToLower(token) {
+		case "iphone", "ok", "no", "yes", "acceded", "defaced", "effaced":
+			continue
 		}
 		tokens = append(tokens, token)
 	}

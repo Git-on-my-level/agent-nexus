@@ -49,7 +49,9 @@ Inline flags are `--situation`, `--impact`, `--recommend`, `--why`,
 Missing situation, impact or recommendation (including why) is an error.
 `--force --reason 'explanation'` records a deliberate authoring exception.
 Jargon warnings quote the offending token and field; rewrite them before asking.
-ANX stores authored text and runs no model to rewrite it.
+ANX stores authored text and runs no model to rewrite it. Forced partial
+recommendations are retained in `details` so their text is never discarded.
+Preview cannot be combined with delivery flags or `--dry-run`.
 
 Before: “Approve PR123 existing-fence reuse?” / “Recovered c10041; reuse
 external_write_fence for monthly_usage_totals.”
@@ -224,3 +226,10 @@ when structured copy is absent, keep the legacy body visible. Do not treat
 if_no_answer prose as an automatic action or deadline: `by` is the separate
 machine-readable decision deadline. Text fields are limited to 4,000 Unicode
 characters (action: 240; details: 32,000); alternatives has at most five entries.
+
+## Presentation contract for HTTP writers
+
+The presentation fields are optional: omit unused fields. Explicit JSON `null`
+is rejected for typed fields such as `impact` and `recommendation`; a present
+recommendation requires both `action` and `why`. Each batch member carries its
+own proposal; Decide initially collapses each member under its title.

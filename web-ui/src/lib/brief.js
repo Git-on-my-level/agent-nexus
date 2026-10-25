@@ -126,22 +126,8 @@ function refTitle(value) {
   return ref ? { ref, title: text(value.title) } : null;
 }
 
-function normalizeDecision(raw) {
-  const ref = text(raw?.ref);
-  if (!ref) return null;
-  const kind = text(raw.kind) || "ask";
-  const eventRef =
-    text(raw.event_ref) ||
-    text(raw.eventRef) ||
-    (text(raw.event_id) ? `event:${text(raw.event_id)}` : "");
+function normalizeAskPresentation(raw) {
   return {
-    ref,
-    kind,
-    inboxItemId:
-      text(raw.inbox_item_id) || text(raw.inboxItemId) || text(raw.id) || ref,
-    ...(eventRef ? { eventRef } : {}),
-    workspace: text(raw.workspace),
-    title: text(raw.title) || ref,
     body: String(raw.body ?? ""),
     situation: text(raw.situation),
     impact: text(raw.impact),
@@ -163,6 +149,26 @@ function normalizeDecision(raw) {
     evidence: (Array.isArray(raw.evidence) ? raw.evidence : [])
       .filter((v) => v && typeof v === "object")
       .map((v) => ({ label: text(v.label), url: text(v.url) })),
+  };
+}
+
+function normalizeDecision(raw) {
+  const ref = text(raw?.ref);
+  if (!ref) return null;
+  const kind = text(raw.kind) || "ask";
+  const eventRef =
+    text(raw.event_ref) ||
+    text(raw.eventRef) ||
+    (text(raw.event_id) ? `event:${text(raw.event_id)}` : "");
+  return {
+    ref,
+    kind,
+    inboxItemId:
+      text(raw.inbox_item_id) || text(raw.inboxItemId) || text(raw.id) || ref,
+    ...(eventRef ? { eventRef } : {}),
+    workspace: text(raw.workspace),
+    title: text(raw.title) || ref,
+    ...normalizeAskPresentation(raw),
     requestedBy: actor(raw.requested_by),
     createdAt: text(raw.created_at),
     decideBy: text(raw.decide_by),
@@ -214,6 +220,7 @@ function normalizeBatch(raw) {
         inboxItemId: text(member.inbox_item_id) || text(member.inboxItemId),
         ...(eventRef ? { eventRef } : {}),
         title: text(member.title),
+        ...normalizeAskPresentation(member),
         subjectRef: text(member.subject_ref) || text(member.subjectRef),
         blocks: (Array.isArray(member.blocks) ? member.blocks : [])
           .map(refTitle)

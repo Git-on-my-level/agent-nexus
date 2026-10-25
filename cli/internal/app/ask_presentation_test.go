@@ -26,6 +26,7 @@ func TestAskPlainLanguageLint(t *testing.T) {
 		{name: "good risk title", title: "Deleted users' usage data can reappear.", p: good, options: []any{good.Recommendation.Action}},
 		{name: "uppercase hash", title: "Approve DEADBEEF?", p: good, warnings: []string{`"DEADBEEF"`}},
 		{name: "long hash", title: "Approve " + strings.Repeat("a1", 32) + "?", p: good, warnings: []string{`"` + strings.Repeat("a1", 32) + `"`}},
+		{name: "everyday language", title: "Approve 24/7 support for iPhone?", p: good, options: []any{"OK if NO data was defaced; OK if NO one acceded."}},
 		{name: "English numbers", title: "Approve 10000000 more credits?", p: good},
 		{name: "missing", title: "Approve?", errors: []string{"Missing situation", "Missing impact", "Missing recommendation", "Missing recommendation.why"}},
 		{name: "production jargon", title: "Approve PR23397 existing-fence reuse on every aggregate creator?", p: askPresentation{Situation: "Recovered c10041 on m1: ordinary/once/absolute/admin/migration writers can create monthly_usage_totals after erasure inventories the subtree.", Impact: "An external_write_fence is needed.", Recommendation: good.Recommendation}, options: []any{"Approve existing-fence reuse plus root check; count new authority reads", "Keep PR23397 blocked; lead chooses UPDATE-only design"}, warnings: []string{`"PR23397"`, `"c10041"`, `"monthly_usage_totals"`, `"external_write_fence"`}},
@@ -151,6 +152,9 @@ func TestAskPreviewFlagDetection(t *testing.T) {
 		want bool
 	}{
 		{[]string{"Choose?", "--preview"}, true},
+		{[]string{"Choose?", "-preview"}, true},
+		{[]string{"Choose?", "-preview=1"}, true},
+		{[]string{"Choose?", "-body", "-preview"}, false},
 		{[]string{"Choose?", "--preview=TRUE"}, true},
 		{[]string{"Choose?", "--preview=1"}, true},
 		{[]string{"Choose?", "--preview=false"}, false},
@@ -171,9 +175,69 @@ func TestAskMisplacedPreviewCannotPublish(t *testing.T) {
 		w.WriteHeader(500)
 	}))
 	defer server.Close()
-	raw := runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "ask", "--situation", "A launch is waiting.", "--impact", "The team is delayed.", "--recommend", "Approve the guard.", "--why", "It saves time.", "--subject-ref", "card:launch", "--thread-id", "thr1", "Approve?", "--preview"})
-	payload := assertEnvelopeError(t, raw)
-	if asMap(payload["error"])["code"] != "invalid_flags" {
-		t.Fatal(raw)
+	for _, flag := range []string{"--preview", "-preview", "-preview=true"} {
+		raw := runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "ask", "--situation", "A launch is waiting.", "--impact", "The team is delayed.", "--recommend", "Approve the guard.", "--why", "It saves time.", "--subject-ref", "card:launch", "--thread-id", "thr1", "Approve?", flag})
+		payload := assertEnvelopeError(t, raw)
+		if asMap(payload["error"])["code"] != "invalid_flags" {
+			t.Fatal(raw)
+		}
+	}
+}
+
+func TestAskPreviewMatchesDecide(t *testing.T) {
+	raw, err := os.ReadFile("testdata/ask-decide-presentation.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		askPresentation
+		Title      string
+		Paragraphs []string
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	got := renderAskPreview(fixture.Title, "", fixture.askPresentation, nil, nil)
+	want := fixture.Title + "\n\n" + strings.Join(fixture.Paragraphs, "\n") + "\n"
+	if got != want {
+		t.Fatalf("preview drifted from Decide: got %q want %q", got, want)
+	}
+}
+
+func TestAskForcePreservesPartialRecommendation(t *testing.T) {
+	p := askPresentation{Recommendation: &askRecommendation{Why: "Keep this explanation."}}
+	payload := map[string]any{}
+	p.apply(payload)
+	if !strings.Contains(anyString(payload["details"]), p.Recommendation.Why) || payload["recommendation"] != nil {
+		t.Fatalf("%#v", payload)
+	}
+	p.Recommendation = &askRecommendation{Action: strings.Repeat("x", 241)}
+	if p.validateBounds() == nil {
+		t.Fatal("partial action bypassed hard bound")
+	}
+	p.Recommendation = &askRecommendation{Why: "Keep this explanation."}
+	p.Details = strings.Repeat("x", 32000)
+	if p.validateBounds() == nil {
+		t.Fatal("preserved partial copy bypassed details bound")
+	}
+}
+
+func TestAskAlternativeConsequenceJargon(t *testing.T) {
+	p := goodAskPresentation()
+	p.Alternatives[0].Consequence = "Needs usageTotals."
+	warnings, _ := lintAskPresentation("Approve?", p, nil)
+	if !strings.Contains(strings.Join(warnings, "\n"), `"usageTotals" in alternative 1 consequence`) {
+		t.Fatal(warnings)
+	}
+}
+
+func TestAskPreviewRejectsIgnoredDeliveryFlags(t *testing.T) {
+	for _, flags := range [][]string{{"--dry-run"}, {"--delivery", "none"}, {"--on-answer", "echo done"}, {"--webhook", "https://example.org/answer"}} {
+		args := append([]string{"--json", "ask", "Approve?", "--preview"}, flags...)
+		raw := runCLIForTest(t, t.TempDir(), nil, nil, args)
+		payload := assertEnvelopeError(t, raw)
+		if asMap(payload["error"])["code"] != "invalid_flags" {
+			t.Fatal(raw)
+		}
 	}
 }

@@ -119,7 +119,7 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 		return nil, errnorm.Usage("invalid_request", "work block --ask requires --recommend")
 	}
 	if verb == "block" && !askFlag.value && (situation.set || impact.set || why.set || ifNoAnswer.set || details.set || len(alternatives.values) > 0 || recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
-		return nil, errnorm.Usage("invalid_flags", "--recommend, --alt, --body, --body-file, --force and --reason require --ask")
+		return nil, errnorm.Usage("invalid_flags", "--situation, --impact, --recommend, --why, --alternative, --if-no-answer, --details, --alt, --body, --body-file, --force and --reason require --ask")
 	}
 	card, err := a.fetchCardBody(ctx, cfg, cardRef)
 	if err != nil {

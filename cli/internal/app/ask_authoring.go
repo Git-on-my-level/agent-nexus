@@ -48,8 +48,6 @@ evidence: []
 ---
 `
 
-const askAuthoringTemplate = askDecisionTemplate
-
 var askNamedPR = regexp.MustCompile(`(?i)\bPR\s*#?(\d+)\b`)
 var askNamedRef = regexp.MustCompile("(?i)\\b(doc(?:ument)?|card|topic|file)\\s+[`\"]([^`\"\\n]+)[`\"]")
 var askPointerOnly = regexp.MustCompile(`(?i)^\s*(?:please\s+)?(?:see|read|refer to|check)\s+[^\n]+\s*$`)

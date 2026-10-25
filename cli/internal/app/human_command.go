@@ -160,6 +160,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if hasAskPreview(args) && !previewFlag.value {
 		return nil, errnorm.Usage("invalid_flags", "put the title before flags so --preview is parsed")
 	}
+	if previewFlag.value && (dryRunFlag.set || deliveryFlag.set || onAnswerFlag.set || webhookFlag.set) {
+		return nil, errnorm.Usage("invalid_flags", "--preview cannot be combined with --dry-run, --delivery, --on-answer or --webhook; preview performs no delivery")
+	}
 	trailingPositionals := fs.Args()
 	if err := rejectHumanFromFileFlagConflicts(
 		fromFileFlag,
