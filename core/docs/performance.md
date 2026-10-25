@@ -101,9 +101,9 @@ the next read**. Each HTTP request may probe twice; only an absent or stale epoc
 binding counts as a capture, since CASE skips rebuilding on a current binding.
 Main's warm point read uses 949,304 VM; after a write it uses 2,188,885 VM, a
 **1,239,581-VM invalidation penalty**. The initial cold sample uses 2,371,174 VM.
-#469 uses 4,699 VM cold/idle and 4,708 after a write on the instrumented pool,
+#469 uses 4,563 VM cold/idle and 4,572 after a write on the instrumented pool,
 with no closure probe or capture. The separate native route matrix writes through
-another pool and retains its 4,699-VM result in every phase.
+another pool and retains its 4,563-VM result in every phase.
 
 | Canonical SQL write and triggers | Main VM | #469 VM |
 | -------------------------------- | ------: | ------: |
@@ -161,7 +161,8 @@ advisory inventory overruns. Both original tests and limits remain unchanged:
   parents in their existing thread/event indexes. Reachability follows those
   indexed relations; reached wakeups receive keys and spellings as needed, and
   structural edits materialize the old contribution before normal teardown.
-  Both 1k and 100k now perform **67 writes and allocate 354 pages**. Historical
+  Both 1k and 100k now perform **68 writes and allocate 356 pages**, including
+  the durable migration cursor introduced below. Historical
   parity covers private threads/events, explicit references and referring cards,
   a 128-wakeup reference cycle, empty legacy parents, moves, revocation/transfer,
   rename, deletion and compact cutover. New wakeups use the ordinary incremental
@@ -219,6 +220,62 @@ Legacy schema-reconstruction fixtures remove post-116 admission triggers before
 dropping older indexes. Their canonical legacy triggers and all retained-privacy
 assertions remain active; migration 116 must rebuild the new derived state.
 
+### GLM follow-up: resumable migration and explicit scope
+
+Migration 116 separates schema/direct-index setup from transitive reachability.
+Setup remains one atomic, linear phase; the potentially root-by-vertex backfill
+then commits **one distinct root per transaction**, with a durable primary-key
+cursor in the same commit. Multiple retained owners of a root do not replay it.
+Cancellation or restart resumes after the last committed root; the migration is
+marked complete only after its final chunk. Initialization returns no workspace
+handle before completion, so partially built authority cannot serve requests.
+Total work and storage can still grow as roots times reachable vertices; a root
+chunk can traverse its entire affected component. This is chunking, not a claim
+of constant total startup cost or a measurement of an unspecified production
+workspace. Runtime grant/revoke component work remains the accepted write-side
+tradeoff (GLM #2).
+
+The released-schema synthetic profile has 4,096 cards, 512 private roots and a
+512-dependent shared hub. It completed in **514 transactions**, with 30,726 row
+changes in setup and at most 1,546 per root chunk. The longest root chunk was
+62.93 ms; backfill elapsed time was 12.43 s on this local run. A separate fast
+regression interrupts after one independently visible root commit, reopens the
+workspace, rejects replay of that root with an abort trigger, and verifies full
+old/new admission parity after completion. It fails against the former atomic
+migration because no partial root commit is visible. No startup allowance changed.
+
+The retained-wakeup backfill also now pins the existing origin-leading identity
+uniqueness index. EXPLAIN previously selected the kind index and scanned every
+historical wakeup for the retained-origin arm; the regression requires origin
+seeks instead. The unchanged 1k/100k receipt startup guard passes with identical
+68 writes and 356 allocated pages; the latest 100k startup took 503 ms. This does
+not copy untouched wakeup history or add an index over that history.
+
+`hiddenWorkPage` now rejects a missing request access scope before reading any
+rows, and returns no refs or continuation. An explicit anonymous scope is still
+a scope and follows normal policy. Its regression previously returned the
+private archived card's ID and handle. Direct work test fixtures supply their
+actual reader scope, preserving ordering and callback-pagination assertions.
+The dead candidate-proof `ancestors` argument and its reuse comment were removed;
+only SQL-proven candidate results are cached, with the existing entry/byte cap,
+epoch, connection-change and token-expiry checks intact.
+
+The topics-update lifecycle probe now uses `ReferenceSQL` and the canonical
+`idx_work_access_project` expression index. A populated 10,000-card probe shows
+**29 VM / zero scan steps**, and its complete topic update uses **1,950 VM** under
+the unchanged 50,000 ceiling. The old raw-JSON probe already used the covering
+`idx_work_metadata_project` index at the same 29 VM: the reported full-scan
+hypothesis was refuted. This is consistent index-expression use, not a claimed
+VM reduction.
+
+The remaining GLM observations are documented rather than changed: grant/revoke
+may traverse its affected component (#2); lifecycle continuations can yield an
+empty work page, and clients must honor the cursor and their existing traversal
+caps/honest partial result (#3); SQL trigger construction still depends on known
+string shapes, with explicit artifact/revision refresh exceptions (#6); and the
+six improved, pre-existing full-inventory overruns remain tracked in #472 (#8).
+No budget, baseline, allowance, required-gate selection or timeout is widened.
+
 ### Final native bounded-route measurements
 
 The checked-in native request matrix independently seeds the shared analyzed
@@ -229,25 +286,26 @@ The table below is from the final run, **without a test overlay**:
 | Route / reader                                             | First VM | Warm VM | Invalidated VM |
 | ---------------------------------------------------------- | -------: | ------: | -------------: |
 | `/work?limit=20` / owner                                   |   21,285 |  21,285 |         21,285 |
-| `/work?limit=20` / partial                                 |   35,864 |  35,864 |         35,864 |
+| `/work?limit=20` / partial                                 |   35,714 |  35,714 |         35,714 |
 | `/brief` / owner                                           |   27,913 |  27,913 |         27,913 |
-| `/brief` / partial                                         |   46,277 |  46,277 |         46,277 |
+| `/brief` / partial                                         |   46,085 |  46,085 |         46,085 |
 | `/cards?summary=1&limit=20` / owner                        |   16,920 |  16,920 |         16,920 |
-| `/cards?summary=1&limit=20` / partial                      |   30,086 |  30,086 |         30,086 |
+| `/cards?summary=1&limit=20` / partial                      |   29,960 |  29,960 |         29,960 |
 | `/boards/scale-board-0/cards?summary=1&limit=20` / owner   |   19,240 |  19,240 |         19,240 |
-| `/boards/scale-board-0/cards?summary=1&limit=20` / partial |   37,708 |  37,708 |         37,708 |
+| `/boards/scale-board-0/cards?summary=1&limit=20` / partial |   37,560 |  37,560 |         37,560 |
 | `/cards/scale-card-1` / owner                              |    2,056 |   2,056 |          2,056 |
-| `/cards/scale-card-1` / partial                            |    4,699 |   4,699 |          4,699 |
+| `/cards/scale-card-1` / partial                            |    4,563 |   4,563 |          4,563 |
 | `/boards/scale-board-1` / owner                            |   15,319 |  15,319 |         15,319 |
 | `/boards/scale-board-1` / partial                          |      405 |     405 |            405 |
 
-The separate complete grouping gate uses **30,479 owner / 48,197 partial VM**
+The separate complete grouping gate uses **30,479 owner / 48,169 partial VM**
 in every phase, under the unchanged 50,000 ceiling. The populated brief is now
-46,277 partial VM; main's original baseline brief was empty, so these are different
-content controls. The final combined run took 258.87 seconds including fresh fixture seeds and the interleaved-write gate.
-Repeating the complete route matrix and grouping gate after rebasing onto
-v0.13.29 (`74aba48f`) reproduced all 54 route measurements exactly; that
-confirmation took 284.49 seconds, including its fresh fixtures.
+46,085 partial VM; main's original baseline brief was empty, so these are different
+content controls. The fresh post-review combined run took 154.57 seconds including fixture seeds,
+interleaved writes and dense ancestry/bucket probes. The dead `ancestors` JSON
+argument was removed from candidate proofs; these measurements include that change.
+The earlier rebase onto v0.13.29 (`74aba48f`) reproduced the prior measurements;
+the table records the latest implementation rather than that earlier run.
 Every bounded request, the grouping gate and the micro/adversarial gates passed.
 The combined command remains red only for the six legacy inventory reader cases
 below; their hard 50,000 assertions are deliberately retained.
@@ -268,11 +326,11 @@ No ordinary bounded route takes this full inventory batch.
 | Legacy inventory / reader                        | Main warm VM (`b7c3a77f`) | Final VM, each phase |
 | ------------------------------------------------ | ------------------------: | -------------------: |
 | `/cards?limit=20` / owner                        |                 3,339,838 |            3,275,798 |
-| `/cards?limit=20` / partial                      |                 5,923,309 |            3,812,125 |
+| `/cards?limit=20` / partial                      |                 5,923,309 |            3,807,859 |
 | `/boards?limit=20` / owner                       |                 2,301,617 |            1,815,211 |
-| `/boards?limit=20` / partial                     |                 8,280,791 |            3,736,341 |
+| `/boards?limit=20` / partial                     |                 8,280,791 |            3,735,985 |
 | `/boards/scale-board-0/cards?limit=20` / owner   |                 3,242,038 |            3,101,254 |
-| `/boards/scale-board-0/cards?limit=20` / partial |                 7,443,111 |            4,658,257 |
+| `/boards/scale-board-0/cards?limit=20` / partial |                 7,443,111 |            4,653,975 |
 
 All six warm costs improve on the original native main measurements, even though
 current main also adds grouping hydration. A supplemental main-source replay on
@@ -301,8 +359,8 @@ no allowance, test selection change or gate weakening is introduced here.
   teardown repair still used 179,116 / 177,735 for grouping/brief. Reverse ancestry
   batching also missed the ceiling; persisted reachability removed that read work.
 - A 128-node DAG with 1,016 incoming dependencies, cycles and 128 reachable owned
-  roots now uses **2,431 VM** per phase. The 512-spelling legacy bucket fanout
-  case used 276,447 VM before prefix seeks and now uses **12,242 VM** per phase.
+  roots now uses **2,429 VM** per phase. The 512-spelling legacy bucket fanout
+  case used 276,447 VM before prefix seeks and now uses **12,226 VM** per phase.
   Both include cold admission and retain a 50,000 ceiling.
 - A complete `/work?limit=20` over 4,096 private archived cards used 230,045 VM
   before owner routing and now uses **640 VM** per phase, returning no work,
@@ -384,7 +442,7 @@ leaving 29,786 elsewhere in the invalidated request.
 
 That workspace closure preceded page admission, so changing the candidate
 window could not remove it. The indexed authorization repair above brings the
-complete grouping request to 30,479 owner / 48,197 partial VM in all phases.
+complete grouping request to 30,479 owner / 48,169 partial VM in all phases.
 These historical figures are evidence of the repaired cause, not a baseline or
 allowance. The separate legacy inventory gap remains documented above. No
 budget or query-plan requirement is weakened.

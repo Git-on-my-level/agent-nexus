@@ -76,31 +76,42 @@ func TestCandidateProofBorrowedWriteSeesUnversionedLedgerChanges(t *testing.T) {
 
 }
 
-func TestCandidateProofMalformedAndExpiredCacheFallsBack(t *testing.T) {
+func TestCandidateProofCachesOnlyCanonicalResultAndExpires(t *testing.T) {
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ws.Close()
-	for _, rows := range []string{`[["card",null]]`, `[["card",42]]`, `[["card","bad","extra"]]`, `[["card","bad"]] []`, "[[\"card\",\"bad\xff\"]]"} {
+	for _, decision := range []int{0, 1, 2} {
 		snapshot := &denialSnapshot{candidates: true, candidateIndex: make(map[denialTarget]bool)}
 		token := pointSnapshotSequence.Add(1)
 		pointSnapshots.Store(token, snapshot)
 		var allowed int
-		if err := ws.DB().QueryRow(`SELECT anx_candidate_remember(?,CAST('card' AS BLOB),CAST('self' AS BLOB),1,CAST(? AS BLOB))`, token, rows).Scan(&allowed); err != nil || allowed != 1 {
-			t.Fatalf("canonical result=%d err=%v", allowed, err)
+		if err := ws.DB().QueryRow(`SELECT anx_candidate_remember(?,CAST('card' AS BLOB),CAST('self' AS BLOB),?)`, token, decision).Scan(&allowed); err != nil {
+			t.Fatal(err)
 		}
-		for _, id := range []string{"bad", ""} {
-			var got sql.NullInt64
-			if err := ws.DB().QueryRow(`SELECT anx_candidate_lookup(?,CAST('card' AS BLOB),CAST(? AS BLOB))`, token, id).Scan(&got); err != nil || got.Valid {
-				t.Fatalf("malformed proof cached %q: %v %v", id, got, err)
+		want := decision
+		if decision == 2 {
+			want = 0
+		}
+		if allowed != want {
+			t.Fatalf("canonical result=%d want=%d", allowed, want)
+		}
+		var cached sql.NullInt64
+		if err := ws.DB().QueryRow(`SELECT anx_candidate_lookup(?,CAST('card' AS BLOB),CAST('self' AS BLOB))`, token).Scan(&cached); err != nil {
+			t.Fatal(err)
+		}
+		if decision == 2 {
+			if cached.Valid {
+				t.Fatal("invalid decision cached")
 			}
+		} else if !cached.Valid || cached.Int64 != int64(want) {
+			t.Fatalf("cached result=%v want=%d", cached, want)
 		}
 		pointSnapshots.Delete(token)
-		var got sql.NullInt64
-		if err := ws.DB().QueryRow(`SELECT anx_candidate_lookup(?,CAST('card' AS BLOB),CAST('self' AS BLOB))`, token).Scan(&got); err != nil || got.Valid {
-			t.Fatalf("expired cache=%v err=%v", got, err)
+		if err := ws.DB().QueryRow(`SELECT anx_candidate_lookup(?,CAST('card' AS BLOB),CAST('self' AS BLOB))`, token).Scan(&cached); err != nil || cached.Valid {
+			t.Fatalf("expired cache=%v err=%v", cached, err)
 		}
 	}
 	public := &denialSnapshot{candidates: true, candidateAllPublic: true}

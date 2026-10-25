@@ -30,10 +30,8 @@ func installAccessAdmissionReach(ctx context.Context, tx *sql.Tx) error {
 	// WITH is embedded in INSERT/DELETE SELECTs because SQLite trigger grammar
 	// does not accept a top-level WITH statement. UNION terminates arbitrary cycles.
 	walk := admissionReachWalk
-	initial := `SELECT l.value,r.kind,r.id,r.kind,r.id FROM resource_access_admission_roots r CROSS JOIN json_each('[-1,1,2]') l`
-	if err := exec(`INSERT INTO resource_access_admission_reach ` + walk(initial) + `SELECT * FROM reach WHERE true ON CONFLICT DO NOTHING`); err != nil {
-		return err
-	}
+	// Initial memberships are backfilled one root per durable migration chunk.
+	// Install incremental maintenance first so each committed chunk stays valid.
 	newRoot := `SELECT l.value,NEW.kind,NEW.id,NEW.kind,NEW.id FROM json_each('[-1,1,2]') l WHERE NOT EXISTS(SELECT 1 FROM resource_access_admission_reach WHERE ledger=1 AND kind=NEW.kind AND id=NEW.id AND root_kind=NEW.kind AND root_id=NEW.id)`
 	addRoot := `INSERT INTO resource_access_admission_reach ` + walk(newRoot) + `SELECT * FROM reach WHERE true ON CONFLICT DO NOTHING;`
 	dropRoot := `DELETE FROM resource_access_admission_reach WHERE root_kind=OLD.kind AND root_id=OLD.id AND NOT EXISTS(SELECT 1 FROM resource_access_admission_roots WHERE kind=OLD.kind AND id=OLD.id);`

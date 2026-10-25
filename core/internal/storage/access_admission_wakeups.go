@@ -9,8 +9,9 @@ import (
 
 // Two kind ranges omit untouched wakeup history. Retained aliases/tombstones
 // still need their spellings even without a live wakeup or a reached parent;
-// the identity uniqueness index starts with origin, so these are origin seeks.
-const admissionNonWakeupIdentities = `SELECT * FROM resource_access_identities INDEXED BY idx_access_identities_resource WHERE kind<'wakeup' UNION ALL SELECT * FROM resource_access_identities INDEXED BY idx_access_identities_resource WHERE kind>'wakeup' UNION ALL SELECT * FROM resource_access_identities WHERE origin IN ('resource_handle_aliases','resource_access_tombstones') AND kind='wakeup'`
+// Force the existing origin-leading uniqueness index: SQLite otherwise prefers
+// the kind index and scans every historical wakeup for the retained-origin arm.
+const admissionNonWakeupIdentities = `SELECT * FROM resource_access_identities INDEXED BY idx_access_identities_resource WHERE kind<'wakeup' UNION ALL SELECT * FROM resource_access_identities INDEXED BY idx_access_identities_resource WHERE kind>'wakeup' UNION ALL SELECT * FROM resource_access_identities INDEXED BY sqlite_autoindex_resource_access_identities_1 WHERE origin IN ('resource_handle_aliases','resource_access_tombstones') AND kind='wakeup'`
 
 // Historical wakeups already have indexed canonical parents. Reachability walks
 // those parents directly; only reached wakeups need new keys/projection spellings.

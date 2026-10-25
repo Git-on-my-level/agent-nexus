@@ -26,7 +26,7 @@ func TestWorkCursorPersistentKeyReadBudget(t *testing.T) {
 	defer db.Close()
 	s := primitives.NewTestStore(db, ws.Layout().ArtifactContentDir)
 	capture.Start()
-	_, err = s.ListWork(ctx, primitives.WorkListFilter{Limit: 1})
+	_, err = s.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), primitives.WorkListFilter{Limit: 1})
 	statements, _, _ := capture.Stop()
 	if err != nil {
 		t.Fatal(err)

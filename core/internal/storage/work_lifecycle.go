@@ -5,11 +5,16 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 // Only inactive card identities are routed here. Payloads and authorization
 // remain canonical and are hydrated after indexed page selection.
 func installWorkLifecycle(ctx context.Context, tx *sql.Tx) error {
+	topicCards := func(p string) string {
+		return `SELECT card_id FROM work_metadata WHERE ` + resourceaccess.ReferenceSQL(`json_extract(metadata_json,'$.project_ref')`) + ` COLLATE NOCASE IN ('topic:'||` + p + `id,'topic:'||` + p + `handle)`
+	}
 	hidden := `(COALESCE(c.archived_at,'')<>'' OR COALESCE(c.trashed_at,'')<>'' OR EXISTS(SELECT 1 FROM boards b WHERE b.id=c.board_id AND (COALESCE(b.archived_at,'')<>'' OR COALESCE(b.trashed_at,'')<>'')) OR EXISTS(SELECT 1 FROM work_metadata m JOIN topics t ON t.id=substr(json_extract(m.metadata_json,'$.project_ref'),7) OR (t.handle=substr(json_extract(m.metadata_json,'$.project_ref'),7) AND t.handle IS NOT NULL AND trim(t.handle)<>'') WHERE m.card_id=c.id AND substr(json_extract(m.metadata_json,'$.project_ref'),1,6)='topic:' AND (COALESCE(t.archived_at,'')<>'' OR COALESCE(t.trashed_at,'')<>'')))`
 	class, owner := admissionOwnerClass("l.value", "'card'", "c.id")
 	refresh := func(ids string) string {
@@ -35,7 +40,7 @@ func installWorkLifecycle(ctx context.Context, tx *sql.Tx) error {
 		{"cards", "id,board_id,archived_at,trashed_at", `SELECT OLD.id`, `SELECT NEW.id`},
 		{"work_metadata", "card_id,metadata_json", `SELECT OLD.card_id`, `SELECT NEW.card_id`},
 		{"boards", "id,archived_at,trashed_at", `SELECT id FROM cards WHERE board_id=OLD.id`, `SELECT id FROM cards WHERE board_id=NEW.id`},
-		{"topics", "id,handle,archived_at,trashed_at", `SELECT card_id FROM work_metadata WHERE json_extract(metadata_json,'$.project_ref') IN ('topic:'||OLD.id,'topic:'||OLD.handle)`, `SELECT card_id FROM work_metadata WHERE json_extract(metadata_json,'$.project_ref') IN ('topic:'||NEW.id,'topic:'||NEW.handle)`},
+		{"topics", "id,handle,archived_at,trashed_at", topicCards("OLD."), topicCards("NEW.")},
 	} {
 		for _, op := range []string{"insert", "update", "delete"} {
 			queries = append(queries, `DROP TRIGGER IF EXISTS admission_work_lifecycle_`+source.table+`_`+op)

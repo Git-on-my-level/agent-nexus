@@ -121,7 +121,7 @@ func TestBulkWorkMatchesIndividualProjectionAndPagination(t *testing.T) {
 	cursor := ""
 	count := 0
 	for {
-		page, err := store.ListWork(ctx, primitives.WorkListFilter{Limit: 1, Cursor: cursor})
+		page, err := store.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor-1"}), primitives.WorkListFilter{Limit: 1, Cursor: cursor})
 		if err != nil {
 			t.Fatal(err)
 		}

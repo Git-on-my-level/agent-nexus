@@ -8,6 +8,30 @@ import (
 	"testing"
 )
 
+func TestHiddenWorkPageRequiresAccessScope(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	card, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Private archived control"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE threads SET body_json='{"pm_actor_id":"owner"}' WHERE id=?`, card["thread_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`UPDATE cards SET archived_at='now' WHERE id=?`, card["id"]); err != nil {
+		t.Fatal(err)
+	}
+	refs, after, more, err := s.hiddenWorkPage(ctx, "", 20, nil)
+	if err == nil || len(refs) != 0 || after != "" || more {
+		t.Fatalf("scopeless page: refs=%v after=%q more=%v err=%v", refs, after, more, err)
+	}
+}
+
 func TestWorkLifecycleRoutingAndPagination(t *testing.T) {
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())

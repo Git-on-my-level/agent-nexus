@@ -31,18 +31,18 @@ func TestBoundedWorkFiltersMatchProjectionAndCursorOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	filter := WorkListFilter{Limit: 1, ProjectRef: "topic:standalone", Phase: "review", Owner: "actor:alice", Query: "école 100%"}
-	first, err := s.ListWork(ctx, filter)
+	first, err := s.ListWork(WithRequestAccessScope(ctx, AccessScope{ActorID: "actor"}), filter)
 	if err != nil || len(first.Work) != 1 || first.Work[0]["id"] != "work-1" || first.NextCursor == "" {
 		t.Fatalf("first page: %+v %v", first, err)
 	}
 	filter.Cursor = first.NextCursor
-	second, err := s.ListWork(ctx, filter)
+	second, err := s.ListWork(WithRequestAccessScope(ctx, AccessScope{ActorID: "actor"}), filter)
 	if err != nil || len(second.Work) != 1 || second.Work[0]["id"] != "work-2" || second.NextCursor != "" {
 		t.Fatalf("second page: %+v %v", second, err)
 	}
 	filter.Cursor, filter.Limit = "", 20
 	filter.Visible = func(string, string) bool { return false }
-	hidden, err := s.ListWork(ctx, filter)
+	hidden, err := s.ListWork(WithRequestAccessScope(ctx, AccessScope{ActorID: "actor"}), filter)
 	if err != nil || len(hidden.Work) != 0 || hidden.NextCursor != "" {
 		t.Fatalf("visibility callback exposed a row or cursor: %+v %v", hidden, err)
 	}

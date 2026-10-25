@@ -24,6 +24,15 @@ func mainHistoryDatabase(t *testing.T, root string, version int) *sql.DB {
 		if m.Version > version {
 			break
 		}
+		if m.ApplyInChunks != nil {
+			if err := m.ApplyInChunks(ctx, db); err != nil {
+				t.Fatalf("chunked history %d: %v", m.Version, err)
+			}
+			if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET applied_at='historical-main' WHERE version=?`, m.Version); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			t.Fatal(err)

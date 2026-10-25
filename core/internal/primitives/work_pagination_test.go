@@ -54,7 +54,7 @@ func TestWorkListNewestUpdatedFirstAndStableCursor(t *testing.T) {
 		}
 		return want[i].at.After(want[j].at)
 	})
-	first, err := s.ListWork(ctx, primitives.WorkListFilter{})
+	first, err := s.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor-1"}), primitives.WorkListFilter{})
 	if err != nil || len(first.Work) != 50 || first.NextCursor == "" {
 		t.Fatalf("first page: %d %v", len(first.Work), err)
 	}
@@ -75,7 +75,7 @@ func TestWorkListNewestUpdatedFirstAndStableCursor(t *testing.T) {
 	if _, err := ws.DB().Exec(`UPDATE cards SET updated_at=? WHERE id=?`, base.Add(2*time.Hour).Format(time.RFC3339Nano), newer["id"]); err != nil {
 		t.Fatal(err)
 	}
-	second, err := s.ListWork(ctx, primitives.WorkListFilter{Cursor: first.NextCursor})
+	second, err := s.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor-1"}), primitives.WorkListFilter{Cursor: first.NextCursor})
 	if err != nil || len(second.Work) != 10 || second.NextCursor != "" {
 		t.Fatalf("second page: %d %v", len(second.Work), err)
 	}
@@ -84,12 +84,12 @@ func TestWorkListNewestUpdatedFirstAndStableCursor(t *testing.T) {
 			t.Fatalf("row %d: %v, want %s", i, item["id"], want[i+50].id)
 		}
 	}
-	fresh, err := s.ListWork(ctx, primitives.WorkListFilter{Limit: 2})
+	fresh, err := s.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor-1"}), primitives.WorkListFilter{Limit: 2})
 	if err != nil || len(fresh.Work) != 2 || fresh.Work[0]["id"] != newer["id"] || fresh.Work[1]["id"] != want[49].id {
 		t.Fatalf("new updates hidden: %+v %v", fresh, err)
 	}
 	for _, cursor := range []string{"!", base64.RawURLEncoding.EncodeToString([]byte(`{}`)), base64.RawURLEncoding.EncodeToString([]byte(want[0].id))} {
-		if _, err := s.ListWork(ctx, primitives.WorkListFilter{Cursor: cursor}); !errors.Is(err, primitives.ErrInvalidCursor) {
+		if _, err := s.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor-1"}), primitives.WorkListFilter{Cursor: cursor}); !errors.Is(err, primitives.ErrInvalidCursor) {
 			t.Fatalf("cursor %q: %v", cursor, err)
 		}
 	}
@@ -155,7 +155,9 @@ func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
 	for pageNum := 0; pageNum < 10; pageNum++ {
 		// Every page can land on another server process.
 		s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-		page, err := s.ListWork(ctx, primitives.WorkListFilter{
+		// Admit the private prefix as its owner so the explicit narrower
+		// visibility callback still exercises pagination across rejected rows.
+		page, err := s.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "other-owner"}), primitives.WorkListFilter{
 			Limit:   2,
 			Cursor:  cursor,
 			Visible: visibleForReader,

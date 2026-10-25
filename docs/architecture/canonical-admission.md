@@ -44,7 +44,12 @@ Insertion visits only newly reached root/vertex pairs. Edge deletion recomputes
 only roots that reached that edge, then deletes only memberships that changed;
 recursive UNION handles cycles. These writes can read the affected root's
 reachable component. They do not rebuild unrelated components. Initial migration
-backfills these derivable indexes once before readiness. Storage grows with
+backfills these derivable indexes before readiness. Schema/direct-index setup
+is an atomic linear phase; transitive root reachability then commits one distinct
+root and its durable primary-key cursor per transaction. Restart resumes without
+replaying completed roots; initialization exposes no partially built workspace.
+One chunk can still traverse one root's entire component, and total upgrade work
+can still grow as roots times vertices. Storage grows with
 reachable root/vertex pairs in three ledgers (the worst case is the product
 of roots and vertices), plus direct contributions and spelling prefixes.
 
@@ -61,7 +66,8 @@ legacy/compact dependency before that ledger's parent membership exists. A later
 conflicting key insert does not repeat its insert trigger. Each new wakeup
 membership therefore resolves its keys, then walks dependencies from its own
 ledger/root. This does not rely on recursive INSERT evaluation or trigger order.
-Retained wakeup aliases and tombstones are backfilled through origin-index seeks;
+Retained wakeup aliases and tombstones are backfilled through explicitly pinned
+origin-leading uniqueness-index seeks;
 only untouched canonical wakeup history is omitted.
 
 Retained aliases and tombstones contribute canonical typed/bare ID keys directly
@@ -96,7 +102,8 @@ prepare SQL against the removed optional table.
 
 SQL-proven resource/text decisions share a request-local 8,192-entry/1-MiB limit.
 Every reuse checks epoch and connection changes; expired tokens use indexed
-canonical checks. Closing a pinned read removes its token. Full inventories take
+canonical checks. Closing a pinned read removes its token. The former unused ancestor-JSON
+argument was removed; only the proven candidate result is remembered. Full inventories take
 one indexed denial batch for the entire immutable read and use its membership
 map with the candidate projection policy. Mutable borrowed transactions retain
 fresh owner checks. This does not add an inventory batch to bounded routes.
@@ -110,6 +117,11 @@ ranges, maintained from reachable owners. It skips private prefixes before
 hydration; canonical authorization is still enforced before counts, lookahead
 and output. Following the continuation collects the complete visible lifecycle
 inventory. A private-only inventory returns no hidden count or continuation.
+The lifecycle helper rejects a missing access scope before querying; explicit
+anonymous scopes retain ordinary policy. Empty lifecycle pages may still carry a
+visible-resource continuation, which callers must follow within their existing
+traversal caps. SQL trigger construction retains its reviewed string-shape and
+explicit history-refresh constraints; this change does not replace that machinery.
 
 Canonical source updates retain unchanged atoms and their rowids. Identity and
 admission triggers skip unchanged inputs. Evidence descriptions retain stable

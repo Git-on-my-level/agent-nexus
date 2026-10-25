@@ -3,10 +3,8 @@ package primitives
 import (
 	"context"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"agent-nexus-core/internal/resourceaccess"
 	"modernc.org/sqlite"
@@ -41,7 +39,7 @@ func candidateVisibleSQL(scope AccessScope, kind, id string, proofs ...*denialSn
 		return `COALESCE((SELECT valid FROM _anx_candidate_public_guard),` + canonical + `)`
 	}
 	key := fmt.Sprint(proof.pointToken) + `,CAST(` + kind + ` AS BLOB),CAST(` + id + ` AS BLOB)`
-	return `CASE WHEN ` + candidateProofGuardSQL(proof) + ` THEN COALESCE(anx_candidate_lookup(` + key + `),anx_candidate_remember(` + key + `,` + canonical + `,CAST('[]' AS BLOB))) ELSE ` + canonical + ` END`
+	return `CASE WHEN ` + candidateProofGuardSQL(proof) + ` THEN COALESCE(anx_candidate_lookup(` + key + `),anx_candidate_remember(` + key + `,` + canonical + `)) ELSE ` + canonical + ` END`
 }
 
 func candidateProofGuardSQL(proof *denialSnapshot) string {
@@ -105,7 +103,7 @@ func init() {
 		}
 		return nil, nil
 	})
-	sqlite.MustRegisterScalarFunction("anx_candidate_remember", 5, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+	sqlite.MustRegisterScalarFunction("anx_candidate_remember", 4, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
 		allowed, valid := args[3].(int64)
 		if !valid || allowed != 0 && allowed != 1 {
 			return int64(0), nil
@@ -114,25 +112,6 @@ func init() {
 		if !ok {
 			return allowed, nil
 		} // The SQL-computed result remains canonical.
-		var ancestors []denialTarget
-		if raw, ok := args[4].([]byte); ok && allowed == 1 && len(raw) <= 1<<20 && utf8.Valid(raw) {
-			var rows [][]any
-			if json.Unmarshal(raw, &rows) == nil {
-				for _, row := range rows {
-					if len(row) != 2 {
-						ancestors = nil
-						break
-					}
-					kind, kOK := row[0].(string)
-					id, iOK := row[1].(string)
-					if !kOK || !iOK {
-						ancestors = nil
-						break
-					}
-					ancestors = append(ancestors, denialTarget{kind, id})
-				}
-			}
-		}
 		snapshot.candidateMu.Lock()
 		defer snapshot.candidateMu.Unlock()
 		remember := func(target denialTarget, allowed bool) {
@@ -147,11 +126,6 @@ func init() {
 			snapshot.candidateBytes += bytes
 		}
 		remember(target, allowed == 1)
-		// If this candidate has no denied ancestor, every visited ancestor is
-		// itself visible. Reuse those SQL proofs across the page's joins.
-		for _, target := range ancestors {
-			remember(target, true)
-		}
 		return allowed, nil
 	})
 	sqlite.MustRegisterScalarFunction("anx_candidate_text_lookup", 3, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {

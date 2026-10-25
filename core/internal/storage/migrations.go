@@ -28,6 +28,9 @@ type migration struct {
 	Statements []string
 	// AfterApply runs in the same transaction after Statements (optional).
 	AfterApply func(ctx context.Context, tx *sql.Tx) error
+	// ApplyInChunks owns its transactions and records Version only on completion.
+	// It must resume durable progress after cancellation; startup waits for it.
+	ApplyInChunks func(ctx context.Context, db *sql.DB) error
 }
 
 var migrations = []migration{
@@ -1170,7 +1173,7 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_events_promise_facts ON events(thread_id,ts DESC) WHERE type='message_posted' AND (json_extract(payload_json,'$.payload.next.at') IS NOT NULL OR json_array_length(json_extract(payload_json,'$.payload.evidence_refs'))>0);`,
 		`INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives WHERE true ON CONFLICT DO NOTHING;`,
 	}},
-	{Version: 116, AfterApply: installAccessAdmission},
+	{Version: 116, ApplyInChunks: applyAccessAdmissionMigration},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {
@@ -2916,6 +2919,9 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
 	finish := reportMigrationProgress(ctx, m.Version)
 	defer finish()
+	if m.ApplyInChunks != nil {
+		return m.ApplyInChunks(ctx, db)
+	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

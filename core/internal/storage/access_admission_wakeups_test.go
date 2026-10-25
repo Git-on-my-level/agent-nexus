@@ -4,11 +4,41 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"strings"
 	"testing"
 
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 )
+
+func TestHistoricalWakeupBackfillSeeksRetainedOrigins(t *testing.T) {
+	db := mainHistoryDatabase(t, t.TempDir(), 115)
+	defer db.Close()
+	rows, err := db.Query(`EXPLAIN QUERY PLAN ` + admissionNonWakeupIdentities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	originSeek := false
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		t.Log(detail)
+		originSeek = originSeek || strings.Contains(detail, "(origin=?)")
+		if strings.Contains(detail, "(kind=?)") {
+			t.Error("retained-spelling backfill scans untouched wakeup identities")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !originSeek {
+		t.Error("retained-spelling backfill did not seek by origin")
+	}
+}
 
 func TestHistoricalWakeupAdmissionMatchesCanonical(t *testing.T) {
 	ctx := context.Background()

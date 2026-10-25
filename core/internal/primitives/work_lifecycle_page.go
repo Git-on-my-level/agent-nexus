@@ -6,19 +6,21 @@ import (
 )
 
 func (s *Store) hiddenWorkPage(ctx context.Context, after string, limit int, visible func(string, string) bool) ([]string, string, bool, error) {
+	scope, scoped := accessScopeFrom(ctx)
+	if !scoped {
+		return nil, "", false, invalidBoardRequest("principal read access scope is required for lifecycle pages")
+	}
 	refs := []string{}
 	more := false
 	for pass := 0; pass < maxWorkAccessFilterPasses; pass++ {
 		ledger := `CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN 2 WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END`
 		source := `SELECT id FROM work_lifecycle_positions WHERE ledger=(` + ledger + `) AND id>?`
 		args := []any{after}
-		if scope, scoped := accessScopeFrom(ctx); scoped {
-			if scope.ActorID != "" && scope.ActorID == scope.PMActorID {
-				source += ` AND availability<>3`
-			} else {
-				source += ` AND availability=0 UNION ALL SELECT id FROM work_lifecycle_positions WHERE ledger=(` + ledger + `) AND availability=1 AND owner=? AND id>?`
-				args = append(args, scope.ActorID, after)
-			}
+		if scope.ActorID != "" && scope.ActorID == scope.PMActorID {
+			source += ` AND availability<>3`
+		} else {
+			source += ` AND availability=0 UNION ALL SELECT id FROM work_lifecycle_positions WHERE ledger=(` + ledger + `) AND availability=1 AND owner=? AND id>?`
+			args = append(args, scope.ActorID, after)
 		}
 		args = append(args, limit+1)
 		rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(c.handle,'') FROM (`+source+`) p CROSS JOIN cards c ON c.id=p.id ORDER BY p.id LIMIT ?`, args...)
