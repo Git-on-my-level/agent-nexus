@@ -1449,7 +1449,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Bounded formula review: one indexed page of 200 open asks, 200 open initiatives and one 200-ref resolution.",
+    "reason": "Bounded formula review: one indexed page of 200 open asks, 200 open initiatives and one 200-ref resolution. Quiet suggestions add two queries: 51 open-ledger rows via idx_curation_proposals_open_page, then at most 50 scoped event/thread primary-key lookups. No refill after filtering.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },

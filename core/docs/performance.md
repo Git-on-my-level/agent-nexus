@@ -1974,3 +1974,26 @@ ANX_PERFORMANCE_TEST=1 go test -C core ./internal/primitives -count=1 -v \
 
 No budget, baseline or allowance was widened. The six legacy inventory gaps
 remain the separate pre-existing issue #472 described above.
+
+## Quiet curation suggestions
+
+Agent `GET /brief` and `GET /curation/candidates` add a bounded two-query
+suggestion read: 51 open ledger positions via
+`idx_curation_proposals_open_page(status,created_at,key)`, then at most 50
+scoped event/thread primary-key lookups. Hidden rows do not refill the cohort.
+There is no per-row hydration or scan through resolved proposal history.
+`TestPerformanceCurationSuggestionsBudget` measured 2 queries, 101 returned
+rows, 2,785 VM steps and zero scans with both zero and 4,096 unrelated dismissed
+suggestions. Its new budget is 5,000 VM steps and zero scans; existing route
+budgets and plan exceptions are unchanged. Migration 119 performs the one-time
+legacy curation-ask withdrawal sweep, removes their materialized inbox rows
+through the source-event index, and queues only affected threads by primary key.
+Serving reads never perform that sweep. The proposal response capability adds
+no read; re-suggestion after undo reuses the existing key lookup and upsert.
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run '^TestPerformanceCurationSuggestionsBudget$' -count=1 -v -timeout=5m
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/storage \
+  -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```

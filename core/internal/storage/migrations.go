@@ -1178,6 +1178,9 @@ var migrations = []migration{
 	// Card work leases: one row per card, CAS-updated inside the write
 	// transaction, plus the partial index the lease expiry clock seeks.
 	{Version: 118, AfterApply: installCardLeases},
+	// Stop delivering legacy curation prompts. Canonical withdrawal events and
+	// resolution claims commit together, retaining a reason for each request.
+	{Version: 119, AfterApply: quietCurationSuggestions},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

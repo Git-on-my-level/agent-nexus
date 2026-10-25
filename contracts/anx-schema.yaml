@@ -84,6 +84,8 @@ enums:
       - topic_archived
       - topic_restored
       - topic_trashed
+      - curation_suggested
+      - curation_receipt
       - message_posted
       - document_created
       - document_revised
@@ -117,6 +119,7 @@ enums:
       documents: [document_created, document_revised, document_trashed, document_restored]
       boards: [board_created, board_updated]
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved, card_lease_acquired, card_lease_renewed, card_lease_released, card_lease_expired]
+      curation: [curation_suggested, curation_receipt]
       attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, attention_feedback]
       notifications: [agent_notification_read, agent_notification_dismissed]
       runs: [run_recorded]
@@ -145,7 +148,7 @@ enums:
 
   event_group:
     enum_policy: strict
-    values: [messages, topics, documents, boards, cards, attention, notifications, runs, reviews, exceptions]
+    values: [messages, topics, documents, boards, cards, curation, attention, notifications, runs, reviews, exceptions]
 
   provenance_source:
     enum_policy: open
@@ -1451,12 +1454,10 @@ work_summary:
 
 curation:
   description: >
-    Formula and PM curation proposals. A proposal is never an action: it is a
-    human_attention_requested ask (kind ask) whose payload.curation names the
-    action and its targets, addressed to a human. response_proposals[0] accepts;
-    any other answer dismisses. Accepting performs the action as the answering
-    human through normal authority and posts an undo trail (message_posted with
-    payload.curation_applied) in the proposal thread. No new object type.
+    Quiet agent work, stored as curation_suggested events with payload.curation.
+    Agents apply or dismiss through POST /curation/proposals with resolution and rationale;
+    receipts are curation_receipt events. No curation path creates human attention, an inbox
+    item or a notification. Formula passes are bounded fallbacks; ANX runs no models.
   payload:
     curation:
       action: { type: string, enum: [withdraw, merge, batch], required: true }
@@ -1466,11 +1467,12 @@ curation:
       rationale: { type: string, required: true }
   rules:
     - Withdraw as moot reuses possibly_moot. Only sources observed as terminal count; one unknown or unresolved source means no proposal; sources are counted, never named.
-    - Withdrawing another principal's ask is only ever proposed (I4). A requester withdraws its own ask directly.
+    - An agent may withdraw a moot ask through the scoped curation action; its receipt names the agent and the original request.
     - Restricted asks and initiatives are never formula candidates, so a proposal never names a private ref or title.
-    - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Accepting archives the duplicate; undo restores the card.
-    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. Accepting records the grouping server side (curation_batch_members); brief.v1 decisions then collapse the open members into one decision with a batch field, and undo removes the grouping. Answering that decision answers every still-open member.
-    - A reader sees a proposal only when it can read every target; brief.v1 drops pm_proposal decisions naming a card or ask the reader cannot read.
+    - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Applying folds the duplicate into the kept card, preserving refs and asks; undo uses work unfold.
+    - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. An agent records the grouping server side (curation_batch_members); brief.v1 decisions then collapse the open members into one decision with a batch field, and undo removes the grouping. Answering that decision answers every still-open member.
+    - A reader sees a suggestion only when it can read every target. Agent brief.v1 lists curation_suggestions separately from decisions; humans read them quietly through the curation API.
+    - Accepted keys may start a fresh quiet generation when an undo makes their action a candidate again. Open keys dedupe; dismissed keys remain suppressed.
     - Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.
   applied_trail:
     payload_must_include: ["curation_applied"]
@@ -1478,8 +1480,9 @@ curation:
       proposal_event_id: { type: string, required: true }
       action: { type: string, required: true }
       targets: { type: array, items: ref, required: true }
+      rationale: { type: string, required: true, description: Agent reason for applying or dismissing the suggestion. }
       applied_by: { type: string, required: true }
-      result: { type: string, enum: [applied, failed, skipped], required: true }
+      result: { type: string, enum: [applied, dismissed, failed, skipped], required: true }
       undo: { type: object, required: false, description: Enough prior state to reverse the action (for merge the duplicate's prior phase). }
   metrics:
     window: Default 30 days, at most 90. Reads at most 2000 asks and 5000 notes; truncated marks a larger window.
@@ -1526,7 +1529,7 @@ brief:
       location: Top-level CLI envelope field, separate from result; omitted by other commands.
       fields: [alias, base_url, source, other_aliases]
       description: Locally resolved workspace identity, selection source and other configured aliases. Adds no core read.
-  sections: [decisions, initiatives, your_asks, answered_for_you]
+  sections: [decisions, initiatives, your_asks, answered_for_you, curation_suggestions]
   section_limit: 50
   decision_kinds: [ask, review, access, host, pm_proposal]
   initiative_owner: Nullable first canonical assignee ref, matching work list; no new health state.

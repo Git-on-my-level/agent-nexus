@@ -516,6 +516,22 @@ func renderOrientText(brief map[string]any, identity string) string {
 		}
 	}
 
+	for _, raw := range asSlice(brief["curation_suggestions"]) {
+		item := asMap(raw)
+		fmt.Fprintf(&b, "suggestion: %s %s %q\n", anyString(item["key"]), anyString(item["action"]), anyString(item["title"]))
+		for _, verb := range []string{"apply", "dismiss"} {
+			argv := stringList(item[verb+"_argv"])
+			// Quote the JSON argument for copy/paste into a shell.
+			if len(argv) > 0 {
+				for i, arg := range argv {
+					if strings.ContainsAny(arg, " \"'{}") {
+						argv[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
+					}
+				}
+				fmt.Fprintf(&b, "next %s\n", strings.Join(argv, " "))
+			}
+		}
+	}
 	answered := asSlice(brief["answered_for_you"])
 	if len(answered) == 0 {
 		b.WriteString("answered for you:  none\n")

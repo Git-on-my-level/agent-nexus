@@ -116,3 +116,13 @@ func TestValidateProvenanceAcceptsValidShape(t *testing.T) {
 		t.Fatalf("expected valid provenance to pass: %v", err)
 	}
 }
+
+func TestCurationEventGroupIsSelectable(t *testing.T) {
+	contract := loadContract(t)
+	if err := ValidateEnum(contract, "event_group", "curation"); err != nil {
+		t.Fatal(err)
+	}
+	if len(contract.Enums["event_type"].Groups["curation"]) != 2 {
+		t.Fatal("curation taxonomy must include suggestions and receipts")
+	}
+}

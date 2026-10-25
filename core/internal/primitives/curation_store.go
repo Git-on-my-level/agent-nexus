@@ -40,7 +40,7 @@ const (
 
 var ErrCurationTargetGone = errors.New("curation_target_gone")
 
-// CurationProposalRecord is the dedupe row behind one proposal ask.
+// CurationProposalRecord is the dedupe row behind one quiet suggestion.
 type CurationProposalRecord struct {
 	Key             string   `json:"key"`
 	ProposalEventID string   `json:"event_id"`
@@ -258,7 +258,7 @@ func (s *Store) curationMootFunc(ctx context.Context, asks []curation.AskInfo, v
 
 // curationInternal drops the reader's policy for curation_proposals only: it
 // is an internal dedupe index keyed by proposal hashes, never returned to a
-// reader except through a proposal ask the reader can already see.
+// reader except through a canonical suggestion the reader can already see.
 func curationInternal(ctx context.Context) context.Context {
 	return resourceaccess.WithoutPolicy(ctx)
 }
@@ -279,7 +279,7 @@ func (s *Store) CurationProposal(ctx context.Context, key string) (CurationPropo
 	return rec, nil
 }
 
-// CurationProposalByEvent finds the proposal behind an ask event, or ErrNotFound.
+// CurationProposalByEvent finds the proposal behind a suggestion event, or ErrNotFound.
 func (s *Store) CurationProposalByEvent(ctx context.Context, eventID string) (CurationProposalRecord, error) {
 	var key string
 	err := s.db.QueryRowContext(curationInternal(ctx), `SELECT key FROM curation_proposals WHERE proposal_event_id=?`, eventID).Scan(&key)
@@ -292,32 +292,54 @@ func (s *Store) CurationProposalByEvent(ctx context.Context, eventID string) (Cu
 	return s.CurationProposal(ctx, key)
 }
 
-// FileCurationProposal files one proposal ask and its dedupe row. An existing
-// open or dismissed key returns that record instead of filing again; the
-// returned bool reports whether a new ask was filed.
-func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curation.Candidate, source string, event map[string]any) (CurationProposalRecord, bool, error) {
-	if existing, err := s.CurationProposal(ctx, c.Key); err == nil {
-		if existing.Status != CurationProposalAccepted {
-			return existing, false, nil
+// FileCurationProposal atomically records a quiet suggestion and its dedupe key.
+// Even legacy callers passing an ask event cannot create human attention.
+// Accepted keys can start a new generation when the candidate returns after undo;
+// open and dismissed keys keep their existing generation.
+func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curation.Candidate, source string, event map[string]any) (rec CurationProposalRecord, created bool, err error) {
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
+
+	event = cloneMap(event)
+	event["type"] = "curation_suggested"
+	prepared, err := prepareEventForInsert(actor, event)
+	if err != nil {
+		return rec, false, err
+	}
+	err = s.db.WriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
+		var targets string
+		e := tx.QueryRowContext(curationInternal(ctx), `SELECT key,proposal_event_id,action,source,status,targets_json FROM curation_proposals WHERE key=?`, c.Key).Scan(&rec.Key, &rec.ProposalEventID, &rec.Action, &rec.Source, &rec.Status, &targets)
+		if e == nil {
+			// Verify current reader authority before returning an existing dedupe row.
+			var id string
+			if e = tx.QueryRowContext(ctx, `SELECT id FROM events WHERE id=?`, rec.ProposalEventID).Scan(&id); e != nil {
+				return ErrNotFound
+			}
+			_ = json.Unmarshal([]byte(targets), &rec.Targets)
+			if rec.Status != CurationProposalAccepted {
+				return nil
+			}
 		}
-	} else if !errors.Is(err, ErrNotFound) {
-		return CurationProposalRecord{}, false, err
-	}
-	stored, err := s.AppendTaskAttentionEvent(ctx, actor, event)
-	if err != nil {
-		return CurationProposalRecord{}, false, err
-	}
-	rec := CurationProposalRecord{Key: c.Key, ProposalEventID: anyStringValue(stored["id"]), Action: string(c.Action), Source: source, Status: CurationProposalOpen, Targets: c.Targets}
-	targets, _ := json.Marshal(c.Targets)
-	// Accepted keys may be proposed again (the target came back); the upsert
-	// keeps one row per key either way.
-	_, err = s.db.ExecContext(curationInternal(ctx), `INSERT INTO curation_proposals(key,proposal_event_id,action,source,status,targets_json,created_at) VALUES(?,?,?,?,?,?,?)
- ON CONFLICT(key) DO UPDATE SET proposal_event_id=excluded.proposal_event_id,status=excluded.status,source=excluded.source,created_at=excluded.created_at,resolved_at=NULL`,
-		rec.Key, rec.ProposalEventID, rec.Action, rec.Source, rec.Status, string(targets), time.Now().UTC().Format(time.RFC3339Nano))
-	if err != nil {
-		return CurationProposalRecord{}, false, err
-	}
-	return rec, true, nil
+		if e != nil && !errors.Is(e, sql.ErrNoRows) {
+			return e
+		}
+		if e = s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 1024)}, blobLedgerWritePlan{}); e != nil {
+			return e
+		}
+		if e = insertPreparedEvent(ctx, tx, prepared); e != nil {
+			return e
+		}
+		rec = CurationProposalRecord{Key: c.Key, ProposalEventID: anyStringValue(prepared.Body["id"]), Action: string(c.Action), Source: source, Status: CurationProposalOpen, Targets: c.Targets}
+		encoded, _ := json.Marshal(c.Targets)
+		_, e = tx.ExecContext(curationInternal(ctx), `INSERT INTO curation_proposals(key,proposal_event_id,action,source,status,targets_json,created_at) VALUES(?,?,?,?,?,?,?)
+ ON CONFLICT(key) DO UPDATE SET proposal_event_id=excluded.proposal_event_id,action=excluded.action,source=excluded.source,status=excluded.status,targets_json=excluded.targets_json,created_at=excluded.created_at,resolved_at=NULL
+ WHERE curation_proposals.status='accepted'`, rec.Key, rec.ProposalEventID, rec.Action, source, rec.Status, string(encoded), prepared.Body["ts"])
+		created = e == nil
+		return e
+	})
+	return rec, created, err
 }
 
 // ResolveCurationProposal marks a proposal accepted or dismissed. Only an
@@ -331,14 +353,12 @@ func (s *Store) ResolveCurationProposal(ctx context.Context, key, status string)
 	return n == 1, err
 }
 
-// WithdrawAskByProposal withdraws another principal's ask because a human
-// accepted a curation proposal for it (invariant I4: the human decides, the
-// proposal only proposed). It shares the requester path's atomic resolution
+// WithdrawAskByProposal withdraws a moot ask after agent review. It shares the requester path's atomic resolution
 // claim, so a racing answer and this withdrawal never both resolve the ask.
 // Access-request asks are never withdrawable. briefAnswerableAskJoin is the
 // same eligibility as candidate hydration: an ask whose thread row is missing
 // is not a target, so accepting the proposal cannot resolve an orphan ask.
-func (s *Store) WithdrawAskByProposal(ctx context.Context, humanActorID, askEventID, proposalEventID, reason string) (map[string]any, error) {
+func (s *Store) WithdrawAskByProposal(ctx context.Context, agentActorID, askEventID, proposalEventID, reason string) (map[string]any, error) {
 	var requester string
 	err := s.db.QueryRowContext(ctx, `SELECT trim(COALESCE(json_extract(e.payload_json,'$.payload.requester_actor_id'),'')) FROM events e `+briefAnswerableAskJoin+` WHERE e.id=? AND e.type='human_attention_requested'`, askEventID).Scan(&requester)
 	if err == sql.ErrNoRows {
@@ -348,7 +368,7 @@ func (s *Store) WithdrawAskByProposal(ctx context.Context, humanActorID, askEven
 		return nil, err
 	}
 	event := map[string]any{"payload": map[string]any{"reason": reason}, "provenance": map[string]any{"sources": []string{"event:" + proposalEventID}}}
-	stored, err := s.appendHumanAttentionWithdrawalAs(ctx, requester, humanActorID, askEventID, event)
+	stored, err := s.appendHumanAttentionWithdrawalAs(ctx, requester, agentActorID, askEventID, event)
 	if err != nil {
 		return nil, err
 	}
@@ -597,18 +617,18 @@ func (s *Store) CurationCardThread(ctx context.Context, ref string) (string, err
 	return thread, err
 }
 
-// ApplyCurationAction performs an accepted proposal as the answering human
-// through the same store paths a human uses directly. It returns what undo
+// ApplyCurationAction performs an agent-reviewed suggestion
+// through the normal scoped store paths. It returns what undo
 // needs (nil when the action has no in-place reversal) and a trail summary
 // that names refs, never titles.
-func (s *Store) ApplyCurationAction(ctx context.Context, humanActorID, proposalEventID string, rec CurationProposalRecord) (map[string]any, string, error) {
+func (s *Store) ApplyCurationAction(ctx context.Context, agentActorID, proposalEventID string, rec CurationProposalRecord) (map[string]any, string, error) {
 	switch curation.Action(rec.Action) {
 	case curation.ActionWithdraw:
 		if len(rec.Targets) != 1 || !strings.HasPrefix(rec.Targets[0], "event:") {
 			return nil, "", ErrCurationTargetGone
 		}
 		askID := strings.TrimPrefix(rec.Targets[0], "event:")
-		if _, err := s.WithdrawAskByProposal(ctx, humanActorID, askID, proposalEventID, "moot: accepted curation proposal"); err != nil {
+		if _, err := s.WithdrawAskByProposal(ctx, agentActorID, askID, proposalEventID, "moot: agent reviewed curation suggestion"); err != nil {
 			// A replay after the withdrawal committed but before the trail was
 			// written finds the ask already withdrawn. That is the action.
 			if !errors.Is(err, ErrHumanAttentionAlreadyResponded) || !s.askResolutionIs(ctx, askID, "withdrawn") {
@@ -626,12 +646,14 @@ func (s *Store) ApplyCurationAction(ctx context.Context, humanActorID, proposalE
 		if err != nil {
 			return nil, "", err
 		}
-		result, err := s.ArchiveBoardCard(ctx, humanActorID, "", resolved.ID, RemoveBoardCardInput{})
+		kept, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "card", Ref: rec.Targets[1]})
 		if err != nil {
 			return nil, "", err
 		}
-		undo := map[string]any{"restore_card": rec.Targets[0], "card_id": resolved.ID, "board_id": workString(result.Card["board_id"])}
-		return undo, "Archived " + rec.Targets[0] + " as a duplicate of " + rec.Targets[1] + ". Restore the card to undo.", nil
+		if _, err = s.FoldWork(ctx, agentActorID, resolved.ID, kept.ID, ""); err != nil {
+			return nil, "", err
+		}
+		return map[string]any{"unfold": rec.Targets[0], "card_id": resolved.ID}, "Folded " + rec.Targets[0] + " into " + rec.Targets[1] + ". Use work unfold to undo.", nil
 	case curation.ActionBatch:
 		// Filed asks keep their own ids; the grouping is stored so brief.v1
 		// collapses the open members into one decision.
@@ -644,7 +666,7 @@ func (s *Store) ApplyCurationAction(ctx context.Context, humanActorID, proposalE
 }
 
 // GroupCurationBatch records an accepted batch in one transaction. A member
-// already in another batch moves to this one: the newest human decision wins.
+// already in another batch moves to this one: the newest delivery grouping wins.
 // A rejected member leaves no rows from this call.
 func (s *Store) GroupCurationBatch(ctx context.Context, rec CurationProposalRecord) error {
 	if len(rec.Targets) < 2 || len(rec.Targets) > curation.MaxBatchMembers {
@@ -681,7 +703,7 @@ func (s *Store) CurationActionApplied(ctx context.Context, threadID, proposalEve
 	err := s.db.QueryRowContext(curationInternal(ctx), `SELECT 1 FROM ref_edges INDEXED BY idx_ref_edges_target
  JOIN events e ON e.id=ref_edges.source_id AND e.thread_id=?
  WHERE ref_edges.target_type='event' AND ref_edges.target_id=? AND ref_edges.source_type='event'
- AND e.type='message_posted'
+ AND e.type='curation_receipt'
  AND json_extract(e.payload_json,'$.payload.curation_applied.proposal_event_id')=?
  LIMIT 1`, threadID, proposalEventID, proposalEventID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
