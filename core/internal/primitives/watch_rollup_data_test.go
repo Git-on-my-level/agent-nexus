@@ -101,6 +101,23 @@ func TestWatchRollupData(t *testing.T) {
 	if at := stream["rollup"].(*WorkRollup).EarliestPromiseAt; at == nil || *at != "2000-01-01T00:00:00Z" {
 		t.Fatalf("earliest fractional promise: %v", at)
 	}
+	for _, card := range []map[string]any{leaf, earlier} {
+		if _, err = s.ArchiveBoardCard(ctx, "writer", "", workString(card["id"]), RemoveBoardCardInput{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for drained := false; !drained; {
+		drained, err = s.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = s.EnrichWorkHierarchy(readCtx, []map[string]any{stream}, "viewer", true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if rollup := stream["rollup"].(*WorkRollup); rollup.PastPromise != 0 || rollup.EarliestPromiseAt != nil {
+		t.Fatalf("archived children retained open promises: %+v", rollup)
+	}
 	brief, err := s.Brief(readCtx, BriefReader{ActorID: "viewer", Kind: "human"}, time.Now())
 	if err != nil {
 		t.Fatal(err)

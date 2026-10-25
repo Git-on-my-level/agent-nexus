@@ -2091,3 +2091,12 @@ with `migrations.go` overlaid verbatim from branch baseline `746e093c` reproduce
 the same failure before the new index/view exists. This is a baseline gate
 failure, not a passing startup certification. The focused released-120 upgrade
 and reopen regression verifies migration 121 over existing lifecycle events.
+
+The broader work-summary gate also reproduces against the same baseline source
+(read implementations and migrations overlaid verbatim). Its authorized
+50-card sample is identical before and after this change: 5 queries, 198 rows,
+58,567 VM steps, above the existing 50,000 ceiling, with the same unreviewed
+plans. The baseline partial-reader sample is 58,310 VM steps. The changed-branch
+run reached the matching authorized samples before its five-minute process
+timeout; the ten-minute baseline run completed and reported the gate failures.
+Neither run is represented as passing.

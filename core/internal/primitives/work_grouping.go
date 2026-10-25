@@ -164,8 +164,8 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	doneAt := `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events e
  WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY position.ts DESC,position.id DESC LIMIT 1)) END`
 	rows, err = q.QueryContext(ctx, `SELECT requested.value,COALESCE(NULLIF(c.handle,''),c.id),c.title,json_extract(step.value,'$.id'),c.column_key,
-	 `+needs+`,`+streams+`,c.id,COALESCE(c.assignee,''),
- bi.promise_at,`+doneAt+`
+	 `+needs+`,`+streams+`,c.id,c.assignee,
+ bi.promise_at,bi.open,`+doneAt+`
 	 FROM json_each(?) requested CROSS JOIN card_plans p ON p.card_id=requested.value
 	 CROSS JOIN json_each(p.body_json,'$.steps') step
 	 CROSS JOIN cards c ON c.id=substr(json_extract(step.value,'$.ref'),6) OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=substr(json_extract(step.value,'$.ref'),6))
@@ -182,11 +182,13 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	seen := map[string]bool{}
 	earliestPromises := map[string]time.Time{}
 	for rows.Next() {
-		var parent, ref, id, assignee string
+		var parent, ref, id string
+		var assignee sql.NullString
 		var promise, done sql.NullString
+		var open sql.NullInt64
 		var child WorkChild
 		var stream bool
-		if err = rows.Scan(&parent, &ref, &child.Title, &child.StepID, &child.State, &child.NeedsViewer, &stream, &id, &assignee, &promise, &done); err != nil {
+		if err = rows.Scan(&parent, &ref, &child.Title, &child.StepID, &child.State, &child.NeedsViewer, &stream, &id, &assignee, &promise, &open, &done); err != nil {
 			return err
 		}
 		if seen[parent+"/"+ref] {
@@ -197,13 +199,13 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 		childIDs[child.Ref] = id
 		var promiseAt time.Time
 		hasPromise := false
-		if promise.Valid && child.State != "done" && child.State != "cancelled" {
+		if promise.Valid && open.Valid && open.Int64 == 1 && child.State != "done" && child.State != "cancelled" {
 			var parseErr error
 			promiseAt, parseErr = time.Parse(time.RFC3339Nano, promise.String)
 			hasPromise = parseErr == nil
 			child.PastPromise = hasPromise && promiseAt.Before(now)
 		}
-		if refs := boardCardAssigneeRefs(assignee); len(refs) > 0 {
+		if refs := boardCardAssigneeRefs(assignee.String); len(refs) > 0 {
 			child.Owner = &refs[0]
 		}
 		if done.Valid {

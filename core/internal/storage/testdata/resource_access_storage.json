@@ -2715,7 +2715,7 @@
     "../primitives/work_grouping.go:*Store:saveGroupingPlan": "98b10224b8e464ed278cb0cd642f162e1141eb2a4df7744283dfe24ef6a84727",
     "../primitives/work_grouping.go:enrichWorkHierarchy": "3833fc4495b8001f2cac772f3c1673e3e62dfd55f25700999beaa18564a5b85a",
     "../primitives/work_grouping.go:loadGroupingPlan": "6c4a06987678a204ad5bf6733e49ad3549dd1e7f37c90146661c1b84c6277b3a",
-    "../primitives/work_grouping.go:loadWorkHierarchy": "f2dc4958668f689b78897698deeeb839ad2d227e40e6af10dd7354db0ab9b2e4",
+    "../primitives/work_grouping.go:loadWorkHierarchy": "3a8d4384880fe9962a3e8bc90ca28c0461a456b8459e2d4e4c89d01d73dd4119",
     "../primitives/work_grouping.go:requireGroupingFieldReadable": "6e8fd8c2581692276890e456bce79b012cbafa612eb9dc4a9ab68b90f809000f",
     "../primitives/work_grouping.go:type:WorkChild": "94aeb64db1f4c7375f7bb43317ecdee9dce98bf5e48dfd4191ffbeb0fc1e14d0",
     "../primitives/work_grouping.go:type:WorkRollup": "96e60044c7693ffcded9ee684f243b71e0657ff16b50412fcc1053bc76a3a68c",
