@@ -160,7 +160,7 @@ func (c *WorkTrackingClock) notify(ctx context.Context, n primitives.TrackingNot
 		if option, ok := options[channel]; ok && !option.Accepts(kind) {
 			continue
 		}
-		_, err = c.Store.EnqueueTrackingDelivery(ctx, n, delivery.Request{IdempotencyKey: n.Key + ":" + channel, PrincipalID: actor, Channel: channel, Kind: kind, SourceRef: "event:" + n.EventID, Payload: map[string]any{"type": n.Kind, "title": title, "text": text, "cards": n.Cards, "has_more": true, "workspace": c.WorkspaceName}}, time.Now().UTC())
+		_, err = c.Store.EnqueueTrackingDelivery(ctx, n, delivery.Request{IdempotencyKey: n.Key + ":" + channel, PrincipalID: actor, Channel: channel, Kind: kind, SourceRef: "event:" + n.EventID, Payload: trackingDeliveryPayload(n, title, text, c.WorkspaceName)}, time.Now().UTC())
 		if err != nil {
 			return err
 		}
@@ -194,4 +194,22 @@ func (c *WorkTrackingClock) queueAgent(ctx context.Context, n primitives.Trackin
 	}
 	_, err = c.Store.UpsertTrackingWakeup(ctx, n, primitives.AgentWakeup{WakeupID: wakeID, Status: primitives.AgentWakeupStatusRequested, TargetHandle: handle, TargetActorID: actor, WorkspaceID: workspace, WorkspaceName: c.WorkspaceName, ThreadID: n.ThreadID, TriggerEventID: n.EventID, TriggerCreatedAt: now, TriggerText: text, Refs: append(wakeRefs, "artifact:"+wakeID)})
 	return err
+}
+
+// Digest queues keep canonical identities only. Titles, reasons and text are
+// rebuilt under the recipient's current access at claim/list serialization.
+func trackingDeliveryPayload(n primitives.TrackingNotice, title, text, workspace string) map[string]any {
+	if n.Kind != "work_tracking_digest" {
+		return map[string]any{"type": n.Kind, "title": title, "text": text, "cards": n.Cards, "has_more": true, "workspace": workspace}
+	}
+	refs := make([]string, 0, len(n.Cards))
+	for _, card := range n.Cards {
+		refs = append(refs, "card:"+card.ID)
+	}
+	return map[string]any{"type": n.Kind, "card_refs": refs, "workspace": workspace}
+}
+
+// DeliveryAccessContext starts a fresh recipient boundary on every queue read.
+func DeliveryAccessContext(ctx context.Context, principal string) context.Context {
+	return primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: principal})
 }

@@ -75,3 +75,54 @@ func TestWorkTrackingColumnsInheritCardAndFallbackGrantsNoAccess(t *testing.T) {
 		t.Fatalf("private digest leaked: %v %v", digest, err)
 	}
 }
+
+func TestTrackingNoticeReanchorsAfterAccessRevoked(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	board, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Initially shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := s.CreateBoard(ctx, "reader", map[string]any{"title": "Still shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cards []map[string]any
+	for _, boardID := range []string{workString(board["id"]), workString(public["id"])} {
+		card, err := s.CreateWork(ctx, "reader", boardID, map[string]any{"title": "Digest contributor"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cards = append(cards, card)
+		if _, err = ws.DB().Exec(`UPDATE work_tracking SET fallback_owner='actor:reader',next_digest_at='2000-01-01' WHERE card_id=?`, card["id"]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n := TrackingNotice{Kind: "work_tracking_digest", Owner: "actor:reader", ThreadID: workString(cards[0]["thread_id"])}
+	for _, card := range cards {
+		n.Cards = append(n.Cards, TrackingDigestCard{ID: workString(card["id"]), Ref: workString(card["ref"]), Title: workString(card["title"])})
+	}
+	if _, err = s.PatchThread(ctx, "owner", workString(board["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	valid, err := s.ValidateTrackingNotice(ctx, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(valid.Cards) != 1 || valid.ThreadID != workString(cards[1]["thread_id"]) {
+		t.Fatalf("filtered digest retained denied thread: %+v", valid)
+	}
+	n.Cards = n.Cards[:1]
+	valid, err = s.ValidateTrackingNotice(ctx, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(valid.Cards) != 0 || valid.ThreadID != "" {
+		t.Fatalf("empty digest retained thread: %+v", valid)
+	}
+}

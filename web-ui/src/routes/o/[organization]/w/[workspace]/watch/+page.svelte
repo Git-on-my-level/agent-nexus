@@ -737,11 +737,11 @@
         >
       </p>
     </div>
-  {:else if layout === "board" && initiatives.length}
-    <div class="flex justify-end">{@render initiativeActions()}</div>
-    <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
   {:else}
-    {#if initiatives.length}
+    {#if layout === "board" && initiatives.length}
+      <div class="flex justify-end">{@render initiativeActions()}</div>
+      <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
+    {:else if initiatives.length}
       <CollectionTable
         collection={initiativeCollection}
         folded={["done", "no_promise"]}

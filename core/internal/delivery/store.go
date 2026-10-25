@@ -18,6 +18,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 const (
@@ -123,8 +125,11 @@ type ChannelSetting struct {
 }
 
 type Store struct {
-	DB  *sql.DB
-	Now func() time.Time
+	// AccessContext binds digest hydration to the recipient, never the adapter.
+	// A missing binding fails closed for contributor-bearing digests.
+	AccessContext func(context.Context, string) context.Context
+	DB            *sql.DB
+	Now           func() time.Time
 	// CanRead reports whether principalID may read the ask event. Per-principal
 	// attention counts include an ask only when it returns true. Nil fails
 	// closed for those counts; the workspace totals stay unfiltered.
@@ -265,7 +270,7 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 	options, declared := opts[channel]
 	principalAddressed := declared && options.Addressing == AddressingPrincipal
 	now := s.now()
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +337,15 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 			// Access changed since the push was queued: hand out nothing.
 			cancel = "recipient can no longer read the ask"
 		}
+		if cancel == "" && d.Kind == KindDigest {
+			visible, err := s.resolveDigest(ctx, tx, &d)
+			if err != nil {
+				return nil, err
+			}
+			if !visible {
+				cancel = "no readable digest contributors"
+			}
+		}
 		if cancel != "" {
 			// The payload is dropped with the delivery: nothing it held is
 			// handed out or kept once it can no longer be delivered.
@@ -390,7 +404,16 @@ func Backoff(attempts int) time.Duration {
 // A retry of the receipt that already delivered or failed this attempt
 // returns that row and does not append another receipt. The claim token
 // stays on the row so that retry can be recognized; callers do not receive it.
-func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel, outcomeName string, errText string, retryable bool, recordedBy string) (Delivery, error) {
+func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel, outcomeName string, errText string, retryable bool, recordedBy string) (result Delivery, resultErr error) {
+	// Receipts acknowledge queue state; they must never replay a historical
+	// digest payload (or adapter error containing a formerly readable title).
+	defer func() {
+		if result.Kind == KindDigest {
+			result.Payload = map[string]any{}
+			result.SourceRef = ""
+			result.LastError = ""
+		}
+	}()
 	deliveryID = strings.TrimSpace(deliveryID)
 	claimToken = strings.TrimSpace(claimToken)
 	if deliveryID == "" || claimToken == "" || (outcomeName != ReceiptDelivered && outcomeName != ReceiptFailed && outcomeName != ReceiptSkipped) {
@@ -499,6 +522,26 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 		return nil, nil, err
 	}
 	rows.Close()
+	filtered := make([]Delivery, 0, len(out))
+	for _, d := range out {
+		if d.Kind == KindDigest {
+			visible, err := s.resolveDigest(ctx, resourceaccess.NewDB(s.DB), &d)
+			if err != nil {
+				return nil, nil, err
+			}
+			if !visible {
+				continue
+			}
+		}
+		filtered = append(filtered, d)
+	}
+	out = filtered
+	digestIDs := map[string]bool{}
+	for _, d := range out {
+		if d.Kind == KindDigest {
+			digestIDs[d.DeliveryID] = true
+		}
+	}
 	receipts := map[string][]Receipt{}
 	if len(out) == 0 {
 		return out, receipts, nil
@@ -522,6 +565,9 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 		var r Receipt
 		if err := rrows.Scan(&r.DeliveryID, &r.Outcome, &r.Attempt, &r.Error, &r.CreatedAt); err != nil {
 			return nil, nil, err
+		}
+		if digestIDs[r.DeliveryID] {
+			r.Error = ""
 		}
 		receipts[r.DeliveryID] = append(receipts[r.DeliveryID], r)
 	}

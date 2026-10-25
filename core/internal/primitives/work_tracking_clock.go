@@ -289,6 +289,7 @@ func validateTrackingNotice(ctx context.Context, q briefQueryer, n TrackingNotic
 	actor := stripActor(n.Owner)
 	if !strings.HasPrefix(n.Owner, "actor:") {
 		n.Cards = nil
+		n.ThreadID = ""
 		return n, nil
 	}
 	ctx = WithAccessScope(ctx, AccessScope{ActorID: actor})
@@ -297,18 +298,18 @@ func validateTrackingNotice(ctx context.Context, q briefQueryer, n TrackingNotic
 		ids = append(ids, card.ID)
 	}
 	raw, _ := json.Marshal(ids)
-	rows, err := q.QueryContext(ctx, `SELECT t.card_id FROM work_tracking t JOIN cards c ON c.id=t.card_id WHERE t.card_id IN(SELECT value FROM json_each(?)) AND t.fallback_owner=? AND c.archived_at IS NULL AND c.trashed_at IS NULL AND c.column_key NOT IN('done','cancelled') AND ((?='default_promise_lapsed' AND t.reminder_event_id=? AND t.reminder_sent_at='' AND t.default_at<>'') OR (?='work_tracking_digest' AND t.next_digest_at<>''))`, string(raw), n.Owner, n.Kind, n.EventID, n.Kind)
+	rows, err := q.QueryContext(ctx, `SELECT t.card_id,c.thread_id FROM work_tracking t JOIN cards c ON c.id=t.card_id WHERE t.card_id IN(SELECT value FROM json_each(?)) AND t.fallback_owner=? AND c.archived_at IS NULL AND c.trashed_at IS NULL AND c.column_key NOT IN('done','cancelled') AND ((?='default_promise_lapsed' AND t.reminder_event_id=? AND t.reminder_sent_at='' AND t.default_at<>'') OR (?='work_tracking_digest' AND t.next_digest_at<>''))`, string(raw), n.Owner, n.Kind, n.EventID, n.Kind)
 	if err != nil {
 		return n, err
 	}
-	valid := map[string]bool{}
+	valid := map[string]string{}
 	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
+		var id, thread string
+		if err = rows.Scan(&id, &thread); err != nil {
 			rows.Close()
 			return n, err
 		}
-		valid[id] = true
+		valid[id] = thread
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
@@ -316,11 +317,15 @@ func validateTrackingNotice(ctx context.Context, q briefQueryer, n TrackingNotic
 	}
 	kept := []TrackingDigestCard{}
 	for _, card := range n.Cards {
-		if valid[card.ID] {
+		if _, ok := valid[card.ID]; ok {
 			kept = append(kept, card)
 		}
 	}
 	n.Cards = kept
+	n.ThreadID = ""
+	if len(kept) > 0 {
+		n.ThreadID = valid[kept[0].ID]
+	}
 	return n, nil
 }
 

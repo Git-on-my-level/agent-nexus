@@ -93,6 +93,34 @@ test("digest-only work stays visible in the Initiatives list", async ({
   await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
 });
 
+for (const layout of ["list", "board"]) {
+  test(`mixed ordinary and digest work stays visible in ${layout}`, async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    await page.goto(`${WATCH}?view=${layout}`);
+    if (layout === "board") {
+      await expect(
+        page.locator(
+          '[data-watch-column="review"] [data-work-ref="card:fleet-onboarding"]',
+        ),
+      ).toBeVisible();
+    } else {
+      await expect(
+        page.locator('[data-collection-row="card:battery-measurement"]'),
+      ).toBeVisible();
+    }
+    const digest = page.getByRole("region", { name: "Daily digest" });
+    await expect(digest).toBeVisible();
+    for (const card of brief.daily_digest) {
+      await expect(
+        digest.locator(`[data-collection-row="${card.ref}"]`),
+      ).toContainText(card.title);
+    }
+  });
+}
+
 test("lists initiatives by computed state with sources tagged", async ({
   page,
   context,

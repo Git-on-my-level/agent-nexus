@@ -162,7 +162,11 @@ func TestClaimFiltersByRecipientSettings(t *testing.T) {
 	enqueue(t, e, "2", "no-push", "email", delivery.KindPush)
 	enqueue(t, e, "3", "no-addr", "email", delivery.KindPush)
 	enqueue(t, e, "4", "nobody", "email", delivery.KindPush)
-	enqueue(t, e, "5", "ok-digest", "email", delivery.KindDigest)
+	e.addAsk(t, "settings-ask", baseNow, "2h", 0, "Readable ask")
+	e.store.AccessContext = func(ctx context.Context, _ string) context.Context { return ctx }
+	if _, _, err := e.store.Enqueue(ctx, delivery.Request{IdempotencyKey: "5", PrincipalID: "ok-digest", Channel: "email", Kind: delivery.KindDigest, Payload: map[string]any{"type": "digest", "items": []map[string]any{{"ref": "event:settings-ask"}}}}); err != nil {
+		t.Fatal(err)
+	}
 	enqueue(t, e, "6", "ok-push", "email", delivery.KindDigest) // digest disabled
 	enqueue(t, e, "7", "ok-push", "telegram", delivery.KindPush)
 

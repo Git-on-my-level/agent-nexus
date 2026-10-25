@@ -49,11 +49,18 @@ Pages and retries share the owner/day delivery identity. Agent recipients use
 the existing bridge queue; humans use their enabled push/digest channels.
 With no channel configured, the automatic note and the reader's
 `brief.daily_digest` remain available. `anx orient` lists these cards under
-`daily digest`; Watch's Initiatives list shows “Needs an owner's look” with
-the preview count and links to the same initiative pages. Reading the brief
+`daily digest`; Watch's Initiatives tab shows “Needs an owner's look” with
+the preview count and links to the same initiative pages in every layout. Reading the brief
 sends no notification.
 Ownership is checked again in the enqueue transaction; reassignment, a new
 explicit promise, completion or lost visibility can cancel a stale snapshot.
+A filtered snapshot anchors its note and wake to the first surviving readable
+card's thread; no survivors means no notification. Queued human digests store
+card identities only. Claim and delivery-list reads resolve current titles and
+reasons under the recipient's access, remove denied contributors and hide empty
+digests, including snapshots queued before this change. Aggregate source events
+and historical adapter error text are not exposed by these filtered reads.
+Receipt acknowledgements return queue state without replaying digest content.
 Step/source evidence cancels the default routes when the canonical brief fold
 records it; explicit note promises/evidence cancel them in the write transaction.
 Notification delivery itself uses the existing durable delivery/retry queue.
