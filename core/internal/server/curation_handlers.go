@@ -137,7 +137,7 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 			curationStoreError(w, r, err)
 			return
 		}
-		writeJSON(w, 201, map[string]any{"proposal": curationProposalJSON(rec, false)})
+		writeJSON(w, 201, map[string]any{"proposal": curationProposalJSON(rec, false), "can_apply": true})
 		return
 	}
 	key := curation.Key(curation.Action(body.Action), body.Targets)
@@ -167,7 +167,7 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 		curationStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"proposal": curationProposalJSON(rec, created)})
+	writeJSON(w, http.StatusCreated, map[string]any{"proposal": curationProposalJSON(rec, created), "can_apply": principal.PrincipalKind == "agent"})
 }
 
 // handleCurationUngroup undoes an accepted batch: its members become separate

@@ -273,6 +273,13 @@ func TestCurationMootWithdrawEndToEnd(t *testing.T) {
 	}
 
 	f.respond(f.thread, anyString(proposal["event_id"]), "Withdraw", "answered")
+	var summary string
+	if err := f.env.workspace.DB().QueryRow(`SELECT json_extract(e.payload_json,'$.summary') FROM events e JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id WHERE r.request_event_id=?`, askID).Scan(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary != "Ask withdrawn after agent curation review" {
+		t.Fatalf("stale withdrawal summary: %q", summary)
+	}
 
 	outcome := f.call(http.MethodGet, "/asks/"+askID, f.agent.AccessToken, nil, http.StatusOK)
 	text := fmt.Sprint(outcome)

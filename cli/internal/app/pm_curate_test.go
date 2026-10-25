@@ -24,12 +24,13 @@ type curateServer struct {
 	paths     []string
 	series    []string
 	inventory string
+	canApply  bool
 	srv       *httptest.Server
 }
 
 func newCurateServer(t *testing.T, candidates string) *curateServer {
 	t.Helper()
-	cs := &curateServer{inventory: `{"series":[]}`}
+	cs := &curateServer{canApply: true, inventory: `{"series":[]}`}
 	cs.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cs.mu.Lock()
 		defer cs.mu.Unlock()
@@ -42,7 +43,12 @@ func newCurateServer(t *testing.T, candidates string) *curateServer {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			cs.posts = append(cs.posts, body)
-			fmt.Fprintf(w, `{"proposal":{"key":"p","status":"created","action":%q,"targets":%s,"event_id":"evt-%d"}}`, body["action"], mustJSON(body["targets"]), len(cs.posts))
+			if body["resolution"] == "apply" && !cs.canApply {
+				w.WriteHeader(403)
+				io.WriteString(w, `{"error":{"code":"forbidden","message":"curation resolution requires an agent principal"}}`)
+				return
+			}
+			fmt.Fprintf(w, `{"can_apply":%t,"proposal":{"key":"p","status":"created","action":%q,"targets":%s,"event_id":"evt-%d"}}`, cs.canApply, body["action"], mustJSON(body["targets"]), len(cs.posts))
 		case r.Method == "POST" && r.URL.Path == "/curation/run":
 			io.WriteString(w, `{"proposals":[{"key":"f","status":"existing","action":"withdraw","targets":["ask:z"],"event_id":"evt-f"}],"skipped":2}`)
 		case r.Method == "GET" && r.URL.Path == "/curation/metrics":
@@ -194,5 +200,21 @@ func TestParsePMCurateDecisionsExtractsArray(t *testing.T) {
 	got, err := parsePMCurateDecisions("noise [ {\"key\":\"a\",\"propose\":true} ] trailing")
 	if err != nil || len(got) != 1 || got[0]["key"] != "a" {
 		t.Fatalf("got %v %v", got, err)
+	}
+}
+
+func TestPMCurateHumanFilesQuietSuggestionsWithoutApplying(t *testing.T) {
+	cs := newCurateServer(t, curateCandidatesBody)
+	cs.canApply = false
+	stubCurateHarness(t, `[{"key":"k1","propose":true},{"key":"k3","propose":true}]`, nil)
+	payload := assertEnvelopeOK(t, runCurate(t, cs, "--runner", "pm-harness {prompt_file}"))
+	result := asMap(payload["result"])
+	if len(cs.posts) != 2 || len(asSlice(result["proposals"])) != 2 || result["apply_skipped"] != float64(2) {
+		t.Fatalf("human pass lost filing results: %#v posts=%#v", result, cs.posts)
+	}
+	for _, p := range cs.posts {
+		if p["resolution"] != nil {
+			t.Fatalf("human pass attempted agent resolution: %#v", p)
+		}
 	}
 }

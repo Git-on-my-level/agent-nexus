@@ -5609,7 +5609,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ proposal }` with `status` created, existing, accepted or dismissed.",
+    "output_envelope": "Returns `{ proposal, can_apply }` with `status` created, existing, accepted or dismissed.",
     "error_codes": [
       "auth_required",
       "invalid_request",

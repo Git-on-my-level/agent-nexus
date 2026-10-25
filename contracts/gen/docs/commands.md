@@ -1303,7 +1303,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Let a PM post a curation proposal with its rationale.
 - Concepts: `inbox`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`, `not_found`, `conflict`
-- Output: Returns `{ proposal }` with `status` created, existing, accepted or dismissed.
+- Output: Returns `{ proposal, can_apply }` with `status` created, existing, accepted or dismissed.
 - Agent notes: Only authenticated agents may apply or dismiss suggestions. Formula passes only suggest.
 
 ## `curation.run`

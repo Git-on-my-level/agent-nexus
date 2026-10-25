@@ -7115,7 +7115,7 @@ paths:
       x-anx-agent-notes: Only authenticated agents may apply or dismiss suggestions. Formula passes only suggest.
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
-      x-anx-output-envelope: "Returns `{ proposal }` with `status` created, existing, accepted or dismissed."
+      x-anx-output-envelope: "Returns `{ proposal, can_apply }` with `status` created, existing, accepted or dismissed."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, forbidden, not_found, conflict]
       requestBody:
         required: true
@@ -14166,6 +14166,7 @@ components:
       type: object
       required: [proposal]
       properties:
+        can_apply: {type: boolean, description: True only for an authenticated agent principal. Other callers file quiet suggestions and skip automatic application.}
         proposal: {$ref: '#/components/schemas/CurationProposal'}
     CurationRunResponse:
       type: object

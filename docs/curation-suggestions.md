@@ -49,8 +49,13 @@ agent rationale and `resolution: apply|dismiss`. Only authenticated agents may
 resolve suggestions. The action, `curation_receipt` and terminal dedupe state
 commit together; a failed receipt rolls the action back and retries reuse the
 same key. Successful receipts record who acted, why, targets, result and undo.
-Dismissal also records a receipt. The local `pm curate` caller applies its
-chosen cleanups through this protocol; formula passes only suggest.
+Dismissal also records a receipt. After unfold or ungroup makes an accepted
+key a candidate again, filing starts a fresh quiet generation with a new event
+and receipt. Open keys still dedupe, and dismissed keys stay suppressed.
+The local `pm curate` caller applies its chosen cleanups with agent credentials.
+The proposal response advertises `can_apply`; human callers retain their quiet
+filings, report skipped application and finish the pass successfully. Formula
+passes only suggest. The strict `event_group` enum includes `curation`.
 
 - Merge uses `FoldWork`, preserving the normal transferred refs, plan context
   and reachability of original asks. Undo is `anx work unfold`.
@@ -72,8 +77,10 @@ contain an empty suggestion section; Decide and inbox never receive suggestions.
 Migration 119 withdraws every unresolved ask carrying object-valued
 `payload.curation`, including orphaned filings missing their dedupe row. Each
 gets a canonical `human_attention_withdrawn` event with an explicit reason and
-an atomic resolution claim. Existing resolution triggers cancel pending push
-notifications. Ordinary asks, access-request asks and already answered records
+an atomic resolution claim. The same transaction deletes the withdrawn
+sources from the materialized human inbox and queues their affected threads
+for ordinary projection maintenance. Existing resolution triggers cancel pending
+push notifications. Ordinary asks, access-request asks and already answered records
 remain intact. Existing curation dedupe rows are dismissed to prevent re-filing
 those legacy prompts. No historical event payload is edited. Installation runs
 the migration; this lane did not install it or change production.
@@ -97,6 +104,11 @@ push cancellation, ordinary/answered preservation and idempotence. Integration
 tests cover quiet agent brief/API discovery, no inbox/delivery rows, human
 resolution denial, generic-ask rejection, apply/dismiss receipts, replay,
 privacy, fold, grouping and atomic rollback after an injected receipt failure.
+Review regressions cover stale inbox rows across merge, batch and withdraw,
+accepted-key suppression after unfold/ungroup, a human PM pass failing after
+filing, the missing strict event group, and stale withdrawal copy.
+After migration the human inbox contains none of those three legacy asks and
+retains the ordinary ask.
 
 The new read admits at most 51 ledger rows through
 `idx_curation_proposals_open_page(status,created_at,key)`, then hydrates at most
@@ -105,7 +117,10 @@ after visibility filtering, per-row query, or workspace-sized serving scan.
 Scoped truncation is always marked potentially partial so hidden ledger
 occupancy is not disclosed. Agent briefs and the candidates API each add these
 two queries. Existing candidate caps remain 200 asks/cards/refs. The one-time
-upgrade scans historical ask/withdrawal type ranges; it adds no recurring scan.
+upgrade scans historical ask/withdrawal type ranges, deletes inbox rows through
+`idx_inbox_access_event(source_event_id)`, and upserts affected-thread queues by
+primary key; it adds no recurring scan. The `can_apply` response adds no query.
+Fresh accepted generations reuse the existing key lookup and primary-key upsert.
 
 The native SQLite scale test measured **2 queries / 101 rows / 2,785 VM steps /
 0 full-scan steps**, both with zero and 4,096 unrelated dismissed suggestions.

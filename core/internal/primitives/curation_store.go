@@ -294,6 +294,8 @@ func (s *Store) CurationProposalByEvent(ctx context.Context, eventID string) (Cu
 
 // FileCurationProposal atomically records a quiet suggestion and its dedupe key.
 // Even legacy callers passing an ask event cannot create human attention.
+// Accepted keys can start a new generation when the candidate returns after undo;
+// open and dismissed keys keep their existing generation.
 func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curation.Candidate, source string, event map[string]any) (rec CurationProposalRecord, created bool, err error) {
 	if s.quota.enabled() {
 		s.quotaMu.Lock()
@@ -316,9 +318,11 @@ func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curati
 				return ErrNotFound
 			}
 			_ = json.Unmarshal([]byte(targets), &rec.Targets)
-			return nil
+			if rec.Status != CurationProposalAccepted {
+				return nil
+			}
 		}
-		if !errors.Is(e, sql.ErrNoRows) {
+		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return e
 		}
 		if e = s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 1024)}, blobLedgerWritePlan{}); e != nil {
@@ -329,7 +333,9 @@ func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curati
 		}
 		rec = CurationProposalRecord{Key: c.Key, ProposalEventID: anyStringValue(prepared.Body["id"]), Action: string(c.Action), Source: source, Status: CurationProposalOpen, Targets: c.Targets}
 		encoded, _ := json.Marshal(c.Targets)
-		_, e = tx.ExecContext(curationInternal(ctx), `INSERT INTO curation_proposals(key,proposal_event_id,action,source,status,targets_json,created_at) VALUES(?,?,?,?,?,?,?)`, rec.Key, rec.ProposalEventID, rec.Action, source, rec.Status, string(encoded), prepared.Body["ts"])
+		_, e = tx.ExecContext(curationInternal(ctx), `INSERT INTO curation_proposals(key,proposal_event_id,action,source,status,targets_json,created_at) VALUES(?,?,?,?,?,?,?)
+ ON CONFLICT(key) DO UPDATE SET proposal_event_id=excluded.proposal_event_id,action=excluded.action,source=excluded.source,status=excluded.status,targets_json=excluded.targets_json,created_at=excluded.created_at,resolved_at=NULL
+ WHERE curation_proposals.status='accepted'`, rec.Key, rec.ProposalEventID, rec.Action, source, rec.Status, string(encoded), prepared.Body["ts"])
 		created = e == nil
 		return e
 	})

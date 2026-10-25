@@ -11182,8 +11182,8 @@ Local Help: pm curate
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
-- Composition: Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. The PM applies chosen cleanups as agent work, recording a receipt; suggestions never ask or notify a human. With --formula no model runs: POST /curation/run applies the deterministic pass.
-- JSON body: `candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`
+- Composition: Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. With agent credentials the PM applies chosen cleanups and records a receipt. Other principals file quiet suggestions and report skipped application; suggestions never ask or notify a human. With --formula no model runs: POST /curation/run applies the deterministic pass.
+- JSON body: `candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`, `apply_skipped`
 - Examples:
   - `anx pm curate --dry-run`
   - `anx pm curate --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve' --max 5`

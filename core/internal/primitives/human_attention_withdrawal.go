@@ -16,17 +16,17 @@ func (s *Store) AppendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 	return s.appendHumanAttentionWithdrawal(ctx, actorID, sourceEventID, event, false)
 }
 func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sourceEventID string, event map[string]any, onlyIfClosed bool) (map[string]any, error) {
-	return s.withdrawHumanAttention(ctx, actorID, actorID, sourceEventID, event, onlyIfClosed)
+	return s.withdrawHumanAttention(ctx, actorID, actorID, sourceEventID, event, onlyIfClosed, false)
 }
 
 // appendHumanAttentionWithdrawalAs records a withdrawal by someone other than
 // the requester: an agent reviewing a moot curation suggestion. actorID must still be
 // the ask's requester; withdrawnBy is who decided.
 func (s *Store) appendHumanAttentionWithdrawalAs(ctx context.Context, actorID, withdrawnBy, sourceEventID string, event map[string]any) (map[string]any, error) {
-	return s.withdrawHumanAttention(ctx, actorID, strings.TrimSpace(withdrawnBy), sourceEventID, event, false)
+	return s.withdrawHumanAttention(ctx, actorID, strings.TrimSpace(withdrawnBy), sourceEventID, event, false, true)
 }
 
-func (s *Store) withdrawHumanAttention(ctx context.Context, actorID, withdrawnBy, sourceEventID string, event map[string]any, onlyIfClosed bool) (map[string]any, error) {
+func (s *Store) withdrawHumanAttention(ctx context.Context, actorID, withdrawnBy, sourceEventID string, event map[string]any, onlyIfClosed, curationReview bool) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -115,8 +115,8 @@ func (s *Store) withdrawHumanAttention(ctx context.Context, actorID, withdrawnBy
 	event["type"] = "human_attention_withdrawn"
 	event["thread_id"] = threadID
 	event["summary"] = "Ask withdrawn by requester"
-	if withdrawnBy != actorID {
-		event["summary"] = "Ask withdrawn on an accepted curation proposal"
+	if curationReview {
+		event["summary"] = "Ask withdrawn after agent curation review"
 	}
 	for _, ref := range sourceRefs {
 		refs = appendUnique(refs, ref)

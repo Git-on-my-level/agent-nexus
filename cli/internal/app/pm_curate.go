@@ -26,8 +26,8 @@ func init() {
 	localHelperTopics = append(localHelperTopics, localHelperTopic{
 		Path:        "pm curate",
 		Summary:     "Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.",
-		JSONShape:   "`candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`",
-		Composition: "Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. The PM applies chosen cleanups as agent work, recording a receipt; suggestions never ask or notify a human. With --formula no model runs: POST /curation/run applies the deterministic pass.",
+		JSONShape:   "`candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`, `apply_skipped`",
+		Composition: "Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. With agent credentials the PM applies chosen cleanups and records a receipt. Other principals file quiet suggestions and report skipped application; suggestions never ask or notify a human. With --formula no model runs: POST /curation/run applies the deterministic pass.",
 		Examples: []string{
 			"anx pm curate --dry-run",
 			"anx pm curate --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve' --max 5",
@@ -305,6 +305,7 @@ func (a *App) pmCurateJudgment(ctx context.Context, cfg config.Resolved, flags p
 	posted := []any{}
 	lines := []string{}
 	skipped := 0
+	applySkipped := 0
 	seen := map[string]bool{}
 	for _, d := range decisions {
 		key := anyString(d["key"])
@@ -333,19 +334,28 @@ func (a *App) pmCurateJudgment(ctx context.Context, cfg config.Resolved, flags p
 		if err != nil {
 			return nil, err
 		}
-		body["resolution"] = "apply"
-		res, err = a.invokeRawJSON(ctx, cfg, "pm curate", "POST", "/curation/proposals", body)
-		if err != nil {
-			return nil, err
+		canApply, _ := asMap(asMap(res.Data)["body"])["can_apply"].(bool)
+		if canApply {
+			body["resolution"] = "apply"
+			res, err = a.invokeRawJSON(ctx, cfg, "pm curate", "POST", "/curation/proposals", body)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			applySkipped++
 		}
+
 		proposal := asMap(asMap(asMap(res.Data)["body"])["proposal"])
 		posted = append(posted, proposal)
 		lines = append(lines, pmCurateProposalLine(proposal))
 	}
 	// Candidates the PM did not mention count as skipped too.
 	skipped += len(cands) - len(seen)
+	if applySkipped > 0 {
+		lines = append(lines, fmt.Sprintf("apply skipped %d: agent credentials required; suggestions remain quiet", applySkipped))
+	}
 	lines = append(lines, fmt.Sprintf("skipped %d", skipped))
-	return &commandResult{Text: strings.Join(lines, "\n"), Data: map[string]any{"candidates": len(cands), "proposals": posted, "skipped": skipped}}, nil
+	return &commandResult{Text: strings.Join(lines, "\n"), Data: map[string]any{"candidates": len(cands), "proposals": posted, "skipped": skipped, "apply_skipped": applySkipped}}, nil
 }
 
 var pmCurateMetricSeries = []struct {

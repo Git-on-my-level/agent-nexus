@@ -1986,7 +1986,10 @@ There is no per-row hydration or scan through resolved proposal history.
 rows, 2,785 VM steps and zero scans with both zero and 4,096 unrelated dismissed
 suggestions. Its new budget is 5,000 VM steps and zero scans; existing route
 budgets and plan exceptions are unchanged. Migration 119 performs the one-time
-legacy curation-ask withdrawal sweep; serving reads never perform that sweep.
+legacy curation-ask withdrawal sweep, removes their materialized inbox rows
+through the source-event index, and queues only affected threads by primary key.
+Serving reads never perform that sweep. The proposal response capability adds
+no read; re-suggestion after undo reuses the existing key lookup and upsert.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/primitives \

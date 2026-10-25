@@ -28,6 +28,21 @@ func quietCurationSuggestions(ctx context.Context, tx *sql.Tx) error {
 		`INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at)
  SELECT json_extract(e.payload_json,'$.payload.request_event_id'),e.id,'withdrawn','system',e.ts
  FROM events e WHERE e.type='human_attention_withdrawn' AND e.id='curation-withdraw:'||json_extract(e.payload_json,'$.payload.request_event_id')`,
+		// Resolution claims alone do not refresh materialized inbox rows.
+		// Remove exact legacy sources immediately; their thread summaries are
+		// invalidated in the same commit for the ordinary projection worker.
+		`DELETE FROM derived_inbox_items WHERE source_event_id IN (
+ SELECT json_extract(e.payload_json,'$.payload.request_event_id') FROM events e
+ WHERE e.type='human_attention_withdrawn' AND e.id='curation-withdraw:'||json_extract(e.payload_json,'$.payload.request_event_id'))`,
+		`INSERT INTO derived_topic_dirty_queue(thread_id,dirty_at)
+ SELECT DISTINCT e.thread_id,strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM events e
+ WHERE e.type='human_attention_withdrawn' AND e.id='curation-withdraw:'||json_extract(e.payload_json,'$.payload.request_event_id') AND COALESCE(e.thread_id,'')<>''
+ ON CONFLICT(thread_id) DO UPDATE SET dirty_at=MIN(derived_topic_dirty_queue.dirty_at,excluded.dirty_at)`,
+		`INSERT INTO topic_projection_refresh_status(thread_id,desired_generation,materialized_generation,queued_at,updated_at)
+ SELECT DISTINCT e.thread_id,1,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM events e
+ WHERE e.type='human_attention_withdrawn' AND e.id='curation-withdraw:'||json_extract(e.payload_json,'$.payload.request_event_id') AND COALESCE(e.thread_id,'')<>''
+ ON CONFLICT(thread_id) DO UPDATE SET desired_generation=topic_projection_refresh_status.desired_generation+1,
+ queued_at=CASE WHEN topic_projection_refresh_status.queued_at IS NULL OR topic_projection_refresh_status.queued_at>excluded.queued_at THEN excluded.queued_at ELSE topic_projection_refresh_status.queued_at END,updated_at=excluded.updated_at`,
 		`UPDATE curation_proposals SET status='dismissed',resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
  WHERE status='open' AND proposal_event_id IN (SELECT e.id FROM events e WHERE e.type='human_attention_requested' AND json_type(e.payload_json,'$.payload.curation')='object')`,
 	}

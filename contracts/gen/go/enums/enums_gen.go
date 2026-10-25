@@ -131,6 +131,7 @@ const (
 	EventGroupDocuments     = "documents"
 	EventGroupBoards        = "boards"
 	EventGroupCards         = "cards"
+	EventGroupCuration      = "curation"
 	EventGroupAttention     = "attention"
 	EventGroupNotifications = "notifications"
 	EventGroupRuns          = "runs"
@@ -139,12 +140,12 @@ const (
 )
 
 // EventGroupValues lists every event_group value in contract order. Do not modify it.
-var EventGroupValues = []string{EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions}
+var EventGroupValues = []string{EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupCuration, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions}
 
 // IsEventGroup reports whether value is exactly a canonical event_group value.
 func IsEventGroup(value string) bool {
 	switch value {
-	case EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions:
+	case EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupCuration, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions:
 		return true
 	}
 	return false

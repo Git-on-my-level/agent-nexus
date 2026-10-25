@@ -148,7 +148,7 @@ enums:
 
   event_group:
     enum_policy: strict
-    values: [messages, topics, documents, boards, cards, attention, notifications, runs, reviews, exceptions]
+    values: [messages, topics, documents, boards, cards, curation, attention, notifications, runs, reviews, exceptions]
 
   provenance_source:
     enum_policy: open
@@ -1472,6 +1472,7 @@ curation:
     - Merge duplicates compares at most 200 open initiatives by title token similarity or shared non-context refs (default threshold 0.8). Applying folds the duplicate into the kept card, preserving refs and asks; undo uses work unfold.
     - Batch groups open, unbatched asks by subject, else thread, in groups of 2 to 10. An agent records the grouping server side (curation_batch_members); brief.v1 decisions then collapse the open members into one decision with a batch field, and undo removes the grouping. Answering that decision answers every still-open member.
     - A reader sees a suggestion only when it can read every target. Agent brief.v1 lists curation_suggestions separately from decisions; humans read them quietly through the curation API.
+    - Accepted keys may start a fresh quiet generation when an undo makes their action a candidate again. Open keys dedupe; dismissed keys remain suppressed.
     - Each pass reads at most 200 open asks, 200 open initiatives and 200 resolved refs.
   applied_trail:
     payload_must_include: ["curation_applied"]
