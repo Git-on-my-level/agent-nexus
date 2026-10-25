@@ -27,16 +27,8 @@ export const WATCH_STATE_LABELS = {
   done: "Done",
 };
 
-/** Board columns: placement, which humans and agents set. Not a state. */
+/** Placement, which humans and agents set. Not a state. */
 export const PLACEMENTS = ["backlog", "ready", "in_progress", "review", "done"];
-
-export const PLACEMENT_LABELS = {
-  backlog: "Backlog",
-  ready: "Ready",
-  in_progress: "In progress",
-  review: "Review",
-  done: "Done",
-};
 
 export const DECISION_KIND_LABELS = {
   ask: "Ask",
@@ -367,6 +359,8 @@ function normalizeInitiative(raw) {
     ref,
     id: ref.replace(/^card:/, ""),
     title: text(raw.title) || ref,
+    // First canonical assignee ref; null when unassigned.
+    owner: text(raw.owner) || null,
     state,
     placement,
     promise,
@@ -491,16 +485,6 @@ export function compareInitiatives(a, b) {
   return a.title.localeCompare(b.title);
 }
 
-/** `[{ state, label, rows }]` in attention order; empty groups dropped. */
-export function groupWatch(initiatives) {
-  const sorted = [...(initiatives ?? [])].sort(compareInitiatives);
-  return WATCH_STATES.map((state) => ({
-    state,
-    label: WATCH_STATE_LABELS[state],
-    rows: sorted.filter((row) => row.state === state),
-  })).filter((group) => group.rows.length);
-}
-
 /**
  * Loops: the brief's `loops` (cards with a cadence, a goal or recent run
  * receipts; core computes `loops.loop`), plus initiatives that link a
@@ -623,16 +607,6 @@ export function formatMetricValue(value) {
     return String(Math.round(number)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   if (abs >= 10) return String(Math.round(number * 10) / 10);
   return String(Math.round(number * 1000) / 1000);
-}
-
-/** `[{ placement, label, rows }]` for every board column, empty or not. */
-export function groupBoard(initiatives) {
-  const sorted = [...(initiatives ?? [])].sort(compareInitiatives);
-  return PLACEMENTS.map((placement) => ({
-    placement,
-    label: PLACEMENT_LABELS[placement],
-    rows: sorted.filter((row) => row.placement === placement),
-  }));
 }
 
 const DAY = 86_400;

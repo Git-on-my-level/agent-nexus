@@ -8,7 +8,13 @@
    * it is given (container queries), so the same table works full-page, in a
    * report panel, and on a phone. Pieces that came from a brief field carry
    * `data-source="computed:<field>"` (I1).
+   *
+   * With `details`, a row expands inline: a click or tap anywhere on it
+   * outside its own links, or Enter/Space on its title button. Several rows
+   * can be open at once, so two initiatives can be read side by side; each
+   * closes the same way it opened.
    */
+  import { SvelteSet } from "svelte/reactivity";
   import {
     boardColumns,
     columnsFor,
@@ -33,7 +39,7 @@
 
   /** The state pill the reader picked; see `active` for the one applied. */
   let picked = $state("");
-  let expanded = $state("");
+  const expanded = new SvelteSet();
   let showFolded = $state(false);
 
   let foldedSet = $derived(new Set(folded));
@@ -86,8 +92,25 @@
   let templateSm = $derived(templateFor({ narrow: true }));
 
   function toggle(ref) {
-    expanded = expanded === ref ? "" : ref;
+    if (expanded.has(ref)) expanded.delete(ref);
+    else expanded.add(ref);
   }
+  /**
+   * A click on the row's own controls (the "You" link, the title button)
+   * does what that control does, and a drag that selected text is not a
+   * click, so copying a title does not toggle the row.
+   */
+  function rowClick(event, ref) {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("a, button, input, select, textarea, label, summary")
+    )
+      return;
+    if (String(globalThis.getSelection?.() ?? "").trim()) return;
+    toggle(ref);
+  }
+  const detailsId = (ref) => `collection-details-${ref.replace(/\W/g, "-")}`;
   function activityStyle(n) {
     return `height:${3 + Math.min(n, 4) * 4}px`;
   }
@@ -296,17 +319,37 @@
 </div>
 
 {#snippet rowView(row)}
+  {@const open = Boolean(details) && expanded.has(row.ref)}
   <div
     class="row-wrap"
+    class:row-wrap--open={open}
     data-collection-row={row.ref}
     data-state={row.state}
     data-watch-state={row.computedState || undefined}
+    data-expanded={details ? String(open) : undefined}
   >
-    <div class="row">
+    <!-- The title button is the keyboard and screen-reader control; a click
+         anywhere else on the row is the same toggle for a pointer. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div
+      class="row"
+      class:row--expandable={details}
+      onclick={details ? (event) => rowClick(event, row.ref) : undefined}
+    >
       {@render dot(row)}
       <div class="min-w-0">
         <div class="flex min-w-0 items-center gap-1.5">
-          {#if row.href}
+          {#if details}
+            <button
+              type="button"
+              class="title-toggle truncate text-meta font-medium text-fg"
+              aria-expanded={open}
+              aria-controls={open ? detailsId(row.ref) : undefined}
+              onclick={() => toggle(row.ref)}
+              data-watch-title
+              data-collection-toggle>{row.title}</button
+            >
+          {:else if row.href}
             <a
               class="truncate text-meta font-medium text-fg hover:text-accent-text"
               href={row.href}
@@ -400,27 +443,24 @@
         </span>
       {/if}
       {#if details}
-        <button
-          type="button"
-          class="expand"
-          aria-expanded={expanded === row.ref}
-          aria-label="{expanded === row.ref
-            ? 'Hide'
-            : 'Show'} details for {row.title}"
-          onclick={() => toggle(row.ref)}
+        <!-- Decorative: the title button carries the state. -->
+        <span class="expand" aria-hidden="true" data-collection-chevron
           ><svg
-            class="h-3 w-3 transition-transform {expanded === row.ref
-              ? 'rotate-90'
-              : ''}"
+            class="h-3 w-3 transition-transform {open ? 'rotate-90' : ''}"
             viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"><path d="M7 4l7 6-7 6V4z" /></svg
-          ></button
+            fill="currentColor"><path d="M7 4l7 6-7 6V4z" /></svg
+          ></span
         >
       {/if}
     </div>
-    {#if details && expanded === row.ref}
-      <div class="details" data-collection-details>
+    {#if open}
+      <div
+        class="details"
+        id={detailsId(row.ref)}
+        role="region"
+        aria-label="Details for {row.title}"
+        data-collection-details
+      >
         {@render details(row)}
       </div>
     {/if}
@@ -446,6 +486,24 @@
   .row:hover {
     background: var(--panel-hover);
   }
+  .row--expandable {
+    cursor: pointer;
+  }
+  .row-wrap--open > .row {
+    background: var(--bg-soft);
+  }
+  .title-toggle {
+    min-width: 0;
+    text-align: left;
+    border-radius: 4px;
+  }
+  .title-toggle:hover {
+    color: var(--accent-text);
+  }
+  .title-toggle:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: 2px;
+  }
   .details {
     padding: 0.25rem 0.75rem 0.85rem 2.75rem;
     background: var(--bg-soft);
@@ -459,11 +517,9 @@
     border-radius: 6px;
     color: var(--fg-muted);
   }
-  .expand:hover {
+  .row:hover .expand {
     color: var(--fg);
-    background: var(--panel-hover);
   }
-  .expand:focus-visible,
   .pill:focus-visible {
     outline: 2px solid var(--accent-solid);
     outline-offset: 1px;

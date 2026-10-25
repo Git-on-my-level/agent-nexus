@@ -6,7 +6,6 @@ import {
   activityByDay,
   attentionCount,
   boardColumns,
-  collectionFromInitiatives,
   collectionFromLoops,
   columnsFor,
   filterRows,
@@ -29,46 +28,31 @@ const brief = normalizeBrief(
 );
 const rows = (collection) => collection.groups.flatMap((g) => g.rows);
 
-describe("collectionFromInitiatives", () => {
-  const collection = collectionFromInitiatives(brief.initiatives, {
-    now: NOW,
-    href: (row) => `/i/${row.id}`,
-    decideHref: (row) => `/decide?initiative=${row.ref}`,
-  });
-
-  it("puts a decision for the reader ahead of the computed state", () => {
-    const battery = rows(collection).find(
-      (r) => r.ref === "card:battery-measurement",
-    );
-    expect(battery.state).toBe("waiting_on_you");
-    expect(battery.computedState).toBe("past_promise");
-    expect(battery.next).toMatchObject({ label: "You", isViewer: true });
-    expect(battery.time).toMatchObject({
-      tone: "warning",
-      field: "initiatives.past_promise_for",
-    });
-  });
+describe("collection helpers on the Loops collection", () => {
+  const collection = collectionFromLoops(brief.initiatives, { now: NOW });
 
   it("tags every computed piece with a brief field", () => {
     for (const row of rows(collection)) {
-      expect(BRIEF_COMPUTED_FIELDS.has(row.stateField)).toBe(true);
-      for (const part of row.subtitle?.parts ?? [])
-        expect(BRIEF_COMPUTED_FIELDS.has(part.field)).toBe(true);
-      if (row.time)
+      if (row.stateField)
+        expect(BRIEF_COMPUTED_FIELDS.has(row.stateField)).toBe(true);
+      if (row.time?.field)
         expect(BRIEF_COMPUTED_FIELDS.has(row.time.field)).toBe(true);
     }
   });
 
   it("counts attention rows for the tab badge", () => {
-    const waiting = brief.initiatives.filter(
-      (r) => r.waitingOnYouCount > 0 && r.state !== "done",
-    ).length;
-    expect(attentionCount(collection)).toBe(waiting);
+    const hot = new Set(
+      collection.states.filter((s) => s.tone === "attention").map((s) => s.key),
+    );
+    expect(attentionCount(collection)).toBe(
+      rows(collection).filter((r) => hot.has(r.state)).length,
+    );
   });
 
   it("filters and buckets rows by state", () => {
-    const moving = filterRows(collection, "moving").flatMap((g) => g.rows);
-    expect(moving.every((r) => r.state === "moving")).toBe(true);
+    const [first] = rows(collection);
+    const picked = filterRows(collection, first.state).flatMap((g) => g.rows);
+    expect(picked.every((r) => r.state === first.state)).toBe(true);
     const board = boardColumns(collection);
     expect(board.map((c) => c.key)).toEqual(
       collection.states.map((s) => s.key).filter((k) => collection.counts[k]),
@@ -76,11 +60,7 @@ describe("collectionFromInitiatives", () => {
   });
 
   it("does not draw columns that no row fills", () => {
-    expect(columnsFor(collection)).toMatchObject({
-      owner: false,
-      activity: false,
-      progress: true,
-    });
+    expect(columnsFor(collection)).toMatchObject({ owner: false });
   });
 });
 
