@@ -2082,9 +2082,10 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/se
   -run '^TestPerformanceGroupingFeedBudget$' -count=1 -v -timeout=5m
 ```
 
-Local acceptance on this branch: nested rollups use 6 queries / 123 returned
-rows / 33,211 VM steps / zero full scans for both principals. The existing
-200-child hierarchy gate uses 49,581 VM steps; the denied-prefix brief uses
+Local acceptance on this branch, with an unrelated private board: nested
+rollups use 6 queries / 123 returned rows / 27,096 owner or 48,050 partial-reader
+VM steps / zero full scans. The existing
+200-child hierarchy gate uses 40,403 VM steps; the denied-prefix brief uses
 47,178. The complete ungrouped HTTP gate also passes (partial-reader samples
 49,730 VM steps). No ceiling or query-plan allowance is increased.
 
@@ -2106,5 +2107,12 @@ Neither run is represented as passing.
 
 The overlapping work-list-page regression (root plus its ten workstreams)
 exposed duplicate hydration at 62,729 VM steps. Reusing the already admitted
-rollups reduces it to 3 queries, 122 rows, 33,828 VM steps and zero full scans
-for both principals. The same unchanged workstreams budget gates this case.
+rollups reduces it to 3 queries, 122 rows, and zero full scans. With an unrelated
+private board, the final values are 27,825 owner / 48,611 partial-reader VM steps. The same unchanged workstreams budget gates this case.
+
+Parent eligibility now admits the current scoped card/board once before its
+steps and uses an indexed existence probe for an older visible alternative.
+It retains the oldest-created/id-tie rule without rehydrating and sorting the
+same current parent per child. Workstream admission uses the same rule. The
+private-board fixture exercises the nonempty authorization path; no policy,
+budget or plan allowance is relaxed.

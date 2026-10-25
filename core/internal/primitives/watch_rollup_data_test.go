@@ -266,3 +266,63 @@ func TestWatchOutcomeAndCodes(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchOldestVisibleParent(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	publicBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Public board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Private board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", workString(b["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	older, err := s.CreateWork(ctx, "owner", workString(b["id"]), map[string]any{"id": "a-parent", "title": "Private older parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := s.CreateWork(ctx, "owner", workString(publicBoard["id"]), map[string]any{"id": "b-parent", "title": "Public parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Public child", "under": public["ref"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.GroupWork(ctx, "owner", workString(child["ref"]), workString(older["ref"]), ""); err != nil {
+		t.Fatal(err)
+	}
+	// Tie creation times to exercise the ID tiebreak as well as privacy.
+	if _, err = ws.DB().Exec(`UPDATE cards SET created_at='2000-01-01T00:00:00Z' WHERE id IN ('a-parent','b-parent')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, actor := range []string{"owner", "stranger"} {
+		readCtx := WithRequestAccessScope(ctx, AccessScope{ActorID: actor})
+		items := []map[string]any{{"id": public["id"]}, {"id": child["id"]}}
+		if err = s.EnrichWorkHierarchy(readCtx, items, actor, true, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		wantCount, wantParent := 0, older["ref"]
+		if actor == "stranger" {
+			wantCount, wantParent = 1, public["ref"]
+		}
+		if items[0]["rollup"].(*WorkRollup).Total != wantCount || items[1]["parent_ref"] != wantParent {
+			t.Fatalf("%s: %v", actor, items)
+		}
+		if actor == "stranger" {
+			raw, _ := json.Marshal(items)
+			if strings.Contains(string(raw), workString(older["ref"])) || strings.Contains(string(raw), "Private older parent") {
+				t.Fatalf("hidden parent leaked: %s", raw)
+			}
+		}
+	}
+}

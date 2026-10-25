@@ -63,6 +63,13 @@ func TestWatchWorkstreamRollupBudget(t *testing.T) {
 	if err = s.SetCardPlan(ctx, "writer", root["id"].(string), root["updated_at"].(string), p); err != nil {
 		t.Fatal(err)
 	}
+	privateBoard, privateErr := s.CreateBoard(ctx, "writer", map[string]any{"title": "Private unrelated board"})
+	if privateErr != nil {
+		t.Fatal(privateErr)
+	}
+	if _, privateErr = s.PatchThread(ctx, "writer", privateBoard["thread_id"].(string), map[string]any{"pm_actor_id": "writer"}, nil); privateErr != nil {
+		t.Fatal(privateErr)
+	}
 	db, capture, err := perfguard.Open("file:" + ws.Layout().DatabasePath)
 	if err != nil {
 		t.Fatal(err)

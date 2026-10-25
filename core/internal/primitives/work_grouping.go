@@ -28,6 +28,15 @@ func workParentSQL(child string) string {
 	return `(SELECT parent.id` + workParentSources + ` WHERE link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle) AND ` + workParentEligible(child) + ` ORDER BY parent.created_at,parent.id LIMIT 1)`
 }
 
+// The current parent was admitted by the surrounding scoped query. Only an
+// older eligible alternative can displace it; do not hydrate/sort the current
+// parent again for every child. Incoming links remain scoped plan relations.
+func noEarlierWorkParentSQL(child, current string) string {
+	return `NOT EXISTS(SELECT 1` + workParentSources + ` WHERE link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle)
+ AND link.card_id<>` + current + `.id AND ` + workParentEligible(child) + `
+ AND (parent.created_at<` + current + `.created_at OR (parent.created_at=` + current + `.created_at AND parent.id<` + current + `.id)))`
+}
+
 // Top-level admission needs existence, not the oldest parent's identity. Two
 // exact probes avoid sorting and building a two-key IN set for every card.
 func workHasParentSQL(child string) string {
@@ -153,8 +162,11 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	 WHERE a.state='open' AND COALESCE(e.trashed_at,'')=''
 	 AND (a.recipient IN (?,?) OR (a.recipient='' AND ?)) AND a.requester NOT IN (?,?))`
 	streams := `EXISTS(SELECT 1 FROM brief_plan_refs grandchildren
-	 CROSS JOIN cards grandchild ON grandchild.id=substr(grandchildren.ref,6) OR (grandchild.handle IS NOT NULL AND trim(grandchild.handle)<>'' AND grandchild.handle=substr(grandchildren.ref,6))
-	 WHERE grandchildren.card_id=c.id AND substr(grandchildren.ref,1,5)='card:' AND grandchild.trashed_at IS NULL AND ` + workParentSQL("grandchild") + `=c.id)`
+ CROSS JOIN cards grandchild ON grandchild.id=substr(grandchildren.ref,6) OR (grandchild.handle IS NOT NULL AND trim(grandchild.handle)<>'' AND grandchild.handle=substr(grandchildren.ref,6))
+ CROSS JOIN boards stream_board ON stream_board.id=c.board_id
+ WHERE grandchildren.card_id=c.id AND substr(grandchildren.ref,1,5)='card:' AND grandchild.trashed_at IS NULL AND grandchild.id<>c.id
+ AND c.archived_at IS NULL AND c.column_key NOT IN ('done','cancelled') AND stream_board.archived_at IS NULL AND stream_board.trashed_at IS NULL
+ AND ` + noEarlierWorkParentSQL("grandchild", "c") + `)`
 	if !expand {
 		streams = "0"
 	}
@@ -166,12 +178,16 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	rows, err = q.QueryContext(ctx, `SELECT requested.value,COALESCE(NULLIF(c.handle,''),c.id),c.title,json_extract(step.value,'$.id'),c.column_key,
 	 `+needs+`,`+streams+`,c.id,c.assignee,
  bi.promise_at,bi.open,`+doneAt+`
-	 FROM json_each(?) requested CROSS JOIN card_plans p ON p.card_id=requested.value
+	 FROM json_each(?) requested CROSS JOIN cards current_parent ON current_parent.id=requested.value
+ CROSS JOIN boards current_board ON current_board.id=current_parent.board_id
+ CROSS JOIN card_plans p ON p.card_id=requested.value
 	 CROSS JOIN json_each(p.body_json,'$.steps') step
 	 CROSS JOIN cards c ON c.id=substr(json_extract(step.value,'$.ref'),6) OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=substr(json_extract(step.value,'$.ref'),6))
 	 LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
 	 WHERE CAST(step.key AS INTEGER)<200 AND substr(json_extract(step.value,'$.ref'),1,5)='card:' AND c.trashed_at IS NULL
-	 AND `+workParentSQL("c")+`=requested.value
+	 AND current_parent.id<>c.id AND current_parent.archived_at IS NULL AND current_parent.trashed_at IS NULL AND current_parent.column_key NOT IN ('done','cancelled')
+ AND current_board.archived_at IS NULL AND current_board.trashed_at IS NULL
+ AND `+noEarlierWorkParentSQL("c", "current_parent")+`
 	 ORDER BY requested.value,CAST(step.key AS INTEGER)`, stripActor(viewer), "actor:"+stripActor(viewer), human, stripActor(viewer), "actor:"+stripActor(viewer), string(encoded))
 	if err != nil {
 		return err
