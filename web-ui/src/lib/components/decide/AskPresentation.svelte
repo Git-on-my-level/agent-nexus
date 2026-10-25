@@ -20,25 +20,33 @@
       {workspaceSlug}
     />
   {/if}
-  {#if decision.situation}<p>{decision.situation}</p>{/if}
-  {#if decision.impact}<p>
-      <strong>Impact:</strong>
-      {decision.impact}
-    </p>{/if}
-  {#if decision.recommendation}<p>
-      <strong>I recommend:</strong>
-      {decision.recommendation.action}
-    </p>
+  {#if decision.situation}
+    <h4 class="font-semibold">What's happening</h4>
+    {#each decision.situation.split(/\n\s*\n/) as paragraph}
+      <p>{paragraph}</p>
+    {/each}
+  {/if}
+  {#if decision.impact}
+    <h4 class="font-semibold">Why it matters</h4>
+    {#each decision.impact.split(/\n\s*\n/) as paragraph}
+      <p>{paragraph}</p>
+    {/each}
+  {/if}
+  {#if decision.recommendation}
+    <h4 class="font-semibold">What I recommend</h4>
+    <p>{decision.recommendation.action}</p>
     <p>{decision.recommendation.why}</p>{/if}
+  {#if decision.alternatives?.length}
+    <h4 class="font-semibold">Alternatives</h4>
+  {/if}
   {#each decision.alternatives ?? [] as alternative}<p>
-      <strong>Alternative:</strong>
       {alternative.action}
       {alternative.consequence}
     </p>{/each}
-  {#if decision.if_no_answer}<p>
-      <strong>If no answer:</strong>
-      {decision.if_no_answer}
-    </p>{/if}
+  {#if decision.if_no_answer}
+    <h4 class="font-semibold">If no answer</h4>
+    <p>{decision.if_no_answer}</p>
+  {/if}
   {#if decision.details || (hasProposalCopy && decision.body) || decision.evidence?.length}
     <details>
       <summary>Details and evidence</summary>
@@ -58,3 +66,11 @@
     </details>
   {/if}
 </div>
+
+<style>
+  [data-decision-presentation] > h4:not(:first-child),
+  [data-decision-presentation] > p + p,
+  [data-decision-presentation] > details {
+    margin-top: 0.75rem;
+  }
+</style>

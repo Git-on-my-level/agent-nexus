@@ -847,7 +847,7 @@ reference_conventions:
       refs_must_include: ["thread:<thread_id>"]
       payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id", "response_proposals"]
       optional_payload:
-        situation: {type: string, description: "Plain words: what is happening, one or two sentences; at most 4000 characters."}
+        situation: {type: string, description: "Plain words: the baseline, what changed and the key numbers; at most 4000 characters."}
         impact: {type: string, description: "Who or what is affected: users, money, risk or time; at most 4000 characters."}
         recommendation:
           type: object

@@ -5,16 +5,16 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v33.
+Skill contract: anx.participant.v34.
 
 ## Daily loop
 
 Set `--as <name>` / `ANX_AS`; enroll (`anx help enroll`). Select `--workspace <alias>` or directory/default. Never hardcode URLs.
 
-`anx orient` reads the brief; `anx context <ref>` precedes edits.
+`anx orient`; `anx context <ref>` before edits.
 `anx note <card> "<text>" --evidence <ref>` posts progress;
-`anx done <card> --evidence <ref>` finishes. `anx plan` tracks steps;
-`anx series push` records measurements.
+`anx done <card> --evidence <ref>` finishes. `anx plan`;
+`anx series push` measurements.
 
 Follow warnings. Promise `--next <when> "<what>"`; renew within two days.
 Evidence resets the clock; moving promises alone remains visible.
@@ -25,18 +25,22 @@ Label agentctl runs `anx.card.<initiative>` and cards land under it. `--under` o
 
 ## Write for a busy boss
 
-`anx ask --template decision` gives a before/after example. Assume no context:
-`situation` (1–2 sentences), `impact` (users/money/risk/time),
-`recommendation: {action, why}` (include cost), optional
-`alternatives: [{action, consequence}]`, `if_no_answer` (default/blocker and by when).
-Collapse technical `details` and evidence; legacy asks retain body.
+Propose to a busy boss without context:
 
-`anx ask --from-file ask.md --preview` checks locally. Missing
-situation/impact/recommendation/why blocks publishing; `--force --reason` records
-exceptions. Use plain answer sentences, short titles and no unexplained identifiers.
-Inline: `--subject-ref card:<slug>`, `--situation`, `--impact`, `--recommend`,
-`--why`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
-Ask human decisions; withdraw stale asks; `anx await <ask>` waits.
+- What's happening (`situation`): baseline, change, numbers.
+- Why it matters (`impact`): affected people; why facts determine the choice.
+- What I recommend (`recommendation: {action, why}`): reason, tradeoff, known cost.
+- Alternatives: real actions and consequences.
+- If no answer (`if_no_answer`): known default/blocker.
+
+Explain fully; no quota. Preserve uncertainty; never invent facts, urgency,
+costs, approvals or defaults. Omit unused optional fields. Collapse technical details/evidence.
+
+`anx ask --template decision`: fictional narrative example.
+Edit frontmatter; preview: `anx ask --from-file ask.md --preview`.
+Require situation/impact/recommendation/why; plain answer buttons.
+`--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
+Withdraw stale asks; `anx await <ask>`.
 
 ## Attention
 
@@ -53,7 +57,7 @@ bind a card. Hooks restore context without transcripts/presence writes.
 Elect one `anx git enable --writer`; share binding. `anx git sync` publishes
 notes/promises, never completion.
 
-Preview `anx bridge install --dry-run`; register `anx bridge add --as <name> --workspace <alias>`.
+Preview `anx bridge install --dry-run`; `anx bridge add --as <name> --workspace <alias>`.
 Answers need wiring; never alter services merely for coding.
 
 Preview `anx sync enable <directory> --card-id card:<handle> --dry-run`.
