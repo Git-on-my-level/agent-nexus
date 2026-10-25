@@ -2150,7 +2150,7 @@ ID/handle indexes, loads that event by primary key, then seeks one
 readers batch only their admitted asks in chunks of at most 200; each chunk
 adds one query and at most one row per ask. Batch asks remain capped at ten.
 There is no history scan, read-time rewrite, per-row query or new polling loop.
-Original event history remains immutable; Decide/inbox overlay only the eight
+Original event history remains immutable; Decide/inbox overlay only the seven
 allowed presentation fields and the audit metadata. Plain event GET/export
 continues to expose canonical original events and separate revision events.
 
@@ -2170,3 +2170,28 @@ ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- go test -C core 
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- go test -C core ./internal/storage \
   -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Reversible stale ask retirement
+
+`POST /asks/{ask_id}/retire` is a mutation, not a new read/poll surface. It
+resolves one ask and subject by the existing ID/handle indexes, checks current
+authority by principal primary key, and seeks the canonical resolution and
+actor/key replay receipt by their unique indexes. Evidence admission performs
+at most 32 indexed point checks (HTTP(S) evidence is validated without fetching).
+It appends one audit event and notification and inserts/deletes one resolution.
+Undo updates only that ask's `ask_subjects`, `brief_asks` and `ask_deadlines`
+primary-key rows. It never loads ask history or workspace rosters.
+
+`GET /asks/{ask_id}` adds only the audit event type to its existing primary-key
+projection, exposing the current retirement token with no additional query.
+Inbox point/list/stream admission already excludes canonical resolutions, so
+retirement adds no reads to those paths. Brief already selects only open
+indexed `brief_asks` rows. Roster admission adds a primary-key resolution
+exclusion per existing ask candidate, retaining its existing finite baseline;
+it does not introduce a history scan or new per-ask round trip. Ordinary
+background projection replay recognizes retire/reopen audit pairs during its
+existing thread pass, using linear maps and exact event identities.
+
+The existing ask outcome/delivery and presentation scale gates are unchanged;
+no read budget or query-plan allowance is increased. Retirement needs no new
+schema, migration or backfill.

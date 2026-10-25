@@ -89,6 +89,7 @@ export declare class AnxClient {
     asksDelivery(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksPresentationGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    asksRetire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksRevise(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksStream(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     asksSubscribe(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

@@ -194,7 +194,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 					return
 				}
 			}
-			writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
+			writeError(w, http.StatusConflict, "conflict", "Ask is no longer open")
 			return
 		}
 	}
@@ -216,11 +216,11 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			for _, variant := range inboxItemIDVariants(effectiveItemID) {
 				claimed, claimErr := responseStore.HumanAttentionResponseClaimed(r.Context(), variant)
 				if claimErr == nil && claimed {
-					writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
+					writeError(w, http.StatusConflict, "conflict", "Ask is no longer open")
 					return
 				}
 			}
-			writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
+			writeError(w, http.StatusNotFound, "not_found", "Ask is no longer open")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox item")
@@ -392,7 +392,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			return
 		}
 		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
-			writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
+			writeError(w, http.StatusConflict, "conflict", "Ask is no longer open")
 			return
 		}
 		if errors.Is(err, primitives.ErrHumanAttentionIdempotencyConflict) {
@@ -903,7 +903,7 @@ func handleRespondCurationBatch(w http.ResponseWriter, r *http.Request, opts han
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to check batch response state")
 			return
 		}
-		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
+		writeError(w, http.StatusNotFound, "not_found", "Ask is no longer open")
 		return
 	}
 	answerRefs := normalizeStringSlice(req.RelatedRefs)

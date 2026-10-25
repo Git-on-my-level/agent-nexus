@@ -95,8 +95,10 @@
         "document_revised",
         "document_trashed",
         "exception_raised",
+        "human_attention_reopened",
         "human_attention_requested",
         "human_attention_responded",
+        "human_attention_retired",
         "human_attention_revised",
         "human_attention_withdrawn",
         "message_posted",
@@ -184,8 +186,10 @@
   "event_groups": {
     "attention": [
       "attention_feedback",
+      "human_attention_reopened",
       "human_attention_requested",
       "human_attention_responded",
+      "human_attention_retired",
       "human_attention_revised",
       "human_attention_withdrawn"
     ],
@@ -307,10 +311,16 @@
     "exception_raised": [
       "exceptions"
     ],
+    "human_attention_reopened": [
+      "attention"
+    ],
     "human_attention_requested": [
       "attention"
     ],
     "human_attention_responded": [
+      "attention"
+    ],
+    "human_attention_retired": [
       "attention"
     ],
     "human_attention_revised": [

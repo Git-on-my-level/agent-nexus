@@ -7326,6 +7326,50 @@ paths:
         '404': {$ref: '#/components/responses/ErrorResponse'}
         '409': {$ref: '#/components/responses/ErrorResponse'}
 
+  /asks/{ask_id}/retire:
+    post:
+      operationId: retireAsk
+      summary: Retire a stale open ask, or undo its retirement
+      description: >
+        Same authorization and visibility as ask revise. Retiring atomically closes
+        an open ask as withdrawn_as_stale, records who, why and evidence, and queues
+        a notification to its original requester. It is never a human answer.
+        Options, requester, presentation, routing and deadlines remain intact.
+        Undo requires if_retirement from the retirement result or ask outcome;
+        only that still-current retirement may be reopened. Expired asks and asks
+        whose subject is closed cannot be reopened. request_key replays atomically.
+        Retired inbox links and answer buttons fail closed as no longer open.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.retire
+      x-anx-why: Remove stale asks reversibly without fabricating a human decision.
+      x-anx-agent-notes: Supply reason and evidence to retire. Undo uses if_retirement from anx await or the retirement result. Preserve request_key after an uncertain result.
+      x-anx-output-envelope: Returns AskRetirementResult.
+      x-anx-stability: beta
+      x-anx-cli-path: ask retire
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-error-codes: [auth_required, forbidden, not_found, invalid_request, conflict]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RetireAskRequest'}
+      responses:
+        '200':
+          description: Audited retirement or reopening, notification and replay committed atomically.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskRetirementResult'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
   /asks/batch:
     post:
       operationId: createAskBatch
@@ -13304,6 +13348,26 @@ components:
         request_key: {type: string, minLength: 1, maxLength: 128}
         presentation: {$ref: '#/components/schemas/RevisableAskPresentation'}
         undo: {type: boolean, default: false, description: Mutually exclusive with presentation.}
+    RetireAskRequest:
+      type: object
+      additionalProperties: false
+      required: [request_key]
+      properties:
+        request_key: {type: string, minLength: 1, maxLength: 128}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+        evidence: {type: array, minItems: 1, maxItems: 32, items: {type: string, minLength: 1, maxLength: 2048}}
+        undo: {type: boolean, default: false}
+        if_retirement: {type: string, description: Required only for undo. Event ref of the current retirement.}
+      description: Retire requires reason and evidence. Undo requires if_retirement and forbids reason and evidence.
+    AskRetirementResult:
+      type: object
+      required: [ask_id, status, event, retirement_event_ref, notified_actor_id]
+      properties:
+        ask_id: {type: string}
+        status: {type: string, enum: [open, withdrawn_as_stale]}
+        event: {$ref: '#/components/schemas/Event'}
+        retirement_event_ref: {type: string}
+        notified_actor_id: {type: string}
     AskPresentationRevision:
       type: object
       required: [actor_id, at, event_ref, previous]
@@ -14153,7 +14217,7 @@ components:
       properties:
         ask_id: {type: string}
         card_ref: {type: string}
-        status: {type: string, enum: [answered, needs_context, withdrawn, expired]}
+        status: {type: string, enum: [answered, needs_context, withdrawn, withdrawn_as_stale, expired]}
         outcome: {type: string, nullable: true}
         response_event_id: {type: string}
         response_text: {type: string, nullable: true}
@@ -14197,7 +14261,8 @@ components:
       properties:
         ask_id: {type: string}
         access_request_ref: {type: string, description: Set when the ask is the caller's own access request, or a human is reading that request's event. Absent for ordinary asks.}
-        status: {type: string, enum: [open, answered, needs_context, withdrawn, expired]}
+        status: {type: string, enum: [open, answered, needs_context, withdrawn, withdrawn_as_stale, expired]}
+        retirement_event_ref: {type: string, description: Current retirement token required to undo.}
         subject_ref: {type: string}
         response: {type: object, additionalProperties: true, nullable: true}
         task_outcome:

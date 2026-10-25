@@ -111,6 +111,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if (args[0] == "ask" || args[0] == "review" || args[0] == "escalate") && hasAskTemplate(args[1:]) {
 		return args[0], validateAskTemplate(args[1:])
 	}
+	if args[0] == "ask" && len(args) > 1 && args[1] == "retire" {
+		_, err := parseAskRetirement(args[2:])
+		return "ask retire", err
+	}
 	if args[0] == "ask" && len(args) > 1 && args[1] == "revise" {
 		return "ask revise", preflightAskRevise(args[2:])
 	}

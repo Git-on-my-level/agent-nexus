@@ -47,8 +47,8 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		return nil, err
 	}
 	if err == nil {
-		var responseRaw, at string
-		if err = s.db.QueryRowContext(ctx, `SELECT payload_json,ts FROM events WHERE id=? AND COALESCE(trashed_at,'')=''`, resolutionID).Scan(&responseRaw, &at); errors.Is(err, sql.ErrNoRows) {
+		var responseRaw, at, eventType string
+		if err = s.db.QueryRowContext(ctx, `SELECT payload_json,ts,type FROM events WHERE id=? AND COALESCE(trashed_at,'')=''`, resolutionID).Scan(&responseRaw, &at, &eventType); errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		} else if err != nil {
 			return nil, err
@@ -62,6 +62,10 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		response["at"] = at
 		out["response"] = response
 		out["status"] = resolutionType
+		if eventType == AskRetiredEventType {
+			out["status"] = "withdrawn_as_stale"
+			out["retirement_event_ref"] = "event:" + resolutionID
+		}
 		if response["outcome"] == "needs_context" {
 			out["status"] = "needs_context"
 		}

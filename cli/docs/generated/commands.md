@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `280`
+- Commands: `281`
 
 ## `actors.create`
 
@@ -433,6 +433,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `not_found`
 - Output: Returns AskPresentationState.
 - Agent notes: Read presentation_revision before revising. Preserve request_key across retries.
+
+## `asks.retire`
+
+- CLI path: `ask retire`
+- HTTP: `POST /asks/{ask_id}/retire`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Remove stale asks reversibly without fabricating a human decision.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `forbidden`, `not_found`, `invalid_request`, `conflict`
+- Output: Returns AskRetirementResult.
+- Agent notes: Supply reason and evidence to retire. Undo uses if_retirement from anx await or the retirement result. Preserve request_key after an uncertain result.
 
 ## `asks.revise`
 

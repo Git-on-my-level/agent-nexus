@@ -655,7 +655,7 @@
           >
             <p class="text-body font-medium text-fg">Decision not found.</p>
             <p class="text-meta text-fg-muted">
-              This decision is no longer waiting on you.
+              This ask is no longer open.
               <a class="ui-prose-link" href={itemHref("")}>Back to Decide</a>
             </p>
           </div>

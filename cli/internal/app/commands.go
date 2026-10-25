@@ -89,6 +89,10 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, err := a.runDailyWork(ctx, args[1], args[2:], cfg)
 		return "work " + args[1], result, err
 	}
+	if args[0] == "ask" && len(args) > 1 && args[1] == "retire" {
+		result, err := a.runAskRetire(ctx, args[2:], cfg)
+		return "ask retire", result, err
+	}
 	if args[0] == "ask" && len(args) > 1 && args[1] == "revise" {
 		result, err := a.runAskRevise(ctx, args[2:], cfg)
 		return "ask revise", result, err

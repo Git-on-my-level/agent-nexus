@@ -691,3 +691,24 @@ test("a clarity rewrite can show original copy and keeps the original answer", a
   await expect.poll(() => bodies.length).toBe(1);
   expect(bodies[0].response_text).toBe("Merge");
 });
+
+test("a retired ask's email permalink fails closed", async ({
+  page,
+  context,
+}) => {
+  const bodies = await setup(context, {
+    briefRoute: (route) =>
+      json(route, {
+        ...brief,
+        decisions: brief.decisions.filter((d) => d.ref !== MERGE.ref),
+        generated_at: new Date().toISOString(),
+      }),
+  });
+  await page.goto(`${LIST}/${MERGE.inbox_item_id}`);
+  await expect(page.locator("[data-decide-gone]")).toContainText(
+    "This ask is no longer open.",
+  );
+  await expect(page.locator("[data-decision-proposal]")).toHaveCount(0);
+  await flush(page);
+  expect(bodies).toHaveLength(0);
+});

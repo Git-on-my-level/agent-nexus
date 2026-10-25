@@ -879,3 +879,38 @@ func TestAskPresentationToolsUseScopedHTTPAndPreserveRevision(t *testing.T) {
 		}
 	}
 }
+
+func TestAskRetirementToolPreservesAuditAndUndoFence(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	bodies := []map[string]any{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/asks/event:ask-1/retire" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"withdrawn_as_stale","retirement_event_ref":"event:retired-1"}`)
+	}))
+	defer server.Close()
+	exec := NewWorkspaceExecutor(server.URL, Options{})
+	tool, ok := cat.Lookup(catalog.ToolName("asks.retire"))
+	if !ok {
+		t.Fatal("missing retirement tool")
+	}
+	for _, body := range []map[string]any{{"request_key": "retire-key", "reason": "No longer relevant", "evidence": []any{"card:subject"}}, {"request_key": "undo-key", "undo": true, "if_retirement": "event:retired-1"}} {
+		if _, err := exec.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: map[string]any{"path": map[string]any{"ask_id": "event:ask-1"}, "body": body}}); err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(body)
+		got, _ := json.Marshal(bodies[len(bodies)-1])
+		if string(raw) != string(got) {
+			t.Fatalf("body changed %s -> %s", raw, got)
+		}
+	}
+}

@@ -2728,7 +2728,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	registerRoute("/asks/", func(r *http.Request) routeAccessRequirement {
 		rest := strings.TrimPrefix(r.URL.Path, "/asks/")
 		parts := strings.Split(rest, "/")
-		if len(parts) == 2 && parts[0] != "" && ((parts[1] == "presentation" && r.Method == http.MethodGet) || (parts[1] == "revise" && r.Method == http.MethodPost)) {
+		if len(parts) == 2 && parts[0] != "" && ((parts[1] == "presentation" && r.Method == http.MethodGet) || ((parts[1] == "revise" || parts[1] == "retire") && r.Method == http.MethodPost)) {
 			mutation := routeMutationNone
 			if r.Method == http.MethodPost {
 				mutation = routeMutationBusiness
@@ -2754,6 +2754,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			switch parts[1] {
+			case "retire":
+				handleAskRetirement(w, r, opts, parts[0])
+				return
 			case "revise":
 				handleAskPresentation(w, r, opts, parts[0], true)
 				return

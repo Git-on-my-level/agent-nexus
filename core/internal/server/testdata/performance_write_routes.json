@@ -711,5 +711,10 @@
     "method": "POST",
     "path": "/asks/{ask_id}/revise",
     "reason": "Transactional presentation-only write: one ask, current authority/subject/head lookups, append-only audit, CAS pointer and replay receipt."
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/retire",
+    "reason": "Transactional stale withdrawal or exact-retirement undo: indexed ask, subject, authority and claim reads; bounded evidence, audit, requester notification and replay receipt."
   }
 ]

@@ -148,7 +148,7 @@ func awaitAskOutcomeResult(target string, out map[string]any) (*commandResult, e
 			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", message), out)
 		}
 		return &commandResult{Data: out}, nil
-	case "needs_context", "withdrawn", "expired":
+	case "needs_context", "withdrawn", "withdrawn_as_stale", "expired":
 		return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, anyString(out["status"]), "ask ended: "+anyString(out["status"])), out)
 	default:
 		return nil, errnorm.New(errnorm.KindRemote, "invalid_response_outcome", "unknown ask state")

@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": false,
-  "rule_count": 30,
+  "rule_count": 32,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -141,6 +141,16 @@
         "subtype"
       ]
     },
+    "human_attention_reopened": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "requester_actor_id",
+        "retirement_event_ref"
+      ]
+    },
     "human_attention_requested": {
       "refs_must_include": [
         "thread:\u003cthread_id\u003e"
@@ -163,6 +173,17 @@
         "response_text",
         "outcome",
         "responding_actor_id"
+      ]
+    },
+    "human_attention_retired": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "requester_actor_id",
+        "reason",
+        "evidence"
       ]
     },
     "human_attention_revised": {

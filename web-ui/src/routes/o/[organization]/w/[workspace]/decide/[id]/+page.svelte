@@ -70,7 +70,7 @@
     <SkeletonList rows={1} />
   {:else}
     <p class="py-10 text-center text-meta text-fg-muted" data-decide-gone>
-      This decision is no longer waiting on you.
+      This ask is no longer open.
       <a class="ui-prose-link" href={href("/decide")}>Back to Decide</a>
     </p>
   {/if}

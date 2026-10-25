@@ -166,6 +166,9 @@ commands:
   "asks.presentation.get":
     classification: exposed_read
     reason: "Scoped point read of ask presentation and concurrency token."
+  "asks.retire":
+    classification: exposed_write
+    reason: "Current curator authorization, resource visibility, atomic withdrawal or fenced undo, and replay."
   "asks.revise":
     classification: exposed_write
     reason: "Strict presentation allowlist, current curator authorization, concurrency and atomic replay."

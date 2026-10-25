@@ -89,3 +89,42 @@ The new presentation counter changes neither binding. The OSS acceptance test
 captures the inbox/options before a rewrite, answers afterward and checks that
 the notification targets the original requester. No deployment-specific code or
 endpoint is introduced here.
+
+## Retiring stale asks
+
+The same curator set can retire an ask that no longer needs a decision:
+
+```sh
+anx ask retire event:ask-id --reason "The old rollout was cancelled." --evidence card:rollout
+anx ask retire event:ask-id --undo --if-retirement event:retirement-id --request-key retirement-undo-1
+```
+
+`POST /asks/{ask_id}/retire` and MCP `anx_asks_retire` accept the same request.
+Retire requires a reason (at most 2,000 characters), 1–32 evidence resource refs
+or HTTP(S) URLs, and a request_key. The CLI derives the key when omitted; use a
+fresh key for a later intentional retirement. Undo reads the current retirement
+when its token is omitted. For a reviewable retry after an uncertain result,
+retain both the exact `--if-retirement` token and `--request-key`.
+
+Retirement appends `human_attention_retired`, naming the actor, timestamp,
+original requester, reason and evidence. The canonical resolution is a withdrawal;
+ask outcomes expose `withdrawn_as_stale` and `retirement_event_ref`. It never
+records a human answer, changes work phase, or enters answer counts. Decide
+hides the ask immediately. Cached inbox reads and answer submissions fail
+closed with “no longer open”; external adapters must treat 404/409 as closure.
+A generic durable notification targets the original requester, includes the
+reason and links the audit event. Undo queues a reopening notification as well.
+Notifications inherit the audit's resource visibility rules.
+
+Undo appends `human_attention_reopened` and releases only the exact current
+retirement claim. It cannot undo a human answer, ordinary withdrawal, later
+retirement, expired ask or closed subject. The original options, requester,
+presentation, deadlines and semantic revisions stay intact. Brief reopens the
+ask atomically; the maintained inbox projection then restores its original item.
+The audit replay recognizes retirement refs by both canonical IDs and public
+handles, independent of event ordering. Access-request enrollment/grant asks
+retain their separate lifecycle and cannot be retired or reopened here.
+
+A retirement and an in-flight answer compete for the same unique resolution
+claim in one transaction. Only one can commit. Exact request-key retries replay
+the original result, subject to current curator authority and resource visibility.

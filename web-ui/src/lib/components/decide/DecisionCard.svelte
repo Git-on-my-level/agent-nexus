@@ -697,7 +697,7 @@
         >
       {:else if gone}
         <span data-decision-gone
-          >This question no longer exists, so your answer can’t be sent.</span
+          >This ask is no longer open, so your answer can’t be sent.</span
         >
         <button
           type="button"

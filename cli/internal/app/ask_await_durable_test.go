@@ -16,6 +16,7 @@ func TestAwaitTerminalOutcomeNeedsNoSubscriptionOrStream(t *testing.T) {
 		{"answered", "rejected", 9},
 		{"needs_context", "needs_context", 10},
 		{"withdrawn", "", 11},
+		{"withdrawn_as_stale", "", 11},
 		{"expired", "", 12},
 	} {
 		t.Run(tc.status+tc.outcome, func(t *testing.T) {

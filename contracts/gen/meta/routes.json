@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 262,
+  "route_count": 263,
   "routes": [
     {
       "method": "GET",
@@ -170,6 +170,11 @@
     {
       "method": "GET",
       "path": "/asks/{ask_id}/presentation",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/asks/{ask_id}/retire",
       "access_class": "workspace_business_surface"
     },
     {

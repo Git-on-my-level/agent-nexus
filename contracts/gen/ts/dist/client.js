@@ -1393,6 +1393,7 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "asks.presentation.get",
+            "asks.retire",
             "asks.revise"
         ],
         "go_method": "AsksBatchCreate",
@@ -1528,10 +1529,77 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "asks.batch.create",
+            "asks.retire",
             "asks.revise"
         ],
         "go_method": "AsksPresentationGet",
         "ts_method": "asksPresentationGet"
+    },
+    {
+        "command_id": "asks.retire",
+        "cli_path": "ask retire",
+        "group": "ask",
+        "method": "POST",
+        "path": "/asks/{ask_id}/retire",
+        "operation_id": "retireAsk",
+        "summary": "Retire a stale open ask, or undo its retirement",
+        "description": "Same authorization and visibility as ask revise. Retiring atomically closes an open ask as withdrawn_as_stale, records who, why and evidence, and queues a notification to its original requester. It is never a human answer. Options, requester, presentation, routing and deadlines remain intact. Undo requires if_retirement from the retirement result or ask outcome; only that still-current retirement may be reopened. Expired asks and asks whose subject is closed cannot be reopened. request_key replays atomically. Retired inbox links and answer buttons fail closed as no longer open.",
+        "why": "Remove stale asks reversibly without fabricating a human decision.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns AskRetirementResult.",
+        "error_codes": [
+            "auth_required",
+            "forbidden",
+            "not_found",
+            "invalid_request",
+            "conflict"
+        ],
+        "concepts": [
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Supply reason and evidence to retire. Undo uses if_retirement from anx await or the retirement result. Preserve request_key after an uncertain result.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "request_key",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "evidence",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "if_retirement",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                },
+                {
+                    "name": "undo",
+                    "type": "boolean"
+                }
+            ]
+        },
+        "path_params": [
+            "ask_id"
+        ],
+        "adjacent_commands": [
+            "asks.batch.create",
+            "asks.presentation.get",
+            "asks.revise"
+        ],
+        "go_method": "AsksRetire",
+        "ts_method": "asksRetire"
     },
     {
         "command_id": "asks.revise",
@@ -1617,7 +1685,8 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "asks.batch.create",
-            "asks.presentation.get"
+            "asks.presentation.get",
+            "asks.retire"
         ],
         "go_method": "AsksRevise",
         "ts_method": "asksRevise"
@@ -7723,8 +7792,10 @@ export const commandRegistry = [
                         "document_revised",
                         "document_trashed",
                         "exception_raised",
+                        "human_attention_reopened",
                         "human_attention_requested",
                         "human_attention_responded",
+                        "human_attention_retired",
                         "human_attention_revised",
                         "human_attention_withdrawn",
                         "message_posted",
@@ -16566,6 +16637,9 @@ export class AnxClient {
     }
     asksPresentationGet(pathParams, options = {}) {
         return this.invoke("asks.presentation.get", pathParams, options);
+    }
+    asksRetire(pathParams, options = {}) {
+        return this.invoke("asks.retire", pathParams, options);
     }
     asksRevise(pathParams, options = {}) {
         return this.invoke("asks.revise", pathParams, options);

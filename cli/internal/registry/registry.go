@@ -323,7 +323,7 @@ func sideEffectClass(cmd Command) string {
 	if cmd.CommandID == "asks.presentation.get" {
 		return "read_only"
 	}
-	if cmd.CommandID == "asks.revise" {
+	if cmd.CommandID == "asks.revise" || cmd.CommandID == "asks.retire" {
 		return "remote_coordination_write"
 	}
 	if cmd.CLIPath == "work cadence" || cmd.CLIPath == "work goal" || cmd.CLIPath == "work receipt" {

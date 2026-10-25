@@ -387,7 +387,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"asks.presentation.get", "asks.revise"},
+		Adjacent:  []string{"asks.presentation.get", "asks.retire", "asks.revise"},
 	},
 	{
 		CommandID:  "asks.delivery",
@@ -423,7 +423,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "read"},
-		Adjacent:   []string{"asks.batch.create", "asks.revise"},
+		Adjacent:   []string{"asks.batch.create", "asks.retire", "asks.revise"},
+	},
+	{
+		CommandID:  "asks.retire",
+		CLIPath:    "ask retire",
+		Group:      "ask",
+		Method:     "POST",
+		Path:       "/asks/{ask_id}/retire",
+		PathParams: []string{"ask_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"asks.batch.create", "asks.presentation.get", "asks.revise"},
 	},
 	{
 		CommandID:  "asks.revise",
@@ -435,7 +447,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"asks.batch.create", "asks.presentation.get"},
+		Adjacent:   []string{"asks.batch.create", "asks.presentation.get", "asks.retire"},
 	},
 	{
 		CommandID:  "asks.stream",
@@ -3811,6 +3823,10 @@ func (c *Client) AsksGet(ctx context.Context, pathParams map[string]string, opts
 
 func (c *Client) AsksPresentationGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "asks.presentation.get", pathParams, opts)
+}
+
+func (c *Client) AsksRetire(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.retire", pathParams, opts)
 }
 
 func (c *Client) AsksRevise(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

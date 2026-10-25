@@ -404,7 +404,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `28`
+- Commands: `29`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -416,6 +416,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `asks.delivery`
   - `asks.get`
   - `asks.presentation.get`
+  - `asks.retire`
   - `asks.revise`
   - `asks.stream`
   - `asks.subscribe`
@@ -620,7 +621,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `67`
+- Commands: `68`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.subscribe`
@@ -635,6 +636,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `artifacts.unarchive`
   - `asks.batch.create`
   - `asks.delivery`
+  - `asks.retire`
   - `asks.revise`
   - `asks.subscribe`
   - `boards.archive`

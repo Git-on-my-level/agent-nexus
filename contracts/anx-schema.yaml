@@ -111,6 +111,8 @@ enums:
       - human_attention_responded
       - human_attention_withdrawn
       - human_attention_revised
+      - human_attention_retired
+      - human_attention_reopened
       - attention_feedback
       - agent_notification_read
       - agent_notification_dismissed
@@ -121,7 +123,7 @@ enums:
       boards: [board_created, board_updated]
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved, card_lease_acquired, card_lease_renewed, card_lease_released, card_lease_expired]
       curation: [curation_suggested, curation_receipt]
-      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, human_attention_revised, attention_feedback]
+      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, human_attention_revised, human_attention_retired, human_attention_reopened, attention_feedback]
       notifications: [agent_notification_read, agent_notification_dismissed]
       runs: [run_recorded]
       reviews: [receipt_added, review_completed]
@@ -889,6 +891,16 @@ reference_conventions:
       refs_must_include: ["event:<request_event_id>"]
       payload_must_include: ["request_event_id", "presentation_revision", "previous", "presentation"]
       description: Server-owned append-only presentation revision. Written only through POST /asks/{ask_id}/revise. Never changes the original ask or answer bindings.
+
+    human_attention_retired:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "requester_actor_id", "reason", "evidence"]
+      description: Server-owned stale withdrawal, never a human answer. Written only through POST /asks/{ask_id}/retire.
+
+    human_attention_reopened:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "requester_actor_id", "retirement_event_ref"]
+      description: Server-owned undo of one still-current retirement. Original ask and options remain immutable.
 
     agent_notification_read:
       refs_must_include: ["artifact:<wakeup_id>"]
