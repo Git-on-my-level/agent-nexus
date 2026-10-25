@@ -12,7 +12,7 @@ import (
 )
 
 func goodAskPresentation() askPresentation {
-	return askPresentation{Situation: "After a user erases their data, five background jobs can still recreate their monthly usage totals.", Impact: "Data we promised to delete comes back, creating privacy and compliance risk.", Recommendation: &askRecommendation{Action: "Make the jobs check whether the user was deleted.", Why: "Reuse the existing guard; about 3 extra database reads per usage write."}, Alternatives: []askAlternative{{Action: "Build a different design.", Consequence: "More retry logic and slower to build."}}, IfNoAnswer: "The database cost change stays blocked until Friday."}
+	return askPresentation{Situation: "After a user erases their data, five background jobs can still recreate their monthly usage totals. Other jobs already check for deletion before writing, but these five do not.", Impact: "Data we promised to delete comes back, creating privacy and compliance risk.", Recommendation: &askRecommendation{Action: "Make the jobs check whether the user was deleted.", Why: "Reuse the existing guard; about 3 extra database reads per usage write."}, Alternatives: []askAlternative{{Action: "Build a different design.", Consequence: "More retry logic and slower to build."}}, IfNoAnswer: "The database cost change stays blocked until Friday."}
 }
 func TestAskPlainLanguageLint(t *testing.T) {
 	good := goodAskPresentation()
@@ -28,14 +28,19 @@ func TestAskPlainLanguageLint(t *testing.T) {
 		{name: "long hash", title: "Approve " + strings.Repeat("a1", 32) + "?", p: good, warnings: []string{`"` + strings.Repeat("a1", 32) + `"`}},
 		{name: "everyday language", title: "Approve 24/7 support for iPhone?", p: good, options: []any{"OK if NO data was defaced; OK if NO one acceded."}},
 		{name: "English numbers", title: "Approve 10000000 more credits?", p: good},
-		{name: "missing", title: "Approve?", errors: []string{"Missing situation", "Missing impact", "Missing recommendation", "Missing recommendation.why"}},
+		{name: "missing", title: "Approve?", errors: []string{"Missing situation", "Missing impact", "Missing recommendation", "Missing recommendation.why"}, warnings: []string{"under 40 words"}},
 		{name: "production jargon", title: "Approve PR23397 existing-fence reuse on every aggregate creator?", p: askPresentation{Situation: "Recovered c10041 on m1: ordinary/once/absolute/admin/migration writers can create monthly_usage_totals after erasure inventories the subtree.", Impact: "An external_write_fence is needed.", Recommendation: good.Recommendation}, options: []any{"Approve existing-fence reuse plus root check; count new authority reads", "Keep PR23397 blocked; lead chooses UPDATE-only design"}, warnings: []string{`"PR23397"`, `"c10041"`, `"monthly_usage_totals"`, `"external_write_fence"`}},
 		{name: "identifiers", title: "Approve usageTotals at abc123def in core/internal/store.go or main.py?", p: good, warnings: []string{`"usageTotals"`, `"abc123def"`, `"core/internal/store.go"`, `"main.py"`}},
 		{name: "repeated acronym", title: "Approve SLA this week?", p: good, options: []any{"Keep SLA"}, warnings: []string{`"SLA"`}},
 		{name: "explained", title: "Approve service level agreement (SLA)?", p: good, options: []any{"Keep SLA"}},
 		{name: "parenthetical", title: "Approve usageTotals (monthly usage totals)?", p: good},
 		{name: "English", title: "Should we replace the old system?", p: good, options: []any{"Let the US team review privacy/compliance risk and choose and/or defer."}},
-		{name: "long", title: strings.Repeat("Choose ", 15), p: askPresentation{Situation: strings.Repeat("word ", 61), Impact: good.Impact, Recommendation: good.Recommendation}, warnings: []string{"80 characters", "60 words"}},
+		{name: "narrative", title: "Approve?", p: askPresentation{Situation: strings.Repeat("word ", 100), Impact: good.Impact, Recommendation: good.Recommendation}},
+		{name: "250 allowed", title: "Approve?", p: askPresentation{Situation: strings.Repeat("word ", 250), Impact: good.Impact, Recommendation: good.Recommendation}},
+		{name: "long", title: strings.Repeat("Choose ", 15), p: askPresentation{Situation: strings.Repeat("word ", 251), Impact: good.Impact, Recommendation: good.Recommendation}, warnings: []string{"80 characters", "250 words"}},
+		{name: "thin", title: "Approve?", p: askPresentation{Situation: "Reports are late.", Impact: "Shops wait.", Recommendation: good.Recommendation}, warnings: []string{"add the baseline, what changed and why it matters"}},
+		{name: "39 warns", title: "Approve?", p: askPresentation{Situation: strings.Repeat("word ", 20), Impact: strings.Repeat("word ", 19), Recommendation: good.Recommendation}, warnings: []string{"under 40 words"}},
+		{name: "40 allowed", title: "Approve?", p: askPresentation{Situation: strings.Repeat("word ", 20), Impact: strings.Repeat("word ", 20), Recommendation: good.Recommendation}},
 		{name: "not decision", title: "Background data update", p: good, warnings: []string{"not a question or decision"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -97,11 +102,49 @@ func TestAskFrontmatterPreviewRoundTrip(t *testing.T) {
 	if asMap(preview["recommendation"])["why"] == nil || len(asSlice(preview["alternatives"])) != 1 {
 		t.Fatalf("%#v", preview)
 	}
+	if !strings.Contains(anyString(preview["situation"]), "\n\nThe slowdown") {
+		t.Fatal("template must preserve the narrative paragraph break")
+	}
+	var prose []string
+	for _, key := range []string{"title", "situation", "impact", "if_no_answer"} {
+		prose = append(prose, anyString(preview[key]))
+	}
+	recommendation := asMap(preview["recommendation"])
+	prose = append(prose, anyString(recommendation["action"]), anyString(recommendation["why"]))
+	for _, v := range asSlice(preview["alternatives"]) {
+		alt := asMap(v)
+		prose = append(prose, anyString(alt["action"]), anyString(alt["consequence"]))
+	}
+	if words := len(strings.Fields(strings.Join(prose, " "))); words < 250 || words > 400 {
+		t.Fatalf("fictional narrative example has %d words, want 250–400", words)
+	}
 	// Dry-run carries the same fields on the existing event payload.
 	dry := assertEnvelopeOK(t, runCLIForTest(t, dir, nil, nil, []string{"--json", "ask", "--from-file", path, "--dry-run"}))
 	encoded, _ := json.Marshal(dry)
 	if !strings.Contains(string(encoded), `"recommendation"`) || !strings.Contains(string(encoded), `"if_no_answer"`) {
 		t.Fatal(string(encoded))
+	}
+}
+
+func TestAskPreviewOmitsUnusedSections(t *testing.T) {
+	p := askPresentation{Situation: "Reports are delayed.", Impact: "Shops are waiting.", Recommendation: &askRecommendation{Action: "Measure one run.", Why: "Find the cause first."}}
+	got := renderAskPreview("Measure the delay?", "", p, nil, nil)
+	for _, absent := range []string{"Alternatives", "If no answer", "Details and evidence", "Not specified"} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("unexpected %q in %s", absent, got)
+		}
+	}
+	// The warning is advisory: thin context still passes required-field lint.
+	warnings, errs := lintAskPresentation("Measure the delay?", p, nil)
+	if len(warnings) != 1 || len(errs) != 0 {
+		t.Fatalf("warnings=%v errors=%v", warnings, errs)
+	}
+}
+
+func TestAskPreviewPartialCopyCollapsesLegacyBody(t *testing.T) {
+	got := renderAskPreview("Approve?", "Legacy context.", askPresentation{Impact: "Shops are waiting."}, nil, nil)
+	if !strings.Contains(got, "Why it matters\n\nShops are waiting.\n\nDetails and evidence (collapsed in Decide)\n\nLegacy context.") {
+		t.Fatal(got)
 	}
 }
 func TestAskRequiredFieldsBlockWriteAndForceRecordsReason(t *testing.T) {
@@ -191,14 +234,18 @@ func TestAskPreviewMatchesDecide(t *testing.T) {
 	}
 	var fixture struct {
 		askPresentation
-		Title      string
-		Paragraphs []string
+		Title  string
+		Blocks []struct{ Text string }
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
 	got := renderAskPreview(fixture.Title, "", fixture.askPresentation, nil, nil)
-	want := fixture.Title + "\n\n" + strings.Join(fixture.Paragraphs, "\n") + "\n"
+	var blocks []string
+	for _, block := range fixture.Blocks {
+		blocks = append(blocks, block.Text)
+	}
+	want := fixture.Title + "\n\n" + strings.Join(blocks, "\n\n") + "\n"
 	if got != want {
 		t.Fatalf("preview drifted from Decide: got %q want %q", got, want)
 	}

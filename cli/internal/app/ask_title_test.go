@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -48,7 +49,11 @@ func TestAskTemplateFlagValueIsBody(t *testing.T) {
 }
 func TestAskDecisionTemplateOffline(t *testing.T) {
 	raw := runCLIForTest(t, t.TempDir(), nil, nil, []string{"ask", "--template", "decision"})
-	if raw != askDecisionTemplate {
+	golden, err := os.ReadFile("testdata/ask-decision-template.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw != string(golden) {
 		t.Fatalf("template: %q", raw)
 	}
 	for _, section := range []string{"situation:", "impact:", "recommendation:", "alternatives:", "if_no_answer:"} {
@@ -60,6 +65,15 @@ func TestAskDecisionTemplateOffline(t *testing.T) {
 		payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), nil, nil, append([]string{"--json"}, args...)))
 		if asMap(payload["error"])["code"] != "invalid_flags" {
 			t.Fatalf("%#v", payload)
+		}
+	}
+}
+
+func TestAskNarrativeHelp(t *testing.T) {
+	raw := runCLIForTest(t, t.TempDir(), nil, nil, []string{"ask", "--help"})
+	for _, text := range []string{"short proposal", "busy boss with no context", "baseline, what changed", "Why it matters", "What I recommend", "tradeoff", "Alternatives", "If no answer", "250", "40", "Omit unused optional fields"} {
+		if !strings.Contains(raw, text) {
+			t.Fatalf("help missing %q: %s", text, raw)
 		}
 	}
 }
