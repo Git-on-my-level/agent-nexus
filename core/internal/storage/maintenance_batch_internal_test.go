@@ -123,3 +123,38 @@ func TestAdaptiveMaintenanceLeaseExpiryKeepsDatabaseWritable(t *testing.T) {
 		t.Fatalf("overrun did not reduce cap: %d", batch.limit.Load())
 	}
 }
+
+func TestAdaptiveMaintenanceBusyDoesNotReduceCap(t *testing.T) {
+	var batch adaptiveMaintenanceBatch
+	_, err := batch.run(context.Background(), 200, func(context.Context, int) (bool, error) {
+		// Pool/schema admission can itself take longer than a chunk's lease. It
+		// is not evidence that processing 200 rows exceeded the writer budget.
+		time.Sleep(maintenanceChunkLease + 20*time.Millisecond)
+		return false, maintenanceBusyError{}
+	})
+	if err == nil || batch.limit.Load() != 200 {
+		t.Fatalf("busy admission shrank useful batch: cap=%d err=%v", batch.limit.Load(), err)
+	}
+}
+
+type maintenanceBusyError struct{}
+
+func (maintenanceBusyError) Error() string { return "synthetic SQLITE_BUSY" }
+func (maintenanceBusyError) Code() int     { return 5 }
+
+func TestAdaptiveMaintenanceRecoversAfterTransientSlowChunk(t *testing.T) {
+	var batch adaptiveMaintenanceBatch
+	_, _ = batch.run(context.Background(), 200, func(context.Context, int) (bool, error) {
+		time.Sleep(maintenanceChunkLease + 20*time.Millisecond)
+		return false, nil
+	})
+	if batch.limit.Load() != 100 {
+		t.Fatal(batch.limit.Load())
+	}
+	for range 32 {
+		_, _ = batch.run(context.Background(), 200, func(context.Context, int) (bool, error) { return false, nil })
+	}
+	if batch.limit.Load() != 200 {
+		t.Fatalf("transient contention left startup permanently throttled: cap=%d", batch.limit.Load())
+	}
+}

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"errors"
@@ -48,6 +49,8 @@ func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
 // InitializeCompactAccessShadow installs transactional mirrors without copying
 // history or selecting compact reads. Mirrors survive a paused worker.
 func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err error) {
+	ctx, finish := loopstats.Start(ctx, "compact_migration")
+	defer finish()
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	defer func() {
@@ -101,6 +104,8 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err erro
 // signed SQLite rowids, including zero/negative imported keys. Triggers cover
 // concurrent writes and key reuse behind the cursor.
 func (w *Workspace) MaintainCompactAccessBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "compact_migration")
+	defer finish()
 	return w.compactAccessBatch.run(ctx, 200, w.maintainCompactAccessChunk)
 }
 
@@ -144,6 +149,7 @@ func (w *Workspace) maintainCompactAccessChunk(ctx context.Context, limit int) (
 	if err != nil {
 		return false, err
 	}
+	loopstats.Rows(ctx, len(keys))
 	if len(keys) > 0 {
 		cursor = sql.NullInt64{Int64: keys[len(keys)-1], Valid: true}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO resource_access_compact_edges

@@ -1,0 +1,4 @@
+{
+  "router_empty": { "queries": 1, "rows": 0, "vm": 2048, "scan": 0 },
+  "aggregate_repair": { "vm": 20000, "scan": 0 }
+}

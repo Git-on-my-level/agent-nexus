@@ -28,6 +28,7 @@ import (
 	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/heartbeat"
+	"agent-nexus-core/internal/loopstats"
 	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
@@ -73,6 +74,12 @@ func main() {
 		os.Exit(runHealthcheckCLI())
 	}
 
+	pprofDiagnostics, pprofErr := runtimememory.StartPprof(envString("ANX_DEBUG_PPROF_ADDR", ""), envBool("ANX_DEBUG_PPROF_ALLOW_NON_LOOPBACK", false))
+	if pprofErr != nil {
+		fmt.Fprintln(os.Stderr, pprofErr)
+		os.Exit(1)
+	}
+	defer pprofDiagnostics.Close()
 	runtimememory.Configure(os.Stderr)
 
 	var (
@@ -640,6 +647,10 @@ func main() {
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
 	// Do not allow background writers or HTTP admission to compete with install.
+	if err := workspace.InitializeUsageTracking(maintenanceCtx); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to initialize usage tracking")
+		os.Exit(1)
+	}
 	var compactWait <-chan struct{}
 	if compactAccessMigration {
 		compactCtx, compactCancel := context.WithTimeout(maintenanceCtx, 10*time.Minute)
@@ -661,6 +672,7 @@ func main() {
 			defer func() { maintenanceCancel(); <-compactDone }()
 		}
 	}
+
 	retiredDone := make(chan struct{})
 	go func() { defer close(retiredDone); workspace.RunCompactAccessRetiredMaintenance(maintenanceCtx) }()
 	defer func() { maintenanceCancel(); <-retiredDone }()
@@ -668,6 +680,8 @@ func main() {
 		p, err := authStore.PrincipalForActor(ctx, actor)
 		return err == nil && !p.Revoked && p.PrincipalKind == string(auth.PrincipalKindAgent)
 	})
+	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router")
+	go loopstats.Run(maintenanceCtx, os.Stderr)
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
 	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
 	go workspace.RunAskSubjectsMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask subject maintenance: retrying bounded batch") })
@@ -817,7 +831,7 @@ func main() {
 				}
 
 				usageSummary := map[string]any{}
-				if usage, err := primitiveStore.GetWorkspaceUsageSummary(ctx); err != nil {
+				if usage, err := primitiveStore.GetMaintenanceWorkspaceUsageSummary(ctx); err != nil {
 					usageSummary["error"] = err.Error()
 				} else {
 					usageSummary = asMapAny(usage)

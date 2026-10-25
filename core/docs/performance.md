@@ -2026,3 +2026,11 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/storage \
   -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
 ```
+
+## Idle background maintenance
+
+The [idle-maintenance reproduction and cost inventory](idle-maintenance.md)
+records the synthetic 2.27 GB comparison, loop accounting, opt-in pprof listener,
+indexed router/FTS positions, writer-free idle probes and dirty heartbeat usage
+cache. New read budgets live in `primitives/testdata/idle_maintenance_budget.json`;
+existing budgets and plan allowances are unchanged.

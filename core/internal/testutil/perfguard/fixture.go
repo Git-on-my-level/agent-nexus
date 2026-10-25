@@ -112,6 +112,15 @@ func seedRows(ctx context.Context, db *sql.DB, contentDir, owner string, seriesA
 			return fmt.Errorf("scale fixture statement %d: %w", i, err)
 		}
 	}
+	var positions bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='document_search_fts_positions')`).Scan(&positions); err != nil {
+		return err
+	}
+	if positions {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO document_search_fts_positions SELECT document_id,rowid FROM document_fts WHERE document_id IS NOT NULL ON CONFLICT DO NOTHING`); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}

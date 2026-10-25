@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"errors"
@@ -78,6 +79,7 @@ func (s *Store) MaintainDocumentSearchBatch(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if err == nil {
+		loopstats.Rows(ctx, 1)
 		revision, body, binding, readErr := s.readSearchBody(ctx, id)
 		if readErr != nil {
 			return false, readErr
@@ -145,6 +147,7 @@ func (s *Store) MaintainDocumentSearchBatch(ctx context.Context) (bool, error) {
 			return false, err
 		}
 	}
+	loopstats.Rows(ctx, 1)
 	var linkCursor sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT document_id,cursor FROM document_search_links_pending ORDER BY document_id LIMIT 1`).Scan(&id, &linkCursor)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -182,6 +185,7 @@ func (s *Store) RunDocumentSearchMaintenance(ctx context.Context, report func(er
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			ctx, finish := loopstats.Start(ctx, "document_search")
 			done, err := s.MaintainDocumentSearchBatch(ctx)
 			var commentsDone bool
 			if err == nil {
@@ -192,6 +196,7 @@ func (s *Store) RunDocumentSearchMaintenance(ctx context.Context, report func(er
 				repaired, err = s.repairAggregateSearchOne(ctx)
 				done = done && repaired
 			}
+			finish()
 			if done && err == nil {
 				ticker.Reset(250 * time.Millisecond)
 			} else {
@@ -245,7 +250,7 @@ func (s *Store) repairAggregateSearchOne(ctx context.Context) (bool, error) {
 			return false, nil
 		}
 	}
-	if _, e := tx.ExecContext(ctx, `DELETE FROM document_fts WHERE document_id=?`, id); e != nil {
+	if e := clearDocumentFTSTx(ctx, tx, id); e != nil {
 		return false, e
 	}
 	if err == nil {
@@ -257,7 +262,11 @@ func (s *Store) repairAggregateSearchOne(ctx context.Context) (bool, error) {
 		if e != nil {
 			return false, e
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO document_fts(document_id,title,body,summary,source,tags,comments) VALUES(?,?,?,?,?,?,?)`, id, title, body, summary, source, strings.Join(list, " "), comments); e != nil {
+		result, e := tx.ExecContext(ctx, `INSERT INTO document_fts(document_id,title,body,summary,source,tags,comments) VALUES(?,?,?,?,?,?,?)`, id, title, body, summary, source, strings.Join(list, " "), comments)
+		if e != nil {
+			return false, e
+		}
+		if e = recordDocumentFTSPosition(ctx, tx, id, result); e != nil {
 			return false, e
 		}
 	}

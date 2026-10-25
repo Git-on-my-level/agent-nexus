@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"crypto/ed25519"
 	"database/sql"
@@ -81,6 +82,8 @@ func (rt *PMRuntime) ChannelIngressConfigured() bool {
 
 // Tick runs turn expiry even when no runner or channel sender is attached.
 func (rt *PMRuntime) Tick(ctx context.Context) error {
+	ctx, finish := loopstats.Start(ctx, "pm")
+	defer finish()
 	if rt == nil || rt.Service == nil {
 		return nil
 	}

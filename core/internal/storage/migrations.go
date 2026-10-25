@@ -1181,6 +1181,9 @@ var migrations = []migration{
 	// Stop delivering legacy curation prompts. Canonical withdrawal events and
 	// resolution claims commit together, retaining a reason for each request.
 	{Version: 119, AfterApply: quietCurationSuggestions},
+
+	// Indexed derived positions keep background polls independent of history.
+	{Version: 120, AfterApply: installIdleMaintenancePositions},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

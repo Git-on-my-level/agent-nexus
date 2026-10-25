@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"fmt"
 	"strings"
@@ -89,6 +90,8 @@ func (m *AnswerWakeMaintainer) Run(ctx context.Context) {
 }
 
 func (m *AnswerWakeMaintainer) Step(ctx context.Context, now time.Time) error {
+	ctx, finish := loopstats.Start(ctx, "answer_wake")
+	defer finish()
 	if m == nil || m.store == nil {
 		return nil
 	}
@@ -99,6 +102,7 @@ func (m *AnswerWakeMaintainer) Step(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	loopstats.Rows(ctx, len(batches))
 	for _, batch := range batches {
 		if m.recipientIsActive != nil {
 			active, activeErr := m.recipientIsActive(ctx, batch.TargetActorID)

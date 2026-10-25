@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"errors"
 	"net/http"
@@ -236,6 +237,8 @@ func handleCurationRun(w http.ResponseWriter, r *http.Request, opts handlerOptio
 // principal. Candidates come from workspace-visible items only; the run never
 // acts on anything.
 func RunCurationFormula(ctx context.Context, store *primitives.Store) ([]map[string]any, int, error) {
+	ctx, finish := loopstats.Start(ctx, "curation")
+	defer finish()
 	candidates, _, err := store.CurationCandidates(ctx, nil, time.Now().UTC())
 	if err != nil {
 		return nil, 0, err

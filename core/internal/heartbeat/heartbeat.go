@@ -1,6 +1,7 @@
 package heartbeat
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -88,6 +89,8 @@ func (p *Publisher) Run(ctx context.Context) {
 }
 
 func (p *Publisher) publishOnce(ctx context.Context) error {
+	ctx, finish := loopstats.Start(ctx, "heartbeat")
+	defer finish()
 	if err := p.validate(); err != nil {
 		return err
 	}

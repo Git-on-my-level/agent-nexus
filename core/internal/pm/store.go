@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"agent-nexus-core/internal/contentusage"
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/sha256"
@@ -57,6 +58,9 @@ func NewStore(db *sql.DB) (*Store, error) {
  CREATE INDEX IF NOT EXISTS pm_records_parent_status ON pm_records(kind,workspace_id,parent_id,json_extract(body,'$.status'));
  CREATE INDEX IF NOT EXISTS pm_records_turn_outbox ON pm_records(kind,workspace_id,json_extract(body,'$.status'),COALESCE(json_extract(body,'$.delivery_queued'),0)) WHERE kind='turn' AND json_extract(body,'$.status')='delivered' AND COALESCE(json_extract(body,'$.delivery_queued'),0)=0;`)
 	if err != nil {
+		return nil, err
+	}
+	if err := contentusage.InstallTable(context.Background(), tx, "pm_records"); err != nil {
 		return nil, err
 	}
 	if err := resourceaccess.InstallPMAccess(context.Background(), tx, false); err != nil {

@@ -35,6 +35,10 @@ func TestBriefAgentOwnershipMigrationAndSessionLifecycle(t *testing.T) {
 	}
 	// Reconstruct the pre-105 participant schema with existing open and closed
 	// sessions. Upgrade must backfill once, preserve activity, and be repeatable.
+	// Recreate the pre-accounting schema, retaining all upgrade assertions.
+	for _, op := range []string{"insert", "update", "delete"} {
+		exec(`DROP TRIGGER IF EXISTS background_usage_work_participants_` + op)
+	}
 	for _, query := range []string{
 		`DROP TRIGGER work_participants_session_active_insert`,
 		`DROP TRIGGER work_participants_session_active_update`,

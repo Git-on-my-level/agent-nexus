@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"encoding/json"
 	"errors"
@@ -317,7 +318,10 @@ func (rt *ObservationRuntime) ReadOne(ctx context.Context, workRef string) (obse
 }
 
 func (rt *ObservationRuntime) Tick(ctx context.Context) error {
+	ctx, finish := loopstats.Start(ctx, "observation")
+	defer finish()
 	var failures []error
+	loopstats.Rows(ctx, len(rt.bindings))
 	for _, b := range rt.bindings {
 		if ctx.Err() != nil {
 			return ctx.Err()
