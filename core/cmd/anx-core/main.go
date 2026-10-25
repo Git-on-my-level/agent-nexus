@@ -728,6 +728,14 @@ func main() {
 		AskPM:         server.NewEscalationPMWaker(workspace.DB(), primitiveStore, authStore, pmRuntime.AgentActorID, server.NewEscalationReadCheck(primitiveStore), workspaceID, workspaceName),
 	}
 	go escalator.Run(maintenanceCtx)
+	// The lease clock records each expired work lease once and wakes the
+	// card's agent assignee (or the PM). Lease state itself is computed on
+	// read, so a sleeping hosted core only delays the audit event and wake.
+	cardLeaseClock := &server.CardLeaseClock{Store: primitiveStore, AuthStore: authStore, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
+	if pmRuntime != nil {
+		cardLeaseClock.PMActorID = pmRuntime.AgentActorID
+	}
+	go cardLeaseClock.Run(maintenanceCtx)
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)

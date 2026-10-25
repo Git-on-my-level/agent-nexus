@@ -151,7 +151,7 @@ func ExitCode(err error) int {
 	switch typed.Code {
 	case "not_found", "draft_not_found", "profile_not_found":
 		return 3
-	case "quota_exceeded", "conflict", "source_revision_changed", "lease_mismatch", "actor_exists", "username_taken":
+	case "quota_exceeded", "conflict", "source_revision_changed", "lease_mismatch", "lease_not_held", "actor_exists", "username_taken":
 		return 4
 	case "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
 		return 5
@@ -167,8 +167,10 @@ func ExitCode(err error) int {
 		return 10
 	case "withdrawn":
 		return 11
-	case "expired":
+	case "expired", "lease_expired":
 		return 12
+	case "lease_held":
+		return 13
 	}
 	if typed.Kind == KindUsage {
 		return 2
@@ -291,6 +293,9 @@ var defaultMetadataByCode = map[string]Metadata{
 	"cli_outdated":                  {Recoverable: true, Hint: "Run `anx update`, then retry."},
 	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, enroll this host, and select an agent with --as or ANX_AS."},
 	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},
+	"lease_held":                    {Recoverable: false, Hint: "Another owner holds this card's work lease; do not start the work. Wait for expires_at or ask the holder to release it."},
+	"lease_expired":                 {Recoverable: true, Hint: "Your work lease expired; run `anx lease acquire` again to take a new epoch, since another owner may have started."},
+	"lease_not_held":                {Recoverable: true, Hint: "Nobody holds this lease; run `anx lease acquire` before renewing."},
 	"draft_exists":                  {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},
 	"draft_not_found":               {Recoverable: true, Hint: "Run `anx draft list` to discover valid draft ids."},
 	"draft_validation_failed":       {Recoverable: true, Hint: "Fix the validation errors in the payload, then run `anx draft create` again."},

@@ -97,6 +97,10 @@ enums:
       - card_archived
       - card_trashed
       - card_resolved
+      - card_lease_acquired
+      - card_lease_renewed
+      - card_lease_released
+      - card_lease_expired
       - run_recorded
       - receipt_added
       - review_completed
@@ -112,7 +116,7 @@ enums:
       topics: [topic_created, topic_updated, topic_archived, topic_restored, topic_trashed]
       documents: [document_created, document_revised, document_trashed, document_restored]
       boards: [board_created, board_updated]
-      cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved]
+      cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved, card_lease_acquired, card_lease_renewed, card_lease_released, card_lease_expired]
       attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, attention_feedback]
       notifications: [agent_notification_read, agent_notification_dismissed]
       runs: [run_recorded]
@@ -785,6 +789,39 @@ reference_conventions:
     card_resolved:
       refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
       payload_must_include: ["resolution"]
+
+    card_lease_acquired:
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
+      payload_must_include: ["owner", "epoch", "expires_at"]
+      description: >
+        Core-written only (generic event append rejects lease types). A work lease was taken.
+        previous_owner and previous_state are present when an expired or released lease
+        changed hands; handoff_from names the releasing owner on a hand-off. The card_leases
+        row is authoritative; this event is the audit record.
+
+    card_lease_renewed:
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
+      payload_must_include: ["owner", "epoch", "expires_at"]
+      description: Core-written only. The holder extended its lease without changing the epoch.
+
+    card_lease_released:
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
+      payload_must_include: ["owner", "epoch"]
+      description: >
+        Core-written only. The holder gave up its lease. On a hand-off, handoff_to and
+        next_epoch name the new owner and its epoch, and a card_lease_acquired event follows
+        in the same transaction. card_unowned (in_progress or open_promise) is present when
+        the release left live work ownerless; the lease clock then wakes the workspace PM.
+
+    card_lease_expired:
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
+      payload_must_include: ["owner", "epoch", "expires_at"]
+      description: >
+        Core-written only, by the lease clock, at most once per epoch. The lease passed
+        expires_at without renewal or release. The clock also wakes the card's agent
+        assignee through the durable wake path (a bridge delivery). card_unowned
+        (in_progress or open_promise) is present when the card is still live work; the
+        clock then also wakes the workspace PM with a card_unowned wake.
 
     run_recorded:
       refs_must_include: ["card:<card_handle>"]

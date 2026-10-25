@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": false,
-  "rule_count": 25,
+  "rule_count": 29,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -37,6 +37,49 @@
         "board:\u003cboard_handle\u003e",
         "card_revision:\u003crevision_handle\u003e",
         "artifact:\u003cartifact_handle\u003e"
+      ]
+    },
+    "card_lease_acquired": {
+      "refs_must_include": [
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
+      ],
+      "payload_must_include": [
+        "owner",
+        "epoch",
+        "expires_at"
+      ]
+    },
+    "card_lease_expired": {
+      "refs_must_include": [
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
+      ],
+      "payload_must_include": [
+        "owner",
+        "epoch",
+        "expires_at"
+      ]
+    },
+    "card_lease_released": {
+      "refs_must_include": [
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
+      ],
+      "payload_must_include": [
+        "owner",
+        "epoch"
+      ]
+    },
+    "card_lease_renewed": {
+      "refs_must_include": [
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
+      ],
+      "payload_must_include": [
+        "owner",
+        "epoch",
+        "expires_at"
       ]
     },
     "card_moved": {

@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `77`
+- Commands: `81`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -166,6 +166,10 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `lease.acquire`
+  - `lease.release`
+  - `lease.renew`
+  - `lease.show`
   - `overview.changes`
   - `overview.get`
   - `plan.set`
@@ -230,11 +234,15 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `concurrency`
 
-- Commands: `4`
+- Commands: `8`
 - Command IDs:
   - `boards.patch`
   - `cards.patch`
   - `docs.patch`
+  - `lease.acquire`
+  - `lease.release`
+  - `lease.renew`
+  - `lease.show`
   - `topics.patch`
 
 ## `docs`
@@ -609,7 +617,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `63`
+- Commands: `66`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.subscribe`
@@ -664,6 +672,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.unarchive`
   - `home.read`
   - `inbox.respond`
+  - `lease.acquire`
+  - `lease.release`
+  - `lease.renew`
   - `plan.set`
   - `secrets.create`
   - `secrets.delete`

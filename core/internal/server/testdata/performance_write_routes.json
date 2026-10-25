@@ -266,6 +266,21 @@
   },
   {
     "method": "POST",
+    "path": "/cards/{card_id}/lease/acquire",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/cards/{card_id}/lease/release",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/cards/{card_id}/lease/renew",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
     "path": "/cards/{card_id}/move",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },

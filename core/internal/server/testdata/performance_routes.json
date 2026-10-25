@@ -327,6 +327,17 @@
   },
   {
     "method": "GET",
+    "path": "/cards/{card_id}/lease",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Point read: one card seek plus one card_leases primary-key seek; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
     "path": "/cards/{card_id}/plan",
     "max_queries": 100,
     "max_rows": 1024,

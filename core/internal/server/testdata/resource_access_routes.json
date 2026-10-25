@@ -506,6 +506,26 @@
     "policy": "record"
   },
   {
+    "method": "GET",
+    "path": "/cards/{card_id}/lease",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/cards/{card_id}/lease/acquire",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/cards/{card_id}/lease/release",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/cards/{card_id}/lease/renew",
+    "policy": "record"
+  },
+  {
     "method": "POST",
     "path": "/cards/{card_id}/move",
     "policy": "record"

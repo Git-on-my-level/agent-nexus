@@ -79,6 +79,10 @@
         "board_updated",
         "card_archived",
         "card_created",
+        "card_lease_acquired",
+        "card_lease_expired",
+        "card_lease_released",
+        "card_lease_renewed",
         "card_moved",
         "card_resolved",
         "card_trashed",
@@ -187,6 +191,10 @@
     "cards": [
       "card_archived",
       "card_created",
+      "card_lease_acquired",
+      "card_lease_expired",
+      "card_lease_released",
+      "card_lease_renewed",
       "card_moved",
       "card_resolved",
       "card_trashed",
@@ -243,6 +251,18 @@
       "cards"
     ],
     "card_created": [
+      "cards"
+    ],
+    "card_lease_acquired": [
+      "cards"
+    ],
+    "card_lease_expired": [
+      "cards"
+    ],
+    "card_lease_released": [
+      "cards"
+    ],
+    "card_lease_renewed": [
       "cards"
     ],
     "card_moved": [

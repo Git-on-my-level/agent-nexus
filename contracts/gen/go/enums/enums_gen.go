@@ -170,6 +170,10 @@ const (
 	EventTypeCardArchived               = "card_archived"
 	EventTypeCardTrashed                = "card_trashed"
 	EventTypeCardResolved               = "card_resolved"
+	EventTypeCardLeaseAcquired          = "card_lease_acquired"
+	EventTypeCardLeaseRenewed           = "card_lease_renewed"
+	EventTypeCardLeaseReleased          = "card_lease_released"
+	EventTypeCardLeaseExpired           = "card_lease_expired"
 	EventTypeRunRecorded                = "run_recorded"
 	EventTypeReceiptAdded               = "receipt_added"
 	EventTypeReviewCompleted            = "review_completed"
@@ -183,12 +187,12 @@ const (
 )
 
 // EventTypeValues lists every event_type value in contract order. Do not modify it.
-var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
+var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
 
 // IsEventType reports whether value is exactly a canonical event_type value.
 func IsEventType(value string) bool {
 	switch value {
-	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
+	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
 		return true
 	}
 	return false

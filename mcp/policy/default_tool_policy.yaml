@@ -836,6 +836,18 @@ commands:
   "curation.ungroup":
     classification: unsupported_interactive
     reason: "human-only undo of an accepted batch requires human judgment"
+  "lease.show":
+    classification: exposed_read
+    reason: "Point read of one card's work lease state, owner, epoch and expiry."
+  "lease.acquire":
+    classification: exposed_write
+    reason: "Ordinary work claim on a card the caller can write; refuses with lease_held when another owner holds it."
+  "lease.renew":
+    classification: exposed_write
+    reason: "Extends a work lease the caller's owner id still holds."
+  "lease.release":
+    classification: exposed_write
+    reason: "Gives up a work lease the caller's owner id holds."
   "deliveries.list":
     classification: exposed_read
     reason: "The caller's own queued notifications and wake deliveries, bounded by limit."

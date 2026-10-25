@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `274`
+- Commands: `278`
 
 ## `actors.create`
 
@@ -2240,6 +2240,67 @@ Generated from `contracts/anx-openapi.yaml`.
 - Agent notes: Off by default. Local settings only; run uses existing card-create replay safety.
 - Examples:
   - Inspect the installed hook and local spool: `anx integrations status claude-code-suggested-tasks`
+
+## `lease.acquire`
+
+- CLI path: `lease acquire`
+- HTTP: `POST /cards/{card_id}/lease/acquire`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Claim a card before starting work so a second session or lane cannot start the same work.
+- Concepts: `cards`, `concurrency`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `lease_held`, `outcome_unknown`, `busy`
+- Output: Returns `{ lease, changed }`.
+- Agent notes: Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock.
+- Examples:
+  - Claim a card for two hours: `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'`
+
+## `lease.release`
+
+- CLI path: `lease release`
+- HTTP: `POST /cards/{card_id}/lease/release`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Give up a work lease when the work stops, or hand it to the next owner, so live work never sits ownerless.
+- Concepts: `cards`, `concurrency`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `lease_not_held`, `outcome_unknown`, `busy`
+- Output: Returns `{ lease, changed }`; changed is false when the lease was already free. After a hand-off, lease is the new owner's lease.
+- Agent notes: Releasing a lease that is already free is a no-op. Releasing another owner's unexpired lease fails with lease_held. --handoff-to moves your lease (held, or your own expired lease nobody took) to the next owner with epoch+1 atomically; handing off a free lease fails with lease_not_held. A release without hand-off on live work (in_progress, or an open --next promise) wakes the workspace PM with card_unowned.
+- Examples:
+  - Release a lease: `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
+  - Hand a lease to the next lane: `anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h --reason 'lane rotation'`
+
+## `lease.renew`
+
+- CLI path: `lease renew`
+- HTTP: `POST /cards/{card_id}/lease/renew`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Extend a work lease you hold while the work is still alive.
+- Concepts: `cards`, `concurrency`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `lease_held`, `lease_expired`, `lease_not_held`, `outcome_unknown`, `busy`
+- Output: Returns `{ lease, changed }`.
+- Agent notes: Renew never resurrects an expired lease (409 lease_expired, CLI exit 12): re-acquire, which takes a new epoch, so a stalled holder always sees that it lost the claim.
+- Examples:
+  - Renew a lease: `anx lease renew card:ramp-batch --owner exec-7f3a`
+
+## `lease.show`
+
+- CLI path: `lease show`
+- HTTP: `GET /cards/{card_id}/lease`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: See who holds the work lease on a card, its epoch and when it expires, before starting work on it.
+- Concepts: `cards`, `concurrency`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ lease }`; `lease.state` is none, held, expired or released, computed from the server clock.
+- Agent notes: A work lease is optimistic concurrency on the server for work claims, not a partition-safe lock. state=expired means any owner may acquire it.
+- Examples:
+  - Check a card's lease: `anx lease show card:ramp-batch`
 
 ## `meta.commands.get`
 

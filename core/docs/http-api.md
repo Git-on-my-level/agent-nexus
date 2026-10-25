@@ -426,6 +426,17 @@ fenced examples and counting empty Markdown checkbox lines.
 
 See `../../docs/live-series.md` for adapter declaration, scoped token exchange, bounded queries, caps, retention, panel sources and fallback semantics. The canonical paths and JSON schemas are in `contracts/anx-openapi.yaml`.
 
+## Card work leases
+
+A card carries at most one work lease: who (an opaque `owner` id such as an execution or session id) is working it, until when, and in which `epoch`. See `../../docs/work-leases.md` for semantics and limits.
+
+- `GET /cards/{card_id}/lease` (`anx lease show`): `{"lease":{card_ref,state,owner,epoch,holder_actor_id,ttl_seconds,acquired_at,renewed_at,expires_at,released_at,remaining_seconds,server_time}}`. `state` is `none`, `held`, `expired` or `released`, computed from the server clock on every read. One card seek plus one `card_leases` primary-key seek.
+- `POST /cards/{card_id}/lease/acquire` (`anx lease acquire`): body `{owner, ttl_seconds (60..604800), reason?, if_epoch?}`. Another owner's unexpired lease returns `409 lease_held` with `error.details {owner, epoch, expires_at, state, holder_actor_id}`. The same owner re-acquiring extends the lease in the same epoch; any other acquisition starts epoch+1. `if_epoch` mismatch returns `409 conflict`. Archived or trashed cards return `400 invalid_request`.
+- `POST /cards/{card_id}/lease/renew` (`anx lease renew`): body `{owner, ttl_seconds?}` (default: the lease's TTL). `409 lease_held` (other owner), `409 lease_expired` (the caller's lease passed `expires_at`; re-acquire for a new epoch) or `409 lease_not_held`.
+- `POST /cards/{card_id}/lease/release` (`anx lease release`): body `{owner, reason?, handoff_to?, ttl_seconds?}`. Releasing a free lease returns `changed:false`; another owner's unexpired lease returns `409 lease_held`. With `handoff_to` the owner's lease (held, or its own untaken expired lease) moves to that owner under epoch+1 in the same transaction (`ttl_seconds` only with `handoff_to`; default the released TTL), recorded as `card_lease_released` then `card_lease_acquired`; a free lease returns `409 lease_not_held`. A release without hand-off on live work (in_progress, or an open `--next` promise in the brief fold) marks the lease for one `card_unowned` wake to the workspace PM, sent by the lease clock.
+
+Mutations return `{"lease":{...},"changed":bool,"event_id":"..."}` and append `card_lease_acquired|renewed|released` to the card timeline in the same transaction. Those event types are rejected on `POST /events`. A core clock (30 s) records `card_lease_expired` once per expired epoch and wakes the card's agent assignee, or the workspace PM, through the durable wake path (a `bridge` delivery). On live work it also sends a `card_unowned` wake (packet `wake_reason: card_unowned`) to the workspace PM, falling back to the agent assignee when no PM can read the card.
+
 ## Delivery queue and notification settings
 
 One durable queue carries agent wakes (bridge channel, mirrored from `agent_wakeups`) and human push or digest notifications. Adapters that declare `delivers: [channel]` (up to 8 per declaration; `bridge` is reserved) move deliveries for those channels; `series` may be empty when `delivers` is non-empty. A declaration may limit `kinds` (`push`, `digest`; both by default) and set a `label`. Every active declaration of one channel must agree on addressing and kinds.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 256,
+  "route_count": 260,
   "routes": [
     {
       "method": "GET",
@@ -470,6 +470,26 @@
     {
       "method": "POST",
       "path": "/cards/{card_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}/lease",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/acquire",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/release",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/lease/renew",
       "access_class": "workspace_business_surface"
     },
     {

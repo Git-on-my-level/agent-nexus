@@ -116,6 +116,10 @@
     "milliseconds": 4648
   },
   {
+    "key": "GET /cards/{card_id}/lease",
+    "milliseconds": 3000
+  },
+  {
     "key": "GET /cards/{card_id}/plan",
     "milliseconds": 4485
   },
