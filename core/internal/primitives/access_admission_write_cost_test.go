@@ -2,6 +2,7 @@ package primitives_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -58,9 +59,9 @@ func TestTopicLifecycleWriteSeeksProjectIndex(t *testing.T) {
 	defer ws.Close()
 	for _, q := range []string{
 		`INSERT INTO topics(id,handle,title,summary,extensions_json,provenance_json,created_at,created_by,updated_at,updated_by) VALUES('indexed-topic','indexed-topic','Project','','{}','{}','now','owner','now','owner')`,
-		`INSERT INTO cards(id,handle,title,summary,column_key,created_at,created_by,updated_at,updated_by) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000) SELECT 'unrelated-'||i,'unrelated-'||i,'Public','','ready','now','owner','now','owner' FROM n`,
+		fmt.Sprintf(`INSERT INTO cards(id,handle,title,summary,column_key,created_at,created_by,updated_at,updated_by) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<%d) SELECT 'unrelated-'||i,'unrelated-'||i,'Public','','ready','now','owner','now','owner' FROM n`, primitivesFixtureRows(512, 10000)),
 		`INSERT INTO cards(id,handle,title,summary,column_key,created_at,created_by,updated_at,updated_by) VALUES('member','member','Public','','ready','now','owner','now','owner')`,
-		`INSERT INTO work_metadata(card_id,authority,metadata_json,updated_at,updated_by) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000) SELECT 'unrelated-'||i,'nexus',json_object('project_ref','topic:unrelated-'||i),'now','owner' FROM n`,
+		fmt.Sprintf(`INSERT INTO work_metadata(card_id,authority,metadata_json,updated_at,updated_by) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<%d) SELECT 'unrelated-'||i,'nexus',json_object('project_ref','topic:unrelated-'||i),'now','owner' FROM n`, primitivesFixtureRows(512, 10000)),
 		`INSERT INTO work_metadata(card_id,authority,metadata_json,updated_at,updated_by) VALUES('member','nexus','{"project_ref":"topic:indexed-topic"}','now','owner')`,
 	} {
 		if _, err := ws.DB().Exec(q); err != nil {

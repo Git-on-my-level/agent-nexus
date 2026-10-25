@@ -49,24 +49,17 @@ func TestDocumentSearchParentANDPostingPlanAndBudget(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback()
-			insert, err := tx.Prepare(`INSERT INTO documents(id,title,head_revision_id,head_revision_number,created_at,created_by,updated_at,updated_by) VALUES(?,'unrelated filler','',0,'now','owner','now','owner')`)
-			if err != nil {
+			// modernc prepares a native VM on each prepared-statement execution.
+			// Keep the full corpus and every trigger, preparing each fixture write
+			// once instead of once per unrelated row.
+			if _, err = tx.Exec(`WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<?)
+			 INSERT INTO documents(id,title,head_revision_id,head_revision_number,created_at,created_by,updated_at,updated_by)
+			 SELECT printf('unrelated-%05d',n),'unrelated filler','',0,'now','owner','now','owner' FROM fixture`, count); err != nil {
 				t.Fatal(err)
 			}
-			defer insert.Close()
-			head, err := tx.Prepare(`UPDATE document_search_heads SET ready=1,projection_json=anx_comment_search_projection(CAST('unrelated filler other words' AS BLOB)) WHERE document_id=?`)
-			if err != nil {
+			if _, err = tx.Exec(`UPDATE document_search_heads SET ready=1,projection_json=anx_comment_search_projection(CAST('unrelated filler other words' AS BLOB))
+			 WHERE document_id IN (WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<?) SELECT printf('unrelated-%05d',n) FROM fixture)`, count); err != nil {
 				t.Fatal(err)
-			}
-			defer head.Close()
-			for i := 0; i < count; i++ {
-				id := fmt.Sprintf("unrelated-%05d", i)
-				if _, err = insert.Exec(id); err != nil {
-					t.Fatal(err)
-				}
-				if _, err = head.Exec(id); err != nil {
-					t.Fatal(err)
-				}
 			}
 			// These imported empty-thread heads have no historical comments to attach.
 			if _, err = tx.Exec(`DELETE FROM document_search_links_pending WHERE document_id LIKE 'unrelated-%'`); err != nil {
