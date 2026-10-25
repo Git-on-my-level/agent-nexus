@@ -74,37 +74,7 @@ func buildOwnershipTemplate(name string, owner bool, ledger resourceaccess.Ledge
 		}
 		children[parent] = append(children[parent], "SELECT '"+child+"' child_kind,r."+childCol+" child_id FROM main."+table+" r"+index+" WHERE r."+parentCol+"=d.id AND COALESCE(r."+childCol+",'')<>''")
 	}
-	for _, e := range [][5]string{
-		{"thread", "board", "boards", "thread_id", "id"}, {"board", "thread", "boards", "id", "thread_id"},
-		{"board", "card", "cards", "board_id", "id"}, {"thread", "card", "cards", "thread_id", "id"},
-		{"thread", "card", "cards", "parent_thread_id", "id"}, {"card", "thread", "cards", "id", "thread_id"},
-		{"thread", "topic", "topics", "thread_id", "id"}, {"topic", "thread", "topics", "id", "thread_id"},
-		{"thread", "document", "documents", "thread_id", "id"}, {"document", "thread", "documents", "id", "thread_id"},
-		{"thread", "event", "events", "thread_id", "id"}, {"thread", "artifact", "artifacts", "thread_id", "id"},
-		{"document", "document_revision", "document_revisions", "document_id", "revision_id"},
-		{"document", "artifact", "document_revisions", "document_id", "artifact_id"},
-		{"card", "card_revision", "card_revisions", "card_id", "revision_id"},
-		{"card", "artifact", "card_revisions", "card_id", "artifact_id"},
-		{"thread", "inbox", "derived_inbox_items", "thread_id", "id"},
-		{"card", "inbox", "derived_inbox_items", "source_card_id", "id"},
-		{"event", "inbox", "derived_inbox_items", "source_event_id", "id"},
-		{"thread", "wakeup", "agent_wakeups", "thread_id", "wakeup_id"},
-		{"event", "wakeup", "agent_wakeups", "trigger_event_id", "wakeup_id"},
-		{"card", "plan", "card_plans", "card_id", "card_id"},
-		{"card", "participant", "work_participants", "card_id", "id"},
-		{"work_metadata", "card", "work_metadata", "card_id", "card_id"},
-		{"work_observation", "card", "work_observations", "id", "card_id"},
-		{"card", "work_observation", "work_observations", "card_id", "id"},
-		{"card", "work_evidence_record", "work_evidence_records", "card_id", "id"},
-		{"work_evidence_record", "card", "work_evidence_records", "id", "card_id"},
-		{"card", "work_evidence_alias", "work_evidence_index", "card_id", "id"},
-		{"work_evidence_alias", "card", "work_evidence_index", "id", "card_id"},
-		{"work_evidence_record", "work_evidence_alias", "work_evidence_index", "evidence_id", "id"},
-		{"artifact", "document_revision", "document_revisions", "artifact_id", "revision_id"},
-		{"artifact", "card_revision", "card_revisions", "artifact_id", "revision_id"},
-		{"document_revision", "document", "document_revisions", "revision_id", "document_id"},
-		{"card_revision", "card", "card_revisions", "revision_id", "card_id"},
-	} {
+	for _, e := range resourceaccess.StructuralOwnershipEdges {
 		edge(e[0], e[1], e[2], e[3], e[4])
 	}
 	// A document's deduplicated revision reference set denies the document,

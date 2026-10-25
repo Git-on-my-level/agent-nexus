@@ -799,7 +799,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			// These routes are finite read-only projections. Admit their complete
 			// reads to one immutable, authorized SQLite snapshot. Mutations and
 			// stream lifetimes must never borrow it.
+			if r.Method == http.MethodGet && (path == "/boards" || r.URL.Query().Get("summary") != "1" && (path == "/cards" || strings.HasPrefix(path, "/boards/") && strings.HasSuffix(path, "/cards"))) {
+				r = r.WithContext(primitives.WithInventoryAdmission(r.Context()))
+			}
 			readProjection := r.Method == http.MethodGet && (path == "/events" || path == "/home/unread" || strings.HasPrefix(path, "/topics/") && strings.HasSuffix(path, "/workspace"))
+			cardSummaryPage := r.URL.Query().Get("summary") == "1" && (path == "/cards" || strings.HasPrefix(path, "/boards/") && strings.HasSuffix(path, "/cards"))
+			readProjection = readProjection || r.Method == http.MethodGet && (path == "/work" || cardSummaryPage || path == "/cards" || path == "/boards" || strings.HasPrefix(path, "/boards/") && strings.HasSuffix(path, "/cards"))
 			if canonical, ok := opts.primitiveStore.(*primitives.Store); ok && readProjection {
 				ctx, closeRead, err := canonical.BeginResourceRead(r.Context())
 				if err != nil {

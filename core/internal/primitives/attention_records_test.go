@@ -40,7 +40,7 @@ func attentionAll(t *testing.T, s *Store, ctx context.Context, actor, kind, surf
 	items := []AttentionItem{}
 	cursor := ""
 	for n := 0; n < 100; n++ {
-		page, err := s.AttentionItems(ctx, actor, kind, surface, "", "builtin:initiatives", cursor, time.Now())
+		page, err := s.AttentionItems(WithRequestAccessScope(ctx, AccessScope{ActorID: actor}), actor, kind, surface, "", "builtin:initiatives", cursor, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,7 +61,7 @@ func TestAttentionDefaultsKeepWorkOrdering(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	work, err := s.ListWork(ctx, WorkListFilter{Limit: 100})
+	work, err := s.ListWork(WithRequestAccessScope(ctx, AccessScope{ActorID: "human"}), WorkListFilter{Limit: 100})
 	if err != nil || len(work.Work) != 2 {
 		t.Fatal(work, err)
 	}

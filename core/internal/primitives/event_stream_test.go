@@ -218,7 +218,7 @@ func TestEventStreamBatchesRevisionRefs(t *testing.T) {
 	}
 	checked := 0
 	for _, statement := range counter.Statements() {
-		if !strings.Contains(statement.SQL, "SELECT kind,id FROM _anx_fresh_denied UNION SELECT") {
+		if !strings.Contains(statement.SQL, "_anx_admission_ledger") || !strings.Contains(statement.SQL, "json_each(?)") {
 			continue
 		}
 		rows, err := db.Query("EXPLAIN QUERY PLAN "+statement.SQL, statement.Args...)

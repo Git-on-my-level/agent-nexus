@@ -46,12 +46,26 @@ func TestPerformanceResourceReadSnapshotBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 		previous = size
+		// Lazy admission is part of the cold request budget. The unchanged
+		// 64-step gate below isolates warm membership after this candidate's
+		// proof exists, rather than after a workspace-wide closure capture.
+		capture.Start()
 		pin, closeRead, err := store.BeginResourceRead(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		capture.Start()
 		var id string
+		if err := scoped.QueryRowContext(pin, `SELECT id FROM documents WHERE id=?`, doc["id"]).Scan(&id); err != nil {
+			closeRead()
+			t.Fatal(err)
+		}
+		capture.Stop()
+		if capture.WorkError() != nil || capture.Work().VMSteps > 50000 {
+			closeRead()
+			t.Fatalf("size=%d cold admission work=%+v error=%v", size, capture.Work(), capture.WorkError())
+		}
+		t.Logf("denied=%d cold admission work=%+v", size, capture.Work())
+		capture.Start()
 		err = scoped.QueryRowContext(pin, `SELECT id FROM documents WHERE id=?`, doc["id"]).Scan(&id)
 		statements, queries, rows := capture.Stop()
 		work := capture.Work()
@@ -63,7 +77,7 @@ func TestPerformanceResourceReadSnapshotBudget(t *testing.T) {
 			t.Fatalf("size=%d queries=%d rows=%d work=%+v", size, queries, rows, work)
 		}
 		for _, stmt := range statements {
-			if !strings.Contains(stmt.SQL, "anx_point_snapshot_denied") || strings.Contains(stmt.SQL, "json_each") {
+			if (!strings.Contains(stmt.SQL, "anx_point_snapshot_denied") && !strings.Contains(stmt.SQL, "anx_candidate_lookup")) || strings.Contains(stmt.SQL, "json_each") {
 				t.Fatal("full denial materialization returned")
 			}
 			plan, err := perfguard.Explain(ctx, raw, stmt)

@@ -1,5 +1,492 @@
 # Performance guardrails
 
+## Canonical admission: main reproduction and candidate index
+
+**Bounded-route gates pass; legacy inventory gaps remain.** The 50,000 VM
+ceiling, budgets, baselines and query-plan allowances are unchanged. This change
+removes eager workspace denial capture from bounded reads. Local scale results
+do not certify repository-wide CI or authorize merging.
+
+Complete native HTTP requests were measured on main `b7c3a77f`, before #463
+merged, using `perfguard.Seed`'s analyzed 4,096-row corpus and 256 private cards.
+Each route/reader opens a fresh instrumented pool; the second request is warm;
+the third follows an authorization epoch advance from a canonical thread write.
+Authentication is included. The fixture omits unrelated PM/stream runtime setup.
+
+| Main route / reader                              |  First VM |   Warm VM | Invalidated VM |
+| ------------------------------------------------ | --------: | --------: | -------------: |
+| `/work?limit=20` / owner                         |   401,329 |   401,281 |        401,405 |
+| `/work?limit=20` / partial                       | 2,112,717 |   873,276 |      2,112,857 |
+| `/brief` / owner                                 |       657 |       616 |            740 |
+| `/brief` / partial                               | 1,240,051 |       610 |      1,240,191 |
+| `/cards?limit=20` / owner                        | 3,339,879 | 3,339,838 |      3,339,962 |
+| `/cards?limit=20` / partial                      | 7,162,750 | 5,923,309 |      7,162,890 |
+| `/boards?limit=20` / owner                       | 2,301,658 | 2,301,617 |      2,301,741 |
+| `/boards?limit=20` / partial                     | 9,520,232 | 8,280,791 |      9,520,372 |
+| `/boards/scale-board-0/cards?limit=20` / owner   | 3,242,079 | 3,242,038 |      3,242,162 |
+| `/boards/scale-board-0/cards?limit=20` / partial | 8,682,552 | 7,443,111 |      8,682,692 |
+| `/cards/scale-card-1` / owner                    |     1,790 |     1,749 |          1,873 |
+| `/cards/scale-card-1` / partial                  | 2,188,574 |   949,133 |      2,188,714 |
+| `/boards/scale-board-1` / owner                  |    20,158 |    20,117 |         20,241 |
+| `/boards/scale-board-1` / denied (404)           | 1,430,712 |   191,271 |      1,430,852 |
+
+The partial reader's cold-minus-warm overhead is consistently 1,239,441 VM.
+This is a complete request delta, not a separately measured capture statement.
+The denial rebuild therefore predates grouping/rollup #463. Brief is **empty**
+in this corpus; its numbers demonstrate admission, not populated brief acceptance.
+`limit=20` does not page the legacy card inventories: they hydrate thousands of
+rows. Board aggregation and work lifecycle inventories also exceed the ceiling
+after the authorization cache is warm.
+
+Migration 116 maintains principal-independent root reachability and reachable
+owner counts in the canonical writer's transaction. Ordinary candidates use at
+most three existence seeks in `(ledger,kind,id,unconditional,owner)`, independent
+of ancestry size and unrelated denial reachability. Direct edges retain origin
+contributions, and structural inheritance shares the old policy's executable
+inventory. Legacy, compact and common-only ledgers remain separate. Owners keep
+their SQLite value types, including numeric legacy JSON values.
+
+Topology additions visit newly reached root/vertex pairs. Deletion recomputes
+only roots that reached the removed edge and changes only memberships that
+differ. Owner transfer updates owner counts without rebuilding reachability.
+A write can read its affected root's reachable component; it never rebuilds an
+unrelated component. Initial migration backfills the derived indexes once.
+Storage is proportional to reachable root/vertex pairs across three ledgers,
+plus direct contributions and spelling prefixes; dense connected graphs can
+require the product of root and vertex counts.
+
+Projection spellings preserve binary endpoints, NOCASE atoms, document aliases,
+external publications and retained purge provenance. Prose now seeks full
+Unicode-folded digests through a counted 16-rune prefix index. Only existing
+prefixes continue, and the complete legacy byte-length/boundary matcher remains
+authoritative. This costs O(admitted reference starts and matching text prefixes),
+without scanning unrelated spellings sharing a token or punctuation bucket.
+Resource/text SQL proofs retain their 8,192-entry/1-MiB bound, epoch and
+`total_changes()` guards, and request-lifetime tokens.
+
+`/work` pages lifecycle removals after active work through its opaque
+continuation. Existing v1 cursors remain accepted; v2 also carries lifecycle
+position. Public, required-owner and designated-PM routing indexes skip private
+inactive prefixes before hydration. The consuming SQL still applies canonical
+visibility before counts, lookahead and output. Following `next_cursor` to empty
+collects the complete visible inventory; no global card/document/topic/thread
+inventory runs on an ordinary page.
+
+The optional compact table may be removed independently: required key triggers
+refer to an admission-owned compact atom mirror. Capability recreation refreshes
+and reinstalls its optional-table sync hooks. A selected but missing capability
+fails closed, while legacy candidate reads remain usable after teardown.
+
+### Epoch churn with continuous writers
+
+`TestPerformanceCanonicalEpochChurn` interleaves committed writes with complete
+partial-reader `GET /cards/scale-card-1` requests on the analyzed 4,096-row
+corpus. Each mode uses a fresh pool: one cold request, then eight further reads.
+The idle control performs no writes; the other modes write before every later
+read. Writes target public card/thread 4,095, unrelated to the requested card.
+The v0.13.28 runtime at `4abbb1e9fd017840362df41b255a87b7d21fcd75` was replayed
+through a Go source overlay with this same test and a fresh native fixture.
+Both versions were also run with `GOMAXPROCS=1`; this limits Go execution to one
+P, not a container CPU quota. VM counts, not host timings, are the comparison.
+
+| Interleaved write          | Main epoch advances per write | Main misses after writes | #469 epoch advances per write | #469 closure captures after writes |
+| -------------------------- | ----------------------------: | -----------------------: | ----------------------------: | ---------------------------------: |
+| Thread attribution only    |                             3 |                      8/8 |                             1 |                                0/8 |
+| Harmless public title edit |                             5 |                      8/8 |                             3 |                                0/8 |
+| Public event append        |                             4 |                      8/8 |                             4 |                                0/8 |
+
+Main's idle control has one cold miss and eight warm hits. Each write mode has
+nine misses including its cold request: **all 24 interleaved writes invalidate
+the next read**. Each HTTP request may probe twice; only an absent or stale epoch
+binding counts as a capture, since CASE skips rebuilding on a current binding.
+Main's warm point read uses 949,304 VM; after a write it uses 2,188,885 VM, a
+**1,239,581-VM invalidation penalty**. The initial cold sample uses 2,371,174 VM.
+#469 uses 4,563 VM cold/idle and 4,572 after a write on the instrumented pool,
+with no closure probe or capture. The separate native route matrix writes through
+another pool and retains its 4,563-VM result in every phase.
+
+| Canonical SQL write and triggers | Main VM | #469 VM |
+| -------------------------------- | ------: | ------: |
+| Attribution                      |     434 |     189 |
+| Public title                     |     837 |   1,802 |
+| Public event append              |   1,603 |   7,648 |
+
+The write probe exposed an admission teardown defect: TEXT contribution IDs
+compared directly with INTEGER edge IDs scanned the entire `exact` origin range.
+A title edit initially cost 564,443 VM. Matching the stored TEXT affinity restores
+the composite-key seek. The independent 10,000-unrelated-origin regression fails
+at 51,551 VM before that fix and passes at 1,890, preserving all contributions.
+The interleaved test also enforces 50,000 VM for these unrelated write controls.
+Affected ownership/topology changes can still visit their actual descendants;
+write-audit tests continue to reject unrelated index rewrites.
+These write controls exclude HTTP mutation authorization; the measured reads
+include authentication and the full HTTP handler.
+
+This confirms the reported epoch-churn mechanism locally. For a workspace with
+at least one registered canonical write between polls, a reader's old shared
+closure cache can miss on almost every poll, regardless of whether the writer
+changes that reader's target. Multiple principals pay their own rebuilds.
+#469 retains conservative epochs but makes those misses irrelevant to bounded
+admission: it reads transactionally maintained owner indexes and starts fresh
+request proofs. It removes both the repeated workspace closure capture and the
+expensive warm ancestry path. Write maintenance grows with changed contributions
+and affected reachability, not with the number of reader principals.
+
+An epoch-only first PR could suppress attribution-only invalidations, but would
+leave cold admission, warm ancestry and content/event-driven invalidations. New
+content can introduce inherited private references, so excluding it safely needs
+dependency-aware maintenance. With the full repair implemented, retain broad
+epochs rather than adding another revocation-sensitive optimization first.
+
+This synthetic reproduction does not attribute every reported CPU spike or
+three-second cancellation to denial capture. Native VM counts exclude Go work
+and SQLite preparation time; no production deadline guarantee follows from them.
+Authentication-token queries do not themselves capture business-resource denials,
+but may wait behind shared CPU, pool or database contention. Other projection
+work, full inventories, canonical mutation authorization and access-write
+maintenance retain their own costs. Net CPU depends on the read/write mix.
+
+### Required CI regressions repaired without new allowances
+
+Two required checks failed on the previous draft head, independently of the six
+advisory inventory overruns. Both original tests and limits remain unchanged:
+
+- Scoped all-public hierarchy used 56,154 VM. It now avoids proof-cache work
+  when there are no denied roots and uses **47,982 VM**. One statement proof
+  retains epoch, connection-change and token validation for the shared public
+  fact; expired or invalidated proofs use current indexed authority. Borrowed
+  writer coverage includes revocation with an apparently unchanged epoch.
+- The released-schema 100k-wakeup startup fixture performed 1,100,070 writes
+  versus 11,070 at 1k. Migration 116 now leaves untouched historical wakeup
+  parents in their existing thread/event indexes. Reachability follows those
+  indexed relations; reached wakeups receive keys and spellings as needed, and
+  structural edits materialize the old contribution before normal teardown.
+  Both 1k and 100k now perform **68 writes and allocate 424 pages**, including
+  the durable migration cursor introduced below. Historical
+  parity covers private threads/events, explicit references and referring cards,
+  a 128-wakeup reference cycle, empty legacy parents, moves, revocation/transfer,
+  rename, deletion and compact cutover. New wakeups use the ordinary incremental
+  triggers.
+
+### Security review: late resolution and retained spellings
+
+The Sol review reproduced two authorization leaks in the previous #469 head
+(`987295b7`). Both now have regressions that failed against that head:
+
+- After upgrading a public historical wakeup with no reference atoms, making
+  its parent thread private failed to deny a referring card. The common-only
+  reach insertion created the dependency before the legacy/compact parent
+  memberships existed; later key conflicts skipped the insert-trigger side
+  effect. Each newly reached wakeup now resolves keys and then propagates from
+  that membership's own ledger/root. Recursive INSERT evaluation order cannot
+  decide visibility. Coverage includes legacy, compact, forced legacy and a
+  missing selection, navigational references and ownership transfer.
+- An alias-only document tombstone failed to deny cards referencing its typed
+  or bare canonical ID. Retained alias/tombstone tuples now contribute canonical
+  ID keys independently of retained spelling, through identical migration and
+  runtime SQL. The audit also covered empty tombstone spellings and external-key
+  IDs. An all-resource-kind upgrade test found another omission: skipping all
+  historical wakeup identities also skipped retained wakeup aliases. Backfill
+  now includes those via origin-index seeks while leaving untouched canonical
+  wakeup history uncopied.
+
+`TestAdmissionUpgradeRandomizedScaleParity` seeds 4,096 cards into the released
+schema, with public historical wakeups, alias-only tombstones and retained
+aliases before migration 116. Two fixed seeds in each fence mode exercise 48 post-migration
+operations: access revocation/transfer, wakeup parent/reference changes, alias
+renames, tombstone spelling/owner changes and ledger cutover. After each operation,
+the old canonical closure and maintained admission must agree for nine principal
+scopes: owners, unrelated human/agent, designated PM, owner PM, auth administrator,
+numeric legacy owner and anonymous. Comparison includes the complete denial and
+projection-spelling sets, actual scoped rows, limited pages, counts and lookahead.
+The second seed reverses admission-trigger installation order before exercising
+the transitions, so independent-trigger order cannot conceal a missing effect.
+The two exact reported reproductions also run separately in the fast tier.
+
+The conflict audit covered admission keys/links, graph contributions, root and
+owner counts, reach membership, spelling prefixes, compact synchronization and
+the insert-before-delete source/evidence diff. Duplicate keys/links suppress only
+identical contributions; graph/root/owner aggregates update counts explicitly;
+removal keeps surviving contributors. Historical lazy key resolution was the
+only path that introduced graph dependencies inside a recursive reach insertion;
+its propagation now runs after resolution per membership. The spelling matrix
+covers every registered source kind plus external keys, virtual document history
+and series streams, with canonical typed/bare IDs, retained aliases, empty
+spellings, duplicate contributors and deletion/owner transitions. Existing live
+handle/revision/Unicode/binary policy tests remain active. No budget, allowance,
+startup guard or test timeout changed.
+
+Legacy schema-reconstruction fixtures remove post-116 admission triggers before
+dropping older indexes. Their canonical legacy triggers and all retained-privacy
+assertions remain active; migration 116 must rebuild the new derived state.
+
+### Second security review: structural identity and fenced upgrades
+
+The second Sol review reproduced two additional defects against published
+`a82c1cea`: a private `work_metadata` row for an absent card did not propagate
+canonical typed-ID or navigational inheritance to its dependents, and a fenced
+schema-115 upgrade recorded migration 116 while ignoring its chunk callback.
+Both reproductions became failing regressions before their fixes. The former
+returned `typed-dependent` and `nav-dependent` to a pinned unrelated reader; the
+latter recorded 116 without `resource_access_admission_root_owners`.
+
+Canonical ID keys now derive from canonical declarations: the shared structural
+ownership inventory's endpoints, raw/exact/external indexed source vertices,
+navigational source vertices and roots. This includes absent resources represented
+only by metadata, observations, participants or plan steps. Typed IDs are also
+navigational keys; bare-ID exclusions, external publication policy and virtual
+document history retain the forward oracle's rules. Deriving keys from the
+key-generated graph itself is unsafe: recursive key creation can suppress the
+resolver trigger and leave one spelling unresolved. Canonical input triggers and
+migration backfill use the same declaration inventory instead.
+
+One immutable canonical ID mapping is shared across declarations and retained
+when rows disappear. These keys carry no authority: only current roots and
+reachability can deny a resource. Retention preserves the forward policy's
+existence-independent ID resolution, including deletion and later reuse, without
+scanning all declarations on an access write. Storage adds O(distinct observed
+canonical identities) to the existing graph/reachability terms. Alias and
+publication contributions still follow their own live/retained source policy;
+this dictionary stores only ID mappings. ID-unchanged updates do no dictionary
+writes. Untouched historical wakeups keep their existing lazy path, so startup
+does not copy or index that history.
+
+The deterministic sweep covers every ownership/structural kind through typed,
+bare and navigational references, including policy-excluded kinds. Concrete
+missing-card metadata, empty/nested plan steps, observations, participants and
+ref-edge fixtures supplement existing live/alias/tombstone tests. Creation order,
+live arrival/rename/deletion, moved and deleted metadata, owner transfer,
+source removal and retained-ID reuse all compare old and new authority. The
+4,096-card randomized differential now runs two seeds through both fenced and
+unfenced upgrades (four runs), with 48 post-migration operations each, including
+structural-only identity creation, updates, deletion and live-row transitions.
+All nine principal scopes compare complete denial/projection-spelling sets and
+actual pinned candidate rows, pages, counts and lookahead. Historical structural
+cycles and the earlier exact Sol regressions also pass.
+
+Fenced and ordinary loaders, plus the history fixture, now share one transaction
+runner. A chunk executes inside a runner-owned transaction; it cannot write its
+own version. Empty plans and mixed chunk/transactional plans are rejected. On
+completion the runner verifies every required admission table and absence of an
+unfinished cursor before atomically recording 116; fenced completion also updates
+the ledger digest in that same commit. Already-recorded 116 is verified on every
+open, so a malformed preview fails during initialization. No legacy fence is
+removed or its missing function registered. Tests cover both loaders, unchanged
+reopens, missing recorded tables, no-op callbacks, skipped steps, digest/progress
+behavior and cancellation after one durable root followed by resume without
+replaying that root.
+
+Fresh native verification reproduces **all 54 route VM measurements below**.
+Partial grouping remains 48,169 VM in every phase; the combined native run took
+209.84 s and retains only the six documented legacy inventory assertions. The
+interleaved controls remain 4,563 VM idle / 4,572 after writes, with zero closure
+captures across all 24 writes. Write controls now use **189 / 1,802 / 7,648 VM**
+for attribution/title/event writes; the latter two include canonical-ID maintenance.
+The unchanged-index/unrelated-component write audits pass. No net production CPU
+reduction is asserted from VM counts alone; the read/write mix still matters.
+
+The first full fast-suite run exposed a required write regression:
+`TestRevokedSeriesCapacityScaleAndPlan` measured 5,074 VM over 100k retired
+series definitions, above its unchanged 5,000 ceiling. Filter/evidence-only
+vertices have no ID spellings under the forward policy; their canonical-key
+trigger now exits before six no-op INSERTs. The same unmodified regression
+passes at **2,434 VM / zero scan steps**. The all-kind pinned differential and
+write-index audits pass with that guard; no excluded identity gained propagation.
+
+The 512-root/4,096-card migration profile remains **514 transactions**, with
+31,750 setup row changes, at most **1,546 per root**, a longest chunk of 67.72 ms
+and 7.96 s backfill time on this run. The unchanged 1k/100k receipt guard passes
+with **68 writes / 424 allocated pages** at both sizes; the 100k startup took
+358 ms. Additional trigger/schema pages are constant, not history-sized. These
+replace earlier implementation measurements; no budget, baseline, allowance or
+timeout changed. The separate #472 inventory gap remains unchanged.
+
+### GLM follow-up: resumable migration and explicit scope
+
+Migration 116 separates schema/direct-index setup from transitive reachability.
+Setup remains one atomic, linear phase; the potentially root-by-vertex backfill
+then commits **one distinct root per transaction**, with a durable primary-key
+cursor in the same commit. Multiple retained owners of a root do not replay it.
+Cancellation or restart resumes after the last committed root; the migration is
+marked complete only after its final chunk. Initialization returns no workspace
+handle before completion, so partially built authority cannot serve requests.
+Total work and storage can still grow as roots times reachable vertices; a root
+chunk can traverse its entire affected component. This is chunking, not a claim
+of constant total startup cost or a measurement of an unspecified production
+workspace. Runtime grant/revoke component work remains the accepted write-side
+tradeoff (GLM #2).
+
+The released-schema synthetic profile has 4,096 cards, 512 private roots and a
+512-dependent shared hub. It completed in **514 transactions**, with 31,750 row
+changes in setup and at most 1,546 per root chunk. The longest root chunk was
+62.93 ms; backfill elapsed time was 12.43 s on this local run. A separate fast
+regression interrupts after one independently visible root commit, reopens the
+workspace, rejects replay of that root with an abort trigger, and verifies full
+old/new admission parity after completion. It fails against the former atomic
+migration because no partial root commit is visible. No startup allowance changed.
+
+The retained-wakeup backfill also now pins the existing origin-leading identity
+uniqueness index. EXPLAIN previously selected the kind index and scanned every
+historical wakeup for the retained-origin arm; the regression requires origin
+seeks instead. The unchanged 1k/100k receipt startup guard passes with identical
+68 writes and 424 allocated pages; the latest 100k startup took 358 ms. This does
+not copy untouched wakeup history or add an index over that history.
+
+`hiddenWorkPage` now rejects a missing request access scope before reading any
+rows, and returns no refs or continuation. An explicit anonymous scope is still
+a scope and follows normal policy. Its regression previously returned the
+private archived card's ID and handle. Direct work test fixtures supply their
+actual reader scope, preserving ordering and callback-pagination assertions.
+The dead candidate-proof `ancestors` argument and its reuse comment were removed;
+only SQL-proven candidate results are cached, with the existing entry/byte cap,
+epoch, connection-change and token-expiry checks intact.
+
+The topics-update lifecycle probe now uses `ReferenceSQL` and the canonical
+`idx_work_access_project` expression index. A populated 10,000-card probe shows
+**29 VM / zero scan steps**, and its complete topic update uses **1,950 VM** under
+the unchanged 50,000 ceiling. The old raw-JSON probe already used the covering
+`idx_work_metadata_project` index at the same 29 VM: the reported full-scan
+hypothesis was refuted. This is consistent index-expression use, not a claimed
+VM reduction.
+
+The remaining GLM observations are documented rather than changed: grant/revoke
+may traverse its affected component (#2); lifecycle continuations can yield an
+empty work page, and clients must honor the cursor and their existing traversal
+caps/honest partial result (#3); SQL trigger construction still depends on known
+string shapes, with explicit artifact/revision refresh exceptions (#6); and the
+six improved, pre-existing full-inventory overruns remain tracked in #472 (#8).
+No budget, baseline, allowance, required-gate selection or timeout is widened.
+
+### Final native bounded-route measurements
+
+The checked-in native request matrix independently seeds the shared analyzed
+4,096-row corpus, opens a fresh instrumented pool per route/reader, includes
+authentication, and measures first, warm and canonical-epoch-invalidated requests.
+The table below is from the final run, **without a test overlay**:
+
+| Route / reader                                             | First VM | Warm VM | Invalidated VM |
+| ---------------------------------------------------------- | -------: | ------: | -------------: |
+| `/work?limit=20` / owner                                   |   21,285 |  21,285 |         21,285 |
+| `/work?limit=20` / partial                                 |   35,714 |  35,714 |         35,714 |
+| `/brief` / owner                                           |   27,913 |  27,913 |         27,913 |
+| `/brief` / partial                                         |   46,085 |  46,085 |         46,085 |
+| `/cards?summary=1&limit=20` / owner                        |   16,920 |  16,920 |         16,920 |
+| `/cards?summary=1&limit=20` / partial                      |   29,960 |  29,960 |         29,960 |
+| `/boards/scale-board-0/cards?summary=1&limit=20` / owner   |   19,240 |  19,240 |         19,240 |
+| `/boards/scale-board-0/cards?summary=1&limit=20` / partial |   37,560 |  37,560 |         37,560 |
+| `/cards/scale-card-1` / owner                              |    2,056 |   2,056 |          2,056 |
+| `/cards/scale-card-1` / partial                            |    4,563 |   4,563 |          4,563 |
+| `/boards/scale-board-1` / owner                            |   15,319 |  15,319 |         15,319 |
+| `/boards/scale-board-1` / partial                          |      405 |     405 |            405 |
+
+The separate complete grouping gate uses **30,479 owner / 48,169 partial VM**
+in every phase, under the unchanged 50,000 ceiling. The populated brief is now
+46,085 partial VM; main's original baseline brief was empty, so these are different
+content controls. The fresh post-review combined run took 154.57 seconds including fixture seeds,
+interleaved writes and dense ancestry/bucket probes. The dead `ancestors` JSON
+argument was removed from candidate proofs; these measurements include that change.
+The earlier rebase onto v0.13.29 (`74aba48f`) reproduced the prior measurements;
+the table records the latest implementation rather than that earlier run.
+Every bounded request, the grouping gate and the micro/adversarial gates passed.
+The combined command remains red only for the six legacy inventory reader cases
+below; their hard 50,000 assertions are deliberately retained.
+
+### Separate known issue: legacy full inventory hydration
+
+`limit=20` does not page the legacy card/board inventories. They still hydrate
+workspace inventories and exceed 50,000 VM on main after warming. This remains
+a separate pagination/hydration repair, tracked in
+[issue #472](https://github.com/Git-on-my-level/agent-nexus/issues/472), with no
+new budget, baseline or allowance.
+Full inventories now take one complete indexed denial batch for their immutable
+read transaction, then retain the candidate projection policy and constant-time
+membership map. Empty-root inventories use the cheaper empty-root fast path.
+Borrowed mutable transactions skip this batch and evaluate current indexed owners.
+No ordinary bounded route takes this full inventory batch.
+
+| Legacy inventory / reader                        | Main warm VM (`b7c3a77f`) | Final VM, each phase |
+| ------------------------------------------------ | ------------------------: | -------------------: |
+| `/cards?limit=20` / owner                        |                 3,339,838 |            3,275,798 |
+| `/cards?limit=20` / partial                      |                 5,923,309 |            3,807,859 |
+| `/boards?limit=20` / owner                       |                 2,301,617 |            1,815,211 |
+| `/boards?limit=20` / partial                     |                 8,280,791 |            3,735,985 |
+| `/boards/scale-board-0/cards?limit=20` / owner   |                 3,242,038 |            3,101,254 |
+| `/boards/scale-board-0/cards?limit=20` / partial |                 7,443,111 |            4,653,975 |
+
+All six warm costs improve on the original native main measurements, even though
+current main also adds grouping hydration. A supplemental main-source replay on
+the same saved synthetic corpus at `cb156382` measured 3,673,389 / 38,336,046 VM
+for owner/partial cards, 2,301,617 / 8,280,791 for boards, and
+3,554,786 / 7,755,859 for board cards. This supplemental code-overlay probe is
+not substituted for the fresh native before/after tables.
+
+All six failures above belong to `TestPerformanceCanonicalAdmission`, whose
+`requirePerformanceTest` guard requires `ANX_PERFORMANCE_TEST=1` and a non-short
+run. Required server CI discovers this test but leaves that variable unset, so
+it skips at runtime; a local run with the same environment confirms the skip.
+Main's required CI also leaves the variable unset, and main predates this new
+diagnostic test. None of these six failures is a required gate on either tree.
+The repository's main ruleset requires `ci-ok`; `.github/workflows/ci.yml` does
+not include the separate `.github/workflows/performance.yml` jobs in `ci-ok`.
+That advisory workflow runs on main pushes or manual dispatch and enables the
+variable. Its discovered legacy shard and broad advisory partition both select
+this test. Those runs retain all six hard failures until #472 fixes hydration;
+no allowance, test selection change or gate weakening is introduced here.
+
+### Regression and write-cost evidence
+
+- The draft head's partial grouping / populated brief / work costs were
+  179,091 / 177,735 / 3,404,754 VM. A controlled saved-corpus probe after compact
+  teardown repair still used 179,116 / 177,735 for grouping/brief. Reverse ancestry
+  batching also missed the ceiling; persisted reachability removed that read work.
+- A 128-node DAG with 1,016 incoming dependencies, cycles and 128 reachable owned
+  roots now uses **2,429 VM** per phase. The 512-spelling legacy bucket fanout
+  case used 276,447 VM before prefix seeks and now uses **12,226 VM** per phase.
+  Both include cold admission and retain a 50,000 ceiling.
+- A complete `/work?limit=20` over 4,096 private archived cards used 230,045 VM
+  before owner routing and now uses **640 VM** per phase, returning no work,
+  archived refs or continuation. No hidden-prefix marker is exposed.
+- The isolated point gate uses **269 / 479 / 479 cold VM** for 0 / 1,024 / 4,096
+  unrelated denials. Warm membership is **55 / 47 / 47 VM** under the unchanged
+  64-step cap.
+- Write-audit triggers reproduce unnecessary graph/key/index churn before the
+  fix. Unrelated card/metadata edits and identical-owner updates now touch no
+  admission indexes. Owner transfer changes root declarations, root-owner counts
+  and reachable-owner entries only. Abort guards protect an unrelated component.
+  Source atom rowids and unchanged evidence publication keys survive updates.
+  Deliberate artifact/revision self-updates still restore history edges.
+- The 10,000-document handle test passed on main in 20.19s and initially on this
+  branch in 99.24s. Timeout stacks showed repeated `prepareV2` calls: modernc
+  prepares its native VM for each Go prepared-statement execution, recompiling
+  the larger trigger program. One bulk fixture INSERT retains all 10,000 rows,
+  every trigger and every assertion, and passed in **11.71s**. The two reservation
+  queries retain their original 256-VM/no-scan guard. No test timeout was raised.
+  Confirmed slow fixture loops for 10,000 tombstones, 2,001/4,001 cards and 201
+  hidden events use the same bulk setup technique, preserving their exact rows,
+  triggers and assertions. Their focused checks completed in 13–15 seconds.
+
+Differential coverage compares the old full closure with the actual reachable
+owner index on the scale corpus (3,344 denied identities for partial/anonymous,
+zero for owner/designated-owner), plus 48 randomized mutation rounds and full
+projection-spelling comparisons. Tests cover inherited references, case/raw-ID
+collisions, virtual purged documents, exact/compact cutover and teardown,
+missing epochs/selections, counts/lookahead, grant/revoke/transfer and snapshot
+isolation. Full inventory batching is checked for one batch per immutable read
+and for fresh authority inside borrowed writers after unversioned compact writes.
+The protected visit test uses the approved legacy constructor and keeps all its
+complete-denial enforcement assertions.
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
+  -run '^TestPerformance(CanonicalAdmission|GroupingFeedBudget|ResourceReadSnapshotBudget|WorkLifecyclePrivatePrefixBudget|CanonicalEpochChurn)$|^TestCandidateDenseAncestryAndBucketFanout$' \
+  -count=1 -v -timeout=30m
+go test -C core ./internal/primitives \
+  -run '^Test(AdmissionGraph|AdmissionWrites|InventoryAdmission|Candidate|WorkLifecycle|OverviewReadSnapshot|ResourceReadSnapshotRandomizedDifferential)' \
+  -count=1 -timeout=15m
+```
+
+See the [architecture decision](../../docs/architecture/canonical-admission.md).
+
 ## Grouping and promise preservation
 
 The grouping API admits recent physical routing identities before visibility and metadata matching,
@@ -21,31 +508,25 @@ go test -C core ./internal/storage -run '^TestGroupingUpgrade' -count=1
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/series -run '^TestPerformanceBriefSeriesBudget$' -count=1 -v -timeout=10m
 ```
 
-Full HTTP scale acceptance is currently **blocked**. `/work/ungrouped` is an
-exact collection operation, with no card selector named `ungrouped`. Treating
-that segment as a card reference caused an unnecessary authorization read and
-could make the collection depend on a private card with that handle. The
-selector regression now passes.
+The #463 investigation originally blocked HTTP scale acceptance on cold
+canonical admission. `/work/ungrouped` is an exact collection operation, with
+no card selector named `ungrouped`; its selector regression prevents an
+unnecessary point authorization read or dependence on a private card with that
+handle.
 
-`TestPerformanceGroupingFeedBudget` measures authentication, canonical admission
-and the feed on the shared 4,096-row synthetic corpus, using fresh pools for
-both principals and a real authorization-epoch invalidation. Authorized VM
-counts are 31,323 first, 31,275 warm and 31,399 invalidated. Denied-reader counts
-are 1,269,342 first, 29,901 warm and 1,269,482 invalidated, against the unchanged
-50,000 ceiling. These are focused-corpus measurements; they omit the general
-matrix's unrelated PM runtime and stream setup, so they are not a direct
-before/after comparison with its earlier 273,020 / 1,603,957 figures.
+Historical `TestPerformanceGroupingFeedBudget` measurements on the shared
+4,096-row corpus were 31,323 / 31,275 / 31,399 VM for the owner and
+1,269,342 / 29,901 / 1,269,482 for the denied reader (first / warm / invalidated).
+They omit unrelated PM/stream setup and are not comparable to the earlier broad
+matrix's 273,020 / 1,603,957 figures. Replaying denial capture used 1,239,696 VM,
+leaving 29,786 elsewhere in the invalidated request.
 
-Replaying canonical denial capture on the synthetic database uses 1,239,696
-VM steps, leaving 29,786 of the complete invalidated request outside that
-capture. The canonical capture SQL is independent of the page point token.
-Canonical admission still expands denied roots and their
-reachable identities across the workspace. Reducing the feed candidate window
-or adding a candidate index cannot remove that admission work. The complete
-route matrix also retains its query-plan acceptance requirement. The native
-admitted-read figures above do not certify the complete HTTP request. Keep the
-grouping PR draft until cold canonical admission meets the ordinary budget.
-No new baseline, plan allowance or budget increase is supplied here.
+That workspace closure preceded page admission, so changing the candidate
+window could not remove it. The indexed authorization repair above brings the
+complete grouping request to 30,479 owner / 48,169 partial VM in all phases.
+These historical figures are evidence of the repaired cause, not a baseline or
+allowance. The separate legacy inventory gap remains documented above. No
+budget or query-plan requirement is weakened.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceGroupingFeedBudget$' -count=1 -v -timeout=20m

@@ -283,7 +283,8 @@ class RepoTest(unittest.TestCase):
     def test_env_flag_asks_for_every_package(self):
         self.write_go_module()
         self.write("core/internal/leaf/leaf.go", "package leaf\n\nfunc Leaf() int { return 2 }\n")
-        with patch.object(checks, "run") as run, \
+        with patch.dict(os.environ, {"ANX_PREPUSH_FULL": ""}), \
+                patch.object(checks, "run") as run, \
                 patch.object(checks, "go_package_graph", self.root_package_graph), \
                 patch.object(sys, "argv", ["checks.py", "fast"]):
             checks.main()

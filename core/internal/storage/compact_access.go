@@ -39,6 +39,9 @@ func (w *Workspace) initializeCompactAccessMetadata(ctx context.Context) error {
 			return err
 		}
 	}
+	if err = installAdmissionCompactSync(ctx, tx); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -85,6 +88,9 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err erro
 		}
 	}
 	if err = installStableAccessEdges(ctx, tx); err != nil {
+		return err
+	}
+	if err = installAdmissionCompactSync(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -13,11 +13,13 @@ import (
 // Only authenticated ciphertext crosses the boundary, including on empty
 // callback-filtered pages. No traversal state is shared between requests.
 type workContinuation struct {
-	Version   int
-	Binding   string
-	ExpiresAt int64
-	UpdatedAt time.Time
-	ID        string
+	Version     int
+	Binding     string
+	ExpiresAt   int64
+	UpdatedAt   time.Time
+	ID          string
+	Lifecycle   bool
+	LifecycleID string
 }
 
 func (s *Store) workCursorCodec(ctx context.Context, f WorkListFilter) (*scopesearch.Tokens, string, error) {

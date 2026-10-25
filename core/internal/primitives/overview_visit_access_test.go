@@ -34,7 +34,7 @@ func TestOverviewVisitValidationUsesFreshWriteGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})
+	request := canonicalRequestScope(ctx, AccessScope{ActorID: "reader"})
 	if !s.CanAccessResource(request, "card", anyStringValue(work["id"])) {
 		t.Fatal("public work missing")
 	}

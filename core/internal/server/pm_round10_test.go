@@ -71,7 +71,7 @@ func TestRound10RefreshBookkeepingPreservesDecisionFence(t *testing.T) {
 				if err != nil || revision != want || got["decision_revision"] != want || publicWork(got)["decision_revision"] != want {
 					t.Fatalf("get/dispatch fence: %+v revision=%q want=%q err=%v", got, revision, want, err)
 				}
-				page, err := store.ListWork(ctx, primitives.WorkListFilter{})
+				page, err := store.ListWork(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "actor"}), primitives.WorkListFilter{})
 				items := page.Work
 				if err != nil || len(items) != 1 || items[0]["decision_revision"] != want || publicWork(items[0])["decision_revision"] != want {
 					t.Fatalf("list fence: %+v %v", items, err)

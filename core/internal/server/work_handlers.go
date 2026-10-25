@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -168,6 +167,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		cursor := q.Get("cursor")
 		collected := make([]map[string]any, 0, limit)
 		nextCursor := ""
+		archivedRefs := []string{}
 		for pass := 0; pass < 20; pass++ {
 			remaining := limit - len(collected)
 			page, err := store.ListWork(r.Context(), primitives.WorkListFilter{ProjectRef: q.Get("project_ref"), Source: q.Get("source"), Owner: q.Get("owner"), Phase: q.Get("phase"), Freshness: q.Get("freshness"), Query: q.Get("q"), Limit: remaining, Cursor: cursor, Visible: planVisibility(r, opts)})
@@ -180,8 +180,9 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 				return
 			}
 			collected = append(collected, filtered...)
+			archivedRefs = append(archivedRefs, page.ArchivedRefs...)
 			nextCursor = page.NextCursor
-			if len(collected) >= limit || nextCursor == "" {
+			if len(collected) >= limit || nextCursor == "" || page.LifecyclePage {
 				break
 			}
 			cursor = nextCursor
@@ -193,34 +194,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		for _, item := range collected {
 			items = append(items, publicWork(item))
 		}
-		archivedRefs := []string{}
-		if visibility, ok := store.(interface {
-			HiddenSubjectRefs(context.Context) (map[string]bool, error)
-		}); ok {
-			hidden, err := visibility.HiddenSubjectRefs(r.Context())
-			if err != nil {
-				workStoreError(w, r, err)
-				return
-			}
-			for ref := range hidden {
-				if strings.HasPrefix(ref, "card:") {
-					archivedRefs = append(archivedRefs, ref)
-				}
-			}
-			aliases := []map[string]any{}
-			for _, ref := range archivedRefs {
-				aliases = append(aliases, map[string]any{"id": ref})
-			}
-			filtered, ok := filterPlanCards(w, r, opts, aliases)
-			if !ok {
-				return
-			}
-			archivedRefs = archivedRefs[:0]
-			for _, alias := range filtered {
-				archivedRefs = append(archivedRefs, anyString(alias["id"]))
-			}
-			sort.Strings(archivedRefs)
-		}
+
 		writeJSON(w, 200, map[string]any{"work": items, "next_cursor": nextCursor, "archived_refs": archivedRefs})
 		return
 	}

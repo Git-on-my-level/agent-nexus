@@ -75,8 +75,10 @@ type WorkListFilter struct {
 	Visible                                                    func(string, string) bool `json:"-"`
 }
 type WorkPage struct {
-	Work       []map[string]any `json:"work"`
-	NextCursor string           `json:"next_cursor"`
+	Work          []map[string]any `json:"work"`
+	NextCursor    string           `json:"next_cursor"`
+	LifecyclePage bool             `json:"-"`
+	ArchivedRefs  []string         `json:"archived_refs"`
 }
 
 func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID string, m map[string]any) error {
@@ -1014,12 +1016,12 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 	}
 	before := workContinuation{}
 	if f.Cursor != "" {
-		if codec.OpenContinuation(f.Cursor, &before) != nil || before.Version != 1 || before.Binding != binding || before.ExpiresAt <= time.Now().Unix() || before.ID == "" || before.UpdatedAt.IsZero() {
+		if codec.OpenContinuation(f.Cursor, &before) != nil || (before.Version != 1 && before.Version != 2) || before.Binding != binding || before.ExpiresAt <= time.Now().Unix() || (!before.Lifecycle && (before.ID == "" || before.UpdatedAt.IsZero())) {
 			return page, ErrInvalidCursor
 		}
 	}
 	hasMore := false
-	for pass := 0; pass < maxWorkAccessFilterPasses; pass++ {
+	for pass := 0; !before.Lifecycle && pass < maxWorkAccessFilterPasses; pass++ {
 		batchLimit := f.Limit
 		if pass > 0 && batchLimit < 50 {
 			batchLimit = 50
@@ -1074,8 +1076,19 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 			break
 		}
 	}
-	if hasMore && before.ID != "" && !before.UpdatedAt.IsZero() {
-		before.Version = 1
+	// Lifecycle removals follow the work page. The same opaque continuation
+	// carries both phases, so existing clients collect the full inventory by
+	// following next_cursor without an all-workspace read on every page.
+	if !hasMore {
+		before.Lifecycle = true
+		page.LifecyclePage = true
+		page.ArchivedRefs, before.LifecycleID, hasMore, err = s.hiddenWorkPage(ctx, before.LifecycleID, f.Limit, f.Visible)
+		if err != nil {
+			return page, err
+		}
+	}
+	if hasMore {
+		before.Version = 2
 		before.Binding = binding
 		before.ExpiresAt = time.Now().Add(24 * time.Hour).Unix()
 		page.NextCursor, err = codec.SealContinuation(before)
