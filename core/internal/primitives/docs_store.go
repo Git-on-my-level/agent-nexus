@@ -943,7 +943,7 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 
 	// Keep the released metadata-only FTS projection current atomically. Its
 	// body/comments remain untouched; dirty markers still gate lazy fallback.
-	if _, err = tx.ExecContext(ctx, `UPDATE document_fts SET title=?,summary=?,source=?,tags=? WHERE document_id=?`, nextTitle, nextSummary, nextSource, documentFTSTagsText(nextTags), documentID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE document_fts SET title=?,summary=?,source=?,tags=? WHERE rowid IN (SELECT fts_rowid FROM document_search_fts_positions WHERE document_id=?)`, nextTitle, nextSummary, nextSource, documentFTSTagsText(nextTags), documentID); err != nil {
 		return nil, nil, fmt.Errorf("patch document search metadata: %w", err)
 	}
 	if err := markTopicProjectionsDirtyTx(ctx, tx, []string{doc.ThreadID.String}, time.Now().UTC()); err != nil {

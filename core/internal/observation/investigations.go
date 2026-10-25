@@ -1,6 +1,7 @@
 package observation
 
 import (
+	"agent-nexus-core/internal/contentusage"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -41,6 +42,9 @@ func NewInvestigationStore(db *sql.DB, resolve PresetResolver) (*InvestigationSt
  PRIMARY KEY(workspace_id,id)
  )`)
 	if err != nil {
+		return nil, err
+	}
+	if err = contentusage.InstallTable(context.Background(), db, "observation_investigation_specs"); err != nil {
 		return nil, err
 	}
 	return &InvestigationStore{db: db, resolve: resolve}, nil

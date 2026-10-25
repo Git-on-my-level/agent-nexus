@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -50,6 +51,8 @@ func installStableAccessEdges(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (w *Workspace) MaintainStableAccessBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "compact_migration")
+	defer finish()
 	return w.compactAccessBatch.run(ctx, 200, func(ctx context.Context, limit int) (bool, error) {
 		tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(ctx, w.db, 20*time.Millisecond)
 		if err != nil {
@@ -86,6 +89,7 @@ func (w *Workspace) MaintainStableAccessBatch(ctx context.Context) (bool, error)
 		if err != nil {
 			return false, err
 		}
+		loopstats.Rows(ctx, len(keys))
 		if len(keys) > 0 {
 			cursor = sql.NullInt64{Int64: keys[len(keys)-1], Valid: true}
 			if _, err = tx.ExecContext(ctx, `INSERT INTO resource_access_stable_edges SELECT rowid,source_kind,source_id,target_ref FROM resource_access_edges WHERE rowid BETWEEN ? AND ? ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_ref=excluded.target_ref`, keys[0], cursor.Int64); err != nil {
@@ -104,6 +108,8 @@ func (w *Workspace) MaintainStableAccessBatch(ctx context.Context) (bool, error)
 // VerifyCompactAccessCutover certifies both ledgers and stable raw identities in
 // one snapshot. It never grants a cached or process-local reader capability.
 func (w *Workspace) VerifyCompactAccessCutover(ctx context.Context) (CompactAccessVerification, error) {
+	ctx, finish := loopstats.Start(ctx, "compact_migration")
+	defer finish()
 	// Reuse verification through a pinned one-connection snapshot by factoring
 	// its SQL into the shared verifier below.
 	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -146,6 +152,8 @@ var ErrCompactAccessChanged = errors.New("access ledgers changed after verificat
 // A successful publication also invalidates all existing authorization caches.
 // The caller's deadline bounds the cutover; without one it gets one second.
 func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAccessVerification) (err error) {
+	ctx, finish := loopstats.Start(ctx, "compact_migration")
+	defer finish()
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Second)

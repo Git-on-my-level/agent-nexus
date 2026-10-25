@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"errors"
 	"fmt"
@@ -239,7 +240,10 @@ func (c *CardLeaseClock) Run(ctx context.Context) {
 // logged and not retried: the lease event is already durable and visible on
 // the card timeline.
 func (c *CardLeaseClock) Step(ctx context.Context) error {
+	ctx, finish := loopstats.Start(ctx, "card_lease")
+	defer finish()
 	expired, err := c.Store.ExpireDueCardLeases(ctx, actors.SystemActorID, 0)
+	loopstats.Rows(ctx, len(expired))
 	for _, e := range expired {
 		c.notify(ctx, e)
 	}
@@ -247,6 +251,7 @@ func (c *CardLeaseClock) Step(ctx context.Context) error {
 		return err
 	}
 	unowned, err := c.Store.TakeUnownedCardLeases(ctx, 0)
+	loopstats.Rows(ctx, len(unowned))
 	for _, e := range unowned {
 		c.notify(ctx, e)
 	}

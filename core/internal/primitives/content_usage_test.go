@@ -150,3 +150,79 @@ func TestContentUsageCountsCanonicalRelationsAndWakeups(t *testing.T) {
 		t.Fatalf("canonical wakeup not counted: before=%d after=%d err=%v", relations, wakeups, err)
 	}
 }
+
+func TestCanonicalUsageIdleDoesNotRecountWorkspace(t *testing.T) {
+	ctx := context.Background()
+	w, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	db, counter := testsql.Open("file:" + w.Layout().DatabasePath)
+	defer db.Close()
+	s := NewStore(db, blob.NewFilesystemBackend(w.Layout().ArtifactContentDir), w.Layout().ArtifactContentDir, WithDatabasePath(w.Layout().DatabasePath))
+	if _, err = s.GetMaintenanceWorkspaceUsageSummary(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Expiration alone must not make the background heartbeat rescan history.
+	s.contentUsageAt = time.Now().Add(-contentUsageCacheTTL)
+	counter.Reset()
+	before, err := s.GetMaintenanceWorkspaceUsageSummary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := counter.Count(); n > 2 {
+		t.Fatalf("unchanged usage performed %d reads; expected fixed revision/schema probes", n)
+	}
+	if _, err = s.AppendEvent(ctx, "owner", map[string]any{"type": "message_posted", "refs": []string{}, "payload": map[string]any{"text": "new canonical content"}}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.GetMaintenanceWorkspaceUsageSummary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Usage.EventCount != before.Usage.EventCount+1 || after.Usage.StorageBytes <= before.Usage.StorageBytes {
+		t.Fatalf("dirty usage did not refresh: before=%+v after=%+v", before.Usage, after.Usage)
+	}
+}
+
+func TestMaintenanceUsageCacheRetainsReaderScopeAndUntrackedFallback(t *testing.T) {
+	ctx := context.Background()
+	w, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	s := NewStore(w.DB(), blob.NewFilesystemBackend(w.Layout().ArtifactContentDir), w.Layout().ArtifactContentDir, WithDatabasePath(w.Layout().DatabasePath))
+	if _, err = s.CreateThread(ctx, "owner", map[string]any{"title": "private", "pm_actor_id": "owner", "summary": strings.Repeat("private", 1024)}); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := s.GetMaintenanceWorkspaceUsageSummary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible, err := s.GetMaintenanceWorkspaceUsageSummary(WithAccessScope(ctx, AccessScope{ActorID: "stranger"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visible.Usage.StorageBytes >= canonical.Usage.StorageBytes {
+		t.Fatal("canonical cached content escaped reader scope")
+	}
+	for _, op := range []string{"insert", "update", "delete"} {
+		if _, err = w.DB().Exec(`DROP TRIGGER background_usage_events_` + op); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if _, err = w.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,payload_json) VALUES(?,'message_posted','2026-01-01T00:00:00Z','owner','{}')`, fmt.Sprint("untracked-", i)); err != nil {
+			t.Fatal(err)
+		}
+		summary, err := s.GetMaintenanceWorkspaceUsageSummary(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if summary.Usage.EventCount != canonical.Usage.EventCount+int64(i)+1 {
+			t.Fatal("missing tracking froze old totals")
+		}
+	}
+}

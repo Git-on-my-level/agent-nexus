@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"errors"
 	"time"
@@ -12,6 +13,12 @@ import (
 // the verified rename. Drain them in short slices before dropping the empty
 // table. Canonical ledgers, certification and operator rollback are untouched.
 func (w *Workspace) maintainCompactAccessRetiredBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "compact_retired")
+	defer finish()
+	var exists bool
+	if err := w.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_unstable_edges')`).Scan(&exists); err != nil || !exists {
+		return !exists, err
+	}
 	return w.compactAccessBatch.run(ctx, 200, func(ctx context.Context, limit int) (bool, error) {
 		tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(ctx, w.db, 20*time.Millisecond)
 		if err != nil {
@@ -36,6 +43,7 @@ func (w *Workspace) maintainCompactAccessRetiredBatch(ctx context.Context) (bool
 		if err != nil {
 			return false, err
 		}
+		loopstats.Rows(ctx, int(n))
 		if n == 0 {
 			if _, err = tx.ExecContext(ctx, `DROP TABLE resource_access_unstable_edges`); err != nil {
 				return false, err

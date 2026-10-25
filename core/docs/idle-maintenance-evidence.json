@@ -1,0 +1,278 @@
+{
+  "fixture": {
+    "database_bytes": 2271711232,
+    "events": 16384,
+    "documents": 4096,
+    "document_revisions": 32768,
+    "asks": 4096,
+    "replay_receipts": 32768,
+    "cards": 4096,
+    "plans": 4096
+  },
+  "limits": {
+    "cpus": 1,
+    "memory_bytes": 1073741824,
+    "tmp_bytes": 67108864
+  },
+  "windows_seconds": {
+    "startup": [5, 50],
+    "steady": [360, 425]
+  },
+  "baseline_commit": "b178a790c81c636aa8de72286669ca6e6a09863f",
+  "runs": {
+    "warm-before": {
+      "startup_counters": {
+        "start_elapsed": 5.274428374948911,
+        "end_elapsed": 46.1826230000006,
+        "start_cpu_usec": 2954463,
+        "end_cpu_usec": 19827686
+      },
+      "startup_cpu_percent": 41.247,
+      "steady_counters": {
+        "start_elapsed": 360.2614092909498,
+        "end_elapsed": 420.9021577909589,
+        "start_cpu_usec": 113363547,
+        "end_cpu_usec": 126351742
+      },
+      "steady_cpu_percent": 21.418,
+      "peak_cgroup_memory_bytes": 162734080,
+      "loops": {
+        "answer_wake": {
+          "runs": 298,
+          "busy_ms": 49050,
+          "rows": 0
+        },
+        "ask_lifecycle": {
+          "runs": 295,
+          "busy_ms": 58402,
+          "rows": 0
+        },
+        "ask_subjects": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "ask_webhooks": {
+          "runs": 299,
+          "busy_ms": 3,
+          "rows": 0
+        },
+        "brief": {
+          "runs": 1083,
+          "busy_ms": 64967,
+          "rows": 0
+        },
+        "card_lease": {
+          "runs": 10,
+          "busy_ms": 11910,
+          "rows": 0
+        },
+        "comment_search": {
+          "runs": 1167,
+          "busy_ms": 4009,
+          "rows": 0
+        },
+        "compact_migration": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "compact_retired": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "curation": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "document_history": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "document_search": {
+          "runs": 1163,
+          "busy_ms": 5234,
+          "rows": 0
+        },
+        "escalation": {
+          "runs": 10,
+          "busy_ms": 10764,
+          "rows": 0
+        },
+        "heartbeat": {
+          "runs": 10,
+          "busy_ms": 4776,
+          "rows": 0
+        },
+        "inbox_lifecycle": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "observation": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "pm": {
+          "runs": 59,
+          "busy_ms": 25071,
+          "rows": 0
+        },
+        "projection": {
+          "runs": 60,
+          "busy_ms": 33508,
+          "rows": 0
+        },
+        "replay_gc": {
+          "runs": 4,
+          "busy_ms": 2800,
+          "rows": 0
+        },
+        "router": {
+          "runs": 297,
+          "busy_ms": 41145,
+          "rows": 0
+        },
+        "scope_inbox": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        }
+      }
+    },
+    "verified": {
+      "startup_counters": {
+        "start_elapsed": 5.2459600410657,
+        "end_elapsed": 46.12480874999892,
+        "start_cpu_usec": 2521965,
+        "end_cpu_usec": 3225211
+      },
+      "startup_cpu_percent": 1.72,
+      "steady_counters": {
+        "start_elapsed": 362.0643095000414,
+        "end_elapsed": 423.0257671249565,
+        "start_cpu_usec": 6702921,
+        "end_cpu_usec": 7400328
+      },
+      "steady_cpu_percent": 1.144,
+      "peak_cgroup_memory_bytes": 168607744,
+      "loops": {
+        "answer_wake": {
+          "runs": 300,
+          "busy_ms": 63,
+          "rows": 0
+        },
+        "ask_lifecycle": {
+          "runs": 299,
+          "busy_ms": 76,
+          "rows": 0
+        },
+        "ask_subjects": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "ask_webhooks": {
+          "runs": 300,
+          "busy_ms": 3,
+          "rows": 0
+        },
+        "brief": {
+          "runs": 151,
+          "busy_ms": 34,
+          "rows": 0
+        },
+        "card_lease": {
+          "runs": 10,
+          "busy_ms": 1495,
+          "rows": 0
+        },
+        "comment_search": {
+          "runs": 1184,
+          "busy_ms": 1525,
+          "rows": 0
+        },
+        "compact_migration": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "compact_retired": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "curation": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "document_history": {
+          "runs": 1,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "document_search": {
+          "runs": 1183,
+          "busy_ms": 1865,
+          "rows": 0
+        },
+        "escalation": {
+          "runs": 10,
+          "busy_ms": 16,
+          "rows": 0
+        },
+        "heartbeat": {
+          "runs": 10,
+          "busy_ms": 1953,
+          "rows": 0
+        },
+        "inbox_lifecycle": {
+          "runs": 1,
+          "busy_ms": 1341,
+          "rows": 0
+        },
+        "observation": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        },
+        "pm": {
+          "runs": 59,
+          "busy_ms": 18,
+          "rows": 0
+        },
+        "projection": {
+          "runs": 60,
+          "busy_ms": 1563,
+          "rows": 0
+        },
+        "replay_gc": {
+          "runs": 4,
+          "busy_ms": 1,
+          "rows": 0
+        },
+        "router": {
+          "runs": 300,
+          "busy_ms": 1652,
+          "rows": 0
+        },
+        "scope_inbox": {
+          "runs": 0,
+          "busy_ms": 0,
+          "rows": 0
+        }
+      }
+    }
+  },
+  "candidate_binary_sha256": "f45986d308c81c3076e0440ab057dbe311de4564708c3bf6da4cb7057ed5aa3e",
+  "startup_probe": {
+    "migration_ms": 187,
+    "listener_ms": 336,
+    "binary_sha256": "4569a250584346267a2dba7e6cfa573a32bc873d326c8b229f6b8db20ef9e796"
+  }
+}

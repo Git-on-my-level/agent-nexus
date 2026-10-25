@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/loopstats"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -126,6 +127,8 @@ CREATE TRIGGER IF NOT EXISTS comment_search_event_delete AFTER DELETE ON events 
 // The durable pending cursor advances before attempting normalization, including
 // failed attempts; failures are reported by Run and cannot starve later sources.
 func (w *Workspace) MaintainCommentSearchBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "comment_search")
+	defer finish()
 	return w.maintainCommentSearchBatch(ctx, commentindex.Prepare)
 }
 
@@ -151,6 +154,7 @@ func (w *Workspace) maintainCommentSearchBatch(ctx context.Context, prepare func
 	if err != nil {
 		return false, err
 	}
+	loopstats.Rows(ctx, 1)
 	body, err := prepare(raw, truncated)
 	if err != nil {
 		return false, err
