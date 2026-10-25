@@ -15075,7 +15075,7 @@ components:
       type: object
       required: [at, what, source]
       properties:
-        at: { type: string, format: date-time }
+        at: { type: string, format: date-time, description: Exact computed deadline; fractional seconds are preserved by materialized and direct folds. }
         what: { type: string, maxLength: 160 }
         source: { type: string, enum: [note, plan_step, due_at, wake_condition, cadence, default] }
         source_ref: { type: string }
@@ -15096,7 +15096,7 @@ components:
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         ref: { type: string, description: "card:<handle-or-id>" }
         title: { type: string }
-        owner: { type: string, nullable: true, description: First canonical assignee ref, as in work list; null when unassigned. }
+        owner: { type: string, nullable: true, description: First canonical assignee ref, including an implicit creator or assigned fallback owner; never inferred from the promise author. Null only when unassigned. }
         state: { type: string, enum: [past_promise, moving, no_promise, digest, done] }
         placement: { type: string, enum: [backlog, ready, in_progress, review, done] }
         promise: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefPromise' }] }

@@ -985,7 +985,7 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 			item["owner"] = refs[0]
 		}
 		if state.Promise != nil {
-			p := map[string]any{"at": state.Promise.At.UTC().Format(time.RFC3339), "what": state.Promise.What, "source": state.Promise.Source}
+			p := map[string]any{"at": state.Promise.At.UTC().Format(time.RFC3339Nano), "what": state.Promise.What, "source": state.Promise.Source}
 			if state.Promise.SourceRef != "" {
 				p["source_ref"] = state.Promise.SourceRef
 			}

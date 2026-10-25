@@ -2,6 +2,12 @@
 
 ## Default tracking and daily digest reads
 
+The brief contract reconciliation preserves fractional promise deadlines in
+materialization and wire serialization. It changes no SQL shape, index, batch
+size or admission bound. The cadence/digest scale gates and pinned preparation
+allocation gate pass without new allowances. The client digest normalization is
+one pass over the existing at-most-50-row preview; it adds no API request.
+
 Migration 120 adds card-inherited `work_tracking` bookkeeping and a tiny
 maintenance cursor. It installs schema only, without a canonical-row backfill.
 Maintenance admits 100 historical identities and at most 50 due defaults or

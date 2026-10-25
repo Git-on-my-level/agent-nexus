@@ -43,8 +43,8 @@ describe("groupWatch", () => {
       (g) => g.state === "moving",
     );
     expect(moving.rows.map((r) => r.id)).toEqual([
-      "fleet-onboarding",
       "observability",
+      "fleet-onboarding",
     ]);
   });
 });

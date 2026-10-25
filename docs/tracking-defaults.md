@@ -5,7 +5,8 @@ non-blocking and make missing follow-through visible without repeated alerts.
 
 New cards get a computed promise twelve hours after creation when there is no
 explicit promise or cadence. It has `promise.source=default`, not an authored
-`next` note. A supplied assignee is preserved; otherwise creation assigns the
+`next` note. The exact deadline, including fractional seconds from creation,
+survives both the materialized brief and direct reads. A supplied assignee is preserved; otherwise creation assigns the
 creating actor. Explicit promises and genuine evidence replace or meet the
 default; ordinary conversation and plan authoring do not meet it.
 

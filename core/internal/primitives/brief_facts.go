@@ -55,7 +55,7 @@ func (s *Store) RefreshBriefInitiatives(ctx context.Context, limit int) (bool, e
 		var promiseAt, lastEvidence any
 		what, source, sourceRef, author := "", "", "", ""
 		if fold.Promise != nil {
-			promiseAt = fold.Promise.At.UTC().Format(time.RFC3339)
+			promiseAt = fold.Promise.At.UTC().Format(time.RFC3339Nano)
 			what, source, sourceRef, author = fold.Promise.What, fold.Promise.Source, fold.Promise.SourceRef, fold.Promise.Author
 		}
 		if !fold.LastEvidenceAt.IsZero() {

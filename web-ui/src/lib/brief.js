@@ -52,6 +52,10 @@ export const DECISION_KIND_LABELS = {
  */
 export const BRIEF_COMPUTED_FIELDS = new Set([
   "curation_suggestions",
+  "daily_digest",
+  "daily_digest.ref",
+  "daily_digest.title",
+  "daily_digest.reason",
   "initiatives.loop",
   "decisions.decide_by",
   "decisions.overdue_for",
@@ -393,6 +397,9 @@ export function normalizeBrief(raw) {
     decisions: (Array.isArray(brief?.decisions) ? brief.decisions : [])
       .map(normalizeDecision)
       .filter(Boolean),
+    dailyDigest: (Array.isArray(brief?.daily_digest) ? brief.daily_digest : [])
+      .map((row) => ({ ...refTitle(row), reason: text(row?.reason) }))
+      .filter((row) => row.ref),
     initiatives: (Array.isArray(brief?.initiatives) ? brief.initiatives : [])
       .map(normalizeInitiative)
       .filter(Boolean),

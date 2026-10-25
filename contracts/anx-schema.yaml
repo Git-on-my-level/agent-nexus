@@ -1496,6 +1496,7 @@ promises:
     One clock: promise versus evidence. A promise is a field on things agents already write,
     not a separately authored object. Durations are computed at read time; default reminder and digest delivery receipts are durable bookkeeping.
   sources: [note, plan_step, due_at, wake_condition, cadence, default]
+  timestamp_precision: Materialized and direct folds preserve the same exact RFC3339 deadline, including fractional seconds on computed defaults.
   rules:
     - "Which promise counts: a live note promise is the stated next. That is each principal's latest message_posted note carrying payload.next, that evidence, a step status change, a linked step moving, or a changed observation has not met; the earliest such note wins. Plan-step due dates, the effective due_at, and the first date inside wake_condition are milestones and supply the counted promise only when no live note promise remains, in which case the earliest unmet at wins."
     - "Met: a promise is met when a reset event lands before its `at`. A met promise no longer counts. A plan edit does not meet a promise."
@@ -1534,7 +1535,7 @@ brief:
   sections: [decisions, initiatives, daily_digest, your_asks, answered_for_you, curation_suggestions]
   section_limit: 50
   decision_kinds: [ask, review, access, host, pm_proposal]
-  initiative_owner: Nullable first canonical assignee ref, matching work list. Unowned and fallback work is routed to daily_digest.
+  initiative_owner: Nullable first canonical assignee ref, matching work list, including implicit creator and assigned fallback responsibility; never inferred from the promise author. Unowned and fallback work is routed to daily_digest.
   initiative_states: [past_promise, moving, no_promise, digest, done]
   placements: [backlog, ready, in_progress, review, done]
   decision_order: "decide_by ascending (absent last), then blocks_count descending, then priority (critical/p0, high/p1, medium/p2, low/p3, absent), then created_at ascending, then ref."

@@ -210,8 +210,8 @@ func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
 		yoursByRef[anyString(raw["ref"])] = raw["yours"] == true
 		owners[anyString(raw["ref"])] = raw["owner"]
 	}
-	if owners[anyString(assigned["ref"])] != "actor:agent-1" || owners[anyString(unrelated["ref"])] != "actor:agent-2" || owners[anyString(promised["ref"])] != nil {
-		t.Fatalf("owner must be nullable first assignee, not promise author: %#v", owners)
+	if owners[anyString(assigned["ref"])] != "actor:agent-1" || owners[anyString(unrelated["ref"])] != "actor:agent-2" || owners[anyString(promised["ref"])] != "actor:actor-1" || owners[anyString(participating["ref"])] != "actor:actor-1" {
+		t.Fatalf("owner must be the explicit or implicit assignee, not promise author: %#v", owners)
 	}
 	if !yoursByRef[anyString(assigned["ref"])] {
 		t.Fatalf("assigned card should have yours=true: %#v", brief["initiatives"])
@@ -245,7 +245,7 @@ func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
 			t.Errorf("brief field %q is not in the shared fixture", key)
 		}
 	}
-	for _, section := range []string{"decisions", "initiatives", "your_asks", "answered_for_you"} {
+	for _, section := range []string{"decisions", "initiatives", "daily_digest", "your_asks", "answered_for_you"} {
 		known := map[string]bool{}
 		for _, item := range fixture[section].([]any) {
 			for k := range item.(map[string]any) {
@@ -400,3 +400,78 @@ func TestBriefV1UndatedAskCandidatePriorityAndAgentSummaryRecency(t *testing.T) 
 
 // I7 (core side): the live brief uses only fields the shared fixture that
 // Decide, Watch and orient render from also uses, plus the optional ones.
+
+// The shared wire fixture must cover normal defaults and both daily routes,
+// rather than merely accepting an empty digest from an ordinary brief.
+func TestBriefTrackingDefaultsMatchSharedFixture(t *testing.T) {
+	t.Parallel()
+	h := newPrimitivesTestServer(t)
+	ctx := context.Background()
+	store := h.primitiveStore.(*primitives.Store)
+	create := func(title string) map[string]any {
+		t.Helper()
+		card, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return card
+	}
+	normal := create("Default checkpoint")
+	lapsed := create("Lapsed default")
+	ended := create("Ended lease")
+	now := time.Now().UTC()
+	created := now.Add(-13 * time.Hour)
+	if _, err := h.workspace.DB().Exec(`UPDATE cards SET created_at=? WHERE id=?`, created.Format(time.RFC3339Nano), lapsed["id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.workspace.DB().Exec(`UPDATE work_tracking SET default_at=? WHERE card_id=?`, created.Add(12*time.Hour).Format(time.RFC3339Nano), lapsed["id"]); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MaintainWorkTracking(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	store.SetTrackingLead(func() string { return "actor-1" })
+	if _, err := store.AcquireCardLease(ctx, "actor-1", anyString(ended["id"]), primitives.CardLeaseAcquireInput{Owner: "actor:actor-1", TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReleaseCardLease(ctx, "actor-1", anyString(ended["id"]), primitives.CardLeaseReleaseInput{Owner: "actor:actor-1"}); err != nil {
+		t.Fatal(err)
+	}
+	for done := false; !done; {
+		var err error
+		done, err = store.RefreshBriefInitiatives(ctx, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := store.Brief(ctx, primitives.BriefReader{ActorID: "actor-1", Kind: "human"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err = json.Unmarshal(encoded, &body); err != nil {
+		t.Fatal(err)
+	}
+	assertBriefMatchesFixture(t, body)
+	initiatives := body["initiatives"].([]any)
+	if len(initiatives) != 1 {
+		t.Fatalf("digest work leaked into normal initiatives: %+v", initiatives)
+	}
+	row := initiatives[0].(map[string]any)
+	promise := row["promise"].(map[string]any)
+	if row["ref"] != normal["ref"] || row["owner"] != "actor:actor-1" || row["state"] != "moving" || promise["source"] != "default" {
+		t.Fatalf("default contract lost: %+v", row)
+	}
+	reasons := map[string]string{}
+	for _, value := range body["daily_digest"].([]any) {
+		row := value.(map[string]any)
+		reasons[anyString(row["ref"])] = anyString(row["reason"])
+	}
+	if len(reasons) != 2 || reasons[anyString(lapsed["ref"])] != "default_promise_lapsed" || reasons[anyString(ended["ref"])] != "awaiting_owner" {
+		t.Fatalf("digest contract lost: %+v", reasons)
+	}
+}
