@@ -58,6 +58,7 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "groupWork",
           "foldWork",
           "unfoldWork",
+          "patchWork",
           "updateBoardCard",
           "moveBoardCard",
           "createCardRevision",

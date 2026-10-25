@@ -76,7 +76,9 @@ function seed() {
     child("card:a1-funding", "A1 fallback funding ruling", "blocked", {
       needs_viewer: true,
     }),
-    child("card:fail-loudly", "Fail loudly", "done"),
+    child("card:fail-loudly", "Fail loudly", "done", {
+      done_at: "2026-10-23T09:00:00Z",
+    }),
   ];
   const margin = [
     child("card:storage", "Storage levers", "ready"),
@@ -138,6 +140,7 @@ function seed() {
         phase: "backlog",
         parent_ref: null,
         created_at: "2026-10-24T11:58:00Z",
+        created_by: { id: "agent:lane-stt", display: "lane-stt" },
         likely_home: [
           {
             ref: "card:capture",
@@ -169,9 +172,34 @@ function seed() {
         parent_ref: null,
         created_at: "2026-10-24T09:00:00Z",
         likely_home: [],
-        next_actions: [],
+        next_actions: [
+          {
+            label: "Make it an initiative",
+            command_id: "work.patch",
+            argv: [
+              "anx",
+              "work",
+              "patch",
+              "card:ramp-telemetry",
+              "--from-file",
+              "-",
+            ],
+            stdin: { if_version: 3, patch: { top_level: true } },
+          },
+          {
+            label: "Move to another workspace",
+            command_template:
+              "anx move card card:ramp-telemetry --to <workspace-alias>",
+            requires_human: true,
+            requires_destination: true,
+          },
+        ],
       },
     ],
+    /** Card versions and `top_level`, for the fenced work patch. */
+    work: { "card:ramp-telemetry": { version: 3, top_level: false } },
+    parked: {},
+    losePatchResponses: 0,
     hasMore: false,
     plans: {},
     planTokens: {},
@@ -268,6 +296,41 @@ async function install(context, api) {
       return json(route, {
         work: { ref, parent_ref: body.under || body.into || null },
       });
+    },
+  );
+  // Core's fenced work patch: a stale version is refused, so a retry of a
+  // landed patch comes back 409 and the client reads the card back.
+  await context.route(
+    (url) =>
+      /^\/work\/[^/]+$/.test(url.pathname) &&
+      url.pathname !== "/work/ungrouped",
+    async (route) => {
+      const ref = decodeURIComponent(
+        new URL(route.request().url()).pathname.split("/")[2],
+      );
+      const method = route.request().method();
+      api.calls.push(`${method} /work/${ref}`);
+      const card = api.work[ref];
+      if (!card) return json(route, { error: { message: "missing" } }, 404);
+      if (method === "GET") return json(route, { work: { ref, ...card } });
+      const body = route.request().postDataJSON();
+      api.posts.push({ verb: "patch", ref, body });
+      if (body.if_version !== card.version)
+        return json(route, { error: { message: "version changed" } }, 409);
+      card.version += 1;
+      card.top_level = body.patch.top_level;
+      if (card.top_level) {
+        api.parked[ref] = api.ungrouped.find((row) => row.ref === ref);
+        api.ungrouped = api.ungrouped.filter((row) => row.ref !== ref);
+      } else if (api.parked[ref]) {
+        api.ungrouped = [...api.ungrouped, api.parked[ref]];
+        delete api.parked[ref];
+      }
+      if (api.losePatchResponses > 0) {
+        api.losePatchResponses -= 1;
+        return json(route, { error: { message: "gateway timeout" } }, 503);
+      }
+      return json(route, { work: { ref, ...card } });
     },
   );
   await context.route(
@@ -588,6 +651,111 @@ test.describe("desktop", () => {
     );
   });
 
+  test("Make it an initiative sends core's fenced patch, and Undo puts it back", async ({
+    page,
+    context,
+  }) => {
+    const api = await open(page, context);
+    const tray = page.locator("[data-swimlane-tray]");
+    // Who made a card, beside when.
+    await expect(tray.locator('[data-tray-ref="card:a1-f4"]')).toContainText(
+      "created 2m ago by lane-stt",
+    );
+    const row = tray.locator('[data-tray-ref="card:ramp-telemetry"]');
+    await expect(row).toContainText("no likely home");
+    await row.locator('[data-promote="card:ramp-telemetry"]').click();
+    const notice = page.locator("[data-grouping-notice]");
+    await expect(notice).toContainText(
+      "“Shared-speech ramp telemetry” is an initiative now.",
+    );
+    const patches = () => api.posts.filter((post) => post.verb === "patch");
+    expect(patches()).toEqual([
+      {
+        verb: "patch",
+        ref: "card:ramp-telemetry",
+        body: {
+          actor_id: "actor-comment",
+          if_version: 3,
+          patch: { top_level: true },
+        },
+      },
+    ]);
+    await expect(
+      tray.locator('[data-tray-ref="card:ramp-telemetry"]'),
+    ).toHaveCount(0);
+
+    // Undo is fenced to the version the promote made.
+    await notice.getByRole("button", { name: "Undo" }).click();
+    await expect(notice).toContainText(
+      "“Shared-speech ramp telemetry” is back in Ungrouped.",
+    );
+    expect(patches()[1].body).toEqual({
+      actor_id: "actor-comment",
+      if_version: 4,
+      patch: { top_level: false },
+    });
+    await expect(
+      tray.locator('[data-tray-ref="card:ramp-telemetry"]'),
+    ).toBeVisible();
+    expect(api.work["card:ramp-telemetry"]).toEqual({
+      version: 5,
+      top_level: false,
+    });
+  });
+
+  test("a promote whose response was lost is confirmed by a read-back, not sent twice over", async ({
+    page,
+    context,
+  }) => {
+    const api = seed();
+    api.losePatchResponses = 1;
+    await open(page, context, api, { fixTime: false });
+    await page.locator('[data-promote="card:ramp-telemetry"]').click();
+    await expect(
+      page.locator('[data-mutation-state="retrying"]'),
+    ).toBeVisible();
+    await expect(page.getByText("gateway timeout")).not.toBeVisible();
+    await expect(page.locator("[data-grouping-notice]")).toContainText(
+      "is an initiative now.",
+      { timeout: 15_000 },
+    );
+    const patches = api.posts.filter((post) => post.verb === "patch");
+    // The retry repeats the original fence; core refuses it, and the card
+    // read back shows the first send landed. Applied once.
+    expect(patches).toHaveLength(2);
+    expect(patches[1].body).toEqual(patches[0].body);
+    expect(api.calls).toContain("GET /work/card:ramp-telemetry");
+    expect(api.work["card:ramp-telemetry"]).toEqual({
+      version: 4,
+      top_level: true,
+    });
+  });
+
+  test("Move to another workspace shows the command and sends nothing", async ({
+    page,
+    context,
+  }) => {
+    const api = await open(page, context);
+    const row = page.locator(
+      '[data-swimlane-tray] [data-tray-ref="card:ramp-telemetry"]',
+    );
+    await row.locator("select").selectOption("+move");
+    const move = row.locator("[data-tray-move]");
+    await expect(move).toContainText(
+      "anx move card card:ramp-telemetry --to <workspace-alias>",
+    );
+    await expect(move).toContainText("A person with access to both");
+    expect(api.posts).toEqual([]);
+    await move.getByRole("button", { name: "Close" }).click();
+    await expect(move).toHaveCount(0);
+    // A card with no move hint from core offers none.
+    await expect(
+      page
+        .locator('[data-swimlane-tray] [data-tray-ref="card:a1-f4"] option')
+        .filter({ hasText: "Move to another workspace" }),
+    ).toHaveCount(0);
+  });
+
   test("dragging a tray card onto a lane groups it there", async ({
     page,
     context,
@@ -637,7 +805,7 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expect(page.getByText("Upstream detail")).not.toBeVisible();
     await expect(page.locator('[data-tray-ref="card:cost-4"]')).toContainText(
-      "Grouping saved. Sending…",
+      "Saved. Sending…",
     );
     await page.reload();
     await expect

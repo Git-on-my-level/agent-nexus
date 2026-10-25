@@ -12,12 +12,15 @@ import {
   columnFor,
   foldSuggestions,
   hiddenChildren,
+  LANE_COLUMNS,
   laneCells,
   overBudget,
   progressSegments,
+  splitDone,
+  trayActions,
   trayRows,
 } from "../../src/lib/swimlanes.js";
-import { removeGroupedStep } from "../../src/lib/groupingPlan.js";
+import { removeGroupedStep, sendTopLevel } from "../../src/lib/groupingPlan.js";
 import {
   enqueueFailureMessage,
   groupingDraft,
@@ -264,11 +267,101 @@ describe("tray and budget", () => {
         title: "A1 F4",
         phase: "backlog",
         createdAt: "2026-10-24T00:00:00Z",
+        createdBy: "",
+        promote: null,
+        move: "",
         homes: [
           { ref: "card:a1", title: "A1 routing", reasons: ["title_family"] },
         ],
       },
     ]);
+  });
+
+  it("reads the creator, the fenced promote and the human move hint", () => {
+    const [row] = trayRows({
+      work: [
+        {
+          ref: "card:x",
+          title: "X",
+          created_by: { id: "agent:lane", display: "lane", kind: "agent" },
+          next_actions: [
+            {
+              label: "Choose a home",
+              argv: ["anx", "work", "group", "card:x", "--under", "card:a"],
+            },
+            {
+              command_id: "work.patch",
+              argv: ["anx", "work", "patch", "card:x", "--from-file", "-"],
+              stdin: { if_version: 7, patch: { top_level: true } },
+            },
+            {
+              command_template: "anx move card card:x --to <workspace-alias>",
+              requires_human: true,
+              requires_destination: true,
+            },
+          ],
+        },
+      ],
+    });
+    expect(row).toMatchObject({
+      createdBy: "lane",
+      promote: { version: 7 },
+      move: "anx move card card:x --to <workspace-alias>",
+    });
+  });
+
+  it("offers no promote or move it cannot prove", () => {
+    expect(
+      trayActions([
+        // Not only top_level, or no fence, or another command: not a promote.
+        {
+          command_id: "work.patch",
+          stdin: { if_version: 1, patch: { top_level: true, goal: null } },
+        },
+        { command_id: "work.patch", stdin: { patch: { top_level: true } } },
+        {
+          command_id: "work.patch",
+          stdin: { if_version: -1, patch: { top_level: true } },
+        },
+        {
+          command_id: "work.fold",
+          stdin: { if_version: 1, patch: { top_level: true } },
+        },
+        // An executable move, or one not marked for a person, is not shown.
+        {
+          command_template: "anx move card card:x",
+          requires_human: true,
+          argv: ["anx", "move"],
+        },
+        { command_template: "anx move card card:x", requires_human: false },
+      ]),
+    ).toEqual({ promote: null, move: "" });
+    expect(trayActions(undefined)).toEqual({ promote: null, move: "" });
+  });
+
+  it("splits done children into this week and earlier by done_at", () => {
+    const now = Date.parse("2026-10-24T12:00:00Z");
+    const done = (ref, doneAt) => ({ ref, state: "done", doneAt });
+    const { recent, earlier } = splitDone(
+      [
+        done("card:today", "2026-10-24T09:00:00Z"),
+        done("card:six-days", "2026-10-18T13:00:00Z"),
+        done("card:eight-days", "2026-10-16T12:00:00Z"),
+        done("card:undated", null),
+        done("card:future", "2026-10-25T00:00:00Z"),
+      ],
+      now,
+    );
+    expect(recent.map((c) => c.ref)).toEqual(["card:today", "card:six-days"]);
+    expect(earlier.map((c) => c.ref)).toEqual([
+      "card:eight-days",
+      "card:undated",
+      "card:future",
+    ]);
+    expect(LANE_COLUMNS.find((c) => c.key === "done")).toMatchObject({
+      label: "Done",
+      heading: "Done this week",
+    });
   });
 
   it("reads fold suggestions only from fold argv", () => {
@@ -468,5 +561,102 @@ describe("review fixes", () => {
     expect(
       enqueueFailureMessage(new Error("Choose an initiative to group under.")),
     ).toBe("Choose an initiative to group under. Nothing was sent.");
+  });
+});
+
+describe("make it an initiative", () => {
+  const work = { ref: "card:ramp", title: "Ramp telemetry" };
+
+  it("is a fenced top_level patch at the version the tray read", () => {
+    const draft = groupingDraft("promote", work, null, { version: 3 });
+    expect(groupingTitle(draft)).toBe("Make “Ramp telemetry” an initiative");
+    expect(groupingRequest(draft, "human", "k")).toEqual({
+      operation: "work.top_level",
+      request: {
+        ref: "card:ramp",
+        body: {
+          actor_id: "human",
+          if_version: 3,
+          patch: { top_level: true },
+        },
+      },
+    });
+    const undo = groupingDraft("unpromote", work, null, { version: 4 });
+    expect(groupingTitle(undo)).toBe("Put “Ramp telemetry” back in Ungrouped");
+    expect(groupingRequest(undo, "human", "k").request.body).toEqual({
+      actor_id: "human",
+      if_version: 4,
+      patch: { top_level: false },
+    });
+    // No version, no write: it would not be fenced.
+    expect(() =>
+      groupingRequest(groupingDraft("promote", work), "human", "k"),
+    ).toThrow(/Reload/);
+  });
+
+  const body = { actor_id: "h", if_version: 3, patch: { top_level: true } };
+  const conflict = () => Object.assign(new Error("409"), { status: 409 });
+
+  it("sends once and returns core's receipt", async () => {
+    const client = {
+      patchWork: vi.fn().mockResolvedValue({
+        work: { ref: "card:ramp", version: 4, top_level: true },
+      }),
+      getWork: vi.fn(),
+    };
+    await expect(
+      sendTopLevel(client, { ref: "card:ramp", body }),
+    ).resolves.toMatchObject({ work: { version: 4 } });
+    expect(client.patchWork).toHaveBeenCalledWith("card:ramp", body);
+    expect(client.getWork).not.toHaveBeenCalled();
+  });
+
+  it("confirms a retry whose first send landed, from a read-back", async () => {
+    const client = {
+      patchWork: vi.fn().mockRejectedValue(conflict()),
+      getWork: vi.fn().mockResolvedValue({
+        work: { ref: "card:ramp", version: 4, top_level: true },
+      }),
+    };
+    await expect(
+      sendTopLevel(client, { ref: "card:ramp", body }),
+    ).resolves.toEqual({
+      work: { ref: "card:ramp", version: 4, top_level: true },
+    });
+    expect(client.patchWork).toHaveBeenCalledTimes(1);
+    expect(client.getWork).toHaveBeenCalledWith("card:ramp", { summary: 1 });
+  });
+
+  it("stops when the card changed some other way", async () => {
+    const client = {
+      patchWork: vi.fn().mockRejectedValue(conflict()),
+      getWork: vi.fn().mockResolvedValue({
+        work: { ref: "card:ramp", version: 5, top_level: false },
+      }),
+    };
+    const error = await sendTopLevel(client, { ref: "card:ramp", body }).catch(
+      (e) => e,
+    );
+    expect(error.status).toBe(409);
+    expect(error.publicMessage).toMatch(/nothing was changed/);
+    // An unchanged version is not a landed write either.
+    client.getWork.mockResolvedValue({
+      work: { ref: "card:ramp", version: 3, top_level: true },
+    });
+    await expect(
+      sendTopLevel(client, { ref: "card:ramp", body }),
+    ).rejects.toHaveProperty("publicMessage");
+  });
+
+  it("leaves other failures to the outbox's retry", async () => {
+    const offline = Object.assign(new Error("offline"), { status: 503 });
+    const client = {
+      patchWork: vi.fn().mockRejectedValue(offline),
+      getWork: vi.fn(),
+    };
+    await expect(sendTopLevel(client, { ref: "card:ramp", body })).rejects.toBe(
+      offline,
+    );
+    expect(client.getWork).not.toHaveBeenCalled();
   });
 });

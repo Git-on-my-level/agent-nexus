@@ -41,7 +41,7 @@ import {
   autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
-import { removeGroupedStep } from "$lib/groupingPlan.js";
+import { removeGroupedStep, sendTopLevel } from "$lib/groupingPlan.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -333,6 +333,8 @@ async function send(entry, lease = null) {
     if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
     return result;
   }
+  if (entry.operation === "work.top_level")
+    return sendTopLevel(client, entry.request);
   if (entry.operation === "work.ungroup") {
     // One exact plan write per undo, like the op-based pins edit: the first
     // send reads the plan once, removes only the step this group added, and

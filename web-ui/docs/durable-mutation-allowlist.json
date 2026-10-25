@@ -73,6 +73,14 @@
       "raw-fetch": 5
     }
   },
+  "lib/groupingPlan.js": {
+    "classification": "outbox",
+    "reason": "Audited version-fenced top_level work patch sent only by the mutation outbox, with read-back after a 409; not a direct form sender.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "patchWork": 1
+    }
+  },
   "lib/hostBridgeStatus.js": {
     "classification": "read-helper",
     "reason": "getHostBridgeStatus uses an authenticated read-only POST for bounded machine liveness; it submits no authored work or mutation, so no durable outbox is needed.",
