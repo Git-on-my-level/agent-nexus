@@ -410,7 +410,6 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	// A fresh answer to a curation proposal applies or dismisses it. A replay
 	// (including the early returns above) reapplies when the proposal was
 	// accepted and the trail never landed.
-	applyCurationAnswer(context.WithoutCancel(r.Context()), opts, actorID, true, sourceEventID, threadID, itemPayload, responseText, req.Outcome)
 	writeJSON(w, http.StatusCreated, storedResponse)
 }
 
@@ -459,7 +458,6 @@ func writeAuthorizedInboxResponseReplay(w http.ResponseWriter, r *http.Request, 
 	}
 	// The answer is already durable. Finish a curation action that did not
 	// land with it, then return the original response.
-	reapplyCurationFromReplay(context.WithoutCancel(r.Context()), opts, replay)
 	writeJSON(w, http.StatusCreated, replay)
 }
 

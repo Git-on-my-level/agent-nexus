@@ -364,3 +364,11 @@ func TestLoopTierCommandsAreStable(t *testing.T) {
 }
 
 var _ = bytes.Buffer{}
+
+func TestOrientShowsQuietCurationActions(t *testing.T) {
+	b := map[string]any{"principal": map[string]any{"kind": "agent"}, "curation_suggestions": []any{map[string]any{"key": "k", "action": "batch", "title": "Group delivery", "apply_argv": []any{"anx", "api", "createCurationProposal", "--json-body", `{"resolution":"apply"}`}, "dismiss_argv": []any{"anx", "api", "createCurationProposal", "--json-body", `{"resolution":"dismiss"}`}}}}
+	text := renderOrientText(b, "worker")
+	if !strings.Contains(text, "suggestion: k batch") || !strings.Contains(text, `next anx api createCurationProposal --json-body '{"resolution":"apply"}'`) || !strings.Contains(text, "waiting on human:  none") {
+		t.Fatal(text)
+	}
+}

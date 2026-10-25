@@ -5549,7 +5549,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Read only. Post the ones worth a human decision with `curation propose`.",
+    "agent_notes": "Read only. Review suggestions; use `curation propose` with resolution apply or dismiss and a rationale.",
     "adjacent_commands": [
       "curation.metrics",
       "curation.propose",
@@ -5602,14 +5602,14 @@ export const commandRegistry: CommandSpec[] = [
     "method": "POST",
     "path": "/curation/proposals",
     "operation_id": "createCurationProposal",
-    "summary": "Propose a curation action as a decision",
-    "description": "Files one curation proposal (withdraw an ask as moot, merge a duplicate initiative into another, or batch related asks) as a human decision. The proposal is an ask addressed to a human whose first response proposal accepts it; answering with it performs the action as the answering human, through normal authority, and records an undo trail in the proposal thread. Any other answer dismisses it. The same action over the same targets is proposed at most once while open, and not again after a dismissal.",
+    "summary": "Record or resolve an agent curation suggestion",
+    "description": "Records a quiet agent suggestion, never a human ask, inbox item or notification. Agents review current formula candidates and use resolution apply or dismiss to act with their own authority and record a receipt. Merge folds the duplicate into the kept card; batch groups delivery without a human decision. Default resolution is suggest. Repeated requests reuse the same action/targets key. Humans can read suggestions through GET /curation/candidates; a separate Watch/board affordance may show them.",
     "why": "Let a PM post a curation proposal with its rationale.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ proposal }` with `status` created, existing or dismissed.",
+    "output_envelope": "Returns `{ proposal }` with `status` created, existing, accepted or dismissed.",
     "error_codes": [
       "auth_required",
       "invalid_request",
@@ -5624,7 +5624,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.",
+    "agent_notes": "Only authenticated agents may apply or dismiss suggestions. Formula passes only suggest.",
     "body_schema": {
       "required": [
         {
@@ -5646,6 +5646,15 @@ export const commandRegistry: CommandSpec[] = [
         }
       ],
       "optional": [
+        {
+          "name": "resolution",
+          "type": "string",
+          "enum_values": [
+            "apply",
+            "dismiss",
+            "suggest"
+          ]
+        },
         {
           "name": "title",
           "type": "string"
@@ -5687,7 +5696,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Proposals only; nothing is withdrawn or merged until a human accepts.",
+    "agent_notes": "Quiet suggestions only; an agent must explicitly apply or dismiss them.",
     "adjacent_commands": [
       "curation.candidates",
       "curation.metrics",
@@ -5706,7 +5715,7 @@ export const commandRegistry: CommandSpec[] = [
     "operation_id": "ungroupCurationBatch",
     "summary": "Undo an accepted batch proposal",
     "description": "Removes the grouping an accepted batch proposal recorded, so its member asks show as separate decisions again. The key is the proposal key named in the batch decision and in the applied trail's undo. Nothing else changes; no ask is answered or withdrawn.",
-    "why": "Undo a batch a human accepted.",
+    "why": "Undo a delivery grouping.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -5724,7 +5733,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Human principals only. Returns whether any grouping was removed.",
+    "agent_notes": "Authenticated humans or agents. Returns whether any grouping was removed.",
     "body_schema": {
       "required": [
         {
@@ -7630,6 +7639,8 @@ export const commandRegistry: CommandSpec[] = [
             "card_resolved",
             "card_trashed",
             "card_updated",
+            "curation_receipt",
+            "curation_suggested",
             "document_created",
             "document_restored",
             "document_revised",

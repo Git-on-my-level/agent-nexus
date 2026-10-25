@@ -87,6 +87,8 @@
         "card_resolved",
         "card_trashed",
         "card_updated",
+        "curation_receipt",
+        "curation_suggested",
         "document_created",
         "document_restored",
         "document_revised",
@@ -200,6 +202,10 @@
       "card_trashed",
       "card_updated"
     ],
+    "curation": [
+      "curation_receipt",
+      "curation_suggested"
+    ],
     "documents": [
       "document_created",
       "document_restored",
@@ -276,6 +282,12 @@
     ],
     "card_updated": [
       "cards"
+    ],
+    "curation_receipt": [
+      "curation"
+    ],
+    "curation_suggested": [
+      "curation"
     ],
     "document_created": [
       "documents"

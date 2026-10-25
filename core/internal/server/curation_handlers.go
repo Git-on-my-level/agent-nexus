@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/curation"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/resourceaccess"
 )
 
 const (
@@ -51,7 +49,12 @@ func handleCurationCandidates(w http.ResponseWriter, r *http.Request, opts handl
 		workStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"candidates": curationCandidatesJSON(candidates), "limitations": limitations})
+	suggestions, suggestionsTruncated, err := store.CurationSuggestions(r.Context(), planVisibility(r, opts))
+	if err != nil {
+		workStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"candidates": curationCandidatesJSON(candidates), "suggestions": suggestions, "suggestions_truncated": suggestionsTruncated, "limitations": limitations})
 }
 
 func curationCandidatesJSON(candidates []curation.Candidate) []map[string]any {
@@ -65,8 +68,8 @@ func curationCandidatesJSON(candidates []curation.Candidate) []map[string]any {
 	return out
 }
 
-// handleCurationPropose files a PM proposal. The PM chooses among the current
-// formula candidates and supplies the rationale; the targets must match one,
+// handleCurationPropose records or resolves quiet agent work. The PM chooses among current
+// formula candidates and supplies a rationale; new targets must match one,
 // so a proposal never names anything the formula's privacy rule excludes.
 func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if r.Method != http.MethodPost {
@@ -82,10 +85,11 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 	var body struct {
-		Action    string   `json:"action"`
-		Targets   []string `json:"targets"`
-		Rationale string   `json:"rationale"`
-		Title     string   `json:"title"`
+		Action     string   `json:"action"`
+		Targets    []string `json:"targets"`
+		Rationale  string   `json:"rationale"`
+		Resolution string   `json:"resolution"`
+		Title      string   `json:"title"`
 	}
 	if !decodeJSONBody(w, r, &body) {
 		return
@@ -108,6 +112,32 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	if len(body.Targets) == 0 || len(body.Targets) > curation.MaxBatchMembers {
 		writeError(w, http.StatusBadRequest, "invalid_request", "targets must contain 1 to 10 refs")
+		return
+	}
+	if body.Resolution != "" && body.Resolution != "suggest" && body.Resolution != "apply" && body.Resolution != "dismiss" {
+		writeError(w, 400, "invalid_request", "resolution must be suggest, apply or dismiss")
+		return
+	}
+	if body.Resolution == "apply" || body.Resolution == "dismiss" {
+		if principal.PrincipalKind != "agent" {
+			writeError(w, 403, "forbidden", "curation resolution requires an agent principal")
+			return
+		}
+		rec, err := store.ReadableCurationProposal(r.Context(), curation.Key(curation.Action(body.Action), body.Targets), planVisibility(r, opts))
+		if err != nil {
+			curationStoreError(w, r, err)
+			return
+		}
+		if err = store.ResolveAgentCuration(r.Context(), principal.ActorID, rec, body.Resolution, body.Rationale); err != nil {
+			curationStoreError(w, r, err)
+			return
+		}
+		rec, err = store.ReadableCurationProposal(r.Context(), rec.Key, planVisibility(r, opts))
+		if err != nil {
+			curationStoreError(w, r, err)
+			return
+		}
+		writeJSON(w, 201, map[string]any{"proposal": curationProposalJSON(rec, false)})
 		return
 	}
 	key := curation.Key(curation.Action(body.Action), body.Targets)
@@ -141,7 +171,7 @@ func handleCurationPropose(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 // handleCurationUngroup undoes an accepted batch: its members become separate
-// decisions again. Only a human ungroups, mirroring who accepted it.
+// decisions again. Agents or humans may undo this delivery grouping.
 func handleCurationUngroup(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -151,7 +181,7 @@ func handleCurationUngroup(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
-	if _, ok := requireHumanPrincipal(w, r, opts); !ok {
+	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
 		return
 	}
 	var body struct {
@@ -194,7 +224,7 @@ func handleCurationRun(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	// The pass files as the system principal, exactly like the hourly loop.
-	proposals, skipped, err := RunCurationFormula(resourceaccess.WithoutPolicy(r.Context()), store)
+	proposals, skipped, err := RunCurationFormula(r.Context(), store)
 	if err != nil {
 		curationStoreError(w, r, err)
 		return
@@ -266,17 +296,15 @@ func fileCurationProposal(ctx context.Context, store *primitives.Store, actor st
 	}
 	refs = append(refs, c.Targets...)
 	event := map[string]any{
-		"type":       humanAttentionRequestedEventType,
+		"type":       "curation_suggested",
 		"thread_id":  thread,
 		"refs":       mergeUniqueSortedRefs(refs...),
 		"summary":    c.Title,
 		"provenance": eventProvenance(),
 		"payload": map[string]any{
-			"kind": "ask", "title": c.Title, "body": c.Body,
-			"subject_ref":        c.SubjectRef,
-			"related_refs":       c.Targets,
-			"requester_actor_id": actor,
-			"response_proposals": c.ResponseProposals,
+			"title": c.Title, "body": c.Body,
+			"subject_ref":  c.SubjectRef,
+			"related_refs": c.Targets,
 			"curation": map[string]any{
 				"action": string(c.Action), "targets": c.Targets, "key": c.Key,
 				"source": source, "rationale": c.Rationale,
@@ -293,6 +321,8 @@ func curationProposalJSON(rec primitives.CurationProposalRecord, created bool) m
 		status = "created"
 	case rec.Status == primitives.CurationProposalDismissed:
 		status = "dismissed"
+	case rec.Status == primitives.CurationProposalAccepted:
+		status = "accepted"
 	}
 	return map[string]any{"key": rec.Key, "status": status, "action": rec.Action, "targets": rec.Targets, "event_id": rec.ProposalEventID, "source": rec.Source}
 }
@@ -336,116 +366,4 @@ func handleCurationMetrics(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics})
-}
-
-// reapplyCurationFromReplay finishes a curation action when the stored answer
-// is replayed. The proposal ask is loaded by its canonical id so a public
-// handle in the stored response still finds response_proposals.
-func reapplyCurationFromReplay(ctx context.Context, opts handlerOptions, replay map[string]any) {
-	store, ok := opts.primitiveStore.(*primitives.Store)
-	if !ok || store == nil {
-		return
-	}
-	event, _ := replay["event"].(map[string]any)
-	payload, _ := event["payload"].(map[string]any)
-	if event == nil || payload == nil {
-		return
-	}
-	requestRef := strings.TrimSpace(anyString(payload["request_event_ref"]))
-	if requestRef == "" {
-		return
-	}
-	resolved, err := store.ResolveResourceRef(ctx, primitives.ResourceRefInput{Type: "event", Ref: requestRef})
-	if err != nil {
-		return
-	}
-	source, err := store.GetEvent(ctx, resolved.ID)
-	if err != nil {
-		return
-	}
-	sourcePayload, _ := source["payload"].(map[string]any)
-	threadID := eventThreadID(source)
-	if threadID == "" {
-		threadID = eventThreadID(event)
-	}
-	applyCurationAnswer(ctx, opts, strings.TrimSpace(anyString(payload["responding_actor_id"])), true, resolved.ID, threadID, sourcePayload, anyString(payload["response_text"]), anyString(payload["outcome"]))
-}
-
-// applyCurationAnswer runs after a human answer to a proposal ask commits.
-// The first response proposal accepts and performs the action as the
-// answering human; anything else dismisses. The outcome, including a failure,
-// lands as a trail note in the proposal thread with what undo needs.
-func applyCurationAnswer(ctx context.Context, opts handlerOptions, responder string, human bool, proposalEventID, threadID string, payload map[string]any, responseText, outcome string) {
-	store, ok := opts.primitiveStore.(*primitives.Store)
-	if !ok || store == nil || proposalEventID == "" {
-		return
-	}
-	rec, err := store.CurationProposalByEvent(ctx, proposalEventID)
-	if err != nil {
-		return
-	}
-	proposals := stringSliceAny(payload["response_proposals"])
-	accepted := len(proposals) > 0 && outcome != "needs_context" && strings.EqualFold(strings.TrimSpace(responseText), strings.TrimSpace(proposals[0]))
-	if !accepted {
-		// A replay of a dismissal is a no-op once the row has left open.
-		if rec.Status == primitives.CurationProposalOpen {
-			if _, err := store.ResolveCurationProposal(ctx, rec.Key, primitives.CurationProposalDismissed); err != nil {
-				log.Printf("curation dismiss %s: %v", rec.Key, err)
-			}
-		}
-		return
-	}
-	if rec.Status == primitives.CurationProposalDismissed {
-		return
-	}
-	if rec.Status == primitives.CurationProposalAccepted {
-		// The answer committed and the row was accepted, but the action or
-		// its trail never landed. Apply again; the actions are idempotent.
-		applied, err := store.CurationActionApplied(ctx, threadID, proposalEventID)
-		if err != nil || applied {
-			return
-		}
-	} else {
-		moved, err := store.ResolveCurationProposal(ctx, rec.Key, primitives.CurationProposalAccepted)
-		if err != nil || !moved {
-			return
-		}
-	}
-	trail := map[string]any{"proposal_event_id": proposalEventID, "action": rec.Action, "targets": rec.Targets, "applied_by": responder}
-	text := ""
-	if !human {
-		// I4: only a human answer performs the action.
-		trail["result"], text = "skipped", "Curation proposal accepted by a non-human principal; nothing was changed."
-	} else {
-		undo, summary, err := store.ApplyCurationAction(ctx, responder, proposalEventID, rec)
-		if err != nil {
-			trail["result"], trail["error"] = "failed", err.Error()
-			text = "Curation proposal accepted but not applied: " + curationFailureText(err)
-		} else {
-			trail["result"], text = "applied", summary
-			if undo != nil {
-				trail["undo"] = undo
-			}
-		}
-	}
-	if _, err := store.AppendEvent(ctx, responder, map[string]any{
-		"type": "message_posted", "thread_id": threadID, "summary": text,
-		"refs":       mergeUniqueSortedRefs(append([]string{"thread:" + threadID, "event:" + proposalEventID}, rec.Targets...)...),
-		"provenance": eventProvenance(),
-		"payload":    map[string]any{"text": text, "curation_applied": trail},
-	}); err != nil {
-		log.Printf("curation trail %s: %v", rec.Key, err)
-	}
-}
-
-func curationFailureText(err error) string {
-	switch {
-	case errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded):
-		return "the ask was already resolved."
-	case errors.Is(err, primitives.ErrNotFound), errors.Is(err, primitives.ErrCurationTargetGone):
-		return "a target no longer exists."
-	case errors.Is(err, primitives.ErrForbidden):
-		return "the action is not allowed for this target."
-	}
-	return "the action failed; try again from the target."
 }

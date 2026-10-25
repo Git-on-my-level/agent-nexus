@@ -118,14 +118,17 @@ func TestPMCurateJudgmentParsesFencedJSONAndHonorsMax(t *testing.T) {
 	stubCurateHarness(t, "Here you go:\n```json\n[{\"key\":\"k1\",\"propose\":true,\"rationale\":\"Overtaken by the launch.\"},{\"key\":\"zzz\",\"propose\":true,\"rationale\":\"unknown\"},{\"key\":\"k2\",\"propose\":false,\"rationale\":\"keep\"},{\"key\":\"k3\",\"propose\":true,\"rationale\":\"\"}]\n```\n", nil)
 	payload := assertEnvelopeOK(t, runCurate(t, cs, "--runner", "pm-harness {prompt_file}"))
 	result := asMap(payload["result"])
-	if len(cs.posts) != 2 {
+	if len(cs.posts) != 4 {
 		t.Fatalf("posts=%v", cs.posts)
+	}
+	if cs.posts[1]["resolution"] != "apply" || cs.posts[3]["resolution"] != "apply" {
+		t.Fatalf("PM must apply selected agent work: %#v", cs.posts)
 	}
 	if cs.posts[0]["action"] != "withdraw" || cs.posts[0]["rationale"] != "Overtaken by the launch." {
 		t.Fatalf("first post %v", cs.posts[0])
 	}
-	if cs.posts[1]["rationale"] != "old" {
-		t.Fatalf("empty rationale did not fall back: %v", cs.posts[1])
+	if cs.posts[2]["rationale"] != "old" {
+		t.Fatalf("empty rationale did not fall back: %v", cs.posts[2])
 	}
 	if len(asSlice(result["proposals"])) != 2 || result["candidates"] != float64(3) || result["skipped"] != float64(1) {
 		t.Fatalf("result=%v", result)
@@ -134,7 +137,7 @@ func TestPMCurateJudgmentParsesFencedJSONAndHonorsMax(t *testing.T) {
 	cs2 := newCurateServer(t, curateCandidatesBody)
 	stubCurateHarness(t, `[{"key":"k1","propose":true},{"key":"k2","propose":true},{"key":"k3","propose":true}]`, nil)
 	assertEnvelopeOK(t, runCurate(t, cs2, "--runner", "pm-harness {prompt_file}", "--max", "1"))
-	if len(cs2.posts) != 1 {
+	if len(cs2.posts) != 2 {
 		t.Fatalf("--max not honored: %v", cs2.posts)
 	}
 }

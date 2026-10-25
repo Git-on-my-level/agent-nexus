@@ -20,7 +20,7 @@ func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 }
 
 // appendHumanAttentionWithdrawalAs records a withdrawal by someone other than
-// the requester: a human accepting a curation proposal. actorID must still be
+// the requester: an agent reviewing a moot curation suggestion. actorID must still be
 // the ask's requester; withdrawnBy is who decided.
 func (s *Store) appendHumanAttentionWithdrawalAs(ctx context.Context, actorID, withdrawnBy, sourceEventID string, event map[string]any) (map[string]any, error) {
 	return s.withdrawHumanAttention(ctx, actorID, strings.TrimSpace(withdrawnBy), sourceEventID, event, false)
@@ -35,7 +35,7 @@ func (s *Store) withdrawHumanAttention(ctx context.Context, actorID, withdrawnBy
 	if actorID == "" || sourceEventID == "" || withdrawnBy == "" {
 		return nil, fmt.Errorf("request actor and source event id are required")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

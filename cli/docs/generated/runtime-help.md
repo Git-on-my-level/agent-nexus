@@ -3431,7 +3431,7 @@ Inputs:
   - body `event.provenance.notes` (string)
   - body `event.ref` (typed_ref)
   - body `event.thread_ref` (string)
-  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_lease_acquired, card_lease_expired, card_lease_released, card_lease_renewed, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_lease_acquired, card_lease_expired, card_lease_released, card_lease_renewed, card_moved, card_resolved, card_trashed, card_updated, curation_receipt, curation_suggested, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -11182,7 +11182,7 @@ Local Help: pm curate
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
-- Composition: Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. The PM never performs an action itself; every accepted proposal is applied by the human's answer and leaves an undo trail in the proposal thread. With --formula no model runs: POST /curation/run applies the deterministic pass.
+- Composition: Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. The PM applies chosen cleanups as agent work, recording a receipt; suggestions never ask or notify a human. With --formula no model runs: POST /curation/run applies the deterministic pass.
 - JSON body: `candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`
 - Examples:
   - `anx pm curate --dry-run`

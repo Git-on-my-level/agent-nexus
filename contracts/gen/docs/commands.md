@@ -1278,7 +1278,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`
 - Output: Returns `{ candidates, limitations }`.
-- Agent notes: Read only. Post the ones worth a human decision with `curation propose`.
+- Agent notes: Read only. Review suggestions; use `curation propose` with resolution apply or dismiss and a rationale.
 
 ## `curation.metrics`
 
@@ -1303,8 +1303,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Let a PM post a curation proposal with its rationale.
 - Concepts: `inbox`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`, `not_found`, `conflict`
-- Output: Returns `{ proposal }` with `status` created, existing or dismissed.
-- Agent notes: Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.
+- Output: Returns `{ proposal }` with `status` created, existing, accepted or dismissed.
+- Agent notes: Only authenticated agents may apply or dismiss suggestions. Formula passes only suggest.
 
 ## `curation.run`
 
@@ -1317,7 +1317,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `inbox`, `write`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`
 - Output: Returns `{ proposals, skipped }`.
-- Agent notes: Proposals only; nothing is withdrawn or merged until a human accepts.
+- Agent notes: Quiet suggestions only; an agent must explicitly apply or dismiss them.
 
 ## `curation.ungroup`
 
@@ -1326,11 +1326,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Undo a batch a human accepted.
+- Why: Undo a delivery grouping.
 - Concepts: `inbox`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
 - Output: Returns `{ ungrouped }`.
-- Agent notes: Human principals only. Returns whether any grouping was removed.
+- Agent notes: Authenticated humans or agents. Returns whether any grouping was removed.
 
 ## `deliveries.claim`
 
