@@ -9,9 +9,17 @@ import (
 // and bridge wake IDs. An undone retirement must not occupy a later answer's
 // slot. Released legacy deliveries keep their empty outcome and original ID.
 func installAskDeliveryOutcomes(ctx context.Context, tx *sql.Tx) error {
+	hasOutcome, err := sqliteTableHasColumn(ctx, tx, "ask_deliveries", "resolution_event_id")
+	if err != nil {
+		return err
+	}
+	if !hasOutcome {
+		if _, err = tx.ExecContext(ctx, `ALTER TABLE ask_deliveries ADD COLUMN resolution_event_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	for _, q := range []string{
-		`ALTER TABLE ask_deliveries ADD COLUMN resolution_event_id TEXT NOT NULL DEFAULT ''`,
-		`CREATE INDEX ask_deliveries_outcome ON ask_deliveries(ask_id,resolution_event_id,id)`,
+		`CREATE INDEX IF NOT EXISTS ask_deliveries_outcome ON ask_deliveries(ask_id,resolution_event_id,id)`,
 		`DROP TRIGGER IF EXISTS deliveries_webhook_insert`,
 		`CREATE TRIGGER deliveries_webhook_insert AFTER INSERT ON ask_deliveries WHEN NEW.kind='webhook' BEGIN
  INSERT INTO deliveries(delivery_id,idempotency_key,principal_id,channel,kind,status,payload_json,source_ref,attempts,max_attempts,next_attempt_at,created_at,updated_at)

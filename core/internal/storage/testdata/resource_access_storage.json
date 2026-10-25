@@ -3593,7 +3593,7 @@
     "../storage/access_read_indexes.go:repairResourceAccessReadIndexes": "c3ef8b7596eb7f3bec8c1f92fef267caf0cd54ca6b8fe4875a07ee430d22ed7d",
     "../storage/agent_summary_indexes.go:indexAgentSummaryCards": "c40793933715566b2994c3065be4923d6be24ee6adcb86f7dc395ccce9ece523",
     "../storage/agent_summary_indexes.go:upgradeAgentSummaryAndBriefAskIndexes": "2942430dfb2b29cebd835b1c05a9909187e5392d85e358d6f2f61af2debfbfab",
-    "../storage/ask_delivery_outcomes.go:installAskDeliveryOutcomes": "d1265505123e6fa969273843faefd0107f3a543a1352e6cd1703c2a939721a10",
+    "../storage/ask_delivery_outcomes.go:installAskDeliveryOutcomes": "1d6233ddc5aeb1c1f79a6255dedbed1abb3069b11defb9c30e4e5204ee5b76de",
     "../storage/ask_presentation.go:installAskPresentationHeads": "cf97a6956a53f19abc632f72d036ff4554cb53c7b9ac099788522f1852a336a7",
     "../storage/ask_subjects.go:*Workspace:MaintainAskSubjectsBatch": "c1da05eab55357cea131004b8c0cee997f3325882922566c6ce0716f2014d2f5",
     "../storage/ask_subjects.go:*Workspace:RunAskSubjectsMaintenance": "52433eab63569d613158645d583f5cdf7e3666245f767e3802b38777c45d0c55",
