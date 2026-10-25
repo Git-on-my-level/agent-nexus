@@ -105,28 +105,43 @@ class Migration:
         return {"alias": self.workspace, "workspace_id": item["workspace_id"], "base_url": item["base_url"], "actor": self.actor}
 
     def receipts(self, work, now):
-        page = self.api("listEvents", {"thread_id": work["thread_id"], "type": "run_recorded", "limit": 50})
-        refs = {work["ref"], "card:" + work["id"]}
         rows = []
         seen = set()
-        for event in page.get("events", []):
-            # Canonical loop calculations exclude archived and withdrawn
-            # (trashed) event receipts, even if a list page includes them.
-            if event.get("archived_at") or event.get("trashed_at"):
-                continue
-            if event.get("subject_ref") not in refs:
-                continue
-            payload = event.get("payload", {})
-            run = payload["run_id"]
-            at = stamp(event["ts"])
-            if at > now:
-                continue
-            if run in seen:
-                raise ValueError("duplicate receipt run identity")
-            seen.add(run)
-            rows.append({"event_id": event["id"], "run_id": run, "at": at.isoformat()})
+        cursors = set()
+        cursor = ""
+        while True:
+            params = {"type": "run_recorded", "limit": 50}
+            if cursor:
+                params["cursor"] = cursor
+            # listEvents has no subject_ref query parameter. Filter the public
+            # event field after paging; public work has no backing thread ID.
+            page = self.api("listEvents", params)
+            for event in page.get("events", []):
+                if event.get("subject_ref") != work["ref"]:
+                    continue
+                # Match canonical loop lifecycle filtering.
+                if event.get("archived_at") or event.get("trashed_at"):
+                    continue
+                run = event.get("payload", {})["run_id"]
+                at = stamp(event["ts"])
+                if at > now:
+                    continue
+                if run in seen:
+                    raise ValueError("duplicate receipt run identity")
+                seen.add(run)
+                rows.append({"event_id": event["id"], "run_id": run, "at": at.isoformat()})
+                if len(rows) > 50:
+                    break
+            if len(rows) > 50 or not page.get("page_info", {}).get("has_more"):
+                break
+            cursor = page["page_info"].get("next_cursor", "")
+            if not cursor or cursor in cursors:
+                raise ValueError("event cursor missing or repeated; no complete sample was read")
+            cursors.add(cursor)
+        truncated = len(rows) > 50
+        rows = rows[:50]
         rows.sort(key=lambda row: (row["at"], row["event_id"]))
-        return rows, bool(page.get("page_info", {}).get("has_more"))
+        return rows, truncated
 
     def report(self, now):
         report = {"schema": 1, "mode": "dry_run", "algorithm": ALGORITHM, "workspace": self.binding(), "generated_at": now.isoformat(), "cards": []}
@@ -141,7 +156,7 @@ class Migration:
                 if item.get("phase") in ("done", "cancelled") or item.get("archived_at") or item.get("trashed_at"):
                     continue
                 work = self.api("workGet", {"card_ref": item["ref"]})["work"]
-                entry = {"ref": work["ref"], "id": work["id"], "title": work["title"], "owner": work.get("owner"), "version": work["version"], "action": "owner_review"}
+                entry = {"ref": work["ref"], "title": work["title"], "owner": work.get("owner"), "version": work["version"], "action": "owner_review"}
                 if work.get("cadence"):
                     entry.update(action="already_tracked", reason="cadence_present")
                 else:
@@ -173,7 +188,7 @@ class Migration:
                 continue
             ref = entry["ref"]
             work = self.api("workGet", {"card_ref": ref})["work"]
-            if work["id"] != entry["id"]:
+            if work["ref"] != ref:
                 raise ValueError(f"{ref}: identity changed; make a new dry-run report")
             if work.get("cadence"):
                 status = "matching_cadence_observed" if work["cadence"].get("every_seconds") == entry["every_seconds"] else "conflict"
