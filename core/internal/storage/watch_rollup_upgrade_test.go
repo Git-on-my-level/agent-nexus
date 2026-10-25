@@ -49,13 +49,20 @@ func TestWatchRollupUpgradeIndexesExistingLifecycle(t *testing.T) {
 func TestWatchRollupMigrationGap(t *testing.T) {
 	original := migrations
 	defer func() { migrations = original }()
+	// Keep the synthetic gap fixture independent of the now-real tracking 121.
+	withoutTracking := []migration{}
+	for _, m := range original {
+		if m.Version != 121 {
+			withoutTracking = append(withoutTracking, m)
+		}
+	}
 	for _, fenced := range []bool{false, true} {
 		name := "legacy"
 		if fenced {
 			name = "fenced"
 		}
 		t.Run(name, func(t *testing.T) {
-			migrations = original
+			migrations = withoutTracking
 			ctx := context.Background()
 			root := t.TempDir()
 			db := mainHistoryDatabase(t, root, 120)
@@ -79,7 +86,7 @@ func TestWatchRollupMigrationGap(t *testing.T) {
 			}
 			scopeMust(t, w.Close())
 			migrations = nil
-			for _, m := range original {
+			for _, m := range withoutTracking {
 				if m.Version == 122 {
 					migrations = append(migrations, migration{Version: 121, Statements: []string{`CREATE TABLE late_migration_probe(id INTEGER PRIMARY KEY)`}})
 				}
@@ -98,6 +105,61 @@ func TestWatchRollupMigrationGap(t *testing.T) {
 					t.Fatal("122 reapplied")
 				}
 				scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM late_migration_probe`).Scan(&count))
+				scopeMust(t, w.Close())
+			}
+		})
+	}
+}
+
+// Released Watch databases can already have 122 when tracking 121 arrives.
+// Exercise the actual migration and both ledgers, retaining 122's receipt.
+func TestWorkTrackingUpgradeAfterWatch(t *testing.T) {
+	original := migrations
+	defer func() { migrations = original }()
+	withoutTracking := []migration{}
+	for _, m := range original {
+		if m.Version != 121 {
+			withoutTracking = append(withoutTracking, m)
+		}
+	}
+	for _, fenced := range []bool{false, true} {
+		t.Run(map[bool]string{false: "legacy", true: "fenced"}[fenced], func(t *testing.T) {
+			migrations = withoutTracking
+			ctx := context.Background()
+			root := t.TempDir()
+			db := mainHistoryDatabase(t, root, 120)
+			if fenced {
+				fenceAdmissionHistory(t, root, db)
+			} else {
+				scopeMust(t, db.Close())
+			}
+			w, err := InitializeWorkspace(ctx, root)
+			scopeMust(t, err)
+			ledger := "schema_migrations"
+			if fenced {
+				ledger = "scope_schema_migrations"
+			}
+			var before string
+			scopeMust(t, w.DB().QueryRow(`SELECT applied_at FROM `+ledger+` WHERE version=122`).Scan(&before))
+			scopeMust(t, w.Close())
+			migrations = original
+			for reopen := 0; reopen < 2; reopen++ {
+				w, err = InitializeWorkspace(ctx, root)
+				scopeMust(t, err)
+				var count int
+				var after string
+				scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM `+ledger+` WHERE version IN(121,122)`).Scan(&count))
+				if count != 2 {
+					t.Fatalf("tracking/Watch receipts=%d", count)
+				}
+				scopeMust(t, w.DB().QueryRow(`SELECT applied_at FROM `+ledger+` WHERE version=122`).Scan(&after))
+				if before != after {
+					t.Fatal("Watch 122 reapplied")
+				}
+				scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM work_tracking`).Scan(&count))
+				if count != 0 {
+					t.Fatal("tracking upgrade backfilled canonical work")
+				}
 				scopeMust(t, w.Close())
 			}
 		})

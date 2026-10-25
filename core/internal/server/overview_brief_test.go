@@ -14,6 +14,20 @@ import (
 
 var briefNow = time.Date(2026, 10, 8, 8, 12, 0, 0, time.UTC)
 
+func TestBriefInitiativeDigestOrderMatchesContract(t *testing.T) {
+	states := []string{plans.PromisePast, plans.PromiseNone, plans.PromiseMoving, plans.PromiseDigest, plans.PromiseDone}
+	input := briefInputs{}
+	for i := len(states) - 1; i >= 0; i-- {
+		input.initiatives = append(input.initiatives, map[string]any{"ref": "card:" + states[i], "plan_health": plans.Health{State: states[i]}})
+	}
+	items := briefItems(t, briefInitiatives(input))
+	for i, state := range states {
+		if items[i]["state"] != state {
+			t.Fatalf("state %d = %v, want %s", i, items[i]["state"], state)
+		}
+	}
+}
+
 func briefAt(d time.Duration) string {
 	return briefNow.Add(-d).Format(time.RFC3339Nano)
 }

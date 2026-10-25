@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testsql"
@@ -23,6 +25,7 @@ func TestBriefMaterializedFoldsMatchPerRequestFolds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defaultCreated := time.Date(2026, 10, 25, 15, 0, 0, 123456789, time.UTC)
 	ids := []string{}
 	for i, payloads := range [][]map[string]any{
 		{{"next": map[string]any{"at": "2026-01-01", "what": "a"}}, {"next": map[string]any{"at": "2026-01-03", "what": "b"}}},
@@ -35,6 +38,14 @@ func TestBriefMaterializedFoldsMatchPerRequestFolds(t *testing.T) {
 			t.Fatal(err)
 		}
 		ids = append(ids, anyString(w["id"]))
+		if i == 3 {
+			if _, err = db.Exec(`UPDATE cards SET created_at=? WHERE id=?`, defaultCreated.Format(time.RFC3339Nano), w["id"]); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.Exec(`UPDATE work_tracking SET default_at=? WHERE card_id=?`, defaultCreated.Add(12*time.Hour).Format(time.RFC3339Nano), w["id"]); err != nil {
+				t.Fatal(err)
+			}
+		}
 		for _, payload := range payloads {
 			payload["text"] = "note"
 			if _, err = store.AppendEvent(ctx, "agent-1", map[string]any{"type": "message_posted", "thread_id": w["thread_id"], "refs": []string{anyString(w["ref"]), "thread:" + anyString(w["thread_id"])}, "payload": payload}); err != nil {
@@ -56,12 +67,34 @@ func TestBriefMaterializedFoldsMatchPerRequestFolds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(materialized) != len(ids) || !reflect.DeepEqual(materialized, direct) {
-		t.Fatalf("paths differ:\nmaterialized=%+v\ndirect=%+v", materialized, direct)
+		a, _ := json.Marshal(materialized)
+		b, _ := json.Marshal(direct)
+		t.Fatalf("paths differ:\nmaterialized=%s\ndirect=%s", a, b)
 	}
 	if f := materialized[ids[0]]; f.Moves != 1 || f.Promise == nil || f.Promise.What != "b" {
 		t.Fatalf("fixture 0 = %+v", f)
 	}
-	if f := materialized[ids[2]]; !f.LastEvidenceAt.IsZero() || f.Promise != nil {
-		t.Fatalf("unresolvable evidence and bad next must not count: %+v", f)
+	if f := materialized[ids[2]]; !f.LastEvidenceAt.IsZero() || f.Promise == nil || f.Promise.Source != "default" {
+		t.Fatalf("unresolvable evidence and bad next must preserve the default: %+v", f)
+	}
+	if f := materialized[ids[3]]; f.Promise == nil || f.Promise.Source != "default" || !f.Promise.At.Equal(defaultCreated.Add(12*time.Hour)) {
+		t.Fatalf("default timestamp lost subsecond precision: %+v", f)
+	}
+	brief, err := store.Brief(ctx, primitives.BriefReader{ActorID: "actor-1", Kind: "human"}, defaultCreated.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, row := range brief["initiatives"].([]map[string]any) {
+		if row["ref"] == "card:fixture-3" {
+			found = true
+			promise, _ := row["promise"].(map[string]any)
+			if promise["at"] != defaultCreated.Add(12*time.Hour).Format(time.RFC3339Nano) || promise["source"] != "default" {
+				t.Fatalf("brief wire lost the exact default promise: %+v", promise)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("default-promised card missing from brief")
 	}
 }

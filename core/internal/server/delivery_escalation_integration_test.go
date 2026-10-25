@@ -72,7 +72,7 @@ func TestEscalationPushesOverdueAskAndWakesPM(t *testing.T) {
 	if pmWaker == nil {
 		t.Fatal("PM waker not constructed")
 	}
-	escalator := &delivery.Escalator{Store: delivery.Store{DB: db}, WorkspaceName: "test", CanRead: readCheck, AskPM: pmWaker, DigestHourUTC: 23}
+	escalator := &delivery.Escalator{Store: delivery.Store{DB: db, AccessContext: DeliveryAccessContext, CanRead: readCheck}, WorkspaceName: "test", CanRead: readCheck, AskPM: pmWaker, DigestHourUTC: 23}
 	now := time.Now().UTC().Add(2 * time.Hour)
 	if now.Hour() >= 23 {
 		escalator.DigestHourUTC = 0
@@ -80,12 +80,26 @@ func TestEscalationPushesOverdueAskAndWakesPM(t *testing.T) {
 	if err := escalator.Step(ctx, now); err != nil {
 		t.Fatal(err)
 	}
-	var title, principal string
-	if err := db.QueryRow(`SELECT json_extract(payload_json,'$.title'), principal_id FROM deliveries WHERE kind='push' AND source_ref=?`, "event:"+askID).Scan(&title, &principal); err != nil {
+	var ref, principal string
+	var refsOnly bool
+	if err := db.QueryRow(`SELECT json_extract(payload_json,'$.ref'),json_type(payload_json,'$.title') IS NULL,principal_id FROM deliveries WHERE kind='push' AND source_ref=?`, "event:"+askID).Scan(&ref, &refsOnly, &principal); err != nil {
 		t.Fatalf("push delivery missing: %v", err)
 	}
-	if title != "Merge battery-v2?" || principal != "series-human" {
-		t.Fatalf("push payload: %q %q", title, principal)
+	if !refsOnly || ref != "event:"+askID || principal != "series-human" {
+		t.Fatalf("push provenance: ref=%q refsOnly=%t principal=%q", ref, refsOnly, principal)
+	}
+	visible, _, err := escalator.Store.ListForPrincipal(ctx, "series-human", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := ""
+	for _, d := range visible {
+		if d.Kind == delivery.KindPush && d.SourceRef == "event:"+askID {
+			title, _ = d.Payload["title"].(string)
+		}
+	}
+	if title != "Merge battery-v2?" {
+		t.Fatalf("recipient push title: %q", title)
 	}
 	var leaked int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM deliveries WHERE kind IN ('push','digest') AND (source_ref=? OR payload_json LIKE '%Confidential%')`, "event:"+privateAskID).Scan(&leaked); err != nil || leaked != 0 {

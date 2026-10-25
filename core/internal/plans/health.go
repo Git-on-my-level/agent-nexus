@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// Health is the promise state of one card: past_promise, moving, no_promise
-// or done (contracts/anx-schema.yaml plan_health). It is computed on read
+// Health is the promise state of one card: past_promise, moving, no_promise,
+// digest or done (contracts/anx-schema.yaml plan_health). It is computed on read
 // from FoldPromise; there are no inactivity thresholds.
 type Health struct {
 	State                 string         `json:"state"`
@@ -41,6 +41,8 @@ type NextStep struct {
 
 // HealthInput is everything HealthFor reads for one card.
 type HealthInput struct {
+	Created, DefaultAt time.Time
+	DefaultAuthor      string
 	// Ref is the card ref used for promise source refs ("card:<handle>").
 	Ref   string
 	Plan  *Plan
@@ -99,7 +101,7 @@ func PromiseInputFor(in HealthInput) PromiseInput {
 	if in.Phase == "" && in.Plan != nil && len(in.Plan.Steps) > 0 && in.State.Progress.Total > 0 && in.State.Progress.Done == in.State.Progress.Total {
 		done = true
 	}
-	out := PromiseInput{Ref: in.Ref, Done: done, Notes: in.Notes, CardDue: ParseDue(in.CardDue), Wake: WakeTime(in.Wake), Observations: in.Observations, StepChanges: in.StepChanges}
+	out := PromiseInput{Created: in.Created, DefaultAt: in.DefaultAt, DefaultAuthor: in.DefaultAuthor, Ref: in.Ref, Done: done, Notes: in.Notes, CardDue: ParseDue(in.CardDue), Wake: WakeTime(in.Wake), Observations: in.Observations, StepChanges: in.StepChanges}
 	if !in.PlanEditedAt.IsZero() {
 		out.PlanEdits = []time.Time{in.PlanEditedAt}
 	}

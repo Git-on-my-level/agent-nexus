@@ -32,6 +32,11 @@ references it. Multiple parents choose the oldest parent card by `created_at`,
 then storage ID. This rule uses existing creation times, not inferred link ages.
 The chosen parent receives the child count; duplicate steps do not double-count.
 Closing, archiving or trashing a parent releases its children to top level.
+
+The chosen parent's owner is also the first fallback for an ended agent work
+lease, before the workspace lead. Responsibility transfers with an automatic
+note and enters the daily digest; it does not create another execution lease.
+See [tracking defaults](tracking-defaults.md).
 The parent board must also be active. `related_refs` alone never creates hierarchy.
 
 Work/card reads and brief items expose `parent_ref` (null for top level) and:

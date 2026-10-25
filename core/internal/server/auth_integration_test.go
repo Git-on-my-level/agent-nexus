@@ -121,7 +121,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithActorRegistry(registry),
 		WithAuthStore(authStore),
 		WithSeriesStore(&series.Store{DB: servingDB, Auth: authStore}),
-		WithDeliveryStore(&delivery.Store{DB: servingDB}),
+		WithDeliveryStore(&delivery.Store{DB: servingDB, AccessContext: DeliveryAccessContext}),
 		WithRunStore(commandcenter.NewStore(servingDB, commandcenter.SQLIdentities{DB: servingDB})),
 		WithWorkspaceHumanGrantVerifier(options.workspaceHumanGrantVerifier),
 		WithWorkspaceManagedAgentGrantVerifier(options.workspaceManagedGrantVerifier),

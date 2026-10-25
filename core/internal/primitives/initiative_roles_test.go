@@ -42,7 +42,7 @@ func TestInitiativeBoardRoleSelectionAndFallback(t *testing.T) {
 			}
 		}
 	}
-	read(1, false, now, "no_promise")
+	read(1, false, now, "moving")
 	updated, err := s.UpdateBoard(ctx, "actor-1", designated["id"].(string), map[string]any{"summary": "Edited"}, nil)
 	if err != nil || updated["role"] != "initiatives" {
 		t.Fatalf("board=%v err=%v", updated, err)
@@ -51,22 +51,22 @@ func TestInitiativeBoardRoleSelectionAndFallback(t *testing.T) {
 	if err != nil || got["role"] != "initiatives" {
 		t.Fatalf("board=%v err=%v", got, err)
 	}
-	read(1, false, now.Add(30*24*time.Hour), "no_promise")
+	read(1, false, now.Add(30*24*time.Hour), "past_promise")
 	if _, err = s.UpdateBoard(ctx, "actor-1", designated["id"].(string), map[string]any{"role": ""}, nil); err != nil {
 		t.Fatal(err)
 	}
-	read(2, true, now, "no_promise")
+	read(2, true, now, "moving")
 	// An empty designated board still opts into explicit selection.
 	empty, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Empty initiative board", "role": "initiatives"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	read(0, false, now, "no_promise")
+	read(0, false, now, "moving")
 	// An archived designation still prevents unrelated work becoming initiatives.
 	if _, err = s.ArchiveBoard(ctx, "actor-1", empty["id"].(string)); err != nil {
 		t.Fatal(err)
 	}
-	read(0, false, now, "no_promise")
+	read(0, false, now, "moving")
 	if _, err = s.UpdateBoard(ctx, "actor-1", designated["id"].(string), map[string]any{"role": 1}, nil); err == nil {
 		t.Fatal("accepted non-string role")
 	}

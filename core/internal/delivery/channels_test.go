@@ -220,8 +220,12 @@ func TestReceiptSkipped(t *testing.T) {
 	}
 	d := claimed[0]
 	got, err := e.store.RecordReceipt(ctx, d.DeliveryID, d.ClaimToken, "hosted", delivery.ReceiptSkipped, "muted by recipient", false, "actor_notifier")
-	if err != nil || got.Status != delivery.StatusCanceled || got.LastError != "muted by recipient" || got.FailedAt != "" {
+	if err != nil || got.Status != delivery.StatusCanceled || got.LastError != "" || got.FailedAt != "" {
 		t.Fatalf("skip %+v %v", got, err)
+	}
+	var reason string
+	if err = e.db.QueryRow(`SELECT last_error FROM deliveries WHERE delivery_id=?`, d.DeliveryID).Scan(&reason); err != nil || reason != "muted by recipient" {
+		t.Fatalf("stored skip reason: %q %v", reason, err)
 	}
 	if n := e.count(t, `SELECT COUNT(*) FROM delivery_receipts WHERE delivery_id=?`, d.DeliveryID); n != 0 {
 		t.Fatalf("a skip is not a failure receipt, got %d receipts", n)

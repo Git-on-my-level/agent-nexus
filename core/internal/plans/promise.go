@@ -20,6 +20,7 @@ const (
 	PromisePast    = "past_promise"
 	PromiseMoving  = "moving"
 	PromiseNone    = "no_promise"
+	PromiseDigest  = "digest"
 	PromiseDone    = "done"
 	PromiseHorizon = 2 * 24 * time.Hour
 	// NoPromiseFallback is the single duration fallback for objects with no
@@ -51,10 +52,12 @@ type PromiseStep struct {
 
 // PromiseInput is everything the fold needs for one card.
 type PromiseInput struct {
-	Ref   string
-	Done  bool
-	Notes []PromiseNote // any order; the newest MaxPromiseNotes are used
-	Steps []PromiseStep // open steps only
+	Created, DefaultAt time.Time
+	DefaultAuthor      string
+	Ref                string
+	Done               bool
+	Notes              []PromiseNote // any order; the newest MaxPromiseNotes are used
+	Steps              []PromiseStep // open steps only
 	// StepChanges and Observations are reset events (plan-step status changes,
 	// a linked step resource moving, and changed source observations).
 	StepChanges  []time.Time
@@ -196,6 +199,8 @@ func FoldPromise(in PromiseInput) PromiseFold {
 	if len(chosen) > 0 {
 		p := chosen[0]
 		out.Promise = &p
+	} else if !in.DefaultAt.IsZero() && !landed(resets, in.Created, farFuture) {
+		out.Promise = &Promise{At: in.DefaultAt, What: "report progress", Source: "default", SourceRef: in.Ref, Author: in.DefaultAuthor}
 	}
 	return out
 }
@@ -228,6 +233,8 @@ func (s PromiseState) Reason(now time.Time) string {
 	switch s.State {
 	case PromiseDone:
 		return "Done."
+	case PromiseDigest:
+		return "Included in the daily digest."
 	case PromiseNone:
 		if s.LastEvidenceAt.IsZero() {
 			return "No promise and no evidence yet."

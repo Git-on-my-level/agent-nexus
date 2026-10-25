@@ -596,6 +596,14 @@ func renderOrientText(brief map[string]any, identity string) string {
 	for _, item := range workspace {
 		b.WriteString(formatOrientInitiativeLine("workspace:", item) + "\n")
 	}
+	for _, raw := range asSlice(brief["daily_digest"]) {
+		item := asMap(raw)
+		reason := strings.ReplaceAll(anyString(item["reason"]), "_", " ")
+		if reason == "default promise lapsed" {
+			reason = "default promise elapsed"
+		}
+		fmt.Fprintf(&b, "daily digest:  %s %q · %s\n", anyString(item["ref"]), anyString(item["title"]), reason)
+	}
 	if next == "" {
 		for _, raw := range answered {
 			if ref := briefShortRef(asMap(raw)); ref != "" {

@@ -100,7 +100,7 @@ func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]pla
 }
 
 func summaryLabel(state string) string {
-	if label := map[string]string{plans.PromisePast: "Past promise", plans.PromiseMoving: "Moving", plans.PromiseNone: "No promise", plans.PromiseDone: "Done"}[state]; label != "" {
+	if label := map[string]string{plans.PromisePast: "Past promise", plans.PromiseMoving: "Moving", plans.PromiseNone: "No promise", plans.PromiseDigest: "Daily digest", plans.PromiseDone: "Done"}[state]; label != "" {
 		return label
 	}
 	return strings.ReplaceAll(state, "_", " ")

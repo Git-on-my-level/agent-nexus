@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+import { installQaRoutes } from "../../scripts/qa-visual.mjs";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 
 /**
@@ -43,6 +44,89 @@ async function setup(context, briefRoute) {
       ((route) =>
         json(route, { ...brief, generated_at: new Date().toISOString() })),
   );
+}
+
+test("empty visual QA scene clears the digest as well as initiatives", async ({
+  page,
+  context,
+}) => {
+  await setup(context);
+  await installQaRoutes(page, {
+    name: "workspace-watch-empty",
+    workspaceMode: "workspace-default",
+    briefState: "empty",
+  });
+  await page.goto(WATCH);
+  await expect(page.locator("[data-watch-empty]")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Daily digest" })).toHaveCount(
+    0,
+  );
+});
+
+test("digest-only work stays visible in the Initiatives list", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      initiatives: [],
+      loops: [],
+      generated_at: new Date().toISOString(),
+    }),
+  );
+  await page.goto(WATCH);
+  await expect(
+    page.getByRole("heading", {
+      name: `Needs an owner's look (${brief.daily_digest.length})`,
+    }),
+  ).toBeVisible();
+  for (const card of brief.daily_digest) {
+    const row = page.locator(`[data-collection-row="${card.ref}"]`);
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(card.title);
+    await expect(row.locator("a").first()).toHaveAttribute(
+      "href",
+      `${WATCH.replace("/watch", "")}/initiatives/${card.ref.slice(5)}`,
+    );
+    await expect(
+      row.locator('[data-source="computed:daily_digest.reason"]').last(),
+    ).toBeVisible();
+  }
+  await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
+});
+
+for (const layout of ["list", "lanes"]) {
+  test(`mixed ordinary and digest work stays visible in ${layout}`, async ({
+    page,
+    context,
+  }) => {
+    await setup(context);
+    await page.goto(`${WATCH}?view=${layout}`);
+    if (layout === "lanes") {
+      await expect(
+        page.locator('[data-lane-ref="card:fleet-onboarding"]'),
+      ).toBeVisible();
+    } else {
+      await expect(
+        page.locator('[data-collection-row="card:fleet-onboarding"]'),
+      ).toBeVisible();
+    }
+    const digest = page.getByRole("region", { name: "Daily digest" });
+    await expect(digest).toBeVisible();
+    await digest.scrollIntoViewIfNeeded();
+    await expect(digest).toBeInViewport();
+    for (const card of brief.daily_digest) {
+      await expect(
+        digest.locator(`[data-collection-row="${card.ref}"]`),
+      ).toContainText(card.title);
+    }
+    if (process.env.WATCH_SHOTS) {
+      await page.screenshot({
+        path: `${process.env.WATCH_SHOTS}/digest-${layout}.png`,
+      });
+    }
+  });
 }
 
 test("lists initiatives by computed state with sources tagged", async ({
@@ -235,7 +319,9 @@ test.describe("lanes", () => {
 
     await page.locator('[data-watch-view="list"]').click();
     await expect(page).toHaveURL(/\/watch$/);
-    await expect(page.locator("[data-collection-list]")).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Initiatives", exact: true }),
+    ).toBeVisible();
   });
 });
 
@@ -271,7 +357,7 @@ test("a row opens inline on click and closes on the next", async ({
     "In review",
   );
   await expect(row.locator("[data-rollup-next]")).toContainText(
-    "next: dashboards live",
+    "next: report progress",
   );
   await expect(details.locator("[data-details-evidence]")).toContainText(
     "Last evidence",

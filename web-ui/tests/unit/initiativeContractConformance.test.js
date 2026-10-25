@@ -45,22 +45,19 @@ const model = (overrides = {}) => card(overrides).summary;
 describe("the Overview card reads core's serialized initiative", () => {
   it("renders the computed status core sends, with core's own label", () => {
     expect(tile.work_summary.status).toEqual({
-      state: "no_promise",
-      label: "No promise",
-      reason: "No promise.",
+      state: "moving",
+      label: "Moving",
+      reason: "Next: report progress by 2026-10-05T00:00:00Z.",
       since: "2026-10-04T12:00:00Z",
     });
-    /*
-     * And drops that reason rather than printing it. Core answers "why is
-     * this card in this state" for every card; under a badge reading
-     * `No promise`, "No promise." is a line that can never tell a reader
-     * something the badge did not. A reason that names a cause keeps its line.
-     */
+    expect(tile.plan_health.promise.source).toBe("default");
+    // Keep the computed checkpoint: unlike a repeated status label, it
+    // explains what the owner should do and when.
     expect(model().status).toMatchObject({
-      state: "no_promise",
-      label: "No promise",
-      reason: "",
-      tone: "neutral",
+      state: "moving",
+      label: "Moving",
+      reason: tile.work_summary.status.reason,
+      tone: "ok",
     });
   });
 
@@ -179,7 +176,7 @@ describe("the Overview card reads core's serialized initiative", () => {
     const legacyRow = { ...tile };
     delete legacyRow.work_summary;
     const legacy = workSummaryCard(legacyRow, { now: NOW }).summary;
-    expect(legacy.status.state).toBe("no_promise");
+    expect(legacy.status.state).toBe("moving");
     expect(legacy.progress).toMatchObject({ done: 1, total: 2 });
     expect(legacy.next).toMatchObject({ id: "build", title: "Build" });
     expect(legacy.steps.groups.map((list) => list.key)).toEqual(["next"]);

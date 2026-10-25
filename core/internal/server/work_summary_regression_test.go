@@ -196,7 +196,7 @@ func TestInboxSummaryStreamIdleAcrossElapsedAges(t *testing.T) {
 		t.Fatal("meaningful plan edit did not emit", changed)
 	}
 	rows := changed.Data["item"].(map[string]any)["related_cards"].([]any)
-	if rows[0].(map[string]any)["summary"].(map[string]any)["status"].(map[string]any)["state"] != "no_promise" {
+	if rows[0].(map[string]any)["summary"].(map[string]any)["status"].(map[string]any)["state"] != "moving" {
 		t.Fatal("new event lost changed summary")
 	}
 }

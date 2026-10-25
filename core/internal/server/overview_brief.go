@@ -52,9 +52,9 @@ const (
 	briefBlockPlace    = 1_000_000_000
 )
 
-// Initiative order: past promise first, then the no_promise gap, then moving
-// and done (contracts overview_brief).
-var briefInitiativeOrder = []string{plans.PromisePast, plans.PromiseNone, plans.PromiseMoving, plans.PromiseDone}
+// Initiative order: past promise first, then the no_promise gap, moving,
+// digest and done (contracts overview_brief).
+var briefInitiativeOrder = []string{plans.PromisePast, plans.PromiseNone, plans.PromiseMoving, plans.PromiseDigest, plans.PromiseDone}
 
 // briefHealth reads a row's enriched promise state.
 func briefHealth(row map[string]any) (plans.Health, bool) {

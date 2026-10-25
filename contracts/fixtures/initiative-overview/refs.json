@@ -26,10 +26,20 @@
       "url": "/tasks/initiative",
       "resolvable": true,
       "plan_health": {
-        "state": "no_promise",
-        "reason": "No promise.",
+        "state": "moving",
+        "reason": "Next: report progress by 2026-10-05T00:00:00Z.",
         "since": "2026-10-04T12:00:00Z",
-        "last_evidence_at": "2026-10-04T12:00:00Z"
+        "last_evidence_at": "2026-10-04T12:00:00Z",
+        "promise": {
+          "at": "2026-10-05T00:00:00Z",
+          "what": "report progress",
+          "source": "default",
+          "source_ref": "card:initiative",
+          "author": {
+            "id": "actor-1",
+            "display": "actor-1"
+          }
+        }
       },
       "possibly_moot": {
         "flagged": false,
@@ -37,9 +47,9 @@
       },
       "summary": {
         "status": {
-          "state": "no_promise",
-          "label": "No promise",
-          "reason": "No promise.",
+          "state": "moving",
+          "label": "Moving",
+          "reason": "Next: report progress by 2026-10-05T00:00:00Z.",
           "since": "2026-10-04T12:00:00Z"
         },
         "progress": {

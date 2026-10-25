@@ -51,6 +51,9 @@ The [2026-10-25 tracking decisions](decisions/sane-tracking-defaults.md) also
 define default promises, fallback ownership, digest routing and receipt-based
 cadence migration for the follow-up implementation.
 
+The follow-up [tracking-defaults guide](tracking-defaults.md#cadence-migration)
+documents the dry-run-first deterministic cadence migrator and its apply journal.
+
 An effect is an `acted` outcome or a `kept` experiment. Each loop exposes
 `effects_7d`, the number of such runs in the last seven days; a run satisfying
 both conditions counts once. Overview `stats.effects_7d` sums these same counts. The default progress

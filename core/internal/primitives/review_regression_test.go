@@ -78,10 +78,7 @@ func TestEffectiveHealthInputsAgreeAcrossSurfaces(t *testing.T) {
 				a, b, c := rawCard["plan_health"].(plans.Health), work["plan_health"].(plans.Health), *preview[0].PlanHealth
 				// The overdue due_at is a missed promise; cleared, nothing is
 				// promised. Every surface agrees, with or without a plan.
-				expected := "no_promise"
-				if !cleared {
-					expected = "past_promise"
-				}
+				expected := "digest" // Source work has no live owner; dates do not create alerts.
 				if !reflect.DeepEqual(a, b) || !reflect.DeepEqual(a, c) || a.State != expected {
 					t.Fatalf("plan=%v cleared=%v raw=%+v work=%+v preview=%+v expected=%s", withPlan, cleared, a, b, c, expected)
 				}
@@ -243,7 +240,7 @@ func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now)
-	if err != nil || before[0].PlanHealth.State != "no_promise" || before[0].PlanHealth.LastEvidenceAt == nil {
+	if err != nil || before[0].PlanHealth.State != "moving" || before[0].PlanHealth.LastEvidenceAt == nil {
 		t.Fatalf("before=%+v %v", before, err)
 	}
 	if _, err = ws.DB().Exec(`UPDATE card_plans SET updated_at=? WHERE card_id=?`, now.Format(time.RFC3339Nano), child["id"]); err != nil {
@@ -252,7 +249,7 @@ func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
 	after, err := s.ResolveRefs(ctx, []string{parent["ref"].(string)}, nil, now)
 	// A linked plan edit remains visible as activity, but authoring alone
 	// is not evidence that can meet the parent's promise.
-	if err != nil || after[0].PlanHealth.State != "no_promise" || *after[0].PlanHealth.LastEvidenceAt != *before[0].PlanHealth.LastEvidenceAt || after[0].Summary.LastMovementAt == before[0].Summary.LastMovementAt {
+	if err != nil || after[0].PlanHealth.State != "moving" || *after[0].PlanHealth.LastEvidenceAt != *before[0].PlanHealth.LastEvidenceAt || after[0].Summary.LastMovementAt == before[0].Summary.LastMovementAt {
 		t.Fatalf("child plan activity missing=%+v %v", after, err)
 	}
 }

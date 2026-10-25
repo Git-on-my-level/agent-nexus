@@ -604,19 +604,19 @@
     "method": "GET",
     "path": "/deliveries",
     "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+    "reason": "Principal/channel authority controls queue admission. All claim/history payload and source refs use the recipient's current resource policy; receipt acknowledgements redact all cached business content, including on retry. Covered by delivery producer revocation and HTTP history/receipt regressions."
   },
   {
     "method": "POST",
     "path": "/deliveries/claim",
     "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+    "reason": "Principal/channel authority controls queue admission. All claim/history payload and source refs use the recipient's current resource policy; receipt acknowledgements redact all cached business content, including on retry. Covered by delivery producer revocation and HTTP history/receipt regressions."
   },
   {
     "method": "POST",
     "path": "/deliveries/{delivery_id}/receipt",
     "policy": "independent",
-    "reason": "Principal-scoped delivery queue and notification settings; no canonical board/card record ownership. Handlers scope every row to the caller or to the adapter agent's declared channels."
+    "reason": "Principal/channel authority controls queue admission. All claim/history payload and source refs use the recipient's current resource policy; receipt acknowledgements redact all cached business content, including on retry. Covered by delivery producer revocation and HTTP history/receipt regressions."
   },
   {
     "method": "POST",

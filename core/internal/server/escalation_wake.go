@@ -105,7 +105,7 @@ func NewEscalationReadCheck(store *primitives.Store) func(context.Context, strin
 		if strings.TrimSpace(principalID) == "" {
 			return false
 		}
-		scoped := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: principalID})
+		scoped := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: principalID})
 		return store.CanAccessResource(scoped, "event", askID)
 	}
 }

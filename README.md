@@ -196,4 +196,6 @@ Grouped work: [parent plans, likely homes, fold/unfold and the initiative budget
 
 Work leases, deadlines and approval apply-by: [spec](docs/work-leases.md).
 
+Sane tracking defaults: [default promises, fallback responsibility, daily digests and cadence migration](docs/tracking-defaults.md).
+
 Watch: [collections, personal dashboard tabs, scoped activity and panel roles](docs/watch-dashboards.md).

@@ -332,38 +332,38 @@ func (s *Store) mutateCardLease(ctx context.Context, actor, cardID string, decid
 	} else if affected != 1 {
 		return result, ErrConflict
 	}
-	markUnowned := false
 	if change.checkUnowned {
-		live, pending, err := cardLeaseLiveWork(ctx, tx, card)
+		fallback, err := s.fallbackCardTrackingTx(ctx, tx, actor, &card, n.owner, "lease released without hand-off", now)
 		if err != nil {
 			return result, err
 		}
-		switch {
-		case live != "":
-			change.events[0].payload["card_unowned"] = live
-			markUnowned = true
-		case pending:
-			// The brief fold has not caught up; the clock decides later.
-			change.events[0].payload["card_unowned"] = "pending_brief_fold"
-			markUnowned = true
+		if fallback {
+			change.events[0].payload["fallback_owner"] = card.Assignee.String
+		}
+	} else if n.releasedAt == "" && n.expired == "" {
+		// Taking execution responsibility clears an orphan route. A lease
+		// heartbeat is not progress on a reminded default: retain that digest
+		// until evidence/a promise or a changed assignee cancels it.
+		if _, err := tx.ExecContext(ctx, `UPDATE work_tracking SET orphaned_at='',fallback_owner=CASE WHEN default_at<>'' AND reminder_event_id<>'' THEN fallback_owner ELSE '' END,next_digest_at=CASE WHEN default_at<>'' AND reminder_event_id<>'' THEN next_digest_at ELSE '' END,needs_owner=0,updated_at=? WHERE card_id=?`, stamp, card.CardID); err != nil {
+			return result, err
+		}
+		if target, err := trackingActor(ctx, tx, n.owner); err != nil {
+			return result, err
+		} else if target != "" {
+			card.Assignee = sql.NullString{String: "actor:" + target, Valid: true}
+			if _, err := tx.ExecContext(ctx, `UPDATE cards SET assignee=? WHERE id=?`, card.Assignee.String, card.CardID); err != nil {
+				return result, err
+			}
 		}
 	}
+
 	eventID := ""
-	for i, ev := range change.events {
+	for _, ev := range change.events {
 		if eventID, err = insertCardLeaseEvent(ctx, tx, actor, card, ev.eventType, ev.summary, ev.payload); err != nil {
 			return result, err
 		}
-		if i == 0 && markUnowned {
-			marker := eventID
-			if marker == "" {
-				marker = "-"
-			}
-			if _, err = tx.ExecContext(ctx, `UPDATE card_leases SET unowned_event_id=?, unowned_woken_at='' WHERE card_id=? AND epoch=?`, marker, card.CardID, n.epoch); err != nil {
-				return result, err
-			}
-			n.unowned = marker
-		}
 	}
+
 	if err := tx.Commit(); err != nil {
 		return result, &MutationOutcomeUnknown{Cause: err}
 	}
@@ -588,16 +588,17 @@ func firstCardLeaseAssignee(raw string) string {
 // the cardLeaseLiveWork reason when the card is still live work, which makes
 // the clock send a card_unowned wake to the workspace lead.
 type ExpiredCardLease struct {
-	CardID   string
-	CardRef  string
-	ThreadID string
-	Assignee string
-	Owner    string
-	Epoch    int64
-	Expires  string
-	EventID  string
-	Live     string
-	Released bool
+	DigestOnly bool
+	CardID     string
+	CardRef    string
+	ThreadID   string
+	Assignee   string
+	Owner      string
+	Epoch      int64
+	Expires    string
+	EventID    string
+	Live       string
+	Released   bool
 	// LeadOnly marks a deferred card_unowned decision: the assignee already
 	// had its lease_expired wake, so only the lead wake remains.
 	LeadOnly bool
@@ -669,7 +670,17 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 	if err != nil {
 		return ExpiredCardLease{}, false, err
 	}
+	fallback, err := s.fallbackCardTrackingTx(ctx, tx, actor, &card, cur.owner, "lease expired without renewal", now)
+	if err != nil {
+		return ExpiredCardLease{}, false, err
+	}
+	if fallback {
+		live, pending = "", false
+	}
 	payload := map[string]any{"owner": cur.owner, "epoch": cur.epoch, "ttl_seconds": cur.ttl, "expires_at": cur.expiresAt, "renewed_at": cur.renewedAt}
+	if fallback {
+		payload["fallback_owner"] = card.Assignee.String
+	}
 	if live != "" {
 		payload["card_unowned"] = live
 	} else if pending {
@@ -700,7 +711,7 @@ func (s *Store) expireCardLease(ctx context.Context, actor, cardID string, now t
 	}
 	return ExpiredCardLease{
 		CardID: card.CardID, CardRef: cardLeaseRef(card), ThreadID: card.ThreadID.String, Assignee: firstCardLeaseAssignee(card.Assignee.String),
-		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: eventID, Live: live,
+		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: eventID, Live: live, DigestOnly: fallback,
 	}, true, nil
 }
 
@@ -745,20 +756,19 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 		return ExpiredCardLease{}, false, err
 	}
 	live := ""
+	digestOnly := false
 	card, err := s.loadBoardCardByGlobalID(ctx, tx, cardID, true)
-	switch {
-	case errors.Is(err, ErrNotFound):
-	case err != nil:
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		return ExpiredCardLease{}, false, err
-	default:
-		var pending bool
-		if live, pending, err = cardLeaseLiveWork(ctx, tx, card); err != nil {
+	}
+	if err == nil && !card.ArchivedAt.Valid && !card.TrashedAt.Valid && card.ColumnKey != "done" && card.ColumnKey != "cancelled" {
+		live = "open_work"
+		digestOnly, err = s.fallbackCardTrackingTx(ctx, tx, "system", &card, cur.owner, "legacy lease ended without hand-off", cardLeaseNow())
+		if err != nil {
 			return ExpiredCardLease{}, false, err
 		}
-		if pending {
-			return ExpiredCardLease{}, false, nil // Re-check after the brief fold.
-		}
 	}
+
 	res, err := tx.ExecContext(ctx, `UPDATE card_leases SET unowned_woken_at=? WHERE card_id=? AND epoch=? AND unowned_event_id=? AND unowned_woken_at=''`, cardLeaseStamp(cardLeaseNow()), cardID, cur.epoch, cur.unowned)
 	if err != nil {
 		return ExpiredCardLease{}, false, err
@@ -777,7 +787,7 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 		// An expiry that deferred its decision left its own event id as the
 		// marker; a later release by the expired owner does not change the
 		// cause the wake reports.
-		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, Released: cur.releasedAt != "" && cur.unowned != cur.expired, LeadOnly: true,
+		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, DigestOnly: digestOnly, Released: cur.releasedAt != "" && cur.unowned != cur.expired, LeadOnly: true,
 	}, true, nil
 }
 

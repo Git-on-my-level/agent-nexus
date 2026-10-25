@@ -1,5 +1,105 @@
 # Performance guardrails
 
+## Default tracking and daily digest reads
+
+Delivery claim/list serialization admits at most 50 deliveries and at most 50
+contributors per supported aggregate. Each admitted digest adds one recipient-scoped batch
+lookup, with primary-key card/tracking seeks and the partial unique handle index
+for older queued snapshots. The handle predicate includes the index's exact
+nonempty condition. Claim hydration uses the same statement-validated recipient
+policy within the claim transaction; it does not rebuild workspace ownership.
+The credential-only active-human routing check retains its existing service
+boundary, independently of private business profile metadata. List cursors close
+before hydration; denied contributors never trigger a refill.
+Tracking reminder/digest queues retain canonical refs only, and ask pushes/digests
+omit titles; serialization resolves fresh titles. All delivery kinds then pass
+source and serialized payload through the same recipient-bound value admission.
+That additional check uses the existing exact/prose admission spelling indexes
+and statement-local ancestor probes, on the claim transaction's connection or
+the list read handle. Work grows with admitted payload atoms and their canonical
+ancestry, rather than unrelated workspace rows. No denied-row refill occurs.
+Opaque provider errors are suppressed for every kind. Receipt acknowledgements
+strip all business content without an authorization read or another query.
+`TestPerformanceDigestSerializationBudget` enforces the new checked-in
+`delivery/testdata/digest_read_budget.json` (10 queries, 60 returned rows,
+50,000 VM steps, zero full scans) with 50 contributors and 4,096 unrelated
+private cards. List uses 5 queries / 53 rows / 34,027 VM steps; claim uses
+8 queries / 55 rows / 34,127 VM steps. No existing budget is widened.
+The production event-read callback also uses `WithRequestAccessScope`, retaining
+current recipient authorization through indexed candidate admission. The added
+`TestPerformancePushSerializationRecipientCallback` shares that same budget and
+includes the actual callback with 4,096 unrelated private cards. Before repair,
+list/claim executed 1,857,690 / 1,857,790 VM steps and 4,097 full scans. After
+repair they use 7 queries / 6 rows / 1,333 VM and 10 queries / 8 rows / 1,433 VM,
+respectively, with zero full scans. The extra indexed proof query replaces a
+workspace ownership rebuild; no budget or plan exception changes.
+
+Lease acquisition/renewal preserves a reminded default's owner and next digest
+time with two scalar CASE expressions in the existing primary-key update. It
+adds no reads or round trips. Overview's digest ordering reuses admitted rows;
+CLI and Watch render the existing at-most-50-row digest preview in one pass,
+without another request. Receipt lifecycle filtering keeps the migration's
+existing 50-event sample bound and adds no request or database query.
+
+The brief contract reconciliation preserves fractional promise deadlines in
+materialization and wire serialization. It changes no SQL shape, index, batch
+size or admission bound. The cadence/digest scale gates and pinned preparation
+allocation gate pass without new allowances. The client digest normalization is
+one pass over the existing at-most-50-row preview; it adds no API request.
+
+Migration 121 adds card-inherited `work_tracking` bookkeeping and a tiny
+maintenance cursor. It installs schema only, without a canonical-row backfill.
+Maintenance admits 100 historical identities and at most 50 due defaults or
+pending unassignments per tick. A reminder folds one admitted card's bounded
+notes/plan facts in its transaction; it never scans a workspace history.
+Release/expiry uses the existing indexed parent lookup and point principal/card
+authorization checks. Its cost includes the selected child's incoming parent
+links, as in grouping, not unrelated workspace cards.
+
+Plan health adds primary-key joins to one tracking and lease row per admitted
+card; no new SQL round trip is added to ordinary summary batches. Cadence
+enrichment retains the existing 50-card batches and receipt windows. The
+50-cadence-card fixture now measures 32,358 VM uncached and 22,318 cached,
+within the unchanged 50,000 ceiling.
+
+Brief's digest preview seeks
+`idx_work_tracking_owner_digest(fallback_owner,next_digest_at,card_id)` through
+an internal keys-only routing view. It admits 200 physical identities before
+scoped canonical hydration, returns at most 50, and never refills through a
+denied prefix. It exposes neither hidden occupancy nor a hidden-row count.
+`TestPerformanceWorkTrackingDigestBudget` enforces the checked-in
+`work_tracking_read_budget.json`: one query and 3,172 VM for 50 visible cards;
+one query and 21,577 VM behind 4,096 denied cards, with zero full-scan steps.
+No budget, baseline or plan exception is widened. The broader pre-existing
+summary gate described below still blocks complete read-scale acceptance.
+The populated startup/upgrade gate passed in 32.6s against 90s; warm open
+passed in 22ms against 5s before main's idle-maintenance migration landed.
+The tracking migration now follows that migration at version 121.
+
+After that integration, the opt-in populated startup gate timed out in
+historical migration 116 at the unchanged 90-second upgrade budget (91.26s
+observed on the follow-up). A Go-source baseline restoring all 47 differences
+to current main `746e093ca57b3185226dc8dc0e5cf19d73027c7e` also timed out in
+migration 116 at 90.00s. Tracking migration 121 had not run in either sample.
+This remains a startup acceptance limitation; no budget or allowlist is widened.
+
+Reminder and digest delivery identities are stable per card/default or owner/UTC
+day. Ownership and visibility rechecks share the scoped enqueue transaction.
+Default/needs-owner/reminder/digest partial indexes bound clock admission;
+terminal and assignment triggers remove stale routing positions. A daily
+notification holds a 50-card preview and directs readers to paged work.
+
+The offline cadence migrator pages work by 50 and reads at most 50 indexed,
+thread/type-filtered events per card. Total operator work grows with visible
+cards; each HTTP request keeps its existing bounds. Apply uses an exact card
+read, receipt fingerprint and version-conditional patch. It introduces no HTTP
+route, model call or unscoped database read.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- \
+  go test -C core ./internal/primitives -run '^TestPerformance(WorkTrackingDigestBudget|CadenceTrackingBudget)$' -count=1 -v -timeout=5m
+```
+
 ## Plain-language asks
 
 Ask presentation adds no SQL, query, poll tick or migration. Inbox list/get/SSE,

@@ -592,7 +592,7 @@ func main() {
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
 		server.WithSeriesStore(&series.Store{DB: workspace.DB(), Auth: authStore}),
-		server.WithDeliveryStore(&delivery.Store{DB: workspace.DB(), CanRead: server.NewEscalationReadCheck(primitiveStore)}),
+		server.WithDeliveryStore(&delivery.Store{DB: workspace.DB(), AccessContext: server.DeliveryAccessContext, CanRead: server.NewEscalationReadCheck(primitiveStore)}),
 		server.WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
@@ -757,8 +757,11 @@ func main() {
 	cardLeaseClock := &server.CardLeaseClock{Store: primitiveStore, AuthStore: authStore, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
 	if pmRuntime != nil {
 		cardLeaseClock.PMActorID = pmRuntime.AgentActorID
+		primitiveStore.SetTrackingLead(pmRuntime.AgentActorID)
 	}
 	go cardLeaseClock.Run(maintenanceCtx)
+	workTrackingClock := &server.WorkTrackingClock{Store: primitiveStore, AuthStore: authStore, Deliveries: delivery.Store{DB: workspace.DB()}, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
+	go workTrackingClock.Run(maintenanceCtx)
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)

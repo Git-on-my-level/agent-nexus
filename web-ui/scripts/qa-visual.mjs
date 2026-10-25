@@ -1479,6 +1479,7 @@ function qaBrief(scenario) {
     decisions: [],
     initiatives: [],
     loops: [],
+    daily_digest: [],
     your_asks: [],
     answered_for_you: [],
   };

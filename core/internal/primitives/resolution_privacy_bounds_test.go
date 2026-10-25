@@ -81,7 +81,7 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	// Resolution still uses visible evidence. Authored plans, however, carry
 	// every published key's ownership, just as native card refs do; a key also
 	// published privately cannot expose a stored step to a stranger.
-	if current["plan_health"].(plans.Health).State != "no_promise" || current["next_step"] != nil {
+	if current["plan_health"].(plans.Health).State != "moving" || current["next_step"] != nil {
 		t.Fatalf("private published ownership failed to suppress stored plan: %+v", current)
 	}
 	// A native link to the visible publisher remains unaffected by inaccessible
@@ -102,7 +102,7 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	}
 	// The parked card promises nothing and is unaffected by the hidden
 	// candidates: the visible step still resolves.
-	if current["plan_health"].(plans.Health).State != "no_promise" || current["next_step"] == nil {
+	if current["plan_health"].(plans.Health).State != "moving" || current["next_step"] == nil {
 		t.Fatalf("hidden candidates changed native public health: %+v", current)
 	}
 }
