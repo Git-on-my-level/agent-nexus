@@ -48,7 +48,7 @@ func TestOneHostBridgeServesThreeWorkspacesAgainstCore(t *testing.T) {
 		if e := os.WriteFile(script, []byte(source), 0700); e != nil {
 			t.Fatal(e)
 		}
-		ask := h.runCLIExpectOK(t, "worker", nil, "--config-dir", roots[i], "ask", fmt.Sprintf("Proceed %d?", i), "--subject-ref", ref, "--recommend", "Proceed", "--on-answer", script)
+		ask := h.runCLIExpectOK(t, "worker", nil, "--config-dir", roots[i], "ask", fmt.Sprintf("Proceed %d?", i), "--subject-ref", ref, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Proceed", "--on-answer", script)
 		asks = append(asks, mustStringPath(t, ask.Payload, "result.ask_id"))
 	}
 	r, e := hostbridge.Load(hostbridge.Root(home))
@@ -280,7 +280,7 @@ func TestLegacyRollbackConsumersDeliverThreeWorkspaceAnswers(t *testing.T) {
 		calls := filepath.Join(t.TempDir(), "calls")
 		receipts = append(receipts, calls)
 		command := "printf '%s|%s|%s\\n' \"$ANX_BASE_URL\" \"$ANX_AS\" \"$ANX_CONFIG_DIR\" >> " + integrations.ShellQuote(calls) + "; cat >/dev/null"
-		ask := h.runCLIExpectOK(t, "hermes", nil, "--config-dir", roots[i], "ask", "Continue after rollback?", "--subject-ref", ref, "--recommend", "Continue", "--on-answer", command)
+		ask := h.runCLIExpectOK(t, "hermes", nil, "--config-dir", roots[i], "ask", "Continue after rollback?", "--subject-ref", ref, "--situation", "A launch decision is waiting.", "--impact", "The team cannot finish until we choose.", "--why", "This is the quickest safe approach.", "--recommend", "Continue", "--on-answer", command)
 		askID := mustStringPath(t, ask.Payload, "result.ask_id")
 		ctx, cancel := context.WithCancel(context.Background())
 		// This is the restored ProgramArguments/ExecStart shape, with its

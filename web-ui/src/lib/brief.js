@@ -143,6 +143,26 @@ function normalizeDecision(raw) {
     workspace: text(raw.workspace),
     title: text(raw.title) || ref,
     body: String(raw.body ?? ""),
+    situation: text(raw.situation),
+    impact: text(raw.impact),
+    recommendation:
+      raw.recommendation && typeof raw.recommendation === "object"
+        ? {
+            action: text(raw.recommendation.action),
+            why: text(raw.recommendation.why),
+          }
+        : null,
+    alternatives: (Array.isArray(raw.alternatives) ? raw.alternatives : [])
+      .filter((v) => v && typeof v === "object")
+      .map((v) => ({
+        action: text(v.action),
+        consequence: text(v.consequence),
+      })),
+    if_no_answer: text(raw.if_no_answer),
+    details: text(raw.details),
+    evidence: (Array.isArray(raw.evidence) ? raw.evidence : [])
+      .filter((v) => v && typeof v === "object")
+      .map((v) => ({ label: text(v.label), url: text(v.url) })),
     requestedBy: actor(raw.requested_by),
     createdAt: text(raw.created_at),
     decideBy: text(raw.decide_by),

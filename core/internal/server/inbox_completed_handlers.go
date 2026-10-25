@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/askpresentation"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -136,6 +137,10 @@ func completedInboxItemPayload(ctx context.Context, store PrimitiveStore, respEv
 		"requester_agent_id":       strings.TrimSpace(anyString(payload["requester_agent_id"])),
 		"requester_label":          strings.TrimSpace(anyString(payload["requester_label"])),
 		"original_request_missing": requestMissing,
+	}
+	if reqEvtOptional != nil {
+		reqPayload, _ := reqEvtOptional["payload"].(map[string]any)
+		askpresentation.Copy(row, reqPayload)
 	}
 	if outcome := strings.TrimSpace(anyString(payload["outcome"])); outcome != "" {
 		row["outcome"] = outcome

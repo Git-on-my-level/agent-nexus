@@ -27,10 +27,39 @@ urgency comes from the ask's own `--by` deadline (`decide_by` in brief.v1).
 Subscriptions accelerate delivery; a failed subscription never loses the task's
 recorded decision.
 
-## Authoring
+## Write for a busy boss
 
-Use `anx ask --help` for the Markdown/frontmatter template. Supply a one-line
-Decision, 2–5 Context sentences, the effects of each option, and Evidence.
+Assume the reader has no context. In plain words, say what is happening
+(`situation`, one or two sentences), who or what is affected (`impact`: users,
+money, risk or time), and what you recommend (`recommendation: {action, why}`).
+Include the cost in `why`. Optional `alternatives: [{action, consequence}]`
+explain the tradeoff; `if_no_answer` states the default or what stays blocked,
+and by when. Set `by` separately for a machine-readable deadline.
+
+Keep the title a short question or decision, near 80 characters, and situation
+under about 60 words. Answer buttons must be plain sentences a non-engineer
+understands. Move identifiers, code, paths and history to `details` and labelled
+`evidence`; Decide collapses them. Older asks still render `body`.
+
+Start with `anx ask --template decision > ask.md`, edit the YAML frontmatter,
+then run `anx ask --from-file ask.md --preview`. Preview shows Decide copy and
+all lint results locally, without creating anything. Publish without `--preview`.
+Inline flags are `--situation`, `--impact`, `--recommend`, `--why`,
+`--alternative 'Action=consequence'`, `--if-no-answer` and `--details`.
+Missing situation, impact or recommendation (including why) is an error.
+`--force --reason 'explanation'` records a deliberate authoring exception.
+Jargon warnings quote the offending token and field; rewrite them before asking.
+ANX stores authored text and runs no model to rewrite it.
+
+Before: “Approve PR123 existing-fence reuse?” / “Recovered c10041; reuse
+external_write_fence for monthly_usage_totals.”
+
+After: “Approve the guard that keeps deleted users' data erased?” Background jobs
+can recreate erased usage totals, bringing back data we promised to delete
+(privacy risk). I recommend the existing user-deleted guard: about 3 extra reads
+per write. The alternative needs more retry logic and takes longer to build.
+Without an answer by Friday, the database cost change stays blocked.
+
 Use `evidence: [{label: Change, url: https://example.org/repository/pull/123}]`
 for external links; use typed document/card/topic refs in `refs`. The equivalent
 CLI option is `--evidence 'Change=https://example.org/repository/pull/123'`.
@@ -40,9 +69,7 @@ registered forge host — github.com is built in; register other forges with
 `anx config forge add <alias|url> <host> <github|forgejo|gitea|gitlab|bitbucket>`
 (Forgejo/Gitea `/pulls/N`, GitLab `/-/merge_requests/N`, Bitbucket
 `/pull-requests/N`; commit-pinned file permalinks follow each kind's own form).
-Obvious missing refs/links and pointer-only bodies fail locally;
-other incomplete structure produces warnings. `--force --reason 'explanation'`
-records the author's deliberate lint override in the event.
+Missing evidence links and pointer-only bodies fail locally. See `anx ask --help`.
 
 ## Live await
 
@@ -158,3 +185,42 @@ uses `ask_subjects_due`, `ask_subjects_card_open` and a card close queue. Webhoo
 workers seek `ask_deliveries_due` and claim at most 20 due jobs per pass. Upgrades
 install empty indexes and backfill ask subjects in resumable 200-event batches;
 startup and read requests never scan historical payloads for this feature.
+
+### Presentation contract for other clients
+
+The fields below live directly in `human_attention_requested.payload` and are
+copied unchanged to inbox items (including `batch.asks`), completed inbox items,
+`brief.v1.decisions` and brief batch members. Core accepts older writers that
+omit them. The CLI requires situation, impact and recommendation with why;
+`--recommend` supplies the action, `--why` supplies its explanation, and
+`--alternative 'Action=consequence'` also adds an answer button. Frontmatter
+uses the same nested objects and derives answer buttons from their actions;
+legacy `recommended_response` / `proposals` remain accepted.
+
+```json
+{
+  "situation": "Deleted users' usage data can reappear.",
+  "impact": "This breaks our deletion promise.",
+  "recommendation": {
+    "action": "Check whether the user was deleted before writing.",
+    "why": "Reuse the existing guard; about 3 extra reads per usage write."
+  },
+  "alternatives": [
+    {
+      "action": "Build a different design.",
+      "consequence": "More retry logic and slower to build."
+    }
+  ],
+  "if_no_answer": "The database cost change stays blocked until Friday.",
+  "details": "Technical Markdown, shown collapsed.",
+  "evidence": [{ "label": "Change", "url": "https://example.org/change" }]
+}
+```
+
+`response_proposals` (inbox/events) and `proposals` (brief decisions) remain the
+ordered answer strings. Render situation, impact, recommendation, alternatives
+and if_no_answer first. Collapse details, evidence and any accompanying body;
+when structured copy is absent, keep the legacy body visible. Do not treat
+if_no_answer prose as an automatic action or deadline: `by` is the separate
+machine-readable decision deadline. Text fields are limited to 4,000 Unicode
+characters (action: 240; details: 32,000); alternatives has at most five entries.

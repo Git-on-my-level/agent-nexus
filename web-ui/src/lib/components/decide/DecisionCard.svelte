@@ -1,4 +1,5 @@
 <script>
+  import { safeSourceHref } from "$lib/pm/presentation.js";
   import { page } from "$app/stores";
   import { durableDraft } from "$lib/actions/durableDraft.js";
   import { copyText } from "$lib/clipboard.js";
@@ -536,7 +537,47 @@
     {/if}
   </header>
 
-  {#if decision.body}
+  {#if decision.situation || decision.recommendation}
+    <div class="text-meta leading-relaxed text-fg" data-decision-presentation>
+      {#if decision.situation}<p>{decision.situation}</p>{/if}
+      {#if decision.impact}<p>
+          <strong>Impact:</strong>
+          {decision.impact}
+        </p>{/if}
+      {#if decision.recommendation}<p>
+          <strong>I recommend:</strong>
+          {decision.recommendation.action}
+        </p>
+        <p>{decision.recommendation.why}</p>{/if}
+      {#each decision.alternatives ?? [] as alternative}<p>
+          <strong>Alternative:</strong>
+          {alternative.action}
+          {alternative.consequence}
+        </p>{/each}
+      {#if decision.if_no_answer}<p>
+          <strong>If no answer:</strong>
+          {decision.if_no_answer}
+        </p>{/if}
+      {#if decision.details || decision.body || decision.evidence?.length}
+        <details>
+          <summary>Details and evidence</summary>
+          <MarkdownRenderer
+            source={[decision.details, decision.body]
+              .filter(Boolean)
+              .join("\n\n")}
+            organizationSlug={organizationSlug || $page.params.organization}
+            workspaceSlug={workspaceSlug || $page.params.workspace}
+          />
+          {#each decision.evidence ?? [] as evidence}<p>
+              {#if safeSourceHref(evidence.url)}<a
+                  href={safeSourceHref(evidence.url)}
+                  rel="noreferrer">{evidence.label}</a
+                >{:else}{evidence.label}{/if}
+            </p>{/each}
+        </details>
+      {/if}
+    </div>
+  {:else if decision.body}
     <div
       class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere] {rich
         ? ''

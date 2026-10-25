@@ -314,3 +314,35 @@ describe("DecisionCard", () => {
     ).not.toBeNull();
   });
 });
+
+it("shows a plain proposal and keeps technical evidence collapsed", () => {
+  const authored = {
+    ...fixture.decisions[0],
+    situation: "Deleted users' data can reappear.",
+    impact: "This breaks our deletion promise.",
+    recommendation: {
+      action: "Check before writing.",
+      why: "Reuse the existing guard.",
+    },
+    alternatives: [
+      { action: "Wait.", consequence: "The change stays blocked." },
+    ],
+    if_no_answer: "Blocked until Friday.",
+    details: "external_write_fence implementation",
+    evidence: [{ label: "Change", url: "https://example.org/change" }],
+  };
+  const decision = normalizeBrief({ ...fixture, decisions: [authored] })
+    .decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const copy = container.querySelector("[data-decision-presentation]");
+  expect(copy.textContent).toContain(authored.situation);
+  expect(copy.textContent).toContain(authored.recommendation.why);
+  expect(copy.textContent).toContain(authored.alternatives[0].consequence);
+  expect(copy.textContent).toContain(authored.if_no_answer);
+  const details = copy.querySelector("details");
+  expect(details.open).toBe(false);
+  expect(details.textContent).toContain(authored.details);
+  expect(
+    details.querySelector("a[href='https://example.org/change']"),
+  ).not.toBeNull();
+});

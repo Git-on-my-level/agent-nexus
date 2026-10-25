@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 
 	"agent-nexus-cli/internal/workspaceconfig"
 )
@@ -15,38 +14,41 @@ type askEvidenceLink struct {
 	URL   string `json:"url" yaml:"url"`
 }
 
-const askDecisionTemplate = `## Decision
-State the decision in one line.
-
-## Context
-Explain why now and what is affected in 2–5 sentences.
-
-## Options with consequences
-- Accept: explain the effect.
-- Wait: explain the effect.
-
-## Recommendation
-Accept, because …
-
-## Evidence
-Use typed refs and labelled URLs; link code with commit-pinned line URLs.
-`
-
-const askAuthoringTemplate = `---
-title: Decision in one line
-recommended_response: Accept
-proposals: [Wait]
+const askDecisionTemplate = `---
+title: "Approve the guard that keeps deleted users' data erased?"
+situation: "After a user erases their data, five background jobs can still recreate their monthly usage totals."
+impact: "Data we promised to delete comes back, creating privacy and compliance risk."
+recommendation:
+  action: "Make the background jobs check whether the user was deleted."
+  why: "Reuse the guard other jobs already use. Cost: about 3 extra database reads per usage write."
+alternatives:
+  - action: "Build a different design."
+    consequence: "More retry logic and slower to build."
+if_no_answer: "The database cost change stays blocked until we decide; please answer by Friday."
 refs: []
 evidence: []
+# Write for a busy boss with no context. Replace this neutral example with
+# one short proposal. Keep the title near 80 characters and situation under 60 words.
+# Options must be plain sentences a non-engineer understands.
+#
+# Before: Approve PR123 existing-fence reuse on every aggregate creator?
+# Recovered c10041: ordinary/once/admin writers recreate monthly_usage_totals.
+# Reuse external_write_fence and require an existing root, reading authority first.
+# Options: Approve existing-fence reuse plus root check / Keep draft blocked.
+#
+# After: Deleted users' usage data can reappear. After erasure, five background
+# jobs can recreate monthly totals, bringing back data we promised to delete.
+# I recommend the same user-deleted guard the other jobs already use. Cost: about
+# 3 extra reads per write. Alternative: more retry logic, slower to build.
+# If no answer: the database cost change stays blocked until Friday.
+#
+# Put technical Markdown in frontmatter details; link evidence. Both are collapsed.
+# Preview: anx ask --from-file ask.md --preview
+# Publish: add subject_ref: card:<your-card> to frontmatter, then anx ask --from-file ask.md.
 ---
-` + askDecisionTemplate
+`
 
-func lintAskTitle(title string) error {
-	if utf8.RuneCountInString(title) > 100 {
-		return fmt.Errorf("ask title exceeds 100 characters; keep the decision on one line and move context/options into --body or --body-file ask.md (hard maximum 160)")
-	}
-	return nil
-}
+const askAuthoringTemplate = askDecisionTemplate
 
 var askNamedPR = regexp.MustCompile(`(?i)\bPR\s*#?(\d+)\b`)
 var askNamedRef = regexp.MustCompile("(?i)\\b(doc(?:ument)?|card|topic|file)\\s+[`\"]([^`\"\\n]+)[`\"]")
@@ -107,14 +109,6 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forge
 		}
 	}
 	warnings := []string{}
-	if strings.TrimSpace(body) == "" {
-		return []string{"Missing decision body; use anx ask --template decision > ask.md, fill in Decision / Context / Options with consequences / Recommendation / Evidence, then pass --body-file ask.md"}, nil
-	}
-	for _, section := range []string{"Decision", "Context", "Options", "Recommendation", "Evidence"} {
-		if !strings.Contains(strings.ToLower(body), strings.ToLower(section)) {
-			warnings = append(warnings, "Missing "+section+" section; use anx ask --template decision")
-		}
-	}
 	if strings.Contains(body, "```") {
 		warnings = append(warnings, "Summarise code instead of pasting it; link a PR or commit permalink")
 	}

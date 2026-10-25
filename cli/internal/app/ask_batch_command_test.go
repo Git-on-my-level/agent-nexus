@@ -50,9 +50,9 @@ func TestAskBatchFilesOneAtomicRequest(t *testing.T) {
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	path := askBatchFixture(t, `{"asks":[
-		{"title":"Ship the flag?","body":"Decision body.","subject_ref":"card:launch","thread_id":"thr1","recommend":"Ship","alts":["Wait"],"coverage_hint":"thin"},
-		{"title":"Roll back first?","subject_ref":"card:launch","thread_id":"thr1","recommend":"No"},
-		{"title":"Notify the field team?","subject_ref":"card:launch","thread_id":"thr1","recommend":"Yes","delivery":"none"}
+		{"title":"Ship the flag?","body":"Decision body.","subject_ref":"card:launch","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Ship","why":"This is the quickest safe approach."},"recommend":"Ship","alts":["Wait"],"coverage_hint":"thin"},
+		{"title":"Roll back first?","subject_ref":"card:launch","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"No","why":"This is the quickest safe approach."},"recommend":"No"},
+		{"title":"Notify the field team?","subject_ref":"card:launch","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Yes","why":"This is the quickest safe approach."},"recommend":"Yes","delivery":"none"}
 	]}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -116,8 +116,8 @@ func TestAskBatchDryRunSendsNothing(t *testing.T) {
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	path := askBatchFixture(t, `{"asks":[
-		{"title":"One?","subject_ref":"card:x","thread_id":"thr1","recommend":"Yes"},
-		{"title":"Two?","subject_ref":"card:x","thread_id":"thr1","recommend":"No"}
+		{"title":"One?","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Yes","why":"This is the quickest safe approach."},"recommend":"Yes"},
+		{"title":"Two?","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"No","why":"This is the quickest safe approach."},"recommend":"No"}
 	]}`)
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
@@ -148,7 +148,7 @@ func TestAskBatchRejectsUnderSizedBatchBeforeNetwork(t *testing.T) {
 	home := t.TempDir()
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
-	path := askBatchFixture(t, `{"asks":[{"title":"Solo?","subject_ref":"card:x","thread_id":"thr1","recommend":"Yes"}]}`)
+	path := askBatchFixture(t, `{"asks":[{"title":"Solo?","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Yes","why":"This is the quickest safe approach."},"recommend":"Yes"}]}`)
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "batch", "--from-file", path,
@@ -178,8 +178,8 @@ func TestAskBatchAppliesAuthoringLintToEveryAsk(t *testing.T) {
 	// The second member is pointer-only (no evidence), which the authoring
 	// lint rejects exactly as it would for `anx ask`.
 	path := askBatchFixture(t, `{"asks":[
-		{"title":"Fine?","body":"see docs","subject_ref":"card:x","thread_id":"thr1","recommend":"Yes"},
-		{"title":"Pointer only?","body":"see the doc","subject_ref":"card:x","thread_id":"thr1","recommend":"No"}
+		{"title":"Fine?","body":"see docs","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Yes","why":"This is the quickest safe approach."},"recommend":"Yes"},
+		{"title":"Pointer only?","body":"see the doc","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"No","why":"This is the quickest safe approach."},"recommend":"No"}
 	]}`)
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
@@ -215,18 +215,18 @@ func TestAskBatchAppliesTitleLint(t *testing.T) {
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	path := askBatchFixture(t, `{"asks":[
-		{"title":"`+strings.Repeat("界", 101)+`","subject_ref":"card:x","thread_id":"thr1","recommend":"Yes"},
-		{"title":"Short?","subject_ref":"card:x","thread_id":"thr1","recommend":"No"}
+		{"title":"`+strings.Repeat("界", 101)+`","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"Yes","why":"This is the quickest safe approach."},"recommend":"Yes"},
+		{"title":"Short?","subject_ref":"card:x","thread_id":"thr1","situation":"A launch decision is waiting.","impact":"The team cannot finish until we choose.","recommendation":{"action":"No","why":"This is the quickest safe approach."},"recommend":"No"}
 	]}`)
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "batch", "--from-file", path,
 	})
 	if !strings.Contains(raw, "ask_authoring") {
-		t.Fatalf("titles over 100 characters must surface as ask_authoring: %s", raw)
+		t.Fatalf("titles over 80 characters must surface as ask_authoring warnings: %s", raw)
 	}
-	if requests.Load() != 0 {
-		t.Fatal("title lint failures must not reach the server")
+	if requests.Load() != 1 {
+		t.Fatal("title warnings should allow the ask to be filed")
 	}
 
 	rawForced := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -234,7 +234,7 @@ func TestAskBatchAppliesTitleLint(t *testing.T) {
 		"ask", "batch", "--from-file", path, "--force", "--reason", "Deliberate exception",
 	})
 	assertEnvelopeOK(t, rawForced)
-	if requests.Load() != 1 {
-		t.Fatalf("forced title lint must file exactly once, got %d", requests.Load())
+	if requests.Load() != 2 {
+		t.Fatalf("forced title lint must file exactly once more, got %d", requests.Load())
 	}
 }
