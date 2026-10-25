@@ -8,6 +8,8 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/runcontext"
 )
 
 var topicsSubcommandSpec = subcommandSpec{
@@ -249,12 +251,18 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, err := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, query, nil)
 		return result, "cards list", err
 	case "create":
-		body, dryRun, err := a.parseCardCreateInput(args[1:], cfg, "cards create")
+		body, dryRun, topLevel, err := a.parseCardCreateInput(args[1:], cfg, "cards create")
 		if err != nil {
 			return nil, "cards create", err
 		}
+		ctx = runcontext.WithTopLevel(ctx, topLevel)
 		if dryRun {
-			return dryRunResult("cards create", "cards.create", nil, nil, body), "cards create", nil
+			hint := a.prepareRunParent(ctx, cfg, body, false)
+			result := dryRunResult("cards create", "cards.create", nil, nil, body)
+			for _, warning := range hint.Warnings {
+				result.Warnings = append(result.Warnings, output.Warning{Code: warning.Code, Message: warning.Message})
+			}
+			return result, "cards create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
 		return addResourceURLToResult(cfg, "cards.create", result), "cards create", callErr
@@ -469,14 +477,15 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 	return body, dryRunFlag.set && dryRunFlag.value, nil
 }
 
-func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
+func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, bool, error) {
 	fs := newSilentFlagSet(commandName)
 	var boardFlag, titleFlag, bodyFlag, contentFileFlag, fromFileFlag, handleFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, underFlag, afterStepFlag trackedString
 	var columnFlag, topicFlag, documentRefFlag, riskFlag, dueAtFlag trackedString
 	var beforeCardIDFlag, afterCardIDFlag trackedString
 	var assigneeRefFlags, relatedRefFlags, doneFlags trackedStrings
-	var dryRunFlag trackedBool
+	var dryRunFlag, topLevelFlag trackedBool
+	fs.Var(&topLevelFlag, "top-level", "Ignore the run-label parent default")
 	fs.Var(&underFlag, "under", "Parent card ref; adds a plan step atomically")
 	fs.Var(&afterStepFlag, "after", "Preceding plan step id")
 	fs.Var(&boardFlag, "board", "Parent board ref, handle, or id for the new card")
@@ -501,10 +510,13 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	fs.Var(&doneFlags, "done", "Definition-of-done checklist item (repeatable)")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
-		return nil, false, errnorm.Usage("invalid_flags", err.Error())
+		return nil, false, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+		return nil, false, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if topLevelFlag.value && underFlag.set {
+		return nil, false, false, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
 	}
 	fieldFlagsSet := handleFlag.set || strings.TrimSpace(boardFlag.value) != "" ||
 		strings.TrimSpace(titleFlag.value) != "" ||
@@ -525,46 +537,46 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 		len(doneFlags.values) > 0
 	if strings.TrimSpace(fromFileFlag.value) != "" || (!fieldFlagsSet && strings.TrimSpace(contentFileFlag.value) == "") {
 		if fieldFlagsSet {
-			return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+			return nil, false, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, dryRun, err := a.parseJSONBodyInputWithOptions(withoutGroupingFlags(args), commandName, jsonBodyInputOptions{allowDryRun: true})
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		bodyMap, ok := body.(map[string]any)
 		if !ok {
-			return nil, false, errnorm.Usage("invalid_request", "JSON body for `anx cards create` must be an object")
+			return nil, false, false, errnorm.Usage("invalid_request", "JSON body for `anx cards create` must be an object")
 		}
 		ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
 		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		applyCardGroupingFlags(bodyMap, underFlag.value, afterStepFlag.value)
-		return bodyMap, dryRun, nil
+		return bodyMap, dryRun, topLevelFlag.value, nil
 	}
 	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	boardID := strings.TrimSpace(boardFlag.value)
 	if err := validateID(boardID, "board id"); err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	title := strings.TrimSpace(titleFlag.value)
 	if title == "" {
-		return nil, false, errnorm.Usage("invalid_request", "`--title` is required for `anx cards create`")
+		return nil, false, false, errnorm.Usage("invalid_request", "`--title` is required for `anx cards create`")
 	}
 	if strings.TrimSpace(bodyFlag.value) != "" && strings.TrimSpace(contentFileFlag.value) != "" {
-		return nil, false, errnorm.Usage("invalid_request", "`--body` and `--body-file` cannot be combined for `anx cards create`")
+		return nil, false, false, errnorm.Usage("invalid_request", "`--body` and `--body-file` cannot be combined for `anx cards create`")
 	}
 	if strings.TrimSpace(bodyFlag.value) == "" && strings.TrimSpace(contentFileFlag.value) == "" {
-		return nil, false, errnorm.Usage("invalid_request", "`--body` or `--body-file` is required for `anx cards create`")
+		return nil, false, false, errnorm.Usage("invalid_request", "`--body` or `--body-file` is required for `anx cards create`")
 	}
 	content := bodyFlag.value
 	if strings.TrimSpace(contentFileFlag.value) != "" {
 		var err error
 		content, err = a.readTextFlagFile(contentFileFlag.value, commandName, "--body-file")
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 	}
 	card := map[string]any{
@@ -579,7 +591,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	}
 	if handleFlag.set {
 		if err := validateCardHandle(handleFlag.value); err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		card["handle"] = handleFlag.value
 	}
@@ -615,15 +627,15 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	if actorID != "" {
 		body["actor_id"] = actorID
 	}
 	if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
-	return body, dryRunFlag.set && dryRunFlag.value, nil
+	return body, dryRunFlag.set && dryRunFlag.value, topLevelFlag.value, nil
 }
 
 func (a *App) parseTopicPatchInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, bool, error) {

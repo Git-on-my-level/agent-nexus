@@ -28,6 +28,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/registry"
+	"agent-nexus-cli/runcontext"
 )
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
@@ -1549,10 +1550,11 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		}
 		return result, "boards cards list", callErr
 	case "create-batch":
-		boardID, body, err := a.parseBoardBatchCardCreateInput(ctx, args[1:], cfg, "boards cards create-batch")
+		boardID, body, topLevel, err := a.parseBoardBatchCardCreateInput(ctx, args[1:], cfg, "boards cards create-batch")
 		if err != nil {
 			return nil, "boards cards create-batch", err
 		}
+		ctx = runcontext.WithTopLevel(ctx, topLevel)
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create-batch", "boards.cards.batch_add", map[string]string{"board_id": boardID}, nil, body)
 		return result, "boards cards create-batch", callErr
 	case "get":
@@ -3030,9 +3032,12 @@ func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string)
 	return boardID, cardID, nil
 }
 
-func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {
+func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, bool, error) {
 	fs := newSilentFlagSet(commandName)
-	var boardIDFlag, fromFileFlag trackedString
+	var boardIDFlag, fromFileFlag, underFlag trackedString
+	var topLevelFlag trackedBool
+	fs.Var(&underFlag, "under", "Parent for every item in the batch")
+	fs.Var(&topLevelFlag, "top-level", "Ignore the run-label parent default")
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
@@ -3040,7 +3045,10 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	fs.Var(&requestKeyFlag, "request-key", "Request key")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+		return "", nil, false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if topLevelFlag.value && underFlag.set {
+		return "", nil, false, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
 	}
 	positionals := fs.Args()
 	boardID := strings.TrimSpace(boardIDFlag.value)
@@ -3049,28 +3057,35 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validateID(boardID, "board id"); err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	if len(payload) == 0 {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
+		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	bodyMap, ok := body.(map[string]any)
 	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
+		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 	if _, has := bodyMap["items"]; !has {
-		return "", nil, errnorm.Usage("invalid_request", "JSON body must include an items array")
+		return "", nil, false, errnorm.Usage("invalid_request", "JSON body must include an items array")
+	}
+	if underFlag.set {
+		for _, raw := range asSlice(bodyMap["items"]) {
+			if item := asMap(raw); item != nil {
+				item["under"] = underFlag.value
+			}
+		}
 	}
 	// After JSON decode, non-empty CLI flags override the same keys in the body (explicit CLI wins).
 	if v := strings.TrimSpace(requestKeyFlag.value); v != "" {
@@ -3082,17 +3097,17 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	if strings.TrimSpace(actorIDFlag.value) != "" {
 		aid, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 		if err != nil {
-			return "", nil, err
+			return "", nil, false, err
 		}
 		if aid != "" {
 			bodyMap["actor_id"] = aid
 		}
 	}
 	if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	resolvedBoardID := boardID
-	return resolvedBoardID, bodyMap, nil
+	return resolvedBoardID, bodyMap, topLevelFlag.value, nil
 }
 
 func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (map[string]string, any, error) {

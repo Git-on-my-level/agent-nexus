@@ -2196,7 +2196,7 @@
     "../primitives/boards_store.go:*Store:ArchiveBoardIfUpdatedAt": "84fad15cd15ed7d84fa85501762f55024ab55e40be3f1f779e393bc618971ac1",
     "../primitives/boards_store.go:*Store:CreateBoard": "bfa3057572fafa1843924f0034acb883affbb5d88a4b6aee6f2de07a61768331",
     "../primitives/boards_store.go:*Store:CreateBoardCard": "d94e8d378e99cd378b42d03f094d20ffa331311817e6428eeb8acb4add628d48",
-    "../primitives/boards_store.go:*Store:CreateBoardCardsBatch": "d10b28ec07e4b9d0d6dc64c72af7d89dd332ea4b0781a987f5504d18fea39c26",
+    "../primitives/boards_store.go:*Store:CreateBoardCardsBatch": "242b5c02b02f2b6d9a0b4464a2ef8c98e463872a2d73ad1b6a2e63837a9afb86",
     "../primitives/boards_store.go:*Store:CreateCardRevision": "dd9304ab8f95d523a4186a81a56b4c78f79e205e28537aa73486fe73c982ce52",
     "../primitives/boards_store.go:*Store:GetBoard": "89bf34cf7be686138cf8fff87a802aacc2579ed01cd31b70f81f9b42d81024e6",
     "../primitives/boards_store.go:*Store:GetBoardCard": "c50ee8ed65e0933ab77737e00a04b20e9ab6b51badf454f9c7f7665bb124604c",

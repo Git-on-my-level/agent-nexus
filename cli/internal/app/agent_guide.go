@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v32"
+const agentGuideSkillVersion = "anx.participant.v33"
 
 type guideSection struct {
 	Title string
@@ -73,7 +73,7 @@ func agentGuideSections() []guideSection {
 		}},
 		{Title: "Runs and output", Lines: []string{
 			"- Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.",
-			"- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.",
+			"- Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.",
 			"- Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.",
 			"- Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).",
 			"- If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.",
