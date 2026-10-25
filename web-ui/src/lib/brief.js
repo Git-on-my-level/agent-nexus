@@ -17,13 +17,20 @@ import {
 } from "../../../contracts/gen/ts/dist/enums.js";
 import { normalizeLoop } from "$lib/loops.js";
 
-/** The four computed initiative states, in attention order. */
-export const WATCH_STATES = ["past_promise", "moving", "no_promise", "done"];
+/** Computed initiative states, in attention order. */
+export const WATCH_STATES = [
+  "past_promise",
+  "moving",
+  "no_promise",
+  "digest",
+  "done",
+];
 
 export const WATCH_STATE_LABELS = {
   past_promise: "Past promise",
   moving: "Moving",
   no_promise: "No promise",
+  digest: "Daily digest",
   done: "Done",
 };
 

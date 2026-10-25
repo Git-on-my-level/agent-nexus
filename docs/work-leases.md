@@ -77,6 +77,16 @@ Each card has at most one row in `card_leases`, holding:
   receipt. A writer that checks "my epoch is still current" rejects work from a
   holder that has been superseded.
 
+Acquire and renew re-point `cards.assignee` to the lease owner's actor in the
+same transaction when `owner` is an `actor:` reference or a resolvable `agent:`
+reference. A renewal does this even when the card was reassigned since acquire.
+Opaque launcher/session labels leave the assignee unchanged. Renewal preserves
+a reminded default promise's digest route; it does not count as progress.
+
+Agent creation's automatic lease has a **24-hour TTL**. David's **12-hour**
+default is the computed promise deadline, not a lease duration. These are
+independent clocks; explicit lease TTLs and renewal keep their existing rules.
+
 ### Hand-off
 
 `anx lease release <card> --owner O --handoff-to P [--ttl D]` transfers the

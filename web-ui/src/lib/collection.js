@@ -82,6 +82,7 @@ export const INITIATIVE_STATES = [
   },
   { key: "moving", label: WATCH_STATE_LABELS.moving, tone: "good" },
   { key: "no_promise", label: WATCH_STATE_LABELS.no_promise, tone: "neutral" },
+  { key: "digest", label: WATCH_STATE_LABELS.digest, tone: "neutral" },
   { key: "done", label: WATCH_STATE_LABELS.done, tone: "quiet" },
 ];
 
@@ -163,6 +164,39 @@ export function collectionFromInitiatives(
     };
   });
   return groupRows(INITIATIVE_STATES, rows);
+}
+
+/** The principal-owned brief preview, using the same collection rows. */
+export function collectionFromDailyDigest(cards, { href } = {}) {
+  const rows = (cards ?? []).map((card) => ({
+    ref: card.ref,
+    title: card.title,
+    href: href ? href({ ...card, id: card.ref.replace(/^card:/, "") }) : "",
+    state: "digest",
+    stateField: "daily_digest.reason",
+    subtitle: {
+      parts: [
+        {
+          field: "daily_digest.reason",
+          text:
+            card.reason === "awaiting_owner"
+              ? "Awaiting owner"
+              : card.reason === "default_promise_lapsed"
+                ? "Default promise elapsed"
+                : text(card.reason).replaceAll("_", " "),
+        },
+      ],
+    },
+    source: { kind: "daily_digest" },
+  }));
+  return {
+    states: [
+      { key: "digest", label: WATCH_STATE_LABELS.digest, tone: "neutral" },
+    ],
+    groups: [{ key: "digest", label: "", rows }],
+    counts: { digest: rows.length },
+    hasMore: false,
+  };
 }
 
 // ---------------------------------------------------------------------------

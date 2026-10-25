@@ -156,6 +156,72 @@ func TestCardLeaseValidation(t *testing.T) {
 	}
 }
 
+func TestCardLeaseRenewAfterDefaultReminderPreservesDigest(t *testing.T) {
+	for _, method := range []string{"renew", "reacquire"} {
+		t.Run(method, func(t *testing.T) {
+			s, ctx, cardID, now := cardLeaseFixture(t)
+			if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "actor:lead", TTL: 24 * time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			// The card's default lapses while its 24-hour lease is still held.
+			defaultAt := cardLeaseStamp(now.Add(-time.Hour))
+			if _, err := s.db.ExecContext(ctx, `UPDATE work_tracking SET default_at=? WHERE card_id=?`, defaultAt, cardID); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.MaintainWorkTracking(ctx, *now); err != nil {
+				t.Fatal(err)
+			}
+			var reminder, due string
+			if err := s.db.QueryRowContext(ctx, `SELECT reminder_event_id,next_digest_at FROM work_tracking WHERE card_id=?`, cardID).Scan(&reminder, &due); err != nil || reminder == "" || due == "" {
+				t.Fatalf("missing initial reminder/digest: %q %q %v", reminder, due, err)
+			}
+			if method == "renew" {
+				_, err := s.RenewCardLease(ctx, "lead", cardID, CardLeaseRenewInput{Owner: "actor:lead"})
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "actor:lead", TTL: 24 * time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			var gotDefault, gotReminder, gotDue, owner string
+			if err := s.db.QueryRowContext(ctx, `SELECT default_at,reminder_event_id,next_digest_at,fallback_owner FROM work_tracking WHERE card_id=?`, cardID).Scan(&gotDefault, &gotReminder, &gotDue, &owner); err != nil || gotDefault != defaultAt || gotReminder != reminder || gotDue != due || owner != "actor:lead" {
+				t.Fatalf("lease heartbeat dropped default routing: default=%q reminder=%q due=%q owner=%q err=%v", gotDefault, gotReminder, gotDue, owner, err)
+			}
+			digest, err := s.TrackingDigestPreview(ctx, "lead")
+			if err != nil || len(digest) != 1 || digest[0]["reason"] != "default_promise_lapsed" {
+				t.Fatalf("renewed default disappeared from brief digest: %+v %v", digest, err)
+			}
+			if err := s.MaintainWorkTracking(ctx, now.Add(time.Minute)); err != nil {
+				t.Fatal(err)
+			}
+			var count int
+			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE type='message_posted' AND json_extract(payload_json,'$.payload.source')='default_promise'`).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("default reminded again: %d %v", count, err)
+			}
+		})
+	}
+}
+
+func TestCardLeaseAcquireAndRenewRepointAssignee(t *testing.T) {
+	s, ctx, cardID, _ := cardLeaseFixture(t)
+	for _, method := range []string{"acquire", "renew"} {
+		if _, err := s.db.ExecContext(ctx, `UPDATE cards SET assignee='actor:peer' WHERE id=?`, cardID); err != nil {
+			t.Fatal(err)
+		}
+		if method == "acquire" {
+			if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "actor:lead", TTL: 24 * time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := s.RenewCardLease(ctx, "lead", cardID, CardLeaseRenewInput{Owner: "actor:lead"}); err != nil {
+			t.Fatal(err)
+		}
+		var owner string
+		if err := s.db.QueryRowContext(ctx, `SELECT assignee FROM cards WHERE id=?`, cardID).Scan(&owner); err != nil || owner != "actor:lead" {
+			t.Fatalf("%s did not re-point assignee to the lease actor: %q %v", method, owner, err)
+		}
+	}
+}
+
 func TestCardLeaseExpiryClockRecordsOncePerEpoch(t *testing.T) {
 	s, ctx, cardID, now := cardLeaseFixture(t)
 	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-a", TTL: time.Hour}); err != nil {

@@ -341,7 +341,10 @@ func (s *Store) mutateCardLease(ctx context.Context, actor, cardID string, decid
 			change.events[0].payload["fallback_owner"] = card.Assignee.String
 		}
 	} else if n.releasedAt == "" && n.expired == "" {
-		if _, err := tx.ExecContext(ctx, `UPDATE work_tracking SET orphaned_at='',fallback_owner='',next_digest_at='',needs_owner=0,updated_at=? WHERE card_id=?`, stamp, card.CardID); err != nil {
+		// Taking execution responsibility clears an orphan route. A lease
+		// heartbeat is not progress on a reminded default: retain that digest
+		// until evidence/a promise or a changed assignee cancels it.
+		if _, err := tx.ExecContext(ctx, `UPDATE work_tracking SET orphaned_at='',fallback_owner=CASE WHEN default_at<>'' AND reminder_event_id<>'' THEN fallback_owner ELSE '' END,next_digest_at=CASE WHEN default_at<>'' AND reminder_event_id<>'' THEN next_digest_at ELSE '' END,needs_owner=0,updated_at=? WHERE card_id=?`, stamp, card.CardID); err != nil {
 			return result, err
 		}
 		if target, err := trackingActor(ctx, tx, n.owner); err != nil {

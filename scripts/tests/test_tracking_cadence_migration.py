@@ -44,7 +44,7 @@ class FakeANX:
             return {"work": copy.deepcopy(self.work)}
         if operation == "listEvents":
             assert params["limit"] == "50"
-            return {"events": [{"id": row["event_id"], "ts": row["at"], "subject_ref": "card:one", "payload": {"run_id": row["run_id"]}} for row in self.rows], "page_info": {"has_more": False}}
+            return {"events": [{"id": row["event_id"], "ts": row["at"], "subject_ref": "card:one", "payload": {"run_id": row["run_id"]}, **{key: row[key] for key in ("archived_at", "trashed_at") if key in row}} for row in self.rows], "page_info": {"has_more": False}}
         if operation == "workPatch":
             body = json.loads(args[args.index("--json-body") + 1])
             self.writes.append(body)
@@ -58,6 +58,30 @@ class FakeANX:
 
 
 class TrackingMigrationTest(unittest.TestCase):
+    def test_lifecycle_receipts_do_not_make_a_cadence(self):
+        for lifecycle in ("archived_at", "trashed_at"):
+            with self.subTest(lifecycle=lifecycle):
+                fake = FakeANX()
+                fake.rows[1][lifecycle] = NOW.isoformat()
+                tool = migration.Migration("test", "owner", fake)
+                entry = tool.report(NOW)["cards"][0]
+                self.assertEqual(entry["action"], "owner_review")
+                self.assertEqual(entry["reason"], "fewer_than_three_receipts")
+                self.assertEqual(len(entry["receipts"]), 2)
+                fake.rows[1][lifecycle] = None  # Restored/unarchived receipts count again.
+                self.assertEqual(tool.report(NOW)["cards"][0]["every_seconds"], 3600)
+
+    def test_receipt_lifecycle_change_invalidates_apply(self):
+        for lifecycle in ("archived_at", "trashed_at"):
+            with self.subTest(lifecycle=lifecycle), tempfile.TemporaryDirectory() as directory:
+                fake = FakeANX()
+                tool = migration.Migration("test", "owner", fake)
+                report = tool.report(NOW)
+                fake.rows[1][lifecycle] = NOW.isoformat()
+                result = tool.apply(report, Path(directory) / "apply.json", NOW)
+                self.assertEqual(result["cards"]["card:one"]["status"], "conflict")
+                self.assertEqual(fake.writes, [])
+
     def test_median_and_spread_are_deterministic(self):
         self.assertEqual(migration.infer(receipts([3600, 3600])), (3600, "regular_receipts"))
         self.assertEqual(migration.infer(receipts([3600, 3602, 3604, 3606])), (3603, "regular_receipts"))

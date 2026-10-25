@@ -110,6 +110,10 @@ class Migration:
         rows = []
         seen = set()
         for event in page.get("events", []):
+            # Canonical loop calculations exclude archived and withdrawn
+            # (trashed) event receipts, even if a list page includes them.
+            if event.get("archived_at") or event.get("trashed_at"):
+                continue
             if event.get("subject_ref") not in refs:
                 continue
             payload = event.get("payload", {})

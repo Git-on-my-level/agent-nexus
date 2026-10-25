@@ -13,9 +13,19 @@ default; ordinary conversation and plan authoring do not meet it.
 Agent creators automatically acquire an ordinary #466 lease in the same create
 transaction. Its initial TTL is 24 hours, chosen to allow the 12-hour reminder
 before automatic expiry; callers can renew it or explicitly hand it off under
-the existing fencing rules. Human creators do not acquire a lease. Existing
-opaque launcher owner labels remain supported; the automatic lease owner is
+the existing fencing rules. The 12-hour ruling is the default promise deadline,
+not the lease TTL; the automatic agent lease remains 24 hours. Human creators do
+not acquire a lease. Existing opaque launcher owner labels remain supported;
+the automatic lease owner is
 `actor:<creating-actor-id>`, visible through `anx lease show`.
+
+Explicit acquire and renew re-point `cards.assignee` to the lease owner when
+the owner is an `actor:` reference or a resolvable `agent:` reference. This
+assignment is atomic with the lease change, including a renewal by the same
+owner after somebody changed the card's assignee. Opaque launcher labels do
+not identify an actor and leave the assignee unchanged. A same-owner renewal
+after the default reminder preserves its daily digest route; renewing execution
+is not evidence of progress and does not send another reminder.
 
 Release without hand-off and expiry assign responsibility to the chosen parent
 initiative's assignee, then the configured workspace lead, and append an
@@ -38,7 +48,10 @@ actor. The preview is at most 50 cards and points to the paged work inventory.
 Pages and retries share the owner/day delivery identity. Agent recipients use
 the existing bridge queue; humans use their enabled push/digest channels.
 With no channel configured, the automatic note and the reader's
-`brief.daily_digest` remain available. Reading the brief sends no notification.
+`brief.daily_digest` remain available. `anx orient` lists these cards under
+`daily digest`; Watch's Initiatives list shows “Needs an owner's look” with
+the preview count and links to the same initiative pages. Reading the brief
+sends no notification.
 Ownership is checked again in the enqueue transaction; reassignment, a new
 explicit promise, completion or lost visibility can cancel a stale snapshot.
 Step/source evidence cancels the default routes when the canonical brief fold
@@ -74,7 +87,8 @@ three receipts are required. Intervals must be positive, and their maximum
 minus minimum must be at most 20% of their median. The inferred cadence is the
 median rounded to whole seconds, within the existing cadence limits. This is
 integer arithmetic, including the average of the middle intervals for an even
-sample. Future receipts are excluded. A truncated sample is explicitly marked.
+sample. Future, archived and withdrawn (trashed) receipts are excluded. Restored
+or unarchived receipts count again. A truncated sample is explicitly marked.
 Cadence does not make old receipts fresh: after apply, overdue still uses the
 last receipt's original timestamp.
 

@@ -51,6 +51,24 @@ func TestOrientTextRendersSharedBriefFixture(t *testing.T) {
 	}
 }
 
+func TestOrientDailyDigestKeepsQuietCardsVisible(t *testing.T) {
+	brief := loadBriefFixture(t)
+	brief["initiatives"] = []any{}
+	got := renderOrientText(brief, "Reader")
+	for _, raw := range asSlice(brief["daily_digest"]) {
+		row := asMap(raw)
+		want := fmt.Sprintf("daily digest:  %s %q", anyString(row["ref"]), anyString(row["title"]))
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing digest card %q:\n%s", want, got)
+		}
+	}
+	for _, reason := range []string{"default promise elapsed", "awaiting owner"} {
+		if !strings.Contains(got, reason) {
+			t.Fatalf("missing digest reason %q:\n%s", reason, got)
+		}
+	}
+}
+
 func TestOrientAgentReaderScopesInitiativesAndWaitingOnHuman(t *testing.T) {
 	brief := map[string]any{
 		"schema": "brief.v1",

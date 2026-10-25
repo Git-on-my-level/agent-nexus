@@ -27,6 +27,7 @@
   import {
     attentionCount,
     collectionFromInitiatives,
+    collectionFromDailyDigest,
     collectionFromLoops,
   } from "$lib/collection.js";
   import { formatAgo } from "$lib/time/format.js";
@@ -134,6 +135,9 @@
       href: initiativeHref,
       decideHref,
     }),
+  );
+  let digestCollection = $derived(
+    collectionFromDailyDigest(brief?.dailyDigest, { href: initiativeHref }),
   );
   let loopCollection = $derived(
     collectionFromLoops(briefLoops(brief, initiatives), {
@@ -719,7 +723,7 @@
         actions={loopActions}
       />
     {/if}
-  {:else if !initiatives.length}
+  {:else if !initiatives.length && !digestCollection.counts.digest}
     <div
       class="rounded-md border border-dashed border-line px-4 py-8 text-center"
       data-watch-empty
@@ -733,17 +737,31 @@
         >
       </p>
     </div>
-  {:else if layout === "board"}
+  {:else if layout === "board" && initiatives.length}
     <div class="flex justify-end">{@render initiativeActions()}</div>
     <WatchBoard {initiatives} {now} {held} onMove={moveInitiative} />
   {:else}
-    <CollectionTable
-      collection={initiativeCollection}
-      folded={["done", "no_promise"]}
-      label="initiatives"
-      details={initiativeDetails}
-      actions={initiativeActions}
-    />
+    {#if initiatives.length}
+      <CollectionTable
+        collection={initiativeCollection}
+        folded={["done", "no_promise"]}
+        label="initiatives"
+        details={initiativeDetails}
+        actions={initiativeActions}
+      />
+    {/if}
+    {#if digestCollection.counts.digest}
+      <section data-source="computed:daily_digest" aria-label="Daily digest">
+        <h2 class="mb-2 text-meta font-semibold text-fg-muted">
+          Needs an owner's look ({digestCollection.counts.digest})
+        </h2>
+        <CollectionTable
+          collection={digestCollection}
+          filters={false}
+          label="daily digest"
+        />
+      </section>
+    {/if}
   {/if}
 </WorkspacePageShell>
 

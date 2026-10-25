@@ -2,6 +2,13 @@
 
 ## Default tracking and daily digest reads
 
+Lease acquisition/renewal preserves a reminded default's owner and next digest
+time with two scalar CASE expressions in the existing primary-key update. It
+adds no reads or round trips. Overview's digest ordering reuses admitted rows;
+CLI and Watch render the existing at-most-50-row digest preview in one pass,
+without another request. Receipt lifecycle filtering keeps the migration's
+existing 50-event sample bound and adds no request or database query.
+
 The brief contract reconciliation preserves fractional promise deadlines in
 materialization and wire serialization. It changes no SQL shape, index, batch
 size or admission bound. The cadence/digest scale gates and pinned preparation

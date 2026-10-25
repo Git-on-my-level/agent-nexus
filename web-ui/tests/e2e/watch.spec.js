@@ -42,6 +42,39 @@ async function setup(context, briefRoute) {
   );
 }
 
+test("digest-only work stays visible in the Initiatives list", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      initiatives: [],
+      loops: [],
+      generated_at: new Date().toISOString(),
+    }),
+  );
+  await page.goto(WATCH);
+  await expect(
+    page.getByRole("heading", {
+      name: `Needs an owner's look (${brief.daily_digest.length})`,
+    }),
+  ).toBeVisible();
+  for (const card of brief.daily_digest) {
+    const row = page.locator(`[data-collection-row="${card.ref}"]`);
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(card.title);
+    await expect(row.locator("a").first()).toHaveAttribute(
+      "href",
+      `${WATCH.replace("/watch", "")}/initiatives/${card.ref.slice(5)}`,
+    );
+    await expect(
+      row.locator('[data-source="computed:daily_digest.reason"]').last(),
+    ).toBeVisible();
+  }
+  await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
+});
+
 test("lists initiatives by computed state with sources tagged", async ({
   page,
   context,

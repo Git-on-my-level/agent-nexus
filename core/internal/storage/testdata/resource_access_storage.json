@@ -2311,7 +2311,7 @@
     "../primitives/card_leases.go:*Store:TakeUnownedCardLeases": "aa7c5c8935820b375ed4b9e97f1b079259b335397e70138c800ec19477b0b630",
     "../primitives/card_leases.go:*Store:UpsertCardLeaseWakeup": "77027e3a202d75ff02e98c8e6790f87f079733b126604bfb7762366449ab5bef",
     "../primitives/card_leases.go:*Store:expireCardLease": "baf6ed66350934f7716726aa90fca4ed126fbbcfa6393dfacfa0473919031e42",
-    "../primitives/card_leases.go:*Store:mutateCardLease": "e5fa9747b93448f46f7eca8586f1f6ddc16c6ea3d4c56bc1cd1791645aa6fa05",
+    "../primitives/card_leases.go:*Store:mutateCardLease": "32e0efa8718942d4a2d4170d04b0de3a73882bac95f1afe856689fc1a7f5a559",
     "../primitives/card_leases.go:*Store:takeUnownedCardLease": "77459bbf19cab9f1718999756566ef5d9e5abb81874e66b9a5518658f6592da8",
     "../primitives/card_leases.go:cardLeaseLiveWork": "b9e1fd5e5e65e8b7ae10fe85bef16df35cedfd2403b0d6c72c3bf2cf5ee6ffe2",
     "../primitives/card_leases.go:insertCardLeaseEvent": "8b08bcd3ef3c09ee001eb487c63db73605709d245804ffcac957ef2c9df71fe2",
