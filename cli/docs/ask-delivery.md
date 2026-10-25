@@ -29,38 +29,72 @@ recorded decision.
 
 ## Write for a busy boss
 
-Assume the reader has no context. In plain words, say what is happening
-(`situation`, one or two sentences), who or what is affected (`impact`: users,
-money, risk or time), and what you recommend (`recommendation: {action, why}`).
-Include the cost in `why`. Optional `alternatives: [{action, consequence}]`
-explain the tradeoff; `if_no_answer` states the default or what stays blocked,
-and by when. Set `by` separately for a machine-readable deadline.
+Write a short proposal to a busy boss with no context. Give enough explanation
+for the reader to understand the choice in under a minute; do not squeeze the
+proposal into a tight word quota. Use ordinary words and short sections:
 
-Keep the title a short question or decision, near 80 characters, and situation
-under about 60 words. Answer buttons must be plain sentences a non-engineer
-understands. Move identifiers, code, paths and history to `details` and labelled
-`evidence`; Decide collapses them. Older asks still render `body`.
+- **What's happening** (`situation`): explain the baseline, what changed and the
+  key numbers. Preserve uncertainty and distinguish observations from guesses.
+- **Why it matters** (`impact`): say who or what is affected, and explain why the
+  next move depends on those facts.
+- **What I recommend** (`recommendation: {action, why}`): recommend an action,
+  explain the reason and its tradeoff, and include known cost or effort.
+- **Alternatives** (`alternatives: [{action, consequence}]`): give the real
+  alternatives and what each would mean.
+- **If no answer** (`if_no_answer`): state the known default or what stays blocked.
+  Set `by` separately for a machine-readable deadline.
+
+Do not invent facts, urgency, costs, approvals or a default. Omit unused optional
+fields instead of padding them with “Not specified”. If an unknown affects the
+choice, explain that uncertainty in the relevant paragraph.
+
+Keep the title a short question or decision, near 80 characters. Answer buttons
+must be plain sentences a non-engineer understands. Move identifiers, code, paths
+and technical history to `details` and labelled `evidence`; Decide collapses them.
+Older asks still render `body`.
 
 Start with `anx ask --template decision > ask.md`, edit the YAML frontmatter,
-then run `anx ask --from-file ask.md --preview`. Preview shows Decide copy and
+then run `anx ask --from-file ask.md --preview`. The template contains the fictional
+proposal below. Preview shows the same headings and paragraphs as Decide, plus
 all lint results locally, without creating anything. Publish without `--preview`.
 Inline flags are `--situation`, `--impact`, `--recommend`, `--why`,
 `--alternative 'Action=consequence'`, `--if-no-answer` and `--details`.
 Missing situation, impact or recommendation (including why) is an error.
 `--force --reason 'explanation'` records a deliberate authoring exception.
-Jargon warnings quote the offending token and field; rewrite them before asking.
+Soft warnings flag situations above 250 words, situation and impact together
+below 40 words, and unexplained jargon. Add the baseline, what changed and why
+it matters when context is too thin; rewrite quoted jargon before asking.
 ANX stores authored text and runs no model to rewrite it. Forced partial
 recommendations are retained in `details` so their text is never discarded.
 Preview cannot be combined with delivery flags or `--dry-run`.
 
-Before: “Approve PR123 existing-fence reuse?” / “Recovered c10041; reuse
-external_write_fence for monthly_usage_totals.”
+The following example is fictional:
 
-After: “Approve the guard that keeps deleted users' data erased?” Background jobs
-can recreate erased usage totals, bringing back data we promised to delete
-(privacy risk). I recommend the existing user-deleted guard: about 3 extra reads
-per write. The alternative needs more retry logic and takes longer to build.
-Without an answer by Friday, the database cost change stays blocked.
+### Measure the report delay before buying more capacity?
+
+#### What's happening
+
+We send a daily sales report to 24 shops so managers can plan their morning orders. Reports normally arrive within 10 minutes of closing, and that was still true last week. Since Monday, the same reports have taken about 45 minutes. All 24 eventually arrived on each of the last three days, so we have evidence of delay, not missing sales data.
+
+The slowdown began when we moved report generation to a shared queue. We do not yet know whether reports are waiting behind other jobs or taking longer to calculate once they start. That distinction determines whether buying more capacity would help.
+
+#### Why it matters
+
+Managers now wait an extra 35 minutes before they can use the report. Two shops have told support that they placed orders without it. If the queue is the cause, changing when reports run could restore delivery without a recurring bill. If calculation itself is slower, moving the schedule would leave the underlying problem in place.
+
+#### What I recommend
+
+Measure one daily report run before buying more capacity.
+
+Record the waiting time and calculation time separately tomorrow. This should tell us which change addresses the delay, using the timing tools we already have. The tradeoff is one more morning of slow reports while we gather evidence; we cannot promise recovery tomorrow.
+
+#### Alternatives
+
+Add capacity now for an estimated $300 a month. It may reduce the delay immediately, but could leave us paying more while reports still wait behind other work.
+
+#### If no answer
+
+We will keep the current queue and capacity, and continue checking that every report arrives. The delay remains unresolved. Please choose before tomorrow’s run if you want the measurement step included; no purchase will happen without approval.
 
 Use `evidence: [{label: Change, url: https://example.org/repository/pull/123}]`
 for external links; use typed document/card/topic refs in `refs`. The equivalent

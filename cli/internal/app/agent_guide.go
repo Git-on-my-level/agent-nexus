@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v32"
+const agentGuideSkillVersion = "anx.participant.v34"
 
 type guideSection struct {
 	Title string
@@ -53,7 +53,7 @@ func agentGuideSections() []guideSection {
 		}},
 		{Title: "Asking for decisions", Lines: []string{
 			"- Every ask, review and escalation belongs to an initiative card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.",
-			"- Write for a busy boss with no context. Use situation (one or two plain sentences), impact (users, money, risk or time), recommendation {action, why} including cost, alternatives [{action, consequence}], and if_no_answer (default or blocked work and by when). Title: a question or decision near 80 characters; situation: about 60 words. Use plain sentences for answer buttons.",
+			"- Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.",
 			"- Start with anx ask --template decision > ask.md, edit YAML frontmatter and run anx ask --from-file ask.md --preview. Missing situation, impact or recommendation with why fails CLI lint; --force --reason records an exception. Warnings quote jargon to rewrite. Technical details and labelled evidence {label,url} are collapsed. Native evidence stays in related_refs; older asks render body. ANX runs no rewriting model.",
 			"- Answers atomically record a decision on the card and route next action to its owner/requester/board role. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.",
 			"- Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.",
@@ -73,7 +73,7 @@ func agentGuideSections() []guideSection {
 		}},
 		{Title: "Runs and output", Lines: []string{
 			"- Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.",
-			"- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.",
+			"- Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.",
 			"- Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.",
 			"- Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).",
 			"- If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.",

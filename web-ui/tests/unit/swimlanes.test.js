@@ -109,6 +109,10 @@ describe("brief normalization for the board", () => {
       state: "blocked",
       pastPromise: false,
       needsViewer: true,
+      owner: null,
+      doneAt: null,
+      shortCode: "",
+      rollup: null,
     });
     expect(lane.rollup.workstreams.map((row) => row.ref)).toEqual([
       "card:custody",
@@ -131,6 +135,7 @@ describe("brief normalization for the board", () => {
       byState: {},
       pastPromise: 0,
       needingViewer: 0,
+      earliestPromiseAt: null,
       children: [],
       workstreams: [],
       hasMore: false,

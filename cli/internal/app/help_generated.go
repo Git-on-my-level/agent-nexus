@@ -508,6 +508,9 @@ var localHelperTopics = []localHelperTopic{
 			"cat card-create.json | anx cards create",
 		},
 		Flags: []localHelperFlag{
+			{Name: "--under <card-ref>", Description: "Explicit parent; overrides the inherited anx.card.<initiative> run label."},
+			{Name: "--top-level", Description: "Ignore the inherited run-label parent default."},
+			{Name: "--after <step-id>", Description: "Preceding parent plan step id."},
 			{Name: "--handle <slug>", Description: "Client-chosen lowercase card slug (1-64 characters); conflicts fail without renaming."},
 			{Name: "--board <board-ref-or-handle>", Description: "Board typed ref or handle for the new work card."},
 			{Name: "--title <text>", Description: "Card title."},

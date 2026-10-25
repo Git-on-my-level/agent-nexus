@@ -26,9 +26,9 @@ const (
 
 // workCreateWarnings reads one page of at most 200 open initiatives and warns
 // when the new title nearly duplicates one, or when more than the target
-// number are already open. It never fails the write: a read error yields no
+// number are open after creation. It never fails the write: a read error yields no
 // warnings.
-func (a *App) workCreateWarnings(ctx context.Context, cfg config.Resolved, title string) []output.Warning {
+func (a *App) workCreateWarnings(ctx context.Context, cfg config.Resolved, title string, exclude ...string) []output.Warning {
 	result, err := a.invokeRawJSON(ctx, cfg, "work list", "GET", fmt.Sprintf("/work?limit=%d", initiativeScanLimit), nil)
 	if err != nil {
 		return nil
@@ -40,7 +40,20 @@ func (a *App) workCreateWarnings(ctx context.Context, cfg config.Resolved, title
 			open = append(open, row)
 		}
 	}
-	return workCreateWarningsFor(title, open)
+
+	warnings := workCreateWarningsFor("", open)
+	others := open[:0]
+	for _, row := range open {
+		if len(exclude) == 0 || anyString(row["ref"]) != exclude[0] {
+			others = append(others, row)
+		}
+	}
+	for _, warning := range workCreateWarningsFor(title, others) {
+		if warning.Code == workNearDuplicateWarning {
+			warnings = append(warnings, warning)
+		}
+	}
+	return warnings
 }
 
 // suggestOpenInitiativeCards reads newest-first work pages and returns up to
@@ -145,7 +158,7 @@ func workCreateWarningsFor(title string, open []map[string]any) []output.Warning
 	if len(open) > openInitiativeTarget {
 		warnings = append(warnings, output.Warning{
 			Code:    workOverTargetWarning,
-			Message: fmt.Sprintf("%d open initiatives (target 15); prefer a plan step on an existing initiative", len(open)),
+			Message: fmt.Sprintf("%d open initiatives (target 15); workspace initiative budget exceeded; prefer a plan step on an existing initiative", len(open)),
 			Details: map[string]any{"open": len(open), "target": openInitiativeTarget},
 		})
 	}

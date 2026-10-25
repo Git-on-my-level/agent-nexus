@@ -106,8 +106,11 @@ func lintAskPresentation(title string, p askPresentation, options []any) (warnin
 	if !strings.HasSuffix(strings.TrimSpace(title), "?") && !askDecisionTitle.MatchString(title) && !askRiskTitle.MatchString(title) {
 		warnings = append(warnings, fmt.Sprintf("Title %q is not a question or decision; name what the reader should decide", title))
 	}
-	if len(strings.Fields(p.Situation)) > 60 {
-		warnings = append(warnings, fmt.Sprintf("Situation %q exceeds 60 words; keep one or two sentences", p.Situation))
+	if len(strings.Fields(p.Situation)) > 250 {
+		warnings = append(warnings, "Situation exceeds 250 words; focus on the baseline, what changed and the key numbers")
+	}
+	if len(strings.Fields(p.Situation))+len(strings.Fields(p.Impact)) < 40 {
+		warnings = append(warnings, "Situation and impact together are under 40 words; add the baseline, what changed and why it matters")
 	}
 	fields := []struct{ name, text string }{{"title", title}, {"situation", p.Situation}, {"impact", p.Impact}}
 	for i, v := range options {
@@ -139,39 +142,48 @@ func lintAskPresentation(title string, p askPresentation, options []any) (warnin
 func renderAskPreview(title, body string, p askPresentation, options []any, evidence []askEvidenceLink) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", title)
+	section := func(heading string, paragraphs ...string) {
+		fmt.Fprintf(&b, "%s\n\n%s\n\n", heading, strings.Join(paragraphs, "\n\n"))
+	}
+	hasProposalCopy := p.Situation != "" || p.Impact != "" || p.Recommendation != nil || len(p.Alternatives) > 0 || p.IfNoAnswer != "" || p.Details != ""
+	if !hasProposalCopy && body != "" {
+		fmt.Fprintf(&b, "%s\n\n", body)
+	}
 	if p.Situation != "" {
-		fmt.Fprintf(&b, "%s\n", p.Situation)
-	} else if body != "" {
-		fmt.Fprintf(&b, "%s\n", body)
+		section("What's happening", p.Situation)
 	}
 	if p.Impact != "" {
-		fmt.Fprintf(&b, "Impact: %s\n", p.Impact)
+		section("Why it matters", p.Impact)
 	}
 	if p.Recommendation != nil {
-		fmt.Fprintf(&b, "I recommend: %s\n%s\n", p.Recommendation.Action, p.Recommendation.Why)
+		section("What I recommend", p.Recommendation.Action, p.Recommendation.Why)
 	}
-	for _, alt := range p.Alternatives {
-		fmt.Fprintf(&b, "Alternative: %s %s\n", alt.Action, alt.Consequence)
+	if len(p.Alternatives) > 0 {
+		var paragraphs []string
+		for _, alt := range p.Alternatives {
+			paragraphs = append(paragraphs, alt.Action+" "+alt.Consequence)
+		}
+		section("Alternatives", paragraphs...)
 	}
 	if p.IfNoAnswer != "" {
-		fmt.Fprintf(&b, "If no answer: %s\n", p.IfNoAnswer)
+		section("If no answer", p.IfNoAnswer)
 	}
 	for _, option := range options {
 		fmt.Fprintf(&b, "Option: %s\n", anyString(option))
 	}
-	if p.Details != "" || len(evidence) > 0 || (p.Situation != "" && body != "") {
-		b.WriteString("\nDetails and evidence (collapsed in Decide)\n")
+	if p.Details != "" || len(evidence) > 0 || (hasProposalCopy && body != "") {
+		b.WriteString("Details and evidence (collapsed in Decide)\n\n")
 		if p.Details != "" {
 			b.WriteString(p.Details + "\n")
 		}
-		if p.Situation != "" && body != "" {
+		if hasProposalCopy && body != "" {
 			b.WriteString(body + "\n")
 		}
 		for _, e := range evidence {
 			fmt.Fprintf(&b, "%s: %s\n", e.Label, e.URL)
 		}
 	}
-	return b.String()
+	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 
 // Scan flags without mistaking a string flag value for --preview.

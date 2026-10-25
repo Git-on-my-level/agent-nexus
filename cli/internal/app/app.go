@@ -14,11 +14,13 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/runcontext"
 
 	"golang.org/x/term"
 )
 
 type App struct {
+	runParent                      *runcontext.Resolver
 	Stdin                          io.Reader
 	Stdout                         io.Writer
 	Stderr                         io.Writer

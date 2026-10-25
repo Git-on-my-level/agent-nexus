@@ -348,15 +348,37 @@ it("shows a plain proposal and keeps technical evidence collapsed", () => {
   ).not.toBeNull();
 });
 
-it("pins Decide paragraphs to the CLI preview fixture", () => {
+it("pins Decide headings and paragraphs to the CLI preview fixture", () => {
   const decision = normalizeBrief({
     decisions: [{ ref: "inbox:copy", ...askCopy }],
   }).decisions[0];
   const { container } = render(DecisionCard, { decision, now: NOW });
-  const paragraphs = [
-    ...container.querySelectorAll("[data-decision-presentation] > p"),
-  ].map((p) => p.textContent.trim().replace(/\s+/g, " "));
-  expect(paragraphs).toEqual(askCopy.paragraphs);
+  const blocks = [
+    ...container.querySelectorAll(
+      "[data-decision-presentation] > h4, [data-decision-presentation] > p",
+    ),
+  ].map((node) => ({
+    tag: node.tagName.toLowerCase(),
+    text: node.textContent.trim().replace(/\s+/g, " "),
+  }));
+  expect(blocks).toEqual(askCopy.blocks);
+});
+
+it("omits unused optional sections without filler", () => {
+  const decision = normalizeBrief({
+    decisions: [
+      { ref: "inbox:copy", ...askCopy, alternatives: [], if_no_answer: "" },
+    ],
+  }).decisions[0];
+  const { container } = render(DecisionCard, { decision, now: NOW });
+  const copy = container.querySelector("[data-decision-presentation]");
+  expect([...copy.querySelectorAll("h4")].map((h) => h.textContent)).toEqual([
+    "What's happening",
+    "Why it matters",
+    "What I recommend",
+  ]);
+  expect(copy.querySelector("details")).toBeNull();
+  expect(copy.textContent).not.toContain("Not specified");
 });
 
 it("keeps every batch member proposal collapsed and available without context", async () => {
@@ -400,7 +422,9 @@ it("keeps every batch member proposal collapsed and available without context", 
       members[index].recommendation.action,
       members[index].recommendation.why,
     ]) {
-      expect(section.textContent).toContain(copy);
+      for (const paragraph of copy.split(/\n\s*\n/)) {
+        expect(section.textContent).toContain(paragraph);
+      }
     }
   }
   expect(sections[0].querySelector("details").open).toBe(false);

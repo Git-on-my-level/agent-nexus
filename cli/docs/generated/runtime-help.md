@@ -344,13 +344,16 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 Request a decision with a short title and Markdown body; print a decision template offline.
 
 ```text
-Write for a busy boss with no context: what is happening, who is affected, what you recommend and why, alternatives and what happens without an answer.
-anx ask "Approve the deletion guard?" --situation "Deleted users' data can reappear." --impact "This breaks our deletion promise." --recommend "Check whether the user was deleted before writing." --why "Reuse the existing guard; about 3 extra reads per write." --if-no-answer "The cost change stays blocked until Friday."
+Write a short proposal to a busy boss with no context, using ordinary words and short sections:
+What's happening (--situation): explain the baseline, what changed and the key numbers.
+Why it matters (--impact): say who is affected and why the next move depends on those facts.
+What I recommend (--recommend and --why): give the action, reason and tradeoff, including known cost or effort.
+Alternatives (--alternative): give real choices and their consequences.
+If no answer (--if-no-answer): say what happens or stays blocked, when known.
+Use enough context to explain the choice in under a minute; do not compress it into a tight word quota. Preserve uncertainty, conditions and numbers. Never invent facts, urgency, costs, approvals or a default. Omit unused optional fields instead of padding them with "Not specified".
 Required by CLI lint: --situation, --impact, --recommend and --why. Optional: --alternative "Plain action=consequence" (repeatable), --if-no-answer, --details. Use plain sentences for --recommend and --alt answer buttons. Technical identifiers, code and internal history belong in collapsed --details and --evidence Label=URL.
-Use a one-line question or decision near 80 characters (hard maximum 160); keep situation to one or two sentences, about 60 words.
-anx ask --template decision > ask.md prints a filled neutral before/after example with YAML frontmatter; edit it, then use --from-file ask.md.
-Before: "Approve PR123 existing-fence reuse?" / "Recovered c10041; reuse external_write_fence for monthly_usage_totals."
-After: "Deleted users' usage data can reappear." Explain that background jobs recreate erased totals (privacy risk), recommend the existing user-deleted guard (about 3 extra reads per write), describe the slower alternative and say the cost change stays blocked until Friday without an answer.
+Use a one-line question or decision near 80 characters (hard maximum 160). Soft lint warns above 250 situation words or below 40 words for situation plus impact: add the baseline, what changed and why it matters.
+anx ask --template decision > ask.md prints a fictional narrative proposal of about 300 words with YAML frontmatter; edit it, then use --from-file ask.md. The example explains why reports that used to arrive in 10 minutes now take 45, and recommends measuring queue wait before buying capacity. See cli/docs/ask-delivery.md for the same example as friendly sections.
 ask|review|escalate share these flags. --preview prints Decide copy plus all lint results, completely locally and without creating anything (JSON includes preview, rendered and lint). --dry-run validates and prints the API request without sending it. --force --reason <explanation> records an authoring override; it cannot bypass hard limits.
 Attach to --subject-ref card:<slug>, or the current card; otherwise create a ready card on the default board. --from-file reads YAML frontmatter: situation, impact, recommendation: {action, why}, alternatives: [{action, consequence}], if_no_answer, details, subject_ref and evidence. Body Markdown remains supported for historical asks.
 Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. --supersedes event:<old-ask> replaces an old request.
@@ -506,7 +509,7 @@ Executive workspace
 Asking for decisions
 
 - Every ask, review and escalation belongs to an initiative card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
-- Write for a busy boss with no context. Use situation (one or two plain sentences), impact (users, money, risk or time), recommendation {action, why} including cost, alternatives [{action, consequence}], and if_no_answer (default or blocked work and by when). Title: a question or decision near 80 characters; situation: about 60 words. Use plain sentences for answer buttons.
+- Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.
 - Start with anx ask --template decision > ask.md, edit YAML frontmatter and run anx ask --from-file ask.md --preview. Missing situation, impact or recommendation with why fails CLI lint; --force --reason records an exception. Warnings quote jargon to rewrite. Technical details and labelled evidence {label,url} are collapsed. Native evidence stays in related_refs; older asks render body. ANX runs no rewriting model.
 - Answers atomically record a decision on the card and route next action to its owner/requester/board role. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
 - Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.
@@ -532,7 +535,7 @@ Daily loop
 Runs and output
 
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
-- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
+- Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
 - If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.
@@ -5455,6 +5458,7 @@ Inputs:
   - body `source_refs` (list<any>)
   - body `start_at` (string)
   - body `summary` (string)
+  - body `top_level` (boolean)
   - body `topic_ref` (string)
   - body `under` (string)
   - body `wake_condition` (string)
@@ -5465,7 +5469,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
 Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
-Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--request-key <key>] --from-file <path|->
+Usage: anx work create [--handle <slug>] [--under <card> [--after <step-id>]] [--top-level] [--request-key <key>] --from-file <path|->
 
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
@@ -5673,6 +5677,7 @@ Inputs:
   - body `patch.roles` (list<string>)
   - body `patch.source_refs` (list<any>)
   - body `patch.start_at` (string)
+  - body `patch.top_level` (boolean)
   - body `patch.wake_condition` (string)
   - body `patch.workspace_move` (object)
 
@@ -8398,6 +8403,9 @@ Local Help: cards create
   - `cat card-create.json | anx cards create`
 
 Flags:
+  --under <card-ref>           Explicit parent; overrides the inherited anx.card.<initiative> run label.
+  --top-level                  Ignore the inherited run-label parent default.
+  --after <step-id>            Preceding parent plan step id.
   --handle <slug>              Client-chosen lowercase card slug (1-64 characters); conflicts fail without renaming.
   --board <board-ref-or-handle> Board typed ref or handle for the new work card.
   --title <text>               Card title.
@@ -11168,7 +11176,7 @@ Pass at least one field; an empty --after clears dependencies. Source state take
 Edit a linked initiative step with a card concurrency token.
 
 ```text
-anx plan step rm <card> <step-id>
+anx plan step rm <card> (<step-id> | --ref <card-ref>)
 Card accepts a card: ref, handle or id (or --card-id). Text is compact; --verbose shows every field; --json keeps the complete envelope.
 Writes read the latest plan and use its concurrency token. Conflicts require reading anx plan show <card> and reconciling before retry.
 Removing a depended-on step is rejected; update dependencies first.

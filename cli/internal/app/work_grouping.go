@@ -32,6 +32,9 @@ func withoutGroupingFlags(args []string) []string {
 	out := []string{}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+		if arg == "--top-level" || strings.HasPrefix(arg, "--top-level=") {
+			continue
+		}
 		if arg == "--under" || arg == "--after" {
 			i++
 			continue

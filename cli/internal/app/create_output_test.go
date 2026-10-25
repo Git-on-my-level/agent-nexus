@@ -25,7 +25,7 @@ func TestAskAutoCreatedCardSuggestsInitiatives(t *testing.T) {
 			fmt.Fprint(w, `{"work":{"ref":"card:new-subject","board_ref":"board:tasks","title":"Ship it?"}}`)
 		case r.URL.Path == "/work" && r.Method == http.MethodGet:
 			workGets++
-			if r.URL.Query().Get("limit") != "50" {
+			if r.URL.Query().Get("limit") != "50" && r.URL.Query().Get("limit") != "200" {
 				t.Errorf("suggestion page limit=%q", r.URL.RawQuery)
 			}
 			if r.URL.Query().Get("phase") != "" {
@@ -80,7 +80,7 @@ func TestAskAutoCreatedCardSuggestsInitiatives(t *testing.T) {
 	if !strings.Contains(stderr, "warning: "+msg) {
 		t.Fatalf("stderr=%q", stderr)
 	}
-	if workGets != 1 {
+	if workGets != 2 {
 		t.Fatalf("suggestion reads=%d", workGets)
 	}
 	result := asMap(doc["result"])
@@ -363,7 +363,7 @@ func TestAskSuggestionsPagePastClosedWork(t *testing.T) {
 	if strings.Index(msg, "card:newest") > strings.Index(msg, "card:second") {
 		t.Fatalf("server order lost: %q", msg)
 	}
-	if len(paths) != 2 || !strings.Contains(paths[1], "cursor=page-2") {
+	if len(paths) != 3 || !strings.Contains(paths[2], "cursor=page-2") {
 		t.Fatalf("queries=%v", paths)
 	}
 }

@@ -15132,6 +15132,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "top_level",
+                    "type": "boolean"
+                },
+                {
                     "name": "topic_ref",
                     "type": "string"
                 },
@@ -15845,6 +15849,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.start_at",
                     "type": "string"
+                },
+                {
+                    "name": "patch.top_level",
+                    "type": "boolean"
                 },
                 {
                     "name": "patch.wake_condition",

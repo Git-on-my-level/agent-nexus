@@ -13,8 +13,8 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
-	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/internal/registry"
+	"agent-nexus-cli/runcontext"
 )
 
 // The central API owns work, ordering, authorization and evidence. This table only
@@ -87,6 +87,7 @@ type parsedWorkCommand struct {
 	name, id, fromFile             string
 	under, into, after, requestKey string
 	handle                         string
+	topLevel                       bool
 	leaseToken                     string
 	runnerID                       string
 	query                          url.Values
@@ -130,6 +131,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	fs := newSilentFlagSet(out.name)
 	var id, fromFile, leaseToken, runnerID, handle, under, into, after, requestKey trackedString
 	var limit trackedInt
+	var topLevel trackedBool
 
 	values := map[string]*trackedString{}
 	if spec.idFlag != "" {
@@ -150,6 +152,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		fs.Var(&requestKey, "request-key", "Retain the original key and body until confirmed")
 	}
 	if out.name == "work create" {
+		fs.Var(&topLevel, "top-level", "Ignore the run-label parent default")
 		fs.Var(&handle, "handle", "Client-chosen lowercase card slug (1-64 characters)")
 	}
 	if workCommandUsesLeaseToken(out.name) {
@@ -231,6 +234,10 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 			return out, err
 		}
 		out.handle = handle.value
+	}
+	out.topLevel = topLevel.value
+	if topLevel.value && under.set {
+		return out, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
 	}
 	out.under, out.into, out.after, out.requestKey = strings.TrimSpace(under.value), strings.TrimSpace(into.value), strings.TrimSpace(after.value), strings.TrimSpace(requestKey.value)
 	if out.name == "work group" && out.under == "" && fromFile.value == "" {
@@ -368,20 +375,13 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if parsed.name == "pm decisions dispatch" {
 		started = time.Now().UTC()
 	}
-	var createWarnings []output.Warning
-	if parsed.name == "work create" {
-		// Warnings only: one bounded read before the write, never a rejection.
-		createWarnings = a.workCreateWarnings(ctx, cfg, anyString(asMap(body)["title"]))
-	}
+	ctx = runcontext.WithTopLevel(ctx, parsed.topLevel)
 	if object, ok := body.(map[string]any); ok && (parsed.name == "work create" || parsed.name == "work group" || parsed.name == "work fold" || parsed.name == "work unfold") {
 		if err := ensureGroupingRequestKey(object); err != nil {
 			return nil, parsed.name, err
 		}
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
-	if err == nil && result != nil && len(createWarnings) > 0 {
-		result.Warnings = append(result.Warnings, createWarnings...)
-	}
 	if parsed.name == "pm turns claim" {
 		if cap, ok := parsePMClaimCapacity(result, err); ok {
 			return applyPMClaimCapacityResult(result, cap), parsed.name, nil
@@ -488,7 +488,7 @@ func workHelpText(topic string) (string, bool) {
 	if exact {
 		fmt.Fprintf(&b, "%s\n\nUsage: anx %s", spec.summary, topic)
 		if topic == "work create" {
-			b.WriteString(" [--handle <slug>] [--under <card> [--after <step-id>]] [--request-key <key>]")
+			b.WriteString(" [--handle <slug>] [--under <card> [--after <step-id>]] [--top-level] [--request-key <key>]")
 		}
 		if spec.idFlag != "" {
 			fmt.Fprintf(&b, " <ref> (or --%s <ref>)", spec.idFlag)

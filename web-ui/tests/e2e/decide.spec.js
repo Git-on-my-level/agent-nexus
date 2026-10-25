@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+import askCopy from "../../../cli/internal/app/testdata/ask-decide-presentation.json" with { type: "json" };
 
 /**
  * Decide renders `brief.v1`. S9: one tap answers from a cold open on a phone.
@@ -9,6 +10,53 @@ import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type:
 const ACTOR = "actor-decide-e2e";
 const LIST = "/o/local/w/local/decide";
 const MERGE = brief.decisions.find((d) => d.inbox_item_id === "ask-91");
+
+for (const width of [390, 1280]) {
+  test(`narrative ask sections and collapsed details at ${width}px`, async ({
+    page,
+    context,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 844 });
+    await setup(context, {
+      briefRoute: (route) =>
+        json(route, {
+          ...brief,
+          generated_at: new Date().toISOString(),
+          decisions: [
+            {
+              ...MERGE,
+              ...askCopy,
+              details: "Report timing implementation notes.",
+            },
+          ],
+        }),
+    });
+    await page.goto(`${LIST}?item=ask-91`);
+    const copy = page.locator("[data-decision-presentation]:visible");
+    await expect(copy).toBeVisible();
+    const blocks = await copy
+      .locator(":scope > h4, :scope > p")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          tag: node.tagName.toLowerCase(),
+          text: node.textContent.trim().replace(/\s+/g, " "),
+        })),
+      );
+    expect(blocks).toEqual(askCopy.blocks);
+    await expect(copy.locator("details")).not.toHaveAttribute("open", "");
+    await expect(
+      copy.getByText("Report timing implementation notes."),
+    ).toBeHidden();
+    await testInfo.attach(`narrative-ask-${width}`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
+    await copy.locator("summary").click();
+    await expect(
+      copy.getByText("Report timing implementation notes."),
+    ).toBeVisible();
+  });
+}
 
 const json = (route, body, status = 200) =>
   route.fulfill({

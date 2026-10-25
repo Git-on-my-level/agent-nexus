@@ -285,6 +285,10 @@ func TestIntegrationsHostAuthAndUnknownOutcomeReplay(t *testing.T) {
 				fmt.Fprint(w, `{"card":{"ref":"card:follow-up"},"board":{"ref":"board:tasks"}}`)
 			}
 		default:
+			if r.Method == "GET" && r.URL.Path == "/work" {
+				fmt.Fprint(w, `{"work":[]}`)
+				return
+			}
 			t.Errorf("unexpected HTTP read %s", r.URL.Path)
 			http.NotFound(w, r)
 		}

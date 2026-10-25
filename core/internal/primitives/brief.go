@@ -830,6 +830,7 @@ func (b *briefBuild) answered() ([]map[string]any, bool, error) {
 type briefCardRow struct {
 	briefInitiativeRow
 	handle, title, phase, thread, owner, plan, assignee string
+	outcome                                             string
 	progressDone, progressTotal                         int
 	loopAnnotated                                       int
 	loopLastRunAt                                       string
@@ -882,8 +883,8 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 		loopColumns = "0,''"
 	}
 	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
-	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),` + loopColumns + `
-	FROM ` + source + ` CROSS JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id
+	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),` + loopColumns + `,substr(COALESCE(NULLIF(trim(json_extract(m.metadata_json,'$.goal.label')),''),NULLIF(trim(json_extract(m.metadata_json,'$.goal.metric')),''),c.summary,''),1,281)
+ FROM ` + source + ` CROSS JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id
 	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND ` + boardFilter + ` AND ` + groupFilter + ` AND `
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
 	queryArgs := append(prefixArgs, predArgs...)
@@ -896,7 +897,7 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 	out := []briefCardRow{}
 	for rows.Next() {
 		var r briefCardRow
-		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan, &r.progressDone, &r.progressTotal, &r.assignee, &r.loopAnnotated, &r.loopLastRunAt); err != nil {
+		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan, &r.progressDone, &r.progressTotal, &r.assignee, &r.loopAnnotated, &r.loopLastRunAt, &r.outcome); err != nil {
 			return nil, err
 		}
 		if b.reader.Visible != nil && !b.reader.Visible(r.thread, r.owner) {
@@ -982,6 +983,7 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 			"id": r.cardID, "ref": ref, "title": r.title, "owner": nil, "state": state.State, "placement": briefPlacement(r.phase),
 			"promise": nil, "past_promise_for_seconds": nil, "promise_moves": state.Moves, "last_evidence_at": nil,
 			"progress": briefProgress(r.progressDone, r.progressTotal), "blocked_count": counts[r.cardID].blocked, "waiting_on_you_count": counts[r.cardID].waiting,
+			"outcome": briefOutcome(r.outcome), "proposed": briefPlacement(r.phase) == "backlog",
 			"note": nil, "possibly_moot": possiblyMootJSON(moot[r.cardID]),
 		}
 		if refs := boardCardAssigneeRefs(r.assignee); len(refs) > 0 {
@@ -1398,4 +1400,14 @@ func (b *briefBuild) possiblyMoot(rows []briefCardRow, noteText map[string]strin
 		}
 	}
 	return out, nil
+}
+
+// Brief outcomes are a bounded single line of canonical authored text.
+func briefOutcome(text string) string {
+	text = strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
+	runes := []rune(text)
+	if len(runes) > 280 {
+		text = string(runes[:280])
+	}
+	return text
 }

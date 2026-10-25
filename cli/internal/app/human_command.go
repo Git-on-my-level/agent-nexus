@@ -14,18 +14,22 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/runcontext"
 )
 
 const humanAttentionRequestedEventType = "human_attention_requested"
 
 func humanUsageText() string {
-	return strings.TrimSpace(`Write for a busy boss with no context: what is happening, who is affected, what you recommend and why, alternatives and what happens without an answer.
-anx ask "Approve the deletion guard?" --situation "Deleted users' data can reappear." --impact "This breaks our deletion promise." --recommend "Check whether the user was deleted before writing." --why "Reuse the existing guard; about 3 extra reads per write." --if-no-answer "The cost change stays blocked until Friday."
+	return strings.TrimSpace(`Write a short proposal to a busy boss with no context, using ordinary words and short sections:
+What's happening (--situation): explain the baseline, what changed and the key numbers.
+Why it matters (--impact): say who is affected and why the next move depends on those facts.
+What I recommend (--recommend and --why): give the action, reason and tradeoff, including known cost or effort.
+Alternatives (--alternative): give real choices and their consequences.
+If no answer (--if-no-answer): say what happens or stays blocked, when known.
+Use enough context to explain the choice in under a minute; do not compress it into a tight word quota. Preserve uncertainty, conditions and numbers. Never invent facts, urgency, costs, approvals or a default. Omit unused optional fields instead of padding them with "Not specified".
 Required by CLI lint: --situation, --impact, --recommend and --why. Optional: --alternative "Plain action=consequence" (repeatable), --if-no-answer, --details. Use plain sentences for --recommend and --alt answer buttons. Technical identifiers, code and internal history belong in collapsed --details and --evidence Label=URL.
-Use a one-line question or decision near 80 characters (hard maximum 160); keep situation to one or two sentences, about 60 words.
-anx ask --template decision > ask.md prints a filled neutral before/after example with YAML frontmatter; edit it, then use --from-file ask.md.
-Before: "Approve PR123 existing-fence reuse?" / "Recovered c10041; reuse external_write_fence for monthly_usage_totals."
-After: "Deleted users' usage data can reappear." Explain that background jobs recreate erased totals (privacy risk), recommend the existing user-deleted guard (about 3 extra reads per write), describe the slower alternative and say the cost change stays blocked until Friday without an answer.
+Use a one-line question or decision near 80 characters (hard maximum 160). Soft lint warns above 250 situation words or below 40 words for situation plus impact: add the baseline, what changed and why it matters.
+anx ask --template decision > ask.md prints a fictional narrative proposal of about 300 words with YAML frontmatter; edit it, then use --from-file ask.md. The example explains why reports that used to arrive in 10 minutes now take 45, and recommends measuring queue wait before buying capacity. See cli/docs/ask-delivery.md for the same example as friendly sections.
 ask|review|escalate share these flags. --preview prints Decide copy plus all lint results, completely locally and without creating anything (JSON includes preview, rendered and lint). --dry-run validates and prints the API request without sending it. --force --reason <explanation> records an authoring override; it cannot bypass hard limits.
 Attach to --subject-ref card:<slug>, or the current card; otherwise create a ready card on the default board. --from-file reads YAML frontmatter: situation, impact, recommendation: {action, why}, alternatives: [{action, consequence}], if_no_answer, details, subject_ref and evidence. Body Markdown remains supported for historical asks.
 Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. --supersedes event:<old-ask> replaces an old request.
@@ -90,6 +94,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 
 	fs := newSilentFlagSet(kind)
 	var (
+		topLevelFlag                                                    trackedBool
+		underFlag                                                       trackedString
 		threadIDFlag                                                    trackedString
 		subjectRefFlag                                                  trackedString
 		bodyFlag                                                        trackedString
@@ -124,6 +130,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&ifNoAnswerFlag, "if-no-answer", "Default or blocked work and by when")
 	fs.Var(&detailsFlag, "details", "Technical Markdown, collapsed with evidence")
 	fs.Var(&alternativeFlags, "alternative", "Action=consequence in plain words (repeatable)")
+	fs.Var(&topLevelFlag, "top-level", "Ignore the run-label parent default for an auto-created subject")
+	fs.Var(&underFlag, "under", "Parent for an auto-created subject card")
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
 	fs.Var(&byFlag, "by", "When the human should decide: YYYY-MM-DD, RFC3339, or a duration like 2d")
 	fs.Var(&blocksFlags, "blocks", "Typed ref this decision blocks (repeatable, at most 20)")
@@ -163,6 +171,10 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if previewFlag.value && (dryRunFlag.set || deliveryFlag.set || onAnswerFlag.set || webhookFlag.set) {
 		return nil, errnorm.Usage("invalid_flags", "--preview cannot be combined with --dry-run, --delivery, --on-answer or --webhook; preview performs no delivery")
 	}
+	if topLevelFlag.value && underFlag.set {
+		return nil, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
+	}
+	ctx = runcontext.WithTopLevel(ctx, topLevelFlag.value)
 	trailingPositionals := fs.Args()
 	if err := rejectHumanFromFileFlagConflicts(
 		fromFileFlag,
@@ -344,6 +356,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 	autoSubject := false
 	var autoHomes any
+	var autoDefault any
 	var autoGroupingActions []output.NextAction
 	if subjectRef == "" {
 		var err error
@@ -353,12 +366,23 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			if !errors.As(err, &typed) || typed.Code != "no_current_task" {
 				return nil, err
 			}
-			if dryRunFlag.value {
-				return &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body}, Warnings: askAuthoringWarnings(warnings)}, nil
-			}
 			input := map[string]any{"create_surface": "ask.auto_create", "title": title, "summary": body, "phase": "ready", "owner": requesterActorID}
 			if board := strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")); board != "" {
 				input["board_ref"] = board
+			}
+			if underFlag.set {
+				input["under"] = underFlag.value
+			}
+			if dryRunFlag.value {
+				hint := a.prepareRunParent(ctx, cfg, input, false)
+				result := &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body, "under": input["under"]}, Warnings: askAuthoringWarnings(warnings)}
+				for _, warning := range hint.Warnings {
+					result.Warnings = append(result.Warnings, output.Warning{Code: warning.Code, Message: warning.Message})
+				}
+				return result, nil
+			}
+			if e := ensureGroupingRequestKey(input); e != nil {
+				return nil, e
 			}
 			created, e := a.invokeRawJSON(ctx, cfg, "ask subject", "POST", "/work", input)
 			if e != nil {
@@ -366,6 +390,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			}
 			autoBody := commandResultBody(created)
 			autoHomes = autoBody["likely_home"]
+			autoDefault = autoBody["run_parent_default"]
+			loopWarnings = append(loopWarnings, created.Warnings...)
+			autoGroupingActions = append(autoGroupingActions, created.NextActions...)
 			for _, raw := range asSlice(autoBody["next_actions"]) {
 				if argv := stringList(asMap(raw)["argv"]); len(argv) > 0 {
 					autoGroupingActions = append(autoGroupingActions, action("Group the new subject", argv...))
@@ -602,6 +629,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if autoSubject {
 		if body := commandResultBody(result); body != nil {
 			body["likely_home"] = autoHomes
+			if autoDefault != nil {
+				body["run_parent_default"] = autoDefault
+			}
 		}
 		result.NextActions = append(result.NextActions, autoGroupingActions...)
 	}
