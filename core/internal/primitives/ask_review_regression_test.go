@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -201,5 +202,14 @@ func TestAskRevisionTrueOriginalSequences(t *testing.T) {
 				t.Fatal(states)
 			}
 		})
+	}
+}
+
+func TestUnrevisedAskPresentationPreservesPayload(t *testing.T) {
+	payload := map[string]any{"title": "Grant access?", "body": "Original explanation", "access_request_id": "request", "requested_grant": "auth-admin"}
+	before := cloneMap(payload)
+	ApplyAskPresentationState(payload, map[string]any{"presentation_revision": 0, "presentation": map[string]any{"title": "Grant access?"}})
+	if !reflect.DeepEqual(payload, before) {
+		t.Fatalf("unrevised payload changed: %#v", payload)
 	}
 }

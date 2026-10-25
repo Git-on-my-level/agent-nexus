@@ -323,6 +323,12 @@ func (s *Store) reviseAskPresentationTx(ctx context.Context, tx *accessTx, princ
 
 // ApplyAskPresentationState changes copy only, never answer or routing fields.
 func ApplyAskPresentationState(dst, state map[string]any) {
+	// Unrevised asks (including access-request asks with their own lifecycle)
+	// keep their existing wire shape. The dedicated presentation endpoint still
+	// returns revision zero for optimistic concurrency.
+	if state["presentation_rewrite"] == nil {
+		return
+	}
 	applyAskPresentation(dst, asMapValue(state["presentation"]))
 	dst["presentation_revision"] = state["presentation_revision"]
 	delete(dst, "presentation_rewrite")
