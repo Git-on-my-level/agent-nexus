@@ -55,12 +55,20 @@ sends no notification.
 Ownership is checked again in the enqueue transaction; reassignment, a new
 explicit promise, completion or lost visibility can cancel a stale snapshot.
 A filtered snapshot anchors its note and wake to the first surviving readable
-card's thread; no survivors means no notification. Queued human digests store
-card identities only. Claim and delivery-list reads resolve current titles and
-reasons under the recipient's access, remove denied contributors and hide empty
-digests, including snapshots queued before this change. Aggregate source events
-and historical adapter error text are not exposed by these filtered reads.
-Receipt acknowledgements return queue state without replaying digest content.
+card's thread; no survivors means no notification. Queued human reminders and digests store
+card identities only. Overdue-ask pushes and ask digests also omit cached titles.
+Claim and delivery-list reads resolve current titles and reasons under the
+recipient's access, remove denied contributors and hide empty aggregates,
+including snapshots queued before this change. Every delivery kind then checks
+its source and complete serialized payload with the shared resource policy;
+this includes nested, prose and non-card references in legacy or future formats.
+Revoked subjects are omitted from pending, claimed, delivered, failed and canceled
+history alike. Wake and webhook mirrors use this same history guard, while their
+canonical notification paths retain their scoped wakeup/event reads.
+Aggregate source events and historical adapter error text are not exposed by
+these filtered reads. Receipt acknowledgements, including idempotent retries,
+return queue state with an empty payload and no source or provider error. They
+never replay historical content, even if access changed after the claim.
 Step/source evidence cancels the default routes when the canonical brief fold
 records it; explicit note promises/evidence cancel them in the write transaction.
 Notification delivery itself uses the existing durable delivery/retry queue.

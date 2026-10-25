@@ -15962,6 +15962,7 @@ components:
           items: {type: string, enum: [push, digest]}
         label: {type: string, maxLength: 80, description: Short channel name shown to people in notification settings.}
     Delivery:
+      description: Claims and history revalidate all subject references under the recipient's current access, regardless of kind. Inaccessible rows are omitted. Receipt acknowledgements return queue state with an empty payload and omit source_ref and last_error. Opaque provider errors are not replayed.
       type: object
       additionalProperties: false
       required: [delivery_id, principal_id, channel, kind, status, payload, attempt, max_attempts, next_attempt_at, created_at, updated_at]
@@ -16000,7 +16001,7 @@ components:
         delivery_id: {type: string}
         outcome: {type: string}
         attempt: {type: integer}
-        error: {type: string}
+        error: {type: string, description: Omitted from history to avoid replaying opaque provider content.}
         created_at: {type: string, format: date-time}
     NotificationChannelAddressing:
       type: string

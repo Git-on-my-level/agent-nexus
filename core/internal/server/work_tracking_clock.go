@@ -199,9 +199,6 @@ func (c *WorkTrackingClock) queueAgent(ctx context.Context, n primitives.Trackin
 // Digest queues keep canonical identities only. Titles, reasons and text are
 // rebuilt under the recipient's current access at claim/list serialization.
 func trackingDeliveryPayload(n primitives.TrackingNotice, title, text, workspace string) map[string]any {
-	if n.Kind != "work_tracking_digest" {
-		return map[string]any{"type": n.Kind, "title": title, "text": text, "cards": n.Cards, "has_more": true, "workspace": workspace}
-	}
 	refs := make([]string, 0, len(n.Cards))
 	for _, card := range n.Cards {
 		refs = append(refs, "card:"+card.ID)

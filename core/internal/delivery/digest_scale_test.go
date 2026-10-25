@@ -68,29 +68,44 @@ func TestPerformanceDigestSerializationBudget(t *testing.T) {
 	queue := delivery.Store{DB: db, Now: e.store.Now, AccessContext: func(c context.Context, p string) context.Context {
 		return primitives.WithRequestAccessScope(c, primitives.AccessScope{ActorID: p})
 	}}
-	e.setChannel(t, "reader", "email", "reader@example.test", false, true)
+	e.setChannel(t, "reader", "email", "reader@example.test", true, true)
 	if _, _, err = queue.Enqueue(ctx, delivery.Request{IdempotencyKey: "bounded", PrincipalID: "reader", Channel: "email", Kind: delivery.KindDigest, Payload: map[string]any{"type": "work_tracking_digest", "card_refs": refs}}); err != nil {
 		t.Fatal(err)
 	}
-	for _, claim := range []bool{false, true} {
-		capture.Start()
-		var got []delivery.Delivery
-		if claim {
-			got, err = queue.Claim(ctx, "email", "adapter", 1, time.Minute)
-		} else {
-			got, _, err = queue.ListForPrincipal(ctx, "reader", 1)
+	for _, format := range []string{"digest", "generic"} {
+		if format == "generic" {
+			e.advance(time.Second)
+			if _, _, err = queue.Enqueue(ctx, delivery.Request{IdempotencyKey: "bounded-generic", PrincipalID: "reader", Channel: "email", Kind: delivery.KindPush, Payload: map[string]any{"type": "future_notification", "card_refs": refs}}); err != nil {
+				t.Fatal(err)
+			}
 		}
-		_, queries, rows := capture.Stop()
-		work := capture.Work()
-		if err != nil || capture.WorkError() != nil {
-			t.Fatal(err, capture.WorkError())
-		}
-		if len(got) != 1 || len(got[0].Payload["cards"].([]any)) != budget.Cards {
-			t.Fatal("missing visible digest", got)
-		}
-		t.Logf("claim=%v queries=%d rows=%d work=%+v", claim, queries, rows, work)
-		if queries > budget.Queries || rows > budget.Rows || work.VMSteps > budget.VM || work.FullScanSteps != 0 {
-			t.Fatalf("serialization exceeded budget: queries=%d rows=%d work=%+v", queries, rows, work)
+		for _, claim := range []bool{false, true} {
+			capture.Start()
+			var got []delivery.Delivery
+			if claim {
+				got, err = queue.Claim(ctx, "email", "adapter", 1, time.Minute)
+			} else {
+				got, _, err = queue.ListForPrincipal(ctx, "reader", 1)
+			}
+			_, queries, rows := capture.Stop()
+			work := capture.Work()
+			if err != nil || capture.WorkError() != nil {
+				t.Fatal(err, capture.WorkError())
+			}
+			if len(got) != 1 {
+				t.Fatal("missing visible delivery", got)
+			}
+			key := "cards"
+			if format == "generic" {
+				key = "card_refs"
+			}
+			if len(got[0].Payload[key].([]any)) != budget.Cards {
+				t.Fatal("missing visible contributors", got)
+			}
+			t.Logf("format=%s claim=%v queries=%d rows=%d work=%+v", format, claim, queries, rows, work)
+			if queries > budget.Queries || rows > budget.Rows || work.VMSteps > budget.VM || work.FullScanSteps != 0 {
+				t.Fatalf("serialization exceeded budget: queries=%d rows=%d work=%+v", queries, rows, work)
+			}
 		}
 	}
 }

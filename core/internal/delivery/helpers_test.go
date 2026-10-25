@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/delivery"
+	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/storage"
 )
 
@@ -28,7 +29,9 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(func() { _ = ws.Close() })
 	now := baseNow
 	e := &env{db: ws.DB(), now: &now}
-	e.store = delivery.Store{DB: e.db, Now: func() time.Time { return *e.now }}
+	e.store = delivery.Store{DB: e.db, Now: func() time.Time { return *e.now }, AccessContext: func(c context.Context, p string) context.Context {
+		return primitives.WithRequestAccessScope(c, primitives.AccessScope{ActorID: p})
+	}}
 	return e
 }
 

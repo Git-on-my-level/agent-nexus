@@ -10,28 +10,44 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 )
 
-type digestQueryer interface {
+type payloadReader interface {
+	ReadableValues(context.Context, any) (bool, error)
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-// resolveDigest runs after bounded queue admission, in the claim transaction
-// or after closing the list cursor. Never serialize the persisted aggregate:
-// even its source event can inherit a contributor that is now denied.
-func (s Store) resolveDigest(ctx context.Context, q digestQueryer, d *Delivery) (bool, error) {
-	if len(d.Payload) == 0 {
-		return false, nil
-	}
-	if s.AccessContext == nil || strings.TrimSpace(d.PrincipalID) == "" {
+// resolvePayload is the serialization boundary for every queue kind, including
+// legacy pushes, wake/webhook mirrors and future notification formats. Kind
+// selects transport only; provenance always uses the recipient's current policy.
+func (s Store) resolvePayload(ctx context.Context, q payloadReader, d *Delivery) (bool, error) {
+	if len(d.Payload) == 0 || s.AccessContext == nil || strings.TrimSpace(d.PrincipalID) == "" {
 		return false, nil
 	}
 	ctx = s.AccessContext(ctx, d.PrincipalID)
-	// Use the same recipient-bound, statement-validated policy inside a claim
-	// transaction. Falling back to Policy.Read would rebuild workspace ownership
-	// instead of authorizing only these admitted identities.
 	if policy, ok := resourceaccess.PolicyFrom(ctx); ok && policy.TransactionRead == nil && policy.ReadOnDB != nil {
 		policy.TransactionRead = policy.ReadOnDB
 		ctx = resourceaccess.WithPolicy(ctx, policy)
 	}
+	typ, _ := d.Payload["type"].(string)
+	switch typ {
+	case "work_tracking_digest", "default_promise_lapsed", "digest", "ask_overdue":
+		visible, err := s.hydratePayload(ctx, q, d)
+		if err != nil || !visible {
+			return visible, err
+		}
+	}
+	if s.CanRead != nil && strings.HasPrefix(d.SourceRef, "event:") && !s.CanRead(ctx, d.PrincipalID, strings.TrimPrefix(d.SourceRef, "event:")) {
+		return false, nil
+	}
+	// Adapter errors are opaque text and can echo content absent from provenance.
+	// Never replay them into history or a later claim.
+	d.LastError = ""
+	return q.ReadableValues(ctx, []any{d.SourceRef, d.Payload})
+}
+
+// hydratePayload runs after bounded queue admission, in the claim transaction
+// or after closing the list cursor. Never serialize the persisted aggregate:
+// even its source event can inherit a contributor that is now denied.
+func (s Store) hydratePayload(ctx context.Context, q payloadReader, d *Delivery) (bool, error) {
 	raw, _ := json.Marshal(d.Payload)
 	var payload struct {
 		Type      string   `json:"type"`
@@ -50,7 +66,7 @@ func (s Store) resolveDigest(ctx context.Context, q digestQueryer, d *Delivery) 
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return false, nil
 	}
-	tracking := payload.Type == "work_tracking_digest"
+	tracking := payload.Type == "work_tracking_digest" || payload.Type == "default_promise_lapsed"
 	refs := []string{}
 	if tracking {
 		refs = payload.CardRefs
@@ -59,6 +75,8 @@ func (s Store) resolveDigest(ctx context.Context, q digestQueryer, d *Delivery) 
 				refs = append(refs, card.Ref)
 			}
 		}
+	} else if payload.Type == "ask_overdue" {
+		refs = []string{fmt.Sprint(d.Payload["ref"])}
 	} else if payload.Type == "digest" {
 		for _, item := range payload.Items {
 			refs = append(refs, item.Ref)
@@ -122,6 +140,8 @@ func (s Store) resolveDigest(ctx context.Context, q digestQueryer, d *Delivery) 
 			ref := "card:" + f.ref
 			items = append(items, map[string]any{"ref": ref, "title": f.title, "reason": f.reason})
 			text += "\n" + ref + ": " + f.title + " (" + f.reason + ")"
+		} else if payload.Type == "ask_overdue" {
+			items = append(items, map[string]any{"ref": "event:" + f.id, "title": f.title})
 		} else {
 			items = append(items, map[string]any{"ref": "event:" + f.id, "title": f.title, "link": payload.Items[i].Link, "decide_by": payload.Items[i].DecideBy})
 		}
@@ -129,14 +149,32 @@ func (s Store) resolveDigest(ctx context.Context, q digestQueryer, d *Delivery) 
 	if len(items) == 0 {
 		return false, nil
 	}
+	oldPayload := d.Payload
 	d.SourceRef = ""
 	d.LastError = ""
 	d.Payload = map[string]any{"type": payload.Type, "workspace": payload.Workspace}
 	if tracking {
-		d.Payload["title"] = "Daily work tracking digest"
-		d.Payload["text"] = fmt.Sprintf("Daily work tracking digest: %d card(s) need ownership or an explicit promise. This is a bounded preview; use anx work list for the full inventory.", len(items)) + text
+		title := "Daily work tracking digest"
+		lead := fmt.Sprintf("Daily work tracking digest: %d card(s) need ownership or an explicit promise. This is a bounded preview; use anx work list for the full inventory.", len(items))
+		if payload.Type == "default_promise_lapsed" {
+			title = "Default promise elapsed"
+			lead = "Default 12-hour promise elapsed. Record progress or hand off. Further reminders are included in the daily digest."
+		}
+		d.Payload["title"] = title
+		d.Payload["text"] = lead + text
 		d.Payload["cards"] = items
 		d.Payload["has_more"] = true
+	} else if payload.Type == "ask_overdue" {
+		item := items[0].(map[string]any)
+		d.SourceRef = item["ref"].(string)
+		for _, key := range []string{"ref", "title"} {
+			d.Payload[key] = item[key]
+		}
+		for _, key := range []string{"link", "decide_by", "blocks_count"} {
+			if value, ok := oldPayload[key]; ok {
+				d.Payload[key] = value
+			}
+		}
 	} else {
 		d.Payload["day"] = payload.Day
 		d.Payload["items"] = items

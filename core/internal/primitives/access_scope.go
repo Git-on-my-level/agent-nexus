@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -26,6 +27,13 @@ func WithAccessScope(ctx context.Context, scope AccessScope) context.Context {
 	ctx = context.WithValue(ctx, publicRefCacheKey{}, struct{}{})
 	return resourceaccess.WithPolicy(ctx, resourceaccess.Policy{
 		Read: func(q string) string { return scopeRead(ctx, q) },
+		ReadableValues: func(c context.Context, q resourceaccess.QueryRower, v any) (bool, error) {
+			err := requireAccessibleValues(c, q, v)
+			if errors.Is(err, ErrNotFound) {
+				return false, nil
+			}
+			return err == nil, err
+		},
 		Check: func(c context.Context, q resourceaccess.QueryRower, v any) error {
 			return requireAccessibleValues(c, q, v)
 		},

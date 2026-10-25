@@ -125,8 +125,8 @@ type ChannelSetting struct {
 }
 
 type Store struct {
-	// AccessContext binds digest hydration to the recipient, never the adapter.
-	// A missing binding fails closed for contributor-bearing digests.
+	// AccessContext binds every payload read to the recipient, never the adapter.
+	// A missing binding fails closed.
 	AccessContext func(context.Context, string) context.Context
 	DB            *sql.DB
 	Now           func() time.Time
@@ -242,8 +242,8 @@ func (s Store) ChannelsForAgent(ctx context.Context, agentID string) ([]string, 
 // set is one seek on idx_deliveries_claim. The address comes from the
 // recipient's channel setting (primary-key lookup); rows whose recipient has
 // since removed the channel, or whose kind the channel no longer accepts, are
-// canceled instead of handed out. A push whose recipient can no longer read
-// its ask (Store.CanRead, checked live per claimed row) is canceled too, and
+// canceled instead of handed out. Every payload and source reference is checked
+// under the recipient's current resource policy before serialization, and
 // a canceled row's payload is cleared. On a principal-addressed channel there is
 // no address: the recipient must still be an active human, and a human signed
 // in through an external identity grant is identified by that grant.
@@ -336,18 +336,13 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 		case !saved || strings.TrimSpace(address) == "" || !toggled:
 			cancel = "channel disabled by recipient"
 		}
-		if cancel == "" && s.CanRead != nil && d.Kind == KindPush && strings.HasPrefix(d.SourceRef, "event:") &&
-			!s.CanRead(ctx, d.PrincipalID, strings.TrimPrefix(d.SourceRef, "event:")) {
-			// Access changed since the push was queued: hand out nothing.
-			cancel = "recipient can no longer read the ask"
-		}
-		if cancel == "" && d.Kind == KindDigest {
-			visible, err := s.resolveDigest(ctx, tx, &d)
+		if cancel == "" {
+			visible, err := s.resolvePayload(ctx, tx, &d)
 			if err != nil {
 				return nil, err
 			}
 			if !visible {
-				cancel = "no readable digest contributors"
+				cancel = "no readable delivery subjects"
 			}
 		}
 		if cancel != "" {
@@ -410,9 +405,9 @@ func Backoff(attempts int) time.Duration {
 // stays on the row so that retry can be recognized; callers do not receive it.
 func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel, outcomeName string, errText string, retryable bool, recordedBy string) (result Delivery, resultErr error) {
 	// Receipts acknowledge queue state; they must never replay a historical
-	// digest payload (or adapter error containing a formerly readable title).
+	// payload, source, or adapter error containing formerly readable content.
 	defer func() {
-		if result.Kind == KindDigest {
+		if resultErr == nil {
 			result.Payload = map[string]any{}
 			result.SourceRef = ""
 			result.LastError = ""
@@ -528,24 +523,16 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 	rows.Close()
 	filtered := make([]Delivery, 0, len(out))
 	for _, d := range out {
-		if d.Kind == KindDigest {
-			visible, err := s.resolveDigest(ctx, resourceaccess.NewDB(s.DB), &d)
-			if err != nil {
-				return nil, nil, err
-			}
-			if !visible {
-				continue
-			}
+		visible, err := s.resolvePayload(ctx, resourceaccess.NewDB(s.DB), &d)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !visible {
+			continue
 		}
 		filtered = append(filtered, d)
 	}
 	out = filtered
-	digestIDs := map[string]bool{}
-	for _, d := range out {
-		if d.Kind == KindDigest {
-			digestIDs[d.DeliveryID] = true
-		}
-	}
 	receipts := map[string][]Receipt{}
 	if len(out) == 0 {
 		return out, receipts, nil
@@ -570,9 +557,7 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 		if err := rrows.Scan(&r.DeliveryID, &r.Outcome, &r.Attempt, &r.Error, &r.CreatedAt); err != nil {
 			return nil, nil, err
 		}
-		if digestIDs[r.DeliveryID] {
-			r.Error = ""
-		}
+		r.Error = ""
 		receipts[r.DeliveryID] = append(receipts[r.DeliveryID], r)
 	}
 	if err := rrows.Err(); err != nil {

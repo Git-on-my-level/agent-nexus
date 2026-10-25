@@ -2,8 +2,8 @@
 
 ## Default tracking and daily digest reads
 
-Digest claim/list serialization admits at most 50 deliveries and at most 50
-contributors per digest. Each admitted digest adds one recipient-scoped batch
+Delivery claim/list serialization admits at most 50 deliveries and at most 50
+contributors per supported aggregate. Each admitted digest adds one recipient-scoped batch
 lookup, with primary-key card/tracking seeks and the partial unique handle index
 for older queued snapshots. The handle predicate includes the index's exact
 nonempty condition. Claim hydration uses the same statement-validated recipient
@@ -11,13 +11,20 @@ policy within the claim transaction; it does not rebuild workspace ownership.
 The credential-only active-human routing check retains its existing service
 boundary, independently of private business profile metadata. List cursors close
 before hydration; denied contributors never trigger a refill.
-New tracking queues retain canonical refs only; serialization resolves fresh
-titles. Receipt acknowledgements strip content without another query.
+Tracking reminder/digest queues retain canonical refs only, and ask pushes/digests
+omit titles; serialization resolves fresh titles. All delivery kinds then pass
+source and serialized payload through the same recipient-bound value admission.
+That additional check uses the existing exact/prose admission spelling indexes
+and statement-local ancestor probes, on the claim transaction's connection or
+the list read handle. Work grows with admitted payload atoms and their canonical
+ancestry, rather than unrelated workspace rows. No denied-row refill occurs.
+Opaque provider errors are suppressed for every kind. Receipt acknowledgements
+strip all business content without an authorization read or another query.
 `TestPerformanceDigestSerializationBudget` enforces the new checked-in
 `delivery/testdata/digest_read_budget.json` (10 queries, 60 returned rows,
 50,000 VM steps, zero full scans) with 50 contributors and 4,096 unrelated
-private cards. List uses 4 queries / 52 rows / 10,317 VM steps; claim uses
-7 queries / 54 rows / 10,417 VM steps. No existing budget is widened.
+private cards. List uses 5 queries / 53 rows / 34,027 VM steps; claim uses
+8 queries / 55 rows / 34,127 VM steps. No existing budget is widened.
 
 Lease acquisition/renewal preserves a reminded default's owner and next digest
 time with two scalar CASE expressions in the existing primary-key update. It

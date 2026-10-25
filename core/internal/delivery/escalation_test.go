@@ -84,8 +84,12 @@ func TestEscalatorPushOnce(t *testing.T) {
 	}
 	var p map[string]any
 	_ = json.Unmarshal([]byte(payloadJSON), &p)
-	if principal != "alice" || src != "event:ask-1" || p["title"] != "Merge?" || p["ref"] != "event:ask-1" || p["type"] != "ask_overdue" {
+	if principal != "alice" || src != "event:ask-1" || p["title"] != nil || p["ref"] != "event:ask-1" || p["type"] != "ask_overdue" {
 		t.Fatalf("push %s %s %v", principal, src, p)
+	}
+	visible, _, err := e.store.ListForPrincipal(ctx, "alice", 1)
+	if err != nil || len(visible) != 1 || visible[0].Payload["title"] != "Merge?" {
+		t.Fatalf("push title was not resolved live: %+v %v", visible, err)
 	}
 	var escalatedAt, mode string
 	if err := e.db.QueryRow(`SELECT escalated_at, escalation FROM ask_deadlines WHERE request_event_id='ask-1'`).Scan(&escalatedAt, &mode); err != nil || escalatedAt == "" || mode != "push" {
@@ -202,7 +206,7 @@ func TestEscalatorLongWindowGoesToDigest(t *testing.T) {
 		Items   []map[string]any `json:"items"`
 	}
 	_ = json.Unmarshal([]byte(payloadJSON), &p)
-	if p.Day != "2026-01-10" || p.Open != 2 || p.Overdue != 1 || len(p.Items) != 1 || p.Items[0]["title"] != "Roadmap?" || p.Items[0]["ref"] != "event:slow" {
+	if p.Day != "2026-01-10" || p.Open != 2 || p.Overdue != 1 || len(p.Items) != 1 || p.Items[0]["title"] != nil || p.Items[0]["ref"] != "event:slow" {
 		t.Fatalf("digest payload %s", payloadJSON)
 	}
 
@@ -337,7 +341,7 @@ func TestDigestReadsPastUnreadablePrefix(t *testing.T) {
 	if err := json.Unmarshal([]byte(payloadJSON), &p); err != nil {
 		t.Fatal(err)
 	}
-	if p.Overdue != 1 || len(p.Items) != 1 || p.Items[0]["ref"] != "event:readable" || p.Items[0]["title"] != "Visible ask" {
+	if p.Overdue != 1 || len(p.Items) != 1 || p.Items[0]["ref"] != "event:readable" || p.Items[0]["title"] != nil {
 		t.Fatalf("digest missed the readable ask: overdue=%d items=%v", p.Overdue, p.Items)
 	}
 }
