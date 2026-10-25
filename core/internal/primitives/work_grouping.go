@@ -174,7 +174,7 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	// Unary + suppresses the outer TEXT affinity so SQLite seeks the JSON
 	// expression index instead of scanning every completion for every child.
 	doneAt := `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events e
- WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY position.ts DESC,position.id DESC LIMIT 1)) END`
+ WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY anx_timestamp_key(position.ts) DESC,position.id DESC LIMIT 1)) END`
 	rows, err = q.QueryContext(ctx, `SELECT requested.value,COALESCE(NULLIF(c.handle,''),c.id),c.title,json_extract(step.value,'$.id'),c.column_key,
 	 `+needs+`,`+streams+`,c.id,c.assignee,
  bi.promise_at,bi.open,`+doneAt+`

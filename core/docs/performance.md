@@ -2050,10 +2050,11 @@ plans and referenced child cards. The existing primary-key/handle seeks,
 `idx_brief_plan_refs_target`, and subject-ask indexes remain authoritative.
 Visibility filters precede aggregation; no hidden contributor affects a count.
 
-Migration 121 adds `idx_events_card_done`, a partial lifecycle index over
-`(payload.card_id, ts DESC, id DESC)` restricted to untrashed `card_moved` events entering
+Migration 122 adds `idx_events_card_done`, a partial lifecycle index over
+`(payload.card_id, anx_timestamp_key(ts) DESC, id DESC)` restricted to untrashed `card_moved` events entering
 Done from a different column. The internal `work_done_event_positions` view
-selects one latest candidate by this index; its ID never leaves SQL. Canonical
+selects one latest candidate by this index using the shared nanosecond-precision
+UTC key (mixed RFC3339 fractional precision and offsets sort chronologically); its ID never leaves SQL. Canonical
 scoped event hydration then seeks that one ID, returning null if unreadable.
 The comparison suppresses the outer card column's TEXT affinity with unary `+`
 so SQLite can seek the JSON expression index rather than scanning its entries. `done_at` uses one indexed scalar seek per admitted
@@ -2089,12 +2090,17 @@ VM steps / zero full scans. The existing
 47,178. The complete ungrouped HTTP gate also passes (partial-reader samples
 49,730 VM steps). No ceiling or query-plan allowance is increased.
 
-The full startup scale gate remains blocked before migration 121: its fixed
+The full startup scale gate remains blocked before migration 122: its fixed
 90-second upgrade deadline expires in existing migration 116. A second run
 with `migrations.go` overlaid verbatim from branch baseline `746e093c` reproduces
 the same failure before the new index/view exists. This is a baseline gate
 failure, not a passing startup certification. The focused released-120 upgrade
-and reopen regression verifies migration 121 over existing lifecycle events.
+and reopen regression verifies migration 122 over existing lifecycle events.
+`TestWatchRollupMigrationGap` verifies that both the legacy and fenced runners
+record 122 without 121, then apply a subsequently introduced 121 on reopen,
+without rerunning 122. Both runners test membership in their applied-version
+ledger rather than a maximum version. The independent Watch index/view does
+not depend on the work-tracking schema planned for 121.
 
 The broader work-summary gate also reproduces against the same baseline source
 (read implementations and migrations overlaid verbatim). Its authorized

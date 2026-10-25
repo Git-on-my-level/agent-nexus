@@ -326,3 +326,77 @@ func TestWatchOldestVisibleParent(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchCompletionChronologicalOrdering(t *testing.T) {
+	for _, stamps := range []struct{ name, older, newer string }{
+		{"fraction", "2026-10-24T12:00:00.1Z", "2026-10-24T12:00:00.11Z"},
+		{"whole-second", "2026-10-24T12:00:00Z", "2026-10-24T12:00:00.1Z"},
+		{"nanosecond", "2026-10-24T12:00:00.1Z", "2026-10-24T12:00:00.100000001Z"},
+		{"offset", "2026-10-24T13:00:00.1+01:00", "2026-10-24T12:00:00.11Z"},
+	} {
+		for _, hidden := range []bool{false, true} {
+			name := stamps.name + "/readable"
+			if hidden {
+				name = stamps.name + "/unreadable-newer"
+			}
+			t.Run(name, func(t *testing.T) {
+				ctx := context.Background()
+				ws, err := initializeTestWorkspace(ctx, t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer ws.Close()
+				s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+				root, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "Initiative"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				child, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "Shipped", "under": root["ref"]})
+				if err != nil {
+					t.Fatal(err)
+				}
+				private, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Private"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = s.PatchThread(ctx, "owner", workString(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = ws.DB().Exec(`UPDATE cards SET column_key='done' WHERE id=?`, child["id"]); err != nil {
+					t.Fatal(err)
+				}
+				for i, stamp := range []string{stamps.older, stamps.newer} {
+					refs := []string{workString(child["ref"])}
+					if i == 1 && hidden {
+						refs = append(refs, "board:"+workString(private["id"]))
+					}
+					event, err := s.AppendEvent(ctx, "owner", map[string]any{"type": "card_moved", "thread_id": child["thread_id"], "refs": refs, "payload": map[string]any{"card_id": child["id"], "column_key": "done", "from_column_key": "ready"}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					// AppendEvent owns the clock. Seed historical mixed-precision
+					// timestamps after canonical event/authorization creation.
+					if _, err = ws.DB().Exec(`UPDATE events SET ts=?,payload_json=json_set(payload_json,'$.ts',?) WHERE id=?`, stamp, stamp, event["id"]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				reader := WithRequestAccessScope(ctx, AccessScope{ActorID: "viewer"})
+				if err = s.EnrichWorkHierarchy(reader, []map[string]any{root}, "viewer", true, time.Now()); err != nil {
+					t.Fatal(err)
+				}
+				children := root["rollup"].(*WorkRollup).Children
+				if len(children) != 1 {
+					t.Fatalf("children=%+v", children)
+				}
+				at := children[0].DoneAt
+				if hidden {
+					if at != nil {
+						t.Fatalf("unreadable newer event fell back to %q", *at)
+					}
+				} else if at == nil || *at != stamps.newer {
+					t.Fatalf("completion=%+v, want %s", children[0], stamps.newer)
+				}
+			})
+		}
+	}
+}

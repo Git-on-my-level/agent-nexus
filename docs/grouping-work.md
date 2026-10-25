@@ -229,7 +229,8 @@ render them directly, without fetching each initiative:
   canonical assignee ref, matching work ownership.
 - `rollup.children[].done_at`: nullable timestamp of the latest untrashed
   `card_moved` event entering `done` from another column, only while the card
-  is currently done. A reorder within Done does not reset it. Imported cards
+  is currently done. Latest uses chronological nanosecond precision, including
+  mixed RFC3339 precision and UTC offsets. A reorder within Done does not reset it. Imported cards
   without this event, or whose latest terminal event is unreadable, return null. Comments and title edits cannot date completion.
 - `rollup.children[].short_code`: optional recognized handle/title family
   (lowercase, e.g. `p76`, `fs-p3`, `cost`), using the existing `TitleFamily`
