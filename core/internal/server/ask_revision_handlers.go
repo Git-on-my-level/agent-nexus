@@ -91,7 +91,7 @@ func askRevisionError(w http.ResponseWriter, r *http.Request, err error) {
 
 // Apply only to admitted inbox rows, in one bounded batch. The immutable source
 // event, option set and routing metadata remain untouched.
-func enrichAskPresentations(r *http.Request, opts handlerOptions, items []map[string]any) error {
+func enrichAskPresentations(r *http.Request, opts handlerOptions, items []map[string]any, requests ...map[string]map[string]any) error {
 	store, ok := opts.primitiveStore.(*primitives.Store)
 	if !ok {
 		return nil
@@ -100,9 +100,18 @@ func enrichAskPresentations(r *http.Request, opts handlerOptions, items []map[st
 	targets := map[string][]map[string]any{}
 	var add func(map[string]any)
 	add = func(item map[string]any) {
-		if ref := strings.TrimPrefix(anyString(item["request_event_ref"]), "event:"); ref != "" {
-			asks = append(asks, map[string]any{"id": ref, "payload": item})
-			targets[ref] = append(targets[ref], item)
+		ref := anyString(item["request_event_ref"])
+		id := strings.TrimPrefix(ref, "event:")
+		// Completed responses carry public handles. Reuse their already-loaded
+		// canonical requests instead of performing per-row alias lookups.
+		if len(requests) > 0 {
+			if request := requests[0][ref]; request != nil {
+				id = anyString(request["id"])
+			}
+		}
+		if id != "" {
+			asks = append(asks, map[string]any{"id": id, "payload": item})
+			targets[id] = append(targets[id], item)
 		}
 		if batch, ok := item["batch"].(map[string]any); ok {
 			switch members := batch["asks"].(type) {

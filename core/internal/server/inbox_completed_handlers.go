@@ -60,7 +60,16 @@ func resolveHumanAttentionRequestEvent(ctx context.Context, store PrimitiveStore
 	if err != nil || prefix != "event" || strings.TrimSpace(id) == "" {
 		return nil
 	}
-	ev, err := store.GetEvent(ctx, id)
+	var ev map[string]any
+	if batch, ok := store.(interface {
+		GetEventsByRefs(context.Context, []string) (map[string]map[string]any, error)
+	}); ok {
+		var requests map[string]map[string]any
+		requests, err = batch.GetEventsByRefs(ctx, []string{"event:" + id})
+		ev = requests["event:"+id]
+	} else {
+		ev, err = store.GetEvent(ctx, id)
+	}
 	if err != nil || ev == nil {
 		return nil
 	}
@@ -314,7 +323,7 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		payloadItems = append(payloadItems, completedInboxItemPayload(r.Context(), opts.primitiveStore, evt, reqEvt))
 	}
 
-	if err := enrichAskPresentations(r, opts, payloadItems); err != nil {
+	if err := enrichAskPresentations(r, opts, payloadItems, requests); err != nil {
 		writeReadInternalError(w, r, err, "cannot read completed ask presentations")
 		return
 	}
@@ -371,7 +380,7 @@ func handleGetCompletedInboxItem(w http.ResponseWriter, r *http.Request, opts ha
 	payload, _ := ev["payload"].(map[string]any)
 	reqEvt := resolveHumanAttentionRequestEvent(r.Context(), opts.primitiveStore, payload)
 	item := completedInboxItemPayload(r.Context(), opts.primitiveStore, ev, reqEvt)
-	if err := enrichAskPresentations(r, opts, []map[string]any{item}); err != nil {
+	if err := enrichAskPresentations(r, opts, []map[string]any{item}, map[string]map[string]any{anyString(item["request_event_ref"]): reqEvt}); err != nil {
 		writeReadInternalError(w, r, err, "cannot read completed ask presentation")
 		return
 	}

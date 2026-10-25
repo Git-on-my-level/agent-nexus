@@ -172,6 +172,25 @@ func TestAskRevisionAuthorizationAndIntegrity(t *testing.T) {
 	if notify["target_actor_id"] != requester.ActorID {
 		t.Fatalf("answer rerouted: %#v", answer)
 	}
+	responseEvent := answer["event"].(map[string]any)
+	status, completed := hostHTTP(t, "GET", env.server.URL+"/inbox/"+url.PathEscape("completed:"+anyString(responseEvent["id"])), human.AccessToken, nil)
+	hostStatus(t, status, 200, completed)
+	completedItem := completed["item"].(map[string]any)
+	if completedItem["title"] != "Plain question?" || completedItem["presentation_rewrite"] == nil {
+		t.Fatalf("completed history lost rewrite: %#v", completedItem)
+	}
+	status, completedPage := hostHTTP(t, "GET", env.server.URL+"/inbox?status=completed", human.AccessToken, nil)
+	hostStatus(t, status, 200, completedPage)
+	foundHistory := false
+	for _, raw := range completedPage["items"].([]any) {
+		item := raw.(map[string]any)
+		if item["title"] == "Plain question?" && item["presentation_rewrite"] != nil {
+			foundHistory = true
+		}
+	}
+	if !foundHistory {
+		t.Fatalf("completed page lost rewrite: %#v", completedPage)
+	}
 	status, p = revise(ask, human.AccessToken, req(3, "closed"))
 	hostStatus(t, status, 409, p)
 	// Audit events cannot be forged through the ordinary event writer.
