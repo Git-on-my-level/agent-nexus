@@ -2161,7 +2161,8 @@ A head the reader cannot see contributes no copy. Writes serialize one ask,
 append one audit event and update one pointer plus one actor/key replay receipt;
 current permission, open-state, subject visibility and the presentation token
 are checked in that transaction. Migration 123 creates only an empty pointer
-relation, with no historical rewrite or backfill. New route and point-read
+relation, with no historical rewrite or backfill. It follows Watch migration 122;
+121 remains reserved for the separate open-PR lane. New route and point-read
 budgets are checked in; no existing budget or plan allowance is widened.
 
 ```sh

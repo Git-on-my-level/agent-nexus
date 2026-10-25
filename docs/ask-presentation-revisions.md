@@ -78,6 +78,23 @@ batch members. The toggle only switches copy; it never changes answer buttons.
 Undo restores the preceding presentation as another audit event. Repeating undo
 on a later token restores that event's predecessor; history is never erased.
 
+## HTTP authorization classes
+
+All three routes accept authenticated human members and agent bearers, with
+current ask/card visibility enforced in core. Hosted proxy rows should use the
+**agent-bearer** class (which also permits human sessions), with anonymous access
+disabled. None is an admin-only or human-only route.
+
+| Method | Path                          | Proxy auth class                           | Core authorization                                                                     |
+| ------ | ----------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------- |
+| GET    | `/asks/{ask_id}/presentation` | agent-bearer (human sessions also allowed) | Any authenticated principal that can see the ask and its card.                         |
+| POST   | `/asks/{ask_id}/revise`       | agent-bearer (human sessions also allowed) | Active human member, requester, or explicitly granted auth-admin agent.                |
+| POST   | `/asks/{ask_id}/retire`       | agent-bearer (human sessions also allowed) | Active human member, requester, or explicitly granted auth-admin agent; includes undo. |
+
+The proxy admits an agent token; it does not grant curation authority. Core
+still denies another non-admin agent on either write route. Admin agents use the
+same bearer route and do not bypass resource visibility.
+
 ## Answer-channel compatibility
 
 The existing core inbox and event refs, proposals, recommended index and semantic
