@@ -28,8 +28,9 @@ anx lease show    card:ramp-batch
 
 Each card has at most one row in `card_leases`, holding:
 
-- `owner`: an opaque id, 1 to 128 characters of `[A-Za-z0-9._:@/+-]`. Use an
-  execution, session or lane id. It is not a principal.
+- `owner`: an opaque id, 1 to 128 characters of `[A-Za-z0-9._:@/+-]`, starting
+  with a letter or digit. Use an execution, session or lane id. It is not a
+  principal.
 - `epoch`
 - `holder_actor_id`: the authenticated principal that last acquired or renewed
   the lease.
@@ -142,7 +143,12 @@ mirrored into the `deliveries` queue on channel `bridge`. The wake packet
 carries `wake_reason: card_unowned` (or `lease_expired`), `subject_ref` (the
 card) and `trigger_event_id` (the release or expiry event), and its
 `trigger_text` starts with `card_unowned:`. It is sent at most once per epoch
-and only to a principal that can read the card.
+and only to a principal that can read the card. Immediately before sending,
+the clock re-reads the lease and drops the wake if a new tenure (a re-acquire
+or a hand-off) has started since, so an owner that took the card back does not
+leave the lead a stale wake. The re-check and the enqueue are separate
+statements, so a re-acquire landing in that sub-millisecond gap can still let
+one stale wake through; the lead's `anx lease show` then names the new owner.
 
 ### Concurrency
 

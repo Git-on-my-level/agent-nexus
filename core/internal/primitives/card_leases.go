@@ -774,6 +774,23 @@ func (s *Store) takeUnownedCardLease(ctx context.Context, cardID string) (Expire
 	}
 	return ExpiredCardLease{
 		CardID: card.CardID, CardRef: cardLeaseRef(card), ThreadID: card.ThreadID.String, Assignee: firstCardLeaseAssignee(card.Assignee.String),
-		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, Released: cur.releasedAt != "", LeadOnly: true,
+		// An expiry that deferred its decision left its own event id as the
+		// marker; a later release by the expired owner does not change the
+		// cause the wake reports.
+		Owner: cur.owner, Epoch: cur.epoch, Expires: cur.expiresAt, EventID: cur.unowned, Live: live, Released: cur.releasedAt != "" && cur.unowned != cur.expired, LeadOnly: true,
 	}, true, nil
+}
+
+// CardLeaseTenureEnded reports whether a card's lease is still the ended
+// tenure at epoch: released or expired, and not since re-acquired or handed
+// on. The lease clock checks it immediately before each wake, so a tenure
+// taken after the clock claimed the wake (and before it enqueued it) does not
+// leave the lead a stale card_unowned or lease_expired wake. The context must
+// carry no access scope (trusted internal operation).
+func (s *Store) CardLeaseTenureEnded(ctx context.Context, cardID string, epoch int64) (bool, error) {
+	cur, err := loadCardLeaseRow(ctx, s.db, cardID)
+	if err != nil || cur == nil || cur.epoch != epoch {
+		return false, err
+	}
+	return cur.releasedAt != "" || cur.expiresAt <= cardLeaseStamp(cardLeaseNow()), nil
 }

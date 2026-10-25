@@ -254,6 +254,14 @@ func (c *CardLeaseClock) Step(ctx context.Context) error {
 }
 
 func (c *CardLeaseClock) notify(ctx context.Context, e primitives.ExpiredCardLease) {
+	// A new tenure may have started after the store claimed this wake; its
+	// owner holds the card, so the wake would be stale. A failed check still
+	// wakes: a spurious wake costs a lookup, a lost one leaves work ownerless.
+	if ended, err := c.Store.CardLeaseTenureEnded(ctx, e.CardID, e.Epoch); err != nil {
+		c.logf("card lease clock: tenure check for %s epoch %d: %v", e.CardRef, e.Epoch, err)
+	} else if !ended {
+		return
+	}
 	assigneeID, assigneeHandle, err := c.assigneeTarget(ctx, e)
 	if err != nil {
 		c.logf("card lease clock: assignee for %s: %v", e.CardRef, err)

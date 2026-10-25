@@ -261,6 +261,30 @@ func TestCardLeaseClockWakesLeadForUnownedLiveCard(t *testing.T) {
 		t.Fatalf("lead bridge deliveries=%d err=%v", queued, err)
 	}
 
+	// A tenure taken after the clock claimed a wake, and before it sent it,
+	// makes the wake stale: nobody is woken.
+	acquire("exec-x")
+	if _, err = store.ReleaseCardLease(ctx, lane.ActorID, cardID, primitives.CardLeaseReleaseInput{Owner: "exec-x"}); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.TakeUnownedCardLeases(ctx, 0)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed=%+v err=%v", claimed, err)
+	}
+	acquire("exec-y")
+	clock.notify(ctx, claimed[0])
+	if n := wakes(pm.ActorID, "card_unowned"); n != 1 {
+		t.Fatalf("stale claim woke the lead: card_unowned wakes=%d", n)
+	}
+	// exec-y hands the live card to exec-c: still owned, still no new wake.
+	if _, err = store.ReleaseCardLease(ctx, lane.ActorID, cardID, primitives.CardLeaseReleaseInput{Owner: "exec-y", HandoffTo: "exec-c"}); err != nil {
+		t.Fatal(err)
+	}
+	step()
+	if n := wakes(pm.ActorID, "card_unowned"); n != 1 {
+		t.Fatalf("hand-off woke the lead: card_unowned wakes=%d", n)
+	}
+
 	// Expiry of live work wakes the lead with card_unowned and the assignee
 	// with lease_expired.
 	acquire("exec-c")

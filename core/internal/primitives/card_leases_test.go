@@ -381,11 +381,54 @@ func TestCardLeaseUnownedWaitsForBriefFold(t *testing.T) {
 	if err != nil || len(expired) != 1 || expired[0].Live != "" {
 		t.Fatalf("expiry=%+v err=%v", expired, err)
 	}
+	// The expired owner cleans up before the fold lands; the wake still
+	// reports the expiry that caused it.
+	if _, err = s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-b"}); err != nil {
+		t.Fatal(err)
+	}
 	exec(`INSERT INTO brief_initiatives(card_id,open,promise_at) VALUES(?,1,'2026-10-25T12:00:00Z')`, cardID)
 	exec(`DELETE FROM brief_dirty WHERE card_id=?`, cardID)
 	pending, err = s.TakeUnownedCardLeases(ctx, 10)
 	if err != nil || len(pending) != 1 || pending[0].Released || !pending[0].LeadOnly || pending[0].EventID != expired[0].EventID {
 		t.Fatalf("deferred expiry unowned=%+v err=%v", pending, err)
+	}
+}
+
+func TestCardLeaseTenureEndedTracksNewTenure(t *testing.T) {
+	s, ctx, cardID, now := cardLeaseFixture(t)
+	ended := func(epoch int64) bool {
+		t.Helper()
+		ok, err := s.CardLeaseTenureEnded(ctx, cardID, epoch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if ended(1) {
+		t.Fatal("a card with no lease reported an ended tenure")
+	}
+	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-a", TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if ended(1) {
+		t.Fatal("a held lease reported an ended tenure")
+	}
+	if _, err := s.ReleaseCardLease(ctx, "lead", cardID, CardLeaseReleaseInput{Owner: "exec-a"}); err != nil {
+		t.Fatal(err)
+	}
+	if !ended(1) {
+		t.Fatal("a released lease did not report an ended tenure")
+	}
+	// A re-acquire after the clock claimed the wake makes it stale.
+	if _, err := s.AcquireCardLease(ctx, "lead", cardID, CardLeaseAcquireInput{Owner: "exec-b", TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if ended(1) || ended(2) {
+		t.Fatal("a new tenure left the old or new epoch ended")
+	}
+	*now = now.Add(2 * time.Hour)
+	if !ended(2) {
+		t.Fatal("an expired lease did not report an ended tenure")
 	}
 }
 
