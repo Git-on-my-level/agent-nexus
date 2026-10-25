@@ -2053,3 +2053,91 @@ records the synthetic 2.27 GB comparison, loop accounting, opt-in pprof listener
 indexed router/FTS positions, writer-free idle probes and dirty heartbeat usage
 cache. New read budgets live in `primitives/testdata/idle_maintenance_budget.json`;
 existing budgets and plan allowances are unchanged.
+
+## Watch workstream rollups
+
+Hierarchy enrichment retains its existing two batch statements and adds at most
+two more for a single additional level, never a statement per initiative. Each
+batch admits 200 cards; each plan admits 200 steps. At most 200 visible child
+workstreams are expanded per root batch; deeper levels are not read. Thus fan-out
+is bounded by 40,000 direct rows plus 40,000 second-level rows per 200-root batch,
+independent of unrelated workspace size. Workstreams already admitted as input
+rows reuse a detached direct-child rollup; only missing workstreams enter the
+second SQL batch. Detaching child rollup pointers preserves the one-extra-level
+bound and prevents cycles in legacy graphs. Smaller pages grow with their admitted
+plans and referenced child cards. The existing primary-key/handle seeks,
+`idx_brief_plan_refs_target`, and subject-ask indexes remain authoritative.
+Visibility filters precede aggregation; no hidden contributor affects a count.
+
+Migration 122 adds `idx_events_card_done`, a partial lifecycle index over
+`(payload.card_id, anx_timestamp_key(ts) DESC, id DESC)` restricted to untrashed `card_moved` events entering
+Done from a different column. The internal `work_done_event_positions` view
+selects one latest candidate by this index using the shared nanosecond-precision
+UTC key (mixed RFC3339 fractional precision and offsets sort chronologically); its ID never leaves SQL. Canonical
+scoped event hydration then seeks that one ID, returning null if unreadable.
+The comparison suppresses the outer card column's TEXT affinity with unary `+`
+so SQLite can seek the JSON expression index rather than scanning its entries. `done_at` uses one indexed scalar seek per admitted
+Done child within the batch SQL, with canonical event visibility and a one-row
+limit. No event history is materialized or scanned as text at read time. The
+migration builds one index over existing events once; there is no new canonical
+state or authorization exception.
+
+Brief outcomes add a primary-key metadata join to the already admitted cards;
+SQL admits at most 281 code points and the projection emits 280. The tray reads
+creator IDs/annotation versions with its existing card batch, then at most 50
+actor profiles through primary keys in one scoped statement. Intentional-root
+filtering occurs within the existing 200-card cohort without refilling hidden
+rows. No workspace roster read is added.
+
+`TestWatchWorkstreamRollupBudget` adds a populated ten-workstream/100-grandchild
+fixture with 4,096 unrelated cards and lifecycle events, for both writer and
+stranger. Its new `work_grouping_budget.json` workstreams entry preserves the existing hierarchy ceiling:
+12 queries, 500 returned rows, 50,000 VM steps, and requires a SEARCH on the lifecycle index
+in the native plan. Existing grouping and denied-prefix budgets are unchanged.
+
+```sh
+./scripts/slot run tests -- go test -C core ./internal/primitives -count=1 -v \
+  -run '^Test(WatchWorkstreamRollupBudget|GroupingReadsBoundedWithTenThousandUnrelatedCards|GroupingUngroupedBoundedBehindTenThousandDeniedCards)$' -timeout=5m
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
+  -run '^TestPerformanceGroupingFeedBudget$' -count=1 -v -timeout=5m
+```
+
+Local acceptance on this branch, with an unrelated private board: nested
+rollups use 6 queries / 123 returned rows / 27,096 owner or 48,050 partial-reader
+VM steps / zero full scans. The existing
+200-child hierarchy gate uses 40,403 VM steps; the denied-prefix brief uses
+47,178. The complete ungrouped HTTP gate also passes (partial-reader samples
+49,730 VM steps). No ceiling or query-plan allowance is increased.
+
+The full startup scale gate remains blocked before migration 122: its fixed
+90-second upgrade deadline expires in existing migration 116. A second run
+with `migrations.go` overlaid verbatim from branch baseline `746e093c` reproduces
+the same failure before the new index/view exists. This is a baseline gate
+failure, not a passing startup certification. The focused released-120 upgrade
+and reopen regression verifies migration 122 over existing lifecycle events.
+`TestWatchRollupMigrationGap` verifies that both the legacy and fenced runners
+record 122 without 121, then apply a subsequently introduced 121 on reopen,
+without rerunning 122. Both runners test membership in their applied-version
+ledger rather than a maximum version. The independent Watch index/view does
+not depend on the work-tracking schema planned for 121.
+
+The broader work-summary gate also reproduces against the same baseline source
+(read implementations and migrations overlaid verbatim). Its authorized
+50-card sample is identical before and after this change: 5 queries, 198 rows,
+58,567 VM steps, above the existing 50,000 ceiling, with the same unreviewed
+plans. The baseline partial-reader sample is 58,310 VM steps. The changed-branch
+run reached the matching authorized samples before its five-minute process
+timeout; the ten-minute baseline run completed and reported the gate failures.
+Neither run is represented as passing.
+
+The overlapping work-list-page regression (root plus its ten workstreams)
+exposed duplicate hydration at 62,729 VM steps. Reusing the already admitted
+rollups reduces it to 3 queries, 122 rows, and zero full scans. With an unrelated
+private board, the final values are 27,825 owner / 48,611 partial-reader VM steps. The same unchanged workstreams budget gates this case.
+
+Parent eligibility now admits the current scoped card/board once before its
+steps and uses an indexed existence probe for an older visible alternative.
+It retains the oldest-created/id-tie rule without rehydrating and sorting the
+same current parent per child. Workstream admission uses the same rule. The
+private-board fixture exercises the nonempty authorization path; no policy,
+budget or plan allowance is relaxed.

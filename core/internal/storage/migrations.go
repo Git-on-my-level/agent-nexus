@@ -1184,6 +1184,10 @@ var migrations = []migration{
 
 	// Indexed derived positions keep background polls independent of history.
 	{Version: 120, AfterApply: installIdleMaintenancePositions},
+	{Version: 122, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_events_card_done ON events(json_extract(payload_json,'$.payload.card_id'),anx_timestamp_key(ts) DESC,id DESC) WHERE type='card_moved' AND json_extract(payload_json,'$.payload.column_key')='done' AND COALESCE(json_extract(payload_json,'$.payload.from_column_key'),'')<>'done' AND COALESCE(trashed_at,'')=''`,
+		`CREATE VIEW IF NOT EXISTS work_done_event_positions AS SELECT id,ts,json_extract(payload_json,'$.payload.card_id') AS card_id FROM events INDEXED BY idx_events_card_done WHERE type='card_moved' AND json_extract(payload_json,'$.payload.column_key')='done' AND COALESCE(json_extract(payload_json,'$.payload.from_column_key'),'')<>'done' AND COALESCE(trashed_at,'')=''`,
+	}},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

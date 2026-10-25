@@ -12031,6 +12031,7 @@ components:
         parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
         rollup: {$ref: '#/components/schemas/WorkRollup'}
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
+        top_level: {type: boolean, description: Intentionally an initiative; excludes this root from the ungrouped tray. False clears the intent.}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
@@ -12217,11 +12218,12 @@ components:
       properties:
         total: {type: integer}
         by_state: {type: object, additionalProperties: {type: integer}, description: Child work phases.}
+        earliest_promise_at: {type: string, format: date-time, nullable: true, readOnly: true, description: Earliest counted promise of a visible open direct child.}
         past_promise: {type: integer}
         needing_viewer: {type: integer}
         workstreams: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/WorkChild'}}
         children: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/WorkChild'}}
-        has_more: {type: boolean, description: False for valid plans, which admit at most 200 steps. Hidden children never affect this field.}
+        has_more: {type: boolean, description: True only when a visible workstream exceeds the 200-workstream expansion cohort. Each plan admits at most 200 steps. Hidden children never affect this field.}
     WorkChild:
       type: object
       required: [ref, title, step_id, state, past_promise, needs_viewer]
@@ -12232,6 +12234,14 @@ components:
         state: {type: string}
         past_promise: {type: boolean}
         needs_viewer: {type: boolean}
+        owner: {type: string, nullable: true, readOnly: true, description: First canonical assignee ref.}
+        done_at: {type: string, format: date-time, nullable: true, readOnly: true, description: Latest untrashed card_moved event entering done from another column; null unless currently done and that event is readable. Never inferred from updated_at.}
+        short_code: {type: string, maxLength: 64, readOnly: true, description: Optional deterministic recognized handle or title prefix; not a unique identity.}
+        rollup:
+          nullable: true
+          readOnly: true
+          allOf: [{$ref: '#/components/schemas/WorkRollup'}]
+          description: Direct visible children for a workstream; only one extra level is expanded. Further workstreams are not recursively expanded.
     WorkUngroupedResponse:
       type: object
       required: [work, has_more]
@@ -12246,9 +12256,24 @@ components:
         ref: {type: string}
         title: {type: string}
         parent_ref: {type: string, nullable: true}
+        created_by: {nullable: true, readOnly: true, allOf: [{$ref: '#/components/schemas/BriefPrincipal'}], description: Scoped creator profile; null when unavailable or hidden.}
         created_at: {type: string, format: date-time}
         likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
-        next_actions: {type: array, items: {type: object, additionalProperties: true}}
+        next_actions: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/WorkTrayAction'}}
+    WorkTrayAction:
+      type: object
+      required: [label, mutates, side_effect_class]
+      properties:
+        label: {type: string}
+        command_id: {type: string, description: work.patch for intentional top-level marking.}
+        argv: {type: array, items: {type: string}, description: Executable command; work.patch reads the supplied stdin object with --from-file -.}
+        stdin: {type: object, additionalProperties: true, description: Version-fenced WorkPatchRequest for the admitted card.}
+        command_template: {type: string, description: Human-only move command hint with a required workspace-alias argument. Not executable argv or a destination permission grant.}
+        requires_human: {type: boolean}
+        requires_destination: {type: boolean}
+        mutates: {type: boolean}
+        side_effect_class: {type: string}
+        reasons: {type: array, items: {type: string}}
     WorkGroupRequest:
       type: object
       properties:
@@ -12304,6 +12329,7 @@ components:
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle: {$ref: '#/components/schemas/CardHandle'}
+        top_level: {type: boolean, description: Intentionally an initiative; excludes this root from the ungrouped tray. False clears the intent.}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         request_key:
@@ -12372,6 +12398,7 @@ components:
           type: object
           additionalProperties: true
           properties:
+            top_level: {type: boolean, description: Intentionally an initiative; false clears the intent.}
             cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
             goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
             labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
@@ -15153,6 +15180,8 @@ components:
       type: object
       required: [ref, title, owner, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot, loop]
       properties:
+        outcome: {type: string, maxLength: 280, readOnly: true, description: Goal annotation label (or metric), otherwise the first summary line; at most 280 Unicode code points.}
+        proposed: {type: boolean, readOnly: true, description: True exactly when canonical placement is backlog; orthogonal to promise health state.}
         parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
         rollup: {$ref: '#/components/schemas/WorkRollup'}
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}

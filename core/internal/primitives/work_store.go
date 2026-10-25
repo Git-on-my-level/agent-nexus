@@ -140,6 +140,11 @@ func workLocalInvalid(field, reason string) error {
 }
 
 func validateWorkLocal(m map[string]any) error {
+	if v, ok := m["top_level"]; ok {
+		if _, valid := v.(bool); !valid {
+			return workInvalid("top_level must be a boolean")
+		}
+	}
 	if err := validateLoopMetadata(m); err != nil {
 		return err
 	}
@@ -532,7 +537,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"cadence", "goal", "source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
+	for _, key := range []string{"top_level", "cadence", "goal", "source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -1106,7 +1111,7 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"cadence", "goal", "labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
+	return []string{"top_level", "cadence", "goal", "labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.

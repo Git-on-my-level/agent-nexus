@@ -56,6 +56,58 @@ func testGroupingLikelyHomeAndUngrouped(t *testing.T, surface string) {
 	feed := workGetJSON(t, h.baseURL+"/work/ungrouped?limit=10", 200)
 	if rows, _ := feed["work"].([]any); len(rows) != 2 {
 		t.Fatalf("ungrouped feed: %#v", feed)
+	} else {
+		for _, row := range rows {
+			item := row.(map[string]any)
+			if item["created_by"].(map[string]any)["display"] != "Grouper" {
+				t.Fatalf("creator missing on wire: %v", item)
+			}
+			actions := item["next_actions"].([]any)
+			if len(actions) < 2 || actions[len(actions)-1].(map[string]any)["requires_human"] != true {
+				t.Fatalf("tray actions missing: %v", actions)
+			}
+		}
+	}
+}
+
+func TestGroupingWatchWorkstreamsOnWire(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	root := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Root","summary":"Ship the board\nDetails","top_level":true}`, 201)["work"].(map[string]any)
+	if root["top_level"] != true {
+		t.Fatalf("intent lost on response: %v", root)
+	}
+	stream := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"grouper","title":"P76: stream","under":%q}`, root["ref"]), 201)["work"].(map[string]any)
+	workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"grouper","title":"fs-p3: leaf","under":%q}`, stream["ref"]), 201)
+	read := workGetJSON(t, h.baseURL+"/work/"+asString(root["ref"]), 200)["work"].(map[string]any)
+	assertRollup := func(item map[string]any) {
+		t.Helper()
+		rollup := item["rollup"].(map[string]any)
+		streams := rollup["workstreams"].([]any)
+		if len(streams) != 1 {
+			t.Fatalf("no stream: %v", rollup)
+		}
+		w := streams[0].(map[string]any)
+		if w["short_code"] != "p76" || w["rollup"].(map[string]any)["total"] != float64(1) {
+			t.Fatalf("no nested rollup: %v", w)
+		}
+		leaf := w["rollup"].(map[string]any)["children"].([]any)[0].(map[string]any)
+		if leaf["short_code"] != "fs-p3" || leaf["done_at"] != nil {
+			t.Fatalf("leaf fields: %v", leaf)
+		}
+	}
+	assertRollup(read)
+	list := workGetJSON(t, h.baseURL+"/work?limit=20", 200)["work"].([]any)
+	found := false
+	for _, row := range list {
+		item := row.(map[string]any)
+		if item["ref"] == root["ref"] {
+			assertRollup(item)
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("root missing from work list")
 	}
 }
 

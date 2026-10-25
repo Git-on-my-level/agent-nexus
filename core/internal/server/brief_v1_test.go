@@ -239,7 +239,7 @@ func assertBriefMatchesFixture(t *testing.T, body map[string]any) {
 	if err = json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true, "yours": true}
+	optional := map[string]bool{"body": true, "priority": true, "subject": true, "curation": true, "pm_decision": true, "outcome": true, "proposed": true, "yours": true}
 	for key := range body {
 		if _, ok := fixture[key]; !ok {
 			t.Errorf("brief field %q is not in the shared fixture", key)

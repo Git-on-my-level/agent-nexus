@@ -5458,6 +5458,7 @@ Inputs:
   - body `source_refs` (list<any>)
   - body `start_at` (string)
   - body `summary` (string)
+  - body `top_level` (boolean)
   - body `topic_ref` (string)
   - body `under` (string)
   - body `wake_condition` (string)
@@ -5676,6 +5677,7 @@ Inputs:
   - body `patch.roles` (list<string>)
   - body `patch.source_refs` (list<any>)
   - body `patch.start_at` (string)
+  - body `patch.top_level` (boolean)
   - body `patch.wake_condition` (string)
   - body `patch.workspace_move` (object)
 

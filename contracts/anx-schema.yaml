@@ -1046,7 +1046,7 @@ work_tracking:
   observation_status: [reported, verified, uncertain, error]
   refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
-  local_annotations: [cadence, goal, labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
+  local_annotations: [top_level, cadence, goal, labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
@@ -1552,6 +1552,8 @@ brief:
   sections: [decisions, initiatives, your_asks, answered_for_you, curation_suggestions]
   section_limit: 50
   decision_kinds: [ask, review, access, host, pm_proposal]
+  initiative_outcome: Goal annotation label or metric, otherwise first summary line, trimmed to 280 Unicode code points.
+  initiative_proposed: Computed boolean; true exactly for backlog placement, independent of promise health. No new phase or column.
   initiative_owner: Nullable first canonical assignee ref, matching work list; no new health state.
   initiative_states: [past_promise, moving, no_promise, done]
   placements: [backlog, ready, in_progress, review, done]
@@ -1588,3 +1590,14 @@ work_grouping:
   writes: under on either create surface and work.group add an ordinary plan step atomically. request_key replays the original response. after is a plan step id, not a card id.
   suggestions: Deterministic, optional, at most three visible open top-level homes. Related parent ref wins, then shared refs, repository, project and title family. Creation is never refused for lack of grouping or for exceeding the target.
   folds: work.fold records merged_into, transfers authored evidence and related/source refs, retains append-only history and open asks through the linked child, carries its promise as the step due, and archives with a reason. work.unfold restores the saved fields; conflicting intervening edits fail without overwriting user work.
+
+watch_rollup_data:
+  fields: [rollup.earliest_promise_at, rollup.children.owner, rollup.children.done_at, rollup.children.short_code, rollup.workstreams.rollup, ungrouped.created_by, top_level]
+  rules:
+    - Workstreams are direct child cards linked by plan steps with visible children of their own. Their rollup uses the same fields as the parent rollup, including children and earliest_promise_at. Expansion stops after one additional level.
+    - Hierarchy reads admit at most 200 roots and 200 steps per plan, and expand at most 200 workstreams per root batch. Unexpanded visible workstreams have rollup null and parent has_more true. Hidden children never contribute to counts or continuation.
+    - done_at is null unless currently done; it is the latest untrashed card_moved event entering done from a different column, only if that event is readable. No update, comment or inferred timestamp substitutes for the lifecycle event.
+    - short_code is optional, at most 64 code points; recognized numbered/lane prefixes reuse TitleFamily, preferring a matching handle. It is a label, never a unique key.
+    - top_level is a boolean work annotation. True keeps an intentionally top-level card out of the ungrouped tray without changing hierarchy or removing it from initiatives. False restores ordinary tray eligibility.
+    - Ungrouped next_actions include a version-fenced work.patch action for top_level and a command-only move hint requiring a human and a destination alias. No destination or permission is inferred by the single-workspace core.
+    - Curation counts are omitted. Existing events do not classify kept-as-evidence or archive-candidate transitions, and cross-workspace move journals are client state; a recent event window cannot deterministically count all three categories.
