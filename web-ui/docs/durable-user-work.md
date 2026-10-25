@@ -31,7 +31,8 @@ foundation unchanged: proposal taps and replies go through
 retry), the reply draft keeps the `inbox:<item-id>:reply` key on the list, the
 permalink and the initiative page, and a PM decision answer goes through
 `enqueuePmDecisionAnswer`, which refuses to send when it cannot persist.
-Watch's by-stage moves use `enqueueTaskMove`. `tests/e2e/decide.spec.js` covers
+Placement moves (the Initiatives board, the command palette) use
+`enqueueTaskMove`; the swimlane board's group and fold use `enqueueGrouping`. `tests/e2e/decide.spec.js` covers
 one-tap answers, undo and drafts across the list and the permalink.
 
 The full invariant remains incomplete. Do not enable blind retries

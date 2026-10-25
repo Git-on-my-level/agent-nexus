@@ -4,11 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   BRIEF_COMPUTED_FIELDS,
   freshnessLabel,
-  groupBoard,
   groupWatch,
   initiativeLine,
   normalizeBrief,
-  PLACEMENTS,
   plainInline,
 } from "../../src/lib/brief.js";
 
@@ -46,19 +44,6 @@ describe("groupWatch", () => {
       "fleet-onboarding",
       "observability",
     ]);
-  });
-});
-
-describe("groupBoard", () => {
-  it("returns every placement column in order, empty or not", () => {
-    const columns = groupBoard(brief.initiatives);
-    expect(columns.map((c) => c.placement)).toEqual(PLACEMENTS);
-    expect(
-      columns.find((c) => c.placement === "in_progress").rows,
-    ).toHaveLength(2);
-    expect(
-      columns.find((c) => c.placement === "done").rows.map((r) => r.id),
-    ).toEqual(["docs-refresh"]);
   });
 });
 

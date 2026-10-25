@@ -47,7 +47,13 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import SwimlaneTray from "./SwimlaneTray.svelte";
 
-  let { workspaceHref, now = Date.now(), boardHref = "" } = $props();
+  let {
+    workspaceHref,
+    now = Date.now(),
+    boardHref = "",
+    /** Off where the page header already links to Decide. */
+    decideLink = true,
+  } = $props();
 
   const TRAY_LIMIT = 20;
 
@@ -474,7 +480,7 @@
             : ""}</button
         >
       {/if}
-      {#if waitingDecisions}
+      {#if decideLink && waitingDecisions}
         <a
           class="rounded-md border border-warn px-2.5 py-1 text-micro text-warn-text"
           href={workspaceHref("/decide")}>{waitingDecisions} in Decide →</a

@@ -96,19 +96,29 @@ export const QA_SCENES = [
     },
   },
   {
-    name: "workspace-watch-board",
-    path: "/o/local/w/local/watch?view=board",
+    name: "workspace-watch-row-expanded",
+    path: "/o/local/w/local/watch",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      // Below `md` the board shows one stage at a time, so wait for the card
-      // to be in the DOM rather than on screen.
-      await page.waitForSelector("[data-watch-column='review']", {
+      const row = "[data-collection-row='card:fleet-onboarding']";
+      await page.click(`${row} [data-collection-toggle]`);
+      await page.waitForSelector(`${row} [data-details-steps] ol li`);
+    },
+  },
+  {
+    name: "workspace-watch-lanes",
+    path: "/o/local/w/local/watch?view=lanes",
+    workspaceMode: "workspace-default",
+    briefState: "lanes",
+    waitFor: async (page) => {
+      await page.waitForSelector(
+        "[data-lane-ref='card:fleet-onboarding'] [data-work-ref='card:runbook-review']",
+      );
+      // Below `md` the tray is a closed sheet: its rows are in the DOM, not
+      // on screen.
+      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']", {
         state: "attached",
       });
-      await page.waitForSelector(
-        "[data-watch-column='review'] [data-work-ref='card:fleet-onboarding']",
-        { state: "attached" },
-      );
     },
   },
   {
@@ -179,22 +189,6 @@ export const QA_SCENES = [
       // The bootstrap placeholder carries the destination's own name, so the
       // scene has to wait for the loaded page rather than for the heading.
       await page.waitForSelector("text=Nothing tracked yet");
-    },
-  },
-  {
-    name: "workspace-initiatives-lanes",
-    path: "/o/local/w/local/initiatives?view=lanes",
-    workspaceMode: "workspace-default",
-    briefState: "lanes",
-    waitFor: async (page) => {
-      await page.waitForSelector(
-        "[data-lane-ref='card:fleet-onboarding'] [data-work-ref='card:runbook-review']",
-      );
-      // Below `md` the tray is a closed sheet: its rows are in the DOM, not
-      // on screen.
-      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']", {
-        state: "attached",
-      });
     },
   },
   {
@@ -1410,6 +1404,30 @@ const QA_UNGROUPED = [
   },
 ];
 
+/** `GET /work/{ref}` (summary=1): a plan with two ready steps. */
+function qaWorkDetail(ref) {
+  const row = briefFixture.initiatives.find((entry) => entry.ref === ref);
+  return {
+    ref,
+    id: ref.replace(/^card:/, ""),
+    title: row?.title ?? ref,
+    phase: row?.placement ?? "backlog",
+    owner: "actor-agent-1",
+    plan: {
+      steps: [
+        { id: "image", title: "Bake the m6 image" },
+        { id: "docs", title: "Write the enrollment runbook" },
+        { id: "enroll", title: "Enroll m6", after: ["image", "docs"] },
+      ],
+    },
+    plan_state: { next_steps: ["image", "docs"], critical_path: ["image"] },
+    summary: {
+      status: { state: row?.state ?? "moving", label: "", reason: "" },
+      next: { id: "image", title: "Bake the m6 image", ref: "", more: 1 },
+    },
+  };
+}
+
 function qaBrief(scenario) {
   const body = {
     ...briefFixture,
@@ -1694,6 +1712,13 @@ async function handleWorkspaceApiRoute(
     const work =
       scenario.overviewState === "populated" ? overviewPopulatedWork() : [];
     await route.fulfill(jsonResponse(200, { work, next_cursor: "" }));
+    return;
+  }
+
+  // One card: a Watch row that opens inline reads its plan's next steps.
+  const cardRead = /^\/work\/(card:[^/]+)$/.exec(decodeURIComponent(pathname));
+  if (cardRead && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { work: qaWorkDetail(cardRead[1]) }));
     return;
   }
 

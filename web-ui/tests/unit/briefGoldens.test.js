@@ -31,7 +31,6 @@ vi.mock("$lib/actions/durableDraft.js", () => ({
 import DecisionCard from "../../src/lib/components/decide/DecisionCard.svelte";
 import WatchRow from "../../src/lib/components/watch/WatchRow.svelte";
 import WatchList from "../../src/lib/components/watch/WatchList.svelte";
-import WatchBoard from "../../src/lib/components/watch/WatchBoard.svelte";
 import {
   BRIEF_COMPUTED_FIELDS,
   normalizeBrief,
@@ -115,8 +114,8 @@ describe("computed-source lint (I1)", () => {
     }
   });
 
-  it("the Watch list and the by-stage view", () => {
-    for (const component of [WatchList, WatchBoard]) {
+  it("the Watch list", () => {
+    for (const component of [WatchList]) {
       const { container } = render(component, {
         initiatives: brief.initiatives,
         now: NOW,

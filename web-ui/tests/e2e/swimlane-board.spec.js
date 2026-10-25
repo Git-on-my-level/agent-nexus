@@ -4,13 +4,13 @@ import { expectCleanLayout } from "../helpers/layoutAudit.js";
 import { setup } from "./helpers/durable-discussion.js";
 
 /**
- * The swimlane board on the Initiatives page (`?view=lanes`): lanes from the
- * brief's rollups, the Ungrouped tray, grouping and folding through the
+ * The swimlane board, Watch's Lanes view (`/watch?view=lanes`): lanes from
+ * the brief's rollups, the Ungrouped tray, grouping and folding through the
  * device outbox, and every state, at desktop and phone widths.
  *
  * `BOARD_SHOTS=<dir>` also writes the screenshots used in the PR.
  */
-const LANES = "/o/local/w/local/initiatives?view=lanes";
+const LANES = "/o/local/w/local/watch?view=lanes";
 const NOW = "2026-10-24T12:00:00Z";
 
 const json = (route, value, status = 200) =>
@@ -759,6 +759,29 @@ test.describe("desktop", () => {
     await expect(page.locator("#swimlane-tray-title")).not.toContainText("· 0");
     await shot(page, "lanes-tray-error");
   });
+});
+
+test("old links land on the one board, in Watch", async ({ page, context }) => {
+  await install(context, seed());
+  // The Initiatives page's Lanes view moved here.
+  await page.goto("/o/local/w/local/initiatives?view=lanes");
+  await expect(page).toHaveURL(/\/watch\?view=lanes$/);
+  await expect(page.locator("[data-lane-ref]").first()).toBeVisible();
+  await expect(page.locator('[data-watch-view="lanes"]')).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // The by-stage board's links open the lanes, which replaced it.
+  for (const query of ["view=board", "layout=board"]) {
+    await page.goto(`/o/local/w/local/watch?${query}`);
+    await expect(page.locator("[data-lane-ref]").first()).toBeVisible();
+  }
+  // Initiatives keeps Table and By placement; Lanes links to Watch.
+  await page.goto("/o/local/w/local/initiatives");
+  await expect(page.locator("[data-view-lanes]")).toHaveAttribute(
+    "href",
+    /\/watch\?view=lanes$/,
+  );
 });
 
 test("a first read that fails shows one banner and no raw body", async ({

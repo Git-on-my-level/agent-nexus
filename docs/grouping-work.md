@@ -147,7 +147,8 @@ Callers should pass `--under` explicitly.
 
 ## The swimlane board
 
-The web UI's Initiatives page has a Lanes view (`?view=lanes`): one lane per
+The web UI's Watch page has a Lanes view (`/watch?view=lanes`; the old
+`/initiatives?view=lanes` redirects there): one lane per
 brief initiative, its rollup children in Not started / In progress / Blocked or
 needs you / Done columns, loops in their own section, and the Ungrouped tray
 above. It reads the brief (already shared with the navigation badge) and one

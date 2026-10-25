@@ -136,13 +136,19 @@ never a retraction. Copy ref is on every row, and `c` copies the focused row's
 ref (`j`/`k` move focus). Reply drafts use the durable key
 `inbox:<item-id>:reply` on every surface. `?initiative=<ref>` narrows the list.
 
-**Watch** (`/watch`) is outcomes per workspace: a list by attention and a
-by-stage view whose columns are placement (backlog, ready, in progress,
-review, done). Rows show only the four computed states (past promise, moving,
-no promise, done); blocked and waiting-on-you are exact count badges linking
-into Decide. No-promise rows show "last evidence Nd ago". The header shows
-the brief's age ("as of 2 min ago"). Moves go through the durable outbox
-(`taskMoveWork.js`).
+**Watch** (`/watch`) is outcomes per workspace: a list by attention and the
+swimlane board (`?view=lanes`; old `?view=board` and `?layout=board` links
+land there), with the Ungrouped tray and the initiative budget chip.
+`/initiatives?view=lanes` redirects to it, so there is one swimlane board.
+Rows show only the four computed states (past promise, moving, no promise,
+done); blocked and waiting-on-you are exact count badges linking into Decide.
+No-promise rows show "last evidence Nd ago". A click, tap, or Enter/Space on
+the title opens a row inline (several can be open): promise, latest evidence
+and note, owner, the rollup and its first children, and the plan's next
+steps, which are the one thing read on open (once, through `workCache`).
+The header shows the brief's age ("as of 2 min ago"). Placement moves live
+on the Initiatives page's By placement board. The tab row scrolls sideways
+with no scrollbar when tabs do not fit.
 
 **Initiative page** (`/initiatives/{id}`) is the drill-down: computed state,
 one plan rendering, open decisions through DecisionCard, evidence newest
