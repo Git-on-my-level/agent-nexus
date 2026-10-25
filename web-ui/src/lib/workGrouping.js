@@ -12,6 +12,11 @@ import { randomUUID } from "$lib/replayPolicy.js";
  * Undoing a group has no route of its own: it removes the one plan step the
  * group added, through the keyed plan write. The write is computed once and
  * frozen in the entry; see `groupingPlan.js` and the outbox sender.
+ *
+ * Making a card an initiative (and its undo) is the version-fenced
+ * `work.patch` core offers in the tray's `next_actions`: `{top_level}` at the
+ * version the tray read. It has no request key; the fence is what makes a
+ * retry safe (see `sendTopLevel` in `groupingPlan.js`).
  */
 
 export const GROUPING_OPERATIONS = [
@@ -19,6 +24,7 @@ export const GROUPING_OPERATIONS = [
   "work.fold",
   "work.unfold",
   "work.ungroup",
+  "work.top_level",
 ];
 export const isGrouping = (entry) =>
   GROUPING_OPERATIONS.includes(entry?.operation);
@@ -32,6 +38,8 @@ const VERB_OPERATION = {
   fold: "work.fold",
   unfold: "work.unfold",
   ungroup: "work.ungroup",
+  promote: "work.top_level",
+  unpromote: "work.top_level",
 };
 
 /** What the reader is told the saved change does. */
@@ -47,6 +55,10 @@ export function groupingTitle({ verb, work, parent }) {
       return `Unfold ${card}`;
     case "ungroup":
       return `Take ${card} out of ${home}`;
+    case "promote":
+      return `Make ${card} an initiative`;
+    case "unpromote":
+      return `Put ${card} back in Ungrouped`;
     default:
       return `Change grouping for ${card}`;
   }
@@ -54,9 +66,15 @@ export function groupingTitle({ verb, work, parent }) {
 
 /**
  * A complete immutable intent; retries never substitute newer reads.
- * `stepId` binds an undo-group to the one plan step the group added.
+ * `stepId` binds an undo-group to the one plan step the group added;
+ * `version` fences a promote or unpromote to the card as the reader saw it.
  */
-export function groupingDraft(verb, work, parent = null, { stepId = "" } = {}) {
+export function groupingDraft(
+  verb,
+  work,
+  parent = null,
+  { stepId = "", version = null } = {},
+) {
   return JSON.parse(
     JSON.stringify({
       verb,
@@ -65,6 +83,7 @@ export function groupingDraft(verb, work, parent = null, { stepId = "" } = {}) {
         ? { ref: parent.ref, title: parent.title || parent.ref }
         : null,
       ...(stepId ? { stepId } : {}),
+      ...(Number.isInteger(version) ? { version } : {}),
     }),
   );
 }
@@ -74,6 +93,21 @@ export function groupingRequest(draft, actor, key) {
   const ref = String(draft?.work?.ref ?? "").trim();
   const parent = String(draft?.parent?.ref ?? "").trim();
   if (!operation || !ref) throw new Error("Choose a card to group.");
+  if (operation === "work.top_level") {
+    if (!Number.isInteger(draft.version) || draft.version < 0)
+      throw new Error("Reload the board to make this card an initiative.");
+    return {
+      operation,
+      request: {
+        ref,
+        body: {
+          actor_id: actor,
+          if_version: draft.version,
+          patch: { top_level: draft.verb === "promote" },
+        },
+      },
+    };
+  }
   if (draft.verb !== "unfold" && !parent)
     throw new Error("Choose an initiative to group under.");
   const body = { actor_id: actor, request_key: key };

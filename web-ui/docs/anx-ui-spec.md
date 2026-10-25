@@ -141,11 +141,17 @@ Initiatives list (`InitiativeRollupList`) has one row per top-level
 initiative, with children and loops folded away. Rows sort by what needs the
 reader (need you, slipping, moving, no promise; done is folded), and the
 header counts initiatives and the cards rolled up into them. Each row shows
-its stated next step, its children by state (one segment per child), its
+its outcome (core's `outcome`, when it says more than the title), a
+"proposed" tag while it is still in Backlog, its stated next step, its
+children by state (one segment per child), its
 promises ("N of M past", "on track") and who is next (You, else the owner).
 A click, tap, or Enter/Space on the title opens a row. Open, it lists its
-workstreams (or its children) as kid rows, each with its phase, promise
-state and whether it waits on the reader. Below that is one strip: latest
+workstreams (or its children) as kid rows. A workstream row reads from its
+own rollup: its children's short codes and card count, its children by state
+("1 needs you · 3 blocked"), its nearest promise ("due Oct 25", "10h past",
+"3 past") and its owner, or You when something in it waits on the reader. A
+workstream core did not expand, or a single child, shows its own phase and
+promise. Below that is one strip: latest
 evidence and note, owner, the plan's next steps, and a link to the
 initiative. Rows that need the reader start open. Their plan steps wait for
 a tap, so opening the page reads nothing per row. A row the reader opens
@@ -153,10 +159,20 @@ reads its card once, through `workCache`.
 
 Lanes (`?view=lanes`; old `?view=board` and `?layout=board` links land
 there) is the swimlane board. It has a 260px initiative column, then Not
-started, In progress, Blocked / needs you and Done. The reader's open
+started, In progress, Blocked / needs you and Done this week. A lane's
+subtitle is its outcome (else its next step); a proposed lane is dashed with
+a "proposed" tag, and the summary counts it apart ("4 initiatives + 1
+proposed"). Workstream chips carry their short codes and card count ("T1 T2
+P86 · 9"). Done this week lists children whose `done_at` is in the last
+seven days; older or undated finishes are a count. The reader's open
 decisions about a lane or its children sit in its needs-you column as
 "ask · you" chips linking to Decide, in place of the child they cover. The
-Ungrouped tray and the budget chip sit beside the board. On a phone each lane
+Ungrouped tray and the budget chip sit beside the board. Each tray row says
+who created the card. "Make it an initiative" sends core's version-fenced
+`work.patch` (`{top_level: true}`) through the outbox, with Undo; it is the
+one-tap answer when no home fits and is under "Other…" otherwise. "Move to
+another workspace" only shows core's human command to copy: the UI never
+performs a move. On a phone each lane
 is a card: one tag, the bar, the lines that wait on the reader, and the rest
 a tap away. `/initiatives?view=lanes` redirects to Lanes, so there is one
 swimlane board. Measured initiatives and loops are on the Loops tab. The tab

@@ -12,14 +12,42 @@ import { isLoop } from "$lib/brief.js";
 /**
  * Columns, left to right, and the stored phases each one holds. A child
  * waiting on the reader sits in `stuck` whatever its phase. Phase names stay
- * owned by `pm/presentation.js`; these are column headings.
+ * owned by `pm/presentation.js`; these are column names. The board heads its
+ * done column `heading`: it lists only what finished this week.
  */
 export const LANE_COLUMNS = [
   { key: "not_started", label: "Not started", phases: ["backlog", "ready"] },
   { key: "moving", label: "In progress", phases: ["in_progress", "review"] },
   { key: "stuck", label: "Blocked / needs you", phases: ["blocked"] },
-  { key: "done", label: "Done", phases: ["done", "cancelled"] },
+  {
+    key: "done",
+    label: "Done",
+    heading: "Done this week",
+    phases: ["done", "cancelled"],
+  },
 ];
+
+/** "This week" on the board: the last seven days. */
+export const DONE_WINDOW_MS = 7 * 24 * 3_600_000;
+
+/**
+ * Done children split by core's `done_at`: those that entered Done in the
+ * last seven days, and the rest. A child core could not date (cancelled,
+ * imported, or its completion event hidden from the reader) is never
+ * counted as this week.
+ */
+export function splitDone(children, now = Date.now()) {
+  const recent = [];
+  const earlier = [];
+  for (const child of children ?? []) {
+    const at = Date.parse(child.doneAt ?? "");
+    (Number.isFinite(at) && at <= now && now - at <= DONE_WINDOW_MS
+      ? recent
+      : earlier
+    ).push(child);
+  }
+  return { recent, earlier };
+}
 
 /** Cards a cell shows before it offers the rest. */
 export const CELL_PREVIEW = 5;
@@ -112,6 +140,38 @@ export const homeReason = (reasons) =>
     .filter(Boolean)
     .join(", ");
 
+/**
+ * The tray's own actions from a row's `next_actions`. "Make it an
+ * initiative" is core's fenced `work.patch` (`{top_level: true}` at
+ * `if_version`); anything else in that slot is not offered. "Move to another
+ * workspace" is a command for a person to run: it is shown, never sent.
+ */
+export function trayActions(nextActions) {
+  let promote = null;
+  let move = "";
+  for (const action of Array.isArray(nextActions) ? nextActions : []) {
+    const stdin = action?.stdin;
+    if (
+      !promote &&
+      action?.command_id === "work.patch" &&
+      stdin?.patch?.top_level === true &&
+      Object.keys(stdin.patch).length === 1 &&
+      Number.isInteger(stdin.if_version) &&
+      stdin.if_version >= 0
+    )
+      promote = { version: stdin.if_version };
+    if (
+      !move &&
+      action?.requires_human === true &&
+      !action.argv &&
+      typeof action.command_template === "string" &&
+      action.command_template.trim()
+    )
+      move = action.command_template.trim();
+  }
+  return { promote, move };
+}
+
 /** `GET /work/ungrouped` rows, kept to what the tray shows. */
 export function trayRows(raw) {
   return (Array.isArray(raw?.work) ? raw.work : [])
@@ -121,6 +181,10 @@ export function trayRows(raw) {
       title: String(row.title || row.ref),
       phase: String(row.phase || ""),
       createdAt: String(row.created_at || ""),
+      createdBy: String(
+        row.created_by?.display || row.created_by?.id || "",
+      ).trim(),
+      ...trayActions(row.next_actions),
       homes: (Array.isArray(row.likely_home) ? row.likely_home : [])
         .filter((home) => home?.ref && home.ref !== row.ref)
         .map((home) => ({
