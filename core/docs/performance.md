@@ -25,6 +25,14 @@ strip all business content without an authorization read or another query.
 50,000 VM steps, zero full scans) with 50 contributors and 4,096 unrelated
 private cards. List uses 5 queries / 53 rows / 34,027 VM steps; claim uses
 8 queries / 55 rows / 34,127 VM steps. No existing budget is widened.
+The production event-read callback also uses `WithRequestAccessScope`, retaining
+current recipient authorization through indexed candidate admission. The added
+`TestPerformancePushSerializationRecipientCallback` shares that same budget and
+includes the actual callback with 4,096 unrelated private cards. Before repair,
+list/claim executed 1,857,690 / 1,857,790 VM steps and 4,097 full scans. After
+repair they use 7 queries / 6 rows / 1,333 VM and 10 queries / 8 rows / 1,433 VM,
+respectively, with zero full scans. The extra indexed proof query replaces a
+workspace ownership rebuild; no budget or plan exception changes.
 
 Lease acquisition/renewal preserves a reminded default's owner and next digest
 time with two scalar CASE expressions in the existing primary-key update. It
