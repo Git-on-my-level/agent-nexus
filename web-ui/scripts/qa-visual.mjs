@@ -33,6 +33,10 @@ import {
   filterByQuery,
 } from "../tests/fixtures/qa-seed.js";
 import briefFixture from "../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+import {
+  mockupBrief,
+  mockupUngrouped,
+} from "../tests/fixtures/watchMockupSeed.js";
 import { auditLayout, formatViolations } from "../tests/helpers/layoutAudit.js";
 import { getExpectedCommandRegistryDigest } from "../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../src/lib/config.js";
@@ -90,25 +94,61 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector(
-        "[data-collection-row][data-watch-state='past_promise']",
+        "[data-collection-row='card:fleet-onboarding'][data-bucket='needs_you']",
       );
-      await page.waitForSelector("text=Battery measurement");
+      await page.waitForSelector("text=Fleet onboarding");
     },
   },
   {
-    name: "workspace-watch-board",
-    path: "/o/local/w/local/watch?view=board",
+    name: "workspace-watch-row-expanded",
+    path: "/o/local/w/local/watch",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      // Below `md` the board shows one stage at a time, so wait for the card
-      // to be in the DOM rather than on screen.
-      await page.waitForSelector("[data-watch-column='review']", {
+      // Observability starts closed; rows that need the reader start open.
+      const row = "[data-collection-row='card:observability']";
+      await page.click(`${row} [data-collection-toggle]`);
+      await page.waitForSelector(`${row} [data-details-steps] ol li`);
+    },
+  },
+  {
+    name: "workspace-watch-rollup",
+    path: "/o/local/w/local/watch",
+    workspaceMode: "workspace-default",
+    briefState: "mockup",
+    waitFor: async (page) => {
+      await page.waitForSelector(
+        "[data-collection-row='card:capture'] [data-rollup-kid='card:speaker-id']",
+      );
+    },
+  },
+  {
+    name: "workspace-watch-board-mockup",
+    path: "/o/local/w/local/watch?view=lanes",
+    workspaceMode: "workspace-default",
+    briefState: "mockup",
+    waitFor: async (page) => {
+      await page.waitForSelector("[data-ask-ref='inbox:ask-funding']", {
         state: "attached",
       });
+      await page.waitForSelector("[data-tray-ref='card:retry-budget']", {
+        state: "attached",
+      });
+    },
+  },
+  {
+    name: "workspace-watch-lanes",
+    path: "/o/local/w/local/watch?view=lanes",
+    workspaceMode: "workspace-default",
+    briefState: "lanes",
+    waitFor: async (page) => {
       await page.waitForSelector(
-        "[data-watch-column='review'] [data-work-ref='card:fleet-onboarding']",
-        { state: "attached" },
+        "[data-lane-ref='card:fleet-onboarding'] [data-work-ref='card:runbook-review']",
       );
+      // Below `md` the tray is a closed sheet: its rows are in the DOM, not
+      // on screen.
+      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']", {
+        state: "attached",
+      });
     },
   },
   {
@@ -179,22 +219,6 @@ export const QA_SCENES = [
       // The bootstrap placeholder carries the destination's own name, so the
       // scene has to wait for the loaded page rather than for the heading.
       await page.waitForSelector("text=Nothing tracked yet");
-    },
-  },
-  {
-    name: "workspace-initiatives-lanes",
-    path: "/o/local/w/local/initiatives?view=lanes",
-    workspaceMode: "workspace-default",
-    briefState: "lanes",
-    waitFor: async (page) => {
-      await page.waitForSelector(
-        "[data-lane-ref='card:fleet-onboarding'] [data-work-ref='card:runbook-review']",
-      );
-      // Below `md` the tray is a closed sheet: its rows are in the DOM, not
-      // on screen.
-      await page.waitForSelector("[data-tray-ref='card:fleet-alerts']", {
-        state: "attached",
-      });
     },
   },
   {
@@ -1410,11 +1434,36 @@ const QA_UNGROUPED = [
   },
 ];
 
+/** `GET /work/{ref}` (summary=1): a plan with two ready steps. */
+function qaWorkDetail(ref) {
+  const row = briefFixture.initiatives.find((entry) => entry.ref === ref);
+  return {
+    ref,
+    id: ref.replace(/^card:/, ""),
+    title: row?.title ?? ref,
+    phase: row?.placement ?? "backlog",
+    owner: "actor-agent-1",
+    plan: {
+      steps: [
+        { id: "image", title: "Bake the m6 image" },
+        { id: "docs", title: "Write the enrollment runbook" },
+        { id: "enroll", title: "Enroll m6", after: ["image", "docs"] },
+      ],
+    },
+    plan_state: { next_steps: ["image", "docs"], critical_path: ["image"] },
+    summary: {
+      status: { state: row?.state ?? "moving", label: "", reason: "" },
+      next: { id: "image", title: "Bake the m6 image", ref: "", more: 1 },
+    },
+  };
+}
+
 function qaBrief(scenario) {
   const body = {
     ...briefFixture,
     generated_at: QA_FIXED_NOW_ISO,
   };
+  if (scenario.briefState === "mockup") return mockupBrief(QA_FIXED_NOW_ISO);
   if (scenario.briefState === "lanes")
     return {
       ...body,
@@ -1684,7 +1733,12 @@ async function handleWorkspaceApiRoute(
   if (pathname === "/work/ungrouped" && request.method() === "GET") {
     await route.fulfill(
       jsonResponse(200, {
-        work: scenario.briefState === "lanes" ? QA_UNGROUPED : [],
+        work:
+          scenario.briefState === "lanes"
+            ? QA_UNGROUPED
+            : scenario.briefState === "mockup"
+              ? mockupUngrouped(QA_FIXED_NOW_ISO)
+              : [],
         has_more: false,
       }),
     );
@@ -1695,6 +1749,13 @@ async function handleWorkspaceApiRoute(
     const work =
       scenario.overviewState === "populated" ? overviewPopulatedWork() : [];
     await route.fulfill(jsonResponse(200, { work, next_cursor: "" }));
+    return;
+  }
+
+  // One card: a Watch row that opens inline reads its plan's next steps.
+  const cardRead = /^\/work\/(card:[^/]+)$/.exec(decodeURIComponent(pathname));
+  if (cardRead && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { work: qaWorkDetail(cardRead[1]) }));
     return;
   }
 

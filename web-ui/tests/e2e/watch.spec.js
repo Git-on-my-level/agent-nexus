@@ -1,10 +1,13 @@
 import { expect, test } from "@playwright/test";
 import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 import { installQaRoutes } from "../../scripts/qa-visual.mjs";
+import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 
 /**
- * Watch renders `brief.v1`: four computed states, a by-stage view, exact
- * counts, and a banner (never a raw body) when the read fails.
+ * Watch renders `brief.v1`: four computed states, rows that open inline,
+ * the swimlane board as its Lanes view, a tab row that never draws a
+ * scrollbar, exact counts, and a banner (never a raw body) when the read
+ * fails.
  */
 const ACTOR = "actor-watch-e2e";
 const WATCH = "/o/local/w/local/watch";
@@ -93,22 +96,20 @@ test("digest-only work stays visible in the Initiatives list", async ({
   await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
 });
 
-for (const layout of ["list", "board"]) {
+for (const layout of ["list", "lanes"]) {
   test(`mixed ordinary and digest work stays visible in ${layout}`, async ({
     page,
     context,
   }) => {
     await setup(context);
     await page.goto(`${WATCH}?view=${layout}`);
-    if (layout === "board") {
+    if (layout === "lanes") {
       await expect(
-        page.locator(
-          '[data-watch-column="review"] [data-work-ref="card:fleet-onboarding"]',
-        ),
+        page.locator('[data-lane-ref="card:fleet-onboarding"]'),
       ).toBeVisible();
     } else {
       await expect(
-        page.locator('[data-collection-row="card:battery-measurement"]'),
+        page.locator('[data-collection-row="card:fleet-onboarding"]'),
       ).toBeVisible();
     }
     const digest = page.getByRole("region", { name: "Daily digest" });
@@ -133,18 +134,19 @@ test("lists initiatives by computed state with sources tagged", async ({
     "true",
   );
   const rows = page.locator("[data-collection-row]");
-  await expect(rows.first()).toHaveAttribute("data-state", "waiting_on_you");
-  const battery = page.locator(
-    '[data-collection-row="card:battery-measurement"]',
-  );
-  await expect(battery).toContainText("9d past");
+  await expect(rows.first()).toHaveAttribute("data-bucket", "needs_you");
+  // A measured initiative is a loop: it is on Loops, not here.
   await expect(
-    battery.locator('[data-source="computed:initiatives.past_promise_for"]'),
-  ).toHaveText(/9d past/);
+    page.locator('[data-collection-row="card:battery-measurement"]'),
+  ).toHaveCount(0);
+  const fleet = page.locator('[data-collection-row="card:fleet-onboarding"]');
+  await expect(fleet.locator("[data-rollup-next]")).toHaveText(
+    "next: enroll m6 · Oct 16",
+  );
   await expect(
     page.locator('[data-source="computed:generated_at"]'),
   ).toContainText("as of");
-  // Done and no-promise start folded.
+  // Done starts folded.
   await expect(
     page.locator('[data-collection-row="card:docs-refresh"]'),
   ).toHaveCount(0);
@@ -168,114 +170,381 @@ test("lists initiatives by computed state with sources tagged", async ({
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   // "You" in the next column links into Decide for that initiative.
-  await battery
-    .locator('a[data-source="computed:initiatives.waiting_on_you_count"]')
-    .click();
+  await fleet.locator("[data-rollup-owner] a").click();
   await expect(page).toHaveURL(
-    /\/decide\?initiative=card%3Abattery-measurement|\/decide\?initiative=card:battery-measurement/,
+    /\/decide\?initiative=card%3Afleet-onboarding|\/decide\?initiative=card:fleet-onboarding/,
   );
 });
 
-test("the by-stage view shows the five placements", async ({
-  page,
-  context,
-}) => {
-  await setup(context);
-  await page.goto(`${WATCH}?view=board`);
-  for (const placement of ["backlog", "ready", "in_progress", "review", "done"])
-    await expect(
-      page.locator(`[data-watch-column="${placement}"]`),
-    ).toBeVisible();
-  await expect(
-    page.locator(
-      '[data-watch-column="review"] [data-work-ref="card:fleet-onboarding"]',
+/** The brief, with children and an owner on Observability. */
+function briefWithRollup() {
+  const children = [
+    ["card:enroll-m6", "Enroll m6", "in_progress"],
+    ["card:runbook", "Runbook review", "review"],
+    ["card:keys", "Rotate fleet keys", "done"],
+  ].map(([ref, title, state]) => ({
+    ref,
+    title,
+    step_id: ref.slice(5),
+    state,
+    past_promise: false,
+    needs_viewer: false,
+  }));
+  return {
+    ...brief,
+    generated_at: new Date().toISOString(),
+    initiatives: brief.initiatives.map((row) =>
+      row.ref === "card:observability"
+        ? {
+            ...row,
+            owner: "actor-luna",
+            rollup: {
+              total: 4,
+              by_state: { in_progress: 1, review: 1, done: 1, backlog: 1 },
+              past_promise: 0,
+              needing_viewer: 0,
+              workstreams: [],
+              children,
+              has_more: false,
+            },
+          }
+        : row,
     ),
-  ).toBeVisible();
-});
+  };
+}
 
-test.describe("phone", () => {
-  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+/** One `work.get` for Observability; counts how often it is read. */
+async function routeObservabilityWork(context) {
+  const reads = { count: 0 };
+  await context.route(/\/work\/card(?:%3A|:)observability(?:\?|$)/, (route) => {
+    reads.count += 1;
+    return json(route, {
+      work: {
+        ref: "card:observability",
+        id: "observability",
+        title: "Observability",
+        phase: "in_progress",
+        owner: "actor-luna",
+        plan: {
+          steps: [
+            { id: "image", title: "Bake the m6 image" },
+            {
+              id: "enroll",
+              title: "Enroll m6 in the fleet",
+              after: ["image"],
+            },
+          ],
+        },
+        plan_state: { next_steps: ["image"], critical_path: ["image"] },
+        summary: { status: { state: "moving", label: "Moving", reason: "" } },
+      },
+    });
+  });
+  return reads;
+}
 
-  test("by stage shows one column at a time with a counted switcher", async ({
+test.describe("lanes", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("Lanes is the swimlane board, kept in the URL across reloads", async ({
     page,
     context,
   }) => {
-    await setup(context);
-    await page.goto(`${WATCH}?view=board`);
-    const switcher = page.locator("[data-watch-stage-switcher]");
-    await expect(switcher).toBeVisible();
-    // Counts on every stage; the first stage with cards is on screen.
+    await setup(context, (route) => json(route, briefWithRollup()));
+    await context.route(
+      (url) => url.pathname === "/work/ungrouped",
+      (route) =>
+        json(route, {
+          work: [
+            {
+              ref: "card:fleet-alerts",
+              title: "Fleet alert routing",
+              phase: "backlog",
+              parent_ref: null,
+              created_at: "2026-10-15T08:00:00Z",
+              likely_home: [
+                {
+                  ref: "card:observability",
+                  title: "Observability",
+                  reasons: ["title_family"],
+                },
+              ],
+              next_actions: [],
+            },
+          ],
+          has_more: false,
+        }),
+    );
+    await page.goto(WATCH);
+    const toggle = page.locator("[data-watch-view-toggle]");
+    await expect(toggle.locator("button")).toHaveText(["List", "Lanes"]);
+    await toggle.locator('[data-watch-view="lanes"]').click();
+    await expect(page).toHaveURL(/\/watch\?view=lanes$/);
+    const board = page.locator("[data-swimlane-board]");
     await expect(
-      switcher.locator('[data-watch-stage-tab="review"]'),
-    ).toContainText("1");
-    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
-    await expect(page.locator('[data-watch-column="backlog"]')).toBeVisible();
-
-    await switcher.locator('[data-watch-stage-tab="review"]').tap();
-    await expect(
-      switcher.locator('[data-watch-stage-tab="review"]'),
-    ).toHaveAttribute("aria-pressed", "true");
-    const review = page.locator('[data-watch-column="review"]');
-    await expect(review).toBeVisible();
-    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
-    // Every card keeps its Move to menu, and nothing scrolls sideways.
-    await expect(
-      review.locator('[data-work-ref="card:fleet-onboarding"] select'),
+      board.locator(
+        '[data-lane-ref="card:observability"] [data-work-ref="card:runbook"]',
+      ),
     ).toBeVisible();
+    // The tray and the budget chip come with it; Decide stays in the header.
+    await expect(board.locator("[data-swimlane-tray]")).toContainText(
+      "Fleet alert routing",
+    );
+    await expect(board.locator("[data-initiative-budget]")).toHaveText(
+      "Initiatives 6/15",
+    );
+    await expect(page.locator("[data-watch-decide-link]")).toHaveCount(1);
+    await expect(board.getByText(/in Decide →/)).toHaveCount(0);
+    if (process.env.WATCH_SHOTS)
+      await page.screenshot({
+        path: `${process.env.WATCH_SHOTS}/watch-lanes.png`,
+        fullPage: true,
+      });
+
+    await page.reload();
+    await expect(
+      page.locator('[data-lane-ref="card:observability"]'),
+    ).toBeVisible();
+    await expect(page.locator('[data-watch-view="lanes"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await page.locator('[data-watch-view="list"]').click();
+    await expect(page).toHaveURL(/\/watch$/);
+    await expect(
+      page.getByRole("region", { name: "Initiatives", exact: true }),
+    ).toBeVisible();
+  });
+});
+
+test("a row opens inline on click and closes on the next", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) => json(route, briefWithRollup()));
+  const reads = await routeObservabilityWork(context);
+  await page.goto(WATCH);
+  // Rows that need the reader start open, without reading anything.
+  const fleet = page.locator('[data-collection-row="card:fleet-onboarding"]');
+  await expect(fleet).toHaveAttribute("data-expanded", "true");
+  await expect(fleet.locator("[data-details-load]")).toBeVisible();
+
+  const row = page.locator('[data-collection-row="card:observability"]');
+  const title = row.locator("[data-collection-toggle]");
+  await expect(title).toHaveAttribute("aria-expanded", "false");
+  // Nothing is read until a row opens.
+  expect(reads.count).toBe(0);
+
+  // Anywhere on the row: here, the empty middle of it.
+  await row
+    .locator(".grid-row")
+    .first()
+    .click({ position: { x: 600, y: 12 } });
+  const details = row.locator("[data-collection-details]");
+  await expect(details).toBeVisible();
+  await expect(title).toHaveAttribute("aria-expanded", "true");
+  // Its children as kid rows, each with its own state.
+  await expect(row.locator("[data-rollup-kid]")).toHaveCount(3);
+  await expect(row.locator('[data-rollup-kid="card:runbook"]')).toContainText(
+    "In review",
+  );
+  await expect(row.locator("[data-rollup-next]")).toContainText(
+    "next: report progress",
+  );
+  await expect(details.locator("[data-details-evidence]")).toContainText(
+    "Last evidence",
+  );
+  await expect(details.locator("[data-details-owner]")).toContainText("luna");
+  await expect(details.locator("[data-details-steps]")).toContainText(
+    "Bake the m6 image",
+  );
+  await expect(details.locator("[data-details-open]")).toHaveAttribute(
+    "href",
+    /\/initiatives\/observability$/,
+  );
+  if (process.env.WATCH_SHOTS)
+    await page.screenshot({
+      path: `${process.env.WATCH_SHOTS}/watch-row-expanded.png`,
+      fullPage: true,
+    });
+
+  // Several rows can be open; each closes on its own.
+  await expect(fleet).toHaveAttribute("data-expanded", "true");
+  await row
+    .locator(".grid-row")
+    .first()
+    .click({ position: { x: 600, y: 12 } });
+  await expect(details).toHaveCount(0);
+  await expect(title).toHaveAttribute("aria-expanded", "false");
+  await expect(fleet).toHaveAttribute("data-expanded", "true");
+
+  // Opening it again is answered from the cache: one read in all.
+  await title.click();
+  await expect(details.locator("[data-details-steps]")).toContainText(
+    "Bake the m6 image",
+  );
+  expect(reads.count).toBe(1);
+});
+
+test("a row opens and closes from the keyboard", async ({ page, context }) => {
+  await setup(context, (route) => json(route, briefWithRollup()));
+  await routeObservabilityWork(context);
+  await page.goto(WATCH);
+  const row = page.locator('[data-collection-row="card:observability"]');
+  const title = row.locator("[data-collection-toggle]");
+  await title.focus();
+  await page.keyboard.press("Enter");
+  await expect(title).toHaveAttribute("aria-expanded", "true");
+  await expect(row.locator("[data-collection-details]")).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(title).toHaveAttribute("aria-expanded", "false");
+  await expect(row.locator("[data-collection-details]")).toHaveCount(0);
+});
+
+/** Pinned dashboards with long titles, so the tab row overflows. */
+async function routeDashboards(context) {
+  const ids = ["omi", "fleet", "margin", "retention", "billing"];
+  const report = (id) => ({
+    id,
+    ref: `document:${id}`,
+    segment: id,
+    title: `${id[0].toUpperCase()}${id.slice(1)} weekly dashboard`,
+    updated_at: "2026-10-13T00:00:00Z",
+    revision_ref: `document_revision:${id}-1`,
+    report: visualReportExample,
+  });
+  await context.route(
+    (url) => url.pathname === "/workspace/dashboard/reports",
+    (route) =>
+      json(route, {
+        status: "ok",
+        pinned_ref: "document:omi",
+        reports: [...ids, "extra"].map(report),
+        has_more: false,
+      }),
+  );
+  await context.route(
+    (url) => url.pathname === "/workspace/dashboard/pins",
+    (route) =>
+      json(route, {
+        document_refs: ids.map((id) => `document:${id}`),
+        source: "personal",
+      }),
+  );
+}
+
+/** What the tab list's box says about overflow and scrollbars. */
+const tabBox = (page) =>
+  page.locator("[data-watch-tabs]").evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+      overflowY: style.overflowY,
+      scrollbarWidth: style.scrollbarWidth,
+      verticalOverflow: el.scrollHeight - el.clientHeight,
+      // A drawn scrollbar takes room from the client box.
+      scrollbarX: el.offsetHeight - el.clientHeight,
+      scrollbarY: el.offsetWidth - el.clientWidth,
+      scrolls: el.scrollWidth > el.clientWidth,
+    };
+  });
+
+for (const [name, viewport] of [
+  ["desktop", { width: 1000, height: 800 }],
+  ["phone", { width: 390, height: 844 }],
+]) {
+  test(`the tab row has no scrollbar (${name})`, async ({ page, context }) => {
+    await page.setViewportSize(viewport);
+    await setup(context);
+    await routeDashboards(context);
+    await page.goto(WATCH);
+    await expect(page.locator("[data-watch-more-dashboards]")).toBeVisible();
+    await expect(
+      page.locator('[data-watch-tab="dashboard:billing"]'),
+    ).toBeAttached();
+    const box = await tabBox(page);
+    expect(box).toMatchObject({
+      overflowY: "hidden",
+      scrollbarWidth: "none",
+      verticalOverflow: 0,
+      scrollbarX: 0,
+      scrollbarY: 0,
+    });
+    // Tabs that do not fit scroll sideways, and the page itself does not.
+    expect(box.scrolls).toBe(true);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth + 1,
       ),
     ).toBe(true);
+    // Picking the last tab brings it into view.
+    await page.locator('[data-watch-tab="dashboard:billing"]').click();
+    await expect(
+      page.locator('[data-watch-tab="dashboard:billing"]'),
+    ).toBeInViewport({ ratio: 0.9 });
+    if (process.env.WATCH_SHOTS)
+      await page.screenshot({
+        path: `${process.env.WATCH_SHOTS}/watch-tabs-${name}.png`,
+        clip: { x: 0, y: 0, width: viewport.width, height: 220 },
+      });
   });
-});
+}
 
-test.describe("phone move", () => {
+test.describe("phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test("a card moved with Move to takes the switcher with it", async ({
+  test("a tap opens a row and the next tap closes it", async ({
     page,
     context,
   }) => {
-    await setup(context);
-    const now = new Date().toISOString();
-    await context.route(/\/work\/card(?:%3A|:)labels/, (route) =>
-      json(route, {
-        work: {
-          ref: "card:labels",
-          id: "labels",
-          title: "Label scheme",
-          phase: "backlog",
-          board_ref: "board:b1",
-          version: 1,
-          source: { authority: "nexus" },
-          updated_at: now,
-        },
-      }),
+    await setup(context, (route) => json(route, briefWithRollup()));
+    await routeObservabilityWork(context);
+    await page.goto(WATCH);
+    const row = page.locator('[data-collection-row="card:observability"]');
+    await row
+      .locator(".grid-row")
+      .first()
+      .tap({ position: { x: 200, y: 12 } });
+    const details = row.locator("[data-collection-details]");
+    await expect(details).toBeVisible();
+    await expect(details.locator("[data-details-steps]")).toContainText(
+      "Bake the m6 image",
     );
-    await context.route(/\/boards\/(?:board(?:%3A|:))?b1/, (route) =>
-      json(route, { board: { id: "b1", updated_at: now } }),
-    );
-    await context.route(/\/cards\/[^/]+\/move/, (route) =>
-      json(route, { card: { id: "labels" } }),
-    );
-    await page.goto(`${WATCH}?view=board`);
-    const card = page.locator(
-      '[data-watch-column="backlog"] [data-work-ref="card:labels"]',
-    );
-    await expect(card).toBeVisible();
-    await card.locator("select").selectOption("review");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+    if (process.env.WATCH_SHOTS)
+      await page.screenshot({
+        path: `${process.env.WATCH_SHOTS}/watch-row-expanded-phone.png`,
+        fullPage: true,
+      });
+    await row.locator("[data-collection-toggle]").tap();
+    await expect(details).toHaveCount(0);
+  });
 
-    // The reader goes with it: Review is on screen, with the card focused.
-    await expect(
-      page.locator('[data-watch-stage-tab="review"]'),
-    ).toHaveAttribute("aria-pressed", "true");
-    const moved = page.locator(
-      '[data-watch-column="review"] [data-work-ref="card:labels"]',
+  test("Lanes stack on a phone", async ({ page, context }) => {
+    await setup(context, (route) => json(route, briefWithRollup()));
+    await context.route(
+      (url) => url.pathname === "/work/ungrouped",
+      (route) => json(route, { work: [], has_more: false }),
     );
-    await expect(moved).toBeVisible();
-    await expect(moved).toBeFocused();
-    await expect(page.locator("[data-watch-column]:visible")).toHaveCount(1);
+    await page.goto(`${WATCH}?view=lanes`);
+    await expect(
+      page.locator('[data-lane-ref="card:fleet-onboarding"]'),
+    ).toBeVisible();
+    await expect(page.locator("[data-initiative-budget]")).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+    if (process.env.WATCH_SHOTS)
+      await page.screenshot({
+        path: `${process.env.WATCH_SHOTS}/watch-lanes-phone.png`,
+        fullPage: true,
+      });
   });
 });
 
@@ -506,14 +775,12 @@ test("Loops with run receipts show cards, totals and the climb", async ({
   // A loop's row shows its goal as a sparkline; expanding it shows the card.
   const climber = row("card:avo-cleanup");
   await expect(climber.locator("polyline")).toHaveCount(1);
-  await climber.getByRole("button", { name: /Show details/ }).click();
+  await climber.locator("[data-collection-toggle]").click();
   const card = climber.locator('[data-loop="card:avo-cleanup"]');
   await expect(card.locator("[data-loop-chart] polyline")).toHaveCount(2);
   await expect(card.locator("[data-loop-runs] li")).toHaveCount(6);
   await expect(card).toContainText("reclaimable_gb");
-  await row("card:retention-check")
-    .getByRole("button", { name: /Show details/ })
-    .click();
+  await row("card:retention-check").locator("[data-collection-toggle]").click();
   await expect(row("card:retention-check")).toContainText("run overdue by 2d");
   await expect(page.locator("[data-collection]")).not.toContainText("NaN");
   if (process.env.LOOP_SHOTS) {

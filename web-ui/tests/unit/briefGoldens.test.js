@@ -29,9 +29,8 @@ vi.mock("$lib/actions/durableDraft.js", () => ({
 }));
 
 import DecisionCard from "../../src/lib/components/decide/DecisionCard.svelte";
-import WatchRow from "../../src/lib/components/watch/WatchRow.svelte";
-import WatchList from "../../src/lib/components/watch/WatchList.svelte";
-import WatchBoard from "../../src/lib/components/watch/WatchBoard.svelte";
+import InitiativeRollupList from "../../src/lib/components/watch/InitiativeRollupList.svelte";
+import { rollupRows } from "../../src/lib/watchRollup.js";
 import {
   BRIEF_COMPUTED_FIELDS,
   normalizeBrief,
@@ -42,18 +41,24 @@ import fixture from "../../../contracts/fixtures/brief/brief.v1.json";
 
 const brief = normalizeBrief(fixture);
 const NOW = Date.parse("2026-10-15T09:00:00Z");
+const watchProps = {
+  rows: rollupRows(brief.initiatives),
+  now: NOW,
+  hrefFor: (ref) => `/i/${ref}`,
+  decideHref: (row) => `/decide?initiative=${row.ref}`,
+};
 
 /** Visible text, one line per block-ish element, whitespace collapsed. */
 function textOf(root) {
   return [
     ...root.querySelectorAll(
-      "[data-decision-ref], [data-watch-row], h2, h3, button[aria-expanded]",
+      "[data-decision-ref], [data-collection-row], h2, h3, button[aria-expanded]",
     ),
   ]
     .filter(
       (el) =>
-        !el.closest("[data-decision-ref], [data-watch-row]") ||
-        el.matches("[data-decision-ref], [data-watch-row]"),
+        !el.closest("[data-decision-ref], [data-collection-row]") ||
+        el.matches("[data-decision-ref], [data-collection-row]"),
     )
     .map((el) => el.textContent.replace(/\s+/g, " ").trim())
     .join("\n");
@@ -104,10 +109,7 @@ describe("brief.v1 fixture renders Decide and Watch (I7)", () => {
   });
 
   it("Watch golden", async () => {
-    const { container } = render(WatchList, {
-      initiatives: brief.initiatives,
-      now: NOW,
-    });
+    const { container } = render(InitiativeRollupList, watchProps);
     await expect(textOf(container) + "\n").toMatchFileSnapshot(
       "goldens/watch.brief.v1.txt",
     );
@@ -115,37 +117,9 @@ describe("brief.v1 fixture renders Decide and Watch (I7)", () => {
 });
 
 describe("computed-source lint (I1)", () => {
-  it("every Watch row, in both variants and with metrics", () => {
-    const measured = {
-      ...brief.initiatives[0],
-      series: [{ ref: "series:conversion", name: "conversion", last_value: 3 }],
-      metricFlat: { flat: true, for_seconds: 345600, window_seconds: 604800 },
-    };
-    for (const initiative of [...brief.initiatives, measured]) {
-      for (const variant of ["row", "card"]) {
-        const { container } = render(WatchRow, {
-          initiative,
-          variant,
-          now: NOW,
-          metrics: true,
-        });
-        expect(lintComputed(container), `${initiative.ref} ${variant}`).toEqual(
-          [],
-        );
-        cleanup();
-      }
-    }
-  });
-
-  it("the Watch list and the by-stage view", () => {
-    for (const component of [WatchList, WatchBoard]) {
-      const { container } = render(component, {
-        initiatives: brief.initiatives,
-        now: NOW,
-      });
-      expect(lintComputed(container)).toEqual([]);
-      cleanup();
-    }
+  it("the Watch list", () => {
+    const { container } = render(InitiativeRollupList, watchProps);
+    expect(lintComputed(container)).toEqual([]);
   });
 
   it("every Decide row", () => {

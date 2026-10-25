@@ -432,16 +432,17 @@ test("a dark card shows the state and the possibly-moot evidence everywhere", as
   await expect(summary.locator("[data-moot]")).toContainText("Possibly moot");
 });
 
-test("one initiative reads the same on the Watch list, the Watch board and its page", async ({
+test("one initiative reads the same on the Watch list and its page", async ({
   page,
 }) => {
   /*
    * The surfaces that render an initiative's computed state now all read the
-   * brief. Whatever the state and the promise line say, the list row, the
-   * by-stage card and the initiative page header have to say the same thing.
+   * brief. Whatever the state and the promise line say, the list row and
+   * the initiative page header have to say the same thing.
    */
   test.setTimeout(120_000);
-  const ref = "card:battery-measurement";
+  // A measured initiative is on Loops; this one is on the Initiatives list.
+  const ref = "card:fleet-onboarding";
   const row = brief.initiatives.find((item) => item.ref === ref);
   await page.setViewportSize({ width: 1440, height: 1100 });
   await installWorkspaceApi(page, {
@@ -450,7 +451,7 @@ test("one initiative reads the same on the Watch list, the Watch board and its p
     work: [
       {
         ref,
-        handle: "battery-measurement",
+        handle: "fleet-onboarding",
         title: row.title,
         summary: "Measure the battery.",
         phase: "in_progress",
@@ -462,7 +463,7 @@ test("one initiative reads the same on the Watch list, the Watch board and its p
   });
   const workRow = {
     ref,
-    handle: "battery-measurement",
+    handle: "fleet-onboarding",
     title: row.title,
     summary: "Measure the battery.",
     phase: "in_progress",
@@ -472,7 +473,7 @@ test("one initiative reads the same on the Watch list, the Watch board and its p
   };
   await page.route(
     (url) =>
-      [`/work/${ref}`, "/work/battery-measurement"].includes(
+      [`/work/${ref}`, "/work/fleet-onboarding"].includes(
         decodeURIComponent(url.pathname),
       ),
     (route) => route.fulfill({ json: { work: workRow } }),
@@ -493,7 +494,7 @@ test("one initiative reads the same on the Watch list, the Watch board and its p
   };
   const read = async (scope) => {
     // The list groups by state and the row carries it as an attribute; the
-    // by-stage card and the page header print the label.
+    // page header prints the label.
     const stateAttr = await scope
       .getAttribute("data-watch-state")
       .catch(() => null);
@@ -519,19 +520,18 @@ test("one initiative reads the same on the Watch list, the Watch board and its p
 
   await page.goto(WATCH);
   const list = await read(page.locator(`[data-collection-row="${ref}"]`));
-  await page.goto(`${WATCH}?view=board`);
-  const board = await read(
-    page.locator(`[data-watch-row="${ref}"][data-watch-variant="card"]`),
-  );
-  // The card links to the initiative page, which is the drill-down.
-  const href = await page
-    .locator(`[data-watch-row="${ref}"] [data-watch-title]`)
+  // The opened row links to the initiative page, which is the drill-down.
+  const listRow = page.locator(`[data-collection-row="${ref}"]`);
+  // A row that needs the reader starts open.
+  if ((await listRow.getAttribute("data-expanded")) !== "true")
+    await listRow.locator("[data-collection-toggle]").click();
+  const href = await listRow
+    .locator("[data-details-open]")
     .getAttribute("href");
   await page.goto(href);
   const header = await read(page.locator("main").first());
 
-  expect(list.state).toBe("Past promise");
-  expect(list.parts.past_promise_for).toContain("past");
-  expect(board).toEqual(list);
+  expect(list.state).toBe("Moving");
+  expect(list.parts.promise).toContain("next: enroll m6");
   expect(header).toEqual(list);
 });

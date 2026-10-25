@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeBrief, WATCH_STATES } from "../../src/lib/brief.js";
-import {
-  initiativeRowState,
-  collectionFromInitiatives,
-  collectionFromDailyDigest,
-} from "../../src/lib/collection.js";
+import { collectionFromDailyDigest } from "../../src/lib/collection.js";
 import { planHealthModel } from "../../src/lib/planHealth.js";
 import { statusRank, workSummaryModel } from "../../src/lib/workSummary.js";
 
@@ -40,8 +36,11 @@ describe("digest vocabulary", () => {
     expect(WATCH_STATES.indexOf("digest")).toBeLessThan(
       WATCH_STATES.indexOf("done"),
     );
-    expect(initiativeRowState(row)).toBe("digest");
-    expect(collectionFromInitiatives([row]).counts.digest).toBe(1);
+    expect(
+      collectionFromDailyDigest([
+        { ref: row.ref, title: row.title, reason: "awaiting_owner" },
+      ]).counts.digest,
+    ).toBe(1);
     const health = planHealthModel({
       plan_health: { state: "digest", reason: "Daily owner digest" },
     });

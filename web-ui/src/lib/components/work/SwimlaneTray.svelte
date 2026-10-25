@@ -34,7 +34,7 @@
     {@const waiting = pending.has(row.ref)}
     {@const homes = row.homes}
     <li
-      class="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 text-meta {onGrab &&
+      class="flex flex-wrap items-center gap-x-2.5 gap-y-2 py-2 text-meta {onGrab &&
       !waiting
         ? 'md:cursor-grab'
         : ''}"
@@ -43,35 +43,33 @@
         ? (event) => onGrab(event, row)
         : undefined}
     >
-      <span class="min-w-0 flex-[1_1_14rem]">
-        <span class="font-medium text-fg [overflow-wrap:anywhere]"
-          >{row.title}</span
-        >
+      <span class="min-w-0 flex-[1_1_15rem]">
+        <span class="text-fg [overflow-wrap:anywhere]">“{row.title}”</span>
         {#if row.createdAt}
           <span class="text-fg-muted">
             · created {formatAgo(row.createdAt, now) || "recently"}</span
           >
         {/if}
-        <span
-          class="mt-0.5 block text-micro text-fg-muted"
-          data-source="computed:next_actions"
-        >
-          {#if waiting}
-            Grouping saved. Sending…
-          {:else if homes.length}
-            Likely home: {homes[0].title}{homeReason(homes[0].reasons)
-              ? ` · ${homeReason(homes[0].reasons)}`
-              : ""}
-          {:else}
-            No likely home
-          {/if}
-        </span>
+      </span>
+      <span
+        class="min-w-0 text-fg-muted [overflow-wrap:anywhere]"
+        data-source="computed:next_actions"
+      >
+        {#if waiting}
+          Grouping saved. Sending…
+        {:else if homes.length}
+          likely: {homes[0].title}{homeReason(homes[0].reasons)
+            ? ` · ${homeReason(homes[0].reasons)}`
+            : ""}
+        {:else}
+          no likely home
+        {/if}
       </span>
       <span class="flex flex-wrap items-center gap-2">
         {#each homes as home (home.ref)}
           <button
             type="button"
-            class="ui-btn-secondary min-h-9 px-2.5 py-1 text-micro"
+            class="tray-take min-h-9"
             disabled={waiting}
             data-group-under={home.ref}
             onclick={() => onGroup(row, home)}>Group under {home.title}</button
@@ -83,7 +81,7 @@
           >
           <select
             id="{idPrefix}-other-{row.ref}"
-            class="ui-input min-h-9 w-auto max-w-[12rem] py-1 text-micro"
+            class="tray-other min-h-9 w-auto max-w-[12rem]"
             disabled={waiting}
             onchange={(event) => other(row, event)}
           >
@@ -102,3 +100,35 @@
     More recent cards are waiting. Group these to see the rest.
   </p>
 {/if}
+
+<style>
+  /* The suggested home is the one-tap answer; "Other…" is the quiet one. */
+  .tray-take {
+    border: 1px solid color-mix(in srgb, var(--accent-solid) 45%, transparent);
+    border-radius: 7px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .tray-take:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-soft) 70%, var(--accent-solid));
+  }
+  .tray-other {
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--fg-muted);
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  .tray-take:disabled,
+  .tray-other:disabled {
+    opacity: 0.55;
+  }
+  .tray-take:focus-visible,
+  .tray-other:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: 1px;
+  }
+</style>

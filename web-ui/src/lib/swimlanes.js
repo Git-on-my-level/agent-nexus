@@ -17,7 +17,7 @@ import { isLoop } from "$lib/brief.js";
 export const LANE_COLUMNS = [
   { key: "not_started", label: "Not started", phases: ["backlog", "ready"] },
   { key: "moving", label: "In progress", phases: ["in_progress", "review"] },
-  { key: "stuck", label: "Blocked or needs you", phases: ["blocked"] },
+  { key: "stuck", label: "Blocked / needs you", phases: ["blocked"] },
   { key: "done", label: "Done", phases: ["done", "cancelled"] },
 ];
 
