@@ -5,7 +5,7 @@ import (
 	"database/sql"
 )
 
-// Card work leases (migration 117).
+// Card work leases (migration 118).
 //
 // card_leases holds at most one lease row per card: the current or last
 // holder, its epoch (the fencing token, incremented whenever a different
