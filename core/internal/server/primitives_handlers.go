@@ -128,6 +128,10 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
+	if typeValue == primitives.AskRevisedEventType {
+		writeError(w, 400, "invalid_request", "ask revisions must use POST /asks/{ask_id}/revise")
+		return
+	}
 	if typeValue == "run_recorded" {
 		if err := primitives.ValidateRunRecorded(req.Event); err != nil {
 			writeError(w, 400, "invalid_request", err.Error())

@@ -142,8 +142,28 @@ function refTitle(value) {
   return ref ? { ref, title: text(value.title) } : null;
 }
 
-function normalizeAskPresentation(raw) {
+function normalizeAskPresentation(raw, includeRewrite = true) {
   return {
+    presentationRevision: Number(raw.presentation_revision ?? 0),
+    presentationRewrite:
+      includeRewrite &&
+      raw.presentation_rewrite &&
+      typeof raw.presentation_rewrite === "object"
+        ? {
+            actorId: text(raw.presentation_rewrite.actor_id),
+            actorDisplay:
+              text(raw.presentation_rewrite.actor?.display) ||
+              text(raw.presentation_rewrite.actor_id),
+            at: text(raw.presentation_rewrite.at),
+            previous: {
+              ...normalizeAskPresentation(
+                raw.presentation_rewrite.previous ?? {},
+                false,
+              ),
+              title: text(raw.presentation_rewrite.previous?.title),
+            },
+          }
+        : null,
     body: String(raw.body ?? ""),
     situation: text(raw.situation),
     impact: text(raw.impact),

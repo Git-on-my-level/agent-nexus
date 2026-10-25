@@ -1,5 +1,17 @@
 <script>
   import AskPresentation from "./AskPresentation.svelte";
+  let showOriginal = $state(false);
+  const shownDecision = $derived(
+    showOriginal && decision.presentationRewrite
+      ? {
+          ...decision,
+          ...decision.presentationRewrite.previous,
+          body: decision.body,
+          evidence: decision.evidence,
+        }
+      : decision,
+  );
+
   import { page } from "$app/stores";
   import { durableDraft } from "$lib/actions/durableDraft.js";
   import { copyText } from "$lib/clipboard.js";
@@ -469,7 +481,7 @@
   data-variant={variant}
   tabindex={pane ? -1 : 0}
   onkeydown={onKeydown}
-  aria-label={decision.title}
+  aria-label={shownDecision.title}
 >
   <header class="space-y-1.5">
     <p
@@ -516,12 +528,12 @@
       data-decision-title
     >
       {#if full || pane}
-        {decision.title}
+        {shownDecision.title}
       {:else}
         <a
           class="hover:underline"
           href={href(`/decide/${encodeURIComponent(itemId)}`)}
-          data-decision-link>{decision.title}</a
+          data-decision-link>{shownDecision.title}</a
         >
       {/if}
     </h3>
@@ -537,9 +549,23 @@
     {/if}
   </header>
 
-  {#if decision.situation || decision.impact || decision.recommendation || decision.alternatives?.length || decision.if_no_answer || decision.details || decision.evidence?.length}
+  {#if decision.presentationRewrite || decision.situation || decision.impact || decision.recommendation || decision.alternatives?.length || decision.if_no_answer || decision.details || decision.evidence?.length}
+    {#if decision.presentationRewrite}
+      <p class="text-meta text-fg-muted" data-presentation-rewrite>
+        Rewritten for clarity by {decision.presentationRewrite.actorDisplay ||
+          decision.presentationRewrite.actorId} ·
+        <button
+          type="button"
+          class="underline"
+          aria-expanded={showOriginal}
+          onclick={() => (showOriginal = !showOriginal)}
+        >
+          {showOriginal ? "Show rewrite" : "Show original"}
+        </button>
+      </p>
+    {/if}
     <AskPresentation
-      {decision}
+      decision={shownDecision}
       organizationSlug={organizationSlug || $page.params.organization}
       workspaceSlug={workspaceSlug || $page.params.workspace}
     />
@@ -633,6 +659,7 @@
                 <summary>{member.title || member.ref}</summary>
                 <AskPresentation
                   decision={member}
+                  allowRevisionToggle
                   organizationSlug={organizationSlug ||
                     $page.params.organization}
                   workspaceSlug={workspaceSlug || $page.params.workspace}

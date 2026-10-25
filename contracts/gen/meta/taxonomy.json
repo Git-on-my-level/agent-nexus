@@ -97,6 +97,7 @@
         "exception_raised",
         "human_attention_requested",
         "human_attention_responded",
+        "human_attention_revised",
         "human_attention_withdrawn",
         "message_posted",
         "receipt_added",
@@ -185,6 +186,7 @@
       "attention_feedback",
       "human_attention_requested",
       "human_attention_responded",
+      "human_attention_revised",
       "human_attention_withdrawn"
     ],
     "boards": [
@@ -309,6 +311,9 @@
       "attention"
     ],
     "human_attention_responded": [
+      "attention"
+    ],
+    "human_attention_revised": [
       "attention"
     ],
     "human_attention_withdrawn": [

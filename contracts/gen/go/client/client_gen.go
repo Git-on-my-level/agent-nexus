@@ -387,6 +387,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"asks.presentation.get", "asks.revise"},
 	},
 	{
 		CommandID:  "asks.delivery",
@@ -411,6 +412,30 @@ var CommandRegistry = []CommandSpec{
 		Stability:  "beta",
 		Concepts:   []string{"inbox"},
 		Adjacent:   []string{"asks.delivery", "asks.stream", "asks.subscribe"},
+	},
+	{
+		CommandID:  "asks.presentation.get",
+		CLIPath:    "ask presentation",
+		Group:      "ask",
+		Method:     "GET",
+		Path:       "/asks/{ask_id}/presentation",
+		PathParams: []string{"ask_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "read"},
+		Adjacent:   []string{"asks.batch.create", "asks.revise"},
+	},
+	{
+		CommandID:  "asks.revise",
+		CLIPath:    "ask revise",
+		Group:      "ask",
+		Method:     "POST",
+		Path:       "/asks/{ask_id}/revise",
+		PathParams: []string{"ask_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"asks.batch.create", "asks.presentation.get"},
 	},
 	{
 		CommandID:  "asks.stream",
@@ -3782,6 +3807,14 @@ func (c *Client) AsksDelivery(ctx context.Context, pathParams map[string]string,
 
 func (c *Client) AsksGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "asks.get", pathParams, opts)
+}
+
+func (c *Client) AsksPresentationGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.presentation.get", pathParams, opts)
+}
+
+func (c *Client) AsksRevise(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.revise", pathParams, opts)
 }
 
 func (c *Client) AsksStream(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

@@ -7255,6 +7255,77 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  /asks/{ask_id}/presentation:
+    get:
+      operationId: getAskPresentation
+      summary: Read an ask's current presentation and concurrency token
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.presentation.get
+      x-anx-why: Improve clarity while preserving answer integrity.
+      x-anx-agent-notes: Read presentation_revision before revising. Preserve request_key across retries.
+      x-anx-output-envelope: Returns AskPresentationState.
+      x-anx-stability: beta
+      x-anx-error-codes: [auth_required, not_found]
+      x-anx-cli-path: ask presentation
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, read]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Authorized presentation. Original ask events remain immutable.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskPresentationState'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+  /asks/{ask_id}/revise:
+    post:
+      operationId: reviseAskPresentation
+      summary: Rewrite only the presentation of an open ask, or undo its last rewrite
+      description: >
+        The requester, a human member, or an explicitly granted auth-admin agent may
+        revise a visible ask. The ask and subject card visibility rules still apply.
+        if_revision is the separate presentation_revision (initially zero), never a
+        card decision revision. request_key atomically replays the original result;
+        changing its body conflicts. Only title, situation, impact, recommendation,
+        alternatives, if_no_answer and details may be patched. Null clears an optional
+        field. Unknown fields at every level are rejected. All answer options,
+        proposals, recommended index, requester, subject, kind, routing, deadlines and
+        revision-guarded semantics remain unchanged. Undo appends a revision restoring
+        the previous presentation; it never erases audit history. Closed asks conflict.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.revise
+      x-anx-why: Improve clarity while preserving answer integrity.
+      x-anx-agent-notes: Read presentation_revision before revising. Preserve request_key across retries.
+      x-anx-output-envelope: Returns AskPresentationState.
+      x-anx-stability: beta
+      x-anx-cli-path: ask revise
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-error-codes: [auth_required, forbidden, not_found, invalid_request, conflict]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviseAskPresentationRequest'}
+      responses:
+        '200':
+          description: Revision and replay result committed atomically.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskPresentationState'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
   /asks/batch:
     post:
       operationId: createAskBatch
@@ -13196,6 +13267,61 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
       required: [board_ref, board_title, column_key]
 
+    RevisableAskPresentation:
+      type: object
+      additionalProperties: false
+      properties:
+        title: {type: string, minLength: 1, maxLength: 160}
+        situation: {type: string, nullable: true, maxLength: 4000}
+        impact: {type: string, nullable: true, maxLength: 4000}
+        recommendation:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [action, why]
+          properties:
+            action: {type: string, minLength: 1, maxLength: 240}
+            why: {type: string, minLength: 1, maxLength: 4000}
+        alternatives:
+          type: array
+          nullable: true
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [action, consequence]
+            properties:
+              action: {type: string, minLength: 1, maxLength: 240}
+              consequence: {type: string, minLength: 1, maxLength: 4000}
+        if_no_answer: {type: string, nullable: true, maxLength: 4000}
+        details: {type: string, nullable: true, maxLength: 32000}
+    ReviseAskPresentationRequest:
+      type: object
+      additionalProperties: false
+      required: [if_revision, request_key]
+      properties:
+        if_revision: {type: integer, minimum: 0}
+        request_key: {type: string, minLength: 1, maxLength: 128}
+        presentation: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        undo: {type: boolean, default: false, description: Mutually exclusive with presentation.}
+    AskPresentationRevision:
+      type: object
+      required: [actor_id, at, event_ref, previous]
+      properties:
+        actor_id: {type: string}
+        actor: {$ref: '#/components/schemas/BriefPrincipal'}
+        at: {type: string, format: date-time}
+        event_ref: {type: string}
+        previous: {$ref: '#/components/schemas/RevisableAskPresentation'}
+    AskPresentationState:
+      type: object
+      required: [ask_id, presentation_revision, presentation]
+      properties:
+        ask_id: {type: string}
+        presentation_revision: {type: integer, minimum: 0}
+        presentation: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
+
     AskRecommendation:
       type: object
       required: [action, why]
@@ -13276,6 +13402,8 @@ components:
         source_event_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         body: { type: string }
+        presentation_revision: {type: integer, minimum: 0}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
         situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
         impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
         recommendation: {$ref: '#/components/schemas/AskRecommendation'}
@@ -15104,6 +15232,8 @@ components:
         kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
         title: { type: string }
         body: { type: string }
+        presentation_revision: {type: integer, minimum: 0}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
         situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
         impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
         recommendation: {$ref: '#/components/schemas/AskRecommendation'}
@@ -15147,6 +15277,8 @@ components:
                   inbox_item_id: { type: string }
                   event_ref: { type: string, description: "Authoritative ask event reference (event:<id>) for this member." }
                   title: { type: string }
+                  presentation_revision: {type: integer, minimum: 0}
+                  presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
                   situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
                   impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
                   recommendation: {$ref: '#/components/schemas/AskRecommendation'}
@@ -15718,6 +15850,8 @@ components:
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         body: { type: string }
+        presentation_revision: {type: integer, minimum: 0}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
         situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
         impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
         recommendation: {$ref: '#/components/schemas/AskRecommendation'}

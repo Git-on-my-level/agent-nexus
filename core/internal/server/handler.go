@@ -2728,6 +2728,13 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	registerRoute("/asks/", func(r *http.Request) routeAccessRequirement {
 		rest := strings.TrimPrefix(r.URL.Path, "/asks/")
 		parts := strings.Split(rest, "/")
+		if len(parts) == 2 && parts[0] != "" && ((parts[1] == "presentation" && r.Method == http.MethodGet) || (parts[1] == "revise" && r.Method == http.MethodPost)) {
+			mutation := routeMutationNone
+			if r.Method == http.MethodPost {
+				mutation = routeMutationBusiness
+			}
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, mutation: mutation, supported: true}
+		}
 		if len(parts) == 1 && parts[0] == "batch" && r.Method == http.MethodPost {
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		}
@@ -2747,6 +2754,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			switch parts[1] {
+			case "revise":
+				handleAskPresentation(w, r, opts, parts[0], true)
+				return
 			case "subscriptions":
 				handleAskSubscription(w, r, opts, parts[0])
 				return
@@ -2754,6 +2764,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				handleAskDeliveryReceipt(w, r, opts, parts[0])
 				return
 			}
+		}
+		if len(parts) == 2 && parts[1] == "presentation" && r.Method == http.MethodGet {
+			handleAskPresentation(w, r, opts, parts[0], false)
+			return
 		}
 		handleAskOutcome(w, r, opts, false)
 	})

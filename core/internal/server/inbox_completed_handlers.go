@@ -314,6 +314,11 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		payloadItems = append(payloadItems, completedInboxItemPayload(r.Context(), opts.primitiveStore, evt, reqEvt))
 	}
 
+	if err := enrichAskPresentations(r, opts, payloadItems); err != nil {
+		writeReadInternalError(w, r, err, "cannot read completed ask presentations")
+		return
+	}
+
 	// Materialization is complete. Network backpressure must not retain the
 	// SQLite connection, denial token or WAL snapshot. Deferred cleanup still
 	// covers every earlier exit.
@@ -366,6 +371,10 @@ func handleGetCompletedInboxItem(w http.ResponseWriter, r *http.Request, opts ha
 	payload, _ := ev["payload"].(map[string]any)
 	reqEvt := resolveHumanAttentionRequestEvent(r.Context(), opts.primitiveStore, payload)
 	item := completedInboxItemPayload(r.Context(), opts.primitiveStore, ev, reqEvt)
+	if err := enrichAskPresentations(r, opts, []map[string]any{item}); err != nil {
+		writeReadInternalError(w, r, err, "cannot read completed ask presentation")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"item":         item,

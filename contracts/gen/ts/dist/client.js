@@ -1391,6 +1391,10 @@ export const commandRegistry = [
                 }
             ]
         },
+        "adjacent_commands": [
+            "asks.presentation.get",
+            "asks.revise"
+        ],
         "go_method": "AsksBatchCreate",
         "ts_method": "asksBatchCreate"
     },
@@ -1493,6 +1497,130 @@ export const commandRegistry = [
         ],
         "go_method": "AsksGet",
         "ts_method": "asksGet"
+    },
+    {
+        "command_id": "asks.presentation.get",
+        "cli_path": "ask presentation",
+        "group": "ask",
+        "method": "GET",
+        "path": "/asks/{ask_id}/presentation",
+        "operation_id": "getAskPresentation",
+        "summary": "Read an ask's current presentation and concurrency token",
+        "why": "Improve clarity while preserving answer integrity.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns AskPresentationState.",
+        "error_codes": [
+            "auth_required",
+            "not_found"
+        ],
+        "concepts": [
+            "inbox",
+            "read"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Read presentation_revision before revising. Preserve request_key across retries.",
+        "path_params": [
+            "ask_id"
+        ],
+        "adjacent_commands": [
+            "asks.batch.create",
+            "asks.revise"
+        ],
+        "go_method": "AsksPresentationGet",
+        "ts_method": "asksPresentationGet"
+    },
+    {
+        "command_id": "asks.revise",
+        "cli_path": "ask revise",
+        "group": "ask",
+        "method": "POST",
+        "path": "/asks/{ask_id}/revise",
+        "operation_id": "reviseAskPresentation",
+        "summary": "Rewrite only the presentation of an open ask, or undo its last rewrite",
+        "description": "The requester, a human member, or an explicitly granted auth-admin agent may revise a visible ask. The ask and subject card visibility rules still apply. if_revision is the separate presentation_revision (initially zero), never a card decision revision. request_key atomically replays the original result; changing its body conflicts. Only title, situation, impact, recommendation, alternatives, if_no_answer and details may be patched. Null clears an optional field. Unknown fields at every level are rejected. All answer options, proposals, recommended index, requester, subject, kind, routing, deadlines and revision-guarded semantics remain unchanged. Undo appends a revision restoring the previous presentation; it never erases audit history. Closed asks conflict.",
+        "why": "Improve clarity while preserving answer integrity.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns AskPresentationState.",
+        "error_codes": [
+            "auth_required",
+            "forbidden",
+            "not_found",
+            "invalid_request",
+            "conflict"
+        ],
+        "concepts": [
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Read presentation_revision before revising. Preserve request_key across retries.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "if_revision",
+                    "type": "integer"
+                },
+                {
+                    "name": "request_key",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "presentation.alternatives",
+                    "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "presentation.details",
+                    "type": "string"
+                },
+                {
+                    "name": "presentation.if_no_answer",
+                    "type": "string"
+                },
+                {
+                    "name": "presentation.impact",
+                    "type": "string"
+                },
+                {
+                    "name": "presentation.recommendation.action",
+                    "type": "string"
+                },
+                {
+                    "name": "presentation.recommendation.why",
+                    "type": "string"
+                },
+                {
+                    "name": "presentation.situation",
+                    "type": "string"
+                },
+                {
+                    "name": "presentation.title",
+                    "type": "string"
+                },
+                {
+                    "name": "undo",
+                    "type": "boolean"
+                }
+            ]
+        },
+        "path_params": [
+            "ask_id"
+        ],
+        "adjacent_commands": [
+            "asks.batch.create",
+            "asks.presentation.get"
+        ],
+        "go_method": "AsksRevise",
+        "ts_method": "asksRevise"
     },
     {
         "command_id": "asks.stream",
@@ -7597,6 +7725,7 @@ export const commandRegistry = [
                         "exception_raised",
                         "human_attention_requested",
                         "human_attention_responded",
+                        "human_attention_revised",
                         "human_attention_withdrawn",
                         "message_posted",
                         "receipt_added",
@@ -16434,6 +16563,12 @@ export class AnxClient {
     }
     asksGet(pathParams, options = {}) {
         return this.invoke("asks.get", pathParams, options);
+    }
+    asksPresentationGet(pathParams, options = {}) {
+        return this.invoke("asks.presentation.get", pathParams, options);
+    }
+    asksRevise(pathParams, options = {}) {
+        return this.invoke("asks.revise", pathParams, options);
     }
     asksStream(pathParams, options = {}) {
         return this.invoke("asks.stream", pathParams, options);

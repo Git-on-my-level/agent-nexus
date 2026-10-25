@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": false,
-  "rule_count": 29,
+  "rule_count": 30,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -163,6 +163,17 @@
         "response_text",
         "outcome",
         "responding_actor_id"
+      ]
+    },
+    "human_attention_revised": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "presentation_revision",
+        "previous",
+        "presentation"
       ]
     },
     "human_attention_withdrawn": {

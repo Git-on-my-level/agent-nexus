@@ -465,3 +465,49 @@ it("keeps a legacy body visible when only evidence is present", () => {
   expect(details.textContent).not.toContain(decision.body);
   expect(presentation.textContent).toContain(decision.body);
 });
+
+it("shows original copy without changing the answer binding", async () => {
+  const raw = structuredClone(fixture);
+  const target = raw.decisions.find((d) => d.ref === merge.ref);
+  target.title = "Plain question?";
+  target.situation = "Clear situation.";
+  target.presentation_revision = 1;
+  target.presentation_rewrite = {
+    actor_id: "curator",
+    at: "2026-10-26T00:00:00Z",
+    previous: {
+      title: "Original technical question?",
+      situation: "Original situation.",
+    },
+  };
+  const decision = normalizeBrief(raw).decisions.find(
+    (d) => d.ref === merge.ref,
+  );
+  const { container, getByRole, getByText } = render(DecisionCard, {
+    decision,
+    now: NOW,
+  });
+  expect(getByText(/Rewritten for clarity by curator/)).toBeTruthy();
+  expect(
+    container.querySelector("[data-decision-title]").textContent,
+  ).toContain("Plain question?");
+  const before = [
+    ...container.querySelectorAll("[data-decision-proposal]"),
+  ].map((v) => v.textContent);
+  await fireEvent.click(getByRole("button", { name: "Show original" }));
+  expect(
+    container.querySelector("[data-decision-title]").textContent,
+  ).toContain("Original technical question?");
+  expect(getByText("Original situation.")).toBeTruthy();
+  expect(
+    [...container.querySelectorAll("[data-decision-proposal]")].map(
+      (v) => v.textContent,
+    ),
+  ).toEqual(before);
+  await fireEvent.click(getByRole("button", { name: "Show rewrite" }));
+  expect(getByText("Clear situation.")).toBeTruthy();
+  await fireEvent.click(container.querySelector("[data-decision-proposal]"));
+  expect(queue.queueInboxResponse.mock.calls[0][0].request.response_text).toBe(
+    "Merge",
+  );
+});

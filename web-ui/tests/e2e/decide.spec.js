@@ -647,3 +647,47 @@ test("batch proposals start collapsed and open with enough context to decide", a
   }
   await expect(sections.first().getByText(members[0].details)).toBeHidden();
 });
+
+test("a clarity rewrite can show original copy and keeps the original answer", async ({
+  page,
+  context,
+}) => {
+  const rewritten = structuredClone(brief);
+  const ask = rewritten.decisions.find((d) => d.ref === MERGE.ref);
+  ask.title = "Plain question?";
+  ask.situation = "Clear situation.";
+  ask.presentation_revision = 1;
+  ask.presentation_rewrite = {
+    actor_id: "curator",
+    at: "2026-10-26T00:00:00Z",
+    previous: { title: "Original question?", situation: "Original situation." },
+  };
+  const bodies = await setup(context, {
+    briefRoute: (route) => json(route, rewritten),
+  });
+  await page.goto(`${LIST}/ask-91`);
+  const card = page.locator(
+    '[data-variant="full"][data-decision-ref="inbox:ask-91"]',
+  );
+  await expect(card.locator("[data-presentation-rewrite]")).toContainText(
+    "Rewritten for clarity by curator",
+  );
+  await expect(card.locator("[data-decision-title]")).toContainText(
+    "Plain question?",
+  );
+  await card.getByRole("button", { name: "Show original" }).click();
+  await expect(card.locator("[data-decision-title]")).toContainText(
+    "Original question?",
+  );
+  await expect(card.locator("[data-decision-presentation]")).toContainText(
+    "Original situation.",
+  );
+  await card.getByRole("button", { name: "Show rewrite" }).click();
+  await expect(card.locator("[data-decision-presentation]")).toContainText(
+    "Clear situation.",
+  );
+  await card.locator('[data-decision-proposal="1"]').click();
+  await flush(page);
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0].response_text).toBe("Merge");
+});

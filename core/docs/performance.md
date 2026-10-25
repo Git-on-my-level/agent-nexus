@@ -2141,3 +2141,32 @@ It retains the oldest-created/id-tie rule without rehydrating and sorting the
 same current parent per child. Workstream admission uses the same rule. The
 private-board fixture exercises the nonempty authorization path; no policy,
 budget or plan allowance is relaxed.
+
+## Ask presentation revisions
+
+`GET /asks/{ask_id}/presentation` resolves one scoped ask by its existing
+ID/handle indexes, loads that event by primary key, then seeks one
+`ask_presentation_heads(ask_id)` and its audit event primary key. Brief and inbox
+readers batch only their admitted asks in chunks of at most 200; each chunk
+adds one query and at most one row per ask. Batch asks remain capped at ten.
+There is no history scan, read-time rewrite, per-row query or new polling loop.
+Original event history remains immutable; Decide/inbox overlay only the eight
+allowed presentation fields and the audit metadata. Plain event GET/export
+continues to expose canonical original events and separate revision events.
+
+Cost grows with the admitted page and bounded presentation bytes, independent
+of unrelated workspace size or revision history. The scoped head and event
+relations apply current visibility before exposing copy or audit metadata.
+A head the reader cannot see contributes no copy. Writes serialize one ask,
+append one audit event and update one pointer plus one actor/key replay receipt;
+current permission, open-state, subject visibility and the presentation token
+are checked in that transaction. Migration 123 creates only an empty pointer
+relation, with no historical rewrite or backfill. New route and point-read
+budgets are checked in; no existing budget or plan allowance is widened.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run '^TestPerformance(AskPresentationReadBudget|AskDeliveryReadBudgets|InboxItemResolutionRead)$' -count=1 -v
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- go test -C core ./internal/storage \
+  -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```

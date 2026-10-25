@@ -560,6 +560,9 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 	if err := enrichInboxCardSummaries(r, opts, payloadItems); err != nil {
 		return nil, err
 	}
+	if err := enrichAskPresentations(r, opts, payloadItems); err != nil {
+		return nil, err
+	}
 	return payloadItems, nil
 }
 
@@ -617,6 +620,10 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
+	if err := enrichAskPresentations(r, opts, []map[string]any{payload}); err != nil {
+		writeReadInternalError(w, r, err, "cannot read ask presentation")
+		return
+	}
 	enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
 	enrichAccessRequestInboxItem(r.Context(), opts, payload)
 	if err := enrichInboxCardSummaries(r, opts, []map[string]any{payload}); err != nil {

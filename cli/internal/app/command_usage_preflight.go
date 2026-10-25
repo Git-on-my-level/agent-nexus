@@ -111,6 +111,12 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if (args[0] == "ask" || args[0] == "review" || args[0] == "escalate") && hasAskTemplate(args[1:]) {
 		return args[0], validateAskTemplate(args[1:])
 	}
+	if args[0] == "ask" && len(args) > 1 && args[1] == "revise" {
+		return "ask revise", preflightAskRevise(args[2:])
+	}
+	if args[0] == "ask" && len(args) > 1 && args[1] == "presentation" {
+		return "ask presentation", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{})
+	}
 	if args[0] == "ask" && len(args) >= 2 && args[1] == "withdraw" {
 		commandName := "ask withdraw"
 		if err := preflightFlagUsage(args[2:], map[string]preflightFlagSpec{

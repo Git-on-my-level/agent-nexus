@@ -163,6 +163,12 @@ commands:
   "agent.wakeups.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "asks.presentation.get":
+    classification: exposed_read
+    reason: "Scoped point read of ask presentation and concurrency token."
+  "asks.revise":
+    classification: exposed_write
+    reason: "Strict presentation allowlist, current curator authorization, concurrency and atomic replay."
   "asks.batch.create":
     classification: unsupported_other
     reason: "Ask batch filing is available through the CLI and HTTP API; MCP exposure requires separate qualification"

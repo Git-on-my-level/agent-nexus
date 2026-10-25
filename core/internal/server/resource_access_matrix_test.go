@@ -407,6 +407,8 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"actor_id": actor, "board_ref": "board:" + board, "title": "attempt"}
 	case "/events":
 		return map[string]any{"actor_id": actor, "event": map[string]any{"type": "message_posted", "thread_id": thread, "refs": refs, "payload": map[string]any{"text": "attempt"}}}
+	case "/asks/{ask_id}/revise":
+		return map[string]any{"if_revision": 0, "request_key": "private-revision", "presentation": map[string]any{"title": "Attempt?", "details": "card:" + card}}
 	case "/asks/batch":
 		ask := func() map[string]any {
 			return map[string]any{

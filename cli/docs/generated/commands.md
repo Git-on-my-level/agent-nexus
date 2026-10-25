@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `278`
+- Commands: `280`
 
 ## `actors.create`
 
@@ -420,6 +420,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `not_found`, `auth_required`
 - Output: Returns AskOutcome.
 - Agent notes: Current resource access applies on every read.
+
+## `asks.presentation.get`
+
+- CLI path: `ask presentation`
+- HTTP: `GET /asks/{ask_id}/presentation`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Improve clarity while preserving answer integrity.
+- Concepts: `inbox`, `read`
+- Error codes: `auth_required`, `not_found`
+- Output: Returns AskPresentationState.
+- Agent notes: Read presentation_revision before revising. Preserve request_key across retries.
+
+## `asks.revise`
+
+- CLI path: `ask revise`
+- HTTP: `POST /asks/{ask_id}/revise`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Improve clarity while preserving answer integrity.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `forbidden`, `not_found`, `invalid_request`, `conflict`
+- Output: Returns AskPresentationState.
+- Agent notes: Read presentation_revision before revising. Preserve request_key across retries.
 
 ## `asks.stream`
 

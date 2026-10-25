@@ -110,6 +110,7 @@ enums:
       - human_attention_requested
       - human_attention_responded
       - human_attention_withdrawn
+      - human_attention_revised
       - attention_feedback
       - agent_notification_read
       - agent_notification_dismissed
@@ -120,7 +121,7 @@ enums:
       boards: [board_created, board_updated]
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved, card_lease_acquired, card_lease_renewed, card_lease_released, card_lease_expired]
       curation: [curation_suggested, curation_receipt]
-      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, attention_feedback]
+      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, human_attention_revised, attention_feedback]
       notifications: [agent_notification_read, agent_notification_dismissed]
       runs: [run_recorded]
       reviews: [receipt_added, review_completed]
@@ -883,6 +884,11 @@ reference_conventions:
     human_attention_withdrawn:
       refs_must_include: ["event:<request_event_id>"]
       payload_must_include: ["request_event_id", "request_event_ref", "withdrawn_by_actor_id", "reason"]
+
+    human_attention_revised:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "presentation_revision", "previous", "presentation"]
+      description: Server-owned append-only presentation revision. Written only through POST /asks/{ask_id}/revise. Never changes the original ask or answer bindings.
 
     agent_notification_read:
       refs_must_include: ["artifact:<wakeup_id>"]
