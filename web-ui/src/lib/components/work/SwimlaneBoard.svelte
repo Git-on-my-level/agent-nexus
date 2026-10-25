@@ -968,7 +968,7 @@
                               >
                             {:else if stream}
                               <span
-                                class="chip-n"
+                                class="chip-n chip-n--codes"
                                 data-source="computed:initiatives.rollup.workstreams.rollup"
                                 data-stream-count>{streamCount(child)}</span
                               >
@@ -1218,6 +1218,16 @@
     font-size: 11px;
     color: var(--fg-muted);
     white-space: nowrap;
+  }
+  /* A workstream's codes can outgrow a narrow column: they shrink and wrap
+     inside the chip, right-aligned, rather than spill past its edge. */
+  .chip-n--codes {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: right;
   }
   .phone-line {
     display: flex;
